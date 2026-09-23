@@ -45,6 +45,18 @@ _STATIC_APP = _HERE / "static" / "app"
 _VALID_LAYOUTS = frozenset({"embed", "full", "maponly"})
 _VALID_THEMES = frozenset({"light", "dark"})
 
+#: Toolbar panels :meth:`Map.show_control` opens. Mirrors ``SCRIPTABLE_PANELS``
+#: in ``apps/geolibre-desktop/src/lib/scripting/ui-controls.ts``.
+MAP_PANELS = frozenset({"bookmark", "search", "measure", "minimap", "print"})
+
+#: Built-in map controls :meth:`Map.show_control` shows or hides. Mirrors
+#: ``SCRIPTABLE_MAP_CONTROLS`` in the same module.
+MAP_CONTROLS = frozenset(
+    {"navigation", "fullscreen", "compass", "geolocate", "globe", "scale", "attribution", "logo"}
+)
+
+_VALID_PROJECTIONS = frozenset({"globe", "mercator"})
+
 # CSV/tabular input is inlined into the project exactly like GeoJSON is, so the
 # same 50 MB ceiling applies to a fetched response or a local file.
 _MAX_TABULAR_BYTES = _project._MAX_GEOJSON_BYTES
@@ -344,6 +356,10 @@ class Map(anywidget.AnyWidget):
     _seq = traitlets.Int(0).tag(sync=True)
     # Last error reported by the app (e.g. an invalid project).
     error = traitlets.Unicode("").tag(sync=True)
+    # UI state the project does not carry, replayed into the app whenever it
+    # loads: ``identify`` (a layer id, "all", or None) and ``controls`` (a
+    # control or panel name -> shown). Set through set_identify/show_control.
+    _ui = traitlets.Dict().tag(sync=True)
 
     def __init__(
         self,
@@ -1495,15 +1511,16 @@ class Map(anywidget.AnyWidget):
     ) -> str:
         """Add a single point marker at ``[lng, lat]``.
 
-        The marker is a GeoJSON point layer; its ``properties`` are shown when
-        the point is clicked. See :meth:`add_markers` for the symbology and
+        The marker is a GeoJSON point layer; its ``properties`` are shown in a
+        popup when the point is clicked while Identify is armed (see
+        :meth:`set_identify`). See :meth:`add_markers` for the symbology and
         popup arguments, which behave identically here.
 
         Args:
             lng: Marker longitude.
             lat: Marker latitude.
             name: Layer display name.
-            properties: Optional feature properties (shown on click).
+            properties: Optional feature properties (shown in the Identify popup).
             color: Marker color.
             opacity: Fill opacity in ``[0, 1]``.
             radius: Circle radius in pixels.
@@ -2812,10 +2829,14 @@ class Map(anywidget.AnyWidget):
 
         resolved_id = self._resolve_layer(layer_id).id
         self._update_project(lambda p: _authoring.remove_layer(p, resolved_id))
+        if self._ui.get("identify") == resolved_id:
+            self._set_ui(identify=None)
 
     def clear_layers(self) -> None:
         """Remove all layers from the map."""
         self._update_project(lambda p: p.update({"layers": []}))
+        if self._ui.get("identify") not in (None, "all"):
+            self._set_ui(identify=None)
 
     # -- view / basemap API ---------------------------------------------
 
@@ -2937,6 +2958,107 @@ class Map(anywidget.AnyWidget):
         if not isinstance(value, str) or not value.strip():
             raise ValueError("name must be a non-empty string")
         self._update_project(lambda p: p.update(name=value.strip()))
+
+    # -- interaction: identify, controls, projection ---------------------
+
+    def _set_ui(self, **changes: Any) -> None:
+        """Merge ``changes`` into the synced ``_ui`` trait.
+
+        Like :meth:`_update_project`, this reassigns a new dict, because
+        traitlets only syncs a changed value, not an in-place edit.
+
+        Args:
+            **changes: ``identify`` and/or ``controls`` entries to replace.
+        """
+        self._ui = {**self._ui, **changes}
+
+    def set_identify(self, layer: str | Layer | None = "all") -> None:
+        """Arm the Identify tool so clicking a feature opens its popup.
+
+        Popups (including those configured with :meth:`set_popup` or the
+        ``popup=`` argument of :meth:`add_markers`) open only while Identify is
+        armed. This does from Python what the Identify button on a layer, or
+        the "Identify visible layers" button in the Layers panel header, does
+        in the app. The choice is applied when the map loads, so it can be
+        made before the map is displayed.
+
+        Identify is armed on one layer or on every visible layer at a time,
+        and hover tooltips pause while it is armed, as they do in the app.
+
+        Args:
+            layer: A layer id, display name, or :class:`Layer` handle to
+                identify on that layer; ``"all"`` (the default) to identify
+                every visible queryable layer; or ``None`` to turn Identify off.
+
+        Raises:
+            ValueError: If ``layer`` matches no layer.
+        """
+        if layer is None or layer == "all":
+            self._set_ui(identify=layer)
+            return
+        self._set_ui(identify=self._resolve_layer(layer).id)
+
+    def show_control(self, name: str, visible: bool = True) -> None:
+        """Show (or hide) a map control or toolbar panel.
+
+        Covers the panels in the app's Controls menu (``"bookmark"``,
+        ``"search"``, ``"measure"``, ``"minimap"``, ``"print"``) and the
+        built-in map controls (``"navigation"``, ``"fullscreen"``,
+        ``"compass"``, ``"geolocate"``, ``"globe"``, ``"scale"``,
+        ``"attribution"``, ``"logo"``). The choice is applied when the map
+        loads, so it can be made before the map is displayed. It is not saved
+        in the project.
+
+        Hiding ``"globe"`` removes the globe/flat toggle button only; use
+        :meth:`set_projection` to change how the map is drawn.
+
+        Args:
+            name: The control or panel name.
+            visible: ``True`` to show it, ``False`` to hide it.
+
+        Raises:
+            ValueError: If ``name`` is not a known control or panel.
+        """
+        if name not in MAP_PANELS and name not in MAP_CONTROLS:
+            raise ValueError(
+                f"Unknown control {name!r}; expected one of {sorted(MAP_PANELS | MAP_CONTROLS)}"
+            )
+        self._set_ui(controls={**self._ui.get("controls", {}), name: bool(visible)})
+
+    def hide_control(self, name: str) -> None:
+        """Hide a map control or toolbar panel (see :meth:`show_control`).
+
+        Args:
+            name: The control or panel name.
+        """
+        self.show_control(name, False)
+
+    def set_projection(self, projection: str) -> None:
+        """Draw the map as a 3D globe or as a flat Web Mercator map.
+
+        New maps use ``"globe"``, which shows the Earth as a sphere at low
+        zooms. The projection is saved in the project.
+
+        Args:
+            projection: ``"globe"`` or ``"mercator"``.
+
+        Raises:
+            ValueError: If ``projection`` is not one of the two.
+        """
+        if projection not in _VALID_PROJECTIONS:
+            raise ValueError(f"projection must be 'globe' or 'mercator', got {projection!r}")
+
+        def _apply(p: dict[str, Any]) -> None:
+            preferences = p.setdefault("preferences", {})
+            preferences.setdefault("map", {})["projection"] = projection
+
+        self._update_project(_apply)
+
+    @property
+    def projection(self) -> str:
+        """The persisted map projection, ``"globe"`` or ``"mercator"``."""
+        projection = self.project.get("preferences", {}).get("map", {}).get("projection")
+        return "mercator" if projection == "mercator" else "globe"
 
     # -- map controls: split map / legend / colorbar --------------------
 

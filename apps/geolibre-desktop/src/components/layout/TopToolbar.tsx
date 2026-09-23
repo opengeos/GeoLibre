@@ -1,4 +1,8 @@
 import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
+import {
+  SCRIPT_MAP_CONTROL_EVENT,
+  type ScriptMapControlDetail,
+} from "../../lib/scripting/ui-controls";
 import { supportsAddDataRenderer } from "../../lib/add-data-renderer";
 import {
   DEFAULT_PROJECT_NAME,
@@ -1259,6 +1263,22 @@ export function TopToolbar({
         mapControllerRef.current?.setBuiltInControlVisible(id, controlsVisible[id]);
     }
   }, [mapControllerRef, mapReadyGeneration, controlsVisible]);
+
+  // A script (the Jupyter widget's show_control/hide_control) toggles a control
+  // on the map directly; mirror it here so the Controls menu checkmark agrees
+  // and the effect above does not revert it on the next renderer swap. The
+  // choice is per session, so unlike a menu toggle it is not written to the
+  // device preference.
+  useEffect(() => {
+    const onScriptControl = (event: Event) => {
+      const { control, visible } = (event as CustomEvent<ScriptMapControlDetail>).detail;
+      setControlsVisible((current) =>
+        current[control] === visible ? current : { ...current, [control]: visible },
+      );
+    };
+    window.addEventListener(SCRIPT_MAP_CONTROL_EVENT, onScriptControl);
+    return () => window.removeEventListener(SCRIPT_MAP_CONTROL_EVENT, onScriptControl);
+  }, []);
 
   const terrainEnabled = useAppStore((state) => state.preferences.map.terrainEnabled);
 

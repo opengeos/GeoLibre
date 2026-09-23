@@ -14,7 +14,26 @@ import {
   type WhiteboxLayerInput,
   type WhiteboxTool,
 } from "@geolibre/processing";
-import { SKETCHES_SOURCE_KIND, addRasterToMap } from "@geolibre/plugins";
+import {
+  SKETCHES_SOURCE_KIND,
+  addRasterToMap,
+  closeBookmarkPanel,
+  closeMeasurePanel,
+  closeMinimapPanel,
+  closePrintPanel,
+  closeSearchPlacesPanel,
+  isBookmarkPanelVisible,
+  isMeasurePanelVisible,
+  isMinimapPanelVisible,
+  isPrintPanelVisible,
+  isSearchPlacesPanelVisible,
+  openBookmarkPanel,
+  openMeasurePanel,
+  openMinimapPanel,
+  openPrintPanel,
+  openSearchPlacesPanel,
+  type GeoLibreAppAPI,
+} from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
 import type { RefObject } from "react";
 import type { MapEngine } from "@geolibre/map";
@@ -26,6 +45,17 @@ import { parameterKind } from "../whitebox-param-kind";
 import { canUseLayerForParameter, fetchLayerBytes } from "../whitebox-layer-inputs";
 import { createAppAPI } from "../../hooks/usePlugins";
 import { buildModelToolCatalog } from "../model-tool-catalog";
+import {
+  SCRIPT_MAP_CONTROL_EVENT,
+  SCRIPTABLE_MAP_CONTROLS,
+  SCRIPTABLE_PANELS,
+  getScriptIdentify,
+  isScriptableMapControl,
+  isScriptablePanel,
+  setScriptIdentify,
+  type ScriptMapControlDetail,
+  type ScriptablePanel,
+} from "./ui-controls";
 
 // The scripting command surface, shared by every programmatic entry point: the
 // Jupyter widget's postMessage bridge (useCommandBridge) and the in-app Python
@@ -73,6 +103,30 @@ function addWhiteboxRasterOutput(
   const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
   return addRasterToMap(createAppAPI(controllerRef), file, { name });
 }
+
+/** Open/close/read handlers for each scriptable toolbar panel. */
+const PANEL_TOGGLES: Record<
+  ScriptablePanel,
+  {
+    isVisible: () => boolean;
+    open: (app: GeoLibreAppAPI) => void;
+    close: (app: GeoLibreAppAPI) => void;
+  }
+> = {
+  bookmark: {
+    isVisible: isBookmarkPanelVisible,
+    open: openBookmarkPanel,
+    close: closeBookmarkPanel,
+  },
+  search: {
+    isVisible: isSearchPlacesPanelVisible,
+    open: openSearchPlacesPanel,
+    close: () => closeSearchPlacesPanel(),
+  },
+  measure: { isVisible: isMeasurePanelVisible, open: openMeasurePanel, close: closeMeasurePanel },
+  minimap: { isVisible: isMinimapPanelVisible, open: openMinimapPanel, close: closeMinimapPanel },
+  print: { isVisible: isPrintPanelVisible, open: openPrintPanel, close: closePrintPanel },
+};
 
 function whiteboxToolName(tool: WhiteboxTool): string {
   return tool.display_name || tool.id.replace(/_/g, " ");
@@ -239,6 +293,45 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       }
       useAppStore.getState().setBasemapStyleUrl(url);
       return null;
+    },
+    // -- UI state (not saved in the project) ---------------------------------
+    setIdentify: (params) => setScriptIdentify(params.layerId),
+    getIdentify: () => getScriptIdentify(),
+    setControlVisible: (params) => {
+      const control = params.control;
+      const visible = Boolean(params.visible);
+      if (isScriptablePanel(control)) {
+        const panel = PANEL_TOGGLES[control];
+        // Opening an open panel would remount it; closing a closed one is a
+        // no-op either way, but skip it so the two branches read the same.
+        if (panel.isVisible() === visible) return visible;
+        const controllerRef = {
+          get current() {
+            return getController();
+          },
+        } as RefObject<MapEngine | null>;
+        const app = createAppAPI(controllerRef);
+        if (visible) panel.open(app);
+        else panel.close(app);
+        return visible;
+      }
+      if (isScriptableMapControl(control)) {
+        getController()?.setBuiltInControlVisible(control, visible);
+        // The toolbar owns the checkmark state and re-applies it on a renderer
+        // swap, so it has to hear about the change or it would undo it.
+        window.dispatchEvent(
+          new CustomEvent<ScriptMapControlDetail>(SCRIPT_MAP_CONTROL_EVENT, {
+            detail: { control, visible },
+          }),
+        );
+        return visible;
+      }
+      throw new Error(
+        `setControlVisible: unknown control ${JSON.stringify(control)}; expected one of ${[
+          ...SCRIPTABLE_PANELS,
+          ...SCRIPTABLE_MAP_CONTROLS,
+        ].join(", ")}`,
+      );
     },
     zoomToLayer: (params) => {
       const layerId = requireLayerId(params);
