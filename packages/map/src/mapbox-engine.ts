@@ -48,6 +48,7 @@ import {
   styleLayerLabel,
 } from "./layer-labels";
 import { mapboxSourceId } from "./style-layer-ids";
+import { hasZoomDependentClusterFilter } from "./cluster-input";
 import { resolveTextFontFromStyleLayers } from "./text-font";
 import { getLayerBounds } from "./geojson-loader";
 import { captureEngineImage } from "./map-capture";
@@ -236,6 +237,15 @@ export class MapboxEngine implements MapEngine {
     if (this.syncPending) this.syncLayers(this.layers);
     if (this.basemapPending) this.applyBasemap();
   };
+  /**
+   * A clustered layer's authored filters are applied to its data before
+   * clustering, once per sync. A filter that reads `["zoom"]` therefore needs
+   * a sync per zoom to stay truthful, as MapLibre's controller does; the
+   * cluster input is cached per zoom, so an unchanged outcome costs no setData.
+   */
+  private onZoomEnd = () => {
+    if (hasZoomDependentClusterFilter(this.layers)) this.syncLayers(this.layers);
+  };
 
   constructor(
     map: mapboxgl.Map,
@@ -287,6 +297,7 @@ export class MapboxEngine implements MapEngine {
     map.on("error", this.onError);
     map.on("sourcedata", this.onSourceData);
     map.on("idle", this.flushLayers);
+    map.on("zoomend", this.onZoomEnd);
     map.on("styledata", this.onStyleData);
     for (const id of MAPBOX_HOSTED_CONTROL_ORDER) {
       if (this.controlVisibility[id]) this.mountBuiltInControl(id);
@@ -428,6 +439,7 @@ export class MapboxEngine implements MapEngine {
     this.map.off("error", this.onError);
     this.map.off("sourcedata", this.onSourceData);
     this.map.off("idle", this.flushLayers);
+    this.map.off("zoomend", this.onZoomEnd);
     this.map.off("styledata", this.onStyleData);
     this.layerControlHost.destroy();
     // Leave no stale names behind for whichever engine mounts next — but only
@@ -717,7 +729,7 @@ export class MapboxEngine implements MapEngine {
           this.clearError(`layer:${original.id}`);
           continue;
         }
-        const plan = compileMapboxLayer(layer, { textFont: this.textFont });
+        const plan = compileMapboxLayer(layer, { textFont: this.textFont, zoom: map.getZoom() });
         const previous = this.previous.get(layer.id);
         const oldPlan = this.plans.get(layer.id);
         const sourceChanged =
@@ -725,7 +737,10 @@ export class MapboxEngine implements MapEngine {
           (JSON.stringify(oldPlan.additionalSources) !== JSON.stringify(plan.additionalSources) ||
             oldPlan.source.type !== plan.source.type ||
             (plan.source.type === "geojson" && oldPlan.source.type === "geojson"
-              ? false
+              ? // Clustering is a source option mapbox-gl cannot change in
+                // place, so a renderer switch or new cluster radius/max zoom
+                // rebuilds the source; new data alone goes through setData.
+                clusterOptionsKey(oldPlan.source) !== clusterOptionsKey(plan.source)
               : JSON.stringify(oldPlan.source) !== JSON.stringify(plan.source)));
         if (sourceChanged) this.removeLayer(layer.id);
         for (const [id, source] of Object.entries(plan.additionalSources ?? {})) {
@@ -734,7 +749,11 @@ export class MapboxEngine implements MapEngine {
         if (!map.getSource(plan.sourceId)) map.addSource(plan.sourceId, plan.source);
         else if (
           plan.source.type === "geojson" &&
-          (previous?.geojson !== layer.geojson || previous?.source !== layer.source)
+          (previous?.geojson !== layer.geojson ||
+            previous?.source !== layer.source ||
+            // A clustered layer's data is its GeoJSON narrowed by the authored
+            // filters, so a filter edit changes the data without a new layer.
+            (oldPlan?.source.type === "geojson" && oldPlan.source.data !== plan.source.data))
         ) {
           (map.getSource(plan.sourceId) as mapboxgl.GeoJSONSource).setData(plan.source.data!);
         }
@@ -1249,7 +1268,10 @@ export class MapboxEngine implements MapEngine {
     }
     let plan: MapboxLayerPlan;
     try {
-      plan = compileMapboxLayer({ ...layer, opacity: clamped }, { textFont: this.textFont });
+      plan = compileMapboxLayer(
+        { ...layer, opacity: clamped },
+        { textFont: this.textFont, zoom: map.getZoom() },
+      );
     } catch {
       // The layer does not compile at all; a full sync reports that the usual
       // way instead of failing silently here.
@@ -1355,7 +1377,7 @@ export class MapboxEngine implements MapEngine {
     const seen = new Set<string>();
     return map.queryRenderedFeatures(map.project(lngLat), { layers: queryIds }).flatMap((f) => {
       const id = byId.get(f.layer?.id ?? "")!;
-      const featureId = this.featureIdForLayer(id, f.id);
+      const featureId = this.featureIdForLayer(id, f);
       const key = `${id}:${featureId ?? JSON.stringify(f.properties)}`;
       if (seen.has(key)) return [];
       seen.add(key);
@@ -1383,7 +1405,7 @@ export class MapboxEngine implements MapEngine {
       ],
       { layers: queryIds },
     );
-    return feature ? this.featureIdForLayer(layerId, feature.id) : null;
+    return feature ? this.featureIdForLayer(layerId, feature) : null;
   }
   /**
    * Resolve a queried feature's id to the app's `String(feature.id ?? index)`
@@ -1391,14 +1413,30 @@ export class MapboxEngine implements MapEngine {
    * the feature's index in the source data and overwrites any authored id; map
    * it back through the layer's own GeoJSON so selection and highlighting key
    * on the same value as the attribute table.
+   *
+   * A clustered source indexes the data the plan handed it, which the layer's
+   * authored filters may have narrowed (`authoredClusterInput`), so the index
+   * is read against that collection and the feature is then located in the
+   * layer's own. A cluster bubble aggregates many points and is no feature of
+   * the layer, so it has no id to select.
    */
-  private featureIdForLayer(layerId: string, queried: string | number | undefined): string | null {
-    if (queried == null) return null;
+  private featureIdForLayer(
+    layerId: string,
+    queried: { id?: string | number; properties?: Record<string, unknown> | null },
+  ): string | null {
+    if (queried.id == null) return null;
+    if (queried.properties?.cluster === true) return null;
     const features = this.layers.find((l) => l.id === layerId)?.geojson?.features;
-    if (!features) return String(queried);
-    const index = Number(queried);
-    const feature = Number.isInteger(index) ? features[index] : undefined;
-    return feature ? String(feature.id ?? index) : String(queried);
+    if (!features) return String(queried.id);
+    const source = this.plans.get(layerId)?.source;
+    const data = source?.type === "geojson" ? source.data : undefined;
+    const indexed =
+      data && typeof data === "object" && "features" in data ? data.features : features;
+    const index = Number(queried.id);
+    const feature = Number.isInteger(index) ? indexed[index] : undefined;
+    if (!feature) return String(queried.id);
+    if (feature.id != null) return String(feature.id);
+    return String(indexed === features ? index : features.indexOf(feature));
   }
   highlightFeature(
     layer: GeoLibreLayer | undefined,
@@ -1790,4 +1828,11 @@ export class MapboxEngine implements MapEngine {
   async setTerrainCogSource(source: string | Blob | null): Promise<boolean> {
     return source === null;
   }
+}
+
+/** The clustering options of a GeoJSON source, which mapbox-gl fixes at creation. */
+function clusterOptionsKey(source: mapboxgl.SourceSpecification): string {
+  if (source.type !== "geojson") return "";
+  const { cluster, clusterRadius, clusterMaxZoom } = source;
+  return JSON.stringify([cluster ?? false, clusterRadius, clusterMaxZoom]);
 }

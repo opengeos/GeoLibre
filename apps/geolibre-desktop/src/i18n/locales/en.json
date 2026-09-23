@@ -6762,6 +6762,16 @@
     "expand": "Expand style",
     "collapse": "Collapse style",
     "openStyleManager": "Saved styles…",
+    "mapboxUnsupported": {
+      "title": "The Mapbox renderer does not draw these settings yet:",
+      "markerIcons": "Marker icons",
+      "fillPattern": "Fill pattern",
+      "invertedFill": "Inverted fill",
+      "lineDecoration": "Line decorations",
+      "geometryGenerator": "Geometry generator",
+      "labelDedupe": "Label de-duplication",
+      "labelExpressions": "Data-driven label size, color, opacity, visibility or priority"
+    },
     "addClass": "Add class",
     "removeClass": "Remove class",
     "beforeIdSavedUnavailable": "Saved (unavailable)",

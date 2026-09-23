@@ -227,9 +227,13 @@ Layers drawn with deck.gl need none:
 `@deck.gl/mapbox` targets Mapbox GL JS natively, so the engine reports
 `capabilities.deckOverlay` and the shared interleaved overlay binds to the
 Mapbox map through `app.getMapboxMap()`. Visible unsupported layers report an error
-on the map instead of being silently omitted. Advanced MapLibre-only symbology
-(such as custom marker assets and blend modes) is not reproduced by this native
-renderer. Mapbox Standard is loaded as a local style import with a shared opacity setting.
+on the map instead of being silently omitted. The heatmap and clustered point
+renderers compile to native Mapbox layers, with a clustered layer's authored
+filters applied to its data before clustering, as on MapLibre. Advanced
+MapLibre-only symbology (marker icons, fill patterns, inverted fill, line
+decorations, the geometry generator, label de-duplication and data-driven label
+expressions, and blend modes) is not reproduced by this native renderer; the
+Style panel lists the ones a layer turns on. Mapbox Standard is loaded as a local style import with a shared opacity setting.
 The Background card fades its land and water colors, labels (including ocean labels),
 3D objects, and atmosphere while preserving project layers and Standard's configuration.
 

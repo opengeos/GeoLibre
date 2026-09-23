@@ -3,6 +3,7 @@ import {
   labelFieldTextField,
   ruleBasedVisibilityFilter,
   DEFAULT_LAYER_STYLE,
+  styleValue,
   type GeoLibreLayer,
 } from "@geolibre/core";
 import type {
@@ -11,7 +12,16 @@ import type {
   SourceSpecification,
   FilterSpecification,
 } from "mapbox-gl";
-import { circlePaint, fillPaint, fillExtrusionPaint, linePaint, rasterPaint } from "./style-mapper";
+import {
+  circlePaint,
+  clusterCirclePaint,
+  fillPaint,
+  fillExtrusionPaint,
+  heatmapPaint,
+  linePaint,
+  rasterPaint,
+} from "./style-mapper";
+import { authoredClusterInput, resolveVectorRenderMode } from "./cluster-input";
 import { proxyWmsTiles } from "./wms-proxy";
 import { arcgisOpacity, arcgisVectorStyle } from "./arcgis-vector-style";
 import { mapboxFillLayerId, mapboxLineLayerId, mapboxSourceId } from "./style-layer-ids";
@@ -181,6 +191,12 @@ export interface CompileMapboxLayerOptions {
    * render on a third-party basemap whose glyphs do not include it.
    */
   textFont?: string[];
+  /**
+   * The map's current zoom. A clustered layer's authored filters are applied
+   * to its source data before clustering (see `authoredClusterInput`), and a
+   * filter that reads `["zoom"]` is evaluated at this zoom.
+   */
+  zoom?: number;
 }
 
 export const DEFAULT_MAPBOX_TEXT_FONT = ["Open Sans Regular"];
@@ -284,6 +300,76 @@ export function compileMapboxLayer(
   const profile: GeometryProfile = layer.geojson?.features?.length
     ? detectGeometryProfile(layer.geojson)
     : { hasPoint: true, hasLine: true, hasPolygon: true };
+  // The point renderer, resolved the way MapLibre's layer-sync resolves it:
+  // heatmap and cluster apply only to point-only inline GeoJSON, and anything
+  // else draws one circle per point.
+  const { renderer, wantCluster, clusterRadius, clusterMaxZoom } = layer.geojson
+    ? resolveVectorRenderMode(layer, profile)
+    : { renderer: "single", wantCluster: false, clusterRadius: 0, clusterMaxZoom: 0 };
+  const pointLayers = (base: Record<string, unknown>, id: string): LayerSpecification[] => {
+    if (renderer === "heatmap") {
+      return [
+        {
+          ...base,
+          id: `${id}-heatmap`,
+          type: "heatmap",
+          filter: geometryFilter("Point"),
+          paint: mapboxPaint(heatmapPaint(style, layer.opacity)),
+        } as LayerSpecification,
+      ];
+    }
+    if (renderer === "cluster") {
+      // The bubble and its count aggregate the source's clusters, which carry
+      // no feature properties, so they take no feature filter (a time or rule
+      // filter would drop every cluster). The authored filters already
+      // narrowed the clustered data itself; see `authoredClusterInput`.
+      const isCluster: FilterSpecification = ["has", "point_count"];
+      const unclustered = ["!", ["has", "point_count"]];
+      return [
+        {
+          ...base,
+          id: `${id}-cluster`,
+          type: "circle",
+          filter: isCluster,
+          paint: mapboxPaint(clusterCirclePaint(style, layer.opacity)),
+        },
+        {
+          ...base,
+          id: `${id}-cluster-count`,
+          type: "symbol",
+          filter: isCluster,
+          layout: {
+            ...layout,
+            "text-field": ["get", "point_count_abbreviated"],
+            "text-font": compileOptions.textFont ?? DEFAULT_MAPBOX_TEXT_FONT,
+            "text-size": 12,
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: {
+            "text-color": styleValue(layer.style, "textColor"),
+            "text-opacity": layer.opacity,
+          },
+        },
+        {
+          ...base,
+          id: `${id}-circle`,
+          type: "circle",
+          filter: (filter ? ["all", unclustered, filter] : unclustered) as FilterSpecification,
+          paint: mapboxPaint(circlePaint(style, layer.opacity)),
+        },
+      ] as LayerSpecification[];
+    }
+    return [
+      {
+        ...base,
+        id: `${id}-circle`,
+        type: "circle",
+        filter: geometryFilter("Point"),
+        paint: mapboxPaint(circlePaint(style, layer.opacity)),
+      } as LayerSpecification,
+    ];
+  };
   const vectorLayers = (sourceLayer?: string): LayerSpecification[] => {
     const base = {
       source: sourceId,
@@ -313,13 +399,7 @@ export function compileMapboxLayer(
         filter: (filter ? ["all", notPoint, filter] : notPoint) as FilterSpecification,
         paint: mapboxPaint(linePaint(style, layer.opacity)),
       },
-      profile.hasPoint && {
-        ...base,
-        id: `${id}-circle`,
-        type: "circle",
-        filter: geometryFilter("Point"),
-        paint: mapboxPaint(circlePaint(style, layer.opacity)),
-      },
+      ...(profile.hasPoint ? pointLayers(base, id) : []),
     ].filter(Boolean) as LayerSpecification[];
     const labels = style.labels;
     if (labels.enabled && (labels.field || labels.expression)) {
@@ -367,7 +447,16 @@ export function compileMapboxLayer(
   if (layer.geojson) {
     return {
       sourceId,
-      source: { type: "geojson", data: layer.geojson, generateId: true },
+      source: wantCluster
+        ? {
+            type: "geojson",
+            data: authoredClusterInput(layer, compileOptions.zoom ?? 0),
+            generateId: true,
+            cluster: true,
+            clusterRadius,
+            clusterMaxZoom,
+          }
+        : { type: "geojson", data: layer.geojson, generateId: true },
       layers: vectorLayers(),
     };
   }
@@ -482,3 +571,56 @@ export function compileMapboxLayer(
   }
   throw new Error(`Layer type ${layer.type} requires a renderer-specific adapter`);
 }
+
+/**
+ * Style settings the Mapbox compiler does not draw yet. The Style panel lists
+ * the ones a layer has turned on, so a setting that silently does nothing on
+ * this renderer is named instead. Remove an entry once the compiler honors it.
+ */
+export type MapboxUnsupportedStyleSetting =
+  | "markerIcons"
+  | "fillPattern"
+  | "invertedFill"
+  | "lineDecoration"
+  | "geometryGenerator"
+  | "labelDedupe"
+  | "labelExpressions";
+
+/** The {@link MapboxUnsupportedStyleSetting}s this layer's style turns on. */
+export function mapboxUnsupportedStyleSettings(
+  layer: GeoLibreLayer,
+): MapboxUnsupportedStyleSetting[] {
+  const cached = unsupportedSettingsCache.get(layer);
+  if (cached) return cached;
+  const style = layer.style;
+  const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
+  const settings: MapboxUnsupportedStyleSetting[] = [];
+  // Marker icons only draw under the single point renderer on MapLibre too;
+  // the heatmap and cluster renderers replace them.
+  const profile = layer.geojson?.features?.length ? detectGeometryProfile(layer.geojson) : null;
+  const renderer = profile ? resolveVectorRenderMode(layer, profile).renderer : "single";
+  if (styleValue(style, "markerEnabled") && renderer === "single" && (profile?.hasPoint ?? true))
+    settings.push("markerIcons");
+  if (styleValue(style, "fillPattern") !== "none") settings.push("fillPattern");
+  if (styleValue(style, "invertedFillEnabled")) settings.push("invertedFill");
+  if (styleValue(style, "lineDecoration") !== "none") settings.push("lineDecoration");
+  if (styleValue(style, "geometryGenerator") !== "none") settings.push("geometryGenerator");
+  if (labels.enabled && labels.dedupe !== "off") settings.push("labelDedupe");
+  if (
+    labels.enabled &&
+    [
+      labels.sizeExpression,
+      labels.colorExpression,
+      labels.opacityExpression,
+      labels.visibilityExpression,
+      labels.priorityExpression,
+    ].some((expression) => Boolean(expression?.trim()))
+  )
+    settings.push("labelExpressions");
+  unsupportedSettingsCache.set(layer, settings);
+  return settings;
+}
+
+// Memoized per immutable layer record, like `supportedLayerCache`: the Style
+// panel asks on every render and the geometry scan walks every feature.
+const unsupportedSettingsCache = new WeakMap<GeoLibreLayer, MapboxUnsupportedStyleSetting[]>();

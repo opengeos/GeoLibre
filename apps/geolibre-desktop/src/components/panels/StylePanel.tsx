@@ -61,6 +61,7 @@ import {
 import {
   arcgisVectorStyle,
   layerBlendModesSupported,
+  mapboxUnsupportedStyleSettings,
   subscribeLayerBlendModeSupport,
   type MapEngine,
 } from "@geolibre/map";
@@ -1027,6 +1028,9 @@ export function StylePanel({
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
+  // The Mapbox compiler draws only part of the symbology below; see
+  // `mapboxUnsupportedStyleSettings`.
+  const mapboxPrimary = useAppStore((s) => s.primaryRenderer === "mapbox");
   const [pasteStyleOpen, setPasteStyleOpen] = useState(false);
   // What the last pasted style reported. The Layers panel has a per-row note for this; this
   // panel has none, and dropping the parser's warnings would make an import that could not be
@@ -1880,6 +1884,10 @@ export function StylePanel({
   // for them, even if a hand-edited project set "meters".
   const strokeWidthInMeters = strokeWidthUnit === "meters" && !supportsPointRenderer;
   const pointRenderer = styleValue(style, "pointRenderer");
+  // Settings this layer turns on that the Mapbox renderer does not draw yet,
+  // named at the top of the panel so they do not silently do nothing.
+  const mapboxUnsupportedSettings =
+    mapboxPrimary && hasVectorPaintControls ? mapboxUnsupportedStyleSettings(layer) : [];
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const elevation3dEnabled = styleValue(style, "elevation3dEnabled");
   // Effective 3D Z-value mode: the saved flag can outlive the data's Z values
@@ -5141,6 +5149,20 @@ export function StylePanel({
         >
           {pasteStyleNotice.message}
         </p>
+      )}
+      {mapboxUnsupportedSettings.length > 0 && (
+        <div
+          className="border-b px-3 py-1.5 text-xs text-amber-600"
+          data-testid="style-mapbox-unsupported"
+          role="note"
+        >
+          <p>{t("style.mapboxUnsupported.title")}</p>
+          <ul className="list-disc ps-4">
+            {mapboxUnsupportedSettings.map((setting) => (
+              <li key={setting}>{t(`style.mapboxUnsupported.${setting}`)}</li>
+            ))}
+          </ul>
+        </div>
       )}
       <ScrollArea className="flex-1">
         {/* Padding lives on the inner content (not the ScrollArea root) with
