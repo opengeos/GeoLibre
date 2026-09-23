@@ -75,6 +75,23 @@ export interface ScriptingDeps {
 }
 
 /**
+ * Adapt a lazy controller accessor into the ref `createAppAPI` expects.
+ *
+ * The controller is created asynchronously and can be replaced, so the app API
+ * has to read it on each access rather than capture it once.
+ *
+ * @param getController - Lazy accessor for the live map controller.
+ * @returns A ref whose `current` resolves the controller on every read.
+ */
+function controllerRefFrom(getController: () => MapEngine | null): RefObject<MapEngine | null> {
+  return {
+    get current() {
+      return getController();
+    },
+  } as RefObject<MapEngine | null>;
+}
+
+/**
  * Add a Whitebox raster result to the map and return the created layer id.
  *
  * Built from `getController` rather than injected by a transport, so every
@@ -94,15 +111,8 @@ function addWhiteboxRasterOutput(
   name: string,
   fileName: string,
 ): Promise<string> {
-  // A live view of the controller, since it is created asynchronously and the
-  // app API reads it lazily.
-  const controllerRef = {
-    get current() {
-      return getController();
-    },
-  } as RefObject<MapEngine | null>;
   const file = new File([bytes as BlobPart], fileName, { type: "image/tiff" });
-  return addRasterToMap(createAppAPI(controllerRef), file, { name });
+  return addRasterToMap(createAppAPI(controllerRefFrom(getController)), file, { name });
 }
 
 /** Open/close/read handlers for each scriptable toolbar panel. */
@@ -306,12 +316,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         // Opening an open panel would remount it; closing a closed one is a
         // no-op either way, but skip it so the two branches read the same.
         if (panel.isVisible() === visible) return visible;
-        const controllerRef = {
-          get current() {
-            return getController();
-          },
-        } as RefObject<MapEngine | null>;
-        const app = createAppAPI(controllerRef);
+        const app = createAppAPI(controllerRefFrom(getController));
         if (visible) panel.open(app);
         else panel.close(app);
         return visible;

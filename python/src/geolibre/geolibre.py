@@ -2828,15 +2828,19 @@ class Map(anywidget.AnyWidget):
         """
 
         resolved_id = self._resolve_layer(layer_id).id
-        self._update_project(lambda p: _authoring.remove_layer(p, resolved_id))
+        # Disarm before the project sync, not after: the two traits sync
+        # independently, so clearing second leaves a window where the front end
+        # replays `identify` for a layer the project push just deleted.
         if self._ui.get("identify") == resolved_id:
             self._set_ui(identify=None)
+        self._update_project(lambda p: _authoring.remove_layer(p, resolved_id))
 
     def clear_layers(self) -> None:
         """Remove all layers from the map."""
-        self._update_project(lambda p: p.update({"layers": []}))
+        # Disarm first, for the reason given in `remove_layer`.
         if self._ui.get("identify") not in (None, "all"):
             self._set_ui(identify=None)
+        self._update_project(lambda p: p.update({"layers": []}))
 
     # -- view / basemap API ---------------------------------------------
 

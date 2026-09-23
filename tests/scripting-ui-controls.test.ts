@@ -3,6 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 import { IDENTIFY_ALL_LAYERS_ID, useAppStore } from "@geolibre/core";
 import {
   clearScriptMapControls,
+  forgetScriptMapControl,
   getScriptIdentify,
   getScriptMapControls,
   isScriptableMapControl,
@@ -85,5 +86,29 @@ describe("recorded script map controls", () => {
 
   it("starts empty so an untouched control is left to the toolbar", () => {
     assert.deepEqual(getScriptMapControls(), []);
+  });
+
+  it("drops a control the user toggled so the replay stops forcing it", () => {
+    // A script hides navigation, then the user shows it from the Controls menu.
+    // Without the drop, the next renderer swap or project load would replay the
+    // scripted `false` and hide it again behind the user's back.
+    recordScriptMapControl("navigation", false);
+    forgetScriptMapControl("navigation");
+    assert.deepEqual(getScriptMapControls(), []);
+  });
+
+  it("leaves other controls recorded when one is toggled", () => {
+    recordScriptMapControl("navigation", false);
+    recordScriptMapControl("scale", false);
+    forgetScriptMapControl("navigation");
+    assert.deepEqual(getScriptMapControls(), [["scale", false]]);
+  });
+
+  it("ignores a toggle of a control no script touched", () => {
+    recordScriptMapControl("scale", false);
+    forgetScriptMapControl("navigation");
+    // Terrain and the Maptoolkit logo are not scriptable at all.
+    forgetScriptMapControl("terrain");
+    assert.deepEqual(getScriptMapControls(), [["scale", false]]);
   });
 });

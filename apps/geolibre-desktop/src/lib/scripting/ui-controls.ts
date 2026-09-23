@@ -76,6 +76,21 @@ export function getScriptMapControls(): readonly (readonly [ScriptableMapControl
   return [...scriptMapControls];
 }
 
+/**
+ * Drop a script's recorded override for one control.
+ *
+ * Called when the user toggles that control from the Controls menu: an explicit
+ * user choice revokes an earlier scripted one, so the replay must stop forcing
+ * the scripted value back on the next map or project change.
+ *
+ * @param control - The control the user toggled. Ignored when no script has
+ *   touched it, or when it is not scriptable at all (terrain, the Maptoolkit
+ *   logo).
+ */
+export function forgetScriptMapControl(control: BuiltInMapControl): void {
+  if (isScriptableMapControl(control)) scriptMapControls.delete(control);
+}
+
 /** Forget every recorded control. Exported for tests. */
 export function clearScriptMapControls(): void {
   scriptMapControls.clear();

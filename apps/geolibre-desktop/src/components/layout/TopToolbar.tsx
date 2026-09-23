@@ -1,6 +1,7 @@
 import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
 import {
   SCRIPT_MAP_CONTROL_EVENT,
+  forgetScriptMapControl,
   type ScriptMapControlDetail,
 } from "../../lib/scripting/ui-controls";
 import { supportsAddDataRenderer } from "../../lib/add-data-renderer";
@@ -1450,6 +1451,10 @@ export function TopToolbar({
     const visible = !controlsVisible[control];
     const updated = mapControllerRef.current?.setBuiltInControlVisible(control, visible) ?? false;
     if (!updated) return;
+    // An explicit user choice revokes an earlier scripted one, so
+    // `useScriptControlRestore` stops forcing the scripted value back on the
+    // next renderer swap or project load.
+    forgetScriptMapControl(control);
     setControlsVisible((current) => ({ ...current, [control]: visible }));
     if (control !== "terrain" && control !== "maptoolkit-logo")
       writeControlPreference(control, visible);
