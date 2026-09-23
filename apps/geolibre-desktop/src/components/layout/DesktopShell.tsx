@@ -1270,6 +1270,10 @@ export function DesktopShell({
   // empty). Refresh it the moment the renderer changes: this store subscriber
   // runs synchronously inside setPrimaryRenderer, before React unmounts the old
   // map, so every plugin still reports its live state from a live control.
+  // The project generation whose plugin state has been restored onto a map. A
+  // swap before that restore must not snapshot the manager, which still holds
+  // the previous project's plugins.
+  const restoredPluginGeneration = useRef<number | null>(null);
   useEffect(
     () =>
       useAppStore.subscribe((state, previous) => {
@@ -1277,15 +1281,35 @@ export function DesktopShell({
           state.primaryRenderer === previous.primaryRenderer ||
           // A project load brings its own plugin state; never overwrite it.
           state.projectGeneration !== previous.projectGeneration ||
-          state.projectPlugins !== previous.projectPlugins
+          state.projectPlugins !== previous.projectPlugins ||
+          restoredPluginGeneration.current !== state.projectGeneration
         )
           return;
         try {
-          const live = getPluginManager().getProjectState();
-          state.setProjectPlugins(
-            { ...live, manifestUrls: state.projectPlugins?.manifestUrls ?? [] },
-            false,
-          );
+          const manager = getPluginManager();
+          const live = manager.getProjectState();
+          const stored = state.projectPlugins;
+          // A plugin still registering (an external one loading) is not in
+          // the live snapshot yet; keep what the project stored for it.
+          const registered = new Set(manager.list().map((plugin) => plugin.id));
+          const unregistered = (id: string) => !registered.has(id);
+          const keep = <T,>(record: Record<string, T> | undefined) =>
+            Object.fromEntries(Object.entries(record ?? {}).filter(([id]) => unregistered(id)));
+          const next = {
+            ...live,
+            activePluginIds: [
+              ...live.activePluginIds,
+              ...(stored?.activePluginIds ?? []).filter(unregistered),
+            ],
+            mapControlPositions: {
+              ...keep(stored?.mapControlPositions),
+              ...live.mapControlPositions,
+            },
+            settings: { ...keep(stored?.settings), ...live.settings },
+            manifestUrls: stored?.manifestUrls ?? [],
+          };
+          if (JSON.stringify(next) === JSON.stringify(stored)) return;
+          state.setProjectPlugins(next, false);
         } catch (error) {
           console.warn("[GeoLibre] Could not snapshot plugin state for the renderer swap", error);
         }
@@ -1305,6 +1329,7 @@ export function DesktopShell({
     const appAPI = createAppAPI(mapControllerRef);
     const pluginManager = getPluginManager();
     pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI);
+    restoredPluginGeneration.current = projectGeneration;
     // Immediately after the restore, so a project that persisted the geo-editor
     // as active cannot re-arm editing inside a read-only viewer embed.
     enforceViewerPlugins();
