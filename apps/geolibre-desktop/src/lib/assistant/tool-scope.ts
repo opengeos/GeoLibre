@@ -21,6 +21,13 @@ export const LOAD_PLUGIN_TOOLS_NAME = "load_plugin_tools";
 /** Longest one-line summary the catalog shows for a deferred tool. */
 const SUMMARY_MAX_LENGTH = 160;
 
+/**
+ * A sentence end: a terminator followed by the end of the line or by a capital
+ * letter, but not the period of an initial (`U.S.`) or a common abbreviation
+ * (`e.g.`, `approx.`), which would otherwise cut a summary mid-thought.
+ */
+const SENTENCE_END = /(?<!\b(?:[A-Za-z]|e\.g|i\.e|etc|vs|approx|St|No))[.!?](?=\s+[A-Z]|\s*$)/;
+
 /** Most names one {@link LOAD_PLUGIN_TOOLS_NAME} call may load. */
 const MAX_LOAD_NAMES = 20;
 
@@ -72,7 +79,7 @@ export function scopePluginTools(
  */
 export function summarizeToolDescription(description: string | undefined): string {
   const firstLine = (description ?? "").trim().split(/\r?\n/, 1)[0]?.trim() ?? "";
-  const sentenceEnd = firstLine.search(/[.!?](\s|$)/);
+  const sentenceEnd = firstLine.search(SENTENCE_END);
   const sentence = sentenceEnd >= 0 ? firstLine.slice(0, sentenceEnd + 1) : firstLine;
   if (sentence.length <= SUMMARY_MAX_LENGTH) return sentence;
   return `${sentence.slice(0, SUMMARY_MAX_LENGTH - 1).trimEnd()}…`;

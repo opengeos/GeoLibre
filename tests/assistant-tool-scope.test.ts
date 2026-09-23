@@ -76,6 +76,15 @@ test("summaries keep the first sentence of the first line and cap the length", (
     "Query PM2.5 rows.",
   );
   assert.equal(summarizeToolDescription("  List fires\nsecond line"), "List fires");
+  // Initials and abbreviations do not end the sentence.
+  assert.equal(
+    summarizeToolDescription("Query wildfire risk for a U.S. county. Returns rows."),
+    "Query wildfire risk for a U.S. county.",
+  );
+  assert.equal(
+    summarizeToolDescription("Rank sensors, e.g. by PM2.5, approx. hourly. More."),
+    "Rank sensors, e.g. by PM2.5, approx. hourly.",
+  );
   assert.equal(summarizeToolDescription(undefined), "");
   const long = summarizeToolDescription("x".repeat(500));
   assert.equal(long.length, 160);
