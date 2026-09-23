@@ -240,7 +240,14 @@ inverted fill and the geometry generator (companion GeoJSON sources), the flat
 fill below a zoom-stepped extrusion, and attribute labels (de-duplicated labels
 read an aggregated companion source; the data-defined size, color, opacity,
 visibility and priority expressions apply). Layer blend modes are not
-reproduced, and the Style panel says so on a layer that sets one. Mapbox Standard is loaded as a local style import with a shared opacity setting.
+reproduced, and the Style panel says so on a layer that sets one. Large
+GeoJSON (over 50,000 features) keeps mapbox-gl's own GeoJSON source: MapLibre
+serves such layers as vector tiles through a geojson-vt protocol, and mapbox-gl
+has no `addProtocol` hook, but its source already tiles the data in a worker
+with geojson-vt. With 200,000 points, adding the layer took about 2.1 s on
+Mapbox against 1.5 s on MapLibre, a restyle 0.9 s against 0.8 s, and a data
+edit 2.1 s against 1.2 s, with a shorter longest main-thread stall on Mapbox
+(0.8 s against 0.85 s). Mapbox Standard is loaded as a local style import with a shared opacity setting.
 The Background card fades its land and water colors, labels (including ocean labels),
 3D objects, and atmosphere while preserving project layers and Standard's configuration.
 
