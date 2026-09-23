@@ -232,7 +232,7 @@ Layers drawn with deck.gl need none:
 Mapbox map through `app.getMapboxMap()`. Visible unsupported layers report an error
 on the map instead of being silently omitted. The heatmap and clustered point
 renderers compile to native Mapbox layers, with a clustered layer's authored
-filters applied to its data before clustering, as on MapLibre. Advanced
+filters applied to its data before clustering, as on MapLibre.
 The Style panel's symbology compiles to native Mapbox layers as on MapLibre:
 marker and KML icons, Geo Editor text markers, fill patterns and line
 decorations (generated sprites supplied through `styleimagemissing`), the
