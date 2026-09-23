@@ -1297,9 +1297,12 @@ export function DesktopShell({
             Object.fromEntries(Object.entries(record ?? {}).filter(([id]) => unregistered(id)));
           const next = {
             ...live,
+            // Keep every stored activation: a toggle already writes a
+            // deliberate deactivation to the store, so an id still stored but
+            // not live is one that failed to mount (or has not registered)
+            // and should be retried on the new map.
             activePluginIds: [
-              ...live.activePluginIds,
-              ...(stored?.activePluginIds ?? []).filter(unregistered),
+              ...new Set([...live.activePluginIds, ...(stored?.activePluginIds ?? [])]),
             ],
             mapControlPositions: {
               ...keep(stored?.mapControlPositions),

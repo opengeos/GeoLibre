@@ -174,10 +174,20 @@ export class PluginManager {
           settings[plugin.id] = this.deferredState.settings[plugin.id];
         continue;
       }
-      const position = plugin.getMapControlPosition?.();
-      if (position) mapControlPositions[plugin.id] = position;
-      const pluginState = plugin.getProjectState?.();
-      if (pluginState !== undefined) settings[plugin.id] = pluginState;
+      // One plugin that cannot report its state (an external plugin whose
+      // control is gone, say) must not cost every other plugin its snapshot.
+      try {
+        const position = plugin.getMapControlPosition?.();
+        if (position) mapControlPositions[plugin.id] = position;
+        const pluginState = plugin.getProjectState?.();
+        if (pluginState !== undefined) settings[plugin.id] = pluginState;
+      } catch (error) {
+        console.warn(`[GeoLibre] Could not read the project state of plugin "${plugin.id}"`, error);
+        const position = this.deferredState?.mapControlPositions[plugin.id];
+        if (position) mapControlPositions[plugin.id] = position;
+        if (this.deferredState?.settings && plugin.id in this.deferredState.settings)
+          settings[plugin.id] = this.deferredState.settings[plugin.id];
+      }
     }
 
     return {
