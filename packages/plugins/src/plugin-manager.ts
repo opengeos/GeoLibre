@@ -194,8 +194,11 @@ export class PluginManager {
         if (pluginState !== undefined) settings[plugin.id] = pluginState;
       } catch (error) {
         console.warn(`[GeoLibre] Could not read the project state of plugin "${plugin.id}"`, error);
-        const position = fallbackState?.mapControlPositions[plugin.id];
-        if (position) mapControlPositions[plugin.id] = position;
+        // Keep a live position read before the state accessor threw.
+        if (!(plugin.id in mapControlPositions)) {
+          const position = fallbackState?.mapControlPositions[plugin.id];
+          if (position) mapControlPositions[plugin.id] = position;
+        }
         if (fallbackState?.settings && plugin.id in fallbackState.settings)
           settings[plugin.id] = fallbackState.settings[plugin.id];
       }

@@ -1531,4 +1531,14 @@ describe("PluginManager getProjectState fallback", () => {
     assert.deepEqual(state.settings.broken, { step: 7 });
     assert.equal(state.mapControlPositions.broken, "bottom-right");
   });
+
+  it("keeps a live control position read before the state accessor threw", () => {
+    const manager = new PluginManager();
+    manager.register({ ...brokenPlugin(), getMapControlPosition: () => "top-right" });
+    manager.restoreProjectState(restored, app);
+
+    const state = manager.getProjectState();
+    assert.equal(state.mapControlPositions.broken, "top-right");
+    assert.deepEqual(state.settings.broken, { step: 1 });
+  });
 });
