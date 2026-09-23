@@ -163,6 +163,68 @@ export function resolvePluginToolNames(
 }
 
 /**
+ * Which plugin tools one conversation has loaded, kept across agent refreshes.
+ *
+ * Names are kept rather than tool instances, so a tool its plugin re-registers
+ * (a version bump) resolves to the new instance on the next {@link scope}.
+ */
+export class ConversationPluginTools {
+  private readonly loaded = new Set<string>();
+
+  /** @param limit The largest plugin tool count that is sent without deferral. */
+  constructor(private readonly limit: number = EAGER_PLUGIN_TOOL_LIMIT) {}
+
+  /**
+   * Scope the registered plugin tools for the next agent build or refresh.
+   *
+   * @param entries Registered plugin tools, from `listAssistantToolEntries()`.
+   * @returns The active plugin tools and, when deferring, the full catalog.
+   */
+  scope(entries: readonly AssistantToolEntry[]): PluginToolScope {
+    // Forget loads whose tool has since been unregistered, so a plugin that is
+    // deactivated and later reactivated starts deferred again.
+    const live = new Set(entries.map((entry) => entry.tool.name));
+    for (const name of this.loaded) {
+      if (!live.has(name)) this.loaded.delete(name);
+    }
+    const scope = scopePluginTools(entries, this.loaded, this.limit);
+    // A tool sent in full already counts as loaded: if more plugins later push
+    // the total past the eager limit, the tools this conversation could already
+    // call stay callable instead of silently dropping behind load_plugin_tools.
+    if (scope.catalog.length === 0) {
+      for (const active of scope.active) this.loaded.add(active.name);
+    }
+    return scope;
+  }
+
+  /**
+   * Mark the requested tools loaded.
+   *
+   * @param entries Registered plugin tools, from `listAssistantToolEntries()`.
+   * @param names Tool names or plugin ids the model asked for.
+   * @returns The newly loaded tools, to add to the live agent, and the outcome.
+   */
+  load(
+    entries: readonly AssistantToolEntry[],
+    names: readonly string[],
+  ): { tools: Tool[]; result: PluginToolLoadResult } {
+    const resolved = resolvePluginToolNames(entries, names, this.loaded);
+    for (const tool of resolved.tools) this.loaded.add(tool.name);
+    return resolved;
+  }
+
+  /** Forget every load, for a new conversation. */
+  clear(): void {
+    this.loaded.clear();
+  }
+
+  /** The loaded tool names, in load order. */
+  names(): string[] {
+    return [...this.loaded];
+  }
+}
+
+/**
  * Build the {@link LOAD_PLUGIN_TOOLS_NAME} tool. Loading goes through `load`,
  * which the session implements by adding the tools to the live agent's
  * registry; the SDK re-reads that registry before every model call, so the

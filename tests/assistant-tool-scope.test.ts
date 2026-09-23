@@ -9,6 +9,7 @@ import {
   type AssistantToolEntry,
 } from "../packages/plugins/src/assistant-tool-registry";
 import {
+  ConversationPluginTools,
   EAGER_PLUGIN_TOOL_LIMIT,
   LOAD_PLUGIN_TOOLS_NAME,
   createLoadPluginToolsTool,
@@ -172,6 +173,36 @@ test("load_plugin_tools reports loads and errors when nothing matches", async ()
   // Schema validation rejects an empty request before the loader runs.
   assert.equal((await run(loader, { names: [] })).status, "error");
   assert.deepEqual(calls, [["known"], ["missing"]]);
+});
+
+test("a conversation keeps its loads across refreshes and forgets removed tools", () => {
+  const state = new ConversationPluginTools(3);
+  const [a, b, c, d] = ["a", "b", "c", "d"].map((name) => entry(`plugin_5_alpha_${name}`, "alpha"));
+  const names = (tools: Tool[]) => tools.map((t) => t.name);
+
+  // Under the limit every tool is sent, and so counts as loaded.
+  assert.deepEqual(names(state.scope([a, b]).active), [a.tool.name, b.tool.name]);
+  // Crossing the limit keeps what the conversation could already call.
+  const crossed = state.scope([a, b, c, d]);
+  assert.deepEqual(names(crossed.active), [a.tool.name, b.tool.name]);
+  assert.equal(crossed.catalog.length, 4);
+
+  // A load survives the next refresh (a version bump from another plugin).
+  assert.deepEqual(names(state.load([a, b, c, d], [d.tool.name]).tools), [d.tool.name]);
+  assert.deepEqual(names(state.scope([a, b, c, d]).active), [
+    a.tool.name,
+    b.tool.name,
+    d.tool.name,
+  ]);
+
+  // An unregistered tool is forgotten, so reregistering it starts deferred.
+  state.scope([b, c, d, entry("plugin_4_beta_e", "beta")]);
+  assert.deepEqual(state.names(), [b.tool.name, d.tool.name]);
+  assert.deepEqual(names(state.scope([a, b, c, d]).active), [b.tool.name, d.tool.name]);
+
+  state.clear();
+  assert.deepEqual(state.names(), []);
+  assert.deepEqual(state.scope([a, b, c, d]).active, []);
 });
 
 test("registry entries carry the owning plugin for grouping", () => {

@@ -24,10 +24,9 @@ import type { AssistantProfile } from "./provider";
 import { describeLayers } from "./layer-summary";
 import { buildSystemPrompt } from "./system-prompt";
 import {
+  ConversationPluginTools,
   createLoadPluginToolsTool,
   formatPluginToolCatalog,
-  resolvePluginToolNames,
-  scopePluginTools,
   type PluginToolLoadResult,
 } from "./tool-scope";
 import { createHostAssistantTools, type AssistantToolDeps } from "./tools";
@@ -106,12 +105,10 @@ export class AssistantSession {
   /** Aborts an in-flight fast-path request when the user stops the run. */
   private fastPathAbort: AbortController | null = null;
   /**
-   * Deferred plugin tools the model loaded with `load_plugin_tools` in this
-   * conversation. Kept by name so a tool re-registered by its plugin (a version
-   * bump) is re-resolved to the new instance on the next refresh; cleared with
-   * the conversation in {@link reset}.
+   * Plugin tools this conversation can call, including those the model loaded
+   * with `load_plugin_tools`; cleared with the conversation in {@link reset}.
    */
-  private loadedPluginTools = new Set<string>();
+  private readonly pluginTools = new ConversationPluginTools();
   /** Tool instances for direct (non-model) invocation by the fast path. */
   private cachedTools: Tool[] | null = null;
   private cachedToolsVersion = -1;
@@ -157,7 +154,7 @@ export class AssistantSession {
     this.agent?.cancel();
     this.agent = null;
     this.lastContext = null;
-    this.loadedPluginTools.clear();
+    this.pluginTools.clear();
   }
 
   /** Cancel the in-flight model/tool run, if any. */
@@ -235,20 +232,7 @@ export class AssistantSession {
    * limit, and otherwise are listed in the prompt and loaded on demand.
    */
   private composeAgentInputs(): { tools: Tool[]; systemPrompt: string } {
-    const entries = listAssistantToolEntries();
-    // Forget loads whose tool has since been unregistered, so a plugin that is
-    // deactivated and later reactivated starts deferred again.
-    const live = new Set(entries.map((entry) => entry.tool.name));
-    for (const name of this.loadedPluginTools) {
-      if (!live.has(name)) this.loadedPluginTools.delete(name);
-    }
-    const scope = scopePluginTools(entries, this.loadedPluginTools);
-    // A tool sent in full already counts as loaded: if more plugins later push
-    // the total past the eager limit, the tools this conversation could already
-    // call stay callable instead of silently dropping behind load_plugin_tools.
-    if (scope.catalog.length === 0) {
-      for (const active of scope.active) this.loadedPluginTools.add(active.name);
-    }
+    const scope = this.pluginTools.scope(listAssistantToolEntries());
     const tools = [...scope.active, ...createHostAssistantTools(this.deps)];
     if (scope.catalog.length > 0) {
       tools.push(createLoadPluginToolsTool((names) => this.loadPluginTools(names)));
@@ -265,12 +249,7 @@ export class AssistantSession {
    * the loaded specs reach the model on its next step.
    */
   private loadPluginTools(names: string[]): PluginToolLoadResult {
-    const { tools, result } = resolvePluginToolNames(
-      listAssistantToolEntries(),
-      names,
-      this.loadedPluginTools,
-    );
-    for (const loaded of tools) this.loadedPluginTools.add(loaded.name);
+    const { tools, result } = this.pluginTools.load(listAssistantToolEntries(), names);
     if (tools.length > 0) this.agent?.toolRegistry.addOrReplace(tools);
     return result;
   }
