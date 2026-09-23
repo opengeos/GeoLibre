@@ -117,7 +117,7 @@ export function parseFirmsCsv(csv: string): FirmsDetection[] | null {
     if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) continue;
     const acquiredAtMs = firmsAcquisitionMs(cell(cells, iDate), cell(cells, iTime));
     if (!Number.isFinite(acquiredAtMs)) continue;
-    const frp = Number(cells[iFrp]);
+    const frp = Number(cell(cells, iFrp));
     detections.push({
       latitude,
       longitude,
