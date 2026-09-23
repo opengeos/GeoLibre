@@ -51,8 +51,14 @@ export function decodeArrowDecimal(value: unknown, scale: number): unknown {
  * Build a converter for a column of the given Arrow type that decodes every
  * DECIMAL it contains, including inside LIST, STRUCT and MAP values. Returns null
  * when the type holds no DECIMAL, so the common case costs nothing per row.
+ *
+ * Unions are not handled: DuckDB-WASM exports its UNION type as an Arrow
+ * union, which no GeoLibre reader consumes today.
  */
 function decimalConverter(type: unknown): CellConverter | null {
+  // A dictionary-encoded column reads back its decoded values, so it needs
+  // whatever converter its value type needs.
+  if (DataType.isDictionary(type)) return decimalConverter(type.dictionary);
   if (DataType.isDecimal(type)) {
     const { scale } = type;
     return (value) => decodeArrowDecimal(value, scale);
@@ -132,4 +138,28 @@ export function decodeArrowDecimalRows<T extends Record<string, unknown>>(
     for (const [name, convert] of converters) record[name] = convert(record[name]);
   }
   return rows;
+}
+
+/** A row as DuckDB-WASM's Arrow result hands it back. */
+interface ArrowResultRow {
+  toJSON?: () => Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/**
+ * Read a DuckDB-WASM Arrow result into plain row objects keyed by column name,
+ * rescaling DECIMAL cells into numbers from the result schema (see
+ * {@link decodeArrowDecimal}). Every DuckDB reader in the app goes through this.
+ *
+ * @param result An Arrow table (or anything with `toArray` and `schema`).
+ * @returns One plain object per row.
+ */
+export function rowsFromResult(result: {
+  toArray: () => ArrowResultRow[];
+  schema?: { fields?: ReadonlyArray<ArrowSchemaField> };
+}): Record<string, unknown>[] {
+  const rows = result
+    .toArray()
+    .map((row) => (typeof row.toJSON === "function" ? row.toJSON() : { ...row }));
+  return decodeArrowDecimalRows(rows, result.schema?.fields);
 }

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   Decimal,
+  Dictionary,
   Field,
+  Int32,
   List,
   Map_,
   Struct,
@@ -15,18 +17,8 @@ import {
 import {
   decodeArrowDecimal,
   decodeArrowDecimalRows,
+  rowsFromResult,
 } from "../apps/geolibre-desktop/src/lib/arrow-decimal";
-
-/**
- * What `rowsFromResult` (duckdb-vector-loader.ts) does with a DuckDB-WASM Arrow
- * result. Re-stated here because importing that module loads DuckDB-WASM.
- */
-function rowsFromResult(table: Table) {
-  return decodeArrowDecimalRows(
-    table.toArray().map((row) => row.toJSON() as Record<string, unknown>),
-    table.schema.fields,
-  );
-}
 
 /** Pack signed unscaled integers into Arrow's 128-bit little-endian DECIMAL words. */
 function decimalWords(values: bigint[]): Uint32Array {
@@ -136,6 +128,21 @@ describe("rowsFromResult with DECIMAL columns", () => {
       new Table({ m: makeVector(valuesByText), mk: makeVector(textByDecimal) }),
     );
     assert.deepEqual(rows, [{ m: { a: 1.25, b: -2.5 }, mk: { "1.5": "x" } }]);
+  });
+
+  it("decodes a dictionary-encoded decimal column", () => {
+    const decimal = new Decimal(2, 10, 128);
+    const dictionary = makeData({
+      type: new Dictionary(decimal, new Int32()),
+      length: 3,
+      data: new Int32Array([1, 0, 1]),
+      dictionary: makeVector(decimalData([125n, -5n], 2, 10)),
+    });
+    assert.deepEqual(rowsFromResult(new Table({ d: makeVector(dictionary) })), [
+      { d: -0.05 },
+      { d: 1.25 },
+      { d: -0.05 },
+    ]);
   });
 
   it("leaves rows alone when the schema has no decimal", () => {

@@ -1,6 +1,6 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
-import { decodeArrowDecimalRows, type ArrowSchemaField } from "./arrow-decimal";
+import { rowsFromResult } from "./arrow-decimal";
 import { isGeographicCrs } from "./crs-utils";
 import {
   detectGeometryColumn,
@@ -355,18 +355,10 @@ function exportBaseName(): string {
 
 /**
  * Read a DuckDB-WASM Arrow result into plain row objects keyed by column name.
- * DECIMAL cells are rescaled into numbers using the result schema (Arrow hands
- * them back as unscaled integer wrappers; see `decodeArrowDecimal`).
+ * Lives in `arrow-decimal.ts` (re-exported here) so it can be tested without
+ * loading DuckDB-WASM.
  */
-export function rowsFromResult(result: {
-  toArray: () => DuckDbRow[];
-  schema?: { fields?: ReadonlyArray<ArrowSchemaField> };
-}) {
-  const rows = result
-    .toArray()
-    .map((row) => (typeof row.toJSON === "function" ? row.toJSON() : { ...row }));
-  return decodeArrowDecimalRows(rows, result.schema?.fields);
-}
+export { rowsFromResult };
 
 function isParquetExtension(extension: string): boolean {
   return extension === "parquet" || extension === "geoparquet";
