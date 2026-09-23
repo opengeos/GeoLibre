@@ -194,7 +194,8 @@ export interface CompileMapboxLayerOptions {
   /**
    * The map's current zoom. A clustered layer's authored filters are applied
    * to its source data before clustering (see `authoredClusterInput`), and a
-   * filter that reads `["zoom"]` is evaluated at this zoom.
+   * filter that reads `["zoom"]` is evaluated at this zoom. Omitted, the
+   * clustered source keeps the unfiltered data (a compile-only check).
    */
   zoom?: number;
 }
@@ -450,7 +451,13 @@ export function compileMapboxLayer(
       source: wantCluster
         ? {
             type: "geojson",
-            data: authoredClusterInput(layer, compileOptions.zoom ?? 0),
+            // Without a live zoom (the support check's dry-run compile) the
+            // raw data stands in, so a dry run never touches the one-slot
+            // cluster-input cache the engine's real syncs rely on.
+            data:
+              compileOptions.zoom === undefined
+                ? layer.geojson
+                : authoredClusterInput(layer, compileOptions.zoom),
             generateId: true,
             cluster: true,
             clusterRadius,
@@ -583,6 +590,7 @@ export type MapboxUnsupportedStyleSetting =
   | "invertedFill"
   | "lineDecoration"
   | "geometryGenerator"
+  | "blendMode"
   | "labelDedupe"
   | "labelExpressions";
 
@@ -605,6 +613,8 @@ export function mapboxUnsupportedStyleSettings(
   if (styleValue(style, "invertedFillEnabled")) settings.push("invertedFill");
   if (styleValue(style, "lineDecoration") !== "none") settings.push("lineDecoration");
   if (styleValue(style, "geometryGenerator") !== "none") settings.push("geometryGenerator");
+  if ((style.blendMode ?? DEFAULT_LAYER_STYLE.blendMode) !== DEFAULT_LAYER_STYLE.blendMode)
+    settings.push("blendMode");
   if (labels.enabled && labels.dedupe !== "off") settings.push("labelDedupe");
   if (
     labels.enabled &&

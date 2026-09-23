@@ -2,7 +2,7 @@ import { showGlSearchResult } from "./gl-search-result";
 import type * as mapboxgl from "mapbox-gl";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import type * as maplibregl from "maplibre-gl";
-import type { FeatureCollection, Point, Polygon } from "geojson";
+import type { Feature, FeatureCollection, Point, Polygon } from "geojson";
 import type {
   GeoLibreLayer,
   MapPreferences,
@@ -1293,8 +1293,16 @@ export class MapboxEngine implements MapEngine {
     }
     // Keep the remembered plan in step with what the map now shows, or the
     // next `syncLayers` would diff the restored paint against a plan that
-    // still holds the pre-fade opacity and skip writing it back.
-    this.plans.set(id, plan);
+    // still holds the pre-fade opacity and skip writing it back. Only the
+    // paint was applied here, so the sources stay the ones the map holds: a
+    // recompiled clustered source's data was never pushed with setData.
+    const applied = this.plans.get(id);
+    this.plans.set(
+      id,
+      applied
+        ? { ...plan, source: applied.source, additionalSources: applied.additionalSources }
+        : plan,
+    );
   }
   /**
    * Give a story fade mapbox-gl's paint transition, so the chapter's duration
@@ -1436,7 +1444,7 @@ export class MapboxEngine implements MapEngine {
     const feature = Number.isInteger(index) ? indexed[index] : undefined;
     if (!feature) return String(queried.id);
     if (feature.id != null) return String(feature.id);
-    return String(indexed === features ? index : features.indexOf(feature));
+    return String(indexed === features ? index : featureIndex(features, feature));
   }
   highlightFeature(
     layer: GeoLibreLayer | undefined,
@@ -1835,4 +1843,17 @@ function clusterOptionsKey(source: mapboxgl.SourceSpecification): string {
   if (source.type !== "geojson") return "";
   const { cluster, clusterRadius, clusterMaxZoom } = source;
   return JSON.stringify([cluster ?? false, clusterRadius, clusterMaxZoom]);
+}
+
+// A feature's index in its layer's collection, for identify on a filtered
+// clustered source. Memoized per collection: an id-less layer would otherwise
+// pay a linear scan for every hit of every click.
+const featureIndexes = new WeakMap<Feature[], Map<Feature, number>>();
+function featureIndex(features: Feature[], feature: Feature): number {
+  let indexes = featureIndexes.get(features);
+  if (!indexes) {
+    indexes = new Map(features.map((candidate, index) => [candidate, index]));
+    featureIndexes.set(features, indexes);
+  }
+  return indexes.get(feature) ?? -1;
 }

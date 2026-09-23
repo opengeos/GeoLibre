@@ -6769,6 +6769,7 @@
       "invertedFill": "Inverted fill",
       "lineDecoration": "Line decorations",
       "geometryGenerator": "Geometry generator",
+      "blendMode": "Blend mode",
       "labelDedupe": "Label de-duplication",
       "labelExpressions": "Data-driven label size, color, opacity, visibility or priority"
     },

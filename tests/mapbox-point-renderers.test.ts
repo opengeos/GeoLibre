@@ -63,7 +63,7 @@ describe("Mapbox point renderers", () => {
   it("narrows the clustered data by the authored filter so hidden points leave the counts", () => {
     const layer = pointLayer({ pointRenderer: "cluster" });
     layer.filterExpression = ["==", ["get", "kind"], "a"];
-    const plan = compileMapboxLayer(layer);
+    const plan = compileMapboxLayer(layer, { zoom: 3 });
     if (plan.source.type !== "geojson") return assert.fail("expected a GeoJSON source");
     const data = plan.source.data as FeatureCollection;
     assert.deepEqual(
@@ -75,8 +75,11 @@ describe("Mapbox point renderers", () => {
     assert.deepEqual(bubble.filter, ["has", "point_count"]);
     // A second compile of the same record reuses the filtered collection, so
     // the engine does not re-cluster on every sync.
-    const again = compileMapboxLayer(layer);
+    const again = compileMapboxLayer(layer, { zoom: 3 });
     if (again.source.type === "geojson") assert.equal(again.source.data, data);
+    // A compile-only check (no live zoom) leaves the data unfiltered.
+    const dryRun = compileMapboxLayer(layer);
+    if (dryRun.source.type === "geojson") assert.equal(dryRun.source.data, layer.geojson);
   });
 
   it("ignores the point renderer on layers that also carry lines or polygons", () => {
@@ -110,6 +113,7 @@ describe("mapboxUnsupportedStyleSettings", () => {
       invertedFillEnabled: true,
       lineDecoration: "arrow",
       geometryGenerator: "centroid",
+      blendMode: "multiply",
       labels: {
         ...DEFAULT_LAYER_STYLE.labels,
         enabled: true,
@@ -124,6 +128,7 @@ describe("mapboxUnsupportedStyleSettings", () => {
       "invertedFill",
       "lineDecoration",
       "geometryGenerator",
+      "blendMode",
       "labelDedupe",
       "labelExpressions",
     ]);
