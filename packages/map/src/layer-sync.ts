@@ -35,8 +35,6 @@ import {
   hasZoomDependentClusterFilter,
   resolveVectorRenderMode,
 } from "./cluster-input";
-
-export { hasZoomDependentClusterFilter };
 import { addProtocol, config } from "maplibre-gl";
 import type { GeoJSON } from "geojson";
 import type * as maplibregl from "maplibre-gl";
@@ -106,6 +104,9 @@ import {
 } from "./style-mapper";
 import { isViteDevServer, proxyWmsTileUrl, proxyWmsTiles } from "./wms-proxy";
 import { resolveTextFontFromStyleLayers } from "./text-font";
+
+// Existing importers (MapController, tests) read it from here.
+export { hasZoomDependentClusterFilter };
 
 /**
  * Notified of the computed `beforeId` for a deck.gl-backed external custom layer
