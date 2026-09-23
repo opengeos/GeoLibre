@@ -2738,20 +2738,6 @@ export function DesktopShell({
                     onMapDiagnosticEvent={handleMapDiagnosticEvent}
                     onControllerReady={handleMapControllerReady}
                   />
-                  <MapModeBanner mapControllerRef={mapControllerRef} />
-                  <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
-                  <NetcdfSampleMarkers
-                    mapControllerRef={mapControllerRef}
-                    mapReadyGeneration={mapReadyGeneration}
-                  />
-                  {/* Its own boundary: the cube window builds a `WebGLRenderer`,
-                  whose constructor throws outright when the browser or driver
-                  gives it no context. Sharing the map's boundary would turn a
-                  failure to draw one panel into the loss of the whole map. */}
-                  <SilentErrorBoundary label="NetCDF 3D cube">
-                    <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
-                  </SilentErrorBoundary>
-                  <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
                   <Suspense fallback={null}>
                     <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
                   </Suspense>
@@ -2762,6 +2748,20 @@ export function DesktopShell({
               )}
               {/* Renderer-neutral: these use the store or `MapEngine`, so they
                   stay available on every renderer. */}
+              <MapModeBanner mapControllerRef={mapControllerRef} />
+              <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+              <NetcdfSampleMarkers
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
+              {/* Its own boundary: the cube window builds a `WebGLRenderer`,
+                  whose constructor throws outright when the browser or driver
+                  gives it no context. Sharing the map's boundary would turn a
+                  failure to draw one panel into the loss of the whole map. */}
+              <SilentErrorBoundary label="NetCDF 3D cube">
+                <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
+              </SilentErrorBoundary>
+              <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
               <RemoteCursorsOverlay
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}

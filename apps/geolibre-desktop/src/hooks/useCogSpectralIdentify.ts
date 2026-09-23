@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import type * as maplibregl from "maplibre-gl";
 import { knownCogBandCount, readCogSpectralProfile } from "@geolibre/plugins/cog-spectral-profile";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
@@ -56,11 +55,11 @@ export function useCogSpectralIdentify(
   );
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map || !activeCogId || !cogUrl) return;
+    // Renderer-neutral: only the clicked position is needed.
+    const engine = mapControllerRef.current;
+    if (!engine || !activeCogId || !cogUrl) return;
 
-    const handleClick = (event: maplibregl.MapMouseEvent) => {
-      const { lng, lat } = event.lngLat;
+    const handleClick = ([lng, lat]: [number, number]) => {
       // A single-band raster -- a DEM, a grayscale scene -- has no spectrum, so
       // every click on one would add a marker and take it away again a moment
       // later. Once the first read has told us the band count, skip the marker
@@ -108,10 +107,7 @@ export function useCogSpectralIdentify(
       });
     };
 
-    map.on("click", handleClick);
-    return () => {
-      map.off("click", handleClick);
-    };
+    return engine.onMapClick(handleClick);
     // mapReadyGeneration re-runs this once the map exists, matching the other
     // identify hooks — the ref is empty on the first render.
     // eslint-disable-next-line react-hooks/exhaustive-deps

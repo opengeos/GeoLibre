@@ -28,7 +28,7 @@ import {
   type NetcdfCubeSettings,
 } from "../../lib/netcdf-cube-store";
 import { getNetcdfLayerState } from "../../lib/netcdf-image-symbology";
-import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
+import { clearPrintExtent, drawEnginePrintExtent, drawPrintExtent } from "../../lib/print-extent";
 
 interface NetcdfCubeSetupDialogProps {
   /** The live map, for "use the current view" and for drawing an extent. */
@@ -117,22 +117,33 @@ export function NetcdfCubeSetupDialog({ mapControllerRef }: NetcdfCubeSetupDialo
   }
 
   const startDraw = async (): Promise<void> => {
-    const map = mapControllerRef.current?.getMap();
-    if (!map) return;
+    const engine = mapControllerRef.current;
+    if (!engine) return;
+    const map = engine.getMap();
     drawAbort.current?.abort();
     const controller = new AbortController();
     drawAbort.current = controller;
     setDrawing(true);
+    let disposePreview: (() => void) | undefined;
     try {
       // The shared box-draw the Print layout uses: it suspends the map gestures
       // that would fight the drag, handles touch and Escape, and hands back
-      // [west, south, east, north].
-      const extent = await drawPrintExtent(map, { signal: controller.signal });
+      // [west, south, east, north]. Other renderers draw through the engine.
+      let extent: [number, number, number, number] | null;
+      if (map) {
+        extent = await drawPrintExtent(map, { signal: controller.signal });
+      } else {
+        const drawn = await drawEnginePrintExtent(engine, controller.signal);
+        disposePreview = drawn?.dispose;
+        extent = drawn?.extent ?? null;
+      }
       if (extent) setDraft((current) => ({ ...current, extent: "draw", bbox: extent }));
     } finally {
-      // The box it leaves behind belongs to the Print layout's source; clear it
-      // so a cube extent does not linger on the map as a print frame.
-      clearPrintExtent(map);
+      // The box it leaves behind belongs to the Print layout's source (or the
+      // engine's preview); clear it so a cube extent does not linger on the
+      // map as a print frame.
+      if (map) clearPrintExtent(map);
+      disposePreview?.();
       if (drawAbort.current === controller) drawAbort.current = null;
       setDrawing(false);
     }

@@ -1,9 +1,10 @@
 import { useAppStore } from "@geolibre/core";
 import type { TFunction } from "i18next";
-import * as maplibregl from "maplibre-gl";
+import type * as maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { MapEngine } from "@geolibre/map";
+import { createEnginePopup, engineStyleMap } from "../lib/engine-style-map";
 import { bandMeasure } from "../lib/netcdf-band-axis";
 import {
   displayUnits,
@@ -146,7 +147,10 @@ export function useNetcdfIdentify(
   });
 
   useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
+    // Either 2D engine: the click, cursor and popup go through the surface
+    // MapLibre and mapbox-gl share (see engineStyleMap).
+    const engine = mapControllerRef.current;
+    const map = engineStyleMap(engine);
     if (!activeLayerId || !map) return;
 
     const canvas = map.getCanvas();
@@ -194,7 +198,7 @@ export function useNetcdfIdentify(
       // it MapLibre's own always-white `.maplibregl-popup-content` survives, and
       // the rows below — which inherit the theme foreground — render white on
       // white in dark mode.
-      popup = new maplibregl.Popup({
+      popup = createEnginePopup(engine, {
         className: "geolibre-identify-popup",
         closeButton: true,
         closeOnClick: false,

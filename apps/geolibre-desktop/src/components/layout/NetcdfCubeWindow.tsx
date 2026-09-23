@@ -565,15 +565,10 @@ function extentRect(
   if (settings.extent === "draw") {
     return settings.bbox ? rectFromBounds(grid, settings.bbox) : null;
   }
-  const map = controller?.getMap();
-  if (!map) return null;
-  const bounds = map.getBounds();
-  return rectFromBounds(grid, [
-    bounds.getWest(),
-    bounds.getSouth(),
-    bounds.getEast(),
-    bounds.getNorth(),
-  ]);
+  // The engine's view extent, so the "current view" option works on every
+  // renderer rather than only where there is a MapLibre map.
+  const bounds = controller?.getViewBounds();
+  return bounds ? rectFromBounds(grid, bounds) : null;
 }
 
 /** The cells a geographic rectangle covers, clamped into the grid. */

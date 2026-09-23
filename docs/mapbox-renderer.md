@@ -104,8 +104,12 @@ browser against an authenticated Mapbox map):
 - **Time Slider** for XYZ, WMS, GeoJSON and TiTiler-served COG sources. A COG
   bound to the `gpu` / `wasm` engines (MapLibre-only tile protocols) is
   re-added through TiTiler; a mosaic manifest is dropped with a console
-  warning. Pixel identify and pixel time series are not available while Mapbox
-  is primary because those interactions still depend on the MapLibre map.
+  warning. The pixel time series tool picks and marks its points on Mapbox too
+  (the engine's click events and projected DOM markers). Pixel identify is not
+  available while Mapbox is primary because it still depends on the MapLibre
+  map.
+- **NetCDF** sample markers, the 3D cube's "current view" and "draw" extents,
+  and the COG spectral-profile click work on either 2D engine.
 - **Timelapse**, including recording the Mapbox canvas to video.
 - **Elevation Profile**, **USGS LiDAR** (the 3DEP index raster is adopted
   natively; point clouds already drew through deck.gl), and **Mapillary**
