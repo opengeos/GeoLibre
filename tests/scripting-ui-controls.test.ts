@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { IDENTIFY_ALL_LAYERS_ID, useAppStore } from "@geolibre/core";
 import {
+  clearScriptMapControls,
   getScriptIdentify,
+  getScriptMapControls,
   isScriptableMapControl,
   isScriptablePanel,
+  recordScriptMapControl,
   setScriptIdentify,
 } from "../apps/geolibre-desktop/src/lib/scripting/ui-controls";
 
@@ -54,5 +57,33 @@ describe("scriptable control names", () => {
     // Terrain is project state, and the layer control is always on.
     assert.ok(!isScriptableMapControl("terrain"));
     assert.ok(!isScriptableMapControl("layer-control"));
+  });
+});
+
+// The record `useScriptControlRestore` replays onto each new controller. It
+// lives outside the toolbar because `?maponly` embeds never mount one, and a
+// renderer swap or project load drops whatever the old controller had mounted.
+describe("recorded script map controls", () => {
+  beforeEach(() => {
+    clearScriptMapControls();
+  });
+
+  it("records what a script asked for so it can be replayed", () => {
+    recordScriptMapControl("navigation", false);
+    recordScriptMapControl("scale", true);
+    assert.deepEqual(getScriptMapControls(), [
+      ["navigation", false],
+      ["scale", true],
+    ]);
+  });
+
+  it("keeps only the latest request per control", () => {
+    recordScriptMapControl("navigation", false);
+    recordScriptMapControl("navigation", true);
+    assert.deepEqual(getScriptMapControls(), [["navigation", true]]);
+  });
+
+  it("starts empty so an untouched control is left to the toolbar", () => {
+    assert.deepEqual(getScriptMapControls(), []);
   });
 });

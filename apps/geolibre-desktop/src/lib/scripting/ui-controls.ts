@@ -45,6 +45,43 @@ export interface ScriptMapControlDetail {
 }
 
 /**
+ * Built-in map controls a script has shown or hidden this session.
+ *
+ * Kept at module scope rather than in the toolbar because `?maponly` embeds
+ * never mount the toolbar, and a renderer swap or project load drops whatever
+ * the previous controller had mounted. `useScriptControlRestore` replays this
+ * record onto each new controller, the same split `useTerrainRestore` uses for
+ * terrain. It also covers a script that runs before the controller exists: the
+ * map controller is created asynchronously, so a command flushed right after
+ * `geolibre:ready` can find none.
+ */
+const scriptMapControls = new Map<ScriptableMapControl, boolean>();
+
+/**
+ * Record a script's desired visibility for a built-in map control.
+ *
+ * @param control - The control the script addressed.
+ * @param visible - Whether the script asked for it to be shown.
+ */
+export function recordScriptMapControl(control: ScriptableMapControl, visible: boolean): void {
+  scriptMapControls.set(control, visible);
+}
+
+/**
+ * Read every control visibility a script has set this session.
+ *
+ * @returns The recorded control/visibility pairs, oldest first.
+ */
+export function getScriptMapControls(): readonly (readonly [ScriptableMapControl, boolean])[] {
+  return [...scriptMapControls];
+}
+
+/** Forget every recorded control. Exported for tests. */
+export function clearScriptMapControls(): void {
+  scriptMapControls.clear();
+}
+
+/**
  * Whether a name is a scriptable built-in map control.
  *
  * @param name - The control name a script passed.

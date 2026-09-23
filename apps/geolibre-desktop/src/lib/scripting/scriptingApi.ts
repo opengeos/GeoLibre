@@ -52,6 +52,7 @@ import {
   getScriptIdentify,
   isScriptableMapControl,
   isScriptablePanel,
+  recordScriptMapControl,
   setScriptIdentify,
   type ScriptMapControlDetail,
   type ScriptablePanel,
@@ -316,9 +317,17 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         return visible;
       }
       if (isScriptableMapControl(control)) {
+        // Record before applying. The controller is created asynchronously, so a
+        // command flushed right after `geolibre:ready` can find none, and a
+        // renderer swap or project load drops what the old one had mounted.
+        // `useScriptControlRestore` replays this record onto each new
+        // controller, which is also what makes this work in `?maponly` embeds
+        // where no toolbar is mounted to re-apply anything.
+        recordScriptMapControl(control, visible);
         getController()?.setBuiltInControlVisible(control, visible);
-        // The toolbar owns the checkmark state and re-applies it on a renderer
-        // swap, so it has to hear about the change or it would undo it.
+        // The toolbar, when mounted, owns the checkmark state and re-applies it
+        // on a renderer swap, so it has to hear about the change or it would
+        // undo it.
         window.dispatchEvent(
           new CustomEvent<ScriptMapControlDetail>(SCRIPT_MAP_CONTROL_EVENT, {
             detail: { control, visible },

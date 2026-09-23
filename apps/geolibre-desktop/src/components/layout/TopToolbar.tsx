@@ -1268,7 +1268,9 @@ export function TopToolbar({
   // on the map directly; mirror it here so the Controls menu checkmark agrees
   // and the effect above does not revert it on the next renderer swap. The
   // choice is per session, so unlike a menu toggle it is not written to the
-  // device preference.
+  // device preference. Only the checkmark is mirrored here: re-applying the
+  // control to a new map belongs to `useScriptControlRestore`, since this
+  // toolbar is unmounted in `?maponly` embeds.
   useEffect(() => {
     const onScriptControl = (event: Event) => {
       const { control, visible } = (event as CustomEvent<ScriptMapControlDetail>).detail;
