@@ -29,6 +29,7 @@ import {
   buildGeneratedGeometry,
   buildInvertedMask,
   generatedGeometryKinds,
+  mapboxRenderableMask,
 } from "./derived-geometry";
 import { prepareFillPattern } from "./fill-patterns";
 import { prepareLineDecoration } from "./line-decorations";
@@ -627,7 +628,7 @@ export function compileMapboxLayer(
     styleValue(layer.style, "invertedFillEnabled") &&
     !hasFeatureFilter &&
     layer.geojson
-      ? withOpposingHoles(buildInvertedMask(layer.geojson))
+      ? mapboxMask(buildInvertedMask(layer.geojson))
       : null;
   const invertedSourceId = `${sourceId}-inverted`;
   const generatorType =
@@ -909,50 +910,7 @@ export function mapboxUnsupportedStyleSettings(
   return blendMode !== DEFAULT_LAYER_STYLE.blendMode ? ["blendMode"] : [];
 }
 
-// turf's mask is a world rectangle ([-180, -90] to [180, 90]) with every
-// feature cut out as a hole wound the same way as that rectangle. MapLibre
-// draws it as intended, but mapbox-gl drops a ring lying exactly on the
-// antimeridian and the poles, and draws each same-wound hole as a polygon of
-// its own, which inverts the mask (the features filled, the world around them
-// empty). Pulling the world ring just inside the Web Mercator limits and
-// giving the holes the RFC 7946 opposing winding draws it as on MapLibre.
-// Memoized per mask, which buildInvertedMask itself memoizes.
-const opposedMasks = new WeakMap<FeatureCollection, FeatureCollection>();
-const MASK_MAX_LNG = 179.999;
-const MASK_MAX_LAT = 85.0511;
-function withOpposingHoles(mask: FeatureCollection | null): FeatureCollection | null {
-  if (!mask) return null;
-  const cached = opposedMasks.get(mask);
-  if (cached) return cached;
-  const signedArea = (ring: number[][]) => {
-    let sum = 0;
-    for (let i = 0; i < ring.length - 1; i++)
-      sum += (ring[i + 1][0] - ring[i][0]) * (ring[i + 1][1] + ring[i][1]);
-    return sum;
-  };
-  const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
-  const oppose = (rings: number[][][]) =>
-    rings.map((ring, index) =>
-      index === 0
-        ? ring.map(([lng, lat]) => [clamp(lng, MASK_MAX_LNG), clamp(lat, MASK_MAX_LAT)])
-        : Math.sign(signedArea(ring)) === Math.sign(signedArea(rings[0]))
-          ? [...ring].reverse()
-          : ring,
-    );
-  const result: FeatureCollection = {
-    ...mask,
-    features: mask.features.map((feature) => {
-      const geometry = feature.geometry;
-      if (geometry?.type === "Polygon")
-        return { ...feature, geometry: { ...geometry, coordinates: oppose(geometry.coordinates) } };
-      if (geometry?.type === "MultiPolygon")
-        return {
-          ...feature,
-          geometry: { ...geometry, coordinates: geometry.coordinates.map(oppose) },
-        };
-      return feature;
-    }),
-  };
-  opposedMasks.set(mask, result);
-  return result;
+/** The inverted-fill mask reshaped so mapbox-gl draws it as MapLibre does. */
+function mapboxMask(mask: FeatureCollection | null): FeatureCollection | null {
+  return mask ? mapboxRenderableMask(mask as Parameters<typeof mapboxRenderableMask>[0]) : null;
 }
