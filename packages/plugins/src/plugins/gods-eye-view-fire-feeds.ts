@@ -107,8 +107,12 @@ export function parseFirmsCsv(csv: string): FirmsDetection[] | null {
     if (cells.length < header.length) continue;
     const confidence = cell(cells, iConfidence).toLowerCase();
     if (isLowConfidence(confidence)) continue;
-    const latitude = Number(cells[iLat]);
-    const longitude = Number(cells[iLon]);
+    // An empty cell would read as 0 and plot the detection at (0, 0).
+    const latCell = cell(cells, iLat);
+    const lonCell = cell(cells, iLon);
+    if (latCell === "" || lonCell === "") continue;
+    const latitude = Number(latCell);
+    const longitude = Number(lonCell);
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) continue;
     if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) continue;
     const acquiredAtMs = firmsAcquisitionMs(cell(cells, iDate), cell(cells, iTime));
