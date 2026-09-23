@@ -725,6 +725,19 @@ function sortGroupThroughUnits(
   const insideSet = new Set(inside);
   const reordered = units.filter((_, index) => !insideSet.has(index));
   reordered.splice(inside[0], 0, ...sortedBlocks.flat());
+  // Judge "already sorted" by what the panel shows, not by `groups` order:
+  // a reparent can leave that array out of panel order, and re-deriving it
+  // alone would enable a sort that changes nothing visible. This also skips
+  // the whole-array rebuild for the common no-op asked by the sort menu.
+  const unchanged =
+    reordered.length === units.length &&
+    reordered.every(
+      (unit, index) =>
+        unit.groupId === units[index].groupId &&
+        unit.layers.length === units[index].layers.length &&
+        unit.layers.every((layer, at) => layer.id === units[index].layers[at].id),
+    );
+  if (unchanged) return null;
   return arraysFromUnits(reordered, layers, groups, groupById);
 }
 

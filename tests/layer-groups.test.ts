@@ -619,6 +619,19 @@ describe("sortLayerGroupInPanel", () => {
     assert.ok(sortLayerGroupInPanel(layers, [group("g")], "g", "asc", "not a locale!"));
   });
 
+  it("reports an already-sorted panel as sorted even when the group array is out of panel order", () => {
+    // A reparent leaves the child "a" ahead of its parent in `groups`; the
+    // panel still shows the children in A to Z order, so A to Z is a no-op.
+    const layers = [layer("b1", { groupId: "b" }), layer("a1", { groupId: "a" })];
+    const groups = [
+      group("a", { name: "Alpha", parentId: "p" }),
+      group("p", { name: "Parent" }),
+      group("b", { name: "Bravo", parentId: "p" }),
+    ];
+    assert.equal(sortLayerGroupInPanel(layers, groups, "p", "asc"), null);
+    assert.deepEqual(layerGroupSortability(layers, groups).get("p"), { asc: false, desc: true });
+  });
+
   it("returns null for an unknown or empty group, and reports sortability", () => {
     const layers = [layer("a", { groupId: "g" }), layer("b", { groupId: "g" })];
     const groups = [group("g"), group("empty")];
