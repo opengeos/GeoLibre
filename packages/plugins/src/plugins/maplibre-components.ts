@@ -3121,6 +3121,12 @@ export async function addLidarLayerFromUrl(
     const opened = await openStandaloneLidarControl(app, { reveal: false });
     if (!opened || !lidarControl) return null;
     const info = await lidarControl.loadPointCloud(url);
+    // maplibre-gl-lidar emits `load` synchronously before loadPointCloud
+    // resolves, so the load handler has already added the store layer. Fail
+    // loudly if an upgrade breaks that, rather than hand back a dangling id.
+    if (!useAppStore.getState().layers.some((layer) => layer.id === info.id)) {
+      throw new Error(`The LiDAR control did not create a layer for ${url}.`);
+    }
     return info.id;
   };
   return (options.fit ?? true) ? load() : withLidarAutoZoomSuppressed(app, load);

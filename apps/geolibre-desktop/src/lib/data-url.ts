@@ -108,7 +108,10 @@ export function dataUrlParameters(search: string): DataUrlParameter[] | null {
 }
 
 export function remoteName(url: string): string {
-  const basename = new URL(url).pathname.split("/").pop() || "data";
+  const segments = new URL(url).pathname.split("/");
+  // An EPT dataset's entry file is always `ept.json`; its folder names it.
+  const basename =
+    (segments.at(-1)?.toLowerCase() === "ept.json" ? segments.at(-2) : segments.at(-1)) || "data";
   // A literal `%` in the path (`.../100%.tif`) makes decoding throw, which would
   // surface as a raw "URI malformed" instead of this file's own errors.
   let name: string;

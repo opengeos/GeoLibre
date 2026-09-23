@@ -421,7 +421,7 @@ describe("data URL deep links", () => {
       ["https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz", "autzen-classified"],
       ["https://example.com/tile.LAZ?token=abc", "tile"],
       ["https://example.com/survey.las", "survey"],
-      ["https://example.com/autzen/ept.json", "ept"],
+      ["https://example.com/autzen/ept.json", "autzen"],
     ];
     for (const [url, name] of cases) {
       assert.deepEqual(await fetchRemoteData(url, { fetchImpl }), { kind: "lidar", name, url });
