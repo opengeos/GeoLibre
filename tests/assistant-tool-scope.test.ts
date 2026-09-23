@@ -138,6 +138,19 @@ test("names resolve to exact tools or expand a plugin id, reporting the rest", (
   });
 });
 
+test("an exact tool name wins over a plugin id spelled the same", () => {
+  const catalog = [
+    entry("plugin_5_alpha_a", "alpha"),
+    entry("plugin_16_plugin_5_alpha_a_x", "plugin_5_alpha_a"),
+    entry("plugin_16_plugin_5_alpha_a_y", "plugin_5_alpha_a"),
+  ];
+  const { tools } = resolvePluginToolNames(catalog, ["plugin_5_alpha_a"], new Set());
+  assert.deepEqual(
+    tools.map((t) => t.name),
+    ["plugin_5_alpha_a"],
+  );
+});
+
 test("load_plugin_tools reports loads and errors when nothing matches", async () => {
   const calls: string[][] = [];
   const loader = createLoadPluginToolsTool((names) => {

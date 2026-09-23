@@ -123,7 +123,7 @@ export interface PluginToolLoadResult {
 
 /**
  * Resolve requested names against the catalog. A name matches a tool exactly,
- * or a plugin id, which expands to every tool that plugin registered.
+ * or else a plugin id, which expands to every tool that plugin registered.
  *
  * @param catalog Every plugin tool currently registered.
  * @param names Tool names or plugin ids the model asked for.
@@ -140,9 +140,10 @@ export function resolvePluginToolNames(
   const seen = new Set<string>();
   for (const raw of names) {
     const name = raw.trim();
-    const matches = catalog.filter(
-      (entry) => entry.tool.name === name || (!!name && entry.ownerPluginId === name),
-    );
+    // An exact tool name wins over a plugin id that happens to spell the same.
+    const exact = catalog.filter((entry) => entry.tool.name === name);
+    const matches =
+      exact.length > 0 ? exact : catalog.filter((entry) => !!name && entry.ownerPluginId === name);
     if (matches.length === 0) {
       result.unknown.push(raw);
       continue;

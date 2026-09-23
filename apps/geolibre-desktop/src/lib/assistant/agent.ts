@@ -243,6 +243,12 @@ export class AssistantSession {
       if (!live.has(name)) this.loadedPluginTools.delete(name);
     }
     const scope = scopePluginTools(entries, this.loadedPluginTools);
+    // A tool sent in full already counts as loaded: if more plugins later push
+    // the total past the eager limit, the tools this conversation could already
+    // call stay callable instead of silently dropping behind load_plugin_tools.
+    if (scope.catalog.length === 0) {
+      for (const active of scope.active) this.loadedPluginTools.add(active.name);
+    }
     const tools = [...scope.active, ...createHostAssistantTools(this.deps)];
     if (scope.catalog.length > 0) {
       tools.push(createLoadPluginToolsTool((names) => this.loadPluginTools(names)));
