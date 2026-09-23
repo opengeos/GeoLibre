@@ -2749,7 +2749,10 @@ export function DesktopShell({
               {/* Renderer-neutral: these use the store or `MapEngine`, so they
                   stay available on every renderer. */}
               <MapModeBanner mapControllerRef={mapControllerRef} />
-              <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+              <PixelTimeSeriesControl
+                mapControllerRef={mapControllerRef}
+                mapReadyGeneration={mapReadyGeneration}
+              />
               <NetcdfSampleMarkers
                 mapControllerRef={mapControllerRef}
                 mapReadyGeneration={mapReadyGeneration}

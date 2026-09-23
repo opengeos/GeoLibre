@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
+import { engineStyleMap } from "../lib/engine-style-map";
 import { knownCogBandCount, readCogSpectralProfile } from "@geolibre/plugins/cog-spectral-profile";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
@@ -55,9 +56,10 @@ export function useCogSpectralIdentify(
   );
 
   useEffect(() => {
-    // Renderer-neutral: only the clicked position is needed.
+    // Either 2D engine (the samples are drawn as 2D markers); only the
+    // clicked position is needed from the engine.
     const engine = mapControllerRef.current;
-    if (!engine || !activeCogId || !cogUrl) return;
+    if (!engine || !engineStyleMap(engine) || !activeCogId || !cogUrl) return;
 
     const handleClick = ([lng, lat]: [number, number]) => {
       // A single-band raster -- a DEM, a grayscale scene -- has no spectrum, so

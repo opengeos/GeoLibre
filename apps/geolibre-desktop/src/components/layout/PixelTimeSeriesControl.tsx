@@ -53,6 +53,8 @@ const SOURCE_DASHES: (string | undefined)[] = [undefined, "4 3", "2 2", "8 3"];
 
 interface PixelTimeSeriesControlProps {
   mapControllerRef: RefObject<MapEngine | null>;
+  /** Bumped by the shell each time the map (re)initialises, e.g. a renderer swap. */
+  mapReadyGeneration: number;
 }
 
 /**
@@ -125,7 +127,10 @@ interface ClickedPoint {
  * The pixel reads happen client-side via HTTP range reads (the same reader as
  * the single-COG Identify tool), so no Python sidecar is required.
  */
-export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesControlProps) {
+export function PixelTimeSeriesControl({
+  mapControllerRef,
+  mapReadyGeneration,
+}: PixelTimeSeriesControlProps) {
   const { t } = useTranslation();
   const { isActive } = usePluginRegistry();
   const timeSliderActive = isActive(TIME_SLIDER_PLUGIN_ID);
@@ -179,6 +184,8 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   // below reconciles them against `points` (which "Clear all", removing a
   // point, and the Time Slider teardown all empty).
   const markers = useRef<Map<number, AnnotationMarker>>(new Map());
+  // The map those markers were added to, so a renderer swap can rebuild them.
+  const markersMap = useRef<unknown>(null);
 
   // Panel geometry. A null rect means "use the default top-left placement
   // (CSS)"; the first drag or resize switches to absolute px so the panel is
@@ -206,8 +213,15 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   useEffect(() => {
     // Either 2D engine: MapLibre's Marker, or a projected DOM marker on Mapbox.
     const map = engineStyleMap(mapControllerRef.current);
-    if (!map) return;
     const live = markers.current;
+    // After a renderer swap the markers still sit on the discarded map: drop
+    // them so the loop below rebuilds every point on the new one.
+    if (markersMap.current !== map) {
+      for (const marker of live.values()) marker.remove();
+      live.clear();
+      markersMap.current = map;
+    }
+    if (!map) return;
     for (const point of points) {
       if (live.has(point.id)) continue;
       live.set(
@@ -224,7 +238,7 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
       marker.remove();
       live.delete(id);
     }
-  }, [points, mapControllerRef]);
+  }, [points, mapControllerRef, mapReadyGeneration]);
 
   // Unmount (rather than an emptied `points`) leaves the effect above no chance
   // to run, so drop every marker here or they outlive the panel on the map.
@@ -288,9 +302,10 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
   // Esc stops picking.
   useEffect(() => {
     if (!picking) return;
-    // Renderer-neutral: the engine's click subscription and render canvas.
+    // Either 2D engine (the samples are drawn as 2D markers): the engine's
+    // click subscription and render canvas.
     const engine = mapControllerRef.current;
-    const canvas = engine?.getRenderSurface()?.getCanvas();
+    const canvas = engineStyleMap(engine) ? engine?.getRenderSurface()?.getCanvas() : null;
     if (!engine || !canvas) {
       setPicking(false);
       return;
@@ -326,7 +341,7 @@ export function PixelTimeSeriesControl({ mapControllerRef }: PixelTimeSeriesCont
       window.removeEventListener("keydown", onKey);
       canvas.style.cursor = prevCursor;
     };
-  }, [picking, runQueryForPoint, mapControllerRef, t]);
+  }, [picking, runQueryForPoint, mapControllerRef, mapReadyGeneration, t]);
 
   // Leaving the time-slider stack (dock closed or stack removed) tears the tool
   // down so the crosshair, panel, and click handler do not linger.
