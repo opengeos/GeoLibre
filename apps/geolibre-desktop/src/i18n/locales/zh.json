@@ -7324,6 +7324,8 @@
     "renameGroup": "重命名分组",
     "moveGroupUp": "上移分组",
     "moveGroupDown": "下移分组",
+    "sortGroupAscending": "按 A 到 Z 排序",
+    "sortGroupDescending": "按 Z 到 A 排序",
     "ungroupKeepLayers": "取消分组（保留图层）",
     "deleteGroupAndLayers": "删除分组及图层",
     "groupActions": "分组操作",

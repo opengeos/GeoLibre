@@ -7324,6 +7324,8 @@
     "renameGroup": "Nhấp đúp để thay đổi bản đồ cơ sở",
     "moveGroupUp": "Di chuyển nhóm lên",
     "moveGroupDown": "Di chuyển nhóm xuống",
+    "sortGroupAscending": "Sắp xếp từ A đến Z",
+    "sortGroupDescending": "Sắp xếp từ Z đến A",
     "ungroupKeepLayers": "Ungroup (giữ các lớp)",
     "deleteGroupAndLayers": "Xóa nhóm và lớp",
     "groupActions": "Hành động nhóm",

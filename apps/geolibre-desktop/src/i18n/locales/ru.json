@@ -7567,6 +7567,8 @@
     "renameGroup": "Переименовать группу",
     "moveGroupUp": "Переместить группу вверх",
     "moveGroupDown": "Переместить группу вниз",
+    "sortGroupAscending": "Сортировать от А до Я",
+    "sortGroupDescending": "Сортировать от Я до А",
     "ungroupKeepLayers": "Разгруппировать (сохранить слои)",
     "deleteGroupAndLayers": "Удалить группу и слои",
     "groupActions": "Действия с группой",

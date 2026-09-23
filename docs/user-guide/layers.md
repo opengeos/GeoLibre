@@ -143,6 +143,7 @@ Groups are folders in the layer stack. They can nest, so a project can carry a r
 - **Create**: **New group** adds an empty folder. **New group from layer** wraps the layer you are on, and **New group from selected layers** wraps a multi-selection.
 - **Fill**: **Move to group** moves one layer, **Move selected layers to group** moves a whole selection in one step (keeping their relative order), and **Add data to group** opens Add Data with the new layer targeted at that group.
 - **Organize**: rename a group, collapse or expand it, move it up or down, and set a group-level opacity that applies to everything inside.
+- **Sort**: **Sort A to Z** and **Sort Z to A** order a group's contents by name, top of the list first. Numbers sort naturally (Parcel 2 before Parcel 10) and case is ignored. Subgroups are sorted among themselves and move with everything inside them, while the group's own layers stay together as one block. Undo restores the previous order.
 - **Visibility**: hiding a group hides its layers. A layer inside a hidden group is marked *Hidden because its group is not visible*, so you can tell it apart from a layer you turned off yourself.
 - **Remove**: **Ungroup (keep layers)** dissolves the folder and leaves its layers in place; **Delete group and layers** removes both.
 

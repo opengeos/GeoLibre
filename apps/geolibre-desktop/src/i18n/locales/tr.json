@@ -7405,6 +7405,8 @@
     "renameGroup": "Grubu yeniden adlandır",
     "moveGroupUp": "Grubu yukarı taşı",
     "moveGroupDown": "Grubu aşağı taşı",
+    "sortGroupAscending": "A'dan Z'ye sırala",
+    "sortGroupDescending": "Z'den A'ya sırala",
     "ungroupKeepLayers": "Grubu çöz (katmanları koru)",
     "deleteGroupAndLayers": "Grubu ve katmanları sil",
     "groupActions": "Grup eylemleri",

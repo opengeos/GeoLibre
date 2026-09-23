@@ -7405,6 +7405,8 @@
     "renameGroup": "ჯგუფის სახელის შეცვლა",
     "moveGroupUp": "ჯგუფის ზემოთ წაწევა",
     "moveGroupDown": "ჯგუფის ქვემოთ წაწევა",
+    "sortGroupAscending": "დალაგება A-დან Z-მდე",
+    "sortGroupDescending": "დალაგება Z-დან A-მდე",
     "ungroupKeepLayers": "დაჯგუფების მოხსნა (შრეების შენარჩუნება)",
     "deleteGroupAndLayers": "ჯგუფისა და შრეების წაშლა",
     "groupActions": "ჯგუფის მოქმედებები",

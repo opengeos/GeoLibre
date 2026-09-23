@@ -7324,6 +7324,8 @@
     "renameGroup": "Ganti nama grup",
     "moveGroupUp": "Pindahkan grup ke atas",
     "moveGroupDown": "Pindahkan grup ke bawah",
+    "sortGroupAscending": "Urutkan A ke Z",
+    "sortGroupDescending": "Urutkan Z ke A",
     "ungroupKeepLayers": "Bubarkan grup (pertahankan layer)",
     "deleteGroupAndLayers": "Hapus grup dan layer",
     "groupActions": "Aksi grup",

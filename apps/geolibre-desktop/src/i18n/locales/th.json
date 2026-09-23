@@ -7324,6 +7324,8 @@
     "renameGroup": "เปลี่ยนชื่อกลุ่ม",
     "moveGroupUp": "เลื่อนกลุ่มขึ้น",
     "moveGroupDown": "เลื่อนกลุ่มลง",
+    "sortGroupAscending": "เรียงจาก A ถึง Z",
+    "sortGroupDescending": "เรียงจาก Z ถึง A",
     "ungroupKeepLayers": "ยกเลิกการจัดกลุ่ม (คงเลเยอร์ไว้)",
     "deleteGroupAndLayers": "ลบกลุ่มและเลเยอร์",
     "groupActions": "การดำเนินการกับกลุ่ม",

@@ -7405,6 +7405,8 @@
     "renameGroup": "Groep hernoemen",
     "moveGroupUp": "Groep omhoog verplaatsen",
     "moveGroupDown": "Groep omlaag verplaatsen",
+    "sortGroupAscending": "Sorteren van A tot Z",
+    "sortGroupDescending": "Sorteren van Z tot A",
     "ungroupKeepLayers": "Groep opheffen (lagen behouden)",
     "deleteGroupAndLayers": "Groep en lagen verwijderen",
     "groupActions": "Groepsacties",

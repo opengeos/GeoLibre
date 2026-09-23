@@ -7324,6 +7324,8 @@
     "renameGroup": "グループ名を変更",
     "moveGroupUp": "グループを上に移動",
     "moveGroupDown": "グループを下に移動",
+    "sortGroupAscending": "A から Z に並べ替え",
+    "sortGroupDescending": "Z から A に並べ替え",
     "ungroupKeepLayers": "グループ解除 (レイヤーは保持)",
     "deleteGroupAndLayers": "グループとレイヤーを削除",
     "groupActions": "グループ操作",

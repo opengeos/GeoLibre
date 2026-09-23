@@ -37,6 +37,8 @@ import {
   DEFAULT_LAYER_GROUP_OPACITY,
   normalizeGroupContiguity,
   reorderLayerGroupInPanel,
+  sortLayerGroupInPanel,
+  type LayerGroupSortOrder,
 } from "./layer-groups";
 import {
   DEFAULT_BASEMAP,
@@ -851,6 +853,11 @@ export interface AppState {
   ) => void;
   moveLayerGroupToGroup: (id: string, parentId: string | null) => void;
   reorderLayerGroup: (id: string, direction: "up" | "down") => void;
+  /**
+   * Sort a group's direct children by name, A to Z or Z to A (top of panel
+   * first), collating by `locale` (the app's display language) when given.
+   */
+  sortLayerGroup: (id: string, order: LayerGroupSortOrder, locale?: string) => void;
 
   addComment: (comment: ProjectComment) => void;
   replyToComment: (commentId: string, reply: CommentReply) => void;
@@ -2424,6 +2431,13 @@ export const useAppStore = create<AppState>()(
           const moved = reorderLayerGroupInPanel(s.layers, s.layerGroups, id, direction);
           if (!moved) return s;
           return { layers: moved.layers, layerGroups: moved.groups, isDirty: true };
+        }),
+
+      sortLayerGroup: (id, order, locale) =>
+        set((s) => {
+          const sorted = sortLayerGroupInPanel(s.layers, s.layerGroups, id, order, locale);
+          if (!sorted) return s;
+          return { layers: sorted.layers, layerGroups: sorted.groups, isDirty: true };
         }),
 
       newProject: (options = {}) => {

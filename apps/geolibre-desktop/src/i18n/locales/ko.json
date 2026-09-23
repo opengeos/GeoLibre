@@ -7324,6 +7324,8 @@
     "renameGroup": "그룹 이름 변경",
     "moveGroupUp": "그룹 위로 이동",
     "moveGroupDown": "그룹 아래로 이동",
+    "sortGroupAscending": "A에서 Z로 정렬",
+    "sortGroupDescending": "Z에서 A로 정렬",
     "ungroupKeepLayers": "그룹 해제(레이어 유지)",
     "deleteGroupAndLayers": "그룹 및 레이어 삭제",
     "groupActions": "그룹 작업",
