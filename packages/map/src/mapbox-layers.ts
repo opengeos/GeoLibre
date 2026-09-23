@@ -387,8 +387,11 @@ export function compileMapboxLayer(
   // and no active time, embed, authored or rule filter: the aggregated source
   // is built from the raw features, which no style filter narrows.
   const hasFeatureFilter = filters.length > 0;
+  // Labels draw on neither an extrusion nor the heatmap renderer, as on
+  // MapLibre; one guard for the label layer and its dedup companion source.
+  const labelsDrawn = labels.enabled && !style.extrusionEnabled && renderer !== "heatmap";
   const dedupedLabels =
-    labels.enabled &&
+    labelsDrawn &&
     labels.dedupe !== "off" &&
     !hasFeatureFilter &&
     layer.geojson &&
@@ -404,7 +407,7 @@ export function compileMapboxLayer(
     id: string,
     sourceLayer: string | undefined,
   ): LayerSpecification | null => {
-    if (style.extrusionEnabled || renderer === "heatmap" || !labels.enabled) return null;
+    if (!labelsDrawn) return null;
     const deduped = !sourceLayer && dedupedLabels;
     let text: unknown = labelFieldTextField(labels, documentLocale());
     if (deduped) text = ["get", DEDUPED_LABEL_PROPERTY];
@@ -528,7 +531,7 @@ export function compileMapboxLayer(
             clusterMaxZoom,
           }
         : { type: "geojson", data: layer.geojson, generateId: true },
-      ...(dedupedLabels && labels.enabled && !style.extrusionEnabled && renderer !== "heatmap"
+      ...(dedupedLabels
         ? { additionalSources: { [labelSourceId]: { type: "geojson", data: dedupedLabels } } }
         : {}),
       layers: vectorLayers(),

@@ -755,6 +755,7 @@ export class MapboxEngine implements MapEngine {
               if ("source" in spec && spec.source === id && map.getLayer(spec.id))
                 map.removeLayer(spec.id);
             if (map.getSource(id)) map.removeSource(id);
+            this.clearError(id);
           }
         }
         for (const [id, source] of Object.entries(plan.additionalSources ?? {})) {

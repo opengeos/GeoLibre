@@ -119,5 +119,6 @@ describe("Mapbox label compilation", () => {
     );
     const companion = Object.values(plan.additionalSources ?? {})[0] as { data: FeatureCollection };
     assert.equal(companion.data.features.length, 1);
+    assert.deepEqual(companion.data.features[0]?.properties, { __geolibre_label: "A" });
   });
 });
