@@ -519,10 +519,14 @@ export class PluginManager {
   restoreProjectState(
     state: ProjectPluginState | null,
     app: GeoLibreAppAPI,
-    options: { resetMissingSettings?: boolean } = {},
+    options: { resetMissingSettings?: boolean; mapReplaced?: boolean } = {},
   ): void {
     const renderer = app.getMapRenderer?.() ?? "maplibre";
-    if (this.renderer !== null && renderer !== this.renderer) {
+    // A new map took down every live control with the old one, so reactivate
+    // from scratch. A swap and back (MapLibre to Mapbox to MapLibre) before
+    // the middle map restored lands on the same renderer kind, so the kind
+    // alone cannot tell; the caller says when the map itself was replaced.
+    if (this.renderer !== null && (renderer !== this.renderer || options.mapReplaced)) {
       for (const id of Array.from(this.active)) this.deactivate(id, app);
     }
     this.renderer = renderer;

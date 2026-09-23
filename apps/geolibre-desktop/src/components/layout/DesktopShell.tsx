@@ -1272,8 +1272,13 @@ export function DesktopShell({
   // map, so every plugin still reports its live state from a live control.
   // The project generation whose plugin state has been restored onto a map. A
   // swap before that restore must not snapshot the manager, which still holds
-  // the previous project's plugins.
+  // the previous project's plugins. Likewise the renderer they were restored
+  // onto: a second swap before the new map's restore would read plugins whose
+  // controls are already gone.
   const restoredPluginGeneration = useRef<number | null>(null);
+  const restoredPluginRenderer = useRef<string | null>(null);
+  // The map engine the plugins were last restored onto.
+  const restoredPluginEngine = useRef<MapEngine | null>(null);
   useEffect(
     () =>
       useAppStore.subscribe((state, previous) => {
@@ -1282,7 +1287,8 @@ export function DesktopShell({
           // A project load brings its own plugin state; never overwrite it.
           state.projectGeneration !== previous.projectGeneration ||
           state.projectPlugins !== previous.projectPlugins ||
-          restoredPluginGeneration.current !== state.projectGeneration
+          restoredPluginGeneration.current !== state.projectGeneration ||
+          restoredPluginRenderer.current !== previous.primaryRenderer
         )
           return;
         try {
@@ -1331,8 +1337,12 @@ export function DesktopShell({
     if (!externalPluginsReady || !mapReadyGeneration || !engine) return;
     const appAPI = createAppAPI(mapControllerRef);
     const pluginManager = getPluginManager();
-    pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI);
+    pluginManager.restoreProjectState(useAppStore.getState().projectPlugins, appAPI, {
+      mapReplaced: restoredPluginEngine.current !== null && restoredPluginEngine.current !== engine,
+    });
+    restoredPluginEngine.current = engine;
     restoredPluginGeneration.current = projectGeneration;
+    restoredPluginRenderer.current = useAppStore.getState().primaryRenderer;
     // Immediately after the restore, so a project that persisted the geo-editor
     // as active cannot re-arm editing inside a read-only viewer embed.
     enforceViewerPlugins();

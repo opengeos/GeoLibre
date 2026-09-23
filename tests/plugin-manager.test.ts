@@ -1542,3 +1542,34 @@ describe("PluginManager getProjectState fallback", () => {
     assert.deepEqual(state.settings.broken, { step: 1 });
   });
 });
+
+describe("PluginManager restore onto a replaced map", () => {
+  it("reactivates active plugins when the map was replaced on the same renderer", () => {
+    const manager = new PluginManager();
+    const calls: string[] = [];
+    manager.register(
+      testPlugin({
+        id: "dock",
+        activate: () => {
+          calls.push("activate");
+        },
+        deactivate: () => {
+          calls.push("deactivate");
+        },
+      }),
+    );
+    const state = {
+      manifestUrls: [],
+      activePluginIds: ["dock"],
+      mapControlPositions: {},
+      settings: {},
+    };
+    manager.restoreProjectState(state, app);
+    manager.restoreProjectState(state, app);
+    assert.deepEqual(calls, ["activate"]);
+
+    manager.restoreProjectState(state, app, { mapReplaced: true });
+    assert.deepEqual(calls, ["activate", "deactivate", "activate"]);
+    assert.equal(manager.isActive("dock"), true);
+  });
+});
