@@ -1147,6 +1147,15 @@ function buildPanel(container: HTMLElement): () => void {
     // --- Map layers ---------------------------------------------------------
     const layersSection = element("div", CSS.section);
     layersSection.append(element("div", CSS.sectionTitle, tr("mapLayers", "Map layers")));
+    // Disabled while any task runs, like the row actions: a second click during
+    // addCogLayer would pass the duplicate check before the first layer lands.
+    const densityButton = button(
+      tr("addDensity", "Field density"),
+      CSS.secondary,
+      () => void runTask((signal) => addFieldDensity((text) => setStatus(text), signal)),
+      tr("addDensityTitle", "Add the global 500 m field-density raster, for zoomed-out views"),
+    );
+    densityButton.disabled = state.busy;
     const layerButtons = element("div", CSS.grid2);
     layerButtons.append(
       button(
@@ -1158,12 +1167,7 @@ function buildPanel(container: HTMLElement): () => void {
           "Add the global field boundaries for the year, colored by confidence",
         ),
       ),
-      button(
-        tr("addDensity", "Field density"),
-        CSS.secondary,
-        () => void runTask((signal) => addFieldDensity((text) => setStatus(text), signal)),
-        tr("addDensityTitle", "Add the global 500 m field-density raster, for zoomed-out views"),
-      ),
+      densityButton,
     );
     layersSection.append(layerButtons);
 
