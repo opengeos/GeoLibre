@@ -184,10 +184,10 @@ export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
     !hasDrawableSource(layer)
   )
     return true;
-  // OpenAerialMap's and Satellite Embeddings' search footprints carry their
-  // GeoJSON (so the Layers panel can zoom to and restyle them) but the plugin
-  // draws the fill and outline itself on whichever map hosts it; compiling the
-  // record would paint them twice.
+  // OpenAerialMap's, Satellite Embeddings' and Fields of the World's search
+  // footprints carry their GeoJSON (so the Layers panel can zoom to and restyle
+  // them) but the plugin draws the fill and outline itself on whichever map
+  // hosts it; compiling the record would paint them twice.
   return (
     layer.type === "geojson" &&
     typeof layer.metadata.sourceKind === "string" &&
@@ -200,6 +200,7 @@ export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
 const PLUGIN_DRAWN_FOOTPRINT_KINDS = new Set([
   "openaerialmap-footprints",
   "satellite-embeddings-footprints",
+  "fields-of-the-world-footprints",
 ]);
 
 /** Whether the store record alone gives the engine something to draw. */

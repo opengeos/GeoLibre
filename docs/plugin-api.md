@@ -627,6 +627,7 @@ export interface GeoLibreCogLayerOptions {
   nodata?: number; // pixel value rendered transparent
   opacity?: number; // default 1
   beforeLayerId?: string;
+  zoomTo?: boolean; // fit the map to the COG once loaded (default true)
 }
 ```
 

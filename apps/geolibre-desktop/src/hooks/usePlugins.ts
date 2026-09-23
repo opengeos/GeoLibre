@@ -34,6 +34,7 @@ import {
   maplibreEarthdataGisPlugin,
   setEarthdataCogSaver,
   setSatelliteEmbeddingsFileSaver,
+  setFieldsOfTheWorldFileSaver,
   maplibreEnviroAtlasPlugin,
   maplibreEsriWaybackPlugin,
   maplibreFemaWmsPlugin,
@@ -53,6 +54,7 @@ import {
   maplibreNaturalEarthPlugin,
   maplibreHuggingFacePlugin,
   maplibreSatelliteEmbeddingsPlugin,
+  maplibreFieldsOfTheWorldPlugin,
   maplibreGeoLensPlugin,
   setGeoLensDefaultServerUrl,
   maplibreVantorPlugin,
@@ -233,6 +235,7 @@ manager.registerAll([
   maplibreNaturalEarthPlugin,
   maplibreHuggingFacePlugin,
   maplibreSatelliteEmbeddingsPlugin,
+  maplibreFieldsOfTheWorldPlugin,
   maplibreGeoLensPlugin,
   maplibreEsriWaybackPlugin,
   maplibreTimeSliderPlugin,
@@ -315,6 +318,17 @@ setEarthdataCogSaver(async (geoTiffBytes, defaultName) => {
 // The Satellite Embeddings plugin builds clipped GeoTIFFs in memory; saving
 // them needs the app's file dialogs, injected the same way.
 setSatelliteEmbeddingsFileSaver((blob, { defaultName, extension, mimeType, description }) =>
+  saveBinaryFileWithFallback(blob, {
+    defaultName,
+    filters: [{ name: description, extensions: [extension] }],
+    browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
+    mimeType,
+  }),
+);
+
+// The Fields of the World plugin saves tile GeoParquet and GeoJSON files the
+// same way.
+setFieldsOfTheWorldFileSaver((blob, { defaultName, extension, mimeType, description }) =>
   saveBinaryFileWithFallback(blob, {
     defaultName,
     filters: [{ name: description, extensions: [extension] }],
@@ -1021,6 +1035,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
           ...(options?.opacity !== undefined ? { opacity: options.opacity } : {}),
         },
         ...(options?.beforeLayerId ? { beforeId: options.beforeLayerId } : {}),
+        ...(options?.zoomTo !== undefined ? { zoomTo: options.zoomTo } : {}),
       });
     },
     setCogRenderEngine: (engine: GeoLibreCogRenderEngine) => setRasterRenderEngine(api, engine),

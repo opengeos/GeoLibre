@@ -35,6 +35,7 @@ They are grouped together because they behave the same way, not because they sha
 | [Natural Earth](#natural-earth) | Natural Earth | The Natural Earth vector and raster themes |
 | [Hugging Face](#hugging-face) | Hugging Face | Geospatial files in dataset repos — and uploads |
 | [Satellite Embeddings](#satellite-embeddings) | Source.coop, Tessera | Pre-computed foundation-model embeddings (AlphaEarth, Tessera, Earth Index, …) |
+| [Fields of the World](#fields-of-the-world) | Source.coop | Global agricultural field boundaries (2024, 2025) |
 | [GeoLens](#geolens) | your server | A self-hosted spatial catalog |
 
 ---
@@ -209,6 +210,20 @@ A catalog of popular pre-computed **satellite embedding** datasets — per-pixel
 
 !!! note "AlphaEarth files are stored bottom-up"
     The AlphaEarth COGs on Source Cooperative put their southern row first, which many GDAL workflows do not expect. The WASM engine (cog-tiler-wasm 0.3.8 and later) and the panel's own reader flip them; the GPU engine does not yet. The panel also offers each tile's companion `.vrt`, which GDAL reads north-up. The data is licensed CC-BY 4.0: *The AlphaEarth Foundations Satellite Embedding dataset is produced by Google and Google DeepMind.*
+
+## Fields of the World
+
+Browses [Fields of the World](https://fieldsofthe.world) (FTW), the global agricultural field boundaries predicted from Sentinel-2 imagery by the FTW PRUE model. It reads the same public files on [Source Cooperative](https://source.coop/ftw/global-data/) as the [FTW inference app](https://fieldsofthe.world/ftw-inference-app).
+
+- Pick a **year** (2025 or 2024).
+- **Field boundaries** adds that year's global archive as a PMTiles layer, colored by the model's confidence from red (low) to green (high). The 2025 archive has tiles at every zoom; the 2024 alpha archive starts at zoom 10, so zoom in to see its fields.
+- **Field density** adds the global 500 m field-density raster as a COG layer, for the zoomed-out picture. It keeps the current view and hides itself above zoom 12, where the field boundaries take over; both can be changed in the Style panel.
+- The **confidence threshold** (70% by default, as in the FTW app) hides fields the model is less confident about. It applies to every FTW field layer on the map, is saved with the project as the layer's filter, and can be edited later in the Style panel. Downloads are never filtered.
+- **Search tiles** lists the 1° × 1° download tiles in the **current map view** or a **box drawn on the map** that have data for the year, most fields first, with each tile's field count and file size. Their outlines are drawn as one entry in the Layers panel; hovering a result outlines it, and clicking an outline selects its result.
+- Each tile offers **Add to map** (its fields as an editable GeoJSON layer, styled and filtered like the archive), **GeoParquet** (the source file, unchanged), and **GeoJSON**. With **Only fields in the search area** checked (the default), Add to map and GeoJSON keep only the fields overlapping the search area. The file is read one row group at a time, so even the largest tiles (about 3 million fields) can be clipped to a small box; the result is limited to 250,000 fields on the map or 1,000,000 in a GeoJSON file. Download the GeoParquet for anything larger.
+
+!!! note "Running the FTW model"
+    The plugin shows and downloads the published global predictions. To run the FTW model on your own area and Sentinel-2 scenes, use the [FTW inference app](https://fieldsofthe.world/ftw-inference-app) or the [ftw-baselines](https://github.com/fieldsoftheworld/ftw-baselines) command-line tools, then add the result to GeoLibre. The data is licensed CC-BY-4.0.
 
 ## GeoLens
 

@@ -526,6 +526,12 @@ export {
   OSM_DOWNLOADER_PLUGIN_ID,
 } from "./plugins/maplibre-osm-downloader";
 export {
+  FIELDS_OF_THE_WORLD_PLUGIN_ID,
+  maplibreFieldsOfTheWorldPlugin,
+  setFieldsOfTheWorldFileSaver,
+  type FieldsOfTheWorldFileSaver,
+} from "./plugins/maplibre-fields-of-the-world";
+export {
   maplibreSatelliteEmbeddingsPlugin,
   SATELLITE_EMBEDDINGS_PLUGIN_ID,
   setSatelliteEmbeddingsFileSaver,
