@@ -1,6 +1,11 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { applyMapboxStyleImport, parseMapboxStyle } from "@geolibre/map";
-import { addPMTilesLayerFromUrl, addRasterToMap, addVectorLayerFromUrl } from "@geolibre/plugins";
+import {
+  addLidarLayerFromUrl,
+  addPMTilesLayerFromUrl,
+  addRasterToMap,
+  addVectorLayerFromUrl,
+} from "@geolibre/plugins";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   dataUrlParameters,
@@ -54,6 +59,17 @@ export async function loadDataUrl(
       zoomTo: fit,
       ...(rasterStyle ? { state: rasterStyle } : {}),
     });
+    if (options.signal?.aborted) {
+      store.removeLayer(id);
+      throw new DOMException("The operation was aborted", "AbortError");
+    }
+    layerIds.push(id);
+  } else if (remote.kind === "lidar") {
+    if (rawStyle !== null) {
+      throw new Error("A style cannot be applied to a LiDAR point cloud.");
+    }
+    const id = await addLidarLayerFromUrl(mapAppAPI, remote.url, { fit });
+    if (!id) throw new Error(`Could not add ${remote.name} to the map.`);
     if (options.signal?.aborted) {
       store.removeLayer(id);
       throw new DOMException("The operation was aborted", "AbortError");

@@ -63,6 +63,7 @@ export type RemoteData =
   | { kind: "cog"; name: string; url: string }
   | { kind: "pmtiles"; name: string; url: string }
   | { kind: "vector"; name: string; url: string; format: "geoparquet" }
+  | { kind: "lidar"; name: string; url: string }
   | { kind: "geojson"; layers: RemoteGeoJsonLayer[] };
 
 const MAX_ZIP_GEOJSON_BYTES = 250 * 1024 * 1024;
@@ -117,7 +118,10 @@ export function remoteName(url: string): string {
     name = basename;
   }
   return (
-    name.replace(/\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet)$/i, "") || "data"
+    name
+      .replace(/\.copc\.laz$/i, "")
+      .replace(/\.(?:geojson|json|tiff?|cog|zip|pmtiles|geoparquet|parquet|las|laz)$/i, "") ||
+    "data"
   );
 }
 
@@ -285,6 +289,15 @@ function unzipGeoJsonEntries(bytes: Uint8Array): Promise<Record<string, Uint8Arr
   });
 }
 
+/**
+ * Whether a URL names a point cloud the LiDAR control streams itself: a LAS/LAZ
+ * (including COPC) file, or an Entwine Point Tile dataset's `ept.json`.
+ */
+function isLidarUrl(url: string): boolean {
+  const pathname = new URL(url).pathname.toLowerCase();
+  return /\.(?:las|laz)$/.test(pathname) || pathname.endsWith("/ept.json");
+}
+
 /** Classify or fetch a supported data URL into startup-loadable layers. */
 export async function fetchRemoteData(
   url: string,
@@ -293,6 +306,7 @@ export async function fetchRemoteData(
   const ext = extension(url);
   if (["tif", "tiff", "cog"].includes(ext)) return { kind: "cog", name: remoteName(url), url };
   if (ext === "pmtiles") return { kind: "pmtiles", name: remoteName(url), url };
+  if (isLidarUrl(url)) return { kind: "lidar", name: remoteName(url), url };
   if (ext === "parquet" || ext === "geoparquet") {
     return { kind: "vector", name: remoteName(url), url, format: "geoparquet" };
   }

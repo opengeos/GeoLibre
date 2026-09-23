@@ -3097,6 +3097,35 @@ export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLidarControl(app);
 }
 
+/**
+ * Stream a remote LAS/LAZ/COPC file (or an EPT `ept.json`) into the shared
+ * LiDAR control without revealing its panel, as the `?data=` deep link does.
+ * The control's `load` handler adds the store layer, so this resolves once the
+ * layer exists.
+ *
+ * Args:
+ *   app: The GeoLibre app API.
+ *   url: The point cloud URL.
+ *   options: `fit: false` keeps the camera still, for a batch the caller frames.
+ *
+ * Returns:
+ *   The store layer id of the loaded point cloud, or null when the LiDAR
+ *   control could not be mounted.
+ */
+export async function addLidarLayerFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: { fit?: boolean } = {},
+): Promise<string | null> {
+  const load = async () => {
+    const opened = await openStandaloneLidarControl(app, { reveal: false });
+    if (!opened || !lidarControl) return null;
+    const info = await lidarControl.loadPointCloud(url);
+    return info.id;
+  };
+  return (options.fit ?? true) ? load() : withLidarAutoZoomSuppressed(app, load);
+}
+
 /** Safety net for {@link waitForPendingLidarRestores}: how long to wait for
  * queued restores to settle before giving up regardless. */
 const PENDING_LIDAR_RESTORE_TIMEOUT_MS = 60_000;

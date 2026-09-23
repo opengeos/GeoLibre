@@ -411,6 +411,24 @@ describe("data URL deep links", () => {
     assert.equal(fetched, false);
   });
 
+  it("recognizes LAS, LAZ, COPC, and EPT point clouds without downloading them", async () => {
+    let fetched = false;
+    const fetchImpl = (async () => {
+      fetched = true;
+      throw new Error("unexpected");
+    }) as unknown as typeof fetch;
+    const cases: [string, string][] = [
+      ["https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz", "autzen-classified"],
+      ["https://example.com/tile.LAZ?token=abc", "tile"],
+      ["https://example.com/survey.las", "survey"],
+      ["https://example.com/autzen/ept.json", "ept"],
+    ];
+    for (const [url, name] of cases) {
+      assert.deepEqual(await fetchRemoteData(url, { fetchImpl }), { kind: "lidar", name, url });
+    }
+    assert.equal(fetched, false);
+  });
+
   it("names a file whose path carries a literal percent sign", async () => {
     const fetchImpl = (async () => {
       throw new Error("unexpected");
