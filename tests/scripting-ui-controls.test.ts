@@ -104,6 +104,16 @@ describe("recorded script map controls", () => {
     assert.deepEqual(getScriptMapControls(), [["scale", false]]);
   });
 
+  it("forgets every override when the user starts a New Project", () => {
+    // New Project resets all controls to their defaults, so the scripted
+    // overrides are spent; leaving them would let the replay re-apply them
+    // over the reset.
+    recordScriptMapControl("navigation", false);
+    recordScriptMapControl("scale", false);
+    clearScriptMapControls();
+    assert.deepEqual(getScriptMapControls(), []);
+  });
+
   it("ignores a toggle of a control no script touched", () => {
     recordScriptMapControl("scale", false);
     forgetScriptMapControl("navigation");

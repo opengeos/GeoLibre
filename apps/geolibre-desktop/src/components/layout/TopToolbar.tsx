@@ -1,6 +1,7 @@
 import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
 import {
   SCRIPT_MAP_CONTROL_EVENT,
+  clearScriptMapControls,
   forgetScriptMapControl,
   type ScriptMapControlDetail,
 } from "../../lib/scripting/ui-controls";
@@ -1417,6 +1418,13 @@ export function TopToolbar({
         NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(control),
       );
     }
+    // New Project resets every control to its default, so an earlier scripted
+    // override is spent: without this `useScriptControlRestore` would re-apply
+    // it to the live map on this same project-generation bump (parent effects
+    // run after this child's) and desync the map from the checkmarks reset
+    // just above. A widget project push does not come through here, so it
+    // still keeps the controls a script set.
+    clearScriptMapControls();
     setControlsVisible(newProjectToolbarControlVisibility());
   };
 

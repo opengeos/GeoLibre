@@ -91,7 +91,12 @@ export function forgetScriptMapControl(control: BuiltInMapControl): void {
   if (isScriptableMapControl(control)) scriptMapControls.delete(control);
 }
 
-/** Forget every recorded control. Exported for tests. */
+/**
+ * Forget every recorded control.
+ *
+ * Called when the user starts a New Project, which resets all controls to their
+ * defaults and so spends any scripted override, and by tests.
+ */
 export function clearScriptMapControls(): void {
   scriptMapControls.clear();
 }
