@@ -1269,6 +1269,41 @@ describe("MapboxEngine labels", () => {
   });
 });
 
+describe("MapboxEngine companion symbology", () => {
+  it("does not identify the inverted-fill mask as a feature of the layer", () => {
+    const { engine, map } = makeEngine();
+    const layer = geojsonLayer({
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "sq",
+            properties: { name: "square" },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 0],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    });
+    engine.syncLayers([{ ...layer, style: { ...layer.style, invertedFillEnabled: true } }]);
+    const mask = `${FILL}-inverted`;
+    assert.ok(map.getLayer(mask));
+    map.setQueried([{ id: 0, layer: { id: mask }, properties: {}, geometry: null }]);
+    assert.deepEqual(engine.identifyFeatures([5, 5]), []);
+    assert.equal(engine.featureIdAtPoint("layer-a", { x: 0, y: 0 }), null);
+  });
+});
+
 describe("MapboxEngine camera and preferences", () => {
   it("publishes geographic map clicks and removes the listener on cleanup", () => {
     const { engine, map } = makeEngine();

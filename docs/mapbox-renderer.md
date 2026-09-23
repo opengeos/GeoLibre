@@ -233,12 +233,14 @@ Mapbox map through `app.getMapboxMap()`. Visible unsupported layers report an er
 on the map instead of being silently omitted. The heatmap and clustered point
 renderers compile to native Mapbox layers, with a clustered layer's authored
 filters applied to its data before clustering, as on MapLibre. Advanced
-MapLibre-only symbology (marker icons, fill patterns, inverted fill, line
-decorations, the geometry generator and layer blend modes) is not reproduced by
-this native renderer, and the Style panel lists the ones a layer turns on.
-Attribute labels are: de-duplicated labels read an aggregated companion source,
-and the data-defined size, color, opacity, visibility and priority expressions
-apply as on MapLibre. Mapbox Standard is loaded as a local style import with a shared opacity setting.
+The Style panel's symbology compiles to native Mapbox layers as on MapLibre:
+marker and KML icons, Geo Editor text markers, fill patterns and line
+decorations (generated sprites supplied through `styleimagemissing`), the
+inverted fill and the geometry generator (companion GeoJSON sources), the flat
+fill below a zoom-stepped extrusion, and attribute labels (de-duplicated labels
+read an aggregated companion source; the data-defined size, color, opacity,
+visibility and priority expressions apply). Layer blend modes are not
+reproduced, and the Style panel says so on a layer that sets one. Mapbox Standard is loaded as a local style import with a shared opacity setting.
 The Background card fades its land and water colors, labels (including ocean labels),
 3D objects, and atmosphere while preserving project layers and Standard's configuration.
 

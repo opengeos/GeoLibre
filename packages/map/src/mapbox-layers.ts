@@ -1,12 +1,14 @@
 import {
   compileLayerFilters,
   documentLocale,
+  generatorCircleRadiusValue,
   labelFieldTextField,
   ruleBasedVisibilityFilter,
   DEFAULT_LAYER_STYLE,
   styleValue,
   type GeoLibreLayer,
 } from "@geolibre/core";
+import type { FeatureCollection } from "geojson";
 import type {
   DataDrivenPropertyValueSpecification,
   LayerSpecification,
@@ -24,6 +26,20 @@ import {
 } from "./style-mapper";
 import { authoredClusterInput, resolveVectorRenderMode } from "./cluster-input";
 import {
+  buildGeneratedGeometry,
+  buildInvertedMask,
+  generatedGeometryKinds,
+} from "./derived-geometry";
+import { prepareFillPattern } from "./fill-patterns";
+import { prepareLineDecoration } from "./line-decorations";
+import {
+  KML_ICON_URL_PROPERTY,
+  markerIconSizeValue,
+  markerImageValue,
+  prepareKmlFeatureIcons,
+} from "./markers";
+import { flatExtrusionCutoff, hasTextMarkerFeatures } from "./symbology-shared";
+import {
   DEDUPED_LABEL_PROPERTY,
   getDedupedLabelFeatures,
   parseLabelOverride,
@@ -39,6 +55,16 @@ export interface MapboxLayerPlan {
   source: SourceSpecification;
   additionalSources?: Record<string, SourceSpecification>;
   layers: LayerSpecification[];
+}
+
+/**
+ * Whether a compiled style layer draws derived or synthetic features (an
+ * inverted-fill mask, generator shapes, decorations, aggregated labels) rather
+ * than the layer's own, so identify and selection skip it, as MapLibre's
+ * layer-sync marks the same layers.
+ */
+export function isInternalMapboxLayer(spec: LayerSpecification): boolean {
+  return (spec.metadata as Record<string, unknown> | undefined)?.["geolibre:internal"] === true;
 }
 
 /** MapLibre's extra compositing properties are not in Mapbox's Style Spec. */
@@ -316,6 +342,20 @@ export function compileMapboxLayer(
   const { renderer, wantCluster, clusterRadius, clusterMaxZoom } = layer.geojson
     ? resolveVectorRenderMode(layer, profile)
     : { renderer: "single", wantCluster: false, clusterRadius: 0, clusterMaxZoom: 0 };
+  // Geo Editor text markers carry their own annotation text: they draw
+  // through their own symbol layer, never as a plain point as well.
+  const hasTextMarkers = layer.geojson ? hasTextMarkerFeatures(layer.geojson) : false;
+  const isPoint = ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false];
+  const plainPoint = hasTextMarkers ? ["all", isPoint, ["!", TEXT_MARKER_SHAPE_FILTER]] : isPoint;
+  const withFilter = (condition: unknown): FilterSpecification =>
+    (filter ? ["all", condition, filter] : condition) as FilterSpecification;
+  // Marker icons and per-feature KML icons are generated sprites resolved by
+  // the map's `styleimagemissing` handler (see generated-images.ts), the same
+  // images MapLibre draws.
+  const markerImage = markerImageValue(layer.style);
+  const kmlIconImage = layer.geojson
+    ? prepareKmlFeatureIcons(layer.geojson, markerImage ?? "")
+    : null;
   const pointLayers = (base: Record<string, unknown>, id: string): LayerSpecification[] => {
     if (renderer === "heatmap") {
       return [
@@ -323,7 +363,7 @@ export function compileMapboxLayer(
           ...base,
           id: `${id}-heatmap`,
           type: "heatmap",
-          filter: geometryFilter("Point"),
+          filter: withFilter(plainPoint),
           paint: mapboxPaint(heatmapPaint(style, layer.opacity)),
         } as LayerSpecification,
       ];
@@ -365,21 +405,67 @@ export function compileMapboxLayer(
           ...base,
           id: `${id}-circle`,
           type: "circle",
-          filter: (filter ? ["all", unclustered, filter] : unclustered) as FilterSpecification,
+          filter: withFilter(hasTextMarkers ? ["all", unclustered, plainPoint] : unclustered),
           paint: mapboxPaint(circlePaint(style, layer.opacity)),
         },
       ] as LayerSpecification[];
     }
-    return [
-      {
+    const circle = (condition: unknown) =>
+      ({
         ...base,
         id: `${id}-circle`,
         type: "circle",
-        filter: geometryFilter("Point"),
+        filter: withFilter(condition),
         paint: mapboxPaint(circlePaint(style, layer.opacity)),
-      } as LayerSpecification,
-    ];
+      }) as LayerSpecification;
+    if (!markerImage && !kmlIconImage) return [circle(plainPoint)];
+    const marker = {
+      ...base,
+      id: `${id}-marker`,
+      type: "symbol",
+      filter: withFilter(plainPoint),
+      layout: {
+        ...layout,
+        "icon-image": kmlIconImage ?? markerImage,
+        // The sprite is baked at its display size, so icon-size stays 1
+        // unless proportional sizing scales it per feature.
+        "icon-size": kmlIconImage
+          ? ["case", ["has", KML_ICON_URL_PROPERTY], 1, markerIconSizeValue(layer.style)]
+          : markerIconSizeValue(layer.style),
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+      },
+      paint: { "icon-opacity": layer.opacity },
+    } as LayerSpecification;
+    // Features without a KML icon still use the ordinary circle renderer.
+    return kmlIconImage && !markerImage
+      ? [marker, circle(["all", plainPoint, ["!", ["has", KML_ICON_URL_PROPERTY]]])]
+      : [marker];
   };
+  // Annotation text for Geo Editor text markers, as layer-sync draws it.
+  const textMarkerLayer = (base: Record<string, unknown>, id: string): LayerSpecification =>
+    ({
+      ...base,
+      id: `${id}-text-markers`,
+      type: "symbol",
+      filter: withFilter(["all", isPoint, TEXT_MARKER_SHAPE_FILTER]),
+      layout: {
+        ...layout,
+        "text-allow-overlap": true,
+        "text-font": compileOptions.textFont ?? DEFAULT_MAPBOX_TEXT_FONT,
+        "text-field": ["to-string", ["coalesce", ["get", "__gm_text"], ["get", "text"], ""]],
+        "text-ignore-placement": true,
+        "text-size": Math.max(1, styleValue(layer.style, "textSize")),
+      },
+      paint: {
+        // An optional per-feature `text-color` (annotation text labels keep
+        // their own color) falls back to the layer's text color.
+        "text-color": ["coalesce", ["get", "text-color"], styleValue(layer.style, "textColor")],
+        "text-halo-color": styleValue(layer.style, "textHaloColor"),
+        "text-halo-width": Math.max(0, styleValue(layer.style, "textHaloWidth")),
+        "text-opacity": layer.opacity,
+      },
+    }) as unknown as LayerSpecification;
   // Attribute labels, compiled the way MapLibre's layer-sync builds them.
   const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
   // Unique/concatenate labels collapse co-located points into one label read
@@ -441,7 +527,8 @@ export function compileMapboxLayer(
     ];
     return {
       ...base,
-      ...(deduped ? { source: labelSourceId } : {}),
+      // The aggregated dedup points are synthetic, so identify skips them.
+      ...(deduped ? { source: labelSourceId, metadata: { "geolibre:internal": true } } : {}),
       id: `${id}-labels`,
       type: "symbol",
       ...(deduped ? {} : { filter: labelFilter as FilterSpecification }),
@@ -477,6 +564,91 @@ export function compileMapboxLayer(
       },
     } as LayerSpecification;
   };
+  // The geometry generator's derived shapes (QGIS geometry generator), drawn
+  // from a companion source with the generator's own colors.
+  const generatorLayers = (
+    base: Record<string, unknown>,
+    id: string,
+    collection: FeatureCollection,
+  ): LayerSpecification[] => {
+    const kinds = generatedGeometryKinds(collection);
+    const fillColor = styleValue(layer.style, "geometryGeneratorFillColor");
+    const strokeColor = styleValue(layer.style, "geometryGeneratorStrokeColor");
+    const strokeWidth = Math.max(0, styleValue(layer.style, "geometryGeneratorStrokeWidth"));
+    const genOpacity =
+      Math.min(1, Math.max(0, styleValue(layer.style, "geometryGeneratorOpacity"))) * layer.opacity;
+    const polygon = ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false];
+    const result: LayerSpecification[] = [];
+    if (kinds.hasPolygon)
+      result.push(
+        {
+          ...base,
+          id: `${id}-generator-fill`,
+          type: "fill",
+          metadata: { "geolibre:internal": true },
+          filter: polygon,
+          paint: { "fill-color": fillColor, "fill-opacity": genOpacity },
+        } as LayerSpecification,
+        {
+          ...base,
+          id: `${id}-generator-line`,
+          type: "line",
+          metadata: { "geolibre:internal": true },
+          filter: polygon,
+          paint: {
+            "line-color": strokeColor,
+            "line-width": strokeWidth,
+            "line-opacity": layer.opacity,
+          },
+        } as LayerSpecification,
+      );
+    if (kinds.hasPoint)
+      result.push({
+        ...base,
+        id: `${id}-generator-circle`,
+        type: "circle",
+        metadata: { "geolibre:internal": true },
+        filter: isPoint,
+        paint: {
+          "circle-color": fillColor,
+          "circle-radius": generatorCircleRadiusValue(layer.style),
+          "circle-opacity": genOpacity,
+          "circle-stroke-color": strokeColor,
+          "circle-stroke-width": strokeWidth,
+          "circle-stroke-opacity": layer.opacity,
+        },
+      } as LayerSpecification);
+    return result;
+  };
+  // Derived companion symbology (the inverted-fill mask, the geometry
+  // generator) is built from the raw features, so, as on MapLibre, it needs
+  // inline data and no active filter that the derivation would ignore.
+  const invertedMask =
+    profile.hasPolygon &&
+    !style.extrusionEnabled &&
+    styleValue(layer.style, "invertedFillEnabled") &&
+    !hasFeatureFilter &&
+    layer.geojson
+      ? withOpposingHoles(buildInvertedMask(layer.geojson))
+      : null;
+  const invertedSourceId = `${sourceId}-inverted`;
+  const generatorType =
+    style.extrusionEnabled || hasFeatureFilter
+      ? "none"
+      : styleValue(layer.style, "geometryGenerator");
+  const generated =
+    generatorType !== "none" && layer.geojson
+      ? buildGeneratedGeometry(
+          layer.geojson,
+          generatorType,
+          styleValue(layer.style, "geometryGeneratorBufferDistance"),
+          styleValue(layer.style, "geometryGeneratorBufferProperty"),
+        )
+      : null;
+  const generatedSourceId = `${sourceId}-generated`;
+  const fillPatternId = prepareFillPattern(layer.style);
+  const decorationImageId = prepareLineDecoration(layer.style);
+  const flatBelowZoom = style.extrusionEnabled ? flatExtrusionCutoff(layer.style) : null;
   const vectorLayers = (sourceLayer?: string): LayerSpecification[] => {
     const base = {
       source: sourceId,
@@ -485,32 +657,109 @@ export function compileMapboxLayer(
       ...(sourceLayer ? { "source-layer": sourceLayer } : {}),
     };
     const id = `${sourceId}-${sourceLayer ?? "geojson"}`;
-    // The shared paint compiler produces Style Spec expressions. Conversion is
-    // confined here; the engine never masquerades as a MapLibre Map instance.
-    const result = [
-      profile.hasPolygon && {
+    const isPolygon = ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false];
+    // A set fill pattern replaces fill-color with the recolorable sprite tile.
+    const fill = {
+      ...mapboxPaint(fillPaint(style, layer.opacity)),
+      ...(fillPatternId ? { "fill-pattern": fillPatternId } : {}),
+    };
+    const result: LayerSpecification[] = [];
+    if (profile.hasPolygon && style.extrusionEnabled) {
+      // A zoom-stepped extrusion that is flat below some zoom draws an
+      // ordinary fill there: a zero-height extrusion still triangulates as 3D
+      // geometry and shards at tile edges on the globe.
+      const flatRange = flatBelowZoom !== null && style.minZoom < flatBelowZoom;
+      if (flatRange)
+        result.push({
+          ...base,
+          id: `${mapboxFillLayerId(layer.id, sourceLayer)}-flat`,
+          type: "fill",
+          maxzoom: Math.min(style.maxZoom, flatBelowZoom),
+          filter: withFilter(isPolygon),
+          paint: fill,
+        } as LayerSpecification);
+      result.push({
         ...base,
         id: mapboxFillLayerId(layer.id, sourceLayer),
-        type: style.extrusionEnabled ? "fill-extrusion" : "fill",
-        filter: geometryFilter("Polygon"),
-        paint: mapboxPaint(
-          style.extrusionEnabled
-            ? fillExtrusionPaint(style, layer.opacity)
-            : fillPaint(style, layer.opacity),
-        ),
-      },
-      (profile.hasLine || profile.hasPolygon) && {
+        type: "fill-extrusion",
+        ...(flatBelowZoom !== null
+          ? { minzoom: Math.min(style.maxZoom, Math.max(style.minZoom, flatBelowZoom)) }
+          : {}),
+        filter: withFilter(isPolygon),
+        paint: mapboxPaint(fillExtrusionPaint(style, layer.opacity)),
+      } as LayerSpecification);
+    } else if (profile.hasPolygon && !sourceLayer && invertedMask) {
+      // Inverted fill (QGIS "Inverted polygons"): the mask outside the
+      // features takes the fill, so the features read as holes. Its outer
+      // ring is the world rectangle, whose hairline outline would draw a seam.
+      result.push({
+        ...base,
+        source: invertedSourceId,
+        id: `${mapboxFillLayerId(layer.id, sourceLayer)}-inverted`,
+        type: "fill",
+        metadata: { "geolibre:internal": true },
+        paint: { ...fill, "fill-outline-color": "rgba(0, 0, 0, 0)" },
+      } as LayerSpecification);
+    } else if (profile.hasPolygon) {
+      result.push({
+        ...base,
+        id: mapboxFillLayerId(layer.id, sourceLayer),
+        type: "fill",
+        filter: withFilter(isPolygon),
+        paint: fill,
+      } as LayerSpecification);
+    }
+    // Under an extrusion only true lines get a line layer; the extrusion
+    // draws its own walls, as on MapLibre.
+    if (profile.hasLine || (!style.extrusionEnabled && profile.hasPolygon))
+      result.push({
         ...base,
         id: mapboxLineLayerId(layer.id, sourceLayer),
         type: "line",
-        filter: (filter ? ["all", notPoint, filter] : notPoint) as FilterSpecification,
+        filter: withFilter(
+          style.extrusionEnabled
+            ? ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false]
+            : notPoint,
+        ),
         paint: mapboxPaint(linePaint(style, layer.opacity)),
-      },
-      ...(profile.hasPoint ? pointLayers(base, id) : []),
-    ].filter(Boolean) as LayerSpecification[];
+      } as LayerSpecification);
+    // Line decorations (QGIS marker lines / arrows): the generated icon
+    // repeated along lines and polygon outlines, rotated to follow them.
+    if (!style.extrusionEnabled && decorationImageId && (profile.hasLine || profile.hasPolygon))
+      result.push({
+        ...base,
+        id: `${id}-line-decoration`,
+        type: "symbol",
+        metadata: { "geolibre:internal": true },
+        filter: withFilter(notPoint),
+        layout: {
+          ...layout,
+          "icon-image": decorationImageId,
+          "icon-size": 1,
+          "symbol-placement": "line",
+          "symbol-spacing": Math.max(1, styleValue(layer.style, "lineDecorationSpacing")),
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-rotation-alignment": "map",
+        },
+        paint: { "icon-opacity": layer.opacity },
+      } as LayerSpecification);
+    if (profile.hasPoint) result.push(...pointLayers(base, id));
+    if (hasTextMarkers && !sourceLayer) result.push(textMarkerLayer(base, id));
     const label = labelLayer(base, id, sourceLayer);
     if (label) result.push(label);
+    if (!sourceLayer && generated?.features.length)
+      result.push(...generatorLayers({ ...base, source: generatedSourceId }, id, generated));
     return result;
+  };
+  // The companion GeoJSON sources the inline layers above read from.
+  const companionSources = (): { additionalSources?: Record<string, SourceSpecification> } => {
+    const sources: Record<string, SourceSpecification> = {};
+    if (dedupedLabels) sources[labelSourceId] = { type: "geojson", data: dedupedLabels };
+    if (invertedMask) sources[invertedSourceId] = { type: "geojson", data: invertedMask };
+    if (generated?.features.length)
+      sources[generatedSourceId] = { type: "geojson", data: generated };
+    return Object.keys(sources).length ? { additionalSources: sources } : {};
   };
   if (layer.geojson) {
     return {
@@ -531,9 +780,7 @@ export function compileMapboxLayer(
             clusterMaxZoom,
           }
         : { type: "geojson", data: layer.geojson, generateId: true },
-      ...(dedupedLabels
-        ? { additionalSources: { [labelSourceId]: { type: "geojson", data: dedupedLabels } } }
-        : {}),
+      ...companionSources(),
       layers: vectorLayers(),
     };
   }
@@ -654,38 +901,60 @@ export function compileMapboxLayer(
  * the ones a layer has turned on, so a setting that silently does nothing on
  * this renderer is named instead. Remove an entry once the compiler honors it.
  */
-export type MapboxUnsupportedStyleSetting =
-  | "markerIcons"
-  | "fillPattern"
-  | "invertedFill"
-  | "lineDecoration"
-  | "geometryGenerator"
-  | "blendMode";
+export type MapboxUnsupportedStyleSetting = "blendMode";
 
 /** The {@link MapboxUnsupportedStyleSetting}s this layer's style turns on. */
 export function mapboxUnsupportedStyleSettings(
   layer: GeoLibreLayer,
 ): MapboxUnsupportedStyleSetting[] {
-  const cached = unsupportedSettingsCache.get(layer);
-  if (cached) return cached;
-  const style = layer.style;
-  const settings: MapboxUnsupportedStyleSetting[] = [];
-  // Marker icons only draw under the single point renderer on MapLibre too;
-  // the heatmap and cluster renderers replace them.
-  const profile = layer.geojson?.features?.length ? detectGeometryProfile(layer.geojson) : null;
-  const renderer = profile ? resolveVectorRenderMode(layer, profile).renderer : "single";
-  if (styleValue(style, "markerEnabled") && renderer === "single" && (profile?.hasPoint ?? true))
-    settings.push("markerIcons");
-  if (styleValue(style, "fillPattern") !== "none") settings.push("fillPattern");
-  if (styleValue(style, "invertedFillEnabled")) settings.push("invertedFill");
-  if (styleValue(style, "lineDecoration") !== "none") settings.push("lineDecoration");
-  if (styleValue(style, "geometryGenerator") !== "none") settings.push("geometryGenerator");
-  if ((style.blendMode ?? DEFAULT_LAYER_STYLE.blendMode) !== DEFAULT_LAYER_STYLE.blendMode)
-    settings.push("blendMode");
-  unsupportedSettingsCache.set(layer, settings);
-  return settings;
+  const blendMode = layer.style.blendMode ?? DEFAULT_LAYER_STYLE.blendMode;
+  return blendMode !== DEFAULT_LAYER_STYLE.blendMode ? ["blendMode"] : [];
 }
 
-// Memoized per immutable layer record, like `supportedLayerCache`: the Style
-// panel asks on every render and the geometry scan walks every feature.
-const unsupportedSettingsCache = new WeakMap<GeoLibreLayer, MapboxUnsupportedStyleSetting[]>();
+// turf's mask is a world rectangle ([-180, -90] to [180, 90]) with every
+// feature cut out as a hole wound the same way as that rectangle. MapLibre
+// draws it as intended, but mapbox-gl drops a ring lying exactly on the
+// antimeridian and the poles, and draws each same-wound hole as a polygon of
+// its own, which inverts the mask (the features filled, the world around them
+// empty). Pulling the world ring just inside the Web Mercator limits and
+// giving the holes the RFC 7946 opposing winding draws it as on MapLibre.
+// Memoized per mask, which buildInvertedMask itself memoizes.
+const opposedMasks = new WeakMap<FeatureCollection, FeatureCollection>();
+const MASK_MAX_LNG = 179.999;
+const MASK_MAX_LAT = 85.0511;
+function withOpposingHoles(mask: FeatureCollection | null): FeatureCollection | null {
+  if (!mask) return null;
+  const cached = opposedMasks.get(mask);
+  if (cached) return cached;
+  const signedArea = (ring: number[][]) => {
+    let sum = 0;
+    for (let i = 0; i < ring.length - 1; i++)
+      sum += (ring[i + 1][0] - ring[i][0]) * (ring[i + 1][1] + ring[i][1]);
+    return sum;
+  };
+  const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
+  const oppose = (rings: number[][][]) =>
+    rings.map((ring, index) =>
+      index === 0
+        ? ring.map(([lng, lat]) => [clamp(lng, MASK_MAX_LNG), clamp(lat, MASK_MAX_LAT)])
+        : Math.sign(signedArea(ring)) === Math.sign(signedArea(rings[0]))
+          ? [...ring].reverse()
+          : ring,
+    );
+  const result: FeatureCollection = {
+    ...mask,
+    features: mask.features.map((feature) => {
+      const geometry = feature.geometry;
+      if (geometry?.type === "Polygon")
+        return { ...feature, geometry: { ...geometry, coordinates: oppose(geometry.coordinates) } };
+      if (geometry?.type === "MultiPolygon")
+        return {
+          ...feature,
+          geometry: { ...geometry, coordinates: geometry.coordinates.map(oppose) },
+        };
+      return feature;
+    }),
+  };
+  opposedMasks.set(mask, result);
+  return result;
+}

@@ -28,12 +28,11 @@ import {
 import { encodeVectorTileLayerPart } from "./vector-tile-layer-ids";
 import {
   DEDUPED_LABEL_PROPERTY,
-  GEOMAN_SHAPE_PROPERTY,
   getDedupedLabelFeatures,
   parseLabelOverride,
-  TEXT_MARKER_SHAPE,
   TEXT_MARKER_SHAPE_FILTER,
 } from "./label-style";
+import { flatExtrusionCutoff, hasTextMarkerFeatures } from "./symbology-shared";
 import {
   authoredClusterInput,
   hasZoomDependentClusterFilter,
@@ -457,33 +456,6 @@ function styleLayerZoomRange(style: LayerStyle): {
     minzoom: Math.min(minzoom, maxzoom),
     maxzoom: Math.max(minzoom, maxzoom),
   };
-}
-
-/**
- * Return the first zoom where a zoom-stepped extrusion becomes non-flat.
- * A zero-height fill-extrusion is still triangulated as 3D geometry by
- * MapLibre and can produce large tile-boundary shards on the globe. Callers
- * use this cutoff to render an ordinary fill below it instead.
- */
-function flatExtrusionCutoff(style: LayerStyle): number | null {
-  if (!style.extrusionAdvancedStyleEnabled || !style.extrusionHeightExpression) return null;
-  try {
-    const expression: unknown = JSON.parse(style.extrusionHeightExpression);
-    if (
-      Array.isArray(expression) &&
-      expression[0] === "step" &&
-      Array.isArray(expression[1]) &&
-      expression[1][0] === "zoom" &&
-      expression[2] === 0 &&
-      typeof expression[3] === "number" &&
-      Number.isFinite(expression[3])
-    ) {
-      return clampLayerZoom(expression[3], MIN_LAYER_ZOOM);
-    }
-  } catch {
-    // Invalid expressions are handled by the existing style-expression path.
-  }
-  return null;
 }
 
 // Intersect a native layer's source-declared zoom range with the user-configured
@@ -2767,38 +2739,8 @@ function applyGeometryGeneratorLayers(
   }
 }
 
-// syncs can fire rapidly (e.g. dragging an opacity slider), and this is an O(n)
-// scan that the tiled path now runs against 50k+ feature collections. Memoize by
-// collection reference — the store replaces the object on every mutation.
-const textMarkerCache = new WeakMap<GeoJSON.FeatureCollection, boolean>();
-
 function removeSourceIfExists(map: maplibregl.Map, id: string): void {
   if (map.getSource(id)) map.removeSource(id);
-}
-
-// Keep this predicate aligned with textMarkerFilter: any text-marker-shaped
-// point routes to the symbol layer, even with empty text, so features are
-// never excluded from the circle layer without a matching symbol entry.
-function hasTextMarkerFeatures(collection: GeoJSON.FeatureCollection): boolean {
-  const cached = textMarkerCache.get(collection);
-  if (cached !== undefined) return cached;
-  const result = computeHasTextMarkerFeatures(collection);
-  textMarkerCache.set(collection, result);
-  return result;
-}
-
-function computeHasTextMarkerFeatures(collection: GeoJSON.FeatureCollection): boolean {
-  return collection.features.some((feature) => {
-    if (feature.geometry?.type !== "Point" && feature.geometry?.type !== "MultiPoint") {
-      return false;
-    }
-    const properties = feature.properties;
-    if (!properties) return false;
-    return (
-      properties[GEOMAN_SHAPE_PROPERTY] === TEXT_MARKER_SHAPE ||
-      properties.shape === TEXT_MARKER_SHAPE
-    );
-  });
 }
 
 // getStyle() deep-clones the whole style, and syncs can fire rapidly (e.g.

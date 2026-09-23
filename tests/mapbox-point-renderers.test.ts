@@ -106,7 +106,7 @@ describe("mapboxUnsupportedStyleSettings", () => {
     assert.deepEqual(mapboxUnsupportedStyleSettings(pointLayer()), []);
   });
 
-  it("names every enabled setting the Mapbox compiler does not draw", () => {
+  it("names only a blend mode, the one setting Mapbox does not draw", () => {
     const layer = pointLayer({
       markerEnabled: true,
       fillPattern: "hatch",
@@ -114,28 +114,7 @@ describe("mapboxUnsupportedStyleSettings", () => {
       lineDecoration: "arrow",
       geometryGenerator: "centroid",
       blendMode: "multiply",
-      labels: {
-        ...DEFAULT_LAYER_STYLE.labels,
-        enabled: true,
-        field: "kind",
-        dedupe: "unique",
-        sizeExpression: '["get", "size"]',
-      },
     } as Partial<GeoLibreLayer["style"]>);
-    assert.deepEqual(mapboxUnsupportedStyleSettings(layer), [
-      "markerIcons",
-      "fillPattern",
-      "invertedFill",
-      "lineDecoration",
-      "geometryGenerator",
-      "blendMode",
-    ]);
-  });
-
-  it("does not name marker icons under the heatmap or cluster renderer", () => {
-    for (const pointRenderer of ["heatmap", "cluster"] as const) {
-      const layer = pointLayer({ markerEnabled: true, pointRenderer });
-      assert.deepEqual(mapboxUnsupportedStyleSettings(layer), []);
-    }
+    assert.deepEqual(mapboxUnsupportedStyleSettings(layer), ["blendMode"]);
   });
 });
