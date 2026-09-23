@@ -262,6 +262,7 @@ export function MapboxCanvas({
               // its ownership record without restoring a layer from the project
               // that was just replaced.
               removeIdentifyPopup({ restore: false });
+              globalIdentifyActivatedLayerId = null;
             } else if (!viewId && identifyPopupState && next.layers !== previous?.layers) {
               const identifiedLayer = next.layers.find(
                 (layer) => layer.id === identifyPopupState?.identifiedLayerId,
@@ -276,6 +277,9 @@ export function MapboxCanvas({
             }
             if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
               removeIdentifyPopup();
+              // A layer "Identify visible layers" selected before the mode
+              // changed is the user's from here on, as MapCanvas resets it.
+              globalIdentifyActivatedLayerId = null;
               if (next.identifyLayerId) featureSelection.cancel.current?.();
               if (!featureSelection.active.current)
                 setIdentifyCursor(Boolean(next.identifyLayerId));
