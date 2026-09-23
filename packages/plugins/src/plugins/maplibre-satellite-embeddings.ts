@@ -120,6 +120,7 @@ const CSS = {
   info:
     "display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:6px;" +
     "border:1px solid hsl(var(--border));background:hsl(var(--muted));",
+  infoSummary: "font-weight:600;cursor:pointer;",
   infoGrid: "display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:11px;",
   infoKey: "color:hsl(var(--muted-foreground));",
   links: "display:flex;gap:12px;flex-wrap:wrap;font-size:11px;",
@@ -199,6 +200,8 @@ interface PanelState {
   rgbBands: [number, number, number];
   stretch: number;
   downloadFloat: boolean;
+  /** Whether the dataset info card is expanded (collapsed by default). */
+  infoExpanded: boolean;
   /**
    * Results selected by a footprint click (every footprint under the click:
    * AlphaEarth years share identical footprints) or a row click. Outlined on
@@ -221,6 +224,7 @@ function initialState(): PanelState {
     rgbBands: [...AEF_DEFAULT_RGB_BANDS],
     stretch: AEF_DEFAULT_STRETCH,
     downloadFloat: true,
+    infoExpanded: false,
     selectedIds: [],
   };
 }
@@ -953,9 +957,18 @@ async function loadEarthIndex(
 // Panel
 // ---------------------------------------------------------------------------
 
+/**
+ * The dataset's details as a collapsible card: the summary line (provider and
+ * model) stays visible, the rest expands on click. Collapsed by default so the
+ * search controls stay near the top; the choice is kept across re-renders.
+ */
 function datasetInfo(dataset: SatelliteEmbeddingDataset): HTMLElement {
-  const box = element("div", CSS.info);
-  box.append(element("div", "font-weight:600;", `${dataset.provider} · ${dataset.model}`));
+  const box = element("details", CSS.info);
+  box.open = state.infoExpanded;
+  box.addEventListener("toggle", () => {
+    state.infoExpanded = box.open;
+  });
+  box.append(element("summary", CSS.infoSummary, `${dataset.provider} · ${dataset.model}`));
   const grid = element("div", CSS.infoGrid);
   const add = (key: string, value: string): void => {
     grid.append(element("span", CSS.infoKey, key), element("span", "", value));
