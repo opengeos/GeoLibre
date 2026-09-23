@@ -1287,8 +1287,8 @@ export function DesktopShell({
           return;
         try {
           const manager = getPluginManager();
-          const live = manager.getProjectState();
           const stored = state.projectPlugins;
+          const live = manager.getProjectState(stored);
           // A plugin still registering (an external one loading) is not in
           // the live snapshot yet; keep what the project stored for it.
           const registered = new Set(manager.list().map((plugin) => plugin.id));

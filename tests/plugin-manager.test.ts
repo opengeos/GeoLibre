@@ -1492,3 +1492,43 @@ describe("PluginManager renderer compatibility", () => {
     assert.equal(mounted, 1);
   });
 });
+
+describe("PluginManager getProjectState fallback", () => {
+  const restored = {
+    manifestUrls: [],
+    activePluginIds: [],
+    mapControlPositions: { broken: "top-left" as const },
+    settings: { broken: { step: 1 } },
+  };
+  const brokenPlugin = () =>
+    testPlugin({
+      id: "broken",
+      getProjectState: () => {
+        throw new Error("control is gone");
+      },
+    });
+
+  it("keeps a failing plugin's restored entry by default", () => {
+    const manager = new PluginManager();
+    manager.register(brokenPlugin());
+    manager.restoreProjectState(restored, app);
+
+    const state = manager.getProjectState();
+    assert.deepEqual(state.settings.broken, { step: 1 });
+    assert.equal(state.mapControlPositions.broken, "top-left");
+  });
+
+  it("takes a failing plugin's entry from a newer stored snapshot when given one", () => {
+    const manager = new PluginManager();
+    manager.register(brokenPlugin());
+    manager.restoreProjectState(restored, app);
+
+    const state = manager.getProjectState({
+      ...restored,
+      mapControlPositions: { broken: "bottom-right" },
+      settings: { broken: { step: 7 } },
+    });
+    assert.deepEqual(state.settings.broken, { step: 7 });
+    assert.equal(state.mapControlPositions.broken, "bottom-right");
+  });
+});
