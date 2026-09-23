@@ -51,6 +51,7 @@ import {
   tesseraTilesForBbox,
   tesseraTileUrls,
 } from "./satellite-embeddings-grids";
+import { getRasterRenderEngine } from "./maplibre-raster";
 import { getStyleMap } from "./style-map";
 
 export const SATELLITE_EMBEDDINGS_PLUGIN_ID = "geolibre-satellite-embeddings";
@@ -654,7 +655,14 @@ function readRegion(row: ResultRow): LonLatBbox {
   return (state.searchBbox && intersectBboxes(state.searchBbox, row.bbox)) ?? row.bbox;
 }
 
-/** Renders an AlphaEarth tile's RGB composite as an image layer. */
+/**
+ * Visualizes an AlphaEarth tile's RGB composite. On the WASM COG engine (the
+ * only one that reads these bottom-up files, since cog-tiler-wasm 0.3.8) the
+ * whole tile becomes a regular COG layer: tiled, zoomable to 10 m, and saved
+ * as a URL. On any other engine it falls back to a snapshot image of the
+ * search area, rather than switching the control-wide engine and re-rendering
+ * every raster already on the map.
+ */
 async function visualizeAlphaEarth(
   row: ResultRow,
   setStatus: (text: string) => void,
@@ -663,6 +671,28 @@ async function visualizeAlphaEarth(
   // Read settings once: the user may change them while the bands load.
   const rgbBands: [number, number, number] = [...state.rgbBands];
   const stretch = state.stretch;
+  const bandLabel = rgbBands.map(aefBandName).join(", ");
+  const name = tr("aefLayerName", "AlphaEarth {{year}} ({{bands}})", {
+    year: tile.year,
+    bands: bandLabel,
+  });
+  const app = appRef;
+  const engine = app?.addCogLayer ? await getRasterRenderEngine(app).catch(() => null) : null;
+  if (app?.addCogLayer && engine === "cog-tiler-wasm") {
+    setStatus(tr("opening", "Opening {{name}}…", { name: row.subtitle }));
+    // The raster control stretches raw int8 values, so map the de-quantized
+    // ±stretch back to raw: |v| = sqrt(stretch) · 127.5.
+    const raw = Math.round(Math.sqrt(stretch) * 127.5);
+    await app.addCogLayer(name, tile.url, {
+      engine: "auto",
+      bands: rgbBands.map((band) => band + 1).join(","),
+      rescaleMin: -raw,
+      rescaleMax: raw,
+      nodata: AEF_NODATA,
+    });
+    setStatus(tr("visualizedCog", "Added {{name}} as a COG layer.", { name }));
+    return;
+  }
   setStatus(tr("opening", "Opening {{name}}…", { name: row.subtitle }));
   const reader = await getReader(tile.url);
   const plan = planAefWindow(
@@ -688,14 +718,10 @@ async function visualizeAlphaEarth(
     0,
   );
   const coordinates = utmBoundsToCorners(plan.bounds, tile.epsg);
-  const bandLabel = rgbBands.map(aefBandName).join(", ");
   const dataset = getSatelliteEmbeddingDataset("alphaearth");
   const layer: GeoLibreLayer = {
     id: crypto.randomUUID(),
-    name: tr("aefLayerName", "AlphaEarth {{year}} ({{bands}})", {
-      year: tile.year,
-      bands: bandLabel,
-    }),
+    name,
     type: "image",
     source: { type: "image", url: canvas.toDataURL("image/png"), coordinates },
     visible: true,
@@ -1044,7 +1070,7 @@ function buildPanel(container: HTMLElement): () => void {
         taskButton(
           tr("visualize", "Visualize"),
           () => visualizeAlphaEarth(row, statusSetter),
-          tr("visualizeTitle", "Render the selected bands over the search area as an image layer"),
+          tr("visualizeTitle", "Add the selected bands to the map as an RGB layer"),
         ),
         taskButton(
           tr("downloadClip", "GeoTIFF"),

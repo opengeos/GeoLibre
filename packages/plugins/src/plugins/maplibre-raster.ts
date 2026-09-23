@@ -441,6 +441,22 @@ export async function setRasterRenderEngine(
 }
 
 /**
+ * The engine the shared raster control renders COGs with, mounting the control
+ * first when needed (a fresh one starts on `cog-tiler-wasm`). Lets a built-in
+ * plugin choose a path that suits the active engine instead of switching it,
+ * since the engine is control-wide and a switch re-renders every raster.
+ *
+ * @param app - The GeoLibre app API for the current map.
+ * @returns The active engine, or null when the control cannot be initialized.
+ */
+export async function getRasterRenderEngine(
+  app: GeoLibreAppAPI,
+): Promise<RasterRenderEngine | null> {
+  const control = await ensureRasterControl(app);
+  return control ? control.getEngine() : null;
+}
+
+/**
  * Mount and warm the raster control without opening its panel.
  *
  * Desktop calls this as soon as a native file drag enters the window, so the
