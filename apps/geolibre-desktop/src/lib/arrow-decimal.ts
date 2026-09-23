@@ -49,7 +49,7 @@ export function decodeArrowDecimal(value: unknown, scale: number): unknown {
 
 /**
  * Build a converter for a column of the given Arrow type that decodes every
- * DECIMAL it contains, including inside LIST and STRUCT values. Returns null
+ * DECIMAL it contains, including inside LIST, STRUCT and MAP values. Returns null
  * when the type holds no DECIMAL, so the common case costs nothing per row.
  */
 function decimalConverter(type: unknown): CellConverter | null {
@@ -57,13 +57,38 @@ function decimalConverter(type: unknown): CellConverter | null {
     const { scale } = type;
     return (value) => decodeArrowDecimal(value, scale);
   }
-  if (DataType.isList(type) || DataType.isFixedSizeList(type)) {
+  if (DataType.isList(type) || DataType.isLargeList(type) || DataType.isFixedSizeList(type)) {
     const child = type.children[0] ? decimalConverter(type.children[0].type) : null;
     if (!child) return null;
     return (value) =>
       value !== null && value !== undefined && typeof value === "object" && Symbol.iterator in value
         ? Array.from(value as Iterable<unknown>, child)
         : value;
+  }
+  if (DataType.isMap(type)) {
+    // A MAP is a list of {key, value} entries; its row value reads back as an
+    // object keyed by the stringified key. Decimal keys come back as unscaled
+    // digits too, so they are rescaled before being used as the object key.
+    const entries = type.children[0]?.type as { children?: { name: string; type: unknown }[] };
+    const keyType = entries?.children?.find((field) => field.name === "key")?.type;
+    const valueType = entries?.children?.find((field) => field.name === "value")?.type;
+    const keyScale = DataType.isDecimal(keyType) ? keyType.scale : null;
+    const convertValue = valueType ? decimalConverter(valueType) : null;
+    if (keyScale === null && !convertValue) return null;
+    return (value) => {
+      if (value === null || value === undefined || typeof value !== "object") return value;
+      const map = value as { toJSON?: () => Record<string, unknown> };
+      const source = typeof map.toJSON === "function" ? map.toJSON() : { ...map };
+      const out: Record<string, unknown> = {};
+      for (const [key, item] of Object.entries(source)) {
+        const decodedKey =
+          keyScale !== null && /^-?\d+$/.test(key)
+            ? String(decodeArrowDecimal(BigInt(key), keyScale))
+            : key;
+        out[decodedKey] = convertValue ? convertValue(item) : item;
+      }
+      return out;
+    };
   }
   if (DataType.isStruct(type)) {
     const children = type.children.flatMap((field) => {

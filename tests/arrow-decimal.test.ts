@@ -4,7 +4,9 @@ import {
   Decimal,
   Field,
   List,
+  Map_,
   Struct,
+  Utf8,
   Table,
   makeData,
   makeVector,
@@ -103,6 +105,37 @@ describe("rowsFromResult with DECIMAL columns", () => {
       { l: [1.25, 2.5], s: { x: 0.01 } },
       { l: [3.75], s: { x: -0.99 } },
     ]);
+  });
+
+  it("decodes decimal values and keys in MAP columns", () => {
+    const decimal = new Decimal(2, 10, 128);
+    const entries = (keyType: Decimal | Utf8, valueType: Decimal | Utf8) =>
+      new Struct([new Field("key", keyType, false), new Field("value", valueType, true)]);
+    const keys = vectorFromArray(["a", "b"]).data[0];
+    const valuesByText = makeData({
+      type: new Map_(new Field("entries", entries(new Utf8(), decimal), false)),
+      length: 1,
+      valueOffsets: new Int32Array([0, 2]),
+      child: makeData({
+        type: entries(new Utf8(), decimal),
+        length: 2,
+        children: [keys, decimalData([125n, -250n], 2, 10)],
+      }),
+    });
+    const textByDecimal = makeData({
+      type: new Map_(new Field("entries", entries(decimal, new Utf8()), false)),
+      length: 1,
+      valueOffsets: new Int32Array([0, 1]),
+      child: makeData({
+        type: entries(decimal, new Utf8()),
+        length: 1,
+        children: [decimalData([150n], 2, 10), vectorFromArray(["x"]).data[0]],
+      }),
+    });
+    const rows = rowsFromResult(
+      new Table({ m: makeVector(valuesByText), mk: makeVector(textByDecimal) }),
+    );
+    assert.deepEqual(rows, [{ m: { a: 1.25, b: -2.5 }, mk: { "1.5": "x" } }]);
   });
 
   it("leaves rows alone when the schema has no decimal", () => {
