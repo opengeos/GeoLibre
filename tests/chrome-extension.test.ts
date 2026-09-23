@@ -296,6 +296,45 @@ describe("GeoLibre Chrome extension scanner", () => {
     );
   });
 
+  it("finds LiDAR point clouds and hints the endpoints GeoLibre cannot classify", () => {
+    const found = scan(`
+      <a href="https://data.example.com/autzen.copc.laz">Autzen</a>
+      <a href="survey.LAS">Survey</a>
+      <a href="https://data.example.com/autzen/ept.json">Autzen EPT</a>
+      <a href="https://api.example.com/download/42?token=abc">Download COPC</a>
+      <a href="https://data.example.com/dem.tif">LiDAR DEM</a>
+      <a href="https://example.com/programs/elevation">LiDAR and point cloud programs</a>
+    `);
+    const byUrl = new Map(found.map((dataset) => [dataset.url, dataset]));
+    assert.equal(found.length, 5);
+    for (const url of [
+      "https://data.example.com/autzen.copc.laz",
+      "https://catalog.example.com/page/survey.LAS",
+      "https://data.example.com/autzen/ept.json",
+    ]) {
+      assert.equal(byUrl.get(url)?.kind, "lidar", url);
+      assert.equal(byUrl.get(url)?.format, "LiDAR", url);
+      assert.equal("dataType" in byUrl.get(url)!, false, url);
+    }
+    assert.equal(byUrl.get("https://api.example.com/download/42?token=abc")?.dataType, "lidar");
+    // Extension rules come first, and portal wording alone is not a format.
+    assert.equal(byUrl.get("https://data.example.com/dem.tif")?.kind, "raster");
+    assert.equal(byUrl.has("https://example.com/programs/elevation"), false);
+  });
+
+  it("keeps the dataType hint of an unpacked GeoLibre link", () => {
+    const target = new URL("https://web.geolibre.app/");
+    target.searchParams.append("data", "https://data.example.com/roads.geojson");
+    target.searchParams.append("data", "https://api.example.com/download/42?token=abc");
+    target.searchParams.append("dataType", "");
+    target.searchParams.append("dataType", "lidar");
+    const found = scan(`<a href="${target.href}">Open map</a>`);
+    const endpoint = found.find((dataset) => dataset.url.includes("/download/42"));
+    assert.equal(endpoint?.kind, "lidar");
+    assert.equal(endpoint?.dataType, "lidar");
+    assert.equal(found.find((dataset) => dataset.url.endsWith("roads.geojson"))?.kind, "vector");
+  });
+
   it("deduplicates repeated links", () => {
     const found = scan(`
       <a href="roads.pmtiles">Roads</a>
@@ -343,6 +382,28 @@ describe("GeoLibre Chrome extension URL builder", () => {
       "",
       "https://data.example.com/dem.style.json",
     ]);
+  });
+
+  it("pairs a dataType hint with its dataset by position", () => {
+    const result = new URL(
+      buildGeoLibreUrl([
+        { url: "https://data.example.com/autzen.copc.laz", styleUrl: null },
+        { url: "https://api.example.com/download/42?token=abc", dataType: "lidar" },
+      ]),
+    );
+    assert.deepEqual(result.searchParams.getAll("data"), [
+      "https://data.example.com/autzen.copc.laz",
+      "https://api.example.com/download/42?token=abc",
+    ]);
+    assert.deepEqual(result.searchParams.getAll("dataType"), ["", "lidar"]);
+    assert.equal(result.searchParams.has("style"), false);
+  });
+
+  it("omits dataType parameters when no selected dataset needs one", () => {
+    const result = new URL(
+      buildGeoLibreUrl([{ url: "https://data.example.com/autzen.copc.laz", styleUrl: null }]),
+    );
+    assert.equal(result.searchParams.has("dataType"), false);
   });
 
   it("omits style parameters when no selected dataset has a style", () => {

@@ -22,6 +22,7 @@ const elements = {
   allCount: document.querySelector("#all-count"),
   vectorCount: document.querySelector("#vector-count"),
   rasterCount: document.querySelector("#raster-count"),
+  lidarCount: document.querySelector("#lidar-count"),
 };
 
 let datasets = [];
@@ -112,6 +113,9 @@ function renderDatasets(found) {
   );
   elements.rasterCount.textContent = String(
     datasets.filter((dataset) => dataset.kind === "raster").length,
+  );
+  elements.lidarCount.textContent = String(
+    datasets.filter((dataset) => dataset.kind === "lidar").length,
   );
   updateFilter();
   updateSelection();

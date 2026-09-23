@@ -39,16 +39,19 @@ before submitting the listing.
 ## Discovery
 
 The scanner recognizes GeoJSON/JSON, GeoParquet/Parquet, PMTiles, GeoTIFF/COG,
-and ZIP links in anchors, linked resources, selected data attributes, and
+LiDAR point clouds (LAS/LAZ/COPC and EPT `ept.json`), and ZIP links in anchors, linked resources, selected data attributes, and
 schema.org JSON-LD `contentUrl`/`downloadUrl` fields. Existing GeoLibre deep
 links are unpacked, and a neighboring `name.style.json` or
-`name.geolibre.style.json` link is paired with the matching dataset.
+`name.geolibre.style.json` link is paired with the matching dataset. A point
+cloud whose URL has no LAS/LAZ suffix, found only because its link or metadata
+says COPC, LAZ, or LASzip, is opened with `dataType=lidar` so GeoLibre does not
+read it as GeoJSON.
 
 Source Cooperative repository pages receive additional handling: the extension
 reads the complete embedded file inventory even when the visible table is
 virtualized, canonicalizes links to `data.source.coop`, and removes duplicate
-page/download links. The popup can filter discovered files by vector or raster
-type without changing the current selection.
+page/download links. The popup can filter discovered files by vector, raster,
+or LiDAR type without changing the current selection.
 
 ## Services
 

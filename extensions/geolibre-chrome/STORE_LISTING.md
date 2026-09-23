@@ -15,7 +15,7 @@ Find geospatial datasets and map services on a webpage and open them in GeoLibre
 
 Open data in GeoLibre turns dataset catalogs, documentation pages, and project websites into launch points for an interactive map.
 
-Click the extension icon to find supported data links on the current page, filter them by vector or raster type, choose the files you need, and open them together in GeoLibre. Supported links include GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF, and ZIP archives containing GeoJSON.
+Click the extension icon to find supported data links on the current page, filter them by vector, raster, or LiDAR type, choose the files you need, and open them together in GeoLibre. Supported links include GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF, LiDAR point clouds (LAS, LAZ, COPC, and EPT), and ZIP archives containing GeoJSON.
 
 The extension also reads schema.org download metadata, understands existing GeoLibre links, pairs matching GeoLibre style files, and discovers the complete file inventory on virtualized Source Cooperative repository pages.
 
@@ -39,7 +39,7 @@ Each block below is self-contained and is pasted verbatim into the matching fiel
 
 ### activeTab
 
-activeTab grants temporary access to the current page only after the user clicks the extension's toolbar icon. The extension uses that access to read the page's links and structured metadata and pick out geospatial datasets, such as GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF, and ZIP archives containing GeoJSON, which it then lists in the popup for the user to choose from. Access ends when the user leaves or reloads the page, and no page content is read at any other time.
+activeTab grants temporary access to the current page only after the user clicks the extension's toolbar icon. The extension uses that access to read the page's links and structured metadata and pick out geospatial datasets, such as GeoJSON, GeoParquet, PMTiles, Cloud-Optimized GeoTIFF, LiDAR point clouds, and ZIP archives containing GeoJSON, which it then lists in the popup for the user to choose from. Access ends when the user leaves or reloads the page, and no page content is read at any other time.
 
 ### scripting
 
