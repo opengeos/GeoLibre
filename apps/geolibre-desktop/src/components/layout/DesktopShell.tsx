@@ -1288,7 +1288,16 @@ export function DesktopShell({
     const remount = restoredProjectGeneration.current === projectGeneration;
     restoredProjectGeneration.current = projectGeneration;
     const storedPlugins = useAppStore.getState().projectPlugins;
-    const live = remount ? pluginManager.getProjectState() : null;
+    // A plugin that cannot report its state once its map is gone must not
+    // cost every plugin its restore: fall back to the stored copy.
+    let live: ReturnType<typeof pluginManager.getProjectState> | null = null;
+    if (remount) {
+      try {
+        live = pluginManager.getProjectState();
+      } catch (error) {
+        console.warn("[GeoLibre] Could not read live plugin state for the new map", error);
+      }
+    }
     pluginManager.restoreProjectState(
       live
         ? {
