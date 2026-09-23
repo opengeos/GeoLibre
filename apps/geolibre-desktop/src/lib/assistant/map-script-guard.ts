@@ -13,6 +13,13 @@ export const BLOCKED_MAP_SCRIPT_METHODS: Readonly<Record<string, string>> = Obje
 });
 
 /**
+ * One guard per map, reused across `run_maplibre_js` calls, so a listener one
+ * snippet registers with `map.on(type, fn)` can be removed by a later snippet's
+ * `map.off(type, fn)`: both calls see the same listener wrapper.
+ */
+const guardedMaps = new WeakMap<object, object>();
+
+/**
  * Wrap a live map so a model-authored snippet cannot call the methods in
  * {@link BLOCKED_MAP_SCRIPT_METHODS}. Every other property reads through to the
  * real map. Methods run against the real instance, so MapLibre's internals
@@ -29,9 +36,12 @@ export const BLOCKED_MAP_SCRIPT_METHODS: Readonly<Record<string, string>> = Obje
  * passes to a custom control's `onAdd`).
  *
  * @param map The live map instance handed to the snippet.
- * @returns A proxy of `map` whose blocked methods throw with guidance.
+ * @returns A proxy of `map` whose blocked methods throw with guidance; the
+ *   same proxy for every call with the same map.
  */
 export function guardMapForScript<T extends object>(map: T): T {
+  const existing = guardedMaps.get(map);
+  if (existing) return existing as T;
   type Fn = (...args: unknown[]) => unknown;
   const wrappers = new WeakMap<Fn, unknown>();
   // One wrapper per snippet listener, so `map.off(type, fn)` finds the wrapper
@@ -95,5 +105,6 @@ export function guardMapForScript<T extends object>(map: T): T {
       return wrapper;
     },
   });
+  guardedMaps.set(map, guarded);
   return guarded;
 }

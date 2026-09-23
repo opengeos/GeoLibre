@@ -129,6 +129,20 @@ describe("guardMapForScript (issue #2584)", () => {
     assert.equal(calls, 0);
   });
 
+  it("reuses one guard per map so off works across separate snippet runs", () => {
+    const map = new FakeMap();
+    assert.equal(guardMapForScript(map), guardMapForScript(map));
+    let calls = 0;
+    const listener = () => {
+      calls += 1;
+    };
+    // Two run_maplibre_js calls each guard the map afresh.
+    guardMapForScript(map).on("move", listener);
+    guardMapForScript(map).off("move", listener);
+    map.fire("move");
+    assert.equal(calls, 0);
+  });
+
   it("passes every other method and property through to the real map", () => {
     const map = new FakeMap();
     const guarded = guardMapForScript(map);
