@@ -865,6 +865,15 @@ export const IDENTIFY_ALL_LAYERS_ID = "__geolibre_identify_all_layers__";
 const MAX_RECENT_PROJECTS = 10;
 
 /**
+ * The layer types {@link AppState.addTileLayer} accepts. Each renders through
+ * the raster tile path, which is why the layer's `source.type` is always
+ * `"raster"`.
+ */
+const RASTER_TILE_LAYER_TYPES: ReadonlySet<string> = new Set<
+  NonNullable<AddTileLayerOptions["type"]>
+>(["xyz", "wms", "wmts", "raster"]);
+
+/**
  * A fresh, inactive collaboration slice (no live session). Frozen (like
  * DEFAULT_LEGEND_CONFIG) to guard against accidental in-place mutation; store
  * actions always produce new objects via spread, so the frozen default is only
@@ -2132,6 +2141,18 @@ export const useAppStore = create<AppState>()(
       },
 
       addTileLayer: (name, options, beforeLayerId = null) => {
+        // Every layer this builds carries a raster source, so a non-raster
+        // `type` from an untyped JS caller (e.g. "vector-tiles") would persist
+        // a layer whose `type` and `source.type` disagree. Reject it instead of
+        // silently mislabelling the source; vector tiles need their own style
+        // layers and go through the vector-tile path, not this one.
+        const type = options.type ?? "xyz";
+        if (!RASTER_TILE_LAYER_TYPES.has(type)) {
+          throw new Error(
+            `addTileLayer: unsupported type "${String(type)}"; expected one of ` +
+              `${[...RASTER_TILE_LAYER_TYPES].join(", ")}. Only raster tile layers are supported.`,
+          );
+        }
         const id = uuidv4();
         // Trim each template and drop blanks, then reject a registration that
         // sanitizes down to nothing: syncRasterTileLayer returns early on an
@@ -2159,10 +2180,11 @@ export const useAppStore = create<AppState>()(
         const layer: GeoLibreLayer = {
           id,
           name,
-          type: options.type ?? "xyz",
+          type,
           source: {
             // Extra source fields (e.g. WMS layers/styles) merge first so the
-            // required raster descriptor below always wins.
+            // required raster descriptor below always wins. `type` above is
+            // validated as a raster kind, so "raster" here always agrees with it.
             ...(options.source ?? {}),
             type: "raster",
             tiles,

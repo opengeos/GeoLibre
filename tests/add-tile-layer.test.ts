@@ -115,6 +115,35 @@ describe("store.addTileLayer", () => {
     assert.equal(useAppStore.getState().layers.length, 0);
   });
 
+  it("rejects a non-raster type instead of stamping a raster source on it", () => {
+    for (const type of ["vector-tiles", "vector", "geojson"]) {
+      assert.throws(
+        () =>
+          useAppStore.getState().addTileLayer("Vector", {
+            // Untyped JS callers can pass anything; the store must not persist a
+            // layer whose type and source.type disagree (issue #2581).
+            type: type as "xyz",
+            tiles: ["https://tiles.example.com/{z}/{x}/{y}.pbf"],
+          }),
+        new RegExp(`unsupported type "${type}"`),
+      );
+    }
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
+  it("keeps type and source.type consistent for every raster kind", () => {
+    for (const type of ["xyz", "wms", "wmts", "raster"] as const) {
+      const id = useAppStore.getState().addTileLayer(type, {
+        type,
+        tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+      });
+      const layer = useAppStore.getState().layers.find((l) => l.id === id);
+      assert.ok(layer);
+      assert.equal(layer.type, type);
+      assert.equal(layer.source.type, "raster");
+    }
+  });
+
   it("merges extra source fields under the required raster descriptor", () => {
     const id = useAppStore.getState().addTileLayer("Coverage", {
       type: "wms",

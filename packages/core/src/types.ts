@@ -1319,7 +1319,9 @@ export interface AddTileLayerOptions {
   tiles: string[];
   /**
    * Layer discriminator, controlling how the layer is labelled and (for WMS)
-   * dev-server proxied. Defaults to `"xyz"`.
+   * dev-server proxied. Defaults to `"xyz"`. The layer's `source.type` is
+   * always `"raster"`, so any other value (such as `"vector-tiles"` from an
+   * untyped JS caller) throws rather than persisting a mislabelled source.
    */
   type?: "xyz" | "wms" | "wmts" | "raster";
   /** Service or base URL recorded on the source for display and restore. */
