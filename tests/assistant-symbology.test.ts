@@ -218,11 +218,19 @@ describe("buildSymbologyStyle", () => {
     );
   });
 
-  it("says the field is all-null rather than missing when it exists", () => {
+  it("says the field has no non-null values rather than missing when it exists", () => {
     const layer = layerWith("pop", [null, null]);
+    // A sparse field (present on some features, absent on others) is reported
+    // the same way, without claiming every feature carries a null.
+    layer.geojson?.features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [0, 0] },
+      properties: { other: 1 },
+    });
     assert.throws(
       () => buildSymbologyStyle(layer, { mode: "graduated", property: "pop" }),
-      /has no values on layer "Test layer"; it is null on every feature/,
+      (error: Error) =>
+        /Property "pop" has no non-null values on layer "Test layer"\.$/.test(error.message),
     );
   });
 

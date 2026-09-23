@@ -5,6 +5,7 @@ import {
   type LayerStyle,
   type VectorStyleStop,
 } from "@geolibre/core";
+import { inferPropertyColumns } from "../pglite-sql";
 
 /** Styling mode the assistant can apply to a vector layer. */
 export type AssistantSymbologyMode = "graduated" | "categorized";
@@ -43,15 +44,11 @@ function propertyValues(layer: GeoLibreLayer, property: string): unknown[] {
 
 /**
  * Every attribute name that appears on at least one of a layer's features, in
- * first-seen order. Matches what `list_layers` reports as the layer's fields,
- * without inferring column types the error message has no use for.
+ * first-seen order. Derived from the same `inferPropertyColumns` scan that
+ * `list_layers` reports, so the two listings cannot drift apart.
  */
 function layerFieldNames(layer: GeoLibreLayer): string[] {
-  const names = new Set<string>();
-  for (const feature of layer.geojson?.features ?? []) {
-    for (const key of Object.keys(feature.properties ?? {})) names.add(key);
-  }
-  return [...names];
+  return inferPropertyColumns(layer.geojson?.features ?? []).map((column) => column.name);
 }
 
 /** How many field names the missing-property error lists before truncating. */
@@ -60,14 +57,13 @@ const MAX_LISTED_FIELDS = 50;
 /**
  * Explain why a property produced no values: either the layer has no such
  * field (then list the fields it does have, so a caller can correct the name
- * without guessing again) or the field exists but is null on every feature.
+ * without guessing again) or the field exists but holds no non-null value
+ * (null, undefined, or absent on every feature).
  */
 function missingPropertyError(layer: GeoLibreLayer, property: string): Error {
   const fields = layerFieldNames(layer);
   if (fields.includes(property)) {
-    return new Error(
-      `Property "${property}" has no values on layer "${layer.name}"; it is null on every feature.`,
-    );
+    return new Error(`Property "${property}" has no non-null values on layer "${layer.name}".`);
   }
   if (fields.length === 0) {
     return new Error(
@@ -158,7 +154,7 @@ function categorizedStops(values: unknown[], colorRamp: string): VectorStyleStop
  * @param request The symbology to apply.
  * @returns A partial style ready for `setLayerStyle`.
  * @throws If the property is missing (the message lists the layer's actual
- *   field names) or null on every feature, graduated mode has too few numeric values,
+ *   field names) or has no non-null values, graduated mode has too few numeric values,
  *   or `breaks` was supplied with fewer than two distinct finite values in it.
  */
 export function buildSymbologyStyle(
