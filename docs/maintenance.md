@@ -95,6 +95,18 @@ The cast hides upstream changes from TypeScript. After either deck.gl package is
 bumped, run `tests/arcgis-control-adapters.test.ts` and confirm the overlay still
 exposes `_props` with the initial `DeckProps` object.
 
+### `@loaders.gl/tiles` (via `@deck.gl/geo-layers`) — tile cache cap
+
+`applyThreeDTilesTilesetMemoryLimit` (`packages/plugins/src/plugins/arcgis-i3s-tiles.ts`)
+works around `Tileset3D` trimming its tile cache against a `maximumMemoryUsage`
+field it never copies from the load options, so the cap stays at 32 MB and
+every camera move evicts the tiles just drawn (issue #2560). The same PR turned
+`memoryAdjustedScreenSpaceError` off because it ratchets the level of detail
+down once that cache fills. After bumping deck.gl or loaders.gl, run
+`tests/arcgis-i3s-tiles.test.ts`: its real-`Tileset3D` case fails if the field
+is renamed or no longer starts at 32 MB. If upstream starts honouring the
+option, the helper can go.
+
 ### `@maplibre/maplibre-gl-style-spec`
 
 `propertySpecFor` (`packages/core/src/expressions.ts`) fabricates the

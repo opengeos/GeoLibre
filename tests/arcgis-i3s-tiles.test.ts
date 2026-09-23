@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { Tileset3D } from "@loaders.gl/tiles";
 import {
   applyThreeDTilesTilesetMemoryLimit,
   arcgisI3sSceneLayerName,
@@ -139,6 +140,30 @@ describe("applyThreeDTilesTilesetMemoryLimit", () => {
   // whatever maximumMemoryUsage the load options pass.
   it("syncs the tileset cache cap with the configured memory limit", () => {
     const tileset = { maximumMemoryUsage: 32 };
+    applyThreeDTilesTilesetMemoryLimit(tileset);
+    assert.equal(
+      tileset.maximumMemoryUsage,
+      THREE_D_TILES_DECK_LOAD_OPTIONS.tileset.maximumMemoryUsage,
+    );
+  });
+
+  // Drift guard for a @loaders.gl bump: run the helper on a real Tileset3D, so
+  // a renamed or lazily initialised cache field fails here instead of the fix
+  // silently turning into a no-op.
+  it("raises a real loaders.gl Tileset3D cache cap from its 32 MB default", () => {
+    const tileset = new Tileset3D(
+      {
+        asset: { version: "1.0" },
+        root: { boundingVolume: { sphere: [0, 0, 0, 1] }, geometricError: 1, refine: "REPLACE" },
+        url: "https://example.com/tileset.json",
+        basePath: "https://example.com",
+        type: "TILES3D",
+        lodMetricType: "geometricError",
+        lodMetricValue: 1,
+      } as never,
+      { ...THREE_D_TILES_DECK_LOAD_OPTIONS.tileset },
+    );
+    assert.equal(tileset.maximumMemoryUsage, 32);
     applyThreeDTilesTilesetMemoryLimit(tileset);
     assert.equal(
       tileset.maximumMemoryUsage,
