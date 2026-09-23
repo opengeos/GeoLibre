@@ -3117,6 +3117,15 @@ export async function addLidarLayerFromUrl(
   url: string,
   options: { fit?: boolean } = {},
 ): Promise<string | null> {
+  let protocol: string | null = null;
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    // Reported below with the same message as a non-web scheme.
+  }
+  if (protocol !== "https:" && protocol !== "http:") {
+    throw new Error(`Enter a valid HTTP(S) point cloud URL: ${url}`);
+  }
   const load = async () => {
     const opened = await openStandaloneLidarControl(app, { reveal: false });
     if (!opened || !lidarControl) return null;
