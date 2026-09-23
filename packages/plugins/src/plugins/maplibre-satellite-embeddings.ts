@@ -154,6 +154,7 @@ const CSS = {
   rowSubtitle:
     "color:hsl(var(--muted-foreground));font-size:11px;overflow:hidden;" +
     "text-overflow:ellipsis;white-space:nowrap;",
+  rowSelected: `border-color:${HIGHLIGHT_COLOR};box-shadow:0 0 0 1px ${HIGHLIGHT_COLOR};`,
   rowActions: "display:flex;gap:4px;flex-wrap:wrap;",
   action:
     "padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;" +
@@ -198,6 +199,12 @@ interface PanelState {
   rgbBands: [number, number, number];
   stretch: number;
   downloadFloat: boolean;
+  /**
+   * Results selected by a footprint click (every footprint under the click:
+   * AlphaEarth years share identical footprints) or a row click. Outlined on
+   * the map and highlighted in the list until the next selection or search.
+   */
+  selectedIds: string[];
 }
 
 function initialState(): PanelState {
@@ -214,6 +221,7 @@ function initialState(): PanelState {
     rgbBands: [...AEF_DEFAULT_RGB_BANDS],
     stretch: AEF_DEFAULT_STRETCH,
     downloadFloat: true,
+    selectedIds: [],
   };
 }
 
@@ -225,7 +233,7 @@ let panelContainer: HTMLElement | null = null;
 let disposePanel: (() => void) | null = null;
 let footprintsRegistered = false;
 let footprintHandlersBound = false;
-let onFootprintClick: ((id: string) => void) | null = null;
+let onFootprintClick: ((ids: string[]) => void) | null = null;
 const readerCache = new Map<string, Promise<AefTileReader>>();
 
 /** Resolves a plugin-namespaced translation key, falling back to English text. */
@@ -375,13 +383,30 @@ async function mapWithConcurrency<T, R>(
 // Map overlays
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether sources and layers can be added. Not `isStyleLoaded()`: that also
+ * waits for every source to finish loading, so it is false while COG tiles
+ * stream in or right after the host adds its own click highlight, and an
+ * outline drawn from a footprint click was silently skipped. Mapbox's
+ * `getStyle()` throws while its style is loading.
+ */
+function styleReady(map: MapLibreMap): boolean {
+  try {
+    return Boolean(map.getStyle());
+  } catch {
+    return false;
+  }
+}
+
 function emptyCollection(): FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
 
 function handleFootprintClick(event: MapLayerMouseEvent): void {
-  const id = event.features?.[0]?.properties?.id;
-  if (typeof id === "string") onFootprintClick?.(id);
+  const ids = (event.features ?? [])
+    .map((feature) => feature.properties?.id)
+    .filter((id): id is string => typeof id === "string");
+  if (ids.length > 0) onFootprintClick?.([...new Set(ids)]);
 }
 
 function handleFootprintEnter(event: MapLayerMouseEvent): void {
@@ -394,7 +419,7 @@ function handleFootprintLeave(event: MapLayerMouseEvent): void {
 
 /** Shows the result footprints, registered as one Layers-panel entry. */
 function setFootprints(map: MapLibreMap, rows: ResultRow[]): void {
-  if (!map.isStyleLoaded()) return;
+  if (!styleReady(map)) return;
   const features = rows.map((row) =>
     polygonFeature(row.ring, { id: row.id, title: row.title, subtitle: row.subtitle }),
   );
@@ -474,9 +499,9 @@ function removeFootprints(map: MapLibreMap | null): void {
   if (map.getSource(FOOTPRINT_SOURCE_ID)) map.removeSource(FOOTPRINT_SOURCE_ID);
 }
 
-/** Outlines one result (or clears the outline when `ring` is null). */
-function setHover(map: MapLibreMap, ring: [number, number][] | null): void {
-  if (!map.isStyleLoaded()) return;
+/** Outlines the given result footprints (none clears the outline). */
+function setOutline(map: MapLibreMap, rings: [number, number][][]): void {
+  if (!styleReady(map)) return;
   if (!map.getSource(HOVER_SOURCE_ID)) {
     map.addSource(HOVER_SOURCE_ID, { type: "geojson", data: emptyCollection() });
   }
@@ -489,13 +514,17 @@ function setHover(map: MapLibreMap, ring: [number, number][] | null): void {
       paint: { "line-color": HIGHLIGHT_COLOR, "line-width": 3 },
     });
   }
-  (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData(
-    ring ? { type: "FeatureCollection", features: [polygonFeature(ring, {})] } : emptyCollection(),
-  );
+  // Layers added since (an AlphaEarth COG covering the whole footprint) would
+  // otherwise hide the outline, so keep it on top.
+  map.moveLayer(HOVER_LINE_LAYER_ID);
+  (map.getSource(HOVER_SOURCE_ID) as GeoJSONSource).setData({
+    type: "FeatureCollection",
+    features: rings.map((ring) => polygonFeature(ring, {})),
+  });
 }
 
 function setDrawBox(map: MapLibreMap, bbox: LonLatBbox | null): void {
-  if (!map.isStyleLoaded()) return;
+  if (!styleReady(map)) return;
   if (!map.getSource(DRAW_SOURCE_ID)) {
     map.addSource(DRAW_SOURCE_ID, { type: "geojson", data: emptyCollection() });
   }
@@ -1035,8 +1064,12 @@ function buildPanel(container: HTMLElement): () => void {
       if (signal.aborted || disposed) return;
       state.results = rows;
       state.total = total;
+      state.selectedIds = [];
       const map = getStyleMap(appRef);
-      if (map) setFootprints(map, rows);
+      if (map) {
+        setFootprints(map, rows);
+        setOutline(map, []);
+      }
       setStatus(
         rows.length === 0
           ? tr("noResults", "No embeddings found in this area.")
@@ -1123,15 +1156,24 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   const rowElements = new Map<string, HTMLElement>();
-  onFootprintClick = (id: string): void => {
-    const rowElement = rowElements.get(id);
-    if (!rowElement) return;
-    rowElement.scrollIntoView({ block: "nearest" });
-    rowElement.style.boxShadow = `0 0 0 2px ${HIGHLIGHT_COLOR}`;
-    window.setTimeout(() => {
-      rowElement.style.boxShadow = "";
-    }, 1200);
+
+  // The map outline follows the selection; a hovered row previews its own.
+  const selectedRings = (): [number, number][][] =>
+    state.results.filter((row) => state.selectedIds.includes(row.id)).map((row) => row.ring);
+  const showSelection = (): void => {
+    const map = getStyleMap(appRef);
+    if (map) setOutline(map, selectedRings());
   };
+
+  const select = (ids: string[], scroll: boolean): void => {
+    state.selectedIds = ids.filter((id) => rowElements.has(id));
+    for (const [id, rowElement] of rowElements) {
+      rowElement.style.cssText = CSS.row + (state.selectedIds.includes(id) ? CSS.rowSelected : "");
+    }
+    showSelection();
+    if (scroll) rowElements.get(state.selectedIds[0])?.scrollIntoView({ block: "nearest" });
+  };
+  onFootprintClick = (ids: string[]): void => select(ids, true);
 
   function render(): void {
     if (disposed) return;
@@ -1155,10 +1197,11 @@ function buildPanel(container: HTMLElement): () => void {
       state.results = [];
       state.total = 0;
       state.status = null;
+      state.selectedIds = [];
       const map = getStyleMap(appRef);
       if (map) {
         removeFootprints(map);
-        setHover(map, null);
+        setOutline(map, []);
       }
       render();
     });
@@ -1315,7 +1358,10 @@ function buildPanel(container: HTMLElement): () => void {
     if (state.results.length > 0) {
       const list = element("div", CSS.list);
       for (const row of state.results) {
-        const rowElement = element("div", CSS.row);
+        const rowElement = element(
+          "div",
+          CSS.row + (state.selectedIds.includes(row.id) ? CSS.rowSelected : ""),
+        );
         rowElement.append(
           element("div", CSS.rowTitle, row.title),
           element("div", CSS.rowSubtitle, row.subtitle),
@@ -1325,17 +1371,20 @@ function buildPanel(container: HTMLElement): () => void {
         rowElement.append(actions);
         rowElement.addEventListener("mouseenter", () => {
           const map = getStyleMap(appRef);
-          if (map) setHover(map, row.ring);
+          if (map) setOutline(map, [row.ring]);
         });
-        rowElement.addEventListener("mouseleave", () => {
-          const map = getStyleMap(appRef);
-          if (map) setHover(map, null);
+        rowElement.addEventListener("mouseleave", showSelection);
+        // Selecting a row from the list; its buttons act without selecting.
+        rowElement.addEventListener("click", (event) => {
+          if ((event.target as HTMLElement).closest("button")) return;
+          select([row.id], false);
         });
         rowElements.set(row.id, rowElement);
         list.append(rowElement);
       }
       body.append(list);
     }
+    showSelection();
   }
 
   render();
