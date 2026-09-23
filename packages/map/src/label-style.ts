@@ -64,7 +64,13 @@ export function getDedupedLabelFeatures(
     labels.field,
   ].join("|");
   if (byKey.has(key)) return byKey.get(key) ?? null;
-  const result = buildDedupedLabelFeatures(collection, labels.field, labels.dedupe, (value) =>
+  // Geo Editor text markers carry their own annotation text and never take an
+  // attribute label; the aggregated points drop the shape property the label
+  // layer's exclusion filter reads, so leave them out before aggregating.
+  const labelled = collection.features.some(isTextMarkerFeature)
+    ? { ...collection, features: collection.features.filter((f) => !isTextMarkerFeature(f)) }
+    : collection;
+  const result = buildDedupedLabelFeatures(labelled, labels.field, labels.dedupe, (value) =>
     formatLabelNumber(value, labels, locale),
   );
   byKey.set(key, result);
@@ -107,4 +113,13 @@ export function parseLabelOverride(
   }
   labelOverrideCache.set(key, result);
   return result;
+}
+
+/** Whether a feature is a Geo Editor text marker (see TEXT_MARKER_SHAPE_FILTER). */
+function isTextMarkerFeature(feature: FeatureCollection["features"][number]): boolean {
+  const properties = feature.properties;
+  return (
+    properties?.[GEOMAN_SHAPE_PROPERTY] === TEXT_MARKER_SHAPE ||
+    properties?.shape === TEXT_MARKER_SHAPE
+  );
 }

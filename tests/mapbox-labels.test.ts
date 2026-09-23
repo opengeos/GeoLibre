@@ -101,4 +101,23 @@ describe("Mapbox label compilation", () => {
     assert.ok(plan.additionalSources);
     assert.doesNotMatch(JSON.stringify(plan.layers.map((spec) => spec.filter)), /\[\]/);
   });
+
+  it("leaves Geo Editor text markers out of the deduplicated labels", () => {
+    const plan = compileMapboxLayer(
+      labelled({ dedupe: "unique" }, [
+        {
+          type: "Feature",
+          properties: { name: "A" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        {
+          type: "Feature",
+          properties: { name: "Note", __gm_shape: "text_marker" },
+          geometry: { type: "Point", coordinates: [5, 5] },
+        },
+      ]),
+    );
+    const companion = Object.values(plan.additionalSources ?? {})[0] as { data: FeatureCollection };
+    assert.equal(companion.data.features.length, 1);
+  });
 });

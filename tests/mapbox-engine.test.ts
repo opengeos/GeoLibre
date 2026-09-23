@@ -1255,6 +1255,14 @@ describe("MapboxEngine labels", () => {
     engine.syncLayers([moved]);
     assert.ok(map.calls.includes(`setData:${dedup}`));
     assert.ok(!map.calls.includes(`removeSource:${dedup}`));
+    // A filter turns dedupe off: only the label layer and its companion
+    // source are swapped; the circles stay as they are.
+    map.calls.length = 0;
+    engine.syncLayers([{ ...moved, filterExpression: ["==", ["get", "pop"], 1] }]);
+    assert.ok(map.calls.includes(`removeSource:${dedup}`));
+    assert.ok(!map.calls.includes(`removeLayer:${CIRCLE}`));
+    assert.ok(!map.calls.includes(`removeSource:${SOURCE}`));
+    assert.equal((map.getLayer(`${SOURCE}-geojson-labels`) as { source?: string }).source, SOURCE);
     // Turning dedupe off drops the companion source with the rebuilt plan.
     engine.syncLayers([labelled({ dedupe: "off" })]);
     assert.ok(!map.sources.has(dedup));

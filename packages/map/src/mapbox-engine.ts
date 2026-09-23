@@ -734,8 +734,7 @@ export class MapboxEngine implements MapEngine {
         const oldPlan = this.plans.get(layer.id);
         const sourceChanged =
           oldPlan &&
-          (sourcesShapeKey(oldPlan.additionalSources) !== sourcesShapeKey(plan.additionalSources) ||
-            oldPlan.source.type !== plan.source.type ||
+          (oldPlan.source.type !== plan.source.type ||
             (plan.source.type === "geojson" && oldPlan.source.type === "geojson"
               ? // Clustering is a source option mapbox-gl cannot change in
                 // place, so a renderer switch or new cluster radius/max zoom
@@ -743,6 +742,21 @@ export class MapboxEngine implements MapEngine {
                 clusterOptionsKey(oldPlan.source) !== clusterOptionsKey(plan.source)
               : JSON.stringify(oldPlan.source) !== JSON.stringify(plan.source)));
         if (sourceChanged) this.removeLayer(layer.id);
+        else if (oldPlan) {
+          // A companion source that went away or changed shape (the dedup
+          // label points appearing as a filter clears, say) is swapped on its
+          // own, with only the style layers that read it; the layer's other
+          // style layers stay as they are.
+          for (const [id, old] of Object.entries(oldPlan.additionalSources ?? {})) {
+            const next = plan.additionalSources?.[id];
+            if (next && sourcesShapeKey({ [id]: next }) === sourcesShapeKey({ [id]: old }))
+              continue;
+            for (const spec of oldPlan.layers)
+              if ("source" in spec && spec.source === id && map.getLayer(spec.id))
+                map.removeLayer(spec.id);
+            if (map.getSource(id)) map.removeSource(id);
+          }
+        }
         for (const [id, source] of Object.entries(plan.additionalSources ?? {})) {
           if (!map.getSource(id)) map.addSource(id, source);
           else if (
@@ -772,7 +786,13 @@ export class MapboxEngine implements MapEngine {
         for (const spec of plan.layers) {
           const oldSpec = oldPlan?.layers.find((s) => s.id === spec.id);
           const old = map.getLayer(spec.id);
-          if (old && old.type !== spec.type) map.removeLayer(spec.id);
+          // A style layer's type and source are fixed once added.
+          if (
+            old &&
+            (old.type !== spec.type ||
+              ("source" in spec && "source" in old && old.source !== spec.source))
+          )
+            map.removeLayer(spec.id);
           if (!map.getLayer(spec.id)) map.addLayer(spec);
           else if (JSON.stringify(oldSpec) !== JSON.stringify(spec)) {
             for (const [key, value] of Object.entries(spec.paint ?? {}))
