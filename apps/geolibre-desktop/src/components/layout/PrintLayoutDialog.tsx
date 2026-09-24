@@ -361,8 +361,12 @@ export function PrintLayoutDialog({
   const renderer = useAppStore((state) => state.primaryRenderer);
   const [atlasEnabledSetting, setAtlasEnabled] = useState(initialLayout.atlasEnabled);
   // Atlas drives the live camera of a flat map (print-atlas-camera): a Style
-  // Spec map's own, or the engine's on ArcGIS; the Cesium globe has none.
-  const atlasRendererSupported = useMapCapabilities(mapControllerRef).flatProjection;
+  // Spec map's own (a MapLibre or Mapbox globe included), or the engine's on
+  // a flat ArcGIS view; the ArcGIS SceneView and the Cesium globe have none.
+  const mapCapabilities = useMapCapabilities(mapControllerRef);
+  const projection = useAppStore((state) => state.preferences.map.projection);
+  const atlasRendererSupported =
+    mapCapabilities.flatProjection && (mapCapabilities.styleSpec || projection !== "globe");
   const atlasEnabled = atlasEnabledSetting && atlasRendererSupported;
   const [atlasLayerId, setAtlasLayerId] = useState(initialLayout.atlasLayerId);
   // Coverage strategy: one page per feature, or pages tiling the layer's line

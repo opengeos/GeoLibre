@@ -33,6 +33,17 @@ describe("fitCamera", () => {
     const worldSize = 512 * 2 ** padded.zoom;
     assert.ok(Math.abs(padded.center[0] - (45 - (256 / worldSize) * 360)) < 1e-6);
   });
+  it("keeps the centre on the world when the padding shifts it past 180 west", () => {
+    // A box by the antimeridian with a wide left margin: the camera looks
+    // west of -180 degrees, which wraps to the east.
+    const west = fitCamera([-179, -1, -175, 1], 512, 512, {
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 400,
+    });
+    assert.ok(west.center[0] > 170 && west.center[0] <= 180, String(west.center[0]));
+  });
   it("frames a point page at the deepest zoom", () => {
     assert.equal(fitCamera([5, 5, 5, 5], 800, 600, NO_PADDING).zoom, 22);
   });
@@ -87,7 +98,7 @@ describe("paintAtlasMask", () => {
 });
 
 describe("atlasCamera", () => {
-  const engine = (flatProjection: boolean) => {
+  const engine = (flatProjection: boolean, projection: "mercator" | "globe" = "mercator") => {
     const views: MapViewState[] = [];
     const canvas = { clientWidth: 800, clientHeight: 600, width: 1600, height: 1200 };
     const surface = {
@@ -99,6 +110,7 @@ describe("atlasCamera", () => {
     const fake = {
       kind: "arcgis",
       capabilities: { flatProjection },
+      readProjection: () => projection,
       getMap: () => null,
       getRenderSurface: () => surface,
       applyView: async (view: MapViewState) => {
@@ -113,6 +125,8 @@ describe("atlasCamera", () => {
   it("is unavailable without a flat map", () => {
     assert.equal(atlasCamera(engine(false).fake), null);
     assert.equal(atlasCamera(null), null);
+    // An engine that can draw flat but shows a globe (the ArcGIS SceneView).
+    assert.equal(atlasCamera(engine(true, "globe").fake), null);
   });
   it("drives another engine's camera north up and masks only the capture", async () => {
     const { fake, views } = engine(true);

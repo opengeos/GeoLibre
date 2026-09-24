@@ -71,6 +71,9 @@ export function atlasCamera(
   if (!engine || !engine.capabilities.flatProjection) return null;
   const map = engineStyleMap(engine);
   if (map) return styleMapCamera(map, engine, graticuleLabelLayerId);
+  // The engine camera frames pages on a flat Web Mercator map; a globe (the
+  // ArcGIS SceneView) has no such fit.
+  if (engine.readProjection() === "globe") return null;
   const surface = engine.getRenderSurface();
   return surface ? engineCamera(engine, surface) : null;
 }
@@ -163,6 +166,8 @@ function engineCamera(
       ? engine.whenDrawn(SETTLE_TIMEOUT_MS)
       : new Promise<void>((resolve) => {
           let done = false;
+          let stop = () => {};
+          let timer = 0;
           const finish = () => {
             if (done) return;
             done = true;
@@ -170,8 +175,10 @@ function engineCamera(
             window.clearTimeout(timer);
             resolve();
           };
-          const stop = engine.onCameraIdle(finish);
-          const timer = window.setTimeout(finish, SETTLE_TIMEOUT_MS);
+          // Either may answer at once, before the other is set up.
+          timer = window.setTimeout(finish, SETTLE_TIMEOUT_MS);
+          stop = engine.onCameraIdle(finish);
+          if (done) stop();
         });
   const viewport = () => {
     const container = surface.getContainer();
@@ -270,7 +277,7 @@ export function fitCamera(
   const cy = (y0 + y1) / 2 - (padding.top - padding.bottom) / 2 / worldSize;
   const lng = cx * 360 - 180;
   const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * cy))) * 180) / Math.PI;
-  return { center: [lng > 180 ? lng - 360 : lng, lat], zoom };
+  return { center: [lng > 180 ? lng - 360 : lng < -180 ? lng + 360 : lng, lat], zoom };
 }
 
 /**
