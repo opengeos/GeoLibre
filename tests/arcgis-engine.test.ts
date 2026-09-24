@@ -1166,8 +1166,10 @@ describe("ArcgisEngine picking and highlight", () => {
         },
       ],
     });
+    (service as { objectIdField?: string }).objectIdField = "OBJECTID";
     const collection = await engine.getLayerGeoJson("fs");
     assert.equal(collection?.features.length, 1);
+    assert.equal(collection?.features[0].id, 1);
     assert.deepEqual(collection?.features[0].properties, { OBJECTID: 1, NAME: "A" });
     // A service past its record limit is paged.
     const starts: unknown[] = [];

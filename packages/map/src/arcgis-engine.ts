@@ -1451,8 +1451,12 @@ export class ArcgisEngine implements MapEngine {
     if (!native?.queryFeatures) return null;
     try {
       const graphics: ArcgisGraphic[] = [];
-      // A stable order, so offset pages neither overlap nor skip rows.
+      // A stable order, so offset pages neither overlap nor skip rows — where
+      // the service supports ORDER BY at all.
       const oidField = (native as { objectIdField?: string }).objectIdField;
+      const orderBy =
+        (native as { capabilities?: { query?: { supportsOrderBy?: boolean } } }).capabilities?.query
+          ?.supportsOrderBy === true;
       let firstOfPreviousPage: string | undefined;
       for (let page = 0; page < SERVICE_GEOJSON_MAX_PAGES; page++) {
         const result = await native.queryFeatures({
@@ -1460,7 +1464,7 @@ export class ArcgisEngine implements MapEngine {
           outFields: ["*"],
           returnGeometry: true,
           outSpatialReference: { wkid: 4326 },
-          ...(oidField ? { orderByFields: [oidField] } : {}),
+          ...(oidField && orderBy ? { orderByFields: [oidField] } : {}),
           ...(graphics.length ? { start: graphics.length } : {}),
         });
         // A service that ignores the offset returns its first page again;
@@ -1475,10 +1479,14 @@ export class ArcgisEngine implements MapEngine {
         type: "FeatureCollection",
         features: graphics.flatMap((graphic) => {
           const geometry = this.graphicGeometryToGeoJson(graphic.geometry);
+          // The service's object id is the feature's identity, as identify
+          // reports it.
+          const oid = oidField ? graphic.attributes?.[oidField] : undefined;
           return geometry
             ? [
                 {
                   type: "Feature" as const,
+                  ...(typeof oid === "string" || typeof oid === "number" ? { id: oid } : {}),
                   properties: stripSyntheticFields(graphic.attributes ?? {}),
                   geometry,
                 },

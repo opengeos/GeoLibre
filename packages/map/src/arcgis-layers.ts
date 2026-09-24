@@ -1567,13 +1567,22 @@ export function compileArcgisLayer(
       const sql = filter ? filterToSql(filter) : null;
       // The layer draws with its style, as the 2D map draws the same
       // service's features (Add Data gives every service layer one).
-      const symbol = createFeatureStyleResolver(style).resolve(undefined, zoom);
+      const resolver = createFeatureStyleResolver(style);
+      const symbol = resolver.resolve(undefined, zoom);
+      // Points read the point channels (their outline width is not a line's).
+      const pointSymbol = resolver.resolve(
+        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [0, 0] } },
+        zoom,
+      );
       return {
         ...base,
         kind: "feature-service",
         url: serviceUrl,
+        // A zoom-dependent style (metre-unit strokes, zoom rules) is resolved
+        // again when the integer zoom changes, as for GeoJSON.
+        zoomDependent: resolver.zoomDependent,
         symbols: {
-          point: symbolForKind("point", symbol),
+          point: symbolForKind("point", pointSymbol),
           polyline: symbolForKind("polyline", symbol),
           polygon: symbolForKind("polygon", symbol),
         },
