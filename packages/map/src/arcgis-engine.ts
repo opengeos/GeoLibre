@@ -37,6 +37,7 @@ import {
   ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
   ARCGIS_LABEL_FIELD,
+  ARCGIS_RASTER_PLAN_KINDS,
   ARCGIS_SYMBOL_FIELD,
   ARCGIS_WEIGHT_FIELD,
   compileArcgisLayer,
@@ -493,6 +494,17 @@ export class ArcgisEngine implements MapEngine {
        * engines.
        */
       controlVisibility?: Partial<Record<BuiltInMapControl, boolean>>;
+      /**
+       * Corners the controls were moved to on an earlier view. The canvas
+       * rebuilds the engine on every 2D/3D switch; without these a moved
+       * control would snap back to its default corner.
+       */
+      controlPositions?: Partial<Record<BuiltInMapControl, maplibregl.ControlPosition>>;
+      /** Record a control move, so the next rebuild can pass it back. */
+      onControlPositionChange?: (
+        control: BuiltInMapControl,
+        position: maplibregl.ControlPosition,
+      ) => void;
     } = {},
   ) {
     this.map = map;
@@ -504,6 +516,7 @@ export class ArcgisEngine implements MapEngine {
       // Esri's terms require attribution; an override cannot hide it.
       attribution: true,
     };
+    this.controlPositions = { ...this.controlPositions, ...options.controlPositions };
     this.surface = {
       getCanvas: () => this.canvas(),
       getContainer: () => view.container ?? document.createElement("div"),
@@ -1044,6 +1057,8 @@ export class ArcgisEngine implements MapEngine {
           native.title = plan.title;
           native.visible = plan.visible;
           native.opacity = plan.opacity;
+          native.blendMode = plan.blendMode;
+          native.effect = ARCGIS_RASTER_PLAN_KINDS.has(plan.kind) ? plan.effect : null;
           native.minScale = plan.minScale;
           native.maxScale = plan.maxScale;
         }
@@ -2131,6 +2146,7 @@ export class ArcgisEngine implements MapEngine {
   setBuiltInControlPosition(id: BuiltInMapControl, position: maplibregl.ControlPosition): boolean {
     if (!this.view || !HOSTED_CONTROLS.has(id)) return false;
     this.controlPositions[id] = position;
+    this.options.onControlPositionChange?.(id, position);
     if (this.builtInControls.has(id)) {
       this.unmountBuiltInControl(id);
       this.mountBuiltInControl(id);
@@ -2270,7 +2286,16 @@ function stripSyntheticFields(attributes: Record<string, unknown>): Record<strin
  * a visibility toggle does not.
  */
 function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
-  const { title: _t, visible: _v, opacity: _o, minScale: _mn, maxScale: _mx, ...rest } = plan;
+  const {
+    title: _t,
+    visible: _v,
+    opacity: _o,
+    minScale: _mn,
+    maxScale: _mx,
+    effect: _e,
+    blendMode: _b,
+    ...rest
+  } = plan;
   if (rest.kind === "cog" || rest.kind === "zarr") {
     const { source: _source, ...signature } = rest;
     return JSON.stringify(signature);

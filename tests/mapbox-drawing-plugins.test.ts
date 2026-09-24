@@ -310,13 +310,13 @@ describe("drawing and environment plugins on a Mapbox-only host", () => {
     ]) {
       assert.deepEqual(plugin.engines, ["maplibre", "mapbox"], plugin.id);
     }
-    for (const plugin of [
-      maplibreCloudsPlugin,
-      maplibrePrecipitationPlugin,
-      maplibreEffectsPlugin,
-      maplibreSunPlugin,
-    ]) {
+    for (const plugin of [maplibreEffectsPlugin, maplibreSunPlugin]) {
       assert.deepEqual(plugin.engines, ["maplibre", "cesium", "mapbox"], plugin.id);
+      assert.equal(isPluginEngineSupported(plugin, "mapbox"), true);
+    }
+    // The weather overlays are store tile layers, which ArcGIS draws too (#2477).
+    for (const plugin of [maplibreCloudsPlugin, maplibrePrecipitationPlugin]) {
+      assert.deepEqual(plugin.engines, ["maplibre", "cesium", "mapbox", "arcgis"], plugin.id);
       assert.equal(isPluginEngineSupported(plugin, "mapbox"), true);
     }
   });

@@ -103,6 +103,10 @@ override is set aside and the shared basemap is translated instead.
   georeference, so rotated and skewed fits land where they do on MapLibre.
 - Shared layer/group visibility, opacity and ordering; synchronized or
   independent split-view cameras; the project's zoom and bounds constraints.
+- The Style panel's raster brightness, contrast, saturation and hue sliders,
+  as the SDK's CSS-filter `effect` on raster layers, and every layer's blend
+  mode as the SDK's `blendMode` (`add` is the SDK's `plus`). The SDK draws both
+  on a flat `MapView` only; a `SceneView` ignores them.
 - Feature picking (click identify with a popup), selection highlighting, extent
   drawing, draggable placement, and engine-level image capture.
 - **Search places** flies to places and coordinates with a temporary marker,
@@ -125,6 +129,15 @@ override is set aside and the shared basemap is translated instead.
   list. Mixed-geometry GeoJSON records have one entry for all their parts.
   Temporary search and selection highlights are omitted. Split panes keep the
   control hidden by default and retain their independent layer visibility.
+- Plugins that only add store layers: **ArcGIS Hub**, **Socrata** and **CKAN**
+  search, the **OSM Downloader**, and the **Weather** overlays (Clouds and
+  Precipitation). **Controls** menu entries whose plugin needs a MapLibre,
+  Mapbox or Cesium map (Atmospheric Effects, Sun, Route Animation, Flight
+  Simulator, Graticule, Directions, Reverse Geocode) are greyed out with the
+  reason while ArcGIS is the primary renderer.
+- If the SDK cannot be loaded from the CDN, the map's banner offers **Retry**,
+  which reloads the page: the browser keeps a failed module import for the life
+  of the page, so only a reload can fetch it again.
 
 ## 2D and 3D
 

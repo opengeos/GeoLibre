@@ -1,6 +1,8 @@
 import { cogSourceUrl, cogRenderSignature } from "./cog-imagery";
 import {
+  BLEND_MODES,
   compileLayerFilters,
+  DEFAULT_BLEND_MODE,
   DEFAULT_LAYER_STYLE,
   extrusionColorValue,
   extrusionHeightValue,
@@ -26,6 +28,7 @@ import {
   needsTemplateTileLayer,
   type ArcgisTileTemplateSource,
 } from "./arcgis-template-tiles";
+import { imageryColorAdjustments } from "./raster-color-adjustments";
 
 /**
  * Translate a store layer into what the ArcGIS Maps SDK can draw (issue #2421).
@@ -160,6 +163,61 @@ interface ArcgisPlanBase {
    * the engine should recompile when the integer zoom changes.
    */
   zoomDependent: boolean;
+  /**
+   * The raster brightness, contrast, saturation and hue sliders as the SDK's
+   * CSS-filter `effect`, or null when they are neutral. Only raster plans
+   * apply it, as MapLibre applies them only to raster layers.
+   */
+  effect: string | null;
+  /** The SDK's `blendMode` for the layer's blend mode. */
+  blendMode: ArcgisBlendMode;
+}
+
+/** The SDK blend modes GeoLibre's {@link BlendMode}s translate to. */
+export type ArcgisBlendMode = "normal" | "multiply" | "screen" | "lighten" | "plus";
+
+/** Plan kinds drawn as raster imagery, which take the raster colour effect. */
+export const ARCGIS_RASTER_PLAN_KINDS: ReadonlySet<ArcgisLayerPlan["kind"]> = new Set([
+  "web-tile",
+  "template-tile",
+  "wms",
+  "tile-service",
+  "map-image",
+  "imagery",
+  "cog",
+  "zarr",
+  "archive",
+  "media-image",
+]);
+
+/**
+ * The raster colour sliders as an SDK `effect`. The SDK takes CSS filter
+ * functions; `brightness` then `contrast` compose into the same affine map
+ * MapLibre's brightness window and contrast produce (the solve is shared with
+ * the Cesium engine), and `saturate` and `hue-rotate` follow.
+ */
+export function arcgisRasterEffect(style: LayerStyle): string | null {
+  const { brightness, contrast, saturation, hue } = imageryColorAdjustments(style);
+  const round = (value: number) => Number(value.toFixed(4));
+  if (
+    round(brightness) === 1 &&
+    round(contrast) === 1 &&
+    round(saturation) === 1 &&
+    round(hue) === 0
+  )
+    return null;
+  return [
+    `brightness(${round(brightness)})`,
+    `contrast(${round(contrast)})`,
+    `saturate(${round(saturation)})`,
+    `hue-rotate(${round((hue * 180) / Math.PI)}deg)`,
+  ].join(" ");
+}
+
+/** GeoLibre's blend mode as the SDK's; MapLibre's additive `add` is the SDK's `plus`. */
+function arcgisBlendMode(style: LayerStyle): ArcgisBlendMode {
+  const mode = style.blendMode ?? DEFAULT_BLEND_MODE;
+  return mode === "add" ? "plus" : BLEND_MODES.includes(mode) ? mode : "normal";
 }
 
 export type ArcgisLayerPlan = ArcgisPlanBase &
@@ -1298,6 +1356,8 @@ export function compileArcgisLayer(
     ...zoomRangeToScales(style.minZoom, style.maxZoom),
     ...(bounds(layer) ? { bounds: bounds(layer) } : {}),
     zoomDependent: false,
+    effect: arcgisRasterEffect(style),
+    blendMode: arcgisBlendMode(style),
   };
   if (isArcgisExternalDeckLayer(layer)) {
     if (options.deckOverlay === false)

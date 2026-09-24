@@ -680,6 +680,20 @@ describe("ArcgisEngine controls", () => {
     assert.equal(engine.addControl(), false);
     assert.equal(engine.capabilities.domControls, true);
   });
+  it("mounts moved controls in the corners an earlier view reported", () => {
+    const moves: [string, string][] = [];
+    const { engine, uiAdds } = makeEngine({
+      controlPositions: { compass: "bottom-left" },
+      onControlPositionChange: (control, position) => moves.push([control, position]),
+    });
+    // Fullscreen, compass, scale: the compass lands where it was moved to.
+    assert.deepEqual(
+      uiAdds.map((entry) => entry.position),
+      ["top-right", "bottom-left", "bottom-left"],
+    );
+    engine.setBuiltInControlPosition("scale", "top-left");
+    assert.deepEqual(moves, [["scale", "top-left"]]);
+  });
   it("forwards the scale unit and compass label to the widgets", () => {
     const { engine, widgets } = makeEngine();
     engine.applyMapPreferences({
@@ -813,6 +827,27 @@ describe("ArcgisEngine layer sync", () => {
       minzoom: 0,
       maxzoom: 22,
     });
+  });
+  it("applies the raster effect and blend mode in place, the effect to rasters only", () => {
+    const { engine, created, layers } = makeEngine();
+    const tiles = {
+      ...geojsonLayer({ id: "xyz", name: "Tiles", geojson: undefined }),
+      type: "xyz" as const,
+      source: { type: "raster", tiles: ["https://t/{z}/{x}/{y}.png"] },
+    };
+    engine.syncLayers([tiles, SQUARE]);
+    const count = created.length;
+    engine.syncLayers([
+      { ...tiles, style: { ...DEFAULT_LAYER_STYLE, rasterSaturation: -1, blendMode: "multiply" } },
+      { ...SQUARE, style: { ...DEFAULT_LAYER_STYLE, rasterSaturation: -1 } },
+    ]);
+    const raster = layers.items.find((l) => l.kind === "web-tile")!;
+    assert.equal(raster.effect, "brightness(1) contrast(1) saturate(0) hue-rotate(0deg)");
+    assert.equal(raster.blendMode, "multiply");
+    assert.ok(layers.items.filter((l) => l.kind === "geojson").every((l) => l.effect === null));
+    // The tile layer was not rebuilt for a slider change.
+    assert.ok(layers.items.includes(created.find((l) => l.kind === "web-tile")!));
+    assert.ok(created.length >= count);
   });
   it("reuses a GeoJSON plan across opacity, visibility and name changes", () => {
     const { engine, created } = makeEngine();

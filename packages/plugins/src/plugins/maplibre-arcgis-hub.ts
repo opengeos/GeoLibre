@@ -397,8 +397,9 @@ function buildPanel(container: HTMLElement): () => void {
       return;
     }
     // Read the extent through `getViewBounds`, not `getMap()?.getBounds()`:
-    // this plugin declares `engines: ["maplibre", "cesium", "mapbox"]`, and
-    // `getMap()` is null on the globe and on Mapbox — so the bounds came back
+    // this plugin declares `engines: ["maplibre", "cesium", "mapbox", "arcgis"]`,
+    // and
+    // `getMap()` is null on the globe, Mapbox and ArcGIS — so the bounds came back
     // undefined there and every search covered the whole world with "current
     // view only" still ticked.
     //
@@ -484,7 +485,7 @@ export const maplibreArcGisHubPlugin: GeoLibrePlugin = {
   id: ARCGIS_HUB_PLUGIN_ID,
   name: "ArcGIS Hub",
   version: "0.1.0",
-  engines: ["maplibre", "cesium", "mapbox"],
+  engines: ["maplibre", "cesium", "mapbox", "arcgis"],
   activate: (app) => {
     appRef = app;
     unregisterPanel =

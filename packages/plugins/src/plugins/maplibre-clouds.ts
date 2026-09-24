@@ -111,10 +111,11 @@ export const maplibreCloudsPlugin: GeoLibrePlugin = {
   id: CLOUDS_PLUGIN_ID,
   name: "Clouds",
   version: "0.3.0",
-  // The overlay is a store tile layer (`addTileLayer`), which both renderers
-  // draw; the MapLibre map is only used for an instant frame swap and tile
-  // error watching, and the controller does without it on the globe.
-  engines: ["maplibre", "cesium", "mapbox"],
+  // The overlay is a store tile layer (`addTileLayer`), which every renderer
+  // draws; the 2D style map is only used for an instant frame swap and tile
+  // error watching, and the controller does without it on the globe and on
+  // ArcGIS.
+  engines: ["maplibre", "cesium", "mapbox", "arcgis"],
   activate: (app: GeoLibreAppAPI) => controller.activate(app),
   deactivate: () => controller.deactivate(),
 };

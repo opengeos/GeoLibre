@@ -83,14 +83,13 @@ describe("Tier 1 built-in plugin engine support audit", () => {
   // what they add as well; the basemap presets are style swaps the Mapbox
   // engine does not host.
   it("declares Mapbox support on the store-only catalog browsers", () => {
-    for (const plugin of [
-      maplibreSourceCoopPlugin,
-      maplibreNaturalEarthPlugin,
-      maplibreArcGisHubPlugin,
-      maplibreSocrataPlugin,
-      maplibreCkanPlugin,
-    ]) {
+    for (const plugin of [maplibreSourceCoopPlugin, maplibreNaturalEarthPlugin]) {
       assert.deepEqual(plugin.engines, ["maplibre", "cesium", "mapbox"], plugin.id);
+    }
+    // These read the view only through `getViewBounds`, which every engine
+    // answers, so the ArcGIS renderer draws what they add too (#2477).
+    for (const plugin of [maplibreArcGisHubPlugin, maplibreSocrataPlugin, maplibreCkanPlugin]) {
+      assert.deepEqual(plugin.engines, ["maplibre", "cesium", "mapbox", "arcgis"], plugin.id);
     }
     for (const plugin of [osmBasemapPlugin, cartoLightPlugin]) {
       assert.equal(isPluginEngineSupported(plugin, "mapbox"), false, plugin.id);

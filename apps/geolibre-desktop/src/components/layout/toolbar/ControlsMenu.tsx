@@ -9,9 +9,14 @@ import {
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
+  flightSimulatorPlugin,
   isPluginEngineSupported,
   maplibreDirectionsPlugin,
+  maplibreEffectsPlugin,
+  maplibreGraticulePlugin,
   maplibreReverseGeocodePlugin,
+  maplibreRouteAnimationPlugin,
+  maplibreSunPlugin,
   setCloudsFrame,
   setPrecipitationFrame,
   subscribeClouds,
@@ -129,6 +134,19 @@ export function ControlsMenu({
     primaryRenderer,
   );
   const directionsDisabled = !directionsSupported && !directionsActive;
+  // A plugin the live renderer does not support cannot activate, so its entry
+  // is greyed with the reason rather than toggling nothing (or opening a panel
+  // that stays empty). One already on stays reachable so it can be turned off.
+  const unsupported = (plugin: Parameters<typeof isPluginEngineSupported>[0], active: boolean) =>
+    !isPluginEngineSupported(plugin, primaryRenderer) && !active;
+  const sunDisabled = unsupported(maplibreSunPlugin, panels.sun.visible);
+  const routeAnimationDisabled = unsupported(
+    maplibreRouteAnimationPlugin,
+    panels.routeAnimation.visible,
+  );
+  const flightSimulatorDisabled = unsupported(flightSimulatorPlugin, panels.flightSimulator.visible);
+  const graticuleDisabled = unsupported(maplibreGraticulePlugin, graticuleActive);
+  const effectsSupported = isPluginEngineSupported(maplibreEffectsPlugin, primaryRenderer);
   const reverseGeocodeDisabled = !reverseGeocodeSupported && !reverseGeocodeActive;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) =>
@@ -245,7 +263,10 @@ export function ControlsMenu({
           {show("controls.atmosphereEffects") && (
             <AtmosphereEffectsSubmenu
               active={effectsActive}
-              disabled={!globeActive}
+              disabled={!globeActive || (!effectsSupported && !effectsActive)}
+              disabledReason={
+                effectsSupported ? t("toolbar.atmosphere.globeOnly") : t("renderer.pluginUnsupported")
+              }
               onToggle={onToggleEffects}
               getSettings={getEffectsSettings}
               onPreview={onPreviewEffectsSettings}
@@ -261,14 +282,23 @@ export function ControlsMenu({
             />
           )}
           {show("controls.sun") && (
-            <DropdownMenuItem title={t("toolbar.item.sunTooltip")} onSelect={panels.sun.toggle}>
+            <DropdownMenuItem
+              disabled={sunDisabled}
+              title={sunDisabled ? t("renderer.pluginUnsupported") : t("toolbar.item.sunTooltip")}
+              onSelect={panels.sun.toggle}
+            >
               {t("toolbar.item.sun")}
               {panels.sun.visible ? " ✓" : ""}
             </DropdownMenuItem>
           )}
           {show("controls.routeAnimation") && (
             <DropdownMenuItem
-              title={t("toolbar.item.routeAnimationTooltip")}
+              disabled={routeAnimationDisabled}
+              title={
+                routeAnimationDisabled
+                  ? t("renderer.pluginUnsupported")
+                  : t("toolbar.item.routeAnimationTooltip")
+              }
               onSelect={panels.routeAnimation.toggle}
             >
               {t("toolbar.item.routeAnimation")}
@@ -277,7 +307,12 @@ export function ControlsMenu({
           )}
           {show("controls.flightSimulator") && (
             <DropdownMenuItem
-              title={t("toolbar.item.flightSimulatorTooltip")}
+              disabled={flightSimulatorDisabled}
+              title={
+                flightSimulatorDisabled
+                  ? t("renderer.pluginUnsupported")
+                  : t("toolbar.item.flightSimulatorTooltip")
+              }
               onSelect={panels.flightSimulator.toggle}
             >
               {t("toolbar.item.flightSimulator")}
@@ -291,7 +326,11 @@ export function ControlsMenu({
             </DropdownMenuItem>
           )}
           {show("controls.graticule") && (
-            <DropdownMenuItem onClick={onToggleGraticule}>
+            <DropdownMenuItem
+              disabled={graticuleDisabled}
+              title={graticuleDisabled ? t("renderer.pluginUnsupported") : undefined}
+              onClick={onToggleGraticule}
+            >
               {t("toolbar.item.graticule")}
               {graticuleActive ? " ✓" : ""}
             </DropdownMenuItem>
@@ -518,8 +557,13 @@ function LogosSubmenu({ controlsVisible, onToggleMapControl, show }: LogosSubmen
 
 interface AtmosphereEffectsSubmenuProps {
   active: boolean;
-  /** Greyed out and non-interactive while the map is not in globe projection. */
+  /**
+   * Greyed out and non-interactive while the map is not in globe projection,
+   * or on a renderer the effects plugin does not support.
+   */
   disabled: boolean;
+  /** Tooltip explaining why the submenu is disabled. */
+  disabledReason: string;
   onToggle: () => void;
   getSettings: () => EffectsSettings;
   onPreview: (next: Partial<EffectsSettings>) => void;
@@ -541,6 +585,7 @@ interface AtmosphereEffectsSubmenuProps {
 function AtmosphereEffectsSubmenu({
   active,
   disabled,
+  disabledReason,
   onToggle,
   getSettings,
   onPreview,
@@ -573,7 +618,7 @@ function AtmosphereEffectsSubmenu({
         // explain why on hover. The trigger keeps pointer-events active (see
         // dropdown-menu.tsx) so the native title tooltip still fires (#783).
         disabled={disabled}
-        title={disabled ? t("toolbar.atmosphere.globeOnly") : undefined}
+        title={disabled ? disabledReason : undefined}
       >
         {t("toolbar.item.atmosphereEffects")}
         {/* Suppress the check on a disabled (Mercator) row: a ✓ on a greyed,

@@ -325,7 +325,7 @@ export const maplibreOsmDownloaderPlugin: GeoLibrePlugin = {
   id: OSM_DOWNLOADER_PLUGIN_ID,
   name: "OSM Downloader",
   version: "0.1.0",
-  engines: ["maplibre", "mapbox", "cesium"],
+  engines: ["maplibre", "mapbox", "cesium", "arcgis"],
   activate: (app) => {
     unregisterPanel =
       app.registerRightPanel?.({

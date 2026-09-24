@@ -118,6 +118,10 @@ export interface ArcgisLayer {
   opacity: number;
   visible: boolean;
   listMode?: "show" | "hide" | "hide-children";
+  /** CSS filter functions applied to the layer (drawn on a `MapView` only). */
+  effect?: string | null;
+  /** How the layer composites with the layers beneath it (`MapView` only). */
+  blendMode?: string;
   minScale: number;
   maxScale: number;
   loaded: boolean;

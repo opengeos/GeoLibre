@@ -43,6 +43,7 @@ export function PrimaryArcgisCanvas({
         onEngineReady={onEngineReady}
         viewId={viewId}
         closeLabel={t("common.close")}
+        retryLabel={t("common.retry")}
       />
       {apiKey ? null : (
         <div className="pointer-events-none absolute bottom-10 start-2 z-10 max-w-[70%] rounded-md border border-input map-glass px-2 py-1 text-xs text-muted-foreground shadow-sm">
