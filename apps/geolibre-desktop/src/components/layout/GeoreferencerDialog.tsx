@@ -226,14 +226,15 @@ export function GeoreferencerDialog({
     // An engine without a render surface (not ready yet) cannot report the
     // click; disarm rather than wait forever (as the comment tool does).
     const engine = mapControllerRef.current;
-    if (!engine?.getRenderSurface()) {
+    const surface = engine?.getRenderSurface();
+    if (!engine || !surface) {
       setLinking(false);
       onOpenChange(true);
       return;
     }
     releaseBodyPointerEvents();
     const raf = requestAnimationFrame(releaseBodyPointerEvents);
-    const canvas = engine.getRenderSurface()?.getCanvas();
+    const canvas = surface.getCanvas();
     const prevCursor = canvas?.style.cursor ?? "";
     if (canvas) canvas.style.cursor = "crosshair";
     let stopClick = () => {};

@@ -79,6 +79,8 @@ interface GpsTrackingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mapControllerRef: React.RefObject<MapEngine | null>;
+  /** Bumped when the map engine is (re)created, so map subscriptions re-attach. */
+  mapReadyGeneration?: number;
 }
 
 /** Transient map sources for the live position overlays (not store layers, so
@@ -269,6 +271,7 @@ export function GpsTrackingDialog({
   open,
   onOpenChange,
   mapControllerRef,
+  mapReadyGeneration = 0,
 }: GpsTrackingDialogProps) {
   const { t } = useTranslation();
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
@@ -411,6 +414,15 @@ export function GpsTrackingDialog({
 
       const map = getMap();
       if (map) {
+        // A renderer swap from another engine leaves its overlay behind.
+        if (neutralEngineRef.current) {
+          neutralMarkerRef.current?.remove();
+          neutralMarkerRef.current = null;
+          neutralMarkerRoot.current = null;
+          neutralOverlayRef.current?.remove();
+          neutralOverlayRef.current = null;
+          neutralEngineRef.current = null;
+        }
         ensureGpsSources(map);
         setSourceData(map, ACCURACY_SOURCE, accuracyCircle(fix));
         // Redraw the track only when a fix was actually logged; the styledata
@@ -441,6 +453,9 @@ export function GpsTrackingDialog({
         const engine = mapControllerRef.current;
         if (engine?.getRenderSurface()) {
           if (neutralEngineRef.current !== engine) {
+            // Nor may a MapLibre marker from before a swap outlive its map.
+            markerRef.current?.remove();
+            markerRef.current = null;
             neutralMarkerRef.current?.remove();
             neutralMarkerRef.current = null;
             neutralOverlayRef.current?.remove();
@@ -463,6 +478,10 @@ export function GpsTrackingDialog({
               markerArrowRef.current = arrow;
               neutralMarkerRoot.current = root;
               const element = document.createElement("div");
+              // Above the track overlay, and transparent to the pointer so a
+              // drag that starts on it still pans the map.
+              element.style.zIndex = "5";
+              element.style.pointerEvents = "none";
               element.append(root);
               neutralMarkerRef.current = createAnnotationMarker(host, {
                 element,
@@ -473,9 +492,11 @@ export function GpsTrackingDialog({
           neutralMarkerRef.current?.setLngLat([fix.lng, fix.lat]);
           if (markerArrowRef.current)
             markerArrowRef.current.style.display = fix.heading != null ? "block" : "none";
+          // The heading is a compass bearing; on screen it turns with the map.
+          const bearing = engine.getRenderSurface()?.getBearing() ?? 0;
           if (neutralMarkerRoot.current)
             neutralMarkerRoot.current.style.transform =
-              fix.heading != null ? `rotate(${fix.heading}deg)` : "";
+              fix.heading != null ? `rotate(${fix.heading - bearing}deg)` : "";
           if (followRef.current) recenterOnFix(null, fix);
         }
       }
@@ -597,7 +618,9 @@ export function GpsTrackingDialog({
       map?.off("dragstart", onDragStart);
       map?.off("styledata", onStyleData);
     };
-  }, [tracking, getMap, mapControllerRef, setFollowMode]);
+    // `mapReadyGeneration`: a renderer swap mid-session re-attaches to the new
+    // map, as the ref alone does not re-run this effect.
+  }, [tracking, getMap, mapControllerRef, setFollowMode, mapReadyGeneration]);
 
   const clearMapArtifacts = useCallback(() => {
     markerRef.current?.remove();

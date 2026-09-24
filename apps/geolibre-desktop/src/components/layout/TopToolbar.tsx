@@ -2427,6 +2427,7 @@ export function TopToolbar({
           open={gpsTrackingOpen}
           onOpenChange={setGpsTrackingOpen}
           mapControllerRef={mapControllerRef}
+          mapReadyGeneration={mapReadyGeneration}
         />
       )}
       <RecordTourDialog

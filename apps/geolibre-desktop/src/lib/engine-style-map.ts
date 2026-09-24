@@ -68,8 +68,10 @@ export function engineMarkerMap(engine: MapEngine | null | undefined): maplibreg
       return host;
     },
     off(type: string, listener: () => void) {
-      subscriptions.get(listener)?.get(type)?.();
-      subscriptions.get(listener)?.delete(type);
+      const byType = subscriptions.get(listener);
+      byType?.get(type)?.();
+      byType?.delete(type);
+      if (byType?.size === 0) subscriptions.delete(listener);
       return host;
     },
   };
