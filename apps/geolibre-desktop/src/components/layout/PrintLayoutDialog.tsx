@@ -1562,7 +1562,11 @@ export function PrintLayoutDialog({
         for (let attempt = 0; attempt < 3; attempt++) {
           const ratio = measure();
           if (!(target > 0 && ratio > 0)) break;
-          if (attempt > 0 && Math.abs(ratio / target - 1) < 0.005) break;
+          if (attempt > 0 && Math.abs(ratio / target - 1) < 0.005) {
+            // Landed: an earlier pass's out-of-range notice no longer holds.
+            setAtlasScaleNotice(null);
+            break;
+          }
           const zoom = camera.zoom() + Math.log2(ratio / target);
           const clamped = Math.max(camera.minZoom(), Math.min(camera.maxZoom(), zoom));
           // A clamp means this page renders at the closest reachable scale,
