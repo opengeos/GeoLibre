@@ -75,6 +75,12 @@ const GOOGLE_PHOTOREALISTIC_TILES_LABEL = "Google Photorealistic 3D Tiles";
 const ARCGIS_I3S_SAMPLE_TILES_URL =
   "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0";
 const ARCGIS_I3S_SAMPLE_TILES_LABEL = "San Francisco Buildings (ArcGIS I3S)";
+const THREE_D_BAG_SAMPLE_TILES_URL =
+  "https://data.3dbag.nl/v20250903/cesium3dtiles/lod22/tileset.json";
+const THREE_D_BAG_SAMPLE_TILES_LABEL = "3D BAG Netherlands (LoD 2.2)";
+// 3D BAG stores ellipsoidal heights; the geoid sits ~43 m above the ellipsoid
+// across the Netherlands, so this puts NAP ground level on the map.
+const THREE_D_BAG_SAMPLE_ALTITUDE_OFFSET = -43;
 const GOOGLE_MAPS_API_KEY_MASK = "********";
 const GOOGLE_PHOTOREALISTIC_SOURCE_KIND = "google-photorealistic-3d-tiles";
 const GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX = "geolibre-google-photorealistic-3d-tiles";
@@ -103,6 +109,11 @@ const THREE_D_TILES_OPTIONS = {
     {
       label: ARCGIS_I3S_SAMPLE_TILES_LABEL,
       url: ARCGIS_I3S_SAMPLE_TILES_URL,
+    },
+    {
+      label: THREE_D_BAG_SAMPLE_TILES_LABEL,
+      url: THREE_D_BAG_SAMPLE_TILES_URL,
+      altitudeOffset: THREE_D_BAG_SAMPLE_ALTITUDE_OFFSET,
     },
   ],
 } satisfies ThreeDTilesControlOptions;
