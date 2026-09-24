@@ -1387,7 +1387,13 @@ export class ArcgisEngine implements MapEngine {
       .filter((tile): tile is string => typeof tile === "string")
       .map((tile) => {
         const wrapped = /^geolibre-wms:\/\/tile\?url=(.+)$/.exec(tile);
-        return wrapped ? decodeURIComponent(wrapped[1]) : tile;
+        if (!wrapped) return tile;
+        try {
+          return decodeURIComponent(wrapped[1]);
+        } catch {
+          // A malformed escape (a hand-edited project) is left out below.
+          return tile;
+        }
       })
       .filter((tile) => /^https?:\/\//i.test(tile));
     return http.length ? http : null;
