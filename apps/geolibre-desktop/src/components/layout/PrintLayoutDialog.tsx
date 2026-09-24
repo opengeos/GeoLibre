@@ -118,7 +118,8 @@ import {
   type AtlasPage,
   type AtlasTokenContext,
 } from "../../lib/print-atlas";
-import { clearAtlasFeatureMask, showAtlasFeatureMask } from "../../lib/print-atlas-mask";
+import { clearAtlasFeatureMask } from "../../lib/print-atlas-mask";
+import { atlasCamera } from "../../lib/print-atlas-camera";
 import { engineStyleMap } from "../../lib/engine-style-map";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
 import { clamp } from "../../lib/clamp";
@@ -359,9 +360,9 @@ export function PrintLayoutDialog({
   // Atlas / map series: one page per coverage-layer feature (GH #1291).
   const renderer = useAppStore((state) => state.primaryRenderer);
   const [atlasEnabledSetting, setAtlasEnabled] = useState(initialLayout.atlasEnabled);
-  // Atlas drives the live 2D camera (fitBounds with padding, idle, the
-  // coverage mask), which every Style Spec engine shares; the globes have none.
-  const atlasRendererSupported = useMapCapabilities(mapControllerRef).styleSpec;
+  // Atlas drives the live camera of a flat map (print-atlas-camera): a Style
+  // Spec map's own, or the engine's on ArcGIS; the Cesium globe has none.
+  const atlasRendererSupported = useMapCapabilities(mapControllerRef).flatProjection;
   const atlasEnabled = atlasEnabledSetting && atlasRendererSupported;
   const [atlasLayerId, setAtlasLayerId] = useState(initialLayout.atlasLayerId);
   // Coverage strategy: one page per feature, or pages tiling the layer's line
@@ -1461,28 +1462,6 @@ export function PrintLayoutDialog({
       : withBlocks;
   }, [options, displayDataBlocks, atlasTokenCtx]);
 
-  /** Resolve once the map goes idle after an atlas camera move, with a grace
-   * timeout because browsers may throttle the occluded canvas behind the
-   * dialog and delay "idle" indefinitely (same failure mode as GH #743);
-   * captureMapImage forces a redraw, so proceeding is safe. */
-  const waitForAtlasSettle = useCallback(
-    (map: NonNullable<ReturnType<MapEngine["getMap"]>>) =>
-      new Promise<void>((resolve) => {
-        let done = false;
-        let timer = 0;
-        const finish = () => {
-          if (done) return;
-          done = true;
-          map.off("idle", finish);
-          window.clearTimeout(timer);
-          resolve();
-        };
-        map.on("idle", finish);
-        timer = window.setTimeout(finish, 2500);
-      }),
-    [],
-  );
-
   // Drive the live map to one atlas page's extent and capture it. Margin mode
   // grows the feature's box before fitting; fixed-scale mode fits first, then
   // corrects the zoom by the log2 ratio difference (like applyScale) and
@@ -1497,11 +1476,11 @@ export function PrintLayoutDialog({
       viewBounds: AtlasBounds;
       mapFit: "cover" | "contain";
     }> => {
-      // Atlas drives the live camera, so it runs on either 2D engine through
-      // the surface MapLibre and mapbox-gl share (see engineStyleMap).
+      // Atlas drives the live camera, on any flat map: the Style Spec map's
+      // own camera, or the engine's (see print-atlas-camera).
       const engine = mapControllerRef.current;
-      const map = engineStyleMap(engine);
-      if (!engine || !map) throw new Error("Map is not ready");
+      const camera = atlasCamera(engine, GRATICULE_LABEL_LAYER_ID);
+      if (!engine || !camera) throw new Error("Map is not ready");
       const ctx: AtlasTokenContext = {
         name: page.name,
         pageNumber: page.index + 1,
@@ -1514,18 +1493,7 @@ export function PrintLayoutDialog({
         subtitle: substituteAtlasTokens(options.subtitle, ctx),
         footerText: substituteAtlasTokens(options.footerText, ctx),
       };
-      const containMap = Boolean(map.getLayer(GRATICULE_LABEL_LAYER_ID));
-      const canvas = map.getCanvas();
-      // mapbox-gl has no getPixelRatio; the canvas carries the same ratio.
-      // An unlaid-out canvas (clientWidth 0) has no ratio to read, so fall
-      // back to the device's.
-      const mapPixelRatio =
-        typeof map.getPixelRatio === "function"
-          ? map.getPixelRatio()
-          : canvas.clientWidth > 0
-            ? canvas.width / canvas.clientWidth
-            : window.devicePixelRatio || 1;
-      const cssPixelRatio = Number.isFinite(mapPixelRatio) && mapPixelRatio > 0 ? mapPixelRatio : 1;
+      const { containMap, canvas, pixelRatio: cssPixelRatio } = camera;
       const viewportWidth = canvas.clientWidth || canvas.width / cssPixelRatio;
       const viewportHeight = canvas.clientHeight || canvas.height / cssPixelRatio;
       const targetAspect = containMap
@@ -1533,25 +1501,9 @@ export function PrintLayoutDialog({
         : mapBodyAspectRatio(pageOptions);
       const viewportFrame = atlasViewportFrame(viewportWidth, viewportHeight, targetAspect);
       const coverageFeature = atlasLayer?.geojson?.features[page.sourceIndex];
-      if (atlasMaskEnabled) {
-        showAtlasFeatureMask(
-          map,
-          coverageFeature,
-          containMap ? GRATICULE_LABEL_LAYER_ID : undefined,
-          { mapbox: engine.kind === "mapbox" },
-        );
-      } else {
-        clearAtlasFeatureMask(map);
-      }
-      const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
-      map.fitBounds(
-        [
-          [w, s],
-          [e, n],
-        ],
-        { animate: false, padding: viewportFrame.padding },
-      );
-      await waitForAtlasSettle(map);
+      camera.showMask(atlasMaskEnabled ? coverageFeature : undefined);
+      await camera.fit(expandBounds(page.bounds, atlasFitMarginPct), viewportFrame.padding);
+      await camera.settle();
       // Mirror recapture: an active graticule draws coordinate labels at the
       // map edges, so fit with "contain" to keep them un-cropped on every
       // atlas page (mapFit is persistent state, so it must be set here too).
@@ -1566,7 +1518,7 @@ export function PrintLayoutDialog({
           // the engine, as recapture does there.
           showEnginePreview(null);
           try {
-            return await captureEngineMapImage(engine, null);
+            return await captureEngineMapImage(engine, null, camera.decorate);
           } finally {
             // The drawn box stays on the map as a reference in either capture
             // mode, as the MapLibre branch and recapture restore it, but only
@@ -1590,29 +1542,35 @@ export function PrintLayoutDialog({
         // a title/footer made purely of tokens can resolve to empty for a
         // given feature, which collapses that row and changes the body height
         // the scale is computed from.
-        const ratio = computeScaleRatio({
-          ...pageOptions,
-          metersPerPixel: cap.metersPerPixel,
-          mapPixelRatio: cap.pixelRatio,
-          bearingDeg: cap.bearingDeg,
-          mapImage: cap.image,
-          mapImageWidth: cap.width,
-          mapImageHeight: cap.height,
-        });
-        if (target > 0 && ratio > 0) {
-          const zoom = map.getZoom() + Math.log2(ratio / target);
-          const clamped = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), zoom));
+        const measure = () =>
+          computeScaleRatio({
+            ...pageOptions,
+            metersPerPixel: cap.metersPerPixel,
+            mapPixelRatio: cap.pixelRatio,
+            bearingDeg: cap.bearingDeg,
+            mapImage: cap.image,
+            mapImageWidth: cap.width,
+            mapImageHeight: cap.height,
+          });
+        // MapLibre lands on the scale in one correction; another engine's
+        // camera can round the zoom it is given (the ArcGIS SDK does), so the
+        // scale is measured again and corrected up to twice more.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const ratio = measure();
+          if (!(target > 0 && ratio > 0)) break;
+          if (attempt > 0 && Math.abs(ratio / target - 1) < 0.005) break;
+          const zoom = camera.zoom() + Math.log2(ratio / target);
+          const clamped = Math.max(camera.minZoom(), Math.min(camera.maxZoom(), zoom));
           // A clamp means this page renders at the closest reachable scale,
           // not the requested one: surface that (like applyScale's notice)
           // instead of letting the substitution pass silently.
           setAtlasScaleNotice(
             Math.abs(clamped - zoom) > 1e-3 ? t("printLayout.errors.scaleOutOfRange") : null,
           );
-          if (Math.abs(clamped - map.getZoom()) > 1e-3) {
-            map.setZoom(clamped);
-            await waitForAtlasSettle(map);
-            cap = await capture();
-          }
+          if (Math.abs(clamped - camera.zoom()) <= 1e-3) break;
+          await camera.setZoom(clamped);
+          await camera.settle();
+          cap = await capture();
         }
       } else {
         setAtlasScaleNotice(null);
@@ -1626,15 +1584,14 @@ export function PrintLayoutDialog({
               [viewportFrame.crop.right, viewportFrame.crop.top],
               [viewportFrame.crop.right, viewportFrame.crop.bottom],
               [viewportFrame.crop.left, viewportFrame.crop.bottom],
-            ].map(([x, y]) => {
-              const point = map.unproject([x, y]);
-              return [point.lng, point.lat];
-            }),
+            ]
+              .map(([x, y]) => camera.unproject(x, y))
+              // A frame corner off the globe has no position.
+              .filter((point): point is [number, number] => point !== null),
           });
-      const b = map.getBounds();
       return {
         cap,
-        viewBounds: frameBounds ?? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+        viewBounds: frameBounds ?? camera.bounds(),
         mapFit: atlasMapFit,
       };
     },
@@ -1648,7 +1605,6 @@ export function PrintLayoutDialog({
       atlasPageCount,
       atlasLayer,
       atlasMaskEnabled,
-      waitForAtlasSettle,
       options,
       t,
     ],

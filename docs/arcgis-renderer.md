@@ -169,6 +169,12 @@ override is set aside and the shared basemap is translated instead.
   around the view's centre with the active body's radius, in metric, imperial
   or nautical units, on a flat map and in a scene. Attribution is drawn by the view
   itself (`attributionVisible`); Esri requires it and it cannot be hidden.
+- The **Print Layout** atlas frames each page by driving the view's camera
+  north up, with the fit MapLibre's `fitBounds` computes, and waits for the
+  view to finish drawing before the capture. The mask outside the current
+  feature is painted onto the capture rather than drawn on the live map, and
+  a fixed scale is corrected until it lands within 0.5 % of the requested
+  one, since the SDK rounds the zoom it is given.
 - **Plugins → Layer Control** toggles the native ArcGIS layer list, enabled by
   default on the primary map like the shared plugin. Its visibility
   toggles update the project and the sidebar, and sidebar changes update the
@@ -330,8 +336,8 @@ experimental alignment and depth limitations described above.
   renderer, and the layer panels badge such layers **No ArcGIS**. A layer a
   plugin draws on MapLibre only (Planetary Computer, say) is named in the map's
   banner too.
-- The Print Layout atlas, in any view; an Esri vector tile service's own icon
-  and label layers (its stored style keeps no sprite or glyphs).
+- An Esri vector tile service's own icon and label layers (its stored style
+  keeps no sprite or glyphs), in any view.
 - Navigation limits differ slightly from MapLibre's: a view that settles past
   the zoom range or the restricted bounds eases back inside them (on a flat
   map the wheel also stops at the zoom limits), the bounds hold the view's

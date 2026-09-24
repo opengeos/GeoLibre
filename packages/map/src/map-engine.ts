@@ -177,6 +177,12 @@ export interface MapEngine {
    * story chapter or chapter-preview move, which is scripted, not navigation.
    */
   onCameraIdle(listener: (event?: CameraIdleEvent) => void): () => void;
+  /**
+   * Resolve once the view has settled and drawn everything it is loading, or
+   * after `timeoutMs`, for captures that drive the camera (the Print Layout
+   * atlas). Engines without it are waited on through {@link onCameraIdle}.
+   */
+  whenDrawn?(timeoutMs: number): Promise<void>;
   stopCamera(): void;
   suspendNavigation(): () => void;
 

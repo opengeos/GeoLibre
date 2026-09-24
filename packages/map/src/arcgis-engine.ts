@@ -2469,6 +2469,27 @@ export class ArcgisEngine implements MapEngine {
       this.handles.delete(handle);
     };
   }
+  whenDrawn(timeoutMs: number): Promise<void> {
+    const view = this.view;
+    if (!view) return Promise.resolve();
+    return new Promise((resolve) => {
+      let finished = false;
+      let handle: ArcgisHandle | undefined;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        handle?.remove();
+        resolve();
+      };
+      const timer = setTimeout(done, timeoutMs);
+      // `initial` can answer at once, before the handle is returned.
+      handle = this.sdk.reactiveUtils.when(() => view.stationary && !view.updating, done, {
+        initial: true,
+      });
+      if (finished) handle.remove();
+    });
+  }
   onCameraIdle(listener: (event?: CameraIdleEvent) => void): () => void {
     const view = this.view;
     if (!view) return () => {};

@@ -108,10 +108,20 @@ function cropCaptureToClip(
   return cropped;
 }
 
-/** Capture either engine while retaining the print scale and geographic crop. */
+/**
+ * Capture either engine while retaining the print scale and geographic crop.
+ *
+ * @param engine - The live map engine.
+ * @param clip - Optional geographic extent to crop to.
+ * @param decorate - Paints over the full-viewport capture before it is
+ *   cropped (the atlas mask off a Style Spec engine), given capture pixels
+ *   per CSS pixel.
+ * @returns The captured map.
+ */
 export async function captureEngineMapImage(
   engine: MapEngine,
   clip?: CaptureClip | null,
+  decorate?: (context: CanvasRenderingContext2D, scale: number) => void,
 ): Promise<CapturedMap> {
   const surface = engine.getRenderSurface();
   if (!surface) throw new Error("The map is not ready yet");
@@ -125,6 +135,8 @@ export async function captureEngineMapImage(
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Could not create the print canvas");
     context.drawImage(bitmap, 0, 0);
+    const cssWidth = surface.getCanvas().clientWidth || surface.getContainer().clientWidth;
+    decorate?.(context, cssWidth > 0 ? canvas.width / cssWidth : 1);
     return captureMapImage(surface, clip, canvas);
   } finally {
     bitmap.close();
