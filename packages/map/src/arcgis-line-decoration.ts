@@ -85,7 +85,8 @@ export function arcgisLineDecorationSymbol(
 ): Record<string, unknown> & { type: string } {
   const shape = styleValue(style, "lineDecoration");
   const size = decorationSize(style);
-  const spacing = Math.max(1, styleValue(style, "lineDecorationSpacing") || 80);
+  // As the 2D map reads it (a 0 spacing is 1 px there, not the default).
+  const spacing = Math.max(1, styleValue(style, "lineDecorationSpacing"));
   const half = size / 2;
   // CIM colours carry alpha on a 0–255 scale.
   const cimColor = [color[0], color[1], color[2], Math.round(color[3] * 255)];

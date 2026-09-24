@@ -1330,7 +1330,14 @@ function compileGeoJson(
             features: { type: "FeatureCollection", features },
             renderer,
             ...(label && !deduped && !(heatmap && scene)
-              ? { labelingInfo: labelingFor(kind, style, scales, labelClassList) }
+              ? {
+                  labelingInfo: labelingFor(
+                    kind,
+                    style,
+                    scales,
+                    labelClassesUsedBy(labelClassList, features),
+                  ),
+                }
               : {}),
             ...(markers ? { markerStyle: style } : {}),
             // An inverted fill's pattern goes on the mask.
@@ -1440,6 +1447,16 @@ function assignLabelClasses(overridden: Map<Feature, LabelOverrideValues>): Labe
     feature.properties![ARCGIS_LABEL_CLASS_FIELD] = entry.id;
   }
   return [...classes.values()];
+}
+
+/** The label classes a part's features use, so no part lists another's. */
+function labelClassesUsedBy(
+  classes: LabelClassStyle[] | undefined,
+  features: Feature[],
+): LabelClassStyle[] | undefined {
+  if (!classes) return undefined;
+  const used = new Set(features.map((feature) => feature.properties?.[ARCGIS_LABEL_CLASS_FIELD]));
+  return classes.filter((entry) => used.has(entry.id));
 }
 
 /**
