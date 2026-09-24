@@ -15,7 +15,7 @@ import { type RefObject, useCallback, useEffect, useId, useMemo, useRef, useStat
 import { useTranslation } from "react-i18next";
 import type { MapEngine } from "@geolibre/map";
 import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
-import { engineStyleMap } from "../../lib/engine-style-map";
+import { engineMarkerMap } from "../../lib/engine-style-map";
 import { type ChartDomain, resolveChartDomain } from "../../lib/chart-domain";
 import { useFloatingPanelRect } from "../../hooks/useFloatingPanelRect";
 import { usePluginRegistry } from "../../hooks/usePlugins";
@@ -211,8 +211,8 @@ export function PixelTimeSeriesControl({
   // "Clear all", removing a single point, and the teardown that fires when the
   // Time Slider stack goes away all clear the map without their own bookkeeping.
   useEffect(() => {
-    // Either 2D engine: MapLibre's Marker, or a projected DOM marker on Mapbox.
-    const map = engineStyleMap(mapControllerRef.current);
+    // MapLibre's Marker, or a projected DOM marker on any other renderer.
+    const map = engineMarkerMap(mapControllerRef.current);
     const live = markers.current;
     // After a renderer swap the markers still sit on the discarded map: drop
     // them so the loop below rebuilds every point on the new one.
@@ -302,10 +302,10 @@ export function PixelTimeSeriesControl({
   // Esc stops picking.
   useEffect(() => {
     if (!picking) return;
-    // Either 2D engine (the samples are drawn as 2D markers): the engine's
-    // click subscription and render canvas.
+    // Any engine with a render surface: its click subscription and canvas
+    // (the samples are drawn as projected markers).
     const engine = mapControllerRef.current;
-    const canvas = engineStyleMap(engine) ? engine?.getRenderSurface()?.getCanvas() : null;
+    const canvas = engine?.getRenderSurface()?.getCanvas();
     if (!engine || !canvas) {
       setPicking(false);
       return;

@@ -1,7 +1,7 @@
 import { type RefObject, useEffect, useSyncExternalStore } from "react";
 import type { MapEngine } from "@geolibre/map";
 import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
-import { engineStyleMap } from "../../lib/engine-style-map";
+import { engineMarkerMap } from "../../lib/engine-style-map";
 import { netcdfSeriesColor } from "../../lib/netcdf-profile-series";
 import {
   getNetcdfProfileSamples,
@@ -67,8 +67,8 @@ export function NetcdfSampleMarkers({
   );
 
   useEffect(() => {
-    // Either 2D engine: MapLibre's Marker, or a projected DOM marker on Mapbox.
-    const map = engineStyleMap(mapControllerRef.current);
+    // MapLibre's Marker, or a projected DOM marker on any other renderer.
+    const map = engineMarkerMap(mapControllerRef.current);
     if (!map) return;
     const live = new Map<number, AnnotationMarker>();
     for (const sample of samples) {

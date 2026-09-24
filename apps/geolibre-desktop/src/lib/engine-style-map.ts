@@ -22,6 +22,62 @@ export function engineStyleMap(engine: MapEngine | null | undefined): maplibregl
     : null;
 }
 
+/** Engine-backed marker hosts, one per engine so their identity is stable. */
+const markerMaps = new WeakMap<MapEngine, maplibregl.Map>();
+
+/**
+ * A map to pin DOM markers to (`createAnnotationMarker`) on any renderer: the
+ * 2D style map where there is one, else a stand-in over the engine's render
+ * surface that places the element through `project()` and follows the camera
+ * through `onCameraMove` / `onCameraIdle` (the ArcGIS map, #2477). Only the
+ * members the projected marker uses exist on the stand-in.
+ *
+ * @param engine - The live map engine.
+ * @returns A marker host, or null before the map exists.
+ */
+export function engineMarkerMap(engine: MapEngine | null | undefined): maplibregl.Map | null {
+  const styleMap = engineStyleMap(engine);
+  if (styleMap || !engine) return styleMap;
+  const cached = markerMaps.get(engine);
+  if (cached) return cached;
+  const surface = engine.getRenderSurface();
+  if (!surface) return null;
+  const subscriptions = new Map<unknown, Map<string, () => void>>();
+  const host = {
+    getCanvasContainer: () => surface.getContainer(),
+    project: (lngLat: [number, number]) => {
+      try {
+        return surface.project(lngLat);
+      } catch {
+        // A globe cannot project its far side: park the marker off screen.
+        return { x: -1e6, y: -1e6 };
+      }
+    },
+    on(type: string, listener: () => void) {
+      let stop: () => void;
+      if (type === "resize") {
+        const observer = new ResizeObserver(() => listener());
+        observer.observe(surface.getContainer());
+        stop = () => observer.disconnect();
+      } else if (type === "moveend") stop = engine.onCameraIdle(() => listener());
+      else stop = engine.onCameraMove(() => listener());
+      const byType = subscriptions.get(listener) ?? new Map<string, () => void>();
+      byType.get(type)?.();
+      byType.set(type, stop);
+      subscriptions.set(listener, byType);
+      return host;
+    },
+    off(type: string, listener: () => void) {
+      subscriptions.get(listener)?.get(type)?.();
+      subscriptions.get(listener)?.delete(type);
+      return host;
+    },
+  };
+  const map = host as unknown as maplibregl.Map;
+  markerMaps.set(engine, map);
+  return map;
+}
+
 /**
  * A popup from the library that draws the map. MapLibre's `Popup` throws on a
  * mapbox-gl map (it reads MapLibre's camera internals), so the Mapbox engine

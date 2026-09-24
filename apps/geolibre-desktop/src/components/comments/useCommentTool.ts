@@ -37,16 +37,22 @@ export function useCommentTool({
 
   /**
    * Whether the current engine can host the tool at all. Placing a comment needs
-   * a map click and feature picking, both MapLibre-only today, so an engine
-   * without a native map must not let the tool arm (#2268 review).
+   * a map click and feature picking: the MapLibre map, or any engine with a
+   * render surface through `onMapClick` and `identifyFeatures` (#2477).
    */
   const canPlaceComments = useCallback(
-    // `=== true`, not `!== false`: a null ref (no engine published yet) must not
-    // arm the tool either. The effect below only attaches its click listener
-    // when `isActive` flips, and mutating the ref does not re-run it — so a tool
-    // armed before the map was ready would stay armed and dead until the user
-    // toggled it off and on again (#2268 review).
-    () => mapControllerRef.current?.capabilities.nativeMapInstance === true,
+    // A null ref (no engine published yet) must not arm the tool. The effect
+    // below only attaches its click listener when `isActive` flips, and
+    // mutating the ref does not re-run it — so a tool armed before the map was
+    // ready would stay armed and dead until the user toggled it off and on
+    // again (#2268 review).
+    () => {
+      const engine = mapControllerRef.current;
+      return (
+        !!engine &&
+        (engine.capabilities.nativeMapInstance === true || engine.getRenderSurface() !== null)
+      );
+    },
     [mapControllerRef],
   );
 
@@ -124,13 +130,42 @@ export function useCommentTool({
   }, []);
 
   useEffect(() => {
-    // Placing a comment needs a map click plus feature picking, so it is
-    // MapLibre-only for now. The guard used to be implicit — the ref was null on
-    // the globe — but it now holds a `CesiumEngine` whose `getMap()` is null, so
-    // without saying so the tool could read as armed while no click ever lands
-    // (#2268 review). `activateTool`/`toggleTool` refuse to arm without it.
-    const map = mapControllerRef.current?.getMap();
+    // Placing a comment needs a map click plus feature picking: MapLibre's
+    // own events, or the engine's `onMapClick` and `identifyFeatures` on any
+    // other renderer with a render surface (#2477). Without either, the tool
+    // could read as armed while no click ever lands (#2268 review), so
+    // `activateTool`/`toggleTool` refuse to arm.
+    const engine = mapControllerRef.current;
+    const map = engine?.getMap();
     if (!isActive) return;
+    const surface = map ? null : engine?.getRenderSurface();
+    if (!map && engine && surface) {
+      // Another renderer: the engine reports the click and the features under
+      // it (#2477).
+      const canvas = surface.getCanvas();
+      canvas.style.cursor = "crosshair";
+      const stop = engine.onMapClick((lngLat) => {
+        const storeIds = new Set(useAppStore.getState().layers.map((l) => l.id));
+        const hit = engine
+          .identifyFeatures(lngLat)
+          .find((feature) => feature.featureId !== null && storeIds.has(feature.layerId));
+        const anchor: CommentAnchor = hit
+          ? { type: "feature", layerId: hit.layerId, featureId: hit.featureId!, lngLat }
+          : { type: "point", lngLat };
+        let point = { x: 0, y: 0 };
+        try {
+          point = surface.project(lngLat);
+        } catch {
+          // Cesium cannot project the far side of the globe; the click itself
+          // landed on the visible side, so this is only a guard.
+        }
+        setPendingComment({ anchor, point: { x: point.x, y: point.y } });
+      });
+      return () => {
+        canvas.style.cursor = "";
+        stop();
+      };
+    }
     if (!map) {
       // Armed with no map to click: disarm rather than leave the tool looking
       // active. Unconditional, including when the ref is momentarily null — the
@@ -138,8 +173,8 @@ export function useCommentTool({
       // waiting for a non-null ref left the tool stuck armed if that engine
       // never arrived (a Cesium or WebGL failure means no second bump) (#2268
       // review). There is no initial-mount case to protect: `canPlaceComments`
-      // requires `nativeMapInstance === true`, so `isActive` cannot be true
-      // before an engine has published.
+      // requires a published engine, so `isActive` cannot be true before one
+      // has published.
       setIsActive(false);
       return;
     }

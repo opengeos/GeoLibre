@@ -125,6 +125,10 @@ override is set aside and the shared basemap is translated instead.
   same gestures as on MapLibre on the primary map. The status bar's pointer
   elevation reads the ground under the cursor from the scene's elevation
   surface, or (with consent) the same remote lookup the other maps use.
+- **GPS Tracking** (the position marker, accuracy circle and track, following
+  the position), **Add comment**, the Georeferencer's **Link on map**, and the
+  Pixel Time Series and NetCDF sample markers work through the engine's render
+  surface and click events.
 - Plugin controls hosted on the map receive MapLibre's `move`, `zoom`,
   `rotate`, `click` and `mousemove` events, so readouts such as View State and
   the minimap follow the camera. Story chapter layer fades run over the
@@ -307,6 +311,9 @@ experimental alignment and depth limitations described above.
   renderer, and the layer panels badge such layers **No ArcGIS**. A layer a
   plugin draws on MapLibre only (Planetary Computer, say) is named in the map's
   banner too.
+- The Print Layout atlas, Vector-tile icon symbols (the store's vector-tile
+  records carry no sprite), and the Style panel's zoom/bounds constraints and
+  nautical scale unit in a 3D `SceneView`.
 - Measure and the geometry editor draw through the MapLibre/Mapbox style API;
   the Controls menu greys Measure out, and editing a layer's geometry says the
   renderer does not support it.

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type * as maplibregl from "maplibre-gl";
 import type { MapEngine } from "@geolibre/map";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
@@ -126,8 +125,6 @@ export function GeoreferencerDialog({
   // Monotonic id for stable GCP React keys.
   const gcpKeyRef = useRef(0);
 
-  const getMap = useCallback(() => mapControllerRef.current?.getMap() ?? null, [mapControllerRef]);
-
   const affine = useMemo(() => solveAffine(gcps), [gcps]);
   const residuals = useMemo(
     () => (affine ? gcpResidualsMeters(affine, gcps) : null),
@@ -216,28 +213,33 @@ export function GeoreferencerDialog({
   );
 
   const handleLinkOnMap = useCallback(() => {
-    if (!pendingPixel || !getMap()) return;
+    if (!pendingPixel || !mapControllerRef.current) return;
     linkPixelRef.current = pendingPixel;
     setLinking(true);
     onOpenChange(false);
-  }, [pendingPixel, getMap, onOpenChange]);
+  }, [pendingPixel, mapControllerRef, onOpenChange]);
 
   useEffect(() => {
     if (!linking) return;
-    const map = getMap();
-    if (!map) {
+    // Through the engine, so the link works on every renderer (the MapLibre
+    // map alone left it dead elsewhere).
+    const engine = mapControllerRef.current;
+    if (!engine) {
       setLinking(false);
       return;
     }
     releaseBodyPointerEvents();
     const raf = requestAnimationFrame(releaseBodyPointerEvents);
-    const prevCursor = map.getCanvas().style.cursor;
-    map.getCanvas().style.cursor = "crosshair";
-    const onClick = (e: maplibregl.MapMouseEvent) => {
+    const canvas = engine.getRenderSurface()?.getCanvas();
+    const prevCursor = canvas?.style.cursor ?? "";
+    if (canvas) canvas.style.cursor = "crosshair";
+    let stopClick = () => {};
+    const onClick = ([lng, lat]: [number, number]) => {
+      stopClick();
       const p = linkPixelRef.current;
       if (p) {
         const key = (gcpKeyRef.current += 1);
-        setGcps((gs) => [...gs, { px: p.px, py: p.py, lng: e.lngLat.lng, lat: e.lngLat.lat, key }]);
+        setGcps((gs) => [...gs, { px: p.px, py: p.py, lng, lat, key }]);
         setPendingPixel(null);
       }
       setLinking(false);
@@ -248,19 +250,19 @@ export function GeoreferencerDialog({
       if (ev.key !== "Escape") return;
       // Remove the click handler synchronously so a queued click can't still
       // fire onClick (and add a stray GCP) before the effect cleanup runs.
-      map.off("click", onClick);
+      stopClick();
       setLinking(false);
       onOpenChange(true);
     };
-    map.once("click", onClick);
+    stopClick = engine.onMapClick(onClick);
     window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(raf);
-      map.off("click", onClick);
+      stopClick();
       window.removeEventListener("keydown", onKey);
-      map.getCanvas().style.cursor = prevCursor;
+      if (canvas) canvas.style.cursor = prevCursor;
     };
-  }, [linking, getMap, onOpenChange]);
+  }, [linking, mapControllerRef, onOpenChange]);
 
   const handleApply = useCallback(() => {
     if (!affine || !image) return;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import type { Feature, FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, Position } from "geojson";
 import * as maplibregl from "maplibre-gl";
 import type { MapEngine } from "@geolibre/map";
 import { useAppStore } from "@geolibre/core";
@@ -71,6 +71,9 @@ import {
   type NmeaConnection,
 } from "../../lib/nmea-source";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
+import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
+import { engineMarkerMap } from "../../lib/engine-style-map";
+import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
 
 interface GpsTrackingDialogProps {
   open: boolean;
@@ -135,6 +138,13 @@ function storeSettings(settings: GpsTrackingSettings): void {
 }
 
 /** Position marker: a blue dot with a heading arrow, rotated per fix. */
+/** The track preview's line coordinates, for the overlay that draws them. */
+function neutralTrackLines(segments: GpsTrackSegments): Position[][] {
+  return trackPreview(segments).features.flatMap((feature) =>
+    feature.geometry.type === "LineString" ? [feature.geometry.coordinates] : [],
+  );
+}
+
 function createMarkerElement(): { root: HTMLDivElement; arrow: HTMLDivElement } {
   const root = document.createElement("div");
   root.style.width = "22px";
@@ -293,6 +303,12 @@ export function GpsTrackingDialog({
 
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const markerArrowRef = useRef<HTMLDivElement | null>(null);
+  // Every other renderer: a projected DOM marker and an SVG overlay over the
+  // engine's render surface (#2477). `neutralMarkerRoot` is what rotates with
+  // the heading, inside the element the marker positions.
+  const neutralMarkerRef = useRef<AnnotationMarker | null>(null);
+  const neutralMarkerRoot = useRef<HTMLDivElement | null>(null);
+  const neutralOverlayRef = useRef<GpsOverlay | null>(null);
   // Logged track fixes as pause/resume segments; a ref so the high-frequency
   // watch callback appends in place without re-creating itself, with
   // `fixCount` mirroring the total for renders. Always holds >= 1 segment.
@@ -323,14 +339,28 @@ export function GpsTrackingDialog({
    * Center the map on a fix. The first recenter of a session also zooms in;
    * later ones only pan, so following doesn't fight the user's chosen zoom.
    */
-  const recenterOnFix = useCallback((map: maplibregl.Map, fix: GpsFix) => {
-    map.easeTo({
-      center: [fix.lng, fix.lat],
-      duration: 500,
-      ...(zoomedRef.current ? {} : { zoom: Math.max(map.getZoom(), 15) }),
-    });
-    zoomedRef.current = true;
-  }, []);
+  const recenterOnFix = useCallback(
+    (map: maplibregl.Map | null, fix: GpsFix) => {
+      if (map) {
+        map.easeTo({
+          center: [fix.lng, fix.lat],
+          duration: 500,
+          ...(zoomedRef.current ? {} : { zoom: Math.max(map.getZoom(), 15) }),
+        });
+      } else {
+        const engine = mapControllerRef.current;
+        if (!engine) return;
+        const view = engine.readView();
+        engine.easeToView({
+          ...view,
+          center: [fix.lng, fix.lat],
+          zoom: zoomedRef.current ? view.zoom : Math.max(view.zoom, 15),
+        });
+      }
+      zoomedRef.current = true;
+    },
+    [mapControllerRef],
+  );
 
   /**
    * Toggle follow mode. The ref moves first so a fix arriving before the
@@ -343,9 +373,8 @@ export function GpsTrackingDialog({
       followRef.current = next;
       setFollow(next);
       if (!next) return;
-      const map = getMap();
       const fix = lastFixRef.current;
-      if (map && fix) recenterOnFix(map, fix);
+      if (fix) recenterOnFix(getMap(), fix);
     },
     [getMap, recenterOnFix],
   );
@@ -405,9 +434,41 @@ export function GpsTrackingDialog({
         if (fix.heading != null) markerRef.current.setRotation(fix.heading);
 
         if (followRef.current) recenterOnFix(map, fix);
+      } else {
+        const engine = mapControllerRef.current;
+        if (engine?.getRenderSurface()) {
+          neutralOverlayRef.current ??= createGpsOverlay(engine, {
+            accuracy: GPS_COLOR,
+            track: TRACK_COLOR,
+          });
+          const overlay = neutralOverlayRef.current;
+          overlay?.setAccuracy(accuracyCircle(fix).geometry.coordinates[0]);
+          if (logged) overlay?.setTrack(neutralTrackLines(fixesRef.current));
+          if (!neutralMarkerRef.current) {
+            const host = engineMarkerMap(engine);
+            if (host) {
+              const { root, arrow } = createMarkerElement();
+              markerArrowRef.current = arrow;
+              neutralMarkerRoot.current = root;
+              const element = document.createElement("div");
+              element.append(root);
+              neutralMarkerRef.current = createAnnotationMarker(host, {
+                element,
+                anchor: "center",
+              });
+            }
+          }
+          neutralMarkerRef.current?.setLngLat([fix.lng, fix.lat]);
+          if (markerArrowRef.current)
+            markerArrowRef.current.style.display = fix.heading != null ? "block" : "none";
+          if (neutralMarkerRoot.current)
+            neutralMarkerRoot.current.style.transform =
+              fix.heading != null ? `rotate(${fix.heading}deg)` : "";
+          if (followRef.current) recenterOnFix(null, fix);
+        }
       }
     },
-    [getMap, recenterOnFix, setGpsStatus],
+    [getMap, mapControllerRef, recenterOnFix, setGpsStatus],
   );
 
   // The first fix of every tracking session zooms in, whichever source it came
@@ -476,6 +537,7 @@ export function GpsTrackingDialog({
     };
     let map: maplibregl.Map | null = null;
     let timer: number | undefined;
+    let detachDrag = () => {};
     const attach = () => {
       map = getMap();
       if (map) {
@@ -483,20 +545,52 @@ export function GpsTrackingDialog({
         map.on("styledata", onStyleData);
         return;
       }
+      // Another renderer: a press that moves on the map is a drag.
+      const container = mapControllerRef.current?.getRenderSurface()?.getContainer();
+      if (container) {
+        let start: { x: number; y: number } | null = null;
+        const onDown = (event: PointerEvent) => {
+          start = { x: event.clientX, y: event.clientY };
+        };
+        const onMove = (event: PointerEvent) => {
+          if (!start || !event.buttons) return;
+          if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < 4) return;
+          start = null;
+          onDragStart();
+        };
+        const onUp = () => {
+          start = null;
+        };
+        container.addEventListener("pointerdown", onDown);
+        container.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        detachDrag = () => {
+          container.removeEventListener("pointerdown", onDown);
+          container.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+        };
+        return;
+      }
       timer = window.setTimeout(attach, 500);
     };
     attach();
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
+      detachDrag();
       map?.off("dragstart", onDragStart);
       map?.off("styledata", onStyleData);
     };
-  }, [tracking, getMap, setFollowMode]);
+  }, [tracking, getMap, mapControllerRef, setFollowMode]);
 
   const clearMapArtifacts = useCallback(() => {
     markerRef.current?.remove();
     markerRef.current = null;
     markerArrowRef.current = null;
+    neutralMarkerRef.current?.remove();
+    neutralMarkerRef.current = null;
+    neutralMarkerRoot.current = null;
+    neutralOverlayRef.current?.remove();
+    neutralOverlayRef.current = null;
     const map = getMap();
     if (map) removeGpsSources(map);
   }, [getMap]);
@@ -697,6 +791,7 @@ export function GpsTrackingDialog({
     setFixCount(0);
     const map = getMap();
     if (map) setSourceData(map, TRACK_SOURCE, EMPTY_FC);
+    neutralOverlayRef.current?.setTrack([]);
   }, [getMap]);
 
   const handleStartRecording = useCallback(() => {
