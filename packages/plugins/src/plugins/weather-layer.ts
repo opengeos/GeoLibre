@@ -191,8 +191,12 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
       }
       index = (index + 1) % frames.length;
       // Live source swap only per tick; avoid churning the store (and its dirty
-      // flag) every frame — the resting frame is written on pause.
-      applyFrameToMap();
+      // flag) every frame — the resting frame is written on pause. A renderer
+      // with no style map (the globe, ArcGIS) redraws only from the store, so
+      // there the frame is written on every tick.
+      // engine-audit-allow: arcgis-null-map
+      if (getStyleMap(appRef)) applyFrameToMap();
+      else syncStore();
       notify();
     }, config.frameMs);
   };

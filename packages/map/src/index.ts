@@ -7,6 +7,7 @@ export {
   type ArcgisEngineMessages,
 } from "./arcgis-engine";
 export {
+  arcgisRasterEffect,
   arcgisUnsupportedStyleSettings,
   isArcgisSupportedLayer,
   type ArcgisUnsupportedStyleSetting,

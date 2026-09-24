@@ -13,6 +13,7 @@ import type * as maplibregl from "maplibre-gl";
 import type { FeatureCollection, Geometry, Point, Polygon, Position } from "geojson";
 import {
   compileLayerFilters,
+  portableWmsTileUrl,
   type GeoLibreLayer,
   type MapPreferences,
   type MapProjection,
@@ -1385,16 +1386,9 @@ export class ArcgisEngine implements MapEngine {
     if (!Array.isArray(tiles)) return null;
     const http = tiles
       .filter((tile): tile is string => typeof tile === "string")
-      .map((tile) => {
-        const wrapped = /^geolibre-wms:\/\/tile\?url=(.+)$/.exec(tile);
-        if (!wrapped) return tile;
-        try {
-          return decodeURIComponent(wrapped[1]);
-        } catch {
-          // A malformed escape (a hand-edited project) is left out below.
-          return tile;
-        }
-      })
+      // A malformed wrapper (a hand-edited project) stays wrapped and is
+      // left out below.
+      .map((tile) => portableWmsTileUrl(tile) as string)
       .filter((tile) => /^https?:\/\//i.test(tile));
     return http.length ? http : null;
   }

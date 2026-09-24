@@ -1834,7 +1834,16 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
   };
 }
 
-function portableWmsTileUrl(tile: unknown): unknown {
+/**
+ * The plain HTTP(S) WMS template inside the desktop app's `geolibre-wms://`
+ * wrapper (its CORS-exempt native fetcher), or the tile unchanged when it is
+ * not wrapped or the wrapped URL is not HTTP(S). Shared by project export and
+ * the ArcGIS engine's story-export templates.
+ *
+ * @param tile - A tile template, wrapped or not.
+ * @returns The unwrapped template, or `tile` itself.
+ */
+export function portableWmsTileUrl(tile: unknown): unknown {
   // Keep this protocol prefix in sync with WMS_TILE_PROTOCOL in the desktop
   // app, which packages/core cannot import without reversing dependencies.
   if (typeof tile !== "string" || !tile.startsWith("geolibre-wms://")) return tile;

@@ -640,13 +640,13 @@ export function ArcgisCanvas({
           // The view-ready failure stays up alongside the engine's own errors;
           // the next tick would otherwise erase it.
           const errors = [...(readyError ? [readyError] : []), ...current.getRenderStatus().errors];
+          if (terrainRestoreError && useAppStore.getState().preferences.map.terrainEnabled)
+            errors.push(terrainRestoreError);
           // Each error reaches the Diagnostics log once, when it first shows;
           // one that clears and comes back is reported again.
           for (const message of errors)
             if (!reported.has(message)) diagnosticRef.current?.({ message, source: "arcgis" });
           reported = new Set(errors);
-          if (terrainRestoreError && useAppStore.getState().preferences.map.terrainEnabled)
-            errors.push(terrainRestoreError);
           setError(errors.length ? errors.join("; ") : null);
         }, 1000);
         // The SDK ships one stylesheet per theme; follow the app's dark-mode

@@ -421,6 +421,7 @@ export function ControlsMenu({
           {show("controls.measure") && (
             <DropdownMenuItem
               disabled={measureDisabled}
+              className={REASON_ON_HOVER}
               title={measureDisabled ? t("renderer.pluginUnsupported") : undefined}
               onSelect={panels.measure.toggle}
             >

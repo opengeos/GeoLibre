@@ -6793,7 +6793,8 @@
       "blendModeScene": "Blend mode (flat map only)",
       "clusterScene": "Point clustering (flat map only)",
       "fillPatternScene": "Fill pattern (flat map only)",
-      "extrusionFlat": "Extrusion (3D view only)"
+      "extrusionFlat": "Extrusion (3D view only)",
+      "rasterEffectScene": "Brightness, contrast, saturation and hue (flat map only)"
     },
     "addClass": "Add class",
     "removeClass": "Remove class",

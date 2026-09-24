@@ -62,6 +62,7 @@ import {
   arcgisVectorStyle,
   layerBlendModesSupported,
   mapboxUnsupportedStyleSettings,
+  arcgisRasterEffect,
   arcgisUnsupportedStyleSettings,
   subscribeLayerBlendModeSupport,
   type MapEngine,
@@ -1899,6 +1900,11 @@ export function StylePanel({
     arcgisPrimary && hasVectorPaintControls
       ? arcgisUnsupportedStyleSettings(layer, arcgisScene)
       : [];
+  // A SceneView blends tiled rasters but ignores the colour sliders' effect.
+  const arcgisRasterEffectIgnored =
+    arcgisPrimary &&
+    arcgisScene &&
+    arcgisRasterEffect({ ...DEFAULT_LAYER_STYLE, ...style }) !== null;
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const elevation3dEnabled = styleValue(style, "elevation3dEnabled");
   // Effective 3D Z-value mode: the saved flag can outlive the data's Z values
@@ -4891,6 +4897,18 @@ export function StylePanel({
           {/* Padding on the inner content with extra right clearance so the
               overlay scrollbar never covers a control's right edge. */}
           <div className="space-y-4 p-3 pe-5">
+            {arcgisRasterEffectIgnored && (
+              <div
+                className="text-xs text-amber-600"
+                data-testid="style-arcgis-unsupported"
+                role="note"
+              >
+                <p>{t("style.arcgisUnsupported.title")}</p>
+                <ul className="list-disc ps-4">
+                  <li>{t("style.arcgisUnsupported.rasterEffectScene")}</li>
+                </ul>
+              </div>
+            )}
             {beforeIdControl}
             {zoomRangeControls}
             <RasterStyleSlider
