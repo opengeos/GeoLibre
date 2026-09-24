@@ -311,9 +311,9 @@ experimental alignment and depth limitations described above.
   renderer, and the layer panels badge such layers **No ArcGIS**. A layer a
   plugin draws on MapLibre only (Planetary Computer, say) is named in the map's
   banner too.
-- The Print Layout atlas, Vector-tile icon symbols (the store's vector-tile
-  records carry no sprite), and the Style panel's zoom/bounds constraints and
-  nautical scale unit in a 3D `SceneView`.
+- The Print Layout atlas and vector-tile icon symbols (the store's vector-tile
+  records carry no sprite), in any view; and, in a 3D `SceneView`, the
+  project's zoom and bounds constraints and the nautical scale unit.
 - Measure and the geometry editor draw through the MapLibre/Mapbox style API;
   the Controls menu greys Measure out, and editing a layer's geometry says the
   renderer does not support it.

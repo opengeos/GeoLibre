@@ -48,6 +48,8 @@ interface GeoreferencerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mapControllerRef: React.RefObject<MapEngine | null>;
+  /** Bumped when the map engine is (re)created, so a pending link re-attaches. */
+  mapReadyGeneration?: number;
 }
 
 interface LoadedImage {
@@ -103,6 +105,7 @@ export function GeoreferencerDialog({
   open,
   onOpenChange,
   mapControllerRef,
+  mapReadyGeneration = 0,
 }: GeoreferencerDialogProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((s) => s.addLayer);
@@ -266,7 +269,7 @@ export function GeoreferencerDialog({
       window.removeEventListener("keydown", onKey);
       if (canvas) canvas.style.cursor = prevCursor;
     };
-  }, [linking, mapControllerRef, onOpenChange]);
+  }, [linking, mapControllerRef, onOpenChange, mapReadyGeneration]);
 
   const handleApply = useCallback(() => {
     if (!affine || !image) return;

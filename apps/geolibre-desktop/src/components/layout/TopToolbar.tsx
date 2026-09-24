@@ -2444,6 +2444,7 @@ export function TopToolbar({
         open={georeferencerOpen}
         onOpenChange={setGeoreferencerOpen}
         mapControllerRef={mapControllerRef}
+        mapReadyGeneration={mapReadyGeneration}
       />
       <SetViewDialog
         open={setViewOpen}

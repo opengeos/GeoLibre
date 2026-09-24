@@ -422,6 +422,8 @@ export function GpsTrackingDialog({
           neutralOverlayRef.current?.remove();
           neutralOverlayRef.current = null;
           neutralEngineRef.current = null;
+          // The new map's track source starts empty: draw the whole track.
+          logged = true;
         }
         ensureGpsSources(map);
         setSourceData(map, ACCURACY_SOURCE, accuracyCircle(fix));
@@ -584,11 +586,15 @@ export function GpsTrackingDialog({
         let start: { x: number; y: number } | null = null;
         // Only a press on the map itself, not on a control inside the same
         // container (a zoom widget, a plugin panel's slider).
+        const canvas = mapControllerRef.current?.getRenderSurface()?.getCanvas();
+        // The canvas's own wrapper (the SDK's view surface) takes the press on
+        // some engines; the controls sit outside it.
+        const surfaceElement = canvas?.parentElement !== container ? canvas?.parentElement : null;
         const onDown = (event: PointerEvent) => {
-          start =
-            event.target instanceof HTMLCanvasElement
-              ? { x: event.clientX, y: event.clientY }
-              : null;
+          const target = event.target as Node | null;
+          const onMap =
+            target === canvas || (!!surfaceElement && !!target && surfaceElement.contains(target));
+          start = onMap ? { x: event.clientX, y: event.clientY } : null;
         };
         const onMove = (event: PointerEvent) => {
           if (!start || !event.buttons) return;

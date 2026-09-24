@@ -704,7 +704,10 @@ export function ArcgisCanvas({
           for (const handle of handles) handle.remove();
           window.clearInterval(status);
           theme.disconnect();
+          // The popup goes with the view; the selection it took is given back.
+          const restore = popupOnClose;
           removePopup();
+          restore?.();
         };
       })
       .catch((error: unknown) => {
