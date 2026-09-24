@@ -139,7 +139,9 @@ override is set aside and the shared basemap is translated instead.
 - Feature picking (click identify with the layer's popup template and field
   visibility; **Identify visible layers** groups every layer's hits, including
   WMS GetFeatureInfo, Time Slider pixels, COG/NetCDF pixels and DuckDB
-  layers), selection highlighting, extent
+  layers), hover map tips (the layer's hover fields, picked from the store's
+  features as on Mapbox), geotagged-photo popups on a click without the
+  Identify tool, selection highlighting, extent
   drawing, draggable placement, and engine-level image capture. **Layers →
   Select features** (single, rectangle, polygon, freehand and radius) runs the
   same gestures as on MapLibre on the primary map. The status bar's pointer

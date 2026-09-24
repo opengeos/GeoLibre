@@ -2,13 +2,22 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   applyGroupEffects,
   createPointerElevationResolver,
+  effectiveLayerRenderState,
   getActiveEllipsoid,
+  isPopupHoverEnabled,
+  resolvePopupMaxWidth,
   useAppStore,
   type MapProjection,
 } from "@geolibre/core";
 import type { BuiltInMapControl, MapEngine } from "./map-engine";
 import type { MapDiagnosticEvent } from "./map-diagnostic";
-import { attachFeatureSelection, type FeatureSelectionState } from "./map-feature-selection";
+import {
+  attachFeatureSelection,
+  FEATURE_SELECTION_BEGIN_EVENT,
+  type FeatureSelectionState,
+} from "./map-feature-selection";
+import { createHoverTooltipElement } from "./feature-popup";
+import { createPhotoPopupElement, PHOTO_SOURCE_KIND } from "./photo-popup";
 import { arcgisFeatureSelectionMap } from "./arcgis-feature-selection";
 import { createArcgisIdentify } from "./arcgis-identify";
 import { consumePendingIdentifyRestore } from "./map-identify-lifecycle";
@@ -607,6 +616,175 @@ export function ArcgisCanvas({
             },
           ),
         );
+        // Hover map tips and geotagged-photo popups, as on the other maps
+        // (MapboxCanvas): the engine's synchronous pick of the store's
+        // features, a tip pinned above the pointer, and a photo popup on a
+        // click made without the Identify tool.
+        let hoverDispose: (() => void) | null = null;
+        let photoDispose: (() => void) | null = null;
+        let photoCursor = false;
+        let hoverFrame = 0;
+        let hoverPending: [number, number] | null = null;
+        const removeHoverTip = () => {
+          hoverDispose?.();
+          hoverDispose = null;
+        };
+        const removePhotoPopup = () => {
+          photoDispose?.();
+          photoDispose = null;
+        };
+        const setPhotoCursor = (active: boolean) => {
+          if (photoCursor === active || !mapView.container) return;
+          photoCursor = active;
+          mapView.container.style.cursor = active ? "pointer" : "";
+        };
+        /** Visible layers that show a hover tip, and the geotagged-photo layers. */
+        const pointerTargets = () => {
+          const next = useAppStore.getState();
+          const groupById = new Map(next.layerGroups.map((group) => [group.id, group]));
+          const visible = next.layers.filter(
+            (layer) => effectiveLayerRenderState(layer, groupById).visible,
+          );
+          return {
+            hover: new Map(
+              visible
+                .filter((layer) => isPopupHoverEnabled(layer.popup))
+                .map((layer) => [layer.id, layer]),
+            ),
+            photos: new Set(
+              visible
+                .filter((layer) => layer.metadata.sourceKind === PHOTO_SOURCE_KIND)
+                .map((layer) => layer.id),
+            ),
+          };
+        };
+        /** The features under `lngLat` of `layerIds`, topmost layer first. */
+        const pickTopmost = (layerIds: Iterable<string>, lngLat: [number, number]) => {
+          const order = new Map(
+            useAppStore.getState().layers.map((layer, index) => [layer.id, index]),
+          );
+          return [...new Set(layerIds)]
+            .sort((a, b) => (order.get(b) ?? -1) - (order.get(a) ?? -1))
+            .flatMap((layerId) => current.identifyFeatures(lngLat, layerId));
+        };
+        /**
+         * A popup in the DOM MapLibre's popups have, so the hover-tip and
+         * photo-popup styles apply unchanged, anchored above its point.
+         */
+        const popupShell = (className: string) => {
+          const root = document.createElement("div");
+          root.className = `maplibregl-popup maplibregl-popup-anchor-bottom ${className}`;
+          const tip = document.createElement("div");
+          tip.className = "maplibregl-popup-tip";
+          const content = document.createElement("div");
+          content.className = "maplibregl-popup-content";
+          root.append(tip, content);
+          return { root, content };
+        };
+        const drawHover = () => {
+          hoverFrame = 0;
+          const lngLat = hoverPending;
+          hoverPending = null;
+          if (!lngLat || cancelled) return;
+          // A selection gesture owns the pointer while it draws, and the
+          // Identify crosshair means a click is coming: neither wants a tip.
+          if (featureSelection.active.current || useAppStore.getState().identifyLayerId) {
+            removeHoverTip();
+            setPhotoCursor(false);
+            return;
+          }
+          const { hover, photos } = pointerTargets();
+          if (hover.size === 0 && photos.size === 0) {
+            removeHoverTip();
+            setPhotoCursor(false);
+            return;
+          }
+          const hits = pickTopmost([...hover.keys(), ...photos], lngLat);
+          setPhotoCursor(hits.some((hit) => photos.has(hit.layerId)));
+          const hit = hits.find((candidate) => hover.has(candidate.layerId));
+          const layer = hit && hover.get(hit.layerId);
+          const content =
+            hit && layer
+              ? createHoverTooltipElement(layer.name, hit.properties, {
+                  popup: layer.popup,
+                  fieldVisibility: layer.fieldVisibility,
+                  feature: hit.geometry
+                    ? { type: "Feature", properties: hit.properties, geometry: hit.geometry }
+                    : null,
+                  zoom: current.readView().zoom,
+                })
+              : null;
+          if (!content) {
+            removeHoverTip();
+            return;
+          }
+          // One tip, moved with the pointer; a new anchor is re-pinned.
+          removeHoverTip();
+          const shell = popupShell("geolibre-hover-tooltip");
+          shell.root.style.maxWidth = `min(${(resolvePopupMaxWidth(layer?.popup) ?? 256) + 24}px, calc(100% - 24px))`;
+          shell.content.append(content);
+          hoverDispose = anchorPopup(sdk, mapView, shell.root, lngLat);
+        };
+        const scheduleHover = (lngLat: [number, number] | null) => {
+          hoverPending = lngLat;
+          if (!lngLat) {
+            removeHoverTip();
+            setPhotoCursor(false);
+            return;
+          }
+          if (!hoverFrame) hoverFrame = requestAnimationFrame(drawHover);
+        };
+        /**
+         * Open the photo popup for a geotagged photo under a click made without
+         * the Identify tool, anchored on the photo point itself.
+         */
+        const showPhotoAt = (lngLat: [number, number]): boolean => {
+          const { photos } = pointerTargets();
+          if (photos.size === 0) return false;
+          const hit = pickTopmost(photos, lngLat).at(0);
+          if (!hit) return false;
+          const anchor =
+            hit.geometry?.type === "Point"
+              ? (hit.geometry.coordinates as [number, number])
+              : lngLat;
+          removePhotoPopup();
+          const shell = popupShell("geolibre-photo-popup-root");
+          const close = document.createElement("button");
+          close.type = "button";
+          close.className = "maplibregl-popup-close-button";
+          close.setAttribute("aria-label", closeLabelRef.current);
+          close.title = closeLabelRef.current;
+          close.textContent = "×";
+          close.onclick = removePhotoPopup;
+          shell.content.append(
+            close,
+            createPhotoPopupElement(hit.properties, identifyAllLabelsRef.current.photo),
+          );
+          photoDispose = anchorPopup(sdk, mapView, shell.root, anchor);
+          return true;
+        };
+        // A selection gesture takes the pointer and sets its own cursor, so drop
+        // the tip and forget the photo cursor without writing over the gesture's.
+        const handleSelectionBegin = () => {
+          removeHoverTip();
+          photoCursor = false;
+        };
+        if (!viewId) {
+          window.addEventListener(FEATURE_SELECTION_BEGIN_EVENT, handleSelectionBegin);
+          // Turning Identify on closes the photo popup, as on the other maps.
+          const stopIdentifyWatch = useAppStore.subscribe((state, previous) => {
+            if (state.identifyLayerId && !previous.identifyLayerId) removePhotoPopup();
+          });
+          handles.push({
+            remove: () => {
+              window.removeEventListener(FEATURE_SELECTION_BEGIN_EVENT, handleSelectionBegin);
+              stopIdentifyWatch();
+              if (hoverFrame) cancelAnimationFrame(hoverFrame);
+              removeHoverTip();
+              removePhotoPopup();
+            },
+          });
+        }
         handles.push(
           mapView.on("pointer-move", (event) => {
             if (viewId) return;
@@ -617,17 +795,27 @@ export function ArcgisCanvas({
             groundZ = typeof point?.z === "number" && Number.isFinite(point.z) ? point.z : null;
             useAppStore.getState().setPointerCoords(coords);
             pointerElevation?.update(coords);
+            scheduleHover(coords);
           }),
         );
         handles.push(
           mapView.on("pointer-leave", () => {
             pointerElevation?.update(null);
-            if (!viewId) useAppStore.getState().setPointerCoords(null);
+            if (viewId) return;
+            useAppStore.getState().setPointerCoords(null);
+            scheduleHover(null);
           }),
         );
         handles.push(
           mapView.on("click", (event) => {
             if (viewId || featureSelection.active.current) return;
+            if (!useAppStore.getState().identifyLayerId) {
+              // A click elsewhere closes the photo popup, as MapLibre's does.
+              removePhotoPopup();
+              const at = mapView.toMap({ x: event.x, y: event.y });
+              if (at) showPhotoAt([at.longitude, at.latitude]);
+              return;
+            }
             identify.click({ x: event.x, y: event.y });
           }),
         );
