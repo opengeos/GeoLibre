@@ -233,9 +233,7 @@ In a scene:
   advanced colour expression, or the extrusion colour. On a 2D `MapView` they
   stay flat fills.
 - Identify, selection highlighting, extent drawing and capture work as in 2D.
-  The project's zoom range becomes the scene's altitude range on a globe, and
-  a scene that settles outside the zoom range or the restricted bounds eases
-  back inside them.
+  The project's zoom range becomes the scene's altitude range on a globe.
 - **3D (Z values)** places vector coordinates at their absolute altitude, with
   the configured vertical scale and offset. Selection highlights use the same
   transformed coordinates. Source data stays unchanged.
@@ -334,9 +332,10 @@ experimental alignment and depth limitations described above.
   banner too.
 - The Print Layout atlas, in any view; an Esri vector tile service's own icon
   and label layers (its stored style keeps no sprite or glyphs).
-- Navigation limits differ slightly from MapLibre's: the SDK keeps the view's
-  centre (not the whole viewport) inside restricted bounds, rounds the
-  minimum zoom to one of its levels, and always wraps around the
+- Navigation limits differ slightly from MapLibre's: a view that settles past
+  the zoom range or the restricted bounds eases back inside them (on a flat
+  map the wheel also stops at the zoom limits), the bounds hold the view's
+  centre rather than the whole viewport, and the SDK always wraps around the
   antimeridian, so turning off world copies only clamps the views the app
   applies.
 - Measure and the geometry editor draw through the MapLibre/Mapbox style API;

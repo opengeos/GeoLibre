@@ -34,7 +34,15 @@ export function createArcgisScaleBar(
   // The control reads the container size and unprojects either side of the
   // centre on every `move`; the view's extent changes on every camera frame.
   const watch = sdk.reactiveUtils.watch(
-    () => [view.ready, view.extent, view.width, view.height],
+    // A rotated MapView keeps its extent, but the span across the centre
+    // changes with it.
+    () => [
+      view.ready,
+      view.extent,
+      view.width,
+      view.height,
+      view.type === "2d" ? view.rotation : view.camera?.heading,
+    ],
     () => {
       for (const listener of listeners) listener();
     },

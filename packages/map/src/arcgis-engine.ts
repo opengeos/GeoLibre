@@ -434,6 +434,16 @@ function scaleForZoom(view: ArcgisView, zoom: number): number {
 }
 
 /**
+ * Which zoom-level scheme the view is in, as the power of two its levels are
+ * offset by from the standard scheme; changes only when the basemap does.
+ */
+function levelScheme(view: ArcgisView): number {
+  return view.zoom >= 0 && view.scale > 0
+    ? Math.round(Math.log2(scaleForZoom(view, 0) / zoomToScale(0)))
+    : 0;
+}
+
+/**
  * A rejected `goTo` is worth a warning, not a render error: the SDK rejects
  * when a later move interrupts this one (routine) but also when a target is
  * malformed, and the second must not vanish silently.
@@ -661,13 +671,32 @@ export class ArcgisEngine implements MapEngine {
         if (CAMERA_KEYS.has((event as { key?: string }).key ?? "")) this.storyMove = false;
       }),
     );
+    this.handles.add(
+      sdk.reactiveUtils.watch(
+        () => [view.ready, view.width, view.height, levelScheme(view)],
+        () => this.applyNavigationLimits(),
+      ),
+    );
+    // The project's zoom range on a flat view (see `applyNavigationLimits`):
+    // a wheel step past a limit the view is at is dropped, and one that
+    // overshoots a limit is eased back once the view settles.
+    this.handles.add(
+      view.on("mouse-wheel", (event) => {
+        if (view.type !== "2d") return;
+        const deltaY = (event as { deltaY?: number }).deltaY ?? 0;
+        const zoom = viewZoom(view);
+        const { minZoom, maxZoom } = this.zoomRange();
+        if ((deltaY > 0 && zoom <= minZoom + 0.01) || (deltaY < 0 && zoom >= maxZoom - 0.01))
+          event.stopPropagation();
+      }),
+    );
     // Expressions baked at one zoom are re-evaluated when the integer zoom
     // changes, the way MapLibre would evaluate `["zoom"]` live.
     this.zoomWatch = sdk.reactiveUtils.when(
       () => view.stationary,
       () => {
         if (!this.view) return;
-        this.constrainScene();
+        this.constrainSettledView();
         const zoom = Math.round(viewZoom(this.view));
         if (zoom === this.compiledZoom) return;
         this.compiledZoom = zoom;
@@ -1093,47 +1122,56 @@ export class ArcgisEngine implements MapEngine {
   }
   applyMapPreferences(p: MapPreferences): void {
     this.preferences = p;
-    const view = this.view;
-    if (!view) return;
-    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    if (!this.view) return;
     this.setTerrainEnabled(p.terrainEnabled);
     (this.builtInControls.get("scale") as ArcgisScaleBar | undefined)?.setUnit(p.scaleUnit);
+    this.applyNavigationLimits();
+  }
+  /**
+   * Hold the view to the project's zoom range, pitch limit and bounds. Rerun
+   * when the view is ready, resized or given another zoom-level scheme (a
+   * basemap swap): the bounds' minimum zoom depends on the view's size, and a
+   * flat view's limits are scales in its own scheme.
+   */
+  private applyNavigationLimits(): void {
+    const p = this.preferences;
+    const view = this.view;
+    if (!p || !view) return;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const { minZoom, maxZoom } = this.zoomRange();
     if (view.type === "3d") {
       // A SceneView's constraints are about the camera: the pitch limit
       // becomes the tilt limit and, on a globe, the zoom range an altitude
       // range. The bounds (and a local scene's zoom) are held by
-      // `constrainScene` once the camera settles.
+      // `constrainSettledView` once the camera settles.
       if (view.constraints.tilt) view.constraints.tilt.max = clamp(p.maxPitch, 0, 85);
       if (view.viewingMode === "global")
         view.constraints.altitude = {
           min: this.altitudeForZoom(view, maxZoom),
           max: this.altitudeForZoom(view, minZoom),
         };
-      this.constrainScene();
+      this.constrainSettledView();
       return;
     }
-    const bounds = p.restrictBounds ? normalizeMapBounds(p.bounds) : null;
     view.constraints = {
-      // As scales: the bounds can raise the minimum to a fractional zoom,
-      // and the SDK reads `minZoom`/`maxZoom` as indexes into its levels.
-      minScale: scaleForZoom(view, minZoom),
-      maxScale: scaleForZoom(view, maxZoom),
+      // No SDK zoom limits: with zoom snapping off (MapLibre's continuous
+      // zoom), the SDK refuses a wheel step that would cross a limit instead
+      // of stopping at it, which can stop the wheel well short of the limit
+      // or at the current zoom. The zoom range is held by the wheel guard in
+      // the constructor and by `constrainSettledView`.
+      minZoom: -1,
+      maxZoom: -1,
+      minScale: 0,
+      maxScale: 0,
       rotationEnabled: true,
       snapToZoom: false,
-      // The SDK holds the centre inside the bounds (MapLibre keeps the whole
-      // viewport inside). It always wraps around the antimeridian, so
+      // The bounds are held by `constrainSettledView`, not the SDK's lateral
+      // `geometry`: with a zoom limit as well, the SDK refuses to zoom out by
+      // wheel at all. The SDK always wraps around the antimeridian, so
       // `renderWorldCopies` is only honoured for the views the app applies.
-      geometry: bounds
-        ? new this.sdk.Extent({
-            xmin: bounds[0],
-            ymin: bounds[1],
-            xmax: bounds[2],
-            ymax: bounds[3],
-            spatialReference: { wkid: 4326 },
-          })
-        : null,
+      geometry: null,
     };
+    this.constrainSettledView();
   }
   /**
    * The project's zoom range in MapLibre levels. With restricted bounds the
@@ -1163,12 +1201,14 @@ export class ArcgisEngine implements MapEngine {
     return (metresPerPixel * diagonal) / (2 * Math.tan(fov / 2));
   }
   /**
-   * Bring a settled scene back inside the project's zoom range and bounds,
-   * which the SDK's scene constraints cannot hold (the altitude limit only
-   * approximates the zoom range, and nothing limits the extent).
+   * Bring a settled view back inside the project's zoom range and bounds,
+   * which the SDK's constraints cannot hold: a scene's altitude limit only
+   * approximates the zoom range, and neither view limits the extent (see
+   * `applyNavigationLimits`). Like the SDK's own lateral limit, it holds the
+   * centre inside the bounds, where MapLibre keeps the whole viewport.
    */
-  private constrainScene(): void {
-    const view = this.sceneView();
+  private constrainSettledView(): void {
+    const view = this.view;
     const p = this.preferences;
     if (!view || !p || !view.ready || !view.stationary || this.storyMove) return;
     const { minZoom, maxZoom } = this.zoomRange();
@@ -1184,7 +1224,10 @@ export class ArcgisEngine implements MapEngine {
       : [lng, lat];
     // A little slack, so the SDK's own rounding never starts a correction.
     const targetZoom = zoom < minZoom - 0.05 ? minZoom : zoom > maxZoom + 0.05 ? maxZoom : null;
-    if (targetZoom === null && center[0] === lng && center[1] === lat) return;
+    // The SDK's projection round trip can leave a settled centre a hair past
+    // the edge it was moved to; that must not start another correction.
+    const moved = Math.abs(center[0] - lng) > 1e-6 || Math.abs(center[1] - lat) > 1e-6;
+    if (targetZoom === null && !moved) return;
     void view
       .goTo(
         { center, ...(targetZoom === null ? {} : this.zoomTarget(targetZoom)) },

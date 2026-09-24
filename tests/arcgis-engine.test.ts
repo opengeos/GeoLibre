@@ -23,7 +23,7 @@ import type {
   ArcgisSceneSdk,
   ArcgisSdk,
 } from "../packages/map/src/arcgis-sdk";
-import { ARCGIS_ID_FIELD, scaleToZoom, zoomToScale } from "../packages/map/src/arcgis-layers";
+import { ARCGIS_ID_FIELD, zoomToScale } from "../packages/map/src/arcgis-layers";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 // The engine never loads the SDK here: `arcgis-sdk.ts` only describes its
@@ -609,25 +609,41 @@ describe("ArcgisEngine camera conventions", () => {
     assert.deepEqual(call.target.center, [180, 85]);
     assert.equal(call.target.zoom, 10);
   });
-  it("keeps a flat view inside restricted bounds", () => {
-    const { engine, rawView } = makeEngine();
-    engine.applyMapPreferences({ ...PREFERENCES });
-    assert.equal(rawView.constraints.geometry, null);
+  it("keeps a flat view inside restricted bounds and the zoom range", () => {
+    const { engine, rawView, goTo, fireViewEvent } = makeEngine();
+    Object.assign(rawView, { zoom: 7, center: { longitude: 10, latitude: 20 } });
+    goTo.length = 0;
     // 10 degrees by 10 degrees must fill the 800 x 600 view: zoom out no
     // further than the level at which the box's height spans 600 pixels.
     engine.applyMapPreferences({ ...PREFERENCES, restrictBounds: true, bounds: [0, 0, 10, 10] });
-    const bounds = rawView.constraints.geometry as { xmin: number; ymax: number };
-    assert.deepEqual([bounds.xmin, bounds.ymax], [0, 10]);
-    // As a scale: the SDK reads a fractional minZoom as a level index.
-    const minZoom = scaleToZoom(rawView.constraints.minScale as number);
-    assert.equal(rawView.constraints.minZoom, undefined);
+    // No SDK lateral or zoom limit (with continuous zoom the SDK refuses the
+    // wheel steps that would cross one): the settled view eases back inside.
+    assert.equal(rawView.constraints.geometry, null);
+    assert.equal(rawView.constraints.minZoom, -1);
+    assert.equal(rawView.constraints.maxScale, 0);
+    const call = goTo.at(-1) as { target: { center: [number, number] } };
+    assert.deepEqual(call.target.center, [10, 10]);
+    // At the minimum, a wheel step out is dropped; one in is not.
+    rawView.zoom = 6.5;
+    const wheel = (deltaY: number) => {
+      let stopped = false;
+      fireViewEvent("mouse-wheel", { deltaY, stopPropagation: () => (stopped = true) });
+      return stopped;
+    };
+    assert.equal(wheel(100), false);
+    goTo.length = 0;
+    rawView.zoom = 3;
+    engine.applyMapPreferences({ ...PREFERENCES, restrictBounds: true, bounds: [0, 0, 10, 10] });
+    const minZoom = (goTo.at(-1) as { target: { zoom: number } }).target.zoom;
     assert.ok(minZoom > 5 && minZoom < 6, String(minZoom));
-    // A 512 px basemap numbers its levels one below the 256 px scheme: the
-    // limits follow the view's own zoom-to-scale ratio.
-    rawView.scale = zoomToScale(rawView.zoom) / 2;
-    engine.applyMapPreferences({ ...PREFERENCES, minZoom: 3, maxZoom: 9 });
-    assert.equal(rawView.constraints.minScale, zoomToScale(3) / 2);
-    assert.equal(rawView.constraints.maxScale, zoomToScale(9) / 2);
+    rawView.zoom = minZoom;
+    assert.equal(wheel(100), true);
+    assert.equal(wheel(-100), false);
+    // And at the maximum, a step in is dropped.
+    engine.applyMapPreferences({ ...PREFERENCES, maxZoom: 12 });
+    rawView.zoom = 12;
+    assert.equal(wheel(-100), true);
+    assert.equal(wheel(100), false);
   });
   it("holds a scene inside the zoom range and bounds once it settles", () => {
     const { engine, rawView, goTo, fireWatchers } = makeSceneEngine();
@@ -647,11 +663,23 @@ describe("ArcgisEngine camera conventions", () => {
     assert.deepEqual(call.target.center, [10, 10]);
     // Zoom 4, raised until the 20 degree box fills the view.
     assert.ok(call.target.zoom > 4.5 && call.target.zoom < 5, String(call.target.zoom));
-    // Inside the range and bounds, nothing moves.
-    Object.assign(rawView, { zoom: 6, center: { longitude: 1, latitude: 2 } });
+    // Inside the range and bounds, nothing moves, nor does a centre a hair
+    // past the edge the correction moved it to.
+    Object.assign(rawView, { zoom: 6, center: { longitude: 10.0000001, latitude: 2 } });
     goTo.length = 0;
     fireWatchers();
     assert.equal(goTo.length, 0);
+  });
+  it("reapplies the bounds' minimum zoom once the view has its size", () => {
+    const { engine, rawView, goTo, fireWatchers } = makeEngine();
+    Object.assign(rawView, { width: 0, height: 0, zoom: 3, center: { longitude: 5, latitude: 5 } });
+    goTo.length = 0;
+    engine.applyMapPreferences({ ...PREFERENCES, restrictBounds: true, bounds: [0, 0, 10, 10] });
+    // Unsized, the bounds cannot raise the minimum.
+    assert.equal(goTo.length, 0);
+    Object.assign(rawView, { width: 800, height: 600 });
+    fireWatchers();
+    assert.ok((goTo.at(-1) as { target: { zoom: number } }).target.zoom > 5);
   });
   it("converts GeoJSON geometry to SDK geometry JSON", () => {
     assert.deepEqual(geojsonToArcgisGeometry({ type: "Point", coordinates: [1, 2] }), {
