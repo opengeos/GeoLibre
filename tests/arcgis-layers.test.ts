@@ -531,6 +531,33 @@ describe("ArcGIS style companions", () => {
     );
   });
 
+  it("hides generated centroids whose proportional radius is 0", () => {
+    const [, points] = parts(
+      polygons({
+        geometryGenerator: "centroid",
+        geometryGeneratorSizeProperty: "v",
+        geometryGeneratorSizeMinValue: 1,
+        geometryGeneratorSizeMaxValue: 2,
+        geometryGeneratorSizeMinRadius: 0,
+        geometryGeneratorSizeMaxRadius: 8,
+      }),
+    );
+    // Feature `a` (v = 1) maps to 0 px and is left out, as on the 2D map.
+    assert.equal(points.features!.features.length, 1);
+  });
+
+  it("reuses the derived geometry of a filtered layer across compiles", () => {
+    const layer: GeoLibreLayer = {
+      ...polygons({ invertedFillEnabled: true }),
+      embedFilter: ["==", ["get", "v"], 1],
+    };
+    const mask = () => parts(layer)[0].features!.features[0].geometry;
+    const first = mask();
+    // One hole: the filter dropped feature `b`.
+    assert.equal((first as { coordinates: unknown[] }).coordinates.length, 2);
+    assert.equal(mask(), first);
+  });
+
   it("decorates lines and outlines with a CIM marker line on a flat map", () => {
     const layer = geojsonLayer({
       ...mixed,
@@ -583,6 +610,30 @@ describe("ArcGIS style companions", () => {
       ["x\ny"],
     );
     assert.equal(labels.labelingInfo?.length, 1);
+  });
+
+  it("bins a continuous label colour ramp instead of a class per feature", () => {
+    const features = Array.from({ length: 200 }, (_, i) => ({
+      type: "Feature" as const,
+      id: `f${i}`,
+      properties: { name: `f${i}`, v: i },
+      geometry: { type: "Point" as const, coordinates: [i / 10, 0] },
+    }));
+    const layer = geojsonLayer({
+      geojson: { type: "FeatureCollection", features },
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        labels: {
+          ...DEFAULT_LAYER_STYLE.labels,
+          enabled: true,
+          field: "name",
+          colorExpression:
+            '["interpolate", ["linear"], ["get", "v"], 0, "#000000", 199, "#ffffff"]',
+        },
+      },
+    });
+    const classes = parts(layer)[0].labelingInfo ?? [];
+    assert.ok(classes.length > 1 && classes.length <= 16, String(classes.length));
   });
 
   it("groups data-defined label overrides into label classes", () => {

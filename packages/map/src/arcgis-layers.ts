@@ -939,7 +939,8 @@ function compileLabelOverrides(
     zoomDependent: Object.values(readers).some((reader) => reader?.zoomDependent),
     read(feature, zoom) {
       // Half-pixel sizes and 5 % opacity steps: a continuous expression
-      // would otherwise make a label class per feature.
+      // would otherwise make a label class per feature (colours are binned
+      // by `assignLabelClasses` once there are too many).
       const textSize = readers.size
         ? Math.max(1, Math.round(finite(readers.size.read(feature, zoom), baseSize) * 2) / 2)
         : baseSize;
@@ -1210,10 +1211,7 @@ function compileGeoJson(
     }
   });
   const labelClassList = overrides ? assignLabelClasses(overridden) : undefined;
-  const source: FeatureCollection =
-    kept.length === geojson.features.length
-      ? geojson
-      : { type: "FeatureCollection", features: kept };
+  const source = derivedSource(geojson, kept);
   const maskPart =
     style.invertedFillEnabled && !extrusion && parts.has("polygon")
       ? invertedMaskPart(source, style, resolver, zoom, scene)
@@ -1389,14 +1387,30 @@ function compileGeoJson(
   };
 }
 
+/** Label classes past which the overrides' colours and sizes are binned. */
+const MAX_LABEL_CLASSES = 64;
+
 /**
  * Group features by their resolved label overrides into label classes (the
  * SDK's label symbols are not data-driven), writing each feature's class into
  * {@link ARCGIS_LABEL_CLASS_FIELD}.
  */
 function assignLabelClasses(overridden: Map<Feature, LabelOverrideValues>): LabelClassStyle[] {
+  // Exact colours while they are few (categories); a continuous ramp would
+  // make a class per feature, so past the cap they are binned instead.
+  const exact = new Set([...overridden.values()].map((v) => `${v.size}|${v.color.join(",")}`));
+  const bin = exact.size > MAX_LABEL_CLASSES;
   const classes = new Map<string, LabelClassStyle>();
-  for (const [feature, value] of overridden) {
+  for (const [feature, raw] of overridden) {
+    const value = bin
+      ? {
+          size: Math.round(raw.size),
+          color: [
+            ...raw.color.slice(0, 3).map((channel) => Math.min(255, Math.round(channel / 32) * 32)),
+            raw.color[3],
+          ] as [number, number, number, number],
+        }
+      : raw;
     const key = `${value.size}|${value.color.join(",")}`;
     let entry = classes.get(key);
     if (!entry) {
@@ -1406,6 +1420,31 @@ function assignLabelClasses(overridden: Map<Feature, LabelOverrideValues>): Labe
     feature.properties![ARCGIS_LABEL_CLASS_FIELD] = entry.id;
   }
   return [...classes.values()];
+}
+
+/**
+ * The filtered features the inverted fill and geometry generator derive from,
+ * cached by the input collection and the features kept, so the memoized
+ * derivations (`derived-geometry.ts`, keyed by collection identity) still hit
+ * when a filter or a text marker drops features.
+ */
+const derivedSources = new WeakMap<
+  FeatureCollection,
+  { kept: Feature[]; source: FeatureCollection }
+>();
+
+function derivedSource(geojson: FeatureCollection, kept: Feature[]): FeatureCollection {
+  if (kept.length === geojson.features.length) return geojson;
+  const cached = derivedSources.get(geojson);
+  if (
+    cached &&
+    cached.kept.length === kept.length &&
+    cached.kept.every((feature, index) => feature === kept[index])
+  )
+    return cached.source;
+  const source: FeatureCollection = { type: "FeatureCollection", features: kept };
+  derivedSources.set(geojson, { kept, source });
+  return source;
 }
 
 /** Whether every feature with a geometry is a point (text markers included). */
@@ -1498,7 +1537,9 @@ function generatedGeometryParts(
       polygons.push({ ...feature, properties: { [ARCGIS_SYMBOL_FIELD]: "s0" } });
     else if (kind === "point") {
       const value = Number(radius.read(feature, zoom));
-      const r = Math.round(Math.max(1, Number.isFinite(value) ? value : 5) * 2) / 2;
+      const r = Math.round(Math.max(0, Number.isFinite(value) ? value : 5) * 2) / 2;
+      // A 0 px radius hides the symbol on purpose (`generatorCircleRadiusValue`).
+      if (r === 0) continue;
       let id = sizes.get(r);
       if (id === undefined) {
         id = `s${sizes.size}`;
