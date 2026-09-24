@@ -171,7 +171,7 @@ Full documentation, including the User Guide and Tutorials, is published at
   - [Plugin API](docs/plugin-api.md)
   - [UI Profiles](docs/ui-profiles.md)
   - [Internationalization](docs/i18n.md)
-  - [Python package (Jupyter)](docs/python.md) — also supports `from geolibre import DashMap` for Dash (install `geolibre[dash]`)
+  - [Python package (Jupyter)](docs/python.md)
   - [R package (RStudio, Quarto, and Shiny)](docs/r.md)
   - [Notebook Panel](docs/notebook.md)
   - [Roadmap](docs/roadmap.md)
