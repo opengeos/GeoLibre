@@ -1007,9 +1007,16 @@ function onKeyChanged(provider: GodsEyeViewKeyProvider): void {
     if (!descriptor.usesKeys?.includes(provider)) continue;
     feeds[feed].failed = false;
     feeds[feed].retryAfter = 0;
+    // Start over even when the key is unchanged: saving it again is how the
+    // user retries after a rejection that was really a network failure.
+    descriptor.dispose?.();
     if (feeds[feed].enabled) void refreshFeed(feed);
   }
-  renderKeysSection();
+  // Only this provider's row: rebuilding the section would discard unsaved
+  // text in the other key field.
+  panelFrame?.keys
+    .querySelector(`[data-key-provider="${provider}"]`)
+    ?.replaceWith(keyRow(provider));
   renderPanel();
 }
 

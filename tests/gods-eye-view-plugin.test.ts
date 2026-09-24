@@ -1072,6 +1072,26 @@ describe("God's Eye View keyed feeds", () => {
       assert.equal(sockets.length, 1);
       assert.equal(sockets[0].url, "wss://stream.aisstream.io/v0/stream");
       assert.match(row()?.textContent ?? "", /Connecting to AISStream/);
+      // Saving one key leaves unsaved text in the other field alone.
+      const tomtomInput = globe.panel.querySelector<HTMLInputElement>("#gods-eye-view-key-tomtom");
+      assert.ok(tomtomInput);
+      tomtomInput.value = "half-typed";
+      const saveAgain = [
+        ...globe.panel.querySelectorAll<HTMLButtonElement>(
+          '[data-key-provider="aisstream"] button',
+        ),
+      ].find((button) => button.textContent === "Save");
+      saveAgain?.dispatchEvent(new (Event())("click"));
+      for (let i = 0; i < 4; i++) await flush();
+      assert.equal(
+        globe.panel.querySelector<HTMLInputElement>("#gods-eye-view-key-tomtom")?.value,
+        "half-typed",
+      );
+      // Saving the same key again starts a fresh connection, the retry path
+      // after a rejection that was really a network failure.
+      assert.equal(sockets.length, 2);
+      assert.equal(sockets[0].readyState, 3);
+      sockets.shift();
       const keyInput = () =>
         globe.panel.querySelector<HTMLInputElement>("#gods-eye-view-key-aisstream");
       const savedInput = keyInput();
