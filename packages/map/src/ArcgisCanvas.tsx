@@ -351,13 +351,23 @@ export function ArcgisCanvas({
           pointerDown = false;
           noteInput();
         };
+        // A press released outside the window (or cancelled by the browser)
+        // never delivers a pointerup; without this the press would stay "down"
+        // and every later programmatic move would count as the user's.
+        const clearPointer = () => {
+          pointerDown = false;
+        };
         const inputTarget = mapView.container;
         inputTarget?.addEventListener("pointerdown", notePointerDown, true);
         inputTarget?.addEventListener("wheel", noteInput, { capture: true, passive: true });
         inputTarget?.addEventListener("keydown", noteInput, true);
         window.addEventListener("pointerup", notePointerUp, true);
+        window.addEventListener("pointercancel", clearPointer, true);
+        window.addEventListener("blur", clearPointer);
         handles.push({
           remove: () => {
+            window.removeEventListener("pointercancel", clearPointer, true);
+            window.removeEventListener("blur", clearPointer);
             inputTarget?.removeEventListener("pointerdown", notePointerDown, true);
             inputTarget?.removeEventListener("wheel", noteInput, true);
             inputTarget?.removeEventListener("keydown", noteInput, true);

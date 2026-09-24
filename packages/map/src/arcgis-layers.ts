@@ -1156,11 +1156,12 @@ function templateTileSource(
   const finite = (value: unknown): value is number =>
     typeof value === "number" && Number.isFinite(value);
   const size = finite(tileSize) && tileSize > 0 ? tileSize : 256;
+  // MapLibre's own defaults (0 and 22) change nothing the plain path draws.
   if (
     scheme !== "tms" &&
     size === 256 &&
-    !finite(minzoom) &&
-    !finite(maxzoom) &&
+    !(finite(minzoom) && minzoom > 0) &&
+    !(finite(maxzoom) && maxzoom < 22) &&
     templates.length === 1 &&
     !needsTemplateTileLayer(templates[0])
   )

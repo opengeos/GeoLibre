@@ -154,6 +154,11 @@ describe("compileArcgisLayer template tiles", () => {
   it("keeps the plain WebTileLayer path for a simple XYZ template", () => {
     const plan = compileArcgisLayer(rasterLayer("xyz", { tiles: ["https://t/{z}/{x}/{y}.png"] }));
     assert.equal(plan.kind, "web-tile");
+    // MapLibre's default zoom range, spelled out, is still the plain path.
+    const defaults = compileArcgisLayer(
+      rasterLayer("xyz", { tiles: ["https://t/{z}/{x}/{y}.png"], minzoom: 0, maxzoom: 22 }),
+    );
+    assert.equal(defaults.kind, "web-tile");
   });
   it("still rejects placeholders MapLibre has no form for", () => {
     assert.throws(() =>
