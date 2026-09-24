@@ -310,17 +310,20 @@ export function paintAtlasMask(
   // Even-odd: the feature's rings cut it out, and its holes stay masked.
   for (const polygon of polygons)
     for (const ring of polygon as Position[][]) {
-      ring.forEach((position, index) => {
+      // Each ring starts its own subpath at its first vertex that projects.
+      let started = false;
+      for (const position of ring) {
         let point: { x: number; y: number };
         try {
           point = project([position[0], position[1]]);
         } catch {
-          return;
+          continue;
         }
-        if (index === 0) context.moveTo(point.x * scale, point.y * scale);
-        else context.lineTo(point.x * scale, point.y * scale);
-      });
-      context.closePath();
+        if (started) context.lineTo(point.x * scale, point.y * scale);
+        else context.moveTo(point.x * scale, point.y * scale);
+        started = true;
+      }
+      if (started) context.closePath();
     }
   context.fillStyle = "rgba(255, 255, 255, 0.7)";
   context.fill("evenodd");

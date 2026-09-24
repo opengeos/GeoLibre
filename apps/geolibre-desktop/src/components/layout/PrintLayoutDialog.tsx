@@ -1559,7 +1559,9 @@ export function PrintLayoutDialog({
         // MapLibre lands on the scale in one correction; another engine's
         // camera can round the zoom it is given (the ArcGIS SDK does), so the
         // scale is measured again and corrected up to twice more.
-        for (let attempt = 0; attempt < 3; attempt++) {
+        // Up to three corrections; the last pass only measures the capture
+        // that ships, so the notice reflects it.
+        for (let attempt = 0; attempt < 4; attempt++) {
           const ratio = measure();
           if (!(target > 0 && ratio > 0)) break;
           if (attempt > 0 && Math.abs(ratio / target - 1) < 0.005) {
@@ -1567,6 +1569,7 @@ export function PrintLayoutDialog({
             setAtlasScaleNotice(null);
             break;
           }
+          if (attempt === 3) break;
           const zoom = camera.zoom() + Math.log2(ratio / target);
           const clamped = Math.max(camera.minZoom(), Math.min(camera.maxZoom(), zoom));
           // A clamp means this page renders at the closest reachable scale,

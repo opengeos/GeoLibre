@@ -173,8 +173,8 @@ override is set aside and the shared basemap is translated instead.
   north up, with the fit MapLibre's `fitBounds` computes, and waits for the
   view to finish drawing before the capture. The mask outside the current
   feature is painted onto the capture rather than drawn on the live map, and
-  a fixed scale is corrected until it lands within 0.5 % of the requested
-  one, since the SDK rounds the zoom it is given.
+  a fixed scale is corrected up to three times, aiming for 0.5 % of the
+  requested one, since the SDK rounds the zoom it is given.
 - **Plugins → Layer Control** toggles the native ArcGIS layer list, enabled by
   default on the primary map like the shared plugin. Its visibility
   toggles update the project and the sidebar, and sidebar changes update the

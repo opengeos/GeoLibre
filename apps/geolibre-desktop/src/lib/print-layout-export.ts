@@ -136,7 +136,7 @@ export async function captureEngineMapImage(
     if (!context) throw new Error("Could not create the print canvas");
     context.drawImage(bitmap, 0, 0);
     const cssWidth = surface.getCanvas().clientWidth || surface.getContainer().clientWidth;
-    decorate?.(context, cssWidth > 0 ? canvas.width / cssWidth : 1);
+    decorate?.(context, cssWidth > 0 ? canvas.width / cssWidth : window.devicePixelRatio || 1);
     return captureMapImage(surface, clip, canvas);
   } finally {
     bitmap.close();
