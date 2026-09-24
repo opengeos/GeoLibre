@@ -41,6 +41,13 @@ use `[vector]` to keep an existing vector-only environment as light as before.
 The optional `[all]` extra is pip-only. If you installed via conda, add it with
 `pip install "geolibre[all]"` inside the same environment.
 
+To embed the map in a [Dash](https://dash.plotly.com/) app, install the `dash`
+extra and use `from geolibre import DashMap`:
+
+```bash
+pip install "geolibre[dash]"
+```
+
 ## Quickstart
 
 ```python
