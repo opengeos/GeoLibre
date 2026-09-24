@@ -213,7 +213,7 @@ export function GeoreferencerDialog({
   );
 
   const handleLinkOnMap = useCallback(() => {
-    if (!pendingPixel || !mapControllerRef.current) return;
+    if (!pendingPixel || !mapControllerRef.current?.getRenderSurface()) return;
     linkPixelRef.current = pendingPixel;
     setLinking(true);
     onOpenChange(false);
@@ -223,9 +223,12 @@ export function GeoreferencerDialog({
     if (!linking) return;
     // Through the engine, so the link works on every renderer (the MapLibre
     // map alone left it dead elsewhere).
+    // An engine without a render surface (not ready yet) cannot report the
+    // click; disarm rather than wait forever (as the comment tool does).
     const engine = mapControllerRef.current;
-    if (!engine) {
+    if (!engine?.getRenderSurface()) {
       setLinking(false);
+      onOpenChange(true);
       return;
     }
     releaseBodyPointerEvents();

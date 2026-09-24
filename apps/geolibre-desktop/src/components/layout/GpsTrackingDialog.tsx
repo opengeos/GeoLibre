@@ -137,7 +137,6 @@ function storeSettings(settings: GpsTrackingSettings): void {
   }
 }
 
-/** Position marker: a blue dot with a heading arrow, rotated per fix. */
 /** The track preview's line coordinates, for the overlay that draws them. */
 function neutralTrackLines(segments: GpsTrackSegments): Position[][] {
   return trackPreview(segments).features.flatMap((feature) =>
@@ -145,6 +144,7 @@ function neutralTrackLines(segments: GpsTrackSegments): Position[][] {
   );
 }
 
+/** Position marker: a blue dot with a heading arrow, rotated per fix. */
 function createMarkerElement(): { root: HTMLDivElement; arrow: HTMLDivElement } {
   const root = document.createElement("div");
   root.style.width = "22px";
@@ -309,6 +309,9 @@ export function GpsTrackingDialog({
   const neutralMarkerRef = useRef<AnnotationMarker | null>(null);
   const neutralMarkerRoot = useRef<HTMLDivElement | null>(null);
   const neutralOverlayRef = useRef<GpsOverlay | null>(null);
+  // The engine the overlay and marker were built on; a renderer swap during a
+  // session rebuilds them on the new one.
+  const neutralEngineRef = useRef<MapEngine | null>(null);
   // Logged track fixes as pause/resume segments; a ref so the high-frequency
   // watch callback appends in place without re-creating itself, with
   // `fixCount` mirroring the total for renders. Always holds >= 1 segment.
@@ -437,6 +440,15 @@ export function GpsTrackingDialog({
       } else {
         const engine = mapControllerRef.current;
         if (engine?.getRenderSurface()) {
+          if (neutralEngineRef.current !== engine) {
+            neutralMarkerRef.current?.remove();
+            neutralMarkerRef.current = null;
+            neutralOverlayRef.current?.remove();
+            neutralOverlayRef.current = null;
+            neutralEngineRef.current = engine;
+            // The rebuilt overlay starts from the whole track, not this fix.
+            logged = true;
+          }
           neutralOverlayRef.current ??= createGpsOverlay(engine, {
             accuracy: GPS_COLOR,
             track: TRACK_COLOR,
@@ -549,8 +561,13 @@ export function GpsTrackingDialog({
       const container = mapControllerRef.current?.getRenderSurface()?.getContainer();
       if (container) {
         let start: { x: number; y: number } | null = null;
+        // Only a press on the map itself, not on a control inside the same
+        // container (a zoom widget, a plugin panel's slider).
         const onDown = (event: PointerEvent) => {
-          start = { x: event.clientX, y: event.clientY };
+          start =
+            event.target instanceof HTMLCanvasElement
+              ? { x: event.clientX, y: event.clientY }
+              : null;
         };
         const onMove = (event: PointerEvent) => {
           if (!start || !event.buttons) return;
@@ -591,6 +608,7 @@ export function GpsTrackingDialog({
     neutralMarkerRoot.current = null;
     neutralOverlayRef.current?.remove();
     neutralOverlayRef.current = null;
+    neutralEngineRef.current = null;
     const map = getMap();
     if (map) removeGpsSources(map);
   }, [getMap]);

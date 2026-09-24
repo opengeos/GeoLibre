@@ -42,23 +42,41 @@ export function createGpsOverlay(
   let track: Position[][] = [];
   let removed = false;
 
-  /** Screen points for a ring or line, or null when any vertex cannot project. */
-  const project = (coordinates: Position[]) => {
-    const points: string[] = [];
+  /**
+   * Screen points for a ring or line, as runs of consecutive vertices that
+   * project: a vertex a globe cannot project (its far side) breaks the line
+   * there rather than dropping all of it.
+   */
+  const projectRuns = (coordinates: Position[]) => {
+    const runs: string[][] = [[]];
     for (const [lng, lat] of coordinates) {
       try {
         const point = surface.project([lng, lat]);
-        points.push(`${point.x},${point.y}`);
+        runs[runs.length - 1].push(`${point.x},${point.y}`);
       } catch {
-        return null;
+        if (runs[runs.length - 1].length) runs.push([]);
       }
     }
-    return points.join(" ");
+    return runs.filter((run) => run.length);
   };
+  let frame: number | null = null;
+  // Camera moves fire every animation frame; redraw at most once per frame.
   const update = () => {
+    if (removed || frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      draw();
+    });
+  };
+  const draw = () => {
     if (removed) return;
     svg.replaceChildren();
-    const ring = accuracy && project(accuracy);
+    // A ring is drawn only whole: a partial circle would read as a wedge.
+    const ringRuns = accuracy ? projectRuns(accuracy) : [];
+    const ring =
+      accuracy && ringRuns.length === 1 && ringRuns[0].length === accuracy.length
+        ? ringRuns[0].join(" ")
+        : null;
     if (ring) {
       const polygon = document.createElementNS(SVG_NS, "polygon");
       polygon.setAttribute("points", ring);
@@ -68,11 +86,10 @@ export function createGpsOverlay(
       polygon.setAttribute("stroke-opacity", "0.6");
       svg.appendChild(polygon);
     }
-    for (const line of track) {
-      const points = line.length >= 2 ? project(line) : null;
-      if (!points) continue;
+    for (const run of track.flatMap(projectRuns)) {
+      if (run.length < 2) continue;
       const polyline = document.createElementNS(SVG_NS, "polyline");
-      polyline.setAttribute("points", points);
+      polyline.setAttribute("points", run.join(" "));
       polyline.setAttribute("fill", "none");
       polyline.setAttribute("stroke", colors.track);
       polyline.setAttribute("stroke-width", "3");
@@ -98,6 +115,7 @@ export function createGpsOverlay(
       removed = true;
       stopMoving();
       resize.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
       svg.remove();
     },
   };
