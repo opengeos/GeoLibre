@@ -948,7 +948,9 @@ function compileLabelOverrides(
       const rgba = cssToArcgisColor(colorValue == null ? labels.color : String(colorValue));
       if (readers.opacity) {
         // The native layer multiplies its labels by the layer opacity, which
-        // the override replaces.
+        // the override replaces. It can only be divided out, so a label cannot
+        // be more opaque than its layer (an override above the layer opacity
+        // reaches the layer's).
         const target = Math.min(1, Math.max(0, finite(readers.opacity.read(feature, zoom), 1)));
         const alpha = layerOpacity > 0 ? Math.min(1, target / layerOpacity) : 1;
         rgba[3] = Math.round(rgba[3] * alpha * 20) / 20;
@@ -1396,22 +1398,34 @@ const MAX_LABEL_CLASSES = 64;
  * {@link ARCGIS_LABEL_CLASS_FIELD}.
  */
 function assignLabelClasses(overridden: Map<Feature, LabelOverrideValues>): LabelClassStyle[] {
-  // Exact colours while they are few (categories); a continuous ramp would
-  // make a class per feature, so past the cap they are binned instead.
-  const exact = new Set([...overridden.values()].map((v) => `${v.size}|${v.color.join(",")}`));
-  const bin = exact.size > MAX_LABEL_CLASSES;
+  // Exact styles while they are few (categories). A continuous ramp would
+  // make a class per feature, so past the cap the colour channels, alpha and
+  // size are binned, ever more coarsely until the classes fit.
+  const values = [...overridden.values()];
+  const binned = (value: LabelOverrideValues, step: number): LabelOverrideValues => {
+    if (step === 0) return value;
+    const channel = (c: number) => Math.min(255, Math.round(c / step) * step);
+    return {
+      ...value,
+      size: Math.round(value.size / (step / 32)) * (step / 32),
+      color: [
+        channel(value.color[0]),
+        channel(value.color[1]),
+        channel(value.color[2]),
+        Math.round(value.color[3] * (256 / step)) / (256 / step),
+      ],
+    };
+  };
+  const keyOf = (value: LabelOverrideValues) => `${value.size}|${value.color.join(",")}`;
+  let step = 0;
+  for (const next of [0, 32, 64, 128, 256]) {
+    step = next;
+    if (new Set(values.map((value) => keyOf(binned(value, step)))).size <= MAX_LABEL_CLASSES) break;
+  }
   const classes = new Map<string, LabelClassStyle>();
   for (const [feature, raw] of overridden) {
-    const value = bin
-      ? {
-          size: Math.round(raw.size),
-          color: [
-            ...raw.color.slice(0, 3).map((channel) => Math.min(255, Math.round(channel / 32) * 32)),
-            raw.color[3],
-          ] as [number, number, number, number],
-        }
-      : raw;
-    const key = `${value.size}|${value.color.join(",")}`;
+    const value = binned(raw, step);
+    const key = keyOf(value);
     let entry = classes.get(key);
     if (!entry) {
       entry = { id: `l${classes.size}`, size: value.size, color: value.color };

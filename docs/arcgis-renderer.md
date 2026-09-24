@@ -92,7 +92,10 @@ override is set aside and the shared basemap is translated instead.
   label-only layer. The label size, colour, opacity and visibility
   expressions are evaluated per feature and grouped into one label class per
   resolved size and colour, since the SDK's label symbols are not
-  data-driven. Companion layers are not identified or selected.
+  data-driven (a continuous ramp is binned to at most 64 classes). The layer's
+  opacity also applies to its labels, so an opacity expression cannot make a
+  label more opaque than its layer. Companion layers are not identified or
+  selected.
 - HTTP(S) raster tiles (XYZ, WMTS tile templates), WMS (the GetMap template is
   split into the SDK's `WMSLayer` description), and vector tiles with named
   source layers (drawn by the SDK's `VectorTileLayer` from the same style

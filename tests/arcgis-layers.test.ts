@@ -634,6 +634,19 @@ describe("ArcGIS style companions", () => {
     });
     const classes = parts(layer)[0].labelingInfo ?? [];
     assert.ok(classes.length > 1 && classes.length <= 16, String(classes.length));
+    // An alpha ramp is binned too.
+    const faded = parts({
+      ...layer,
+      style: {
+        ...layer.style,
+        labels: {
+          ...layer.style.labels,
+          colorExpression:
+            '["interpolate", ["linear"], ["get", "v"], 0, "rgba(0,0,0,0)", 199, "#000000"]',
+        },
+      },
+    })[0].labelingInfo;
+    assert.ok(faded && faded.length > 1 && faded.length <= 64, String(faded?.length));
   });
 
   it("groups data-defined label overrides into label classes", () => {
