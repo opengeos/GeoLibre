@@ -775,9 +775,12 @@ export function ArcgisCanvas({
         };
         if (!viewId) {
           window.addEventListener(FEATURE_SELECTION_BEGIN_EVENT, handleSelectionBegin);
-          // Turning Identify on closes the photo popup, as on the other maps.
+          // Turning Identify on closes the photo popup and the tip, as on Mapbox.
           const stopIdentifyWatch = useAppStore.subscribe((state, previous) => {
-            if (state.identifyLayerId && !previous.identifyLayerId) removePhotoPopup();
+            if (state.identifyLayerId && !previous.identifyLayerId) {
+              removePhotoPopup();
+              removeHoverTip();
+            }
           });
           handles.push({
             remove: () => {
