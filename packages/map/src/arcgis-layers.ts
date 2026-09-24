@@ -209,6 +209,7 @@ export function isArcgisRasterPlan(plan: ArcgisLayerPlan): boolean {
  * the Cesium engine), and `saturate` and `hue-rotate` follow.
  */
 export function arcgisRasterEffect(style: LayerStyle): string | null {
+  // The shared solve returns the hue in radians (Cesium's unit); CSS wants degrees.
   const { brightness, contrast, saturation, hue } = imageryColorAdjustments(style);
   const round = (value: number) => Number(value.toFixed(4));
   if (
@@ -226,9 +227,13 @@ export function arcgisRasterEffect(style: LayerStyle): string | null {
   ].join(" ");
 }
 
-/** GeoLibre's blend mode as the SDK's; MapLibre's additive `add` is the SDK's `plus`. */
-function arcgisBlendMode(style: LayerStyle): ArcgisBlendMode {
-  const mode = style.blendMode ?? DEFAULT_BLEND_MODE;
+/**
+ * GeoLibre's blend mode as the SDK's; MapLibre's additive `add` is the SDK's
+ * `plus`. The membership check guards a hand-edited project whose value the
+ * type does not describe.
+ */
+export function arcgisBlendMode(style: Partial<LayerStyle> | undefined): ArcgisBlendMode {
+  const mode = style?.blendMode ?? DEFAULT_BLEND_MODE;
   return mode === "add" ? "plus" : BLEND_MODES.includes(mode) ? mode : "normal";
 }
 

@@ -37,6 +37,7 @@ import {
   ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
   ARCGIS_LABEL_FIELD,
+  arcgisBlendMode,
   isArcgisRasterPlan,
   ARCGIS_SYMBOL_FIELD,
   ARCGIS_WEIGHT_FIELD,
@@ -1001,6 +1002,7 @@ export class ArcgisEngine implements MapEngine {
                 title: layer.name,
                 visible: layer.visible,
                 opacity: Math.min(1, Math.max(0, layer.opacity)),
+                blendMode: arcgisBlendMode(layer.style),
               }
             : compileArcgisLayer(layer, {
                 zoom: this.compiledZoom,
@@ -2307,7 +2309,8 @@ function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
         ...part,
         features: part.features ? part.features.features.length : undefined,
       })),
-      style: layer.style,
+      // The blend mode is applied in place, so a change to it alone does not rebuild.
+      style: { ...layer.style, blendMode: undefined },
       filters: [layer.timeFilter, layer.embedFilter, compileLayerFilters(layer)],
     });
   }
@@ -2321,7 +2324,8 @@ function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
  */
 function geojsonCompileKey(layer: GeoLibreLayer): string {
   const { geojson: _g, name: _n, visible: _v, opacity: _o, ...rest } = layer;
-  return JSON.stringify(rest);
+  // The blend mode is applied in place, like opacity.
+  return JSON.stringify({ ...rest, style: { ...rest.style, blendMode: undefined } });
 }
 
 /** The SDK's ScaleBar knows metric and "non-metric" (feet and miles). */

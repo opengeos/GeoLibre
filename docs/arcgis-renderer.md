@@ -105,8 +105,8 @@ override is set aside and the shared basemap is translated instead.
   independent split-view cameras; the project's zoom and bounds constraints.
 - The Style panel's raster brightness, contrast, saturation and hue sliders,
   as the SDK's CSS-filter `effect` on raster layers, and every layer's blend
-  mode as the SDK's `blendMode` (`add` is the SDK's `plus`). The SDK draws both
-  on a flat `MapView` only; a `SceneView` ignores them.
+  mode as the SDK's `blendMode` (`add` is the SDK's `plus`). A `SceneView`
+  ignores the raster effects, and blends only tiled and imagery layers.
 - Feature picking (click identify with a popup), selection highlighting, extent
   drawing, draggable placement, and engine-level image capture.
 - **Search places** flies to places and coordinates with a temporary marker,

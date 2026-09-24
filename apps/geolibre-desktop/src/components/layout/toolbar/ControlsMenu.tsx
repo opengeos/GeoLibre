@@ -97,6 +97,13 @@ interface ControlsMenuProps {
   onOpenRecordVideo: () => void;
 }
 
+/**
+ * A disabled menu item ignores the pointer by default, which also hides its
+ * `title` explaining why; keep pointer events so the reason shows on hover.
+ * Radix still refuses to select a disabled item.
+ */
+const REASON_ON_HOVER = "data-[disabled]:pointer-events-auto";
+
 /** The Controls menu: built-in map controls, atmosphere/routing toggles, and panels. */
 export function ControlsMenu({
   chrome,
@@ -289,6 +296,7 @@ export function ControlsMenu({
           {show("controls.sun") && (
             <DropdownMenuItem
               disabled={sunDisabled}
+              className={REASON_ON_HOVER}
               title={sunDisabled ? t("renderer.pluginUnsupported") : t("toolbar.item.sunTooltip")}
               onSelect={panels.sun.toggle}
             >
@@ -299,6 +307,7 @@ export function ControlsMenu({
           {show("controls.routeAnimation") && (
             <DropdownMenuItem
               disabled={routeAnimationDisabled}
+              className={REASON_ON_HOVER}
               title={
                 routeAnimationDisabled
                   ? t("renderer.pluginUnsupported")
@@ -313,6 +322,7 @@ export function ControlsMenu({
           {show("controls.flightSimulator") && (
             <DropdownMenuItem
               disabled={flightSimulatorDisabled}
+              className={REASON_ON_HOVER}
               title={
                 flightSimulatorDisabled
                   ? t("renderer.pluginUnsupported")
@@ -333,6 +343,7 @@ export function ControlsMenu({
           {show("controls.graticule") && (
             <DropdownMenuItem
               disabled={graticuleDisabled}
+              className={REASON_ON_HOVER}
               title={graticuleDisabled ? t("renderer.pluginUnsupported") : undefined}
               onClick={onToggleGraticule}
             >
@@ -352,6 +363,7 @@ export function ControlsMenu({
           {show("controls.directions") && (
             <DropdownMenuItem
               disabled={directionsDisabled}
+              className={REASON_ON_HOVER}
               title={
                 directionsDisabled
                   ? t("renderer.pluginUnsupported")
@@ -366,6 +378,7 @@ export function ControlsMenu({
           {show("controls.reverseGeocode") && (
             <DropdownMenuItem
               disabled={reverseGeocodeDisabled}
+              className={REASON_ON_HOVER}
               title={
                 reverseGeocodeDisabled
                   ? t("renderer.pluginUnsupported")

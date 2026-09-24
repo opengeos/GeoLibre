@@ -849,6 +849,14 @@ describe("ArcgisEngine layer sync", () => {
     assert.ok(layers.items.includes(created.find((l) => l.kind === "web-tile")!));
     assert.ok(created.length >= count);
   });
+  it("changes a GeoJSON layer's blend mode in place", () => {
+    const { engine, created } = makeEngine();
+    engine.syncLayers([SQUARE]);
+    const count = created.length;
+    engine.syncLayers([{ ...SQUARE, style: { ...DEFAULT_LAYER_STYLE, blendMode: "multiply" } }]);
+    assert.equal(created.length, count, "no native layer was rebuilt");
+    assert.ok(created.slice(-2).every((layer) => layer.blendMode === "multiply"));
+  });
   it("reuses a GeoJSON plan across opacity, visibility and name changes", () => {
     const { engine, created } = makeEngine();
     engine.syncLayers([SQUARE]);
