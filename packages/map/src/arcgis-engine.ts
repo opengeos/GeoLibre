@@ -671,9 +671,11 @@ export class ArcgisEngine implements MapEngine {
         if (CAMERA_KEYS.has((event as { key?: string }).key ?? "")) this.storyMove = false;
       }),
     );
+    // A string, so the camera's own changes (the scheme reads the zoom and
+    // scale) re-evaluate the getter without re-running the callback.
     this.handles.add(
       sdk.reactiveUtils.watch(
-        () => [view.ready, view.width, view.height, levelScheme(view)],
+        () => `${view.ready}|${view.width}|${view.height}|${levelScheme(view)}`,
         () => this.applyNavigationLimits(),
       ),
     );
@@ -2593,7 +2595,6 @@ export class ArcgisEngine implements MapEngine {
     }
     if (id === "globe" && !this.options.onProjectionToggle) return false;
     if (id === "layer-control" && !this.options.onLayerVisibilityChange) return false;
-    if (id === "scale" && this.view.type === "3d") return false;
     this.controlVisibility[id] = visible;
     if (visible) this.mountBuiltInControl(id);
     else this.unmountBuiltInControl(id);

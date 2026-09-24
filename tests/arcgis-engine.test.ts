@@ -1534,7 +1534,7 @@ describe("ArcgisEngine 3D scenes", () => {
     assert.deepEqual(polygon?.props.elevationInfo, { mode: "relative-to-ground", offset: 3 });
   });
 
-  it("hosts the globe toggle only with a projection callback, and no scale bar in 3D", () => {
+  it("hosts the globe toggle only with a projection callback, and the scale bar in 3D", () => {
     const { document } = parseHTML("<html><body></body></html>");
     const previous = globalThis.document;
     (globalThis as { document: unknown }).document = document;
@@ -1547,7 +1547,14 @@ describe("ArcgisEngine 3D scenes", () => {
         widgets.map((w) => w.kind),
         ["Fullscreen", "Compass"],
       );
-      assert.equal(engine.setBuiltInControlVisible("scale", true), false);
+      // The 2D map's scale bar measures a scene at its centre too.
+      assert.ok(
+        uiAdds.some((entry) =>
+          /maplibregl-ctrl-scale/.test(String((entry.component as HTMLElement).className)),
+        ),
+      );
+      assert.equal(engine.setBuiltInControlVisible("scale", false), true);
+      assert.equal(engine.setBuiltInControlVisible("scale", true), true);
       const globe = uiAdds.find(
         (entry) => entry.component instanceof document.defaultView!.HTMLElement,
       )?.component as HTMLElement | undefined;
