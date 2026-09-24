@@ -258,14 +258,15 @@ export function LoadFeaturesIntoEditorDialog({
   const runLoad = useCallback(
     (replace: boolean) => {
       const map = getStyleMap(mapControllerRef.current);
-      if (!selectedLayer) {
-        setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
-        return;
-      }
       // The editor queries and draws through a MapLibre or Mapbox map; other
-      // renderers have none, which no layer choice can fix.
+      // renderers have none, which no layer choice can fix (the layer list is
+      // empty there too, and says so).
       if (!map) {
         setStatus({ message: t("renderer.pluginUnsupported"), kind: "error" });
+        return;
+      }
+      if (!selectedLayer) {
+        setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
         return;
       }
       // Mark busy for the query window too, so the form (and Load button) is
@@ -492,7 +493,13 @@ export function LoadFeaturesIntoEditorDialog({
             </Button>
           </div>
           {eligible.length === 0 && (
-            <p className="text-xs text-muted-foreground">{t("loadEditorFeatures.noLayers")}</p>
+            <p className="text-xs text-muted-foreground">
+              {/* Without a MapLibre/Mapbox map (the ArcGIS or globe renderer)
+                  nothing is queryable, and no pan or refresh will change that. */}
+              {getStyleMap(mapControllerRef.current)
+                ? t("loadEditorFeatures.noLayers")
+                : t("renderer.pluginUnsupported")}
+            </p>
           )}
         </div>
 
