@@ -582,6 +582,14 @@ export class ArcgisEngine implements MapEngine {
         );
       }),
     );
+    // The user taking the camera ends a story move: the settle that follows is
+    // theirs, and viewport history and collaboration must record it.
+    for (const type of ["drag", "mouse-wheel", "key-down", "double-click"] as const)
+      this.handles.add(
+        view.on(type, () => {
+          this.storyMove = false;
+        }),
+      );
     // Expressions baked at one zoom are re-evaluated when the integer zoom
     // changes, the way MapLibre would evaluate `["zoom"]` live.
     this.zoomWatch = sdk.reactiveUtils.when(

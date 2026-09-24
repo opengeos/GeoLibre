@@ -507,7 +507,7 @@ describe("ArcgisEngine camera moves", () => {
     });
   });
   it("marks the settle that ends a story move as scripted", async () => {
-    const { engine, fireWatchers } = makeEngine();
+    const { engine, fireWatchers, fireViewEvent } = makeEngine();
     const seen: (boolean | undefined)[] = [];
     engine.onCameraIdle((event) => seen.push(event?.storyCamera));
     fireWatchers();
@@ -515,8 +515,12 @@ describe("ArcgisEngine camera moves", () => {
     fireWatchers();
     await Promise.resolve();
     fireWatchers();
+    // A drag during a story move makes the next settle the user's.
+    engine.applyStoryChapterCamera({ center: [3, 4], zoom: 6 });
+    fireViewEvent("drag", { x: 1, y: 1, action: "start" });
+    fireWatchers();
     engine.destroy();
-    assert.deepEqual(seen, [false, true, false]);
+    assert.deepEqual(seen, [false, true, false, false]);
   });
   it("reads and steps the zoom of a view with no tiling scheme through its scale", () => {
     const { engine, goTo, rawView } = makeEngine();
