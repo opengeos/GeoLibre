@@ -7,11 +7,13 @@ import {
   DEFAULT_LAYER_STYLE,
   extrusionColorValue,
   extrusionHeightValue,
+  generatorCircleRadiusValue,
   geojsonHasZCoordinates,
   heatmapRampColors,
   labelFieldTextField,
   normalizeHexColor,
   ruleBasedVisibilityFilter,
+  styleValue,
   transformGeojsonElevation,
   type GeoLibreLayer,
   type LabelAnchor,
@@ -32,7 +34,20 @@ import {
 } from "./arcgis-template-tiles";
 import { imageryColorAdjustments } from "./raster-color-adjustments";
 import { ARCGIS_TEXT_FONT } from "./arcgis-sprite";
-import { GEOMAN_TEXT_PROPERTY, isTextMarkerFeature } from "./label-style";
+import {
+  DEDUPED_LABEL_PROPERTY,
+  GEOMAN_TEXT_PROPERTY,
+  getDedupedLabelFeatures,
+  isTextMarkerFeature,
+  parseLabelOverride,
+} from "./label-style";
+import {
+  buildGeneratedGeometry,
+  buildInvertedMask,
+  lineDecorationColorValue,
+  mapboxRenderableMask,
+} from "./derived-geometry";
+import { arcgisLineDecorationSymbol, hasLineDecoration } from "./arcgis-line-decoration";
 
 /**
  * Translate a store layer into what the ArcGIS Maps SDK can draw (issue #2421).
@@ -59,6 +74,8 @@ import { GEOMAN_TEXT_PROPERTY, isTextMarkerFeature } from "./label-style";
 export const ARCGIS_ID_FIELD = "gl__id";
 export const ARCGIS_SYMBOL_FIELD = "gl__sym";
 export const ARCGIS_LABEL_FIELD = "gl__label";
+/** The label class a feature's data-defined label overrides resolve to. */
+export const ARCGIS_LABEL_CLASS_FIELD = "gl__lcls";
 /** Extrusion height in metres, read by the 3D renderer's size visual variable. */
 export const ARCGIS_HEIGHT_FIELD = "gl__height";
 export const ARCGIS_WEIGHT_FIELD = "gl__weight";
@@ -149,6 +166,12 @@ export interface ArcgisGeoJsonPart {
   elevationInfo?: { mode: "relative-to-ground" | "absolute-height"; offset: number };
   hasZ?: boolean;
   featureReduction?: Record<string, unknown>;
+  /**
+   * False for a companion part drawn for the layer (an inverted-fill mask, a
+   * generated geometry, line decorations, de-duplicated labels): its
+   * features are not the layer's, so identify and selection skip it.
+   */
+  interactive?: false;
 }
 
 /** Fields every plan shares; applied to each native layer the plan produces. */
@@ -745,6 +768,17 @@ function compileFilter(layer: GeoLibreLayer): {
   }
 }
 
+/** The label style's case transform, as MapLibre's `text-transform`. */
+function labelTransform(style: LayerStyle): (text: string) => string {
+  const transform = style.labels.transform;
+  return (text) =>
+    transform === "uppercase"
+      ? text.toUpperCase()
+      : transform === "lowercase"
+        ? text.toLowerCase()
+        : text;
+}
+
 /**
  * The label text of each feature, evaluated from the label style the way the
  * 2D map's symbol layer would (field with number formatting, or the user's
@@ -764,12 +798,7 @@ function compileLabelText(
       // An unparseable expression keeps the field text, as on Mapbox.
     }
   }
-  const transform = (text: string) =>
-    labels.transform === "uppercase"
-      ? text.toUpperCase()
-      : labels.transform === "lowercase"
-        ? text.toLowerCase()
-        : text;
+  const transform = labelTransform(style);
   if (typeof value === "string") {
     const text = transform(value);
     return { read: () => text, zoomDependent: false };
@@ -795,10 +824,18 @@ function compileLabelText(
   };
 }
 
+/** One label class of the data-defined label overrides: a size and colour. */
+interface LabelClassStyle {
+  id: string;
+  size: number;
+  color: [number, number, number, number];
+}
+
 function labelingFor(
   kind: ArcgisGeometryKind,
   style: LayerStyle,
   layerScales: { minScale: number; maxScale: number },
+  classes?: LabelClassStyle[],
 ): ArcgisLabelingJson[] {
   const labels = style.labels;
   const scales = zoomRangeToScales(
@@ -813,34 +850,115 @@ function labelingFor(
           ? "center-along"
           : "above-along"
         : "always-horizontal";
-  return [
-    {
-      labelExpressionInfo: { expression: `$feature.${ARCGIS_LABEL_FIELD}` },
-      labelPlacement: placement,
-      symbol: {
-        type: "text",
-        color: cssToArcgisColor(labels.color),
-        haloColor: cssToArcgisColor(labels.haloColor),
-        haloSize: `${Math.max(0, labels.haloWidth)}px`,
-        font: { size: `${Math.max(1, labels.size)}px`, family: "sans-serif" },
-        // MapLibre wraps at `text-max-width` ems of the text size.
-        lineWidth: `${Math.max(1, labels.maxWidth ?? 10) * Math.max(1, labels.size)}px`,
-        // MapLibre offsets are in ems of the text size, y down; the SDK's are
-        // in points or pixels, y up.
-        xoffset: `${labels.offsetX * labels.size}px`,
-        yoffset: `${-labels.offsetY * labels.size}px`,
-        angle: labels.rotation,
-      },
-      // The intersection with the layer's own scale range, so a label never
-      // shows where its features are hidden.
-      minScale:
-        scales.minScale === 0
-          ? layerScales.minScale
-          : Math.min(scales.minScale, layerScales.minScale || Infinity),
-      maxScale: Math.max(scales.maxScale, layerScales.maxScale),
-      deconflictionStrategy: labels.allowOverlap ? "none" : "static",
+  const labelClass = (
+    size: number,
+    color: [number, number, number, number],
+    where?: string,
+  ): ArcgisLabelingJson => ({
+    labelExpressionInfo: { expression: `$feature.${ARCGIS_LABEL_FIELD}` },
+    labelPlacement: placement,
+    ...(where ? { where } : {}),
+    symbol: {
+      type: "text",
+      color,
+      haloColor: cssToArcgisColor(labels.haloColor),
+      haloSize: `${Math.max(0, labels.haloWidth)}px`,
+      font: { size: `${size}px`, family: "sans-serif" },
+      // MapLibre wraps at `text-max-width` ems of the text size.
+      lineWidth: `${Math.max(1, labels.maxWidth ?? 10) * size}px`,
+      // MapLibre offsets are in ems of the text size, y down; the SDK's are
+      // in points or pixels, y up.
+      xoffset: `${labels.offsetX * size}px`,
+      yoffset: `${-labels.offsetY * size}px`,
+      angle: labels.rotation,
     },
-  ];
+    // The intersection with the layer's own scale range, so a label never
+    // shows where its features are hidden.
+    minScale:
+      scales.minScale === 0
+        ? layerScales.minScale
+        : Math.min(scales.minScale, layerScales.minScale || Infinity),
+    maxScale: Math.max(scales.maxScale, layerScales.maxScale),
+    deconflictionStrategy: labels.allowOverlap ? "none" : "static",
+  });
+  // Data-defined overrides: one class per distinct size and colour, each
+  // reading the features the compiler assigned to it.
+  if (classes)
+    return classes.map(({ id, size, color }) =>
+      labelClass(size, color, `${ARCGIS_LABEL_CLASS_FIELD} = '${id}'`),
+    );
+  return [labelClass(Math.max(1, labels.size), cssToArcgisColor(labels.color))];
+}
+
+/** A feature's resolved data-defined label overrides. */
+interface LabelOverrideValues {
+  /** False when the visibility expression hides the feature's label. */
+  visible: boolean;
+  size: number;
+  color: [number, number, number, number];
+}
+
+/**
+ * The data-defined label overrides (`sizeExpression`, `colorExpression`,
+ * `opacityExpression`, `visibilityExpression`) evaluated per feature, or
+ * `null` when none is set. The SDK's label symbols are not data-driven, so the
+ * compiler groups features into one label class per resolved size and colour
+ * instead. Invalid expressions fall back to the literal control, as
+ * `parseLabelOverride` does on the 2D map. The SDK has no per-feature label
+ * priority, so `priorityExpression` is not drawn (the Style panel says so).
+ *
+ * @param style - The layer style.
+ * @param layerOpacity - The layer's opacity, which the native layer applies to
+ *   its labels too: an opacity override replaces it on the 2D map.
+ */
+function compileLabelOverrides(
+  style: LayerStyle,
+  layerOpacity: number,
+): {
+  read: (feature: Feature, zoom: number) => LabelOverrideValues;
+  zoomDependent: boolean;
+} | null {
+  const labels = style.labels;
+  const size = parseLabelOverride(labels.sizeExpression, "number");
+  const color = parseLabelOverride(labels.colorExpression, "color");
+  const opacity = parseLabelOverride(labels.opacityExpression, "number");
+  const visibility = parseLabelOverride(labels.visibilityExpression, "boolean");
+  if (!size && !color && !opacity && !visibility) return null;
+  const readers = {
+    size: size ? featureValue(size, "number") : null,
+    color: color ? featureValue(color, "color") : null,
+    opacity: opacity ? featureValue(opacity, "number") : null,
+    visibility: visibility ? featureValue(visibility, "boolean") : null,
+  };
+  const baseSize = Math.max(1, labels.size);
+  const finite = (value: unknown, fallback: number) => {
+    const number = Number(value);
+    return value != null && Number.isFinite(number) ? number : fallback;
+  };
+  return {
+    zoomDependent: Object.values(readers).some((reader) => reader?.zoomDependent),
+    read(feature, zoom) {
+      // Half-pixel sizes and 5 % opacity steps: a continuous expression
+      // would otherwise make a label class per feature.
+      const textSize = readers.size
+        ? Math.max(1, Math.round(finite(readers.size.read(feature, zoom), baseSize) * 2) / 2)
+        : baseSize;
+      const colorValue = readers.color?.read(feature, zoom);
+      const rgba = cssToArcgisColor(colorValue == null ? labels.color : String(colorValue));
+      if (readers.opacity) {
+        // The native layer multiplies its labels by the layer opacity, which
+        // the override replaces.
+        const target = Math.min(1, Math.max(0, finite(readers.opacity.read(feature, zoom), 1)));
+        const alpha = layerOpacity > 0 ? Math.min(1, target / layerOpacity) : 1;
+        rgba[3] = Math.round(rgba[3] * alpha * 20) / 20;
+      }
+      return {
+        visible: readers.visibility ? readers.visibility.read(feature, zoom) !== false : true,
+        size: textSize,
+        color: rgba,
+      };
+    },
+  };
 }
 
 /** Split a MultiPoint into Points so every feature of the part is one marker. */
@@ -874,7 +992,7 @@ interface ExtrusionReader {
 /** Compile a constant or MapLibre expression into a per-feature evaluator. */
 function featureValue(
   value: unknown,
-  type: "number" | "color",
+  type: "number" | "color" | "boolean",
 ): { read: (feature: Feature, zoom: number) => unknown; zoomDependent: boolean } {
   if (!Array.isArray(value)) return { read: () => value, zoomDependent: false };
   const compiled = createExpression(value, "expression", {
@@ -981,6 +1099,27 @@ function compileGeoJson(
   const filter = compileFilter(layer);
   const label = compileLabelText(style);
   const scales = zoomRangeToScales(style.minZoom, style.maxZoom);
+  // Label de-duplication groups points on the label field (`label-dedup.ts`).
+  // As on the 2D map it needs point-only, unfiltered data, so the aggregated
+  // labels agree with the points drawn.
+  const deduped =
+    label &&
+    style.labels.dedupe !== "off" &&
+    style.labels.field &&
+    !filter.test &&
+    isPointOnly(geojson)
+      ? getDedupedLabelFeatures(geojson, style.labels)
+      : null;
+  // The aggregated labels carry only their text, so the overrides do not
+  // apply to them (as on the 2D map).
+  const overrides =
+    label && !deduped
+      ? compileLabelOverrides(style, Math.min(1, Math.max(0, layer.opacity)))
+      : null;
+  const overridden = new Map<Feature, LabelOverrideValues>();
+  // The source features that pass the filter, for the inverted-fill mask and
+  // the geometry generator.
+  const kept: Feature[] = [];
   // Symbols are keyed by their JSON for de-duplication but the features carry
   // a short id: the SDK stores string attributes as fixed-length fields, and a
   // 100-character key was truncated past the point where two symbols differ,
@@ -1027,8 +1166,10 @@ function compileGeoJson(
       }
       return;
     }
+    kept.push(geojson.features[index]);
     let symbol: ReturnType<typeof resolver.resolve> | undefined;
-    const text = label ? label.read(feature, zoom) : "";
+    const override = overrides?.read(feature, zoom);
+    const text = label && !deduped && override?.visible !== false ? label.read(feature, zoom) : "";
     for (const geometry of explodePoints(feature.geometry)) {
       const kind = GEOMETRY_KIND[geometry.type];
       if (!kind) continue;
@@ -1051,7 +1192,7 @@ function compileGeoJson(
         }
         symbolId = entry.id;
       }
-      part.features.push({
+      const out: Feature = {
         type: "Feature",
         geometry,
         properties: {
@@ -1063,9 +1204,58 @@ function compileGeoJson(
             : {}),
           ...(extruded ? { [ARCGIS_HEIGHT_FIELD]: extrusion.height(feature, zoom) } : {}),
         },
-      });
+      };
+      if (override) overridden.set(out, override);
+      part.features.push(out);
     }
   });
+  const labelClassList = overrides ? assignLabelClasses(overridden) : undefined;
+  const source: FeatureCollection =
+    kept.length === geojson.features.length
+      ? geojson
+      : { type: "FeatureCollection", features: kept };
+  const maskPart =
+    style.invertedFillEnabled && !extrusion && parts.has("polygon")
+      ? invertedMaskPart(source, style, resolver, zoom, scene)
+      : null;
+  if (maskPart) {
+    // The features keep their outlines; the mask carries the fill.
+    for (const entry of parts.get("polygon")!.symbols.values())
+      entry.symbol = { ...(entry.symbol as ArcgisSymbolJson), color: [0, 0, 0, 0] };
+  }
+  const generatorParts = extrusion ? [] : generatedGeometryParts(source, style, zoom);
+  const decorationPart =
+    !scene && !extrusion && hasLineDecoration(style)
+      ? lineDecorationPart(style, [
+          ...(parts.get("polyline")?.features ?? []),
+          ...(parts.get("polygon")?.features ?? []),
+        ])
+      : null;
+  const dedupedPart: ArcgisGeoJsonPart | null = deduped
+    ? {
+        geometryType: "point",
+        features: {
+          type: "FeatureCollection",
+          features: deduped.features.map((feature) => ({
+            type: "Feature",
+            geometry: feature.geometry,
+            properties: {
+              [ARCGIS_SYMBOL_FIELD]: "s0",
+              [ARCGIS_LABEL_FIELD]: labelTransform(style)(
+                String(feature.properties?.[DEDUPED_LABEL_PROPERTY] ?? ""),
+              ),
+            },
+          })),
+        },
+        // The points are drawn by the layer's own part; this one only labels.
+        renderer: {
+          type: "simple",
+          symbol: { type: "simple-marker", color: [0, 0, 0, 0], size: 0, outline: null },
+        } as unknown as ArcgisRendererJson,
+        labelingInfo: labelingFor("point", style, scales),
+        interactive: false,
+      }
+    : null;
   // A stable order — polygons under lines under points — so the SDK draws the
   // kinds the way the 2D map stacks its fill, line and circle layers.
   const order: ArcgisGeometryKind[] = ["polygon", "polyline", "point"];
@@ -1103,8 +1293,10 @@ function compileGeoJson(
       resolver.zoomDependent ||
       filter.zoomDependent ||
       Boolean(label?.zoomDependent) ||
+      Boolean(overrides?.zoomDependent) ||
       Boolean(extrusion?.zoomDependent),
     parts: [
+      ...(maskPart ? [maskPart] : []),
       ...order
         .filter((kind) => parts.has(kind))
         .map((kind): ArcgisGeoJsonPart => {
@@ -1137,11 +1329,12 @@ function compileGeoJson(
             geometryType: kind,
             features: { type: "FeatureCollection", features },
             renderer,
-            ...(label && !(heatmap && scene)
-              ? { labelingInfo: labelingFor(kind, style, scales) }
+            ...(label && !deduped && !(heatmap && scene)
+              ? { labelingInfo: labelingFor(kind, style, scales, labelClassList) }
               : {}),
             ...(markers ? { markerStyle: style } : {}),
-            ...(kind === "polygon" && !scene && style.fillPattern !== "none"
+            // An inverted fill's pattern goes on the mask.
+            ...(kind === "polygon" && !scene && !maskPart && style.fillPattern !== "none"
               ? { patternStyle: style }
               : {}),
             ...(extruded
@@ -1181,9 +1374,208 @@ function compileGeoJson(
                 }
               : {}),
           };
-        }),
+        })
+        // Decorations draw over the lines and outlines, under the points.
+        .flatMap((part) =>
+          part.geometryType === "polyline" ||
+          (part.geometryType === "polygon" && !parts.has("polyline"))
+            ? [part, ...(decorationPart ? [decorationPart] : [])]
+            : [part],
+        ),
+      ...generatorParts,
+      ...(dedupedPart ? [dedupedPart] : []),
       ...textPart,
     ],
+  };
+}
+
+/**
+ * Group features by their resolved label overrides into label classes (the
+ * SDK's label symbols are not data-driven), writing each feature's class into
+ * {@link ARCGIS_LABEL_CLASS_FIELD}.
+ */
+function assignLabelClasses(overridden: Map<Feature, LabelOverrideValues>): LabelClassStyle[] {
+  const classes = new Map<string, LabelClassStyle>();
+  for (const [feature, value] of overridden) {
+    const key = `${value.size}|${value.color.join(",")}`;
+    let entry = classes.get(key);
+    if (!entry) {
+      entry = { id: `l${classes.size}`, size: value.size, color: value.color };
+      classes.set(key, entry);
+    }
+    feature.properties![ARCGIS_LABEL_CLASS_FIELD] = entry.id;
+  }
+  return [...classes.values()];
+}
+
+/** Whether every feature with a geometry is a point (text markers included). */
+function isPointOnly(geojson: FeatureCollection): boolean {
+  let points = false;
+  for (const feature of geojson.features) {
+    const type = feature.geometry?.type;
+    if (!type) continue;
+    if (type !== "Point" && type !== "MultiPoint") return false;
+    points = true;
+  }
+  return points;
+}
+
+/**
+ * The inverted fill (QGIS "Inverted polygons"): a world polygon with the
+ * layer's polygons cut out, filled with the layer's fill. `null` when the
+ * mask cannot be built (too many features, degenerate rings), in which case
+ * the layer keeps its ordinary fill, as on the 2D map.
+ */
+function invertedMaskPart(
+  source: FeatureCollection,
+  style: LayerStyle,
+  resolver: ReturnType<typeof createFeatureStyleResolver>,
+  zoom: number,
+  scene: boolean,
+): ArcgisGeoJsonPart | null {
+  const mask = buildInvertedMask(source);
+  if (!mask) return null;
+  // The world ring pulled inside the Web Mercator limit, the holes wound
+  // against it: the SDK, like mapbox-gl, draws a same-wound hole as a polygon.
+  const renderable = mapboxRenderableMask(mask);
+  // The fill a feature without attributes resolves to, as the 2D map's
+  // mask layer evaluates the fill paint over the attribute-less mask.
+  const fill = symbolForKind(
+    "polygon",
+    resolver.resolve({ ...renderable.features[0], properties: {} }, zoom),
+  );
+  return {
+    geometryType: "polygon",
+    features: {
+      type: "FeatureCollection",
+      features: renderable.features.map((feature) => ({
+        type: "Feature",
+        geometry: feature.geometry,
+        properties: { [ARCGIS_SYMBOL_FIELD]: "s0" },
+      })),
+    },
+    // No outline: the world ring's edge would show as a seam.
+    renderer: { type: "simple", symbol: { ...fill, outline: { style: "none", width: 0 } } },
+    ...(!scene && style.fillPattern !== "none" ? { patternStyle: style } : {}),
+    interactive: false,
+  };
+}
+
+/**
+ * The geometry generator's output (centroids, bounding boxes, convex hulls or
+ * buffers) as companion parts: polygons in the generator's fill and stroke,
+ * centroids as circles sized by its radius (constant or proportional).
+ */
+function generatedGeometryParts(
+  source: FeatureCollection,
+  style: LayerStyle,
+  zoom: number,
+): ArcgisGeoJsonPart[] {
+  const type = styleValue(style, "geometryGenerator");
+  if (type === "none") return [];
+  const generated = buildGeneratedGeometry(
+    source,
+    type,
+    styleValue(style, "geometryGeneratorBufferDistance"),
+    styleValue(style, "geometryGeneratorBufferProperty"),
+  );
+  if (!generated?.features.length) return [];
+  const opacity = Math.min(1, Math.max(0, styleValue(style, "geometryGeneratorOpacity")));
+  const fill = styleValue(style, "geometryGeneratorFillColor");
+  const stroke = styleValue(style, "geometryGeneratorStrokeColor");
+  const width = Math.max(0, styleValue(style, "geometryGeneratorStrokeWidth"));
+  const outline =
+    width > 0
+      ? { style: "solid", color: cssToArcgisColor(stroke), width: `${width}px` }
+      : { style: "none", width: 0 };
+  const polygons: Feature[] = [];
+  const points: Feature[] = [];
+  const radius = featureValue(generatorCircleRadiusValue(style), "number");
+  const sizes = new Map<number, string>();
+  for (const feature of generated.features) {
+    const kind = feature.geometry ? GEOMETRY_KIND[feature.geometry.type] : undefined;
+    if (kind === "polygon")
+      polygons.push({ ...feature, properties: { [ARCGIS_SYMBOL_FIELD]: "s0" } });
+    else if (kind === "point") {
+      const value = Number(radius.read(feature, zoom));
+      const r = Math.round(Math.max(1, Number.isFinite(value) ? value : 5) * 2) / 2;
+      let id = sizes.get(r);
+      if (id === undefined) {
+        id = `s${sizes.size}`;
+        sizes.set(r, id);
+      }
+      points.push({ ...feature, properties: { [ARCGIS_SYMBOL_FIELD]: id } });
+    }
+  }
+  const parts: ArcgisGeoJsonPart[] = [];
+  if (polygons.length)
+    parts.push({
+      geometryType: "polygon",
+      features: { type: "FeatureCollection", features: polygons },
+      renderer: {
+        type: "simple",
+        symbol: {
+          type: "simple-fill",
+          style: "solid",
+          color: cssToArcgisColor(fill, opacity),
+          outline,
+        },
+      },
+      interactive: false,
+    });
+  if (points.length)
+    parts.push({
+      geometryType: "point",
+      features: { type: "FeatureCollection", features: points },
+      renderer: {
+        type: "unique-value",
+        field: ARCGIS_SYMBOL_FIELD,
+        uniqueValueInfos: [...sizes].map(([r, id]) => ({
+          value: id,
+          symbol: {
+            type: "simple-marker",
+            style: "circle",
+            color: cssToArcgisColor(fill, opacity),
+            size: `${r * 2}px`,
+            outline,
+          },
+        })),
+      },
+      interactive: false,
+    });
+  return parts;
+}
+
+/**
+ * Line decorations along the layer's lines and polygon outlines, as a
+ * polyline part drawn with the CIM marker-line symbol. Takes the compiled
+ * (already filtered) features.
+ */
+function lineDecorationPart(style: LayerStyle, features: Feature[]): ArcgisGeoJsonPart | null {
+  const lines: Feature[] = [];
+  for (const feature of features) {
+    const geometry = feature.geometry;
+    let coordinates: Position[][] | null = null;
+    if (geometry?.type === "LineString") coordinates = [geometry.coordinates];
+    else if (geometry?.type === "MultiLineString") coordinates = geometry.coordinates;
+    else if (geometry?.type === "Polygon") coordinates = geometry.coordinates;
+    else if (geometry?.type === "MultiPolygon") coordinates = geometry.coordinates.flat();
+    if (coordinates?.length)
+      lines.push({
+        type: "Feature",
+        geometry: { type: "MultiLineString", coordinates },
+        properties: { [ARCGIS_SYMBOL_FIELD]: "s0" },
+      });
+  }
+  if (!lines.length) return null;
+  return {
+    geometryType: "polyline",
+    features: { type: "FeatureCollection", features: lines },
+    renderer: {
+      type: "simple",
+      symbol: arcgisLineDecorationSymbol(style, cssToArcgisColor(lineDecorationColorValue(style))),
+    },
+    interactive: false,
   };
 }
 
@@ -1340,11 +1732,9 @@ function templateTileSource(
 
 /** Style settings the ArcGIS renderer does not draw, named in the Style panel. */
 export type ArcgisUnsupportedStyleSetting =
-  | "lineDecoration"
-  | "geometryGenerator"
-  | "invertedFill"
   | "diagram"
-  | "labelDedupe"
+  | "labelPriority"
+  | "lineDecorationScene"
   | "blendModeScene"
   | "clusterScene"
   | "fillPatternScene"
@@ -1352,8 +1742,9 @@ export type ArcgisUnsupportedStyleSetting =
 
 /**
  * The {@link ArcgisUnsupportedStyleSetting}s this layer's style turns on, for
- * the view it would draw in: the SDK draws clusters, fill patterns and blend
- * modes on a flat `MapView` only, and extrusion in a `SceneView` only.
+ * the view it would draw in: the SDK draws clusters, fill patterns, blend
+ * modes and line decorations (CIM line symbols) on a flat `MapView` only, and
+ * extrusion in a `SceneView` only.
  *
  * @param layer - The store layer whose style is checked.
  * @param scene - Whether the ArcGIS map is a 3D `SceneView`.
@@ -1364,15 +1755,17 @@ export function arcgisUnsupportedStyleSettings(
   scene: boolean,
 ): ArcgisUnsupportedStyleSetting[] {
   const style: LayerStyle = { ...DEFAULT_LAYER_STYLE, ...layer.style };
-  const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
   const settings: ArcgisUnsupportedStyleSetting[] = [];
-  if (style.lineDecoration && style.lineDecoration !== "none") settings.push("lineDecoration");
-  if (style.geometryGenerator && style.geometryGenerator !== "none")
-    settings.push("geometryGenerator");
-  if (style.invertedFillEnabled) settings.push("invertedFill");
   if (style.diagramType && style.diagramType !== "none") settings.push("diagram");
-  if (labels.enabled && labels.dedupe && labels.dedupe !== "off") settings.push("labelDedupe");
+  const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
+  if (
+    labels.enabled &&
+    labels.dedupe === "off" &&
+    parseLabelOverride(labels.priorityExpression, "number")
+  )
+    settings.push("labelPriority");
   if (scene) {
+    if (hasLineDecoration(style)) settings.push("lineDecorationScene");
     if ((style.blendMode ?? DEFAULT_BLEND_MODE) !== DEFAULT_BLEND_MODE)
       settings.push("blendModeScene");
     if (style.pointRenderer === "cluster") settings.push("clusterScene");

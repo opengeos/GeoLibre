@@ -214,7 +214,16 @@ function makeSdk() {
       y: p.y ?? p.latitude ?? 0,
     }),
     toMap: (p: { x: number; y: number }) => ({ longitude: p.x, latitude: p.y, x: p.x, y: p.y }),
-    hitTest: async () => ({ results: hitResults, screenPoint: { x: 0, y: 0 } }),
+    // As the SDK does, only graphics of the included layers are reported.
+    hitTest: async (_point: unknown, options?: { include?: unknown[] }) => ({
+      results: hitResults.filter(
+        (result) =>
+          !options?.include ||
+          !(result as { graphic?: { layer?: unknown } }).graphic?.layer ||
+          options.include.includes((result as { graphic: { layer: unknown } }).graphic.layer),
+      ),
+      screenPoint: { x: 0, y: 0 },
+    }),
     takeScreenshot: async () => ({ dataUrl: "data:image/png;base64,", data: {} as ImageData }),
     on: (type: string, handler: (event: Record<string, unknown>) => void) => {
       const handlers = viewHandlers.get(type) ?? new Set();
@@ -1038,6 +1047,25 @@ describe("ArcgisEngine picking and highlight", () => {
     assert.equal(engine.identifyFeatures([0.5, 0.5]).length, 1);
     assert.equal(engine.identifyFeatures([3, 3]).length, 0);
     assert.equal(engine.identifyFeatures([0.5, 0.5], "other").length, 0);
+  });
+  it("does not identify the companion layers a style draws", async () => {
+    const { engine, layers, setHitResults } = makeEngine();
+    engine.syncLayers([{ ...SQUARE, style: { ...SQUARE.style, invertedFillEnabled: true } }]);
+    const polygons = layers.items.filter((l) => l.props.geometryType === "polygon");
+    // The mask under the square's own polygon layer.
+    assert.equal(polygons.length, 2);
+    setHitResults(
+      polygons.map((layer) => ({
+        type: "graphic",
+        graphic: { attributes: { [ARCGIS_ID_FIELD]: "sq" }, layer },
+      })),
+    );
+    const features = await engine.identifyFeaturesAt({ x: 0.5, y: 0.5 });
+    assert.equal(features.length, 1);
+    setHitResults([
+      { type: "graphic", graphic: { attributes: { gl__sym: "s0" }, layer: polygons[0] } },
+    ]);
+    assert.deepEqual(await engine.identifyFeaturesAt({ x: 5, y: 5 }), []);
   });
   it("skips cluster graphics instead of reporting their object id as a feature", async () => {
     const { engine, layers, setHitResults } = makeEngine();

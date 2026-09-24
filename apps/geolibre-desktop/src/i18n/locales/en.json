@@ -6785,11 +6785,9 @@
     },
     "arcgisUnsupported": {
       "title": "The ArcGIS renderer does not draw these settings in this view:",
-      "lineDecoration": "Line decorations",
-      "geometryGenerator": "Geometry generator",
-      "invertedFill": "Inverted fill",
+      "lineDecorationScene": "Line decorations (flat map only)",
       "diagram": "Diagrams",
-      "labelDedupe": "Label de-duplication",
+      "labelPriority": "Label priority expression",
       "blendModeScene": "Blend mode (flat map only)",
       "clusterScene": "Point clustering (flat map only)",
       "fillPatternScene": "Fill pattern (flat map only)",

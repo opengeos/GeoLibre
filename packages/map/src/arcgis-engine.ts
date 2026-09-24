@@ -39,6 +39,7 @@ import {
 import {
   ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
+  ARCGIS_LABEL_CLASS_FIELD,
   ARCGIS_LABEL_FIELD,
   arcgisBlendMode,
   isArcgisRasterPlan,
@@ -256,6 +257,7 @@ const ARCGIS_GEOJSON_FIELDS = [
   { name: ARCGIS_ID_FIELD, type: "string", length: 255 },
   { name: ARCGIS_SYMBOL_FIELD, type: "string", length: 32 },
   { name: ARCGIS_LABEL_FIELD, type: "string", length: 4000 },
+  { name: ARCGIS_LABEL_CLASS_FIELD, type: "string", length: 16 },
   { name: ARCGIS_HEIGHT_FIELD, type: "double" },
   { name: ARCGIS_WEIGHT_FIELD, type: "double" },
 ];
@@ -478,6 +480,12 @@ export class ArcgisEngine implements MapEngine {
   private surface: MapRenderSurface | null;
   private layers: GeoLibreLayer[] = [];
   private natives = new Map<string, NativePlan>();
+  /**
+   * Companion native layers a plan draws for a store layer (an inverted-fill
+   * mask, generated geometry, line decorations, de-duplicated labels): not
+   * the layer's features, so identify skips them.
+   */
+  private companions = new WeakSet<ArcgisLayer>();
   private errors = new Map<string, string>();
   private preferences: MapPreferences | null = null;
   private basemapPlan: ArcgisBasemapPlan | null = null;
@@ -1308,6 +1316,7 @@ export class ArcgisEngine implements MapEngine {
             popupEnabled: false,
             legendEnabled: false,
           });
+          if (part.interactive === false) this.companions.add(native);
           if (part.markerStyle) void this.bakeMarkers(native, part);
           if (part.patternStyle) void this.bakePattern(native, part);
           return native;
@@ -1749,7 +1758,7 @@ export class ArcgisEngine implements MapEngine {
     const external = identifyArcgisControls(view, screenPoint, layerId);
     const include = [...this.natives]
       .filter(([id]) => !layerId || id === layerId)
-      .flatMap(([, entry]) => entry.layers);
+      .flatMap(([, entry]) => entry.layers.filter((native) => !this.companions.has(native)));
     if (!include.length) return external;
     let hit;
     try {
@@ -2645,9 +2654,11 @@ function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
  * filters, source and metadata.
  */
 function geojsonCompileKey(layer: GeoLibreLayer): string {
-  const { geojson: _g, name: _n, visible: _v, opacity: _o, ...rest } = layer;
+  const { geojson: _g, name: _n, visible: _v, opacity, ...rest } = layer;
+  // A label opacity override is baked against the layer opacity it replaces.
+  const labelOpacity = layer.style?.labels?.opacityExpression?.trim() ? opacity : undefined;
   // The blend mode is applied in place, like opacity.
-  return JSON.stringify({ ...rest, style: { ...rest.style, blendMode: undefined } });
+  return JSON.stringify({ ...rest, labelOpacity, style: { ...rest.style, blendMode: undefined } });
 }
 
 /** The SDK's ScaleBar knows metric and "non-metric" (feet and miles). */

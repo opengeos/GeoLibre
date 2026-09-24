@@ -81,6 +81,18 @@ override is set aside and the shared basemap is translated instead.
   way before features reach the SDK. Zoom-dependent expressions (metre-unit
   strokes, per-rule zoom ranges) are re-evaluated when the integer zoom
   changes.
+- The symbology pack draws through companion layers built from the filtered
+  features: the **inverted fill** as a world mask with the polygons cut out
+  (clamped to the Web Mercator latitude limit, as on Mapbox), the **geometry
+  generator** (centroids, bounding boxes, convex hulls, buffers) in its own
+  fill, stroke and proportional circle size, and **line decorations** as a CIM
+  marker line that repeats the shape at the style's spacing and turns arrows
+  to follow the line (a flat `MapView` only; the SDK draws no CIM line symbols
+  in a scene). **Label de-duplication** labels the aggregated points from a
+  label-only layer. The label size, colour, opacity and visibility
+  expressions are evaluated per feature and grouped into one label class per
+  resolved size and colour, since the SDK's label symbols are not
+  data-driven. Companion layers are not identified or selected.
 - HTTP(S) raster tiles (XYZ, WMTS tile templates), WMS (the GetMap template is
   split into the SDK's `WMSLayer` description), and vector tiles with named
   source layers (drawn by the SDK's `VectorTileLayer` from the same style
@@ -323,10 +335,10 @@ experimental alignment and depth limitations described above.
 - Measure and the geometry editor draw through the MapLibre/Mapbox style API;
   the Controls menu greys Measure out, and editing a layer's geometry says the
   renderer does not support it.
-- Line decorations, geometry generators, inverted fills, diagrams and label
-  de-duplication; clustering, fill patterns and blend modes in a `SceneView`;
-  extrusion on a flat map. The Style panel names whichever of these a layer
-  turns on.
+- Diagrams and the label priority expression (the SDK has no per-feature
+  label priority); clustering, fill patterns, blend modes and line
+  decorations in a `SceneView`; extrusion on a flat map. The Style panel names
+  whichever of these a layer turns on.
 - Arbitrary MapLibre custom layers and rendering APIs still require adapters.
   The primary view hosts DOM controls with navigation methods; Vector, LiDAR,
   DuckDB and 3D Tiles have explicit rendering bridges. Layer Control delegates
