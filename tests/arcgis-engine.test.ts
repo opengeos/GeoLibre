@@ -498,6 +498,10 @@ describe("ArcgisEngine camera moves", () => {
     rawView.zoom = -1;
     rawView.scale = zoomToScale(3);
     assert.ok(Math.abs(engine.readView().zoom - 3) < 1e-9);
+    // A view with no scale yet reads as zoom 0, never a non-finite level.
+    rawView.scale = 0;
+    assert.equal(engine.readView().zoom, 0);
+    rawView.scale = zoomToScale(3);
     engine.zoomIn();
     const target = (goTo[0] as { target: { scale: number } }).target;
     assert.ok(Math.abs(target.scale - zoomToScale(4)) < 1e-6);

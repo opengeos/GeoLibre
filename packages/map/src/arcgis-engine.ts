@@ -350,10 +350,13 @@ export function geojsonToArcgisGeometry(geometry: Geometry): ArcgisGeometryJson 
 
 /**
  * The view's zoom level. A MapView with no tiling scheme (the Blank basemap)
- * reports -1, so the level is derived from its scale there.
+ * reports -1, so the level is derived from its scale there; a view with no
+ * scale yet (before it is ready) reads as zoom 0 rather than a non-finite one.
  */
 function viewZoom(view: ArcgisView): number {
-  return view.zoom >= 0 ? view.zoom : scaleToZoom(view.scale);
+  if (view.zoom >= 0) return view.zoom;
+  const zoom = view.scale > 0 ? scaleToZoom(view.scale) : Number.NaN;
+  return Number.isFinite(zoom) ? zoom : 0;
 }
 
 /**
