@@ -277,9 +277,8 @@ export type ArcgisLayerPlan = ArcgisPlanBase &
         kind: "feature-service";
         url: string;
         /**
-         * The layer's own symbol per geometry kind, when its style is not the
-         * default; the engine picks the one matching the service's geometry
-         * type once loaded. Without it the service draws its own renderer.
+         * The layer's own symbol per geometry kind; the engine picks the one
+         * matching the service's geometry type once loaded.
          */
         symbols?: Record<ArcgisGeometryKind, ArcgisSymbolJson>;
         /** The layer's filters as an SQL where clause, when they translate. */
@@ -1075,9 +1074,10 @@ function compileGeoJson(
           geometryType: "point",
           features: { type: "FeatureCollection", features: textMarkers },
           // The text is the marker: the point itself draws nothing.
+          // Transparent but sized, so a click on the marker still hits it.
           renderer: {
             type: "simple",
-            symbol: { type: "simple-marker", color: [0, 0, 0, 0], size: 0, outline: null },
+            symbol: { type: "simple-marker", color: [0, 0, 0, 0], size: 12, outline: null },
           } as unknown as ArcgisRendererJson,
           labelingInfo: [...textColors].map(([color, colorId]) => ({
             labelExpressionInfo: { expression: `$feature.${ARCGIS_LABEL_FIELD}` },
@@ -1184,14 +1184,6 @@ function compileGeoJson(
       ...textPart,
     ],
   };
-}
-
-/** Whether a style sets nothing beyond the defaults (ignoring label defaults). */
-function isDefaultStyle(style: Partial<LayerStyle> | undefined): boolean {
-  if (!style) return true;
-  return (Object.keys(style) as (keyof LayerStyle)[]).every(
-    (key) => JSON.stringify(style[key]) === JSON.stringify(DEFAULT_LAYER_STYLE[key]),
-  );
 }
 
 const UNSUPPORTED_TEMPLATE = /\{(?:-y|quadkey|ratio|bbox[^}]*|switch:[^}]*)\}/;
@@ -1573,23 +1565,18 @@ export function compileArcgisLayer(
       // an SQL where clause where one exists.
       const filter = activeFilters(layer);
       const sql = filter ? filterToSql(filter) : null;
-      // A styled layer draws with its style, as the 2D map draws the same
-      // service's features; an unstyled one keeps the service's cartography.
-      const styled = !isDefaultStyle(layer.style);
-      const symbol = styled ? createFeatureStyleResolver(style).resolve(undefined, zoom) : null;
+      // The layer draws with its style, as the 2D map draws the same
+      // service's features (Add Data gives every service layer one).
+      const symbol = createFeatureStyleResolver(style).resolve(undefined, zoom);
       return {
         ...base,
         kind: "feature-service",
         url: serviceUrl,
-        ...(symbol
-          ? {
-              symbols: {
-                point: symbolForKind("point", symbol),
-                polyline: symbolForKind("polyline", symbol),
-                polygon: symbolForKind("polygon", symbol),
-              },
-            }
-          : {}),
+        symbols: {
+          point: symbolForKind("point", symbol),
+          polyline: symbolForKind("polyline", symbol),
+          polygon: symbolForKind("polygon", symbol),
+        },
         ...(sql ? { definitionExpression: sql } : {}),
         ...(filter && !sql ? { filterUnsupported: true } : {}),
       };

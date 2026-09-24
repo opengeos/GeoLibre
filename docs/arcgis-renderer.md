@@ -98,10 +98,10 @@ override is set aside and the shared basemap is translated instead.
   above. FeatureServer layers, and any service recorded as `type: "arcgis"`
   (hand-authored or Python records), draw through the SDK's own
   `FeatureLayer`, `TileLayer`, `MapImageLayer` and `ImageryLayer`; a single
-  MapServer sublayer (`MapServer/2`) is a `FeatureLayer` too. A styled service
-  layer draws with its layer style, an unstyled one with the service's own
-  renderer; its identified features can be highlighted, and its features read
-  back as GeoJSON (one query, up to the service's record limit). A
+  MapServer sublayer (`MapServer/2`) is a `FeatureLayer` too. A service layer
+  draws with its layer style, as on the 2D map; its identified features can be
+  highlighted, and its features read back as GeoJSON (paged past the service's
+  per-request record limit, up to 50 requests). A
   FeatureServer layer's filters (quick filters, the expression filter, the time
   and embed filters) become the service's SQL `definitionExpression`; a filter
   with no SQL form is reported in the map's banner and the service draws

@@ -1119,11 +1119,7 @@ describe("ArcgisEngine picking and highlight", () => {
       type: "arcgis" as const,
       source: { type: "geojson", url: "https://h/rest/services/X/FeatureServer/0" },
     };
-    // An unstyled record keeps the service's cartography.
-    engine.syncLayers([record]);
-    await Promise.resolve();
-    assert.equal(layers.items[0].renderer, undefined);
-    // A styled one draws with its style once the geometry type is known.
+    // The layer draws with its style once the service's geometry type is known.
     engine.syncLayers([{ ...record, style: { ...DEFAULT_LAYER_STYLE, fillColor: "#ff0000" } }]);
     const service = layers.items[0] as (typeof layers.items)[0] & {
       geometryType?: string;
@@ -1131,8 +1127,9 @@ describe("ArcgisEngine picking and highlight", () => {
     };
     service.geometryType = "polygon";
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const renderer = service.renderer as { symbol: { type: string } };
+    const renderer = service.renderer as { symbol: { type: string; color: number[] } };
     assert.equal(renderer.symbol.type, "simple-fill");
+    assert.deepEqual(renderer.symbol.color.slice(0, 3), [255, 0, 0]);
     // A hit leaves the feature's geometry behind for its highlight.
     setHitResults([
       {
@@ -1190,6 +1187,23 @@ describe("ArcgisEngine picking and highlight", () => {
     };
     assert.equal((await engine.getLayerGeoJson("fs"))?.features.length, 2);
     assert.deepEqual(starts, [undefined, 1]);
+    // A service that ignores the offset keeps sending its first page: stop.
+    let calls = 0;
+    service.queryFeatures = async () => {
+      calls++;
+      return {
+        exceededTransferLimit: true,
+        features: [
+          {
+            attributes: { OBJECTID: 1 },
+            geometry: { type: "point", x: 3, y: 4, spatialReference: { wkid: 4326 } },
+            layer: null,
+          },
+        ],
+      };
+    };
+    assert.equal((await engine.getLayerGeoJson("fs"))?.features.length, 1);
+    assert.equal(calls, 2);
   });
   it("keeps synchronous control results when a native hit test outlives the engine", async () => {
     const { setArcgisControlPicker } = await import("../packages/map/src/arcgis-control-adapters");

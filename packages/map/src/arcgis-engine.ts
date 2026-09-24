@@ -1451,14 +1451,23 @@ export class ArcgisEngine implements MapEngine {
     if (!native?.queryFeatures) return null;
     try {
       const graphics: ArcgisGraphic[] = [];
+      // A stable order, so offset pages neither overlap nor skip rows.
+      const oidField = (native as { objectIdField?: string }).objectIdField;
+      let firstOfPreviousPage: string | undefined;
       for (let page = 0; page < SERVICE_GEOJSON_MAX_PAGES; page++) {
         const result = await native.queryFeatures({
           where: "1=1",
           outFields: ["*"],
           returnGeometry: true,
           outSpatialReference: { wkid: 4326 },
+          ...(oidField ? { orderByFields: [oidField] } : {}),
           ...(graphics.length ? { start: graphics.length } : {}),
         });
+        // A service that ignores the offset returns its first page again;
+        // stop rather than repeat it.
+        const first = JSON.stringify(result.features[0]?.attributes ?? null);
+        if (page > 0 && first === firstOfPreviousPage) break;
+        firstOfPreviousPage = first;
         graphics.push(...result.features);
         if (!result.exceededTransferLimit || !result.features.length) break;
       }

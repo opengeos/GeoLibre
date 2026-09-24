@@ -485,7 +485,11 @@ export function ArcgisCanvas({
               if (!viewId) next.setPointerElevation(null);
             }
             if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
-              if (previous) removePopup();
+              // A read still in flight for the old target must not reopen a popup.
+              if (previous) {
+                identify.dispose();
+                removePopup();
+              }
               // Identify and a selection gesture both own map clicks; the
               // newer one wins, as on the other renderers.
               if (next.identifyLayerId) featureSelection.cancel.current?.();
