@@ -1261,13 +1261,19 @@ export class ArcgisEngine implements MapEngine {
   async getLayerGeoJson(id: string): Promise<FeatureCollection | null> {
     return this.layers.find((l) => l.id === id)?.geojson ?? null;
   }
+  /** The store record's tile templates, as a story export rebuilds them in MapLibre. */
+  private storeTiles(id: string): string[] | null {
+    const tiles = this.layers.find((l) => l.id === id)?.source.tiles;
+    return Array.isArray(tiles) && tiles.length ? (tiles as string[]) : null;
+  }
   getLayerRasterSource(id: string): Record<string, unknown> | null {
     const plan = this.natives.get(id)?.plan;
     if (!plan) return null;
     if (plan.kind === "template-tile")
       return {
         type: "raster",
-        tiles: plan.templates,
+        // The store's templates: the plan's are dev-proxied for WMS records.
+        tiles: this.storeTiles(id) ?? plan.templates,
         scheme: plan.scheme,
         tileSize: plan.tileSize,
         minzoom: plan.minzoom,
@@ -1277,10 +1283,9 @@ export class ArcgisEngine implements MapEngine {
     if (plan.kind === "web-tile") {
       // The plan holds the SDK's `{level}/{col}/{row}` form; exports want the
       // store's MapLibre template.
-      const tiles = this.layers.find((l) => l.id === id)?.source.tiles;
       return {
         type: "raster",
-        tiles: Array.isArray(tiles) && tiles.length ? tiles : [plan.urlTemplate],
+        tiles: this.storeTiles(id) ?? [plan.urlTemplate],
         ...(plan.copyright ? { attribution: plan.copyright } : {}),
       };
     }

@@ -1079,16 +1079,23 @@ const WMS_STRUCTURAL = new Set([
   "transparent",
 ]);
 
-/** Whether a tile template is a WMS GetMap request naming the layers to draw. */
+/**
+ * Whether a tile template is a WMS GetMap request naming the layers to draw:
+ * it says `REQUEST=GetMap`, or `SERVICE=WMS` with no other request. An ArcGIS
+ * `/export` template also carries `layers` (`show:3`), but neither of those.
+ */
 function isWmsGetMap(template: string): boolean {
   const params = new URLSearchParams(template.split("?", 2)[1] ?? "");
-  let getMap = true;
+  let request: string | undefined;
+  let wms = false;
   let layers = false;
   for (const [key, value] of params) {
-    if (key.toLowerCase() === "request") getMap = value.toLowerCase() === "getmap";
-    if (key.toLowerCase() === "layers") layers = value.trim() !== "";
+    const name = key.toLowerCase();
+    if (name === "request") request = value.toLowerCase();
+    if (name === "service") wms = value.toLowerCase() === "wms";
+    if (name === "layers") layers = value.trim() !== "";
   }
-  return getMap && layers;
+  return layers && (request === "getmap" || (request === undefined && wms));
 }
 
 /**

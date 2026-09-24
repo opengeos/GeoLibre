@@ -105,6 +105,23 @@ describe("compileArcgisLayer template tiles", () => {
     const plan = compileArcgisLayer(layer);
     assert.equal(plan.kind, "template-tile");
   });
+  it("draws a MapServer sublayer export typed wms, whose layers param is not WMS", () => {
+    const plan = compileArcgisLayer(
+      rasterLayer("wms", {
+        tiles: [
+          "https://h/arcgis/rest/services/X/MapServer/export?bbox={bbox-epsg-3857}&bboxSR=3857&size=256,256&format=png32&transparent=true&layers=show:3&f=image",
+        ],
+      }),
+    );
+    assert.equal(plan.kind, "template-tile");
+    // A GetMap template, or a WMS one with no request named, is still WMS.
+    const wms = compileArcgisLayer(
+      rasterLayer("wms", {
+        tiles: ["https://h/wms?SERVICE=WMS&LAYERS=roads&BBOX={bbox-epsg-3857}"],
+      }),
+    );
+    assert.equal(wms.kind, "wms");
+  });
   it("keeps TMS, tile size and zoom range", () => {
     const plan = compileArcgisLayer(
       rasterLayer("xyz", {
