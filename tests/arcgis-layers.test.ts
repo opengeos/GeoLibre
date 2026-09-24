@@ -395,7 +395,10 @@ describe("ArcGIS raster colour effect and blend mode", () => {
       source: { type: "raster", tiles: ["https://t/{z}/{x}/{y}.png"] },
     });
     assert.equal(compileArcgisLayer(tiles).blendMode, "normal");
-    const add = compileArcgisLayer({ ...tiles, style: { ...DEFAULT_LAYER_STYLE, blendMode: "add" } });
+    const add = compileArcgisLayer({
+      ...tiles,
+      style: { ...DEFAULT_LAYER_STYLE, blendMode: "add" },
+    });
     assert.equal(add.blendMode, "plus");
     const multiply = compileArcgisLayer({
       ...tiles,

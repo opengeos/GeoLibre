@@ -65,9 +65,9 @@ export function ArcgisCanvas({
   // Views replaced by a 2D/3D switch, kept on screen until the new view draws.
   const retiring = useRef<{ element: HTMLElement; engine: ArcgisEngine }[]>([]);
   // Moved control corners outlive the engine, which a 2D/3D switch rebuilds.
-  const controlPositions = useRef<
-    Partial<Record<BuiltInMapControl, maplibregl.ControlPosition>>
-  >({});
+  const controlPositions = useRef<Partial<Record<BuiltInMapControl, maplibregl.ControlPosition>>>(
+    {},
+  );
   const terrainSource = useRef<{ source: string | Blob | null; band: number }>({
     source: null,
     band: 1,

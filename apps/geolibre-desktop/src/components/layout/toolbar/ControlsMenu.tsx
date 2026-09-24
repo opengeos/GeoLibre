@@ -144,7 +144,10 @@ export function ControlsMenu({
     maplibreRouteAnimationPlugin,
     panels.routeAnimation.visible,
   );
-  const flightSimulatorDisabled = unsupported(flightSimulatorPlugin, panels.flightSimulator.visible);
+  const flightSimulatorDisabled = unsupported(
+    flightSimulatorPlugin,
+    panels.flightSimulator.visible,
+  );
   const graticuleDisabled = unsupported(maplibreGraticulePlugin, graticuleActive);
   const effectsSupported = isPluginEngineSupported(maplibreEffectsPlugin, primaryRenderer);
   const reverseGeocodeDisabled = !reverseGeocodeSupported && !reverseGeocodeActive;
@@ -265,7 +268,9 @@ export function ControlsMenu({
               active={effectsActive}
               disabled={!globeActive || (!effectsSupported && !effectsActive)}
               disabledReason={
-                effectsSupported ? t("toolbar.atmosphere.globeOnly") : t("renderer.pluginUnsupported")
+                effectsSupported
+                  ? t("toolbar.atmosphere.globeOnly")
+                  : t("renderer.pluginUnsupported")
               }
               onToggle={onToggleEffects}
               getSettings={getEffectsSettings}
