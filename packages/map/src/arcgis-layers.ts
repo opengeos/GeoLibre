@@ -31,6 +31,7 @@ import {
   type ArcgisTileTemplateSource,
 } from "./arcgis-template-tiles";
 import { imageryColorAdjustments } from "./raster-color-adjustments";
+import { ARCGIS_TEXT_FONT } from "./arcgis-sprite";
 import { GEOMAN_TEXT_PROPERTY, isTextMarkerFeature } from "./label-style";
 
 /**
@@ -1527,16 +1528,24 @@ export function compileArcgisLayer(
     // both into paint and layout, but here they are native properties of the
     // VectorTileLayer, and a style that changed with every opacity tick would
     // rebuild the layer (and abort its in-flight tiles) on each one.
-    const plan = compileMapboxLayer({ ...layer, opacity: 1, visible: true });
+    // Labels use a font Esri's glyph service has (the engine adds the glyphs
+    // and a sprite of GeoLibre's generated icons; `arcgis-sprite.ts`).
+    const plan = compileMapboxLayer(
+      { ...layer, opacity: 1, visible: true },
+      { textFont: ARCGIS_TEXT_FONT },
+    );
     return {
       ...base,
       kind: "vector-tile",
       style: {
         version: 8,
         sources: { [plan.sourceId]: plan.source, ...(plan.additionalSources ?? {}) },
-        // Symbol layers need a glyph endpoint the SDK would otherwise reject
-        // the whole style over; the store's vector-tile records carry none.
-        layers: plan.layers.filter((spec) => spec.type !== "symbol"),
+        // An Esri service's own symbol layers name images of its sprite, which
+        // the stored style snapshot does not keep.
+        layers:
+          layer.type === "vector-tiles"
+            ? plan.layers
+            : plan.layers.filter((spec) => spec.type !== "symbol"),
       },
     };
   }
@@ -1612,20 +1621,23 @@ export function compileArcgisLayer(
       ...(base.bounds ? { bounds: base.bounds } : {}),
     };
     if (tileType === "vector") {
-      const vector = compileMapboxLayer({
-        ...layer,
-        type: "vector-tiles",
-        opacity: 1,
-        visible: true,
-        source: {
-          ...layer.source,
-          type: "vector",
-          url: undefined,
-          tiles: ["https://geolibre.invalid/{z}/{x}/{y}.pbf"],
+      const vector = compileMapboxLayer(
+        {
+          ...layer,
+          type: "vector-tiles",
+          opacity: 1,
+          visible: true,
+          source: {
+            ...layer.source,
+            type: "vector",
+            url: undefined,
+            tiles: ["https://geolibre.invalid/{z}/{x}/{y}.pbf"],
+          },
         },
-      });
+        { textFont: ARCGIS_TEXT_FONT },
+      );
       sourceId = vector.sourceId;
-      styleLayers = vector.layers.filter((spec) => spec.type !== "symbol");
+      styleLayers = vector.layers;
     }
     return {
       ...base,

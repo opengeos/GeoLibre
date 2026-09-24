@@ -585,7 +585,7 @@ describe("ArcGIS raster, service and media compilation", () => {
     assert.equal(plan.kind, "wms");
     if (plan.kind === "wms") assert.deepEqual(plan.sublayers, [{ name: "roads" }]);
   });
-  it("turns vector tiles into a Mapbox style document without symbol layers", () => {
+  it("turns vector tiles into a Mapbox style document with labels in an Esri font", () => {
     const layer: GeoLibreLayer = {
       ...geojsonLayer({ geojson: undefined }),
       type: "vector-tiles",
@@ -602,11 +602,18 @@ describe("ArcGIS raster, service and media compilation", () => {
     const plan = compileArcgisLayer(layer);
     assert.equal(plan.kind, "vector-tile");
     if (plan.kind !== "vector-tile") return;
-    const style = plan.style as { version: number; sources: object; layers: { type: string }[] };
+    const style = plan.style as {
+      version: number;
+      sources: object;
+      layers: { type: string; layout?: Record<string, unknown> }[];
+    };
     assert.equal(style.version, 8);
     assert.equal(Object.keys(style.sources).length, 1);
     assert.ok(style.layers.length >= 3);
-    assert.ok(style.layers.every((l) => l.type !== "symbol"));
+    // The label layer is kept, in a font Esri's glyph service has; the engine
+    // adds the glyphs and sprite (`arcgis-sprite.ts`).
+    const label = style.layers.find((l) => l.type === "symbol");
+    assert.deepEqual(label?.layout?.["text-font"], ["Arial Regular"]);
     // Opacity and visibility are native layer properties, so the style must
     // not change with them — otherwise every slider tick rebuilds the layer.
     const faded = compileArcgisLayer({ ...layer, opacity: 0.3, visible: false });

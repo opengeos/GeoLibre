@@ -3,6 +3,7 @@ import { ArcgisControlHost } from "./arcgis-control-host";
 import { createArcgisZarrLayer } from "./arcgis-zarr";
 import { createArcgisArchiveLayer } from "./arcgis-tile-archives";
 import { createArcgisTemplateTileLayer } from "./arcgis-template-tiles";
+import { attachArcgisSprite } from "./arcgis-sprite";
 import { createArcgisCogLayer, loadCogTiler } from "./arcgis-cog-imagery";
 import { cachingCogTiler, cogSourceUrl } from "./cog-imagery";
 import { SEARCH_HIGHLIGHT_COLOR } from "./map-engine";
@@ -1341,9 +1342,12 @@ export class ArcgisEngine implements MapEngine {
             ...(plan.customParameters ? { customParameters: plan.customParameters } : {}),
           }),
         ];
-      case "vector-tile":
+      case "vector-tile": {
         // `fullExtent` is read-only on a VectorTileLayer (it comes from the style).
-        return [new layers.VectorTileLayer({ ...common, style: plan.style })];
+        const sprite = attachArcgisSprite(this.sdk, plan.style);
+        disposers.push(sprite.dispose);
+        return [new layers.VectorTileLayer({ ...common, style: sprite.style })];
+      }
       case "feature-service": {
         const native = new layers.FeatureLayer({
           ...common,

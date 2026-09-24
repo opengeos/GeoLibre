@@ -84,7 +84,12 @@ override is set aside and the shared basemap is translated instead.
 - HTTP(S) raster tiles (XYZ, WMTS tile templates), WMS (the GetMap template is
   split into the SDK's `WMSLayer` description), and vector tiles with named
   source layers (drawn by the SDK's `VectorTileLayer` from the same style
-  layers the Mapbox engine compiles, minus text labels). A raster template
+  layers the Mapbox engine compiles). Markers, line decorations and fill
+  patterns are GeoLibre's generated images, baked into a sprite sheet the SDK
+  reads through a request interceptor; labels use Arial from Esri's public
+  glyph service, so they need the network. Past a source's maximum zoom the
+  SDK magnifies its last tiles, patterns and decoration spacing with them,
+  where MapLibre keeps them crisp. A raster template
   `WebTileLayer` cannot express — a `{bbox-epsg-3857}` request, a TMS scheme,
   `{-y}` or `{quadkey}`, a 512 px tile size, a source `minzoom`/`maxzoom`, or
   several templates — draws through a custom tile layer that requests each
@@ -311,9 +316,10 @@ experimental alignment and depth limitations described above.
   renderer, and the layer panels badge such layers **No ArcGIS**. A layer a
   plugin draws on MapLibre only (Planetary Computer, say) is named in the map's
   banner too.
-- The Print Layout atlas and vector-tile icon symbols (the store's vector-tile
-  records carry no sprite), in any view; and, in a 3D `SceneView`, the
-  project's zoom and bounds constraints and the nautical scale unit.
+- The Print Layout atlas, in any view; an Esri vector tile service's own icon
+  and label layers (its stored style keeps no sprite or glyphs); and, in a 3D
+  `SceneView`, the project's zoom and bounds constraints and the nautical
+  scale unit.
 - Measure and the geometry editor draw through the MapLibre/Mapbox style API;
   the Controls menu greys Measure out, and editing a layer's geometry says the
   renderer does not support it.
