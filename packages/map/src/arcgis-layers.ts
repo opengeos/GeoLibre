@@ -1413,7 +1413,8 @@ function assignLabelClasses(overridden: Map<Feature, LabelOverrideValues>): Labe
     if (step === 0) return value;
     const channel = (c: number) => Math.min(255, Math.round(c / step) * step);
     const sizeStep = step / 32;
-    const alphaStep = step / 256;
+    // Alpha never coarser than eighths, so a fading ramp keeps fading.
+    const alphaStep = Math.min(0.125, step / 256);
     const alpha = value.color[3];
     return {
       ...value,

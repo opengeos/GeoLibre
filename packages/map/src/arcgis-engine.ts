@@ -59,6 +59,7 @@ import {
   type ArcgisSymbolJson,
 } from "./arcgis-layers";
 import { renderMarkerCanvas } from "./markers";
+import { parseLabelOverride } from "./label-style";
 import { planArcgisBasemap, type ArcgisBasemapPlan, sameArcgisBasemapPlan } from "./arcgis-basemap";
 import {
   redactArcgisError,
@@ -2658,7 +2659,12 @@ function geojsonCompileKey(layer: GeoLibreLayer): string {
   // A label opacity override is baked against the layer opacity it replaces,
   // so only then does an opacity change recompile the layer.
   const labels = layer.style?.labels;
-  const labelOpacity = labels?.enabled && labels.opacityExpression?.trim() ? opacity : undefined;
+  const labelOpacity =
+    labels?.enabled &&
+    (labels.field || labels.expression?.trim()) &&
+    parseLabelOverride(labels.opacityExpression, "number")
+      ? opacity
+      : undefined;
   // The blend mode is applied in place, like opacity.
   return JSON.stringify({ ...rest, labelOpacity, style: { ...rest.style, blendMode: undefined } });
 }
