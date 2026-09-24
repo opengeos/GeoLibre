@@ -63,7 +63,7 @@ type SpriteEntry = { x: number; y: number; width: number; height: number; pixelR
 async function bakeSheet(
   ids: string[],
   ratio: number,
-): Promise<{ index: Record<string, SpriteEntry>; image: HTMLImageElement | null }> {
+): Promise<{ index: Record<string, SpriteEntry>; image: HTMLImageElement }> {
   const drawn: { id: string; canvas: HTMLCanvasElement; width: number; height: number }[] = [];
   for (const id of ids) {
     const factory = generatedImageFactory(id);
@@ -84,7 +84,9 @@ async function bakeSheet(
     });
   }
   const index: Record<string, SpriteEntry> = {};
-  if (!drawn.length) return { index, image: null };
+  // A sheet with nothing on it is still an image: the interceptor must never
+  // answer null, which tells the SDK to fetch the synthetic URL itself.
+  if (!drawn.length) return { index, image: await sheetImage(emptyCanvas()) };
   const maxRow = 1024;
   let x = 0;
   let y = 0;
@@ -105,16 +107,26 @@ async function bakeSheet(
   sheet.width = sheetWidth;
   sheet.height = y + rowHeight;
   const context = sheet.getContext("2d");
-  if (!context) return { index: {}, image: null };
+  if (!context) return { index: {}, image: await sheetImage(emptyCanvas()) };
   for (const entry of drawn) {
     const at = index[entry.id];
     context.drawImage(entry.canvas, at.x, at.y, at.width, at.height);
   }
-  // The SDK's sprite loader expects an image element as the response data.
+  return { index, image: await sheetImage(sheet) };
+}
+
+function emptyCanvas(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 1;
+  return canvas;
+}
+
+/** The SDK's sprite loader expects an image element as the response data. */
+async function sheetImage(canvas: HTMLCanvasElement): Promise<HTMLImageElement> {
   const image = new Image();
-  image.src = sheet.toDataURL("image/png");
+  image.src = canvas.toDataURL("image/png");
   await image.decode();
-  return { index, image };
+  return image;
 }
 
 /**
