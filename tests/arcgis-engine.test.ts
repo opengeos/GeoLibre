@@ -23,7 +23,7 @@ import type {
   ArcgisSceneSdk,
   ArcgisSdk,
 } from "../packages/map/src/arcgis-sdk";
-import { ARCGIS_ID_FIELD, zoomToScale } from "../packages/map/src/arcgis-layers";
+import { ARCGIS_ID_FIELD, scaleToZoom, zoomToScale } from "../packages/map/src/arcgis-layers";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 // The engine never loads the SDK here: `arcgis-sdk.ts` only describes its
@@ -90,11 +90,9 @@ function makeSdk() {
   const widgetClass = (kind: string) =>
     class {
       kind = kind;
-      unit: unknown;
       label: unknown;
       destroyed = false;
       constructor(public props: Record<string, unknown> = {}) {
-        this.unit = props.unit;
         this.label = props.label;
         widgets.push(this as never);
       }
@@ -314,7 +312,6 @@ function makeSdk() {
     widgets: {
       Zoom: widgetClass("Zoom"),
       Compass: widgetClass("Compass"),
-      ScaleBar: widgetClass("ScaleBar"),
       Fullscreen: widgetClass("Fullscreen"),
       Locate: widgetClass("Locate"),
       LayerList: widgetClass("LayerList"),
@@ -612,6 +609,50 @@ describe("ArcgisEngine camera conventions", () => {
     assert.deepEqual(call.target.center, [180, 85]);
     assert.equal(call.target.zoom, 10);
   });
+  it("keeps a flat view inside restricted bounds", () => {
+    const { engine, rawView } = makeEngine();
+    engine.applyMapPreferences({ ...PREFERENCES });
+    assert.equal(rawView.constraints.geometry, null);
+    // 10 degrees by 10 degrees must fill the 800 x 600 view: zoom out no
+    // further than the level at which the box's height spans 600 pixels.
+    engine.applyMapPreferences({ ...PREFERENCES, restrictBounds: true, bounds: [0, 0, 10, 10] });
+    const bounds = rawView.constraints.geometry as { xmin: number; ymax: number };
+    assert.deepEqual([bounds.xmin, bounds.ymax], [0, 10]);
+    // As a scale: the SDK reads a fractional minZoom as a level index.
+    const minZoom = scaleToZoom(rawView.constraints.minScale as number);
+    assert.equal(rawView.constraints.minZoom, undefined);
+    assert.ok(minZoom > 5 && minZoom < 6, String(minZoom));
+    // A 512 px basemap numbers its levels one below the 256 px scheme: the
+    // limits follow the view's own zoom-to-scale ratio.
+    rawView.scale = zoomToScale(rawView.zoom) / 2;
+    engine.applyMapPreferences({ ...PREFERENCES, minZoom: 3, maxZoom: 9 });
+    assert.equal(rawView.constraints.minScale, zoomToScale(3) / 2);
+    assert.equal(rawView.constraints.maxScale, zoomToScale(9) / 2);
+  });
+  it("holds a scene inside the zoom range and bounds once it settles", () => {
+    const { engine, rawView, goTo, fireWatchers } = makeSceneEngine();
+    Object.assign(rawView, { zoom: 2, center: { longitude: 30, latitude: 40 } });
+    goTo.length = 0;
+    engine.applyMapPreferences({
+      ...PREFERENCES,
+      minZoom: 4,
+      maxZoom: 12,
+      restrictBounds: true,
+      bounds: [-10, -10, 10, 10],
+    });
+    // On a globe the zoom range is also an altitude range, lower zoom higher.
+    const altitude = (rawView.constraints as { altitude: { min: number; max: number } }).altitude;
+    assert.ok(altitude.max > altitude.min && altitude.min > 0);
+    const call = goTo.at(-1) as { target: { center: [number, number]; zoom: number } };
+    assert.deepEqual(call.target.center, [10, 10]);
+    // Zoom 4, raised until the 20 degree box fills the view.
+    assert.ok(call.target.zoom > 4.5 && call.target.zoom < 5, String(call.target.zoom));
+    // Inside the range and bounds, nothing moves.
+    Object.assign(rawView, { zoom: 6, center: { longitude: 1, latitude: 2 } });
+    goTo.length = 0;
+    fireWatchers();
+    assert.equal(goTo.length, 0);
+  });
   it("converts GeoJSON geometry to SDK geometry JSON", () => {
     assert.deepEqual(geojsonToArcgisGeometry({ type: "Point", coordinates: [1, 2] }), {
       type: "point",
@@ -690,6 +731,7 @@ describe("ArcgisEngine controls", () => {
   });
 
   it("replaces the SDK's default UI with the Controls menu's default set", () => {
+    using _document = withDocument();
     const { engine, widgets, uiAdds, rawView } = makeEngine();
     assert.deepEqual(rawView.ui.components, []);
     // Fullscreen, compass and scale are on by default; navigation (zoom) and
@@ -697,14 +739,16 @@ describe("ArcgisEngine controls", () => {
     // equivalent and are skipped. Attribution is the view's own rendering
     // (`attributionVisible`), not a widget, and can never be turned off.
     assert.equal(rawView.attributionVisible, true);
+    // The scale bar is the 2D map's own control, not an SDK widget.
     assert.deepEqual(
       widgets.map((w) => w.kind),
-      ["Fullscreen", "Compass", "ScaleBar"],
+      ["Fullscreen", "Compass"],
     );
     assert.deepEqual(
       uiAdds.map((entry) => entry.position),
       ["top-right", "top-right", "bottom-left"],
     );
+    assert.match((uiAdds[2].component as { className: string }).className, /maplibregl-ctrl-scale/);
     assert.equal(engine.setBuiltInControlVisible("navigation", true), true);
     assert.equal(widgets.at(-1)?.kind, "Zoom");
     assert.equal(engine.setBuiltInControlVisible("attribution", false), false);
@@ -719,6 +763,7 @@ describe("ArcgisEngine controls", () => {
     assert.equal(engine.capabilities.domControls, true);
   });
   it("mounts moved controls in the corners an earlier view reported", () => {
+    using _document = withDocument();
     const moves: [string, string][] = [];
     const { engine, uiAdds } = makeEngine({
       controlPositions: { compass: "bottom-left" },
@@ -733,22 +778,41 @@ describe("ArcgisEngine controls", () => {
     assert.deepEqual(moves, [["scale", "top-left"]]);
   });
   it("forwards the scale unit and compass label to the widgets", () => {
-    const { engine, widgets } = makeEngine();
-    engine.applyMapPreferences({
-      minZoom: 0,
-      maxZoom: 24,
-      maxPitch: 85,
-      renderWorldCopies: true,
-      restrictBounds: false,
-      bounds: [-180, -85, 180, 85],
-      projection: "mercator",
-      scaleUnit: "imperial",
-    } as MapPreferences);
-    assert.equal(widgets.find((w) => w.kind === "ScaleBar")?.unit, "non-metric");
+    using _document = withDocument();
+    const { engine, widgets, uiAdds } = makeEngine();
+    const scale = uiAdds[2].component as { textContent: string };
+    const apply = (scaleUnit: MapPreferences["scaleUnit"]) =>
+      engine.applyMapPreferences({
+        minZoom: 0,
+        maxZoom: 24,
+        maxPitch: 85,
+        renderWorldCopies: true,
+        restrictBounds: false,
+        bounds: [-180, -85, 180, 85],
+        projection: "mercator",
+        scaleUnit,
+      } as MapPreferences);
+    apply("imperial");
+    assert.match(scale.textContent, / mi$/);
+    // The SDK's own scale bar had no nautical miles.
+    apply("nautical");
+    assert.match(scale.textContent, / nmi$/);
     engine.setCompassLabel("Reset");
     assert.equal(widgets.find((w) => w.kind === "Compass")?.label, "Reset");
   });
 });
+
+/** Install a DOM for the controls that build their own elements. */
+function withDocument(): Disposable {
+  const { document } = parseHTML("<html><body></body></html>");
+  const previous = globalThis.document;
+  (globalThis as { document: unknown }).document = document;
+  return {
+    [Symbol.dispose]() {
+      (globalThis as { document: unknown }).document = previous;
+    },
+  };
+}
 
 describe("ArcgisEngine layer sync", () => {
   beforeEach(() => {

@@ -334,6 +334,8 @@ export interface ArcgisCamera {
   tilt: number;
   /** The camera's location; `z` is its height in metres. */
   position: ArcgisPoint & { z?: number };
+  /** The diagonal field of view in degrees. */
+  fov?: number;
 }
 
 export interface ArcgisSceneView extends ArcgisViewBase {
@@ -343,6 +345,8 @@ export interface ArcgisSceneView extends ArcgisViewBase {
   camera: ArcgisCamera | null;
   constraints: {
     tilt?: { max?: number; mode?: "auto" | "manual" };
+    /** Camera height limits in metres; a global scene only. */
+    altitude?: { min?: number; max?: number } | null;
   };
   environment: {
     background?: { type: "color"; color: unknown } | null;
@@ -388,8 +392,6 @@ export interface ArcgisConfig {
 export interface ArcgisWidget {
   view?: ArcgisView | null;
   destroy(): void;
-  /** `ScaleBar`. */
-  unit?: string;
   /** What to hand `view.ui.add`; the widget itself when absent. */
   uiComponent?: unknown;
 }
@@ -446,7 +448,6 @@ export interface ArcgisSdk {
   widgets: {
     Zoom: ArcgisClass<ArcgisWidget>;
     Compass: ArcgisClass<ArcgisWidget>;
-    ScaleBar: ArcgisClass<ArcgisWidget>;
     Fullscreen: ArcgisClass<ArcgisWidget>;
     Locate: ArcgisClass<ArcgisWidget>;
     LayerList: ArcgisClass<ArcgisWidget>;
@@ -491,7 +492,6 @@ const SDK_MODULES = {
   ControlPointsGeoreference: "layers/support/ControlPointsGeoreference",
   Zoom: "widgets/Zoom",
   Compass: "widgets/Compass",
-  ScaleBar: "widgets/ScaleBar",
   Fullscreen: "widgets/Fullscreen",
   Locate: "widgets/Locate",
   LayerList: "widgets/LayerList",
@@ -554,7 +554,6 @@ export function assembleArcgisSdk(modules: Record<ModuleKey, Record<string, unkn
     widgets: {
       Zoom: member("Zoom"),
       Compass: member("Compass"),
-      ScaleBar: member("ScaleBar"),
       Fullscreen: member("Fullscreen"),
       Locate: member("Locate"),
       LayerList: member("LayerList"),

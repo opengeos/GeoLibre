@@ -163,9 +163,11 @@ override is set aside and the shared basemap is translated instead.
   zoom in 2D. Built-in and custom SVG fill patterns also render in 2D, with
   per-feature fill opacity and independent outlines.
 - The built-in controls the **Controls** menu governs, as the SDK's own widgets:
-  fullscreen, compass (resets rotation), zoom (navigation), locate (geolocate)
-  and the scale bar (metric or imperial, 2D only), plus a globe/Mercator
-  toggle and terrain (see [2D and 3D](#2d-and-3d)). Attribution is drawn by the view
+  fullscreen, compass (resets rotation), zoom (navigation) and locate
+  (geolocate), plus a globe/Mercator toggle and terrain (see
+  [2D and 3D](#2d-and-3d)). The scale bar is the 2D map's own: it measures
+  around the view's centre with the active body's radius, in metric, imperial
+  or nautical units, on a flat map and in a scene. Attribution is drawn by the view
   itself (`attributionVisible`); Esri requires it and it cannot be hidden.
 - **Plugins → Layer Control** toggles the native ArcGIS layer list, enabled by
   default on the primary map like the shared plugin. Its visibility
@@ -231,10 +233,9 @@ In a scene:
   advanced colour expression, or the extrusion colour. On a 2D `MapView` they
   stay flat fills.
 - Identify, selection highlighting, extent drawing and capture work as in 2D.
-  The scale bar does not: the SDK's scale bar only measures a `MapView`, so
-  the Controls menu cannot show it in a scene. The project's minimum and
-  maximum zoom still clamp camera moves the app makes, but not the user's own
-  navigation.
+  The project's zoom range becomes the scene's altitude range on a globe, and
+  a scene that settles outside the zoom range or the restricted bounds eases
+  back inside them.
 - **3D (Z values)** places vector coordinates at their absolute altitude, with
   the configured vertical scale and offset. Selection highlights use the same
   transformed coordinates. Source data stays unchanged.
@@ -332,9 +333,12 @@ experimental alignment and depth limitations described above.
   plugin draws on MapLibre only (Planetary Computer, say) is named in the map's
   banner too.
 - The Print Layout atlas, in any view; an Esri vector tile service's own icon
-  and label layers (its stored style keeps no sprite or glyphs); and, in a 3D
-  `SceneView`, the project's zoom and bounds constraints and the nautical
-  scale unit.
+  and label layers (its stored style keeps no sprite or glyphs).
+- Navigation limits differ slightly from MapLibre's: the SDK keeps the view's
+  centre (not the whole viewport) inside restricted bounds, rounds the
+  minimum zoom to one of its levels, and always wraps around the
+  antimeridian, so turning off world copies only clamps the views the app
+  applies.
 - Measure and the geometry editor draw through the MapLibre/Mapbox style API;
   the Controls menu greys Measure out, and editing a layer's geometry says the
   renderer does not support it.

@@ -76,6 +76,15 @@ import { ensureGeneratedImageHandler } from "./generated-images";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { isMapboxStyleUrl, loadMapboxStyle, redactMapboxStyleUrl } from "./mapbox-style";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
+import {
+  boundsFillMinZoom,
+  latFromMercatorY,
+  lngFromMercatorX,
+  mercatorBoundsForLngLatBounds,
+  mercatorXFromLng,
+  mercatorYFromLat,
+  normalizeMapBounds,
+} from "./map-bounds";
 import { getOfflineBasemapStyle, isOfflineBasemapSentinel } from "./protomaps-basemap";
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MaptoolkitLogoControl } from "./maptoolkit-logo-control";
@@ -2907,19 +2916,8 @@ function effectiveMinZoomForPreferences(
   map: maplibregl.Map,
   requestedMinZoom: number,
 ): number {
-  const bounds = preferences.restrictBounds && normalizeMapBounds(preferences.bounds);
-  if (!bounds) return requestedMinZoom;
-
-  const mercatorBounds = mercatorBoundsForLngLatBounds(bounds);
-  const widthRatio = Math.abs(mercatorBounds.east - mercatorBounds.west);
-  const heightRatio = Math.abs(mercatorBounds.south - mercatorBounds.north);
-  if (widthRatio <= 0 || heightRatio <= 0) return requestedMinZoom;
-
   const canvas = map.getCanvas();
-  const minZoomForWidth = Math.log2(canvas.clientWidth / (512 * widthRatio));
-  const minZoomForHeight = Math.log2(canvas.clientHeight / (512 * heightRatio));
-
-  return clampNumber(Math.max(requestedMinZoom, minZoomForWidth, minZoomForHeight), 0, 24);
+  return boundsFillMinZoom(preferences, canvas.clientWidth, canvas.clientHeight, requestedMinZoom);
 }
 
 function constrainCenterToVisibleBounds(
@@ -2953,53 +2951,6 @@ function constrainCenterToVisibleBounds(
         : (mercatorBounds.north + mercatorBounds.south) / 2,
     ),
   );
-}
-
-function mercatorBoundsForLngLatBounds(bounds: MapPreferences["bounds"]): {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-} {
-  return {
-    west: mercatorXFromLng(bounds[0]),
-    south: mercatorYFromLat(bounds[1]),
-    east: mercatorXFromLng(bounds[2]),
-    north: mercatorYFromLat(bounds[3]),
-  };
-}
-
-function mercatorXFromLng(lng: number): number {
-  return (lng + 180) / 360;
-}
-
-function lngFromMercatorX(x: number): number {
-  return x * 360 - 180;
-}
-
-function mercatorYFromLat(lat: number): number {
-  const radians = (clampNumber(lat, -85, 85) * Math.PI) / 180;
-  return (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2;
-}
-
-function latFromMercatorY(y: number): number {
-  return (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
-}
-
-function normalizeMapBounds(bounds: MapPreferences["bounds"]): MapPreferences["bounds"] | null {
-  const [west, south, east, north] = bounds;
-  if (![west, south, east, north].every(Number.isFinite)) return null;
-  const normalized: MapPreferences["bounds"] = [
-    clampNumber(west, -180, 180),
-    clampNumber(south, -85, 85),
-    clampNumber(east, -180, 180),
-    clampNumber(north, -85, 85),
-  ];
-  if (normalized[0] >= normalized[2] || normalized[1] >= normalized[3]) {
-    return null;
-  }
-
-  return normalized;
 }
 
 function mapBoundsForPreferences(preferences: MapPreferences): maplibregl.LngLatBoundsLike | null {
