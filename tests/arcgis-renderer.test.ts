@@ -112,6 +112,10 @@ describe("ArcGIS project and plugin boundaries", () => {
     assert.equal(supportsAddDataRenderer("arcgis", "arcgis"), true);
     assert.equal(supportsAddDataRenderer("pmtiles", "mapbox"), true);
     assert.equal(supportsAddDataRenderer("pmtiles", "maplibre"), true);
+    // STAC's browser draws MapLibre/Mapbox layers; the SDK has no video overlay.
+    assert.equal(supportsAddDataRenderer("stac", "arcgis"), false);
+    assert.equal(supportsAddDataRenderer("video", "arcgis"), false);
+    assert.equal(supportsAddDataRenderer("stac", "mapbox"), true);
   });
 });
 

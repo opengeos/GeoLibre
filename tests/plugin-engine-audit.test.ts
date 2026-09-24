@@ -29,6 +29,24 @@ const DECLARES_CESIUM = /engines:\s*\[[^\]]*["']cesium["'][^\]]*\]/;
 /** Declares Mapbox in its `engines` list. */
 const DECLARES_MAPBOX = /engines:\s*\[[^\]]*["']mapbox["'][^\]]*\]/;
 
+// ArcGIS-capable plugins have no style map at all: `app.getMap()`,
+// `app.getMapboxMap()` and `getStyleMap(app)` all answer null on the ArcGIS
+// renderer, so a plugin that declares `engines: [..., "arcgis"]` must work
+// through the store and the engine-neutral API (`getViewBounds`,
+// `addGeoJsonLayer`, `addMapControl`, ...). A read that handles the null on
+// purpose (the weather overlays' optional instant frame swap) says so at the
+// call (issue #2477).
+
+/** Declares ArcGIS in its `engines` list. */
+const DECLARES_ARCGIS = /engines:\s*\[[^\]]*["']arcgis["'][^\]]*\]/;
+
+/** Any read of a style map: the MapLibre or Mapbox map, directly or via getStyleMap. */
+const STYLE_MAP_READ =
+  /(?:\bapp(?:Ref|Api|API)?\??\.)(?:getMap|getMapboxMap)\??\.?\(\)|\bgetStyleMap\(/g;
+
+/** Opt out one style-map read whose null answer the module handles on purpose. */
+const ARCGIS_NULL_MAP_OPT_OUT = "engine-audit-allow: arcgis-null-map";
+
 /**
  * A read of the MapLibre-only map: `app.getMap()`, `app?.getMap?.()`, or the
  * same off an `appRef` / `appApi` alias. `getMapboxMap` and a control's own
@@ -190,6 +208,40 @@ function mapboxPluginClosures(): { plugin: string; files: string[] }[] {
   return pluginClosures(DECLARES_MAPBOX);
 }
 
+/** Plugin entry points that declare ArcGIS support, with everything they import. */
+function arcgisPluginClosures(): { plugin: string; files: string[] }[] {
+  return pluginClosures(DECLARES_ARCGIS);
+}
+
+/**
+ * Lines where this module reads a style map, which is null on ArcGIS.
+ *
+ * Out of scope: `style-map.ts`, which defines the accessor; a module that
+ * declares its own `engines` without ArcGIS, which is another plugin reached
+ * for a helper and is audited under its own declaration; and a read already
+ * marked as a MapLibre-detection branch (`getMap-mapbox`), which by that
+ * marker falls back when the map is absent.
+ */
+function styleMapReads(file: string): number[] {
+  if (file.endsWith(`${join("plugins", "style-map.ts")}`)) return [];
+  const raw = readFileSync(file, "utf8");
+  const rawLines = raw.split("\n");
+  const source = blankComments(raw);
+  const ownEngines = /engines:\s*\[[^\]]*\]/.exec(source);
+  if (ownEngines && !DECLARES_ARCGIS.test(ownEngines[0])) return [];
+  const lines = new Set<number>();
+  for (const pattern of [STYLE_MAP_READ, GETMAP_INDIRECT])
+    for (const match of source.matchAll(pattern)) {
+      const line = lineOf(source, match.index);
+      if (
+        !optedOutAt(rawLines, line, ARCGIS_NULL_MAP_OPT_OUT) &&
+        !optedOutAt(rawLines, line, MAPBOX_GETMAP_OPT_OUT)
+      )
+        lines.add(line);
+    }
+  return [...lines].sort((a, b) => a - b);
+}
+
 /**
  * Lines where this module reads the map through `app.getMap()` alone. A read
  * that falls back to `getMapboxMap` on the same line (the STAC idiom) is fine;
@@ -292,6 +344,26 @@ describe("plugin engine audit", () => {
         "a member only a MapLibre map has, which throws (or silently no-ops) on Mapbox: " +
         "branch on the engine, or mark a call guarded by a runtime engine check with " +
         `"${MAPLIBRE_ONLY_OPT_OUT}"`,
+    );
+  });
+
+  it("finds the ArcGIS-capable plugins to audit", () => {
+    assert.ok(arcgisPluginClosures().length > 0, "no plugin declares ArcGIS support");
+  });
+
+  it("does not lean on a style map, which the ArcGIS renderer does not have", () => {
+    const offenders = arcgisPluginClosures().flatMap(({ plugin, files }) =>
+      files.flatMap((file) =>
+        styleMapReads(file).map((line) => `${plugin} -> ${relative(PLUGIN_DIR, file)}:${line}`),
+      ),
+    );
+    assert.deepEqual(
+      offenders,
+      [],
+      "these modules are reachable from a plugin that declares ArcGIS support but read " +
+        "a MapLibre/Mapbox map, which is null on the ArcGIS renderer: go through the " +
+        "store and the engine-neutral API, or mark a read whose null answer is handled " +
+        `on purpose with "${ARCGIS_NULL_MAP_OPT_OUT}"`,
     );
   });
 

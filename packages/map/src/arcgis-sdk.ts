@@ -64,6 +64,8 @@ export interface ArcgisPoint {
   y: number;
   longitude: number;
   latitude: number;
+  /** Height of the point; a SceneView's `toMap` gives the ground's here. */
+  z?: number;
   spatialReference: ArcgisSpatialReference;
 }
 

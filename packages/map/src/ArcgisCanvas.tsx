@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { applyGroupEffects, useAppStore, type MapProjection } from "@geolibre/core";
+import {
+  applyGroupEffects,
+  createPointerElevationResolver,
+  getActiveEllipsoid,
+  useAppStore,
+  type MapProjection,
+} from "@geolibre/core";
 import type { BuiltInMapControl, MapEngine } from "./map-engine";
+import type { MapDiagnosticEvent } from "./map-diagnostic";
+import { attachFeatureSelection, type FeatureSelectionState } from "./map-feature-selection";
+import { arcgisFeatureSelectionMap } from "./arcgis-feature-selection";
 import type * as maplibregl from "maplibre-gl";
 import { CogDemError } from "./cog-dem-source";
 import {
@@ -8,6 +17,7 @@ import {
   arcgisSceneMode,
   bearingToRotation,
   viewPlacementState,
+  type ArcgisEngineMessages,
 } from "./arcgis-engine";
 import {
   ensureArcgisCss,
@@ -33,6 +43,12 @@ export interface ArcgisCanvasProps {
   closeLabel?: string;
   /** Translated label for the button that retries a failed SDK load. */
   retryLabel?: string;
+  /** Report each new render error to the app's Diagnostics log. */
+  onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
+  /** Translated error messages for the engine's banner. */
+  messages?: Partial<ArcgisEngineMessages>;
+  /** Whether the pointer readout may look elevations up remotely (consent). */
+  canUseRemoteElevation?: () => boolean;
 }
 
 /**
@@ -60,6 +76,9 @@ export function ArcgisCanvas({
   onEngineReady,
   closeLabel = "Close",
   retryLabel = "Retry",
+  onMapDiagnosticEvent,
+  messages,
+  canUseRemoteElevation,
 }: ArcgisCanvasProps) {
   const container = useRef<HTMLDivElement>(null);
   // Views replaced by a 2D/3D switch, kept on screen until the new view draws.
@@ -79,6 +98,17 @@ export function ArcgisCanvas({
   // recreating the map.
   const closeLabelRef = useRef(closeLabel);
   closeLabelRef.current = closeLabel;
+  const diagnosticRef = useRef(onMapDiagnosticEvent);
+  diagnosticRef.current = onMapDiagnosticEvent;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const canUseRemoteElevationRef = useRef(canUseRemoteElevation);
+  canUseRemoteElevationRef.current = canUseRemoteElevation;
+  // The live engine, for effects that update it in place.
+  const liveEngine = useRef<ArcgisEngine | null>(null);
+  useEffect(() => {
+    if (messages) liveEngine.current?.setMessages(messages);
+  }, [messages]);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   // Whether mounting failed (the SDK or its modules could not load), which
@@ -205,6 +235,8 @@ export function ArcgisCanvas({
           },
         });
         const current = engine;
+        liveEngine.current = current;
+        if (messagesRef.current) current.setMessages(messagesRef.current);
         let restoringTerrain = false;
         const restoreTerrain = () => {
           const remembered = terrainSource.current;
@@ -243,6 +275,7 @@ export function ArcgisCanvas({
         // default camera, which must not be written back to the store.
         let settled = false;
         let readyError: string | null = null;
+        let reported = new Set<string>();
         let selectionKey: string | null = null;
         let popupDispose: (() => void) | null = null;
         const removePopup = () => {
@@ -258,6 +291,50 @@ export function ArcgisCanvas({
           const surface = element.querySelector<HTMLElement>(".esri-view-surface");
           if (surface) surface.style.cursor = cursor;
         };
+        // The shared selection gestures (Layers panel → Select features),
+        // driven through a MapLibre-shaped adapter over the view.
+        const featureSelection: FeatureSelectionState = {
+          active: { current: false },
+          cancel: { current: null },
+        };
+        const detachSelection = viewId
+          ? () => {}
+          : attachFeatureSelection(arcgisFeatureSelectionMap(current, mapView), {
+              state: featureSelection,
+              featureIdAtPoint: (layer, point) => {
+                const at = mapView.toMap(point);
+                return at
+                  ? (current.identifyFeatures([at.longitude, at.latitude], layer.id)[0]
+                      ?.featureId ?? null)
+                  : null;
+              },
+              onDiagnostic: (event) => diagnosticRef.current?.(event),
+              onEnd: () => {
+                if (!cancelled) setIdentifyCursor(Boolean(useAppStore.getState().identifyLayerId));
+              },
+            });
+        // The status bar's ground elevation under the pointer. A SceneView's
+        // `toMap` hits the elevation surface, so with terrain on its `z` is
+        // the sample (exaggerated, as MapLibre's is); otherwise the shared
+        // resolver's consented remote lookup answers, as on the other maps.
+        let groundZ: number | null = null;
+        const pointerElevation = viewId
+          ? undefined
+          : createPointerElevationResolver({
+              getMap: () => ({
+                getTerrain: () =>
+                  scene && current.isTerrainEnabled() && groundZ !== null
+                    ? { exaggeration: current.getTerrainExaggeration() }
+                    : null,
+                queryTerrainElevation: () => groundZ,
+              }),
+              isEarth: () => getActiveEllipsoid().id === "earth",
+              isEnabled: () => useAppStore.getState().preferences.map.showPointerElevation,
+              canUseRemote: () => canUseRemoteElevationRef.current?.() ?? false,
+              emit: (elevation) => {
+                if (!cancelled) useAppStore.getState().setPointerElevation(elevation);
+              },
+            });
         const update = (next: typeof state, previous?: typeof state) => {
           if (cancelled) return;
           const targetPane = next.secondaryMapViews.find((p) => p.id === viewId);
@@ -336,16 +413,37 @@ export function ArcgisCanvas({
                 { fit },
               );
             }
+            if (
+              previous &&
+              next.preferences.map.showPointerElevation !==
+                previous.preferences.map.showPointerElevation
+            ) {
+              if (!next.preferences.map.showPointerElevation) {
+                pointerElevation?.invalidate();
+                next.setPointerElevation(null);
+              } else if (next.pointerCoords) pointerElevation?.update(next.pointerCoords);
+            }
+            if (previous && next.projectGeneration !== previous.projectGeneration) {
+              pointerElevation?.invalidate();
+              if (!viewId) next.setPointerElevation(null);
+            }
             if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
               if (previous) removePopup();
-              setIdentifyCursor(Boolean(next.identifyLayerId));
+              // Identify and a selection gesture both own map clicks; the
+              // newer one wins, as on the other renderers.
+              if (next.identifyLayerId) featureSelection.cancel.current?.();
+              if (!featureSelection.active.current)
+                setIdentifyCursor(Boolean(next.identifyLayerId));
             }
           } finally {
             applying = false;
           }
         };
         const unsubscribe = useAppStore.subscribe(update);
-        cleanup = unsubscribe;
+        cleanup = () => {
+          detachSelection();
+          unsubscribe();
+        };
         update(state);
         update(useAppStore.getState(), state);
         const handles: ArcgisHandle[] = [];
@@ -433,19 +531,23 @@ export function ArcgisCanvas({
           mapView.on("pointer-move", (event) => {
             if (viewId) return;
             const point = mapView.toMap({ x: event.x, y: event.y });
-            useAppStore
-              .getState()
-              .setPointerCoords(point ? [point.longitude, point.latitude] : null);
+            const coords: [number, number] | null = point
+              ? [point.longitude, point.latitude]
+              : null;
+            groundZ = typeof point?.z === "number" && Number.isFinite(point.z) ? point.z : null;
+            useAppStore.getState().setPointerCoords(coords);
+            pointerElevation?.update(coords);
           }),
         );
         handles.push(
           mapView.on("pointer-leave", () => {
+            pointerElevation?.update(null);
             if (!viewId) useAppStore.getState().setPointerCoords(null);
           }),
         );
         handles.push(
           mapView.on("click", (event) => {
-            if (viewId) return;
+            if (viewId || featureSelection.active.current) return;
             const next = useAppStore.getState();
             if (!next.identifyLayerId) return;
             const layerId = next.layers.some((l) => l.id === next.identifyLayerId)
@@ -538,6 +640,11 @@ export function ArcgisCanvas({
           // The view-ready failure stays up alongside the engine's own errors;
           // the next tick would otherwise erase it.
           const errors = [...(readyError ? [readyError] : []), ...current.getRenderStatus().errors];
+          // Each error reaches the Diagnostics log once, when it first shows;
+          // one that clears and comes back is reported again.
+          for (const message of errors)
+            if (!reported.has(message)) diagnosticRef.current?.({ message, source: "arcgis" });
+          reported = new Set(errors);
           if (terrainRestoreError && useAppStore.getState().preferences.map.terrainEnabled)
             errors.push(terrainRestoreError);
           setError(errors.length ? errors.join("; ") : null);
@@ -555,6 +662,8 @@ export function ArcgisCanvas({
         });
         theme.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
         cleanup = () => {
+          detachSelection();
+          pointerElevation?.dispose();
           unsubscribe();
           for (const handle of handles) handle.remove();
           window.clearInterval(status);
@@ -568,12 +677,15 @@ export function ArcgisCanvas({
         retire();
         setReady(true);
         setLoadFailed(!loaded);
-        setError(redactArcgisError(error instanceof Error ? error.message : String(error)));
+        const message = redactArcgisError(error instanceof Error ? error.message : String(error));
+        setError(message);
+        diagnosticRef.current?.({ message, source: "arcgis" });
       });
     return () => {
       cancelled = true;
       if (engine) terrainExaggeration.current = engine.getTerrainExaggeration();
       cleanup();
+      if (liveEngine.current === engine) liveEngine.current = null;
       if (engineRef && engineRef.current === engine) engineRef.current = null;
       if (engine) {
         // Keep the last frame visible above the next view, inert, until that

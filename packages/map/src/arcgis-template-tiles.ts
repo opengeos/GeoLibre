@@ -1,4 +1,5 @@
 import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
+import { protocolScheme, requestProtocolTile } from "./cesium-protocol-imagery";
 
 /**
  * A MapLibre raster tile source the SDK's `WebTileLayer` cannot express: a
@@ -106,6 +107,7 @@ export function createArcgisTemplateTileLayer(
   properties: Record<string, unknown>,
   fetchImpl: (url: string, init: RequestInit) => Promise<Response> = (url, init) =>
     fetch(url, init),
+  readProtocol: typeof requestProtocolTile = requestProtocolTile,
 ): ArcgisRasterLayer {
   const TemplateTiles = sdk.layers.BaseTileLayer.createSubclass({
     load(this: ArcgisRasterLayer) {
@@ -125,14 +127,23 @@ export function createArcgisTemplateTileLayer(
       canvas.width = canvas.height = 256;
       const tile = sourceTileFor(source, level, row, col);
       if (!tile) return canvas;
-      const response = await fetchImpl(tileTemplateUrl(source, tile.z, tile.x, tile.y), {
-        signal: options?.signal,
-      });
-      // A tile outside the service's coverage is a gap in the layer, as it is
-      // on MapLibre, not a failure of the whole layer.
-      if (response.status === 404 || response.status === 204) return canvas;
-      if (!response.ok) throw new Error(`Tile request failed (${response.status})`);
-      const bitmap = await createImageBitmap(await response.blob());
+      const url = tileTemplateUrl(source, tile.z, tile.x, tile.y);
+      let image: Blob;
+      if (protocolScheme(url)) {
+        // A MapLibre protocol (the desktop's `geolibre-wms://`, say) answers
+        // through its registered handler; no bytes is an empty tile.
+        const bytes = await readProtocol(url, options?.signal ?? new AbortController().signal);
+        if (!bytes) return canvas;
+        image = new Blob([bytes instanceof ArrayBuffer ? bytes : bytes.slice().buffer]);
+      } else {
+        const response = await fetchImpl(url, { signal: options?.signal });
+        // A tile outside the service's coverage is a gap in the layer, as it
+        // is on MapLibre, not a failure of the whole layer.
+        if (response.status === 404 || response.status === 204) return canvas;
+        if (!response.ok) throw new Error(`Tile request failed (${response.status})`);
+        image = await response.blob();
+      }
+      const bitmap = await createImageBitmap(image);
       try {
         options?.signal?.throwIfAborted();
         const { factor } = tile;

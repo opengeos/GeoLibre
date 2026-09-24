@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { BLANK_BASEMAP, DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import {
   arcgisRasterEffect,
+  arcgisUnsupportedStyleSettings,
   isArcgisRasterPlan,
   ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
@@ -418,6 +419,35 @@ describe("ArcGIS raster colour effect and blend mode", () => {
       style: { ...DEFAULT_LAYER_STYLE, blendMode: "multiply" },
     });
     assert.equal(multiply.blendMode, "multiply");
+  });
+});
+
+describe("arcgisUnsupportedStyleSettings", () => {
+  it("names nothing for a default style", () => {
+    assert.deepEqual(arcgisUnsupportedStyleSettings(geojsonLayer({}), false), []);
+  });
+  it("names what no view draws, and what depends on the view", () => {
+    const layer = geojsonLayer({
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        lineDecoration: "arrow",
+        invertedFillEnabled: true,
+        pointRenderer: "cluster",
+        extrusionEnabled: true,
+        blendMode: "multiply",
+      },
+    });
+    assert.deepEqual(arcgisUnsupportedStyleSettings(layer, false), [
+      "lineDecoration",
+      "invertedFill",
+      "extrusionFlat",
+    ]);
+    assert.deepEqual(arcgisUnsupportedStyleSettings(layer, true), [
+      "lineDecoration",
+      "invertedFill",
+      "blendModeScene",
+      "clusterScene",
+    ]);
   });
 });
 

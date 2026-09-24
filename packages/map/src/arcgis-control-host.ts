@@ -9,7 +9,7 @@ import {
   type Map as MapLibreMap,
 } from "maplibre-gl";
 import type { MapEngine } from "./map-engine";
-import type { ArcgisSdk, ArcgisView } from "./arcgis-sdk";
+import type { ArcgisSdk, ArcgisView, ArcgisViewEvent } from "./arcgis-sdk";
 
 /** DOM controls receive view/navigation methods; rendering needs an explicit bridge. */
 export class ArcgisControlHost {
@@ -116,6 +116,40 @@ export class ArcgisControlHost {
       },
     );
     this.cleanup.push(() => watch.remove());
+    // MapLibre fires `move` on every camera frame, plus `zoom` and `rotate`
+    // while those change; readouts such as View State and the minimap follow
+    // the camera through them, not just `moveend`.
+    let lastZoom = engine.readView().zoom;
+    let lastBearing = engine.readView().bearing;
+    const frame = sdk.reactiveUtils.watch(
+      () => [view.extent, view.type === "3d" ? view.camera?.heading : view.rotation],
+      () => {
+        const { zoom, bearing } = engine.readView();
+        facade.fire("move");
+        if (zoom !== lastZoom) facade.fire("zoom");
+        if (bearing !== lastBearing) facade.fire("rotate");
+        lastZoom = zoom;
+        lastBearing = bearing;
+      },
+    );
+    this.cleanup.push(() => frame.remove());
+    // Pointer events carry MapLibre's `lngLat` and `point`, for click-driven
+    // controls and pointer readouts.
+    const pointer = (type: "click" | "mousemove") => (event: ArcgisViewEvent) => {
+      const point = new Point(event.x, event.y);
+      const lngLat = surface().unproject([event.x, event.y]);
+      if (!lngLat) return;
+      facade.fire(type, {
+        point,
+        lngLat: new LngLat(lngLat.lng, lngLat.lat),
+        originalEvent: event.native,
+      });
+    };
+    for (const handle of [
+      view.on("click", pointer("click")),
+      view.on("pointer-move", pointer("mousemove")),
+    ])
+      this.cleanup.push(() => handle.remove());
     if (view.container && typeof ResizeObserver !== "undefined") {
       const observer = new ResizeObserver(() => facade.fire("resize"));
       observer.observe(view.container);

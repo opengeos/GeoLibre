@@ -9,8 +9,12 @@ import type { MapRendererKind } from "@geolibre/core";
 const MAPBOX_UNSUPPORTED_SOURCES = new Set(["mbtiles", "splatting", "cesium-ion", "czml"]);
 
 // Adapted deck.gl plugins are gated separately by flat/local view capabilities.
+// STAC's browser draws its results as MapLibre/Mapbox layers, and the SDK has
+// no video overlay.
 const ARCGIS_UNSUPPORTED_SOURCES = new Set([
   ...[...MAPBOX_UNSUPPORTED_SOURCES].filter((id) => id !== "mbtiles"),
+  "stac",
+  "video",
 ]);
 
 const ARCGIS_DECK_SOURCES = new Set(["deckgl-viz", "gltf-model", "lidar", "duckdb", "3d-tiles"]);

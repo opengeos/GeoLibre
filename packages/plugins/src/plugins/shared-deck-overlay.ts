@@ -120,6 +120,8 @@ async function runEnsureSharedDeckOverlay(
   deckGL ??= await app.getDeckGL();
 
   const arcgisView = app.getArcgisView?.() ?? null;
+  // Falls back to the ArcGIS view on that renderer.
+  // engine-audit-allow: arcgis-null-map
   const map = app.getMap?.() ?? app.getMapboxMap?.() ?? arcgisView;
   if (overlay && boundMap === map) {
     // Already bound to this map; just refresh the rendered layers.
@@ -269,6 +271,8 @@ function renderSharedDeckOverlay(): void {
     // The successful mount can happen on a later retry, after the map became
     // ready; record the map it actually bound to so a subsequent ensure() does
     // not see a stale value and needlessly rebind.
+    // ArcGIS keeps the bound view recorded above.
+    // engine-audit-allow: arcgis-null-map
     boundMap = appRef.getMap?.() ?? appRef.getMapboxMap?.() ?? boundMap;
   }
 

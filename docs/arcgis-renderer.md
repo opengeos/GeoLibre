@@ -89,6 +89,9 @@ override is set aside and the shared basemap is translated instead.
   `{-y}` or `{quadkey}`, a 512 px tile size, a source `minzoom`/`maxzoom`, or
   several templates — draws through a custom tile layer that requests each
   tile as MapLibre would, cropping 512 px tiles and overzooming past `maxzoom`.
+  A template on a registered MapLibre protocol (the desktop app's CORS-exempt
+  `geolibre-wms://` WMS fetcher, say) is asked of that protocol's handler, as
+  the globe does.
 - **Add Data → ArcGIS Layer** stores cached MapServer and ImageServer services
   as tile templates and dynamic ones (sublayers, a rendering rule, no usable
   cache) as `/export` / `/exportImage` bounding-box templates, both drawn as
@@ -108,7 +111,15 @@ override is set aside and the shared basemap is translated instead.
   mode as the SDK's `blendMode` (`add` is the SDK's `plus`). A `SceneView`
   ignores the raster effects, and blends only tiled and imagery layers.
 - Feature picking (click identify with a popup), selection highlighting, extent
-  drawing, draggable placement, and engine-level image capture.
+  drawing, draggable placement, and engine-level image capture. **Layers →
+  Select features** (single, rectangle, polygon, freehand and radius) runs the
+  same gestures as on MapLibre on the primary map. The status bar's pointer
+  elevation reads the ground under the cursor from the scene's elevation
+  surface, or (with consent) the same remote lookup the other maps use.
+- Plugin controls hosted on the map receive MapLibre's `move`, `zoom`,
+  `rotate`, `click` and `mousemove` events, so readouts such as View State and
+  the minimap follow the camera. Story chapter layer fades run over the
+  chapter's transition.
 - **Search places** flies to places and coordinates with a temporary marker,
   and frames H3 cells with a filled outline. Clearing the search removes its
   highlight without removing a selection made elsewhere.
@@ -282,8 +293,18 @@ experimental alignment and depth limitations described above.
 
 ## Not supported yet
 
-- Gaussian splats and Cesium-only sources. **Add Data** greys these out while ArcGIS is the primary
-  renderer, and the layer panels badge such layers **No ArcGIS**.
+- Gaussian splats and Cesium-only sources, STAC search results and video
+  overlays. **Add Data** greys these out while ArcGIS is the primary
+  renderer, and the layer panels badge such layers **No ArcGIS**. A layer a
+  plugin draws on MapLibre only (Planetary Computer, say) is named in the map's
+  banner too.
+- Measure and the geometry editor draw through the MapLibre/Mapbox style API;
+  the Controls menu greys Measure out, and editing a layer's geometry says the
+  renderer does not support it.
+- Line decorations, geometry generators, inverted fills, diagrams and label
+  de-duplication; clustering, fill patterns and blend modes in a `SceneView`;
+  extrusion on a flat map. The Style panel names whichever of these a layer
+  turns on.
 - Arbitrary MapLibre custom layers and rendering APIs still require adapters.
   The primary view hosts DOM controls with navigation methods; Vector, LiDAR,
   DuckDB and 3D Tiles have explicit rendering bridges. Layer Control delegates

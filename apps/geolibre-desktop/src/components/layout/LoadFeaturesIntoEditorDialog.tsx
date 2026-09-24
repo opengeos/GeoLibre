@@ -258,8 +258,14 @@ export function LoadFeaturesIntoEditorDialog({
   const runLoad = useCallback(
     (replace: boolean) => {
       const map = getStyleMap(mapControllerRef.current);
-      if (!map || !selectedLayer) {
+      if (!selectedLayer) {
         setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
+        return;
+      }
+      // The editor queries and draws through a MapLibre or Mapbox map; other
+      // renderers have none, which no layer choice can fix.
+      if (!map) {
+        setStatus({ message: t("renderer.pluginUnsupported"), kind: "error" });
         return;
       }
       // Mark busy for the query window too, so the form (and Load button) is

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { addProtocol, removeProtocol } from "maplibre-gl";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import { compileArcgisLayer, isArcgisSupportedLayer } from "../packages/map/src/arcgis-layers";
 import {
@@ -160,6 +161,19 @@ describe("compileArcgisLayer template tiles", () => {
     );
     assert.equal(defaults.kind, "web-tile");
   });
+  it("draws a registered MapLibre protocol template (the desktop WMS fetcher)", () => {
+    const layer = rasterLayer("wms", {
+      tiles: ["geolibre-wms-test://tile?url=https%3A%2F%2Fh%2Fwms%3Fbbox%3D{bbox-epsg-3857}"],
+    });
+    assert.throws(() => compileArcgisLayer(layer), /not supported/);
+    addProtocol("geolibre-wms-test", async () => ({ data: new ArrayBuffer(0) }));
+    try {
+      const plan = compileArcgisLayer({ ...layer });
+      assert.equal(plan.kind, "template-tile");
+    } finally {
+      removeProtocol("geolibre-wms-test");
+    }
+  });
   it("still rejects placeholders MapLibre has no form for", () => {
     assert.throws(() =>
       compileArcgisLayer(
@@ -174,6 +188,7 @@ describe("createArcgisTemplateTileLayer", () => {
   function makeLayer(
     source: Parameters<typeof createArcgisTemplateTileLayer>[1],
     respond: (url: string) => { status: number },
+    readProtocol?: Parameters<typeof createArcgisTemplateTileLayer>[4],
   ) {
     const draws: unknown[][] = [];
     const requested: string[] = [];
@@ -203,6 +218,7 @@ describe("createArcgisTemplateTileLayer", () => {
       source,
       { title: "T" },
       fetchImpl,
+      readProtocol,
     ) as unknown as {
       fetchTile(level: number, row: number, col: number): Promise<{ width: number }>;
     };
@@ -239,6 +255,28 @@ describe("createArcgisTemplateTileLayer", () => {
       assert.deepEqual(requested, ["https://t/4/5/5.png"]);
       // Column 11 is the right half and row 10 the top half of source tile 5/5.
       assert.deepEqual(draws[0].slice(1), [256, 0, 256, 256, 0, 0, 256, 256]);
+    } finally {
+      restore();
+    }
+  });
+  it("asks a protocol template's registered handler instead of fetching", async () => {
+    const asked: string[] = [];
+    const { layer, draws, requested, restore } = makeLayer(
+      { ...source, templates: ["geolibre-wms://tile?bbox={bbox-epsg-3857}"], tileSize: 256 },
+      () => ({ status: 200 }),
+      async (url) => {
+        asked.push(url);
+        return url.includes("bbox=0,") ? null : new Uint8Array([1]);
+      },
+    );
+    try {
+      await layer.fetchTile(2, 1, 1);
+      assert.equal(requested.length, 0);
+      assert.equal(asked.length, 1);
+      assert.equal(draws.length, 1);
+      // No bytes from the handler is an empty tile.
+      await layer.fetchTile(2, 1, 2);
+      assert.equal(draws.length, 1);
     } finally {
       restore();
     }

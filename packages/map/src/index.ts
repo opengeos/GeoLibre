@@ -1,7 +1,16 @@
 export { MapboxCanvas, type MapboxCanvasProps } from "./MapboxCanvas";
 export { ArcgisCanvas, type ArcgisCanvasProps } from "./ArcgisCanvas";
-export { ArcgisEngine, ARCGIS_CAPABILITIES, ARCGIS_DECK_CAPABILITIES } from "./arcgis-engine";
-export { isArcgisSupportedLayer } from "./arcgis-layers";
+export {
+  ArcgisEngine,
+  ARCGIS_CAPABILITIES,
+  ARCGIS_DECK_CAPABILITIES,
+  type ArcgisEngineMessages,
+} from "./arcgis-engine";
+export {
+  arcgisUnsupportedStyleSettings,
+  isArcgisSupportedLayer,
+  type ArcgisUnsupportedStyleSetting,
+} from "./arcgis-layers";
 export {
   ARCGIS_BASEMAP_STYLES,
   DEFAULT_ARCGIS_BASEMAP,

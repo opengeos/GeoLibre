@@ -2041,7 +2041,10 @@
     "fullscreenUnavailable": "Fullscreen unavailable",
     "mapboxTokenHint": "Add your Mapbox access token in <settingsLink>Settings → Environment variables</settingsLink> to use this renderer.",
     "arcgisKeyHint": "Add an ArcGIS API key in <settingsLink>Settings → Environment variables</settingsLink> for Esri basemap styles.",
-    "pluginUnsupported": "This plugin does not support the selected rendering engine."
+    "pluginUnsupported": "This plugin does not support the selected rendering engine.",
+    "arcgisFilterNoSql": "{{layer}}: this filter has no SQL form, so the ArcGIS service draws unfiltered",
+    "arcgisImageFailed": "{{layer}}: the image failed to load",
+    "arcgisPluginLayer": "{{layer}}: drawn by a plugin that does not support the ArcGIS renderer"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copy coordinates to clipboard",
@@ -6780,6 +6783,18 @@
       "title": "The Mapbox renderer does not draw these settings yet:",
       "blendMode": "Blend mode"
     },
+    "arcgisUnsupported": {
+      "title": "The ArcGIS renderer does not draw these settings in this view:",
+      "lineDecoration": "Line decorations",
+      "geometryGenerator": "Geometry generator",
+      "invertedFill": "Inverted fill",
+      "diagram": "Diagrams",
+      "labelDedupe": "Label de-duplication",
+      "blendModeScene": "Blend mode (flat map only)",
+      "clusterScene": "Point clustering (flat map only)",
+      "fillPatternScene": "Fill pattern (flat map only)",
+      "extrusionFlat": "Extrusion (3D view only)"
+    },
     "addClass": "Add class",
     "removeClass": "Remove class",
     "beforeIdSavedUnavailable": "Saved (unavailable)",
@@ -7575,6 +7590,8 @@
     "materializeToEditable": "Materialize to editable layer",
     "finishEditingGeometry": "Finish editing geometry",
     "editGeometry": "Edit geometry",
+    "editGeometryActivateFailed": "Could not activate the geometry editor. Try again once the map has fully loaded.",
+    "editGeometryStartFailed": "Could not start geometry editing for this layer. Its data may still be loading.",
     "openAttributeTable": "Open attribute table",
     "openRasterAttributeTable": "Open raster attribute table",
     "export": "Export",

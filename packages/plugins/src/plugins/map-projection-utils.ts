@@ -86,6 +86,8 @@ export function acquireMercatorProjectionLock(
   }
   mercatorProjectionHolders.add(key);
   app.setMapProjection?.("mercator");
+  // On ArcGIS the projection is set through setMapProjection above.
+  // engine-audit-allow: arcgis-null-map
   ensureMercatorProjection(mapOverride ?? app.getMap?.() ?? app.getMapboxMap?.());
 }
 

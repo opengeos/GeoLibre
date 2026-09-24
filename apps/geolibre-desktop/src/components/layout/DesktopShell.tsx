@@ -16,6 +16,8 @@ import {
   endLayerGeometryEdit,
   GEO_EDITOR_PLUGIN_ID,
   getGeometryEditTargetLayerId,
+  isPluginEngineSupported,
+  maplibreGeoEditorPlugin,
   openRasterLayerPanel,
   getRightPanel,
   restoreDeckViz,
@@ -1087,30 +1089,35 @@ export function DesktopShell({
         // MapLibre source rather than in `layer.geojson`. Read them back once so
         // the editor has features to load. (Plain geojson layers already have
         // `geojson`.)
+        // The editor draws through a MapLibre or Mapbox map; on another
+        // renderer it cannot start, and waiting for the map will not help.
+        if (
+          !isPluginEngineSupported(maplibreGeoEditorPlugin, useAppStore.getState().primaryRenderer)
+        ) {
+          setDropError(t("renderer.pluginUnsupported"));
+          clearDropMessageLater();
+          return;
+        }
         await ensureLayerGeojsonFromSource(layerId);
         const manager = getPluginManager();
         if (!manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
           manager.activate(GEO_EDITOR_PLUGIN_ID, appAPI);
           if (!manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
-            setDropError(
-              "Could not activate the geometry editor. Try again once the map has fully loaded.",
-            );
+            setDropError(t("layers.editGeometryActivateFailed"));
             clearDropMessageLater();
             return;
           }
         }
         const started = await startLayerGeometryEdit(appAPI, layerId);
         if (!started) {
-          setDropError(
-            "Could not start geometry editing for this layer. Its data may still be loading.",
-          );
+          setDropError(t("layers.editGeometryStartFailed"));
           clearDropMessageLater();
         }
       } finally {
         togglingGeometryEditRef.current = false;
       }
     },
-    [clearDropMessageLater, ensureLayerGeojsonFromSource],
+    [clearDropMessageLater, ensureLayerGeojsonFromSource, t],
   );
 
   const handleCancelGeometryEdit = useCallback(() => {
@@ -2800,8 +2807,10 @@ export function DesktopShell({
                 />
               ) : primaryRenderer === "arcgis" ? (
                 <PrimaryArcgisCanvas
+                  canUseRemoteElevation={hasElevationConsent}
                   engineRef={mapControllerRef}
                   onEngineReady={handleMapControllerReady}
+                  onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 />
               ) : cesiumPrimary ? (
                 <PrimaryCesiumCanvas

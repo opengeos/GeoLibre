@@ -1747,7 +1747,8 @@ function finiteNumber(value: unknown, fallback: number): number {
 }
 
 export function openFlatGeobufAddVectorLayerPanel(app: GeoLibreAppAPI): void {
-  if (app.getMapRenderer?.() === "mapbox") {
+  const renderer = app.getMapRenderer?.();
+  if (renderer === "mapbox" || renderer === "arcgis") {
     // The vector importer materializes FlatGeobuf into the shared layer store.
     // The standalone control owns MapLibre layers outside that bridge.
     void import("./maplibre-vector")

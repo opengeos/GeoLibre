@@ -62,6 +62,7 @@ import {
   arcgisVectorStyle,
   layerBlendModesSupported,
   mapboxUnsupportedStyleSettings,
+  arcgisUnsupportedStyleSettings,
   subscribeLayerBlendModeSupport,
   type MapEngine,
 } from "@geolibre/map";
@@ -1031,6 +1032,12 @@ export function StylePanel({
   // The Mapbox compiler draws only part of the symbology below; see
   // `mapboxUnsupportedStyleSettings`.
   const mapboxPrimary = useAppStore((s) => s.primaryRenderer === "mapbox");
+  // Likewise for ArcGIS, whose 3D SceneView (the globe, or any view with
+  // terrain) draws a different subset from its flat MapView.
+  const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
+  const arcgisScene = useAppStore(
+    (s) => s.preferences.map.projection === "globe" || s.preferences.map.terrainEnabled,
+  );
   const [pasteStyleOpen, setPasteStyleOpen] = useState(false);
   // What the last pasted style reported. The Layers panel has a per-row note for this; this
   // panel has none, and dropping the parser's warnings would make an import that could not be
@@ -1888,6 +1895,10 @@ export function StylePanel({
   // named at the top of the panel so they do not silently do nothing.
   const mapboxUnsupportedSettings =
     mapboxPrimary && hasVectorPaintControls ? mapboxUnsupportedStyleSettings(layer) : [];
+  const arcgisUnsupportedSettings =
+    arcgisPrimary && hasVectorPaintControls
+      ? arcgisUnsupportedStyleSettings(layer, arcgisScene)
+      : [];
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const elevation3dEnabled = styleValue(style, "elevation3dEnabled");
   // Effective 3D Z-value mode: the saved flag can outlive the data's Z values
@@ -5160,6 +5171,20 @@ export function StylePanel({
           <ul className="list-disc ps-4">
             {mapboxUnsupportedSettings.map((setting) => (
               <li key={setting}>{t(`style.mapboxUnsupported.${setting}`)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {arcgisUnsupportedSettings.length > 0 && (
+        <div
+          className="border-b px-3 py-1.5 text-xs text-amber-600"
+          data-testid="style-arcgis-unsupported"
+          role="note"
+        >
+          <p>{t("style.arcgisUnsupported.title")}</p>
+          <ul className="list-disc ps-4">
+            {arcgisUnsupportedSettings.map((setting) => (
+              <li key={setting}>{t(`style.arcgisUnsupported.${setting}`)}</li>
             ))}
           </ul>
         </div>

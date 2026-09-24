@@ -24,6 +24,7 @@ import {
   DEFAULT_BUILT_IN_CONTROL_POSITIONS,
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
   type BuiltInMapControl,
+  type CameraIdleEvent,
   type ExtentDrawingOptions,
   type FlyToCamera,
   type IdentifiedFeature,
@@ -167,6 +168,23 @@ export function arcgisSceneMode(
   if (projection === "globe") return "global";
   return terrainEnabled ? "local" : "2d";
 }
+
+/** User-facing error messages the engine reports, which the app translates. */
+export interface ArcgisEngineMessages {
+  /** A FeatureServer layer's filter has no SQL form, so it draws unfiltered. */
+  filterNoSql(layer: string): string;
+  /** A georeferenced image could not be loaded. */
+  imageFailed(layer: string): string;
+  /** A plugin draws the layer on MapLibre only, so the ArcGIS map omits it. */
+  pluginLayer(layer: string): string;
+}
+
+const DEFAULT_ARCGIS_MESSAGES: ArcgisEngineMessages = {
+  filterNoSql: (layer) =>
+    `${layer}: this filter has no SQL form, so the ArcGIS service draws unfiltered`,
+  imageFailed: (layer) => `${layer}: the image failed to load`,
+  pluginLayer: (layer) => `${layer}: drawn by a plugin that does not support the ArcGIS renderer`,
+};
 
 /** The SDK's layer instances a plan produced, plus the blob URLs backing them. */
 interface NativePlan {
@@ -430,6 +448,9 @@ export class ArcgisEngine implements MapEngine {
   private basemapOpacity = 1;
   private blankColor: string | null = null;
   private storyOpacities = new Map<string, number>();
+  private messages: ArcgisEngineMessages = DEFAULT_ARCGIS_MESSAGES;
+  /** Animation frames of the story opacity fades in flight, by layer id. */
+  private storyFades = new Map<string, number>();
   private controlVisibility: Record<BuiltInMapControl, boolean>;
   private controlPositions: Record<BuiltInMapControl, maplibregl.ControlPosition> = {
     ...DEFAULT_BUILT_IN_CONTROL_POSITIONS,
@@ -441,6 +462,9 @@ export class ArcgisEngine implements MapEngine {
   private highlight: ArcgisLayer | null = null;
   /** Bumped by every story camera move, so a superseded move never starts a rotation. */
   private storyCameraToken = 0;
+  /** Whether the camera move in progress is a story chapter's or preview's. */
+  private storyMove = false;
+  private storyMoveLapse: ReturnType<typeof setTimeout> | undefined;
   /** Integer zoom the zoom-dependent plans were compiled at. */
   private compiledZoom: number;
   /** Results of the latest hit test, served by the synchronous identify. */
@@ -572,6 +596,14 @@ export class ArcgisEngine implements MapEngine {
     );
   }
 
+  /**
+   * Replace the engine's user-facing messages (translated by the app). Errors
+   * already reported are rewritten on the next sync.
+   */
+  setMessages(messages: Partial<ArcgisEngineMessages>): void {
+    this.messages = { ...DEFAULT_ARCGIS_MESSAGES, ...messages };
+    if (this.map) this.syncLayers(this.layers);
+  }
   /** The SDK the engine was built from, for the canvas and integrations. */
   getSdk(): ArcgisSdk {
     return this.sdk;
@@ -641,6 +673,8 @@ export class ArcgisEngine implements MapEngine {
     const view = this.view;
     if (!view) return;
     this.stopCamera();
+    clearTimeout(this.storyMoveLapse);
+    for (const id of [...this.storyFades.keys()]) this.cancelStoryFade(id);
     this.controlHost?.destroy();
     this.controlHost = null;
     disposeArcgisControlAdapters(view);
@@ -787,7 +821,21 @@ export class ArcgisEngine implements MapEngine {
       .catch(reportGoToFailure);
   }
   flyToView(location: StoryChapterLocation): void {
+    // A chapter preview is scripted, like a chapter's own move.
+    this.markStoryMove();
     this.flyTo(location);
+  }
+  /**
+   * Flag the camera move now starting as a story move, so the settle that
+   * ends it reports `storyCamera`. An instant jump may never change
+   * `stationary`, so the flag also lapses shortly after the move.
+   */
+  private markStoryMove(): void {
+    this.storyMove = true;
+    clearTimeout(this.storyMoveLapse);
+    this.storyMoveLapse = setTimeout(() => {
+      if (this.view?.stationary !== false) this.storyMove = false;
+    }, 1500);
   }
   applyStoryChapterCamera(
     location: StoryChapterLocation,
@@ -797,6 +845,7 @@ export class ArcgisEngine implements MapEngine {
     this.stopCamera();
     const view = this.view;
     if (!view) return;
+    this.markStoryMove();
     const token = this.storyCameraToken;
     void view
       .goTo(
@@ -827,6 +876,7 @@ export class ArcgisEngine implements MapEngine {
       view.type === "3d"
         ? { heading: (view.camera?.heading ?? 0) + 180 }
         : { rotation: view.rotation - 180 };
+    this.markStoryMove();
     void view.goTo(turn, { duration: 30000, easing: "linear" }).catch(reportGoToFailure);
   }
   /**
@@ -893,17 +943,43 @@ export class ArcgisEngine implements MapEngine {
     void view.goTo(extent, { duration: 800 }).catch(reportGoToFailure);
   }
   fitLayer(layer: GeoLibreLayer): void {
+    const center = layer.metadata.center;
+    const hasCenter =
+      Array.isArray(center) &&
+      center.length >= 2 &&
+      center.slice(0, 2).every((v) => typeof v === "number" && Number.isFinite(v));
+    // A tileset exposes only its center; look at it in perspective from a
+    // conservative floor, as the MapLibre engine does (a scene only: a flat
+    // view has no tilt).
+    if (layer.type === "3d-tiles" && hasCenter && this.view) {
+      this.flyTo({
+        center: [center[0] as number, center[1] as number],
+        zoom: Math.max(viewZoom(this.view), 14),
+        ...(this.view.type === "3d" ? { pitch: Math.max(this.view.camera?.tilt ?? 0, 60) } : {}),
+      });
+      return;
+    }
     const bounds = getLayerBounds(layer);
     if (bounds) {
+      // A tile source carries data only from its `minzoom` up; fitting the
+      // whole extent would land below it and draw nothing, so fly to the
+      // extent's center at that zoom instead.
+      const minRenderZoom = [layer.source.minzoom, layer.metadata.minzoom].find(
+        (value): value is number =>
+          typeof value === "number" && Number.isFinite(value) && value > 0,
+      );
+      const fit = this.fitZoom(bounds);
+      if (minRenderZoom !== undefined && fit !== null && fit < minRenderZoom) {
+        this.flyTo({
+          center: [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2],
+          zoom: minRenderZoom,
+        });
+        return;
+      }
       this.fitBounds(bounds);
       return;
     }
-    const center = layer.metadata.center;
-    if (
-      Array.isArray(center) &&
-      center.length >= 2 &&
-      center.slice(0, 2).every((v) => typeof v === "number" && Number.isFinite(v))
-    ) {
+    if (hasCenter) {
       this.flyTo({
         center: [center[0] as number, center[1] as number],
         zoom: typeof layer.metadata.zoom === "number" ? layer.metadata.zoom : 16,
@@ -914,6 +990,23 @@ export class ArcgisEngine implements MapEngine {
     const native = this.natives.get(layer.id)?.layers[0];
     if (native?.fullExtent)
       void this.view?.goTo(native.fullExtent, { duration: 800 }).catch(reportGoToFailure);
+  }
+  /**
+   * The zoom at which `bounds` fills the view, in Web Mercator, or null before
+   * the view has a size. `fitBounds` lets the SDK frame the extent; this only
+   * compares a fit against a zoom floor before moving.
+   */
+  private fitZoom(bounds: MapExtent): number | null {
+    const view = this.view;
+    if (!view || !(view.width > 0) || !(view.height > 0)) return null;
+    const mercatorY = (lat: number) => {
+      const clamped = (Math.max(-85, Math.min(85, lat)) * Math.PI) / 180;
+      return Math.log(Math.tan(Math.PI / 4 + clamped / 2));
+    };
+    // Fractions of the world's width and height the extent spans.
+    const spanX = Math.max((bounds[2] - bounds[0]) / 360, 1e-12);
+    const spanY = Math.max((mercatorY(bounds[3]) - mercatorY(bounds[1])) / (2 * Math.PI), 1e-12);
+    return Math.min(Math.log2(view.width / 256 / spanX), Math.log2(view.height / 256 / spanY));
   }
   readProjection(): MapProjection {
     return this.sceneView()?.viewingMode === "global" ? "globe" : "mercator";
@@ -981,6 +1074,9 @@ export class ArcgisEngine implements MapEngine {
       const layer = opacity === undefined ? original : { ...original, opacity };
       if (isArcgisPluginLayer(original)) {
         this.removeLayer(original.id);
+        // The layer panels badge it too; the banner says why it is missing.
+        if (original.visible)
+          this.errors.set(`layer:${original.id}`, this.messages.pluginLayer(original.name));
         continue;
       }
       try {
@@ -1045,10 +1141,7 @@ export class ArcgisEngine implements MapEngine {
         entry.compileKey = compileKey;
         entry.compiledZoom = this.compiledZoom;
         if (plan.kind === "feature-service" && plan.filterUnsupported)
-          this.errors.set(
-            `filter:${layer.id}`,
-            `${layer.name}: this filter has no SQL form, so the ArcGIS service draws unfiltered`,
-          );
+          this.errors.set(`filter:${layer.id}`, this.messages.filterNoSql(layer.name));
         else this.errors.delete(`filter:${layer.id}`);
         for (const native of entry.layers) {
           if (plan.kind === "zarr") {
@@ -1252,7 +1345,7 @@ export class ArcgisEngine implements MapEngine {
             ];
           };
           image.onerror = () => {
-            this.errors.set(`layer:${plan.id}`, `${plan.title}: image failed to load`);
+            this.errors.set(`layer:${plan.id}`, this.messages.imageFailed(plan.title));
           };
           image.src = plan.url;
         }
@@ -1281,10 +1374,23 @@ export class ArcgisEngine implements MapEngine {
   async getLayerGeoJson(id: string): Promise<FeatureCollection | null> {
     return this.layers.find((l) => l.id === id)?.geojson ?? null;
   }
-  /** The store record's tile templates, as a story export rebuilds them in MapLibre. */
+  /**
+   * The store record's tile templates as plain HTTP(S) URLs, as a story export
+   * rebuilds them in a MapLibre page with none of the app's protocols: the
+   * desktop's `geolibre-wms://tile?url=` wrapper is unwrapped, and any other
+   * protocol template is left out.
+   */
   private storeTiles(id: string): string[] | null {
     const tiles = this.layers.find((l) => l.id === id)?.source.tiles;
-    return Array.isArray(tiles) && tiles.length ? (tiles as string[]) : null;
+    if (!Array.isArray(tiles)) return null;
+    const http = tiles
+      .filter((tile): tile is string => typeof tile === "string")
+      .map((tile) => {
+        const wrapped = /^geolibre-wms:\/\/tile\?url=(.+)$/.exec(tile);
+        return wrapped ? decodeURIComponent(wrapped[1]) : tile;
+      })
+      .filter((tile) => /^https?:\/\//i.test(tile));
+    return http.length ? http : null;
   }
   getLayerRasterSource(id: string): Record<string, unknown> | null {
     const plan = this.natives.get(id)?.plan;
@@ -1310,7 +1416,31 @@ export class ArcgisEngine implements MapEngine {
       };
     }
     if (plan.kind === "media-image") return { type: "image", url: plan.url };
-    return null;
+    if (plan.kind === "wms" || plan.kind === "archive") {
+      const tiles = this.storeTiles(id);
+      return tiles ? { type: "raster", tiles, tileSize: 256 } : null;
+    }
+    // A service record names only the service; MapLibre draws its cache or
+    // its export endpoint as a tile template.
+    const service =
+      (plan.kind === "tile-service" || plan.kind === "map-image" || plan.kind === "imagery") &&
+      // `/tile` and `/export` live on the service root, not on a sublayer.
+      plan.url
+        .replace(/[?#].*$/, "")
+        .replace(/\/+$/, "")
+        .replace(/\/\d+$/, "");
+    if (!service) return null;
+    const exportParams =
+      "bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true&f=image";
+    return {
+      type: "raster",
+      tileSize: 256,
+      tiles: [
+        plan.kind === "tile-service"
+          ? `${service}/tile/{z}/{y}/{x}`
+          : `${service}/${plan.kind === "imagery" ? "exportImage" : "export"}?${exportParams}`,
+      ],
+    };
   }
 
   // ------------------------------------------------------------------ basemap
@@ -1424,11 +1554,42 @@ export class ArcgisEngine implements MapEngine {
 
   // ---------------------------------------------------------- story rendering
 
-  setStoryLayerOpacity(id: string, opacity: number): void {
-    this.storyOpacities.set(id, opacity);
+  setStoryLayerOpacity(id: string, opacity: number, durationMs = 0): void {
+    const target = Math.min(1, Math.max(0, opacity));
+    const from = this.natives.get(id)?.layers[0]?.opacity;
+    this.cancelStoryFade(id);
+    this.storyOpacities.set(id, target);
+    // The sync applies the target (and builds the layer if it is new).
     this.syncLayers(this.layers);
+    const natives = this.natives.get(id)?.layers ?? [];
+    if (
+      durationMs <= 0 ||
+      from === undefined ||
+      from === target ||
+      !natives.length ||
+      typeof requestAnimationFrame === "undefined"
+    )
+      return;
+    // Fade from where the layer was, over the chapter's transition, as
+    // MapLibre's paint-property transition does.
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      for (const native of natives) native.opacity = from + (target - from) * t;
+      if (t < 1) this.storyFades.set(id, requestAnimationFrame(step));
+      else this.storyFades.delete(id);
+    };
+    for (const native of natives) native.opacity = from;
+    this.storyFades.set(id, requestAnimationFrame(step));
+  }
+  /** Stop a running story fade, leaving the layer at whatever the sync last applied. */
+  private cancelStoryFade(id: string): void {
+    const frame = this.storyFades.get(id);
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    this.storyFades.delete(id);
   }
   restoreLayerStyles(): void {
+    for (const id of [...this.storyFades.keys()]) this.cancelStoryFade(id);
     this.storyOpacities.clear();
     this.syncLayers(this.layers);
   }
@@ -2007,12 +2168,20 @@ export class ArcgisEngine implements MapEngine {
       this.handles.delete(handle);
     };
   }
-  onCameraIdle(listener: () => void): () => void {
+  onCameraIdle(listener: (event?: CameraIdleEvent) => void): () => void {
     const view = this.view;
     if (!view) return () => {};
     const handle = this.sdk.reactiveUtils.when(
       () => view.stationary,
-      () => listener(),
+      () => {
+        const storyCamera = this.storyMove;
+        // Every subscriber sees the same answer for this settle; the flag
+        // clears once they all have.
+        queueMicrotask(() => {
+          if (this.view?.stationary !== false) this.storyMove = false;
+        });
+        listener({ storyCamera });
+      },
     );
     this.handles.add(handle);
     return () => {

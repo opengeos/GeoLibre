@@ -3,6 +3,7 @@ import {
   BLEND_MODES,
   compileLayerFilters,
   DEFAULT_BLEND_MODE,
+  documentLocale,
   DEFAULT_LAYER_STYLE,
   extrusionColorValue,
   extrusionHeightValue,
@@ -23,6 +24,7 @@ import { KML_ICON_URL_PROPERTY } from "./markers";
 import { compileMapboxLayer } from "./mapbox-layers";
 import { arcgisVectorStyle } from "./arcgis-vector-style";
 import { proxyWmsTiles } from "./wms-proxy";
+import { hasRegisteredProtocol, protocolScheme } from "./cesium-protocol-imagery";
 import {
   isTileTemplate,
   needsTemplateTileLayer,
@@ -744,7 +746,8 @@ function compileLabelText(
 ): { read: (feature: Feature, zoom: number) => string; zoomDependent: boolean } | null {
   const labels = style.labels;
   if (!labels.enabled || (!labels.field && !labels.expression.trim())) return null;
-  let value: unknown = labelFieldTextField(labels);
+  // Number formatting follows the app's locale, as on the 2D map.
+  let value: unknown = labelFieldTextField(labels, documentLocale());
   if (labels.expression.trim()) {
     try {
       value = JSON.parse(labels.expression);
@@ -752,8 +755,14 @@ function compileLabelText(
       // An unparseable expression keeps the field text, as on Mapbox.
     }
   }
+  const transform = (text: string) =>
+    labels.transform === "uppercase"
+      ? text.toUpperCase()
+      : labels.transform === "lowercase"
+        ? text.toLowerCase()
+        : text;
   if (typeof value === "string") {
-    const text = value;
+    const text = transform(value);
     return { read: () => text, zoomDependent: false };
   }
   if (!Array.isArray(value)) return null;
@@ -764,12 +773,6 @@ function compileLabelText(
   } as never);
   if (compiled.result === "error") return null;
   const expression = compiled.value;
-  const transform = (text: string) =>
-    labels.transform === "uppercase"
-      ? text.toUpperCase()
-      : labels.transform === "lowercase"
-        ? text.toLowerCase()
-        : text;
   return {
     zoomDependent: ZOOM_OPERAND.test(JSON.stringify(value)),
     read: (feature, zoom) => {
@@ -811,6 +814,8 @@ function labelingFor(
         haloColor: cssToArcgisColor(labels.haloColor),
         haloSize: `${Math.max(0, labels.haloWidth)}px`,
         font: { size: `${Math.max(1, labels.size)}px`, family: "sans-serif" },
+        // MapLibre wraps at `text-max-width` ems of the text size.
+        lineWidth: `${Math.max(1, labels.maxWidth ?? 10) * Math.max(1, labels.size)}px`,
         // MapLibre offsets are in ems of the text size, y down; the SDK's are
         // in points or pixels, y up.
         xoffset: `${labels.offsetX * labels.size}px`,
@@ -1221,6 +1226,7 @@ export function wmsLayerFromTemplate(template: string): {
 function templateTileSource(
   layer: GeoLibreLayer,
   templates: string[],
+  viaProtocol = false,
 ): ArcgisTileTemplateSource | null {
   const { scheme, tileSize, minzoom, maxzoom } = layer.source as {
     scheme?: unknown;
@@ -1233,6 +1239,7 @@ function templateTileSource(
   const size = finite(tileSize) && tileSize > 0 ? tileSize : 256;
   // MapLibre's own defaults (0 and 22) change nothing the plain path draws.
   if (
+    !viaProtocol &&
     scheme !== "tms" &&
     size === 256 &&
     !(finite(minzoom) && minzoom > 0) &&
@@ -1255,6 +1262,49 @@ function templateTileSource(
     maxzoom: finite(maxzoom) ? Math.max(0, maxzoom) : 22,
     ...(layerBounds ? { bounds: layerBounds } : {}),
   };
+}
+
+/** Style settings the ArcGIS renderer does not draw, named in the Style panel. */
+export type ArcgisUnsupportedStyleSetting =
+  | "lineDecoration"
+  | "geometryGenerator"
+  | "invertedFill"
+  | "diagram"
+  | "labelDedupe"
+  | "blendModeScene"
+  | "clusterScene"
+  | "fillPatternScene"
+  | "extrusionFlat";
+
+/**
+ * The {@link ArcgisUnsupportedStyleSetting}s this layer's style turns on, for
+ * the view it would draw in: the SDK draws clusters, fill patterns and blend
+ * modes on a flat `MapView` only, and extrusion in a `SceneView` only.
+ *
+ * @param layer - The store layer whose style is checked.
+ * @param scene - Whether the ArcGIS map is a 3D `SceneView`.
+ * @returns The settings that turn on something the renderer ignores.
+ */
+export function arcgisUnsupportedStyleSettings(
+  layer: GeoLibreLayer,
+  scene: boolean,
+): ArcgisUnsupportedStyleSetting[] {
+  const style: LayerStyle = { ...DEFAULT_LAYER_STYLE, ...layer.style };
+  const labels = { ...DEFAULT_LAYER_STYLE.labels, ...style.labels };
+  const settings: ArcgisUnsupportedStyleSetting[] = [];
+  if (style.lineDecoration && style.lineDecoration !== "none") settings.push("lineDecoration");
+  if (style.geometryGenerator && style.geometryGenerator !== "none")
+    settings.push("geometryGenerator");
+  if (style.invertedFillEnabled) settings.push("invertedFill");
+  if (style.diagramType && style.diagramType !== "none") settings.push("diagram");
+  if (labels.enabled && labels.dedupe && labels.dedupe !== "off") settings.push("labelDedupe");
+  if (scene) {
+    if ((style.blendMode ?? DEFAULT_BLEND_MODE) !== DEFAULT_BLEND_MODE)
+      settings.push("blendModeScene");
+    if (style.pointRenderer === "cluster") settings.push("clusterScene");
+    if (style.fillPattern && style.fillPattern !== "none") settings.push("fillPatternScene");
+  } else if (style.extrusionEnabled) settings.push("extrusionFlat");
+  return settings;
 }
 
 /** Store layer types the engine draws as a raster tile source. */
@@ -1504,13 +1554,16 @@ export function compileArcgisLayer(
     return { ...base, kind: "wms", ...wmsLayerFromTemplate(proxied[0]) };
   if (RASTER_TILE_TYPES.has(layer.type) && (tiles.length || url)) {
     const templates = proxied.length ? proxied : [url!];
-    // `cog://`, `pmtiles://`, `mbtiles://` and friends are MapLibre protocol
-    // handlers registered with maplibre-gl only.
-    if (templates.some((t) => /^[\w+-]+:/.test(t) && !/^(?:https?|data|blob):/i.test(t)))
+    // `geolibre-wms://` (the desktop's CORS-exempt WMS fetcher), `cog://` and
+    // friends are MapLibre protocol handlers. The template-tile layer asks the
+    // registered handler for each tile, as the globe does; a scheme with no
+    // handler cannot be drawn.
+    const protocols = templates.map(protocolScheme);
+    if (protocols.some((scheme) => scheme && !hasRegisteredProtocol(scheme)))
       throw new Error("MapLibre custom tile protocols are not supported by the ArcGIS renderer");
     const copyright =
       typeof layer.source.attribution === "string" ? { copyright: layer.source.attribution } : {};
-    const tileSource = templateTileSource(layer, templates);
+    const tileSource = templateTileSource(layer, templates, protocols.some(Boolean));
     // An ArcGIS export/tile template (the ArcGIS Layer panel's raster path) is
     // still a plain tile template; the SDK's own service classes are used only
     // for records that name the service itself (the `arcgis` type above).
