@@ -183,8 +183,9 @@ function engineCamera(
   const viewport = () => {
     const container = surface.getContainer();
     return {
-      width: container.clientWidth || canvas.clientWidth,
-      height: container.clientHeight || canvas.clientHeight,
+      // The canvas first, as the dialog measures the page frame from it.
+      width: canvas.clientWidth || container.clientWidth,
+      height: canvas.clientHeight || container.clientHeight,
     };
   };
   return {
