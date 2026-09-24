@@ -273,6 +273,30 @@ describe("AISStream client", () => {
     assert.equal(sockets.length, 3);
   });
 
+  it("does not blame a key that has already worked for later network drops", async () => {
+    client.update("good", harbor);
+    sockets[0].open();
+    sockets[0].deliver({ MessageType: "SubscriptionConfirmation", Message: {} });
+    // A pan resubscribes, then the network drops twice before any frame.
+    client.update("good", [3.9, 51.8, 4.6, 52.1]);
+    sockets[0].drop();
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    assert.equal(sockets.length, 2);
+    sockets[1].open();
+    sockets[1].drop();
+    assert.equal(client.snapshot().state, "reconnecting");
+  });
+
+  it("does not count a reconnect that never opened as a silent rejection", async () => {
+    client.update("key", harbor);
+    sockets[0].open();
+    sockets[0].drop();
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    // Still offline: the reconnect fails before it can subscribe.
+    sockets[1].drop();
+    assert.equal(client.snapshot().state, "reconnecting");
+  });
+
   it("forgets vessels not heard from within the retention window", () => {
     client.update("key-1", harbor);
     sockets[0].open();

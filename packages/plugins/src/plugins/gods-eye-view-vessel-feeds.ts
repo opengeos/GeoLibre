@@ -353,6 +353,11 @@ export class AisStreamClient {
   private silentCloses = 0;
   private subscribedAt = 0;
   private receivedSinceSubscribe = false;
+  /**
+   * Whether AISStream has ever answered this key. Only an unproven key can be
+   * diagnosed as rejected: once it has worked, a close is a network problem.
+   */
+  private keyVerified = false;
 
   constructor(options: AisStreamClientOptions = {}) {
     this.createSocket =
@@ -403,6 +408,7 @@ export class AisStreamClient {
     this.statics.clear();
     this.reconnectAttempts = 0;
     this.silentCloses = 0;
+    this.keyVerified = false;
     this.setState("idle");
   }
 
@@ -439,6 +445,10 @@ export class AisStreamClient {
   private connect(): void {
     if (!this.key || !this.bounds) return;
     this.setState(this.reconnectAttempts > 0 ? "reconnecting" : "connecting");
+    // A socket that never subscribes must not inherit the previous socket's
+    // subscription time, or a failed reconnect would count as a silent rejection.
+    this.subscribedAt = 0;
+    this.receivedSinceSubscribe = false;
     let socket: AisSocket;
     try {
       socket = this.createSocket(AISSTREAM_URL);
@@ -462,6 +472,7 @@ export class AisStreamClient {
       if (this.socket !== socket) return;
       this.socket = null;
       const silent =
+        !this.keyVerified &&
         !this.receivedSinceSubscribe &&
         this.subscribedAt > 0 &&
         this.now() - this.subscribedAt < SILENT_CLOSE_WINDOW_MS;
@@ -531,6 +542,7 @@ export class AisStreamClient {
     }
     if (message.kind === "ignored") return;
     this.receivedSinceSubscribe = true;
+    this.keyVerified = true;
     this.reconnectAttempts = 0;
     this.silentCloses = 0;
     this.setState("live");
@@ -547,6 +559,13 @@ export class AisStreamClient {
       return;
     }
     if (this.bounds && !inBounds(message.vessel, this.bounds)) return;
+    // Re-insert so the Map's order is recency, and evict the stalest report once
+    // a busy area outgrows the cap between two snapshots.
+    this.vessels.delete(message.vessel.mmsi);
     this.vessels.set(message.vessel.mmsi, message.vessel);
+    if (this.vessels.size > AIS_MAX_VESSELS) {
+      const oldest = this.vessels.keys().next().value;
+      if (oldest !== undefined) this.vessels.delete(oldest);
+    }
   }
 }
