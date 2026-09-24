@@ -1147,7 +1147,9 @@ export class ArcgisEngine implements MapEngine {
       // range. The bounds (and a local scene's zoom) are held by
       // `constrainSettledView` once the camera settles.
       if (view.constraints.tilt) view.constraints.tilt.max = clamp(p.maxPitch, 0, 85);
-      if (view.viewingMode === "global")
+      // An unsized view has no diagonal to measure yet; the size watch
+      // applies the range once it has one.
+      if (view.viewingMode === "global" && view.width > 0 && view.height > 0)
         view.constraints.altitude = {
           min: this.altitudeForZoom(view, maxZoom),
           max: this.altitudeForZoom(view, minZoom),
