@@ -368,6 +368,38 @@ describe("ArcGIS GeoJSON compilation", () => {
   });
 });
 
+describe("ArcGIS annotation layers", () => {
+  it("leaves hidden annotations out, as MapLibre's layer sync does", () => {
+    const layer = geojsonLayer({
+      metadata: { sourceKind: "annotation" },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: "shown",
+            properties: { visible: true },
+            geometry: { type: "Point", coordinates: [0, 0] },
+          },
+          {
+            type: "Feature",
+            id: "hidden",
+            properties: { visible: false },
+            geometry: { type: "Point", coordinates: [1, 1] },
+          },
+        ],
+      },
+    });
+    const plan = compileArcgisLayer(layer);
+    assert.equal(plan.kind, "geojson");
+    if (plan.kind !== "geojson") return;
+    const ids = plan.parts.flatMap(
+      (part) => part.features?.features.map((f) => f.properties?.[ARCGIS_ID_FIELD]) ?? [],
+    );
+    assert.deepEqual(ids, ["shown"]);
+  });
+});
+
 describe("ArcGIS raster, service and media compilation", () => {
   it("compiles XYZ tiles into a WebTileLayer plan with copyright and bounds", () => {
     const layer: GeoLibreLayer = {

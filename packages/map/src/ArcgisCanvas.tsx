@@ -222,6 +222,7 @@ export function ArcgisCanvas({
         // Until the initial camera has landed, `stationary` reports the view's
         // default camera, which must not be written back to the store.
         let settled = false;
+        let readyError: string | null = null;
         let selectionKey: string | null = null;
         let popupDispose: (() => void) | null = null;
         const removePopup = () => {
@@ -328,19 +329,70 @@ export function ArcgisCanvas({
         update(state);
         update(useAppStore.getState(), state);
         const handles: ArcgisHandle[] = [];
+        // Only a move the user made marks the project dirty, as MapLibre's
+        // `originalEvent` does: a fit, a search result or a story flight is the
+        // app's own. A move counts as the user's when it starts while a pointer
+        // is down or within moments of a wheel, key or press on the view (its
+        // built-in widgets included).
+        let pointerDown = false;
+        let lastInput = -Infinity;
+        let userMove = false;
+        const noteInput = () => {
+          lastInput = performance.now();
+        };
+        const notePointerDown = () => {
+          pointerDown = true;
+          noteInput();
+        };
+        // Released anywhere, but only a press that began on the view is input
+        // (a click in the layer panel that fits a layer is not).
+        const notePointerUp = () => {
+          if (!pointerDown) return;
+          pointerDown = false;
+          noteInput();
+        };
+        const inputTarget = mapView.container;
+        inputTarget?.addEventListener("pointerdown", notePointerDown, true);
+        inputTarget?.addEventListener("wheel", noteInput, { capture: true, passive: true });
+        inputTarget?.addEventListener("keydown", noteInput, true);
+        window.addEventListener("pointerup", notePointerUp, true);
+        handles.push({
+          remove: () => {
+            inputTarget?.removeEventListener("pointerdown", notePointerDown, true);
+            inputTarget?.removeEventListener("wheel", noteInput, true);
+            inputTarget?.removeEventListener("keydown", noteInput, true);
+            window.removeEventListener("pointerup", notePointerUp, true);
+          },
+        });
+        handles.push(
+          sdk.reactiveUtils.watch(
+            () => mapView.stationary,
+            (stationary) => {
+              if (!stationary) userMove = pointerDown || performance.now() - lastInput < 500;
+            },
+            // Synchronously, so a move that starts and settles within one
+            // task is still seen starting.
+            { sync: true },
+          ),
+        );
         // `stationary` flips true at the end of every pan, zoom and rotation,
         // which is the SDK's `moveend`.
         handles.push(
           sdk.reactiveUtils.when(
             () => mapView.stationary,
             () => {
+              const byUser = userMove;
+              userMove = false;
               if (applying || cancelled || !settled || !mapView.ready) return;
+              // While presenting a story map the presenter owns the camera;
+              // its chapter flights must not overwrite the saved project view.
+              if (useAppStore.getState().ui.storymapPresenting) return;
               const next = useAppStore.getState(),
                 camera = current.readView();
               // Shared view first (as the other canvases do), so a synchronized
               // pane never reads the changed pane against a stale `mapView`.
-              if (!viewId || next.mapLayout.syncView) next.setMapView(camera, true);
-              if (viewId) next.setSecondaryMapView(viewId, camera, true);
+              if (!viewId || next.mapLayout.syncView) next.setMapView(camera, byUser);
+              if (viewId) next.setSecondaryMapView(viewId, camera, byUser);
               // A MapView reports null, which clears a value an earlier
               // renderer (or scene) left in the status bar.
               else next.setCameraAltitude(current.readCameraAltitude());
@@ -448,11 +500,14 @@ export function ArcgisCanvas({
             if (cancelled) return;
             retire();
             setReady(true);
-            setError(redactArcgisError(error instanceof Error ? error.message : String(error)));
+            readyError = redactArcgisError(error instanceof Error ? error.message : String(error));
+            setError(readyError);
           });
         const status = window.setInterval(() => {
           if (cancelled) return;
-          const errors = [...current.getRenderStatus().errors];
+          // The view-ready failure stays up alongside the engine's own errors;
+          // the next tick would otherwise erase it.
+          const errors = [...(readyError ? [readyError] : []), ...current.getRenderStatus().errors];
           if (terrainRestoreError && useAppStore.getState().preferences.map.terrainEnabled)
             errors.push(terrainRestoreError);
           setError(errors.length ? errors.join("; ") : null);

@@ -2,6 +2,7 @@ import { disposeArcgisControlAdapters, identifyArcgisControls } from "./arcgis-c
 import { ArcgisControlHost } from "./arcgis-control-host";
 import { createArcgisZarrLayer } from "./arcgis-zarr";
 import { createArcgisArchiveLayer } from "./arcgis-tile-archives";
+import { createArcgisTemplateTileLayer } from "./arcgis-template-tiles";
 import { createArcgisCogLayer, loadCogTiler } from "./arcgis-cog-imagery";
 import { cachingCogTiler, cogSourceUrl } from "./cog-imagery";
 import { SEARCH_HIGHLIGHT_COLOR } from "./map-engine";
@@ -43,6 +44,8 @@ import {
   geometryContainsPoint,
   isArcgisPluginLayer,
   isMarkerPlaceholder,
+  scaleToZoom,
+  zoomToScale,
   type ArcgisGeoJsonPart,
   type ArcgisLayerPlan,
   type ArcgisMarkerPlaceholder,
@@ -173,6 +176,13 @@ interface NativePlan {
   urls: string[];
   /** The store record's GeoJSON the features were baked from, by identity. */
   geojson: FeatureCollection | undefined;
+  /**
+   * Everything but the display fields of the record the plan was compiled
+   * from, with the zoom it was compiled at; an unchanged key reuses the plan
+   * instead of re-baking every feature.
+   */
+  compileKey?: string;
+  compiledZoom?: number;
   visibilityHandle?: ArcgisHandle;
 }
 
@@ -339,6 +349,14 @@ export function geojsonToArcgisGeometry(geometry: Geometry): ArcgisGeometryJson 
 }
 
 /**
+ * The view's zoom level. A MapView with no tiling scheme (the Blank basemap)
+ * reports -1, so the level is derived from its scale there.
+ */
+function viewZoom(view: ArcgisView): number {
+  return view.zoom >= 0 ? view.zoom : scaleToZoom(view.scale);
+}
+
+/**
  * A rejected `goTo` is worth a warning, not a render error: the SDK rejects
  * when a later move interrupts this one (routine) but also when a target is
  * malformed, and the second must not vanish silently.
@@ -416,7 +434,8 @@ export class ArcgisEngine implements MapEngine {
   private disposers = new Set<() => void>();
   private handles = new Set<ArcgisHandle>();
   private highlight: ArcgisLayer | null = null;
-  private rotating = false;
+  /** Bumped by every story camera move, so a superseded move never starts a rotation. */
+  private storyCameraToken = 0;
   /** Integer zoom the zoom-dependent plans were compiled at. */
   private compiledZoom: number;
   /** Results of the latest hit test, served by the synchronous identify. */
@@ -475,7 +494,7 @@ export class ArcgisEngine implements MapEngine {
   ) {
     this.map = map;
     this.view = view;
-    this.compiledZoom = Math.round(view.zoom);
+    this.compiledZoom = Math.round(viewZoom(view));
     this.controlVisibility = {
       ...DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
       ...options.controlVisibility,
@@ -527,7 +546,7 @@ export class ArcgisEngine implements MapEngine {
       () => view.stationary,
       () => {
         if (!this.view) return;
-        const zoom = Math.round(this.view.zoom);
+        const zoom = Math.round(viewZoom(this.view));
         if (zoom === this.compiledZoom) return;
         this.compiledZoom = zoom;
         if ([...this.natives.values()].some((n) => n.plan.zoomDependent))
@@ -642,7 +661,7 @@ export class ArcgisEngine implements MapEngine {
     const bounds = this.getViewBounds();
     return {
       center: [center.longitude, center.latitude],
-      zoom: view.zoom >= 0 ? view.zoom : Math.log2(591657527.591555 / view.scale),
+      zoom: viewZoom(view),
       bearing: this.bearing(),
       // A MapView has no pitch.
       pitch: view.type === "3d" ? (view.camera?.tilt ?? 0) : 0,
@@ -666,7 +685,7 @@ export class ArcgisEngine implements MapEngine {
       await this.view?.goTo(
         {
           center: target.center,
-          zoom: target.zoom,
+          ...this.zoomTarget(target.zoom),
           ...this.orientation(target.bearing, target.pitch),
         },
         { animate: false },
@@ -688,7 +707,7 @@ export class ArcgisEngine implements MapEngine {
       await this.view?.goTo(
         {
           center: target.center,
-          zoom: target.zoom,
+          ...this.zoomTarget(target.zoom),
           ...this.orientation(target.bearing, target.pitch),
         },
         { animate: false },
@@ -703,7 +722,7 @@ export class ArcgisEngine implements MapEngine {
       ?.goTo(
         {
           center: target.center,
-          zoom: target.zoom,
+          ...this.zoomTarget(target.zoom),
           ...this.orientation(target.bearing, target.pitch),
         },
         { duration: 500 },
@@ -743,7 +762,7 @@ export class ArcgisEngine implements MapEngine {
       .goTo(
         {
           ...(camera.center ? { center: camera.center } : {}),
-          ...(camera.zoom !== undefined ? { zoom: camera.zoom } : {}),
+          ...(camera.zoom !== undefined ? this.zoomTarget(camera.zoom) : {}),
           ...this.orientation(camera.bearing, camera.pitch),
         },
         { duration: camera.duration ?? 800 },
@@ -761,44 +780,59 @@ export class ArcgisEngine implements MapEngine {
     this.stopCamera();
     const view = this.view;
     if (!view) return;
+    const token = this.storyCameraToken;
     void view
       .goTo(
         {
           ...(location.center ? { center: location.center } : {}),
-          ...(location.zoom !== undefined ? { zoom: location.zoom } : {}),
+          ...(location.zoom !== undefined ? this.zoomTarget(location.zoom) : {}),
           ...this.orientation(location.bearing, location.pitch),
         },
         { duration: animation === "jumpTo" ? 0 : 800, animate: animation !== "jumpTo" },
       )
       .then(() => {
-        if (rotate && this.view) {
-          this.rotating = true;
-          this.rotate();
-        }
+        // A later chapter (or any camera stop) superseded this move while it
+        // flew; its rotation would otherwise orbit the wrong chapter.
+        if (rotate && this.view && token === this.storyCameraToken) this.rotate();
       })
       .catch(reportGoToFailure);
   }
-  private rotate = () => {
+  /**
+   * One half turn at MapLibre's story pace (180° over 30 s), as the MapLibre
+   * and Mapbox engines do; it stops there rather than orbiting forever.
+   */
+  private rotate(): void {
     const view = this.view;
-    if (!this.rotating || !view) return;
+    if (!view) return;
     // MapLibre's story rotation turns the bearing forward; `rotation` runs
     // the other way to `heading`.
     const turn =
       view.type === "3d"
-        ? { heading: (view.camera?.heading ?? 0) + 120 }
-        : { rotation: view.rotation - 120 };
-    void view
-      .goTo(turn, { duration: 20000, easing: "linear" })
-      .then(() => this.rotate())
-      .catch(reportGoToFailure);
-  };
+        ? { heading: (view.camera?.heading ?? 0) + 180 }
+        : { rotation: view.rotation - 180 };
+    void view.goTo(turn, { duration: 30000, easing: "linear" }).catch(reportGoToFailure);
+  }
+  /**
+   * A goTo zoom target. A view without a tiling scheme (the Blank basemap on
+   * a MapView) reports `zoom` as -1 and cannot be sent to a zoom level, so
+   * the level is given as the equivalent scale there.
+   */
+  private zoomTarget(zoom: number): { zoom: number } | { scale: number } {
+    return this.view && this.view.zoom < 0 ? { scale: zoomToScale(zoom) } : { zoom };
+  }
   zoomIn(): void {
     const view = this.view;
-    if (view) void view.goTo({ zoom: view.zoom + 1 }, { duration: 500 }).catch(reportGoToFailure);
+    if (view)
+      void view
+        .goTo(this.zoomTarget(viewZoom(view) + 1), { duration: 500 })
+        .catch(reportGoToFailure);
   }
   zoomOut(): void {
     const view = this.view;
-    if (view) void view.goTo({ zoom: view.zoom - 1 }, { duration: 500 }).catch(reportGoToFailure);
+    if (view)
+      void view
+        .goTo(this.zoomTarget(viewZoom(view) - 1), { duration: 500 })
+        .catch(reportGoToFailure);
   }
   resetNorth(): void {
     void this.view
@@ -815,11 +849,23 @@ export class ArcgisEngine implements MapEngine {
   fitBounds(bounds: MapExtent): void {
     const view = this.view;
     if (!view) return;
+    if (bounds.some((value) => !Number.isFinite(value))) return;
     const [w, s, e, n] = bounds;
-    // The 2D map frames with 40 px padding and caps a point-sized extent at
-    // zoom 14; widen a degenerate extent so the SDK has something to fit.
-    const padX = Math.max((e - w) * 0.1, 1e-4);
-    const padY = Math.max((n - s) * 0.1, 1e-4);
+    // A point-sized extent cannot be fit; fly to the point at zoom 14 or
+    // closer, as the MapLibre engine does. Any other extent is framed at
+    // whatever zoom fits it.
+    if (w === e && s === n) {
+      void view
+        .goTo(
+          { center: [w, s], ...this.zoomTarget(Math.max(viewZoom(view), 14)) },
+          { duration: 800 },
+        )
+        .catch(reportGoToFailure);
+      return;
+    }
+    // The 2D map frames with 40 px padding; pad the extent by a tenth instead.
+    const padX = Math.max((e - w) * 0.1, 1e-6);
+    const padY = Math.max((n - s) * 0.1, 1e-6);
     const extent = new this.sdk.Extent({
       xmin: w - padX,
       ymin: Math.max(-85, s - padY),
@@ -827,13 +873,7 @@ export class ArcgisEngine implements MapEngine {
       ymax: Math.min(85, n + padY),
       spatialReference: { wkid: 4326 },
     });
-    void view
-      .goTo(extent, { duration: 800 })
-      .then(() => {
-        if (this.view && this.view.zoom > 14)
-          return this.view.goTo({ zoom: 14 }, { animate: false });
-      })
-      .catch(reportGoToFailure);
+    void view.goTo(extent, { duration: 800 }).catch(reportGoToFailure);
   }
   fitLayer(layer: GeoLibreLayer): void {
     const bounds = getLayerBounds(layer);
@@ -927,13 +967,31 @@ export class ArcgisEngine implements MapEngine {
         continue;
       }
       try {
-        const plan = compileArcgisLayer(layer, {
-          zoom: this.compiledZoom,
-          scene: this.view?.type === "3d",
-          deckOverlay: this.capabilities.deckOverlay,
-        });
-        const signature = planSignature(plan, layer);
         let entry = this.natives.get(layer.id);
+        const compileKey = layer.geojson ? geojsonCompileKey(layer) : undefined;
+        // Baking a GeoJSON layer's symbols walks every feature; an opacity
+        // tick, a visibility toggle or a rename leaves them as they were, so
+        // the plan is reused with only its display fields replaced.
+        const reusable =
+          entry?.plan.kind === "geojson" &&
+          compileKey !== undefined &&
+          entry.compileKey === compileKey &&
+          entry.geojson === layer.geojson &&
+          (!entry.plan.zoomDependent || entry.compiledZoom === this.compiledZoom);
+        const plan: ArcgisLayerPlan =
+          reusable && entry
+            ? {
+                ...entry.plan,
+                title: layer.name,
+                visible: layer.visible,
+                opacity: Math.min(1, Math.max(0, layer.opacity)),
+              }
+            : compileArcgisLayer(layer, {
+                zoom: this.compiledZoom,
+                scene: this.view?.type === "3d",
+                deckOverlay: this.capabilities.deckOverlay,
+              });
+        const signature = reusable && entry ? entry.signature : planSignature(plan, layer);
         if (entry && (entry.signature !== signature || entry.geojson !== layer.geojson)) {
           // Anything but the display fields changed (a re-style, a filter, an
           // edit to the features): rebuild the native layers.
@@ -966,6 +1024,8 @@ export class ArcgisEngine implements MapEngine {
           }
         }
         entry.plan = plan;
+        entry.compileKey = compileKey;
+        entry.compiledZoom = this.compiledZoom;
         if (plan.kind === "feature-service" && plan.filterUnsupported)
           this.errors.set(
             `filter:${layer.id}`,
@@ -978,6 +1038,7 @@ export class ArcgisEngine implements MapEngine {
             zarr.setSelector((plan.source.source.selector ?? {}) as Record<string, unknown>);
             zarr.setStyle(plan.source.source);
           }
+          native.title = plan.title;
           native.visible = plan.visible;
           native.opacity = plan.opacity;
           native.minScale = plan.minScale;
@@ -1091,6 +1152,13 @@ export class ArcgisEngine implements MapEngine {
             ...(plan.copyright ? { copyright: plan.copyright } : {}),
           }),
         ];
+      case "template-tile":
+        return [
+          createArcgisTemplateTileLayer(this.sdk, plan, {
+            ...common,
+            ...(plan.copyright ? { copyright: plan.copyright } : {}),
+          }),
+        ];
       case "wms":
         return [
           new layers.WMSLayer({
@@ -1196,8 +1264,26 @@ export class ArcgisEngine implements MapEngine {
   getLayerRasterSource(id: string): Record<string, unknown> | null {
     const plan = this.natives.get(id)?.plan;
     if (!plan) return null;
-    if (plan.kind === "web-tile")
-      return { type: "raster", tiles: [plan.urlTemplate], attribution: plan.copyright };
+    if (plan.kind === "template-tile")
+      return {
+        type: "raster",
+        tiles: plan.templates,
+        scheme: plan.scheme,
+        tileSize: plan.tileSize,
+        minzoom: plan.minzoom,
+        maxzoom: plan.maxzoom,
+        ...(plan.copyright ? { attribution: plan.copyright } : {}),
+      };
+    if (plan.kind === "web-tile") {
+      // The plan holds the SDK's `{level}/{col}/{row}` form; exports want the
+      // store's MapLibre template.
+      const tiles = this.layers.find((l) => l.id === id)?.source.tiles;
+      return {
+        type: "raster",
+        tiles: Array.isArray(tiles) && tiles.length ? tiles : [plan.urlTemplate],
+        ...(plan.copyright ? { attribution: plan.copyright } : {}),
+      };
+    }
     if (plan.kind === "media-image") return { type: "image", url: plan.url };
     return null;
   }
@@ -1353,6 +1439,8 @@ export class ArcgisEngine implements MapEngine {
     const features: IdentifiedFeature[] = [...external];
     for (const result of hit.results) {
       if (result.type !== "graphic" || !result.graphic) continue;
+      // A cluster is a summary graphic whose object id names no feature.
+      if (result.graphic.isAggregate) continue;
       const native = result.graphic.layer ?? result.layer ?? null;
       const storeId = native ? this.storeIdFor(native) : undefined;
       if (!storeId) continue;
@@ -1908,7 +1996,7 @@ export class ArcgisEngine implements MapEngine {
     };
   }
   stopCamera(): void {
-    this.rotating = false;
+    this.storyCameraToken++;
     // Stopping the animation settles an in-flight goTo where it is.
     (this.view?.animation as { stop?: () => void } | null | undefined)?.stop?.();
   }
@@ -2174,7 +2262,7 @@ function stripSyntheticFields(attributes: Record<string, unknown>): Record<strin
  * a visibility toggle does not.
  */
 function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
-  const { visible: _v, opacity: _o, minScale: _mn, maxScale: _mx, ...rest } = plan;
+  const { title: _t, visible: _v, opacity: _o, minScale: _mn, maxScale: _mx, ...rest } = plan;
   if (rest.kind === "cog" || rest.kind === "zarr") {
     const { source: _source, ...signature } = rest;
     return JSON.stringify(signature);
@@ -2190,6 +2278,16 @@ function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
       filters: [layer.timeFilter, layer.embedFilter, compileLayerFilters(layer)],
     });
   }
+  return JSON.stringify(rest);
+}
+
+/**
+ * What a GeoJSON layer's compiled plan depends on apart from its features
+ * (compared by identity) and the display fields applied in place: the style,
+ * filters, source and metadata.
+ */
+function geojsonCompileKey(layer: GeoLibreLayer): string {
+  const { geojson: _g, name: _n, visible: _v, opacity: _o, ...rest } = layer;
   return JSON.stringify(rest);
 }
 

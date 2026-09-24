@@ -90,6 +90,8 @@ export interface ArcgisGraphic {
   geometry: ArcgisGeometryJson | ArcgisPoint | ArcgisExtent | null;
   layer: ArcgisLayer | null;
   symbol?: unknown;
+  /** Whether the graphic is a cluster or bin summarizing several features. */
+  isAggregate?: boolean;
 }
 
 export interface ArcgisCollection<T> {

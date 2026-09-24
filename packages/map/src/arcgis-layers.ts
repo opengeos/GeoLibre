@@ -21,6 +21,11 @@ import { KML_ICON_URL_PROPERTY } from "./markers";
 import { compileMapboxLayer } from "./mapbox-layers";
 import { arcgisVectorStyle } from "./arcgis-vector-style";
 import { proxyWmsTiles } from "./wms-proxy";
+import {
+  isTileTemplate,
+  needsTemplateTileLayer,
+  type ArcgisTileTemplateSource,
+} from "./arcgis-template-tiles";
 
 /**
  * Translate a store layer into what the ArcGIS Maps SDK can draw (issue #2421).
@@ -177,6 +182,7 @@ export type ArcgisLayerPlan = ArcgisPlanBase &
         subDomains?: string[];
         copyright?: string;
       }
+    | ({ kind: "template-tile"; copyright?: string } & ArcgisTileTemplateSource)
     | {
         kind: "wms";
         url: string;
@@ -440,6 +446,9 @@ function activeFilters(layer: GeoLibreLayer): unknown[] | null {
     layer.timeFilter,
     layer.embedFilter,
     ruleBasedVisibilityFilter(layer.style),
+    // Hidden annotations stay in the collection, as MapLibre's layer sync
+    // filters them out rather than dropping them.
+    layer.metadata.sourceKind === "annotation" ? ["!=", ["get", "visible"], false] : null,
   ].filter(Boolean) as unknown[][];
   if (filters.length === 0) return null;
   return filters.length === 1 ? filters[0] : ["all", ...filters];
@@ -1070,6 +1079,18 @@ const WMS_STRUCTURAL = new Set([
   "transparent",
 ]);
 
+/** Whether a tile template is a WMS GetMap request naming the layers to draw. */
+function isWmsGetMap(template: string): boolean {
+  const params = new URLSearchParams(template.split("?", 2)[1] ?? "");
+  let getMap = true;
+  let layers = false;
+  for (const [key, value] of params) {
+    if (key.toLowerCase() === "request") getMap = value.toLowerCase() === "getmap";
+    if (key.toLowerCase() === "layers") layers = value.trim() !== "";
+  }
+  return getMap && layers;
+}
+
 /**
  * Split a MapLibre WMS GetMap tile template (`...?SERVICE=WMS&REQUEST=GetMap&
  * LAYERS=...&BBOX={bbox-epsg-3857}`) into the SDK's WMSLayer description: the
@@ -1106,6 +1127,50 @@ export function wmsLayerFromTemplate(template: string): {
     ...(get("format") ? { imageFormat: get("format") } : {}),
     imageTransparency: transparent === undefined || transparent.toLowerCase() !== "false",
     ...(Object.keys(custom).length ? { customParameters: custom } : {}),
+  };
+}
+
+/**
+ * The tile source for a raster record `WebTileLayer` cannot draw as MapLibre
+ * would: a TMS scheme, a tile size other than 256 px, a source zoom range, more
+ * than one template, or a placeholder it has no form for. Null when the plain
+ * `WebTileLayer` path draws it the same.
+ */
+function templateTileSource(
+  layer: GeoLibreLayer,
+  templates: string[],
+): ArcgisTileTemplateSource | null {
+  const { scheme, tileSize, minzoom, maxzoom } = layer.source as {
+    scheme?: unknown;
+    tileSize?: unknown;
+    minzoom?: unknown;
+    maxzoom?: unknown;
+  };
+  const finite = (value: unknown): value is number =>
+    typeof value === "number" && Number.isFinite(value);
+  const size = finite(tileSize) && tileSize > 0 ? tileSize : 256;
+  if (
+    scheme !== "tms" &&
+    size === 256 &&
+    !finite(minzoom) &&
+    !finite(maxzoom) &&
+    templates.length === 1 &&
+    !needsTemplateTileLayer(templates[0])
+  )
+    return null;
+  for (const template of templates) {
+    if (/\{(?:bbox-(?!epsg-3857\})[^}]*|switch:[^}]*)\}/.test(template))
+      throw new Error("Tile template placeholders are not supported by the ArcGIS renderer");
+    if (!isTileTemplate(template)) throw new Error("Tile template has no {z}/{x}/{y} placeholders");
+  }
+  const layerBounds = bounds(layer);
+  return {
+    templates,
+    scheme: scheme === "tms" ? "tms" : "xyz",
+    tileSize: size,
+    minzoom: finite(minzoom) ? Math.max(0, minzoom) : 0,
+    maxzoom: finite(maxzoom) ? Math.max(0, maxzoom) : 22,
+    ...(layerBounds ? { bounds: layerBounds } : {}),
   };
 }
 
@@ -1345,27 +1410,27 @@ export function compileArcgisLayer(
       tileOptions,
     };
   }
-  if (layer.type === "wms" && tiles.length) {
-    const [template] = proxyWmsTiles(layer.type, tiles);
-    return { ...base, kind: "wms", ...wmsLayerFromTemplate(template) };
-  }
+  // A GetMap template naming its layers is a WMS service the SDK can draw
+  // natively. Other bounding-box templates typed `wms` (an ArcGIS
+  // `/exportImage`, say) are plain image requests, drawn tile by tile below.
+  // WMS tiles go through the dev server's proxy, as on MapLibre.
+  const proxied = proxyWmsTiles(layer.type, tiles);
+  if (layer.type === "wms" && tiles.length && isWmsGetMap(tiles[0]))
+    return { ...base, kind: "wms", ...wmsLayerFromTemplate(proxied[0]) };
   if (RASTER_TILE_TYPES.has(layer.type) && (tiles.length || url)) {
-    const template = tiles[0] ?? url!;
+    const templates = proxied.length ? proxied : [url!];
     // `cog://`, `pmtiles://`, `mbtiles://` and friends are MapLibre protocol
     // handlers registered with maplibre-gl only.
-    if (/^[\w+-]+:/.test(template) && !/^(?:https?|data|blob):/i.test(template))
+    if (templates.some((t) => /^[\w+-]+:/.test(t) && !/^(?:https?|data|blob):/i.test(t)))
       throw new Error("MapLibre custom tile protocols are not supported by the ArcGIS renderer");
+    const copyright =
+      typeof layer.source.attribution === "string" ? { copyright: layer.source.attribution } : {};
+    const tileSource = templateTileSource(layer, templates);
     // An ArcGIS export/tile template (the ArcGIS Layer panel's raster path) is
     // still a plain tile template; the SDK's own service classes are used only
     // for records that name the service itself (the `arcgis` type above).
-    return {
-      ...base,
-      kind: "web-tile",
-      ...webTileTemplate(template),
-      ...(typeof layer.source.attribution === "string"
-        ? { copyright: layer.source.attribution }
-        : {}),
-    };
+    if (tileSource) return { ...base, kind: "template-tile", ...tileSource, ...copyright };
+    return { ...base, kind: "web-tile", ...webTileTemplate(templates[0]), ...copyright };
   }
   if (layer.type === "geojson" && url) {
     // A remote GeoJSON URL the store never materialized: the SDK can fetch it,
