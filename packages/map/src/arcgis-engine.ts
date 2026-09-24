@@ -2469,6 +2469,11 @@ export class ArcgisEngine implements MapEngine {
       this.handles.delete(handle);
     };
   }
+  /**
+   * Unlike ArcgisCanvas's module-level `whenDrawn`, which waits for the
+   * basemap only (for the loading indicator), this waits for the whole view,
+   * data layers included, as a capture needs.
+   */
   whenDrawn(timeoutMs: number): Promise<void> {
     const view = this.view;
     if (!view) return Promise.resolve();

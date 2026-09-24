@@ -1569,7 +1569,12 @@ export function PrintLayoutDialog({
             setAtlasScaleNotice(null);
             break;
           }
-          if (attempt === 3) break;
+          // Still off after every correction: the camera cannot reach the scale
+          // (a zoom limit, or bounds that raise the minimum), so say so.
+          if (attempt === 3) {
+            setAtlasScaleNotice(t("printLayout.errors.scaleOutOfRange"));
+            break;
+          }
           const zoom = camera.zoom() + Math.log2(ratio / target);
           const clamped = Math.max(camera.minZoom(), Math.min(camera.maxZoom(), zoom));
           // A clamp means this page renders at the closest reachable scale,
