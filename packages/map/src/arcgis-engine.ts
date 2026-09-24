@@ -1355,6 +1355,8 @@ export class ArcgisEngine implements MapEngine {
           void native
             .when()
             .then(() => {
+              // A restyle or removal may have replaced the layer meanwhile.
+              if (native.destroyed) return;
               const type = (native as { geometryType?: string }).geometryType;
               const kind = type === "multipoint" ? "point" : type;
               if (kind === "point" || kind === "polyline" || kind === "polygon")
