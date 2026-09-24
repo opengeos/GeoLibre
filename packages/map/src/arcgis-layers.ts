@@ -176,8 +176,11 @@ interface ArcgisPlanBase {
 /** The SDK blend modes GeoLibre's {@link BlendMode}s translate to. */
 export type ArcgisBlendMode = "normal" | "multiply" | "screen" | "lighten" | "plus";
 
-/** Plan kinds drawn as raster imagery, which take the raster colour effect. */
-export const ARCGIS_RASTER_PLAN_KINDS: ReadonlySet<ArcgisLayerPlan["kind"]> = new Set([
+/**
+ * Plan kinds drawn as raster imagery, which take the raster colour effect. A
+ * tile archive is raster only when its tiles are; see {@link isArcgisRasterPlan}.
+ */
+const ARCGIS_RASTER_PLAN_KINDS: ReadonlySet<ArcgisLayerPlan["kind"]> = new Set([
   "web-tile",
   "template-tile",
   "wms",
@@ -189,6 +192,15 @@ export const ARCGIS_RASTER_PLAN_KINDS: ReadonlySet<ArcgisLayerPlan["kind"]> = ne
   "archive",
   "media-image",
 ]);
+
+/**
+ * Whether a plan draws raster imagery, which the raster colour sliders apply
+ * to (MapLibre applies them to `raster` layers only, never a vector archive's).
+ */
+export function isArcgisRasterPlan(plan: ArcgisLayerPlan): boolean {
+  if (plan.kind === "archive") return plan.tileType === "raster";
+  return ARCGIS_RASTER_PLAN_KINDS.has(plan.kind);
+}
 
 /**
  * The raster colour sliders as an SDK `effect`. The SDK takes CSS filter

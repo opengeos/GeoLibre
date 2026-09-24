@@ -37,7 +37,7 @@ import {
   ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
   ARCGIS_LABEL_FIELD,
-  ARCGIS_RASTER_PLAN_KINDS,
+  isArcgisRasterPlan,
   ARCGIS_SYMBOL_FIELD,
   ARCGIS_WEIGHT_FIELD,
   compileArcgisLayer,
@@ -1058,7 +1058,7 @@ export class ArcgisEngine implements MapEngine {
           native.visible = plan.visible;
           native.opacity = plan.opacity;
           native.blendMode = plan.blendMode;
-          native.effect = ARCGIS_RASTER_PLAN_KINDS.has(plan.kind) ? plan.effect : null;
+          native.effect = isArcgisRasterPlan(plan) ? plan.effect : null;
           native.minScale = plan.minScale;
           native.maxScale = plan.maxScale;
         }

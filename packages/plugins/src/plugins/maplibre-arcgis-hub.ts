@@ -398,10 +398,9 @@ function buildPanel(container: HTMLElement): () => void {
     }
     // Read the extent through `getViewBounds`, not `getMap()?.getBounds()`:
     // this plugin declares `engines: ["maplibre", "cesium", "mapbox", "arcgis"]`,
-    // and
-    // `getMap()` is null on the globe, Mapbox and ArcGIS — so the bounds came back
-    // undefined there and every search covered the whole world with "current
-    // view only" still ticked.
+    // and `getMap()` is null on the globe, Mapbox and ArcGIS — so the bounds
+    // came back undefined there and every search covered the whole world with
+    // "current view only" still ticked.
     //
     // `getViewBounds` has its own null: no map mounted yet, the globe mid-morph
     // between scene modes, or a camera pointed away from Earth. Widening to the

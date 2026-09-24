@@ -94,6 +94,7 @@ export function ArcgisCanvas({
     let cancelled = false;
     let terrainRestoreError: string | null = null;
     let engine: ArcgisEngine | undefined;
+    let loaded = false;
     let cleanup = () => {};
     setError(null);
     setLoadFailed(false);
@@ -117,6 +118,9 @@ export function ArcgisCanvas({
     ])
       .then(([sdk, scene]) => {
         if (cancelled || !element.isConnected) return;
+        // Past this point the modules are in; a failure below is not one a
+        // reload fixes, so it gets no Retry.
+        loaded = true;
         sdk.config.apiKey = apiKey?.trim() || null;
         const state = useAppStore.getState();
         const pane = state.secondaryMapViews.find((p) => p.id === viewId);
@@ -563,7 +567,7 @@ export function ArcgisCanvas({
         // A frozen old view would hide that the new one failed.
         retire();
         setReady(true);
-        setLoadFailed(true);
+        setLoadFailed(!loaded);
         setError(redactArcgisError(error instanceof Error ? error.message : String(error)));
       });
     return () => {

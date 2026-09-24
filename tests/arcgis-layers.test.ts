@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { BLANK_BASEMAP, DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import {
   arcgisRasterEffect,
+  isArcgisRasterPlan,
   ARCGIS_HEIGHT_FIELD,
   ARCGIS_ID_FIELD,
   ARCGIS_LABEL_FIELD,
@@ -387,6 +388,18 @@ describe("ArcGIS raster colour effect and blend mode", () => {
       }),
       "brightness(1) contrast(0.5) saturate(1) hue-rotate(0deg)",
     );
+  });
+  it("treats a tile archive as raster only when its tiles are", () => {
+    const archive = (tileType: string) =>
+      compileArcgisLayer(
+        geojsonLayer({
+          geojson: undefined,
+          type: "pmtiles",
+          source: { url: "https://x/a.pmtiles", tileType, sourceLayers: ["roads"] },
+        }),
+      );
+    assert.equal(isArcgisRasterPlan(archive("raster")), true);
+    assert.equal(isArcgisRasterPlan(archive("vector")), false);
   });
   it("carries the blend mode, with MapLibre's add as the SDK's plus", () => {
     const tiles = geojsonLayer({

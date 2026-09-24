@@ -1,8 +1,6 @@
 import { cesiumKmlSource, isCesiumKmlLayer } from "@geolibre/core";
 import { bindDocumentOpacity } from "./cesium-document-opacity";
 import { imageryColorAdjustments } from "./raster-color-adjustments";
-
-export { imageryColorAdjustments };
 import {
   cesiumIonAssetId,
   compileFeatureExpression,
@@ -91,6 +89,10 @@ import type {
   Resource,
   TilingScheme,
 } from "@cesium/engine";
+
+// The imagery colour solve is shared with the ArcGIS engine
+// (raster-color-adjustments.ts); re-exported here for existing importers.
+export { imageryColorAdjustments };
 
 // Reconciles the store's `GeoLibreLayer[]` onto a Cesium globe, mirroring what
 // MapController.syncLayers does for MapLibre. M3 covers the layer kinds where
