@@ -1172,6 +1172,24 @@ describe("ArcgisEngine picking and highlight", () => {
     const collection = await engine.getLayerGeoJson("fs");
     assert.equal(collection?.features.length, 1);
     assert.deepEqual(collection?.features[0].properties, { OBJECTID: 1, NAME: "A" });
+    // A service past its record limit is paged.
+    const starts: unknown[] = [];
+    service.queryFeatures = async (query: { start?: number }) => {
+      starts.push(query.start);
+      const start = query.start ?? 0;
+      return {
+        exceededTransferLimit: start === 0,
+        features: [
+          {
+            attributes: { OBJECTID: start + 1 },
+            geometry: { type: "point", x: 3, y: 4, spatialReference: { wkid: 4326 } },
+            layer: null,
+          },
+        ],
+      };
+    };
+    assert.equal((await engine.getLayerGeoJson("fs"))?.features.length, 2);
+    assert.deepEqual(starts, [undefined, 1]);
   });
   it("keeps synchronous control results when a native hit test outlives the engine", async () => {
     const { setArcgisControlPicker } = await import("../packages/map/src/arcgis-control-adapters");

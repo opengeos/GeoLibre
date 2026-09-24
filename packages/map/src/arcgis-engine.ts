@@ -241,6 +241,9 @@ const CAMERA_KEYS = new Set([
   "P",
 ]);
 
+/** Pages of a service's features `getLayerGeoJson` reads before stopping. */
+const SERVICE_GEOJSON_MAX_PAGES = 50;
+
 /** Pixel radius the synchronous identify accepts around points and lines. */
 const HIT_TOLERANCE_PX = 6;
 
@@ -1432,6 +1435,8 @@ export class ArcgisEngine implements MapEngine {
     this.natives.delete(id);
     this.errors.delete(`layer:${id}`);
     this.errors.delete(`filter:${id}`);
+    for (const key of [...this.serviceGeometries.keys()])
+      if (key.startsWith(`${id}:`)) this.serviceGeometries.delete(key);
   }
   waitAndSyncLayers(layers: GeoLibreLayer[]): void {
     this.syncLayers(layers);
@@ -1439,21 +1444,27 @@ export class ArcgisEngine implements MapEngine {
   async getLayerGeoJson(id: string): Promise<FeatureCollection | null> {
     const layer = this.layers.find((l) => l.id === id);
     if (layer?.geojson) return layer.geojson;
-    // A service layer's features live on the server: one query answers with
-    // what the service returns per request (its maxRecordCount).
+    // A service layer's features live on the server: page through them the
+    // way the service allows (its maxRecordCount per request), up to a cap.
     const entry = this.natives.get(id);
     const native = entry?.plan.kind === "feature-service" ? entry.layers[0] : undefined;
     if (!native?.queryFeatures) return null;
     try {
-      const result = await native.queryFeatures({
-        where: "1=1",
-        outFields: ["*"],
-        returnGeometry: true,
-        outSpatialReference: { wkid: 4326 },
-      });
+      const graphics: ArcgisGraphic[] = [];
+      for (let page = 0; page < SERVICE_GEOJSON_MAX_PAGES; page++) {
+        const result = await native.queryFeatures({
+          where: "1=1",
+          outFields: ["*"],
+          returnGeometry: true,
+          outSpatialReference: { wkid: 4326 },
+          ...(graphics.length ? { start: graphics.length } : {}),
+        });
+        graphics.push(...result.features);
+        if (!result.exceededTransferLimit || !result.features.length) break;
+      }
       return {
         type: "FeatureCollection",
-        features: result.features.flatMap((graphic) => {
+        features: graphics.flatMap((graphic) => {
           const geometry = this.graphicGeometryToGeoJson(graphic.geometry);
           return geometry
             ? [

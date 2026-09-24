@@ -31,7 +31,7 @@ import {
   type ArcgisTileTemplateSource,
 } from "./arcgis-template-tiles";
 import { imageryColorAdjustments } from "./raster-color-adjustments";
-import { GEOMAN_SHAPE_PROPERTY, GEOMAN_TEXT_PROPERTY, TEXT_MARKER_SHAPE } from "./label-style";
+import { GEOMAN_TEXT_PROPERTY, isTextMarkerFeature } from "./label-style";
 
 /**
  * Translate a store layer into what the ArcGIS Maps SDK can draw (issue #2421).
@@ -1001,7 +1001,7 @@ function compileGeoJson(
     if (!feature.geometry) return;
     if (filter.test && !filter.test(feature, zoom)) return;
     const id = String(feature.id ?? index);
-    if (isTextMarker(feature)) {
+    if (isTextMarkerFeature(feature)) {
       const props = feature.properties ?? {};
       const color =
         typeof props["text-color"] === "string" && props["text-color"]
@@ -1191,15 +1191,6 @@ function isDefaultStyle(style: Partial<LayerStyle> | undefined): boolean {
   if (!style) return true;
   return (Object.keys(style) as (keyof LayerStyle)[]).every(
     (key) => JSON.stringify(style[key]) === JSON.stringify(DEFAULT_LAYER_STYLE[key]),
-  );
-}
-
-/** Whether a feature is a Geo Editor text marker, drawn as its own text. */
-function isTextMarker(feature: Feature): boolean {
-  const props = feature.properties;
-  return (
-    !!props &&
-    (props[GEOMAN_SHAPE_PROPERTY] === TEXT_MARKER_SHAPE || props.shape === TEXT_MARKER_SHAPE)
   );
 }
 

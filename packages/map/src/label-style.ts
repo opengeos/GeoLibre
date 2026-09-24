@@ -118,7 +118,7 @@ export function parseLabelOverride(
 }
 
 /** Whether a feature is a Geo Editor text marker (see TEXT_MARKER_SHAPE_FILTER). */
-function isTextMarkerFeature(feature: FeatureCollection["features"][number]): boolean {
+export function isTextMarkerFeature(feature: FeatureCollection["features"][number]): boolean {
   const properties = feature.properties;
   return (
     properties?.[GEOMAN_SHAPE_PROPERTY] === TEXT_MARKER_SHAPE ||

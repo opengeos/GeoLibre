@@ -145,7 +145,9 @@ export interface ArcgisLayer {
   /** `WebTileLayer` only. */
   urlTemplate?: string;
   /** `FeatureLayer` only: query the service. */
-  queryFeatures?(query: Record<string, unknown>): Promise<{ features: ArcgisGraphic[] }>;
+  queryFeatures?(
+    query: Record<string, unknown>,
+  ): Promise<{ features: ArcgisGraphic[]; exceededTransferLimit?: boolean }>;
 }
 
 export interface ArcgisBasemap {
