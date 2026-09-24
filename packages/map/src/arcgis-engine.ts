@@ -511,6 +511,8 @@ export class ArcgisEngine implements MapEngine {
    * the layer's features, so identify skips them.
    */
   private companions = new WeakSet<ArcgisLayer>();
+  /** Whether {@link settleView} has placed the stored camera. */
+  private placed = false;
   private errors = new Map<string, string>();
   private preferences: MapPreferences | null = null;
   private basemapPlan: ArcgisBasemapPlan | null = null;
@@ -877,6 +879,11 @@ export class ArcgisEngine implements MapEngine {
       );
     } catch (error) {
       reportGoToFailure(error);
+    } finally {
+      // The stored camera has landed; from here a settle outside the limits
+      // is corrected (it may itself be outside the bounds).
+      this.placed = true;
+      this.constrainSettledView();
     }
   }
   easeToView(view: MapViewState): void {
@@ -1214,7 +1221,9 @@ export class ArcgisEngine implements MapEngine {
   private constrainSettledView(): void {
     const view = this.view;
     const p = this.preferences;
-    if (!view || !p || !view.ready || !view.stationary || this.storyMove) return;
+    // Not before the stored camera is placed: the view's default camera would
+    // start a correction that interrupts `settleView`'s own move.
+    if (!view || !p || !this.placed || !view.ready || !view.stationary || this.storyMove) return;
     const { minZoom, maxZoom } = this.zoomRange();
     const zoom = viewZoom(view);
     const bounds = p.restrictBounds ? normalizeMapBounds(p.bounds) : null;

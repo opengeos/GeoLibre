@@ -609,8 +609,9 @@ describe("ArcgisEngine camera conventions", () => {
     assert.deepEqual(call.target.center, [180, 85]);
     assert.equal(call.target.zoom, 10);
   });
-  it("keeps a flat view inside restricted bounds and the zoom range", () => {
+  it("keeps a flat view inside restricted bounds and the zoom range", async () => {
     const { engine, rawView, goTo, fireViewEvent } = makeEngine();
+    await engine.settleView(engine.readView());
     Object.assign(rawView, { zoom: 7, center: { longitude: 10, latitude: 20 } });
     goTo.length = 0;
     // 10 degrees by 10 degrees must fill the 800 x 600 view: zoom out no
@@ -645,8 +646,9 @@ describe("ArcgisEngine camera conventions", () => {
     assert.equal(wheel(-100), true);
     assert.equal(wheel(100), false);
   });
-  it("holds a scene inside the zoom range and bounds once it settles", () => {
+  it("holds a scene inside the zoom range and bounds once it settles", async () => {
     const { engine, rawView, goTo, fireWatchers } = makeSceneEngine();
+    await engine.settleView(engine.readView());
     Object.assign(rawView, { zoom: 2, center: { longitude: 30, latitude: 40 } });
     goTo.length = 0;
     engine.applyMapPreferences({
@@ -670,8 +672,9 @@ describe("ArcgisEngine camera conventions", () => {
     fireWatchers();
     assert.equal(goTo.length, 0);
   });
-  it("reapplies the bounds' minimum zoom once the view has its size", () => {
+  it("reapplies the bounds' minimum zoom once the view has its size", async () => {
     const { engine, rawView, goTo, fireWatchers } = makeEngine();
+    await engine.settleView(engine.readView());
     Object.assign(rawView, { width: 0, height: 0, zoom: 3, center: { longitude: 5, latitude: 5 } });
     goTo.length = 0;
     engine.applyMapPreferences({ ...PREFERENCES, restrictBounds: true, bounds: [0, 0, 10, 10] });
@@ -680,6 +683,21 @@ describe("ArcgisEngine camera conventions", () => {
     Object.assign(rawView, { width: 800, height: 600 });
     fireWatchers();
     assert.ok((goTo.at(-1) as { target: { zoom: number } }).target.zoom > 5);
+  });
+  it("does not correct the default camera before the stored one is placed", async () => {
+    const { engine, rawView, goTo } = makeEngine();
+    Object.assign(rawView, { zoom: 2, center: { longitude: 30, latitude: 40 } });
+    goTo.length = 0;
+    engine.applyMapPreferences({
+      ...PREFERENCES,
+      minZoom: 4,
+      restrictBounds: true,
+      bounds: [0, 0, 10, 10],
+    });
+    // The default camera is outside the limits, but settleView owns the move.
+    assert.equal(goTo.length, 0);
+    await engine.settleView({ center: [5, 5], zoom: 7, bearing: 0, pitch: 0 });
+    assert.deepEqual((goTo[0] as { target: { center: [number, number] } }).target.center, [5, 5]);
   });
   it("converts GeoJSON geometry to SDK geometry JSON", () => {
     assert.deepEqual(geojsonToArcgisGeometry({ type: "Point", coordinates: [1, 2] }), {
