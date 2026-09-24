@@ -2386,6 +2386,7 @@
       "militaryFlights": "सैन्य उड़ानें",
       "bikeShare": "बाइक शेयर",
       "transit": "लाइव सार्वजनिक परिवहन",
+      "vessels": "लाइव AIS जहाज़",
       "streetTraffic": "सिम्युलेटेड सड़क यातायात",
       "mappedAlpr": "मानचित्रित नंबर प्लेट कैमरे",
       "cctv": "सार्वजनिक सीसीटीवी कैमरे",
@@ -2405,6 +2406,12 @@
       "noneInView": "इस लेयर के लिए वर्तमान दृश्य में कोई फ़ीचर नहीं मिला।",
       "never": "कभी नहीं",
       "lastUpdated": "अंतिम अपडेट: {{time}}",
+      "vesselsKeyRequired": "जहाज़ों को स्ट्रीम करने के लिए API कुंजियाँ में AISStream API कुंजी जोड़ें।",
+      "vesselsZoomIn": "जहाज़ों को स्ट्रीम करने के लिए {{span}}° से कम चौड़े दृश्य पर ज़ूम इन करें।",
+      "vesselsConnecting": "AISStream से कनेक्ट हो रहा है…",
+      "vesselsKeyRejected": "AISStream ने API कुंजी अस्वीकार कर दी।",
+      "trafficFlowKeyRejected": "TomTom ने API कुंजी अस्वीकार कर दी, इसलिए ट्रैफ़िक लाइव प्रवाह के अनुसार रंगा नहीं गया है।",
+      "trafficFlowUnavailable": "TomTom लाइव प्रवाह उपलब्ध नहीं है, इसलिए ट्रैफ़िक रंगा नहीं गया है।",
       "speed": "गति",
       "speedRealTime": "वास्तविक समय (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Starlink कैटलॉग लोड नहीं हो सका: {{error}}। फिर प्रयास करने के लिए चुनें।",
-      "denseDescription": "पूरे Starlink समूह को हल्के बिंदुओं के रूप में दिखाएँ (बिना लेबल या तालिका पंक्तियों के)।"
+      "denseDescription": "पूरे Starlink समूह को हल्के बिंदुओं के रूप में दिखाएँ (बिना लेबल या तालिका पंक्तियों के)।",
+      "apiKeys": {
+        "title": "API कुंजियाँ",
+        "description": "कुंजियाँ केवल इसी ब्राउज़र में रखी जाती हैं और कभी भी प्रोजेक्ट के साथ सहेजी नहीं जातीं।",
+        "tomtom": "TomTom (सड़क ट्रैफ़िक का लाइव प्रवाह)",
+        "aisstream": "AISStream (लाइव AIS जहाज़)",
+        "placeholder": "API कुंजी चिपकाएँ",
+        "save": "सहेजें",
+        "clear": "साफ़ करें",
+        "fromPanel": "इस ब्राउज़र में सहेजी गई",
+        "fromEnvironment": "परिवेश की कुंजी का उपयोग हो रहा है",
+        "notSet": "सेट नहीं है",
+        "getKey": "मुफ़्त कुंजी प्राप्त करें",
+        "saveFailed": "इस ब्राउज़र में कुंजी सहेजी नहीं जा सकी।"
+      }
     }
   },
   "toolbar": {

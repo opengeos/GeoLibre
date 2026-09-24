@@ -2386,6 +2386,7 @@
       "militaryFlights": "Askerî Uçuşlar",
       "bikeShare": "Bisiklet Paylaşımı",
       "transit": "Canlı toplu taşıma",
+      "vessels": "Canlı AIS Gemileri",
       "streetTraffic": "Simüle Edilmiş Sokak Trafiği",
       "mappedAlpr": "Haritalanmış Plaka Okuma Kameraları",
       "cctv": "Halka Açık CCTV Kameraları",
@@ -2405,6 +2406,12 @@
       "noneInView": "Bu katman için mevcut görünümde öğe bulunamadı.",
       "never": "Hiçbir zaman",
       "lastUpdated": "Son güncelleme: {{time}}",
+      "vesselsKeyRequired": "Gemileri akışla almak için API anahtarları bölümüne bir AISStream API anahtarı ekleyin.",
+      "vesselsZoomIn": "Gemileri akışla almak için genişliği {{span}}° altında olan bir görünüme yakınlaştırın.",
+      "vesselsConnecting": "AISStream'e bağlanılıyor…",
+      "vesselsKeyRejected": "AISStream API anahtarını reddetti.",
+      "trafficFlowKeyRejected": "TomTom API anahtarını reddetti; bu nedenle trafik canlı akışa göre renklendirilmiyor.",
+      "trafficFlowUnavailable": "TomTom canlı akışı kullanılamıyor; bu nedenle trafik renklendirilmiyor.",
       "speed": "Hız",
       "speedRealTime": "Gerçek zamanlı (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Starlink kataloğu yüklenemedi: {{error}}. Yeniden denemek için seçin.",
-      "denseDescription": "Starlink uydu ağının tamamını hafif noktalar olarak gösterin (etiket veya tablo satırı olmadan)."
+      "denseDescription": "Starlink uydu ağının tamamını hafif noktalar olarak gösterin (etiket veya tablo satırı olmadan).",
+      "apiKeys": {
+        "title": "API anahtarları",
+        "description": "Anahtarlar yalnızca bu tarayıcıda tutulur ve asla projeyle birlikte kaydedilmez.",
+        "tomtom": "TomTom (sokak trafiği canlı akışı)",
+        "aisstream": "AISStream (canlı AIS gemileri)",
+        "placeholder": "API anahtarını yapıştırın",
+        "save": "Kaydet",
+        "clear": "Temizle",
+        "fromPanel": "Bu tarayıcıya kaydedildi",
+        "fromEnvironment": "Ortamdaki anahtar kullanılıyor",
+        "notSet": "Ayarlanmadı",
+        "getKey": "Ücretsiz anahtar alın",
+        "saveFailed": "Anahtar bu tarayıcıya kaydedilemedi."
+      }
     }
   },
   "toolbar": {

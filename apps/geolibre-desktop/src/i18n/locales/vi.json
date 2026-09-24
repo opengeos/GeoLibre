@@ -2338,6 +2338,7 @@
       "militaryFlights": "Chuyến bay quân sự",
       "bikeShare": "Chia sẻ xe đạp",
       "transit": "Giao thông công cộng trực tiếp",
+      "vessels": "Tàu AIS trực tiếp",
       "streetTraffic": "Giao thông đường phố mô phỏng",
       "mappedAlpr": "Camera nhận dạng biển số đã lập bản đồ",
       "cctv": "Camera CCTV công cộng",
@@ -2357,6 +2358,12 @@
       "noneInView": "Không tìm thấy tính năng nào trong chế độ xem hiện tại cho lớp này.",
       "never": "Chưa bao giờ",
       "lastUpdated": "Cập nhật lần cuối: {{time}}",
+      "vesselsKeyRequired": "Thêm khóa API AISStream trong mục Khóa API để truyền dữ liệu tàu.",
+      "vesselsZoomIn": "Phóng to đến chế độ xem rộng dưới {{span}}° để truyền dữ liệu tàu.",
+      "vesselsConnecting": "Đang kết nối với AISStream…",
+      "vesselsKeyRejected": "AISStream đã từ chối khóa API.",
+      "trafficFlowKeyRejected": "TomTom đã từ chối khóa API nên giao thông không được tô màu theo lưu lượng trực tiếp.",
+      "trafficFlowUnavailable": "Lưu lượng trực tiếp của TomTom không khả dụng nên giao thông không được tô màu.",
       "speed": "Tốc độ",
       "speedRealTime": "Thời gian thực (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2366,7 +2373,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Không thể tải danh mục Starlink: {{error}}. Chọn để thử lại.",
-      "denseDescription": "Hiển thị toàn bộ chòm vệ tinh Starlink dưới dạng các điểm nhẹ (không có nhãn hoặc hàng bảng)."
+      "denseDescription": "Hiển thị toàn bộ chòm vệ tinh Starlink dưới dạng các điểm nhẹ (không có nhãn hoặc hàng bảng).",
+      "apiKeys": {
+        "title": "Khóa API",
+        "description": "Khóa chỉ được lưu trong trình duyệt này và không bao giờ được lưu cùng dự án.",
+        "tomtom": "TomTom (lưu lượng giao thông đường phố trực tiếp)",
+        "aisstream": "AISStream (tàu AIS trực tiếp)",
+        "placeholder": "Dán khóa API",
+        "save": "Lưu",
+        "clear": "Xóa",
+        "fromPanel": "Đã lưu trong trình duyệt này",
+        "fromEnvironment": "Đang dùng khóa từ môi trường",
+        "notSet": "Chưa đặt",
+        "getKey": "Nhận khóa miễn phí",
+        "saveFailed": "Không thể lưu khóa trong trình duyệt này."
+      }
     }
   },
   "toolbar": {

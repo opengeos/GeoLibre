@@ -2478,6 +2478,7 @@
       "militaryFlights": "טיסות צבאיות",
       "bikeShare": "שיתוף אופניים",
       "transit": "תחבורה ציבורית חיה",
+      "vessels": "כלי שיט AIS חיים",
       "streetTraffic": "תנועת רחוב מדומה",
       "mappedAlpr": "מצלמות ALPR ממופות",
       "cctv": "מצלמות CCTV ציבוריות",
@@ -2497,6 +2498,12 @@
       "noneInView": "לא נמצאו ישויות בתצוגה הנוכחית עבור שכבה זו.",
       "never": "אף פעם",
       "lastUpdated": "עודכן לאחרונה: {{time}}",
+      "vesselsKeyRequired": "הוסף מפתח API של AISStream תחת מפתחות API כדי להזרים כלי שיט.",
+      "vesselsZoomIn": "התקרב לתצוגה ברוחב של פחות מ-{{span}}° כדי להזרים כלי שיט.",
+      "vesselsConnecting": "מתחבר ל-AISStream…",
+      "vesselsKeyRejected": "AISStream דחה את מפתח ה-API.",
+      "trafficFlowKeyRejected": "TomTom דחה את מפתח ה-API, ולכן התנועה אינה צבועה לפי זרימה חיה.",
+      "trafficFlowUnavailable": "הזרימה החיה של TomTom אינה זמינה, ולכן התנועה אינה צבועה.",
       "speed": "מהירות",
       "speedRealTime": "זמן אמת (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2506,7 +2513,21 @@
       "denseCount": "צפוף · {{count}}",
       "dense": "צפוף",
       "denseError": "לא ניתן לטעון את קטלוג Starlink: {{error}}. יש לבחור כדי לנסות שוב.",
-      "denseDescription": "הצג את כל מעטפת Starlink כנקודות קלות (ללא תוויות או שורות טבלה)."
+      "denseDescription": "הצג את כל מעטפת Starlink כנקודות קלות (ללא תוויות או שורות טבלה).",
+      "apiKeys": {
+        "title": "מפתחות API",
+        "description": "המפתחות נשמרים בדפדפן זה בלבד ולעולם אינם נשמרים עם הפרויקט.",
+        "tomtom": "TomTom (זרימה חיה של תנועת רחוב)",
+        "aisstream": "AISStream (כלי שיט AIS חיים)",
+        "placeholder": "הדבק מפתח API",
+        "save": "שמור",
+        "clear": "נקה",
+        "fromPanel": "נשמר בדפדפן זה",
+        "fromEnvironment": "משתמש במפתח מהסביבה",
+        "notSet": "לא מוגדר",
+        "getKey": "קבל מפתח חינם",
+        "saveFailed": "לא ניתן היה לשמור את המפתח בדפדפן זה."
+      }
     }
   },
   "toolbar": {

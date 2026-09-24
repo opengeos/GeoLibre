@@ -2386,6 +2386,7 @@
       "militaryFlights": "پروازهای نظامی",
       "bikeShare": "اشتراک دوچرخه",
       "transit": "حمل‌ونقل عمومی زنده",
+      "vessels": "کشتی‌های زنده AIS",
       "streetTraffic": "ترافیک خیابانی شبیه‌سازی‌شده",
       "mappedAlpr": "دوربین‌های پلاک‌خوان نقشه‌برداری‌شده",
       "cctv": "دوربین‌های مداربسته عمومی",
@@ -2405,6 +2406,12 @@
       "noneInView": "برای این لایه هیچ عارضه‌ای در نمای کنونی یافت نشد.",
       "never": "هرگز",
       "lastUpdated": "آخرین به‌روزرسانی: {{time}}",
+      "vesselsKeyRequired": "برای پخش کشتی‌ها، یک کلید API برای AISStream در بخش کلیدهای API اضافه کنید.",
+      "vesselsZoomIn": "برای پخش کشتی‌ها، به نمایی با عرض کمتر از {{span}}° بزرگ‌نمایی کنید.",
+      "vesselsConnecting": "در حال اتصال به AISStream…",
+      "vesselsKeyRejected": "AISStream کلید API را رد کرد.",
+      "trafficFlowKeyRejected": "TomTom کلید API را رد کرد، بنابراین ترافیک بر اساس جریان زنده رنگ‌آمیزی نمی‌شود.",
+      "trafficFlowUnavailable": "جریان زنده TomTom در دسترس نیست، بنابراین ترافیک رنگ‌آمیزی نمی‌شود.",
       "speed": "سرعت",
       "speedRealTime": "زمان واقعی (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "فهرست Starlink بارگیری نشد: {{error}}. برای تلاش دوباره آن را انتخاب کنید.",
-      "denseDescription": "مجموعه کامل Starlink را به‌صورت نقاط سبک نمایش دهید (بدون برچسب یا ردیف‌های جدول)."
+      "denseDescription": "مجموعه کامل Starlink را به‌صورت نقاط سبک نمایش دهید (بدون برچسب یا ردیف‌های جدول).",
+      "apiKeys": {
+        "title": "کلیدهای API",
+        "description": "کلیدها فقط در این مرورگر نگه داشته می‌شوند و هرگز همراه پروژه ذخیره نمی‌شوند.",
+        "tomtom": "TomTom (جریان زنده ترافیک خیابان)",
+        "aisstream": "AISStream (کشتی‌های زنده AIS)",
+        "placeholder": "کلید API را جای‌گذاری کنید",
+        "save": "ذخیره",
+        "clear": "پاک کردن",
+        "fromPanel": "در این مرورگر ذخیره شده",
+        "fromEnvironment": "استفاده از کلید متغیرهای محیطی",
+        "notSet": "تنظیم نشده",
+        "getKey": "دریافت کلید رایگان",
+        "saveFailed": "ذخیره کلید در این مرورگر ممکن نشد."
+      }
     }
   },
   "toolbar": {

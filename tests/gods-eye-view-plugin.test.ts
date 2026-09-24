@@ -18,6 +18,7 @@ import {
   GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG,
   GODS_EYE_VIEW_CCTV_FLAG,
   GODS_EYE_VIEW_TRANSIT_FLAG,
+  GODS_EYE_VIEW_VESSELS_FLAG,
   godsEyeViewPlugin,
   reattachGodsEyeView,
 } from "../packages/plugins/src/plugins/gods-eye-view";
@@ -434,7 +435,15 @@ describe("God's Eye View availability", () => {
         [
           [
             "Movement",
-            ["flights", "militaryFlights", "satellites", "bikeShare", "transit", "streetTraffic"],
+            [
+              "flights",
+              "militaryFlights",
+              "satellites",
+              "bikeShare",
+              "vessels",
+              "transit",
+              "streetTraffic",
+            ],
           ],
           ["Cameras", ["mappedAlpr", "cctv"]],
           ["Infrastructure", ["osmInfrastructure", "datacenters", "cables", "dams"]],
@@ -888,6 +897,7 @@ describe("God's Eye View clock speed", () => {
         activeFires: false,
         satellites: true,
         bikeShare: false,
+        vessels: false,
         transit: false,
         streetTraffic: false,
         mappedAlpr: false,
@@ -983,6 +993,133 @@ describe("God's Eye View reattach", () => {
     } finally {
       godsEyeViewPlugin.deactivate?.(first.app);
       net.restore();
+    }
+  });
+});
+
+describe("God's Eye View keyed feeds", () => {
+  it("streams AIS vessels only once a key is saved in the panel, never into the project", async () => {
+    const values = new Map<string, string>();
+    const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => void values.set(key, value),
+        removeItem: (key: string) => void values.delete(key),
+      },
+    });
+    const sockets: Array<{
+      url: string;
+      readyState: number;
+      sent: string[];
+      onopen: ((event: unknown) => void) | null;
+      onmessage: ((event: { data: unknown }) => void) | null;
+      onclose: ((event: unknown) => void) | null;
+      close: () => void;
+    }> = [];
+    const originalWebSocket = globalThis.WebSocket;
+    globalThis.WebSocket = class {
+      binaryType = "blob";
+      readyState = 0;
+      sent: string[] = [];
+      onopen: ((event: unknown) => void) | null = null;
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onclose: ((event: unknown) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      constructor(public url: string) {
+        sockets.push(this);
+      }
+      send(data: string) {
+        this.sent.push(data);
+      }
+      close() {
+        this.readyState = 3;
+      }
+    } as unknown as typeof WebSocket;
+    const net = stubFetch();
+    const globe = makeGlobe();
+    const Event = () => (globe.panel.ownerDocument.defaultView as Window).Event;
+    try {
+      useAppStore.setState({ layers: [] });
+      globe.setViewBounds([-75, 40, -73, 41.5]);
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {
+        vessels: true,
+        earthquakes: false,
+        satellites: false,
+      });
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 4; i++) await flush();
+
+      const row = () => globe.panel.querySelector<HTMLElement>('[data-feed-id="vessels"]');
+      assert.match(row()?.textContent ?? "", /Add an AISStream API key/);
+      assert.equal(sockets.length, 0, "no key, no connection");
+      assert.ok(!useAppStore.getState().layers.some((l) => l.metadata[GODS_EYE_VIEW_VESSELS_FLAG]));
+
+      const input = globe.panel.querySelector<HTMLInputElement>("#gods-eye-view-key-aisstream");
+      assert.ok(input);
+      assert.equal(input.type, "password");
+      input.value = "secret-ais-key";
+      const save = [
+        ...globe.panel.querySelectorAll<HTMLButtonElement>(
+          '[data-key-provider="aisstream"] button',
+        ),
+      ].find((button) => button.textContent === "Save");
+      save?.dispatchEvent(new (Event())("click"));
+      for (let i = 0; i < 4; i++) await flush();
+
+      assert.equal(values.get("geolibre.godsEyeView.apiKey.aisstream"), "secret-ais-key");
+      assert.equal(sockets.length, 1);
+      assert.equal(sockets[0].url, "wss://stream.aisstream.io/v0/stream");
+      assert.match(row()?.textContent ?? "", /Connecting to AISStream/);
+      const keyInput = () =>
+        globe.panel.querySelector<HTMLInputElement>("#gods-eye-view-key-aisstream");
+      const savedInput = keyInput();
+
+      sockets[0].readyState = 1;
+      sockets[0].onopen?.({});
+      assert.equal(JSON.parse(sockets[0].sent[0]).APIKey, "secret-ais-key");
+      sockets[0].onmessage?.({
+        data: JSON.stringify({
+          MessageType: "PositionReport",
+          MetaData: {
+            ShipName: "HARBOR TUG",
+            time_utc: new Date().toISOString().replace("T", " "),
+          },
+          Message: {
+            PositionReport: { UserID: 123456789, Latitude: 40.7, Longitude: -74, Sog: 5, Cog: 90 },
+          },
+        }),
+      });
+      // Going live re-renders the feed rows, but not the key input beside them,
+      // which would otherwise lose a half-typed key and its focus. (A boolean
+      // assert: printing a mismatched DOM node would take minutes.)
+      assert.ok(keyInput() === savedInput, "the key input survives a feed re-render");
+      // Pick the snapshot up now rather than on the next scheduled refresh.
+      const checkbox = row()?.querySelector<HTMLInputElement>("input[type=checkbox]");
+      assert.ok(checkbox);
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new (Event())("change"));
+      assert.equal(sockets[0].readyState, 3, "turning the layer off closes the socket");
+      const reopened = row()?.querySelector<HTMLInputElement>("input[type=checkbox]");
+      assert.ok(reopened);
+      reopened.checked = true;
+      reopened.dispatchEvent(new (Event())("change"));
+      for (let i = 0; i < 4; i++) await flush();
+      assert.equal(sockets.length, 2);
+
+      const state = godsEyeViewPlugin.getProjectState?.(globe.app);
+      assert.equal((state as Record<string, unknown>).vessels, true);
+      assert.doesNotMatch(JSON.stringify(state), /secret-ais-key/);
+      assert.ok(
+        useAppStore.getState().layers.some((layer) => layer.metadata[GODS_EYE_VIEW_VESSELS_FLAG]),
+      );
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      net.restore();
+      globalThis.WebSocket = originalWebSocket;
+      if (storageDescriptor) Object.defineProperty(globalThis, "localStorage", storageDescriptor);
+      else delete (globalThis as { localStorage?: unknown }).localStorage;
     }
   });
 });

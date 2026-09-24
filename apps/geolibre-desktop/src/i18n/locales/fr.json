@@ -2386,6 +2386,7 @@
       "militaryFlights": "Vols militaires",
       "bikeShare": "Vélos en libre-service",
       "transit": "Transports en commun en direct",
+      "vessels": "Navires AIS en direct",
       "streetTraffic": "Circulation routière simulée",
       "mappedAlpr": "Caméras LAPI cartographiées",
       "cctv": "Caméras de vidéosurveillance publiques",
@@ -2405,6 +2406,12 @@
       "noneInView": "Aucune entité trouvée dans la vue actuelle pour cette couche.",
       "never": "Jamais",
       "lastUpdated": "Dernière mise à jour : {{time}}",
+      "vesselsKeyRequired": "Ajoutez une clé API AISStream dans Clés API pour diffuser les navires.",
+      "vesselsZoomIn": "Zoomez sur une vue de moins de {{span}}° de large pour diffuser les navires.",
+      "vesselsConnecting": "Connexion à AISStream…",
+      "vesselsKeyRejected": "AISStream a refusé la clé API.",
+      "trafficFlowKeyRejected": "TomTom a refusé la clé API, le trafic n’est donc pas coloré selon le flux en direct.",
+      "trafficFlowUnavailable": "Le flux en direct de TomTom est indisponible, le trafic n’est donc pas coloré.",
       "speed": "Vitesse",
       "speedRealTime": "Temps réel (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Impossible de charger le catalogue Starlink : {{error}}. Sélectionnez-le pour réessayer.",
-      "denseDescription": "Afficher la constellation Starlink complète sous forme de points légers (sans étiquettes ni lignes de tableau)."
+      "denseDescription": "Afficher la constellation Starlink complète sous forme de points légers (sans étiquettes ni lignes de tableau).",
+      "apiKeys": {
+        "title": "Clés API",
+        "description": "Les clés sont conservées uniquement dans ce navigateur et ne sont jamais enregistrées avec le projet.",
+        "tomtom": "TomTom (flux en direct du trafic routier)",
+        "aisstream": "AISStream (navires AIS en direct)",
+        "placeholder": "Collez la clé API",
+        "save": "Enregistrer",
+        "clear": "Effacer",
+        "fromPanel": "Enregistrée dans ce navigateur",
+        "fromEnvironment": "Utilise la clé de l’environnement",
+        "notSet": "Non définie",
+        "getKey": "Obtenir une clé gratuite",
+        "saveFailed": "Impossible d’enregistrer la clé dans ce navigateur."
+      }
     }
   },
   "toolbar": {

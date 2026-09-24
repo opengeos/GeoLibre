@@ -10,6 +10,14 @@ import type {
 import type { CzmlTimeWindow } from "./gods-eye-view-feeds";
 import type { GodsEyeViewFeedPayload } from "./gods-eye-view-catalog-feeds";
 import { downloadOsmGeoJson } from "./osm-downloader-api";
+import {
+  fetchTrafficFlow,
+  flowSegmentInBounds,
+  matchTrafficFlow,
+  TomTomKeyError,
+  trafficFlowColor,
+  type TrafficFlowSegment,
+} from "./gods-eye-view-traffic-flow";
 
 export type ViewBounds = [west: number, south: number, east: number, north: number];
 
@@ -39,6 +47,9 @@ const TRAFFIC_SPEED_MPS: Record<string, number> = {
 const MAX_TRAFFIC_ENTITIES = 180;
 const MAX_TRAFFIC_VERTICES = 16;
 const MAX_TRAFFIC_CYCLES = 24;
+const MAX_FLOW_POLYLINES = 1_500;
+/** A jammed road still creeps; a zero speed would park every vehicle on it. */
+const MIN_FLOW_SPEED_FACTOR = 0.15;
 
 function documentPacket(name: string): CzmlPacket {
   return { id: "document", name, version: "1.0" };
@@ -198,9 +209,25 @@ function cumulativeDistances(line: Position[]): number[] {
   return distances;
 }
 
+/** Live congestion to draw under, and pace, the simulated vehicles. */
+export interface StreetTrafficFlow {
+  segments: readonly TrafficFlowSegment[];
+  /** Only segments reaching into this box are drawn; flow tiles overhang the view. */
+  bounds: ViewBounds;
+}
+
+/**
+ * Simulate vehicles on OSM road geometry, optionally paced by TomTom flow.
+ *
+ * With `flow`, each road takes the congestion of the flow segment it matches:
+ * vehicles slow to that fraction of the road's free speed and take its color,
+ * closed roads carry none, and the flow segments themselves are drawn as
+ * colored lines. Roads TomTom does not cover keep the keyless simulation.
+ */
 export function streetTrafficToCzml(
   data: FeatureCollection,
   window: CzmlTimeWindow,
+  flow?: StreetTrafficFlow,
 ): GodsEyeViewFeedPayload {
   const packets: CzmlPacket[] = [documentPacket("Simulated Street Traffic")];
   const features: Feature<Point>[] = [];
@@ -222,7 +249,11 @@ export function streetTrafficToCzml(
     const distances = cumulativeDistances(candidate.line);
     const totalDistance = distances.at(-1) ?? 0;
     if (!(totalDistance > 0)) continue;
-    const naturalCycleSeconds = totalDistance / (TRAFFIC_SPEED_MPS[candidate.roadClass] ?? 5);
+    const match = flow ? matchTrafficFlow(candidate.line, flow.segments) : null;
+    if (match?.closure) continue;
+    const speedFactor = match ? Math.max(MIN_FLOW_SPEED_FACTOR, match.level) : 1;
+    const naturalCycleSeconds =
+      totalDistance / ((TRAFFIC_SPEED_MPS[candidate.roadClass] ?? 5) * speedFactor);
     const cycleSeconds = Math.max(naturalCycleSeconds, windowSeconds / MAX_TRAFFIC_CYCLES);
     const samples: number[] = [];
     let lastElapsed = -1;
@@ -246,7 +277,10 @@ export function streetTrafficToCzml(
     const properties = {
       road: String(candidate.feature.properties?.name ?? "Unnamed road"),
       roadClass: candidate.roadClass,
-      mode: "Simulated positions on OpenStreetMap road geometry",
+      mode: match
+        ? "Simulated positions on OpenStreetMap road geometry, paced by TomTom live flow"
+        : "Simulated positions on OpenStreetMap road geometry",
+      ...(match ? { freeFlowPercent: Math.round(match.level * 100) } : {}),
     };
     packets.push({
       id,
@@ -262,7 +296,7 @@ export function streetTrafficToCzml(
       properties,
       point: {
         pixelSize: ["motorway", "trunk"].includes(candidate.roadClass) ? 6 : 4,
-        color: { rgba: [245, 248, 255, 235] },
+        color: { rgba: match ? trafficFlowColor(match.level, false) : [245, 248, 255, 235] },
         outlineColor: { rgba: [30, 41, 59, 190] },
         outlineWidth: 1,
       },
@@ -274,13 +308,62 @@ export function streetTrafficToCzml(
       properties,
     });
   }
+  if (flow) packets.push(...trafficFlowPackets(flow));
   return { packets, attributes: { type: "FeatureCollection", features } };
 }
 
+/** The congestion itself: one ground-clamped polyline per flow segment in view. */
+function trafficFlowPackets(flow: StreetTrafficFlow): CzmlPacket[] {
+  const packets: CzmlPacket[] = [];
+  for (const segment of flow.segments) {
+    if (packets.length >= MAX_FLOW_POLYLINES) break;
+    if (!flowSegmentInBounds(segment, flow.bounds)) continue;
+    const positions = segment.coordinates.filter(finitePosition).flatMap(([x, y]) => [x, y, 0]);
+    if (positions.length < 6) continue;
+    packets.push({
+      id: `traffic-flow-${packets.length}`,
+      name: segment.closure ? "Road closed" : "Traffic flow",
+      properties: {
+        roadType: segment.roadType,
+        freeFlowPercent: Math.round(segment.level * 100),
+        closure: segment.closure,
+        source: "TomTom Traffic Flow",
+      },
+      polyline: {
+        positions: { cartographicDegrees: positions },
+        width: segment.closure ? 5 : 3,
+        clampToGround: true,
+        material: {
+          solidColor: { color: { rgba: trafficFlowColor(segment.level, segment.closure) } },
+        },
+      },
+    });
+  }
+  return packets;
+}
+
+/** Why the flow coloring is missing although a key was supplied. */
+export type StreetTrafficFlowStatus = "active" | "keyRejected" | "unavailable";
+
+let roadCache: { key: string; data: FeatureCollection } | null = null;
+
+/**
+ * Street Traffic for the current view.
+ *
+ * The OSM roads for a snapped viewport are cached, so a flow-only refresh does
+ * not re-query Overpass for geometry that has not changed. A TomTom failure
+ * never takes the vehicles down with it: the layer falls back to the keyless
+ * simulation and reports why through `flowStatus`.
+ */
 export async function fetchStreetTrafficCzml(
   bounds: ViewBounds | null,
   window: CzmlTimeWindow,
-  options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
+  options: {
+    fetch?: typeof fetch;
+    signal?: AbortSignal;
+    tomtomKey?: string;
+    onFlowStatus?: (status: StreetTrafficFlowStatus) => void;
+  } = {},
 ): Promise<GodsEyeViewFeedPayload> {
   const queryBounds = viewportQueryBounds(
     bounds,
@@ -290,10 +373,44 @@ export async function fetchStreetTrafficCzml(
   if (!queryBounds) {
     return streetTrafficToCzml({ type: "FeatureCollection", features: [] }, window);
   }
-  const data = await downloadOsmGeoJson(
-    queryBounds,
-    { preset: "roads" },
-    { fetchImpl: options.fetch as never, signal: options.signal },
+  const key = queryBounds.join(",");
+  const roads =
+    roadCache?.key === key
+      ? Promise.resolve(roadCache.data)
+      : downloadOsmGeoJson(
+          queryBounds,
+          { preset: "roads" },
+          { fetchImpl: options.fetch as never, signal: options.signal },
+        ).then((data) => {
+          roadCache = { key, data };
+          return data;
+        });
+  const flow = options.tomtomKey
+    ? fetchTrafficFlow(queryBounds, options.tomtomKey, {
+        fetch: options.fetch,
+        signal: options.signal,
+      }).then(
+        (segments) => {
+          options.onFlowStatus?.("active");
+          return segments;
+        },
+        (error: unknown) => {
+          if (options.signal?.aborted) throw error;
+          options.onFlowStatus?.(error instanceof TomTomKeyError ? "keyRejected" : "unavailable");
+          console.warn("[God's Eye View] TomTom traffic flow unavailable", error);
+          return null;
+        },
+      )
+    : Promise.resolve(null);
+  const [data, segments] = await Promise.all([roads, flow]);
+  return streetTrafficToCzml(
+    data,
+    window,
+    segments ? { segments, bounds: queryBounds } : undefined,
   );
-  return streetTrafficToCzml(data, window);
+}
+
+/** Forget cached road geometry (tests, and a plugin deactivation). */
+export function clearStreetTrafficRoadCache(): void {
+  roadCache = null;
 }

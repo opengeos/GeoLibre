@@ -48,6 +48,15 @@ restriction. Public camera imagery comes from TfL, Austin, Calgary, Fintraffic,
 Ontario 511, DriveBC, Live Traffic NSW, and Caltrans under each provider's
 public-data terms.
 
+Two layers use a key of your own, entered under **API keys** at the bottom of
+the panel. **Live AIS Vessels** streams ship positions from
+[AISStream](https://aisstream.io/) for the current view (up to 30° across) and
+shows nothing without a key. **Simulated Street Traffic** works keyless; with a
+[TomTom](https://developer.tomtom.com/) key it also draws live congestion and
+paces its vehicles by it. Keys typed there stay in the browser and are never
+written to the project; `VITE_TOMTOM_API_KEY` or `AISSTREAM_API_KEY` under
+**Settings → Environment variables** works too.
+
 ![A plugin submenu, with Activate above the four map-corner positions](https://assets.geolibre.app/images/geolibre-plugin-position-menu.webp)
 
 !!! note "Components live on the Controls menu"

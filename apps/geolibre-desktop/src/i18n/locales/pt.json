@@ -2386,6 +2386,7 @@
       "militaryFlights": "Voos militares",
       "bikeShare": "Bicicletas compartilhadas",
       "transit": "Transporte público em tempo real",
+      "vessels": "Embarcações AIS em tempo real",
       "streetTraffic": "Tráfego viário simulado",
       "mappedAlpr": "Câmeras ALPR mapeadas",
       "cctv": "Câmeras CCTV públicas",
@@ -2405,6 +2406,12 @@
       "noneInView": "Nenhuma feição foi encontrada na visualização atual para esta camada.",
       "never": "Nunca",
       "lastUpdated": "Última atualização: {{time}}",
+      "vesselsKeyRequired": "Adicione uma chave de API do AISStream em Chaves de API para transmitir embarcações.",
+      "vesselsZoomIn": "Aproxime para uma visualização com menos de {{span}}° de largura para transmitir embarcações.",
+      "vesselsConnecting": "Conectando ao AISStream…",
+      "vesselsKeyRejected": "O AISStream rejeitou a chave de API.",
+      "trafficFlowKeyRejected": "A TomTom rejeitou a chave de API, então o tráfego não é colorido pelo fluxo em tempo real.",
+      "trafficFlowUnavailable": "O fluxo em tempo real da TomTom não está disponível, então o tráfego não é colorido.",
       "speed": "Velocidade",
       "speedRealTime": "Tempo real (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Não foi possível carregar o catálogo Starlink: {{error}}. Selecione para tentar novamente.",
-      "denseDescription": "Mostre a constelação Starlink completa como pontos leves (sem rótulos ou linhas da tabela)."
+      "denseDescription": "Mostre a constelação Starlink completa como pontos leves (sem rótulos ou linhas da tabela).",
+      "apiKeys": {
+        "title": "Chaves de API",
+        "description": "As chaves ficam apenas neste navegador e nunca são salvas com o projeto.",
+        "tomtom": "TomTom (fluxo em tempo real do tráfego urbano)",
+        "aisstream": "AISStream (embarcações AIS em tempo real)",
+        "placeholder": "Cole a chave de API",
+        "save": "Salvar",
+        "clear": "Limpar",
+        "fromPanel": "Salva neste navegador",
+        "fromEnvironment": "Usando a chave do ambiente",
+        "notSet": "Não definida",
+        "getKey": "Obter uma chave gratuita",
+        "saveFailed": "Não foi possível salvar a chave neste navegador."
+      }
     }
   },
   "toolbar": {

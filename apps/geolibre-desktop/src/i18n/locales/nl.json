@@ -2386,6 +2386,7 @@
       "militaryFlights": "Militaire vluchten",
       "bikeShare": "Deelfietsen",
       "transit": "Live openbaar vervoer",
+      "vessels": "Live AIS-schepen",
       "streetTraffic": "Gesimuleerd wegverkeer",
       "mappedAlpr": "Gekarteerde kentekencamera's",
       "cctv": "Openbare CCTV-camera's",
@@ -2405,6 +2406,12 @@
       "noneInView": "Geen features gevonden in de huidige weergave voor deze laag.",
       "never": "Nooit",
       "lastUpdated": "Laatst bijgewerkt: {{time}}",
+      "vesselsKeyRequired": "Voeg onder API-sleutels een AISStream-API-sleutel toe om schepen te streamen.",
+      "vesselsZoomIn": "Zoom in op een weergave van minder dan {{span}}° breed om schepen te streamen.",
+      "vesselsConnecting": "Verbinden met AISStream…",
+      "vesselsKeyRejected": "AISStream heeft de API-sleutel geweigerd.",
+      "trafficFlowKeyRejected": "TomTom heeft de API-sleutel geweigerd, dus het verkeer wordt niet gekleurd op basis van de live doorstroming.",
+      "trafficFlowUnavailable": "De live doorstroming van TomTom is niet beschikbaar, dus het verkeer wordt niet gekleurd.",
       "speed": "Snelheid",
       "speedRealTime": "Realtime (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "De Starlink-catalogus kon niet worden geladen: {{error}}. Selecteer om opnieuw te proberen.",
-      "denseDescription": "Toon de volledige Starlink-constellatie als lichte punten (zonder labels of tabelrijen)."
+      "denseDescription": "Toon de volledige Starlink-constellatie als lichte punten (zonder labels of tabelrijen).",
+      "apiKeys": {
+        "title": "API-sleutels",
+        "description": "Sleutels worden alleen in deze browser bewaard en nooit met het project opgeslagen.",
+        "tomtom": "TomTom (live doorstroming van straatverkeer)",
+        "aisstream": "AISStream (live AIS-schepen)",
+        "placeholder": "API-sleutel plakken",
+        "save": "Opslaan",
+        "clear": "Wissen",
+        "fromPanel": "Opgeslagen in deze browser",
+        "fromEnvironment": "Sleutel uit de omgeving wordt gebruikt",
+        "notSet": "Niet ingesteld",
+        "getKey": "Gratis sleutel aanvragen",
+        "saveFailed": "De sleutel kon niet in deze browser worden opgeslagen."
+      }
     }
   },
   "toolbar": {

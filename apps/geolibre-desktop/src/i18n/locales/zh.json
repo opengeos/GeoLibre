@@ -2338,6 +2338,7 @@
       "militaryFlights": "军用航班",
       "bikeShare": "共享单车",
       "transit": "实时公共交通",
+      "vessels": "实时 AIS 船舶",
       "streetTraffic": "模拟道路交通",
       "mappedAlpr": "已标绘车牌识别摄像头",
       "cctv": "公共闭路电视摄像头",
@@ -2357,6 +2358,12 @@
       "noneInView": "当前视图中未找到该图层的任何要素。",
       "never": "从未",
       "lastUpdated": "最后更新：{{time}}",
+      "vesselsKeyRequired": "请在“API 密钥”中添加 AISStream API 密钥以获取船舶数据流。",
+      "vesselsZoomIn": "请放大到宽度小于 {{span}}° 的视图以获取船舶数据流。",
+      "vesselsConnecting": "正在连接 AISStream…",
+      "vesselsKeyRejected": "AISStream 拒绝了该 API 密钥。",
+      "trafficFlowKeyRejected": "TomTom 拒绝了该 API 密钥，因此交通未按实时路况着色。",
+      "trafficFlowUnavailable": "TomTom 实时路况不可用，因此交通未着色。",
       "speed": "速度",
       "speedRealTime": "实时 (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2366,7 +2373,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "无法加载 Starlink 目录：{{error}}。选择以重试。",
-      "denseDescription": "将完整的 Starlink 星座显示为轻量点（无标签或表格行）。"
+      "denseDescription": "将完整的 Starlink 星座显示为轻量点（无标签或表格行）。",
+      "apiKeys": {
+        "title": "API 密钥",
+        "description": "密钥仅保存在此浏览器中，绝不会随项目一起保存。",
+        "tomtom": "TomTom（街道交通实时路况）",
+        "aisstream": "AISStream（实时 AIS 船舶）",
+        "placeholder": "粘贴 API 密钥",
+        "save": "保存",
+        "clear": "清除",
+        "fromPanel": "已保存在此浏览器中",
+        "fromEnvironment": "正在使用环境变量中的密钥",
+        "notSet": "未设置",
+        "getKey": "获取免费密钥",
+        "saveFailed": "无法在此浏览器中保存该密钥。"
+      }
     }
   },
   "toolbar": {

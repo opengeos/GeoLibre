@@ -2386,6 +2386,7 @@
       "militaryFlights": "Vuelos militares",
       "bikeShare": "Bicicletas compartidas",
       "transit": "Transporte público en vivo",
+      "vessels": "Buques AIS en vivo",
       "streetTraffic": "Tráfico urbano simulado",
       "mappedAlpr": "Cámaras ALPR cartografiadas",
       "cctv": "Cámaras CCTV públicas",
@@ -2405,6 +2406,12 @@
       "noneInView": "No se encontraron entidades en la vista actual para esta capa.",
       "never": "Nunca",
       "lastUpdated": "Última actualización: {{time}}",
+      "vesselsKeyRequired": "Añade una clave de API de AISStream en Claves de API para transmitir buques.",
+      "vesselsZoomIn": "Acerca la vista a menos de {{span}}° de ancho para transmitir buques.",
+      "vesselsConnecting": "Conectando con AISStream…",
+      "vesselsKeyRejected": "AISStream rechazó la clave de API.",
+      "trafficFlowKeyRejected": "TomTom rechazó la clave de API, por lo que el tráfico no se colorea según el flujo en vivo.",
+      "trafficFlowUnavailable": "El flujo en vivo de TomTom no está disponible, por lo que el tráfico no se colorea.",
       "speed": "Velocidad",
       "speedRealTime": "Tiempo real (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "No se pudo cargar el catálogo de Starlink: {{error}}. Selecciónalo para volver a intentarlo.",
-      "denseDescription": "Muestra la constelación completa de Starlink como puntos ligeros (sin etiquetas ni filas en la tabla)."
+      "denseDescription": "Muestra la constelación completa de Starlink como puntos ligeros (sin etiquetas ni filas en la tabla).",
+      "apiKeys": {
+        "title": "Claves de API",
+        "description": "Las claves se guardan solo en este navegador y nunca se guardan con el proyecto.",
+        "tomtom": "TomTom (flujo en vivo del tráfico urbano)",
+        "aisstream": "AISStream (buques AIS en vivo)",
+        "placeholder": "Pega la clave de API",
+        "save": "Guardar",
+        "clear": "Borrar",
+        "fromPanel": "Guardada en este navegador",
+        "fromEnvironment": "Usando la clave del entorno",
+        "notSet": "Sin configurar",
+        "getKey": "Obtener una clave gratuita",
+        "saveFailed": "No se pudo guardar la clave en este navegador."
+      }
     }
   },
   "toolbar": {

@@ -22,8 +22,10 @@ import { fetchBikeShareCzml, fetchSpaceMissionsCzml } from "./gods-eye-view-glob
 import {
   ALPR_MAX_VIEW_SPAN_DEGREES,
   ALPR_QUERY_SNAP_DEGREES,
+  clearStreetTrafficRoadCache,
   fetchMappedAlprCzml,
   fetchStreetTrafficCzml,
+  type StreetTrafficFlowStatus,
   TRAFFIC_MAX_VIEW_SPAN_DEGREES,
   TRAFFIC_QUERY_SNAP_DEGREES,
   viewportBoundsKey,
@@ -38,6 +40,19 @@ import {
   fetchCctvCzml,
 } from "./gods-eye-view-cctv-feeds";
 import { fetchTransitCzml } from "./gods-eye-view-transit-feeds";
+import {
+  GODS_EYE_VIEW_KEY_PROVIDERS,
+  readStoredGodsEyeViewKey,
+  resolveGodsEyeViewKey,
+  writeStoredGodsEyeViewKey,
+  type GodsEyeViewKeyProvider,
+} from "./gods-eye-view-keys";
+import {
+  AIS_MAX_VIEW_SPAN_DEGREES,
+  AIS_QUERY_SNAP_DEGREES,
+  AisStreamClient,
+  vesselsToCzml,
+} from "./gods-eye-view-vessel-feeds";
 
 export const GODS_EYE_VIEW_PLUGIN_ID = "gods-eye-view";
 export const GODS_EYE_VIEW_EARTHQUAKES_FLAG = "godsEyeViewEarthquakes";
@@ -57,6 +72,7 @@ export const GODS_EYE_VIEW_FLIGHTS_FLAG = "godsEyeViewFlights";
 export const GODS_EYE_VIEW_MILITARY_FLIGHTS_FLAG = "godsEyeViewMilitaryFlights";
 export const GODS_EYE_VIEW_CCTV_FLAG = "godsEyeViewCctv";
 export const GODS_EYE_VIEW_TRANSIT_FLAG = "godsEyeViewTransit";
+export const GODS_EYE_VIEW_VESSELS_FLAG = "godsEyeViewVessels";
 
 // The aircraft feeds refresh every 15–30 seconds. Individual descriptors still
 // decide whether they are due, so this inexpensive scheduler does not increase
@@ -76,18 +92,50 @@ interface FeedFetchContext {
   zoom: number | null;
 }
 
+/** A translatable status line: key, English fallback, interpolation params. */
+type StatusMessage = readonly [
+  key: string,
+  fallback: string,
+  params?: Record<string, string | number>,
+];
+
 interface FeedDescriptor {
   group: FeedGroup;
   label: readonly [key: string, fallback: string];
   attribution: string;
-  refreshIntervalMs: number;
+  /** A function when the cadence depends on runtime state, such as a key. */
+  refreshIntervalMs: number | (() => number);
   timeoutMs: number;
   flag: string;
   defaultEnabled: boolean;
   ownsClockWindow?: boolean;
+  /** The layer shows nothing without this provider's key, so it is not fetched. */
+  requiresKey?: GodsEyeViewKeyProvider;
+  /** Keys that change what the layer shows, so saving one refreshes it. */
+  usesKeys?: readonly GodsEyeViewKeyProvider[];
   viewportKey?: (bounds: FeedFetchContext["bounds"], zoom: number | null) => string;
   hasQueryableViewport?: (bounds: FeedFetchContext["bounds"]) => boolean;
+  /** A feed-specific status line that takes precedence over "Last updated". */
+  status?: (enabled: boolean) => StatusMessage | null;
+  /** Release what the feed holds outside the layer, such as an open socket. */
+  dispose?: () => void;
   fetch: (context: FeedFetchContext) => Promise<GodsEyeViewFeedPayload>;
+}
+
+/** Why Street Traffic is uncolored although a TomTom key is configured. */
+let trafficFlowStatus: StreetTrafficFlowStatus | null = null;
+
+const aisClient = new AisStreamClient({
+  onStateChange(state) {
+    renderPanel();
+    // The first reports arrive within a second or two of the subscription; draw
+    // them then rather than on the next scheduled refresh.
+    if (state === "live") setTimeout(() => void refreshFeed("vessels"), 2_000);
+  },
+});
+
+function aisQueryBounds(bounds: FeedFetchContext["bounds"]) {
+  return viewportQueryBounds(bounds, AIS_MAX_VIEW_SPAN_DEGREES, AIS_QUERY_SNAP_DEGREES);
 }
 
 /**
@@ -153,6 +201,56 @@ const FEED_DESCRIPTORS = {
     defaultEnabled: false,
     fetch: ({ signal }) => fetchBikeShareCzml({ signal }),
   },
+  vessels: {
+    group: "movement",
+    label: ["panel.godsEyeView.vessels", "Live AIS Vessels"],
+    attribution: "Live vessels: AISStream.io",
+    // A snapshot of the open socket, so this costs no request.
+    refreshIntervalMs: 10_000,
+    timeoutMs: 20_000,
+    flag: GODS_EYE_VIEW_VESSELS_FLAG,
+    defaultEnabled: false,
+    requiresKey: "aisstream",
+    usesKeys: ["aisstream"],
+    viewportKey: (bounds) =>
+      viewportBoundsKey(bounds, AIS_MAX_VIEW_SPAN_DEGREES, AIS_QUERY_SNAP_DEGREES),
+    hasQueryableViewport: (bounds) => aisQueryBounds(bounds) !== null,
+    status(enabled) {
+      if (!resolveGodsEyeViewKey("aisstream")) {
+        return [
+          "panel.godsEyeView.vesselsKeyRequired",
+          "Add an AISStream API key under API keys to stream vessels.",
+        ];
+      }
+      if (!enabled) return null;
+      if (!aisQueryBounds(appRef?.getViewBounds?.() ?? null)) {
+        return [
+          "panel.godsEyeView.vesselsZoomIn",
+          "Zoom in to a view less than {{span}}° across to stream vessels.",
+          { span: AIS_MAX_VIEW_SPAN_DEGREES },
+        ];
+      }
+      const { state } = aisClient.snapshot();
+      if (state === "keyRejected") {
+        return ["panel.godsEyeView.vesselsKeyRejected", "AISStream rejected the API key."];
+      }
+      if (state === "connecting" || state === "reconnecting") {
+        return ["panel.godsEyeView.vesselsConnecting", "Connecting to AISStream…"];
+      }
+      return null;
+    },
+    dispose: () => aisClient.stop(),
+    async fetch({ bounds, window }) {
+      const key = resolveGodsEyeViewKey("aisstream")?.key;
+      const queryBounds = aisQueryBounds(bounds);
+      if (!key || !queryBounds) {
+        aisClient.stop();
+        return vesselsToCzml([], window.start);
+      }
+      aisClient.update(key, queryBounds);
+      return vesselsToCzml(aisClient.snapshot().vessels, window.start);
+    },
+  },
   transit: {
     group: "movement",
     label: ["panel.godsEyeView.transit", "Live Transit"],
@@ -167,17 +265,47 @@ const FEED_DESCRIPTORS = {
   streetTraffic: {
     group: "movement",
     label: ["panel.godsEyeView.streetTraffic", "Simulated Street Traffic"],
-    attribution: "Simulated vehicle positions on © OpenStreetMap contributors, ODbL 1.0",
-    refreshIntervalMs: 2 * 60 * 60_000,
+    attribution:
+      "Simulated vehicle positions on © OpenStreetMap contributors, ODbL 1.0; live flow: © TomTom",
+    // Road geometry changes slowly, but live flow is worth re-reading. The roads
+    // are cached per viewport, so the faster cadence only re-reads TomTom.
+    refreshIntervalMs: () => (resolveGodsEyeViewKey("tomtom") ? 5 * 60_000 : 2 * 60 * 60_000),
     timeoutMs: OVERPASS_REQUEST_TIMEOUT_MS,
     flag: GODS_EYE_VIEW_STREET_TRAFFIC_FLAG,
     defaultEnabled: false,
+    usesKeys: ["tomtom"],
+    status(enabled) {
+      if (!enabled || !resolveGodsEyeViewKey("tomtom")) return null;
+      if (trafficFlowStatus === "keyRejected") {
+        return [
+          "panel.godsEyeView.trafficFlowKeyRejected",
+          "TomTom rejected the API key, so traffic is not colored by live flow.",
+        ];
+      }
+      if (trafficFlowStatus === "unavailable") {
+        return [
+          "panel.godsEyeView.trafficFlowUnavailable",
+          "TomTom live flow is unavailable, so traffic is not colored.",
+        ];
+      }
+      return null;
+    },
     viewportKey: (bounds) =>
       viewportBoundsKey(bounds, TRAFFIC_MAX_VIEW_SPAN_DEGREES, TRAFFIC_QUERY_SNAP_DEGREES),
     hasQueryableViewport: (bounds) =>
       viewportQueryBounds(bounds, TRAFFIC_MAX_VIEW_SPAN_DEGREES, TRAFFIC_QUERY_SNAP_DEGREES) !==
       null,
-    fetch: ({ bounds, signal, window }) => fetchStreetTrafficCzml(bounds, window, { signal }),
+    fetch: ({ bounds, signal, window }) => {
+      const tomtomKey = resolveGodsEyeViewKey("tomtom")?.key;
+      if (!tomtomKey) trafficFlowStatus = null;
+      return fetchStreetTrafficCzml(bounds, window, {
+        signal,
+        tomtomKey,
+        onFlowStatus: (status) => {
+          trafficFlowStatus = status;
+        },
+      });
+    },
   },
   osmInfrastructure: {
     group: "infrastructure",
@@ -605,13 +733,22 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   if (!force && state.loading) return;
   if (!force && state.retryAfter > Date.now()) return;
   const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
+  // Without its key the layer has nothing to show, and a request would only be
+  // refused. A key cleared while the layer was on takes the layer down with it.
+  if (descriptor.requiresKey && !resolveGodsEyeViewKey(descriptor.requiresKey)) {
+    if (state.layerId || ownedLayer(feed)) removeFeedLayer(feed);
+    else descriptor.dispose?.();
+    state.failed = false;
+    renderPanel();
+    return;
+  }
   const bounds = appRef?.getViewBounds?.() ?? null;
   const zoom = cesiumRef?.readView().zoom ?? null;
   const viewportKey = descriptor.viewportKey?.(bounds, zoom) ?? null;
   if (
     !force &&
     state.lastUpdated &&
-    Date.now() - state.lastUpdated.getTime() < descriptor.refreshIntervalMs &&
+    Date.now() - state.lastUpdated.getTime() < refreshInterval(descriptor) &&
     // Recent data the user can no longer see is no reason to skip: a feed
     // toggled off and on has had its layer removed and must rebuild it, and a
     // project load brings the layer back without the rows, which are stripped
@@ -666,8 +803,14 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   }
 }
 
+function refreshInterval(descriptor: FeedDescriptor): number {
+  const interval = descriptor.refreshIntervalMs;
+  return typeof interval === "function" ? interval() : interval;
+}
+
 function removeFeedLayer(feed: FeedId): void {
   const state = feeds[feed];
+  (FEED_DESCRIPTORS[feed] as FeedDescriptor).dispose?.();
   state.generation += 1;
   state.request?.abort();
   state.request = null;
@@ -776,6 +919,8 @@ function statusText(feed: FeedId): string {
   const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
   if (state.loading) return translate("panel.godsEyeView.loading", "Updating…");
   if (state.failed) return translate("panel.godsEyeView.updateFailed", "Update failed");
+  const custom = descriptor.status?.(state.enabled);
+  if (custom) return translate(...custom);
   if (state.lastUpdated && descriptor.viewportKey && state.layerId) {
     const layer = useAppStore.getState().layers.find((candidate) => candidate.id === state.layerId);
     const bounds = appRef?.getViewBounds?.() ?? null;
@@ -829,16 +974,165 @@ function speedRow(): HTMLElement {
   return row;
 }
 
+/**
+ * The panel's long-lived frame. Feed rows are rebuilt on every status change,
+ * which is often, so the API-key inputs live outside them: rebuilding an input
+ * would discard a half-typed key and steal the focus from it.
+ */
+let panelFrame: {
+  container: HTMLElement;
+  feeds: HTMLElement;
+  keys: HTMLElement;
+} | null = null;
+
+const KEY_PROVIDER_DETAILS: Record<
+  GodsEyeViewKeyProvider,
+  { label: readonly [key: string, fallback: string]; signupUrl: string }
+> = {
+  tomtom: {
+    label: ["panel.godsEyeView.apiKeys.tomtom", "TomTom (Street Traffic live flow)"],
+    signupUrl: "https://developer.tomtom.com/",
+  },
+  aisstream: {
+    label: ["panel.godsEyeView.apiKeys.aisstream", "AISStream (Live AIS Vessels)"],
+    signupUrl: "https://aisstream.io/",
+  },
+};
+
+/** Apply a saved or cleared key to every feed whose output depends on it. */
+function onKeyChanged(provider: GodsEyeViewKeyProvider): void {
+  if (provider === "tomtom") trafficFlowStatus = null;
+  for (const feed of FEED_IDS) {
+    const descriptor: FeedDescriptor = FEED_DESCRIPTORS[feed];
+    if (!descriptor.usesKeys?.includes(provider)) continue;
+    feeds[feed].failed = false;
+    feeds[feed].retryAfter = 0;
+    if (feeds[feed].enabled) void refreshFeed(feed);
+  }
+  renderKeysSection();
+  renderPanel();
+}
+
+function keyStatusText(provider: GodsEyeViewKeyProvider): string {
+  const resolved = resolveGodsEyeViewKey(provider);
+  if (resolved?.source === "panel") {
+    return translate("panel.godsEyeView.apiKeys.fromPanel", "Saved in this browser");
+  }
+  if (resolved?.source === "environment") {
+    return translate(
+      "panel.godsEyeView.apiKeys.fromEnvironment",
+      "Using the key from the environment",
+    );
+  }
+  return translate("panel.godsEyeView.apiKeys.notSet", "Not set");
+}
+
+function keyRow(provider: GodsEyeViewKeyProvider): HTMLElement {
+  const details = KEY_PROVIDER_DETAILS[provider];
+  const row = document.createElement("div");
+  row.dataset.keyProvider = provider;
+  row.style.cssText = "display:flex;flex-direction:column;gap:4px";
+  const inputId = `gods-eye-view-key-${provider}`;
+  const label = document.createElement("label");
+  label.htmlFor = inputId;
+  label.textContent = translate(...details.label);
+  label.style.cssText = "font-weight:600";
+  const controls = document.createElement("div");
+  controls.style.cssText = "display:flex;gap:6px";
+  const input = document.createElement("input");
+  input.id = inputId;
+  input.type = "password";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.placeholder = translate("panel.godsEyeView.apiKeys.placeholder", "Paste API key");
+  input.value = readStoredGodsEyeViewKey(provider);
+  input.style.cssText =
+    "flex:1;min-width:0;padding:4px 6px;border:1px solid hsl(var(--border));border-radius:4px;background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px";
+  const buttonStyle =
+    "padding:4px 8px;border:1px solid hsl(var(--border));border-radius:4px;background:transparent;color:hsl(var(--foreground));font-size:11px;cursor:pointer";
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = translate("panel.godsEyeView.apiKeys.save", "Save");
+  save.style.cssText = buttonStyle;
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.textContent = translate("panel.godsEyeView.apiKeys.clear", "Clear");
+  clear.style.cssText = buttonStyle;
+  clear.disabled = !readStoredGodsEyeViewKey(provider);
+  const status = document.createElement("div");
+  status.className = "geolibre-gods-eye-view-key-status";
+  status.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
+  status.textContent = keyStatusText(provider);
+  const signup = document.createElement("a");
+  signup.href = details.signupUrl;
+  signup.target = "_blank";
+  signup.rel = "noopener noreferrer";
+  signup.textContent = translate("panel.godsEyeView.apiKeys.getKey", "Get a free key");
+  signup.style.cssText = "font-size:11px;color:hsl(var(--primary))";
+  const store = (value: string) => {
+    if (!writeStoredGodsEyeViewKey(provider, value)) {
+      status.textContent = translate(
+        "panel.godsEyeView.apiKeys.saveFailed",
+        "Could not save the key in this browser.",
+      );
+      return;
+    }
+    onKeyChanged(provider);
+  };
+  save.addEventListener("click", () => store(input.value));
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") store(input.value);
+  });
+  clear.addEventListener("click", () => store(""));
+  controls.append(input, save, clear);
+  row.append(label, controls, status, signup);
+  return row;
+}
+
+function renderKeysSection(): void {
+  const host = panelFrame?.keys;
+  if (!host) return;
+  const open = host.querySelector("details")?.open ?? false;
+  const section = document.createElement("details");
+  section.className = "geolibre-gods-eye-view-api-keys";
+  section.open = open;
+  section.style.cssText = "padding:10px;border:1px solid hsl(var(--border));border-radius:6px";
+  const summary = document.createElement("summary");
+  summary.textContent = translate("panel.godsEyeView.apiKeys.title", "API keys");
+  summary.style.cssText = "font-weight:600;cursor:pointer";
+  const body = document.createElement("div");
+  body.style.cssText = "display:flex;flex-direction:column;gap:10px;margin-top:8px";
+  const note = document.createElement("p");
+  note.textContent = translate(
+    "panel.godsEyeView.apiKeys.description",
+    "Keys are kept in this browser only and are never saved with the project.",
+  );
+  note.style.cssText = "margin:0;color:hsl(var(--muted-foreground))";
+  body.append(note, ...GODS_EYE_VIEW_KEY_PROVIDERS.map(keyRow));
+  section.append(summary, body);
+  host.replaceChildren(section);
+}
+
 function renderPanel(): void {
   const container = panelContainer;
   if (!container) return;
-  container.replaceChildren();
-  const panel = document.createElement("div");
-  // Tag the panel so the host themes its native select; plain plugin DOM does
-  // not otherwise follow the app theme (see index.css).
-  panel.className = "geolibre-gods-eye-view-panel";
-  panel.style.cssText =
-    "display:flex;flex-direction:column;gap:12px;padding:12px;height:100%;box-sizing:border-box;font-size:12px;color:hsl(var(--foreground))";
+  if (panelFrame?.container !== container) {
+    const root = document.createElement("div");
+    // Tag the panel so the host themes its native select; plain plugin DOM does
+    // not otherwise follow the app theme (see index.css).
+    root.className = "geolibre-gods-eye-view-panel";
+    root.style.cssText =
+      "display:flex;flex-direction:column;gap:12px;padding:12px;height:100%;box-sizing:border-box;font-size:12px;color:hsl(var(--foreground))";
+    const feedsHost = document.createElement("div");
+    feedsHost.style.cssText = "display:flex;flex-direction:column;gap:12px";
+    const keysHost = document.createElement("div");
+    root.append(feedsHost, keysHost);
+    container.replaceChildren(root);
+    panelFrame = { container, feeds: feedsHost, keys: keysHost };
+    renderKeysSection();
+  }
+  const panel = panelFrame.feeds;
+  panel.replaceChildren();
   const description = document.createElement("p");
   description.textContent = translate(
     "panel.godsEyeView.description",
@@ -942,7 +1236,6 @@ function renderPanel(): void {
     panel.append(section);
   }
   panel.append(speedRow());
-  container.append(panel);
 }
 
 function resetRuntime(): void {
@@ -958,6 +1251,7 @@ function resetRuntime(): void {
   unregisterPanel?.();
   unregisterPanel = null;
   panelContainer = null;
+  panelFrame = null;
 }
 
 function activate(app: GeoLibreAppAPI): void {
@@ -995,10 +1289,15 @@ function activate(app: GeoLibreAppAPI): void {
         renderPanel();
         return () => {
           if (panelContainer === container) panelContainer = null;
+          if (panelFrame?.container === container) panelFrame = null;
         };
       },
     }) ?? null;
-  unsubscribeLocale = app.onLocaleChange?.(() => renderPanel()) ?? null;
+  unsubscribeLocale =
+    app.onLocaleChange?.(() => {
+      renderKeysSection();
+      renderPanel();
+    }) ?? null;
   app.openRightPanel?.(GODS_EYE_VIEW_PLUGIN_ID);
 
   if (cesiumRef) startRefreshing();
@@ -1085,6 +1384,8 @@ function deactivate(): void {
   }
   savedClockAnimating = null;
   savedClockMultiplier = null;
+  trafficFlowStatus = null;
+  clearStreetTrafficRoadCache();
   cesiumRef = null;
   appRef = null;
 }

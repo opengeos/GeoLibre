@@ -2386,6 +2386,7 @@
       "militaryFlights": "Voli militari",
       "bikeShare": "Bike sharing",
       "transit": "Trasporto pubblico in tempo reale",
+      "vessels": "Navi AIS in tempo reale",
       "streetTraffic": "Traffico stradale simulato",
       "mappedAlpr": "Telecamere ALPR mappate",
       "cctv": "Telecamere CCTV pubbliche",
@@ -2405,6 +2406,12 @@
       "noneInView": "Nessun elemento trovato nella vista attuale per questo layer.",
       "never": "Mai",
       "lastUpdated": "Ultimo aggiornamento: {{time}}",
+      "vesselsKeyRequired": "Aggiungi una chiave API AISStream in Chiavi API per trasmettere le navi.",
+      "vesselsZoomIn": "Ingrandisci su una vista larga meno di {{span}}° per trasmettere le navi.",
+      "vesselsConnecting": "Connessione ad AISStream…",
+      "vesselsKeyRejected": "AISStream ha rifiutato la chiave API.",
+      "trafficFlowKeyRejected": "TomTom ha rifiutato la chiave API, quindi il traffico non è colorato in base al flusso in tempo reale.",
+      "trafficFlowUnavailable": "Il flusso in tempo reale di TomTom non è disponibile, quindi il traffico non è colorato.",
       "speed": "Velocità",
       "speedRealTime": "Tempo reale (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Impossibile caricare il catalogo Starlink: {{error}}. Seleziona per riprovare.",
-      "denseDescription": "Mostra l'intera costellazione Starlink come punti leggeri (senza etichette o righe della tabella)."
+      "denseDescription": "Mostra l'intera costellazione Starlink come punti leggeri (senza etichette o righe della tabella).",
+      "apiKeys": {
+        "title": "Chiavi API",
+        "description": "Le chiavi sono conservate solo in questo browser e non vengono mai salvate con il progetto.",
+        "tomtom": "TomTom (flusso in tempo reale del traffico stradale)",
+        "aisstream": "AISStream (navi AIS in tempo reale)",
+        "placeholder": "Incolla la chiave API",
+        "save": "Salva",
+        "clear": "Cancella",
+        "fromPanel": "Salvata in questo browser",
+        "fromEnvironment": "Uso della chiave dall’ambiente",
+        "notSet": "Non impostata",
+        "getKey": "Ottieni una chiave gratuita",
+        "saveFailed": "Impossibile salvare la chiave in questo browser."
+      }
     }
   },
   "toolbar": {

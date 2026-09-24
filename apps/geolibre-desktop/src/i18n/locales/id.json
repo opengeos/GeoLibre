@@ -2338,6 +2338,7 @@
       "militaryFlights": "Penerbangan Militer",
       "bikeShare": "Berbagi Sepeda",
       "transit": "Transportasi Umum Langsung",
+      "vessels": "Kapal AIS Langsung",
       "streetTraffic": "Lalu Lintas Jalan Simulasi",
       "mappedAlpr": "Kamera ALPR Terpetakan",
       "cctv": "Kamera CCTV Publik",
@@ -2357,6 +2358,12 @@
       "noneInView": "Tidak ditemukan fitur dalam tampilan saat ini untuk layer ini.",
       "never": "Belum pernah",
       "lastUpdated": "Terakhir diperbarui: {{time}}",
+      "vesselsKeyRequired": "Tambahkan kunci API AISStream di bagian Kunci API untuk mengalirkan data kapal.",
+      "vesselsZoomIn": "Perbesar ke tampilan dengan lebar kurang dari {{span}}° untuk mengalirkan data kapal.",
+      "vesselsConnecting": "Menghubungkan ke AISStream…",
+      "vesselsKeyRejected": "AISStream menolak kunci API.",
+      "trafficFlowKeyRejected": "TomTom menolak kunci API, sehingga lalu lintas tidak diwarnai berdasarkan arus langsung.",
+      "trafficFlowUnavailable": "Arus langsung TomTom tidak tersedia, sehingga lalu lintas tidak diwarnai.",
       "speed": "Kecepatan",
       "speedRealTime": "Waktu nyata (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2366,7 +2373,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Katalog Starlink tidak dapat dimuat: {{error}}. Pilih untuk mencoba lagi.",
-      "denseDescription": "Tampilkan seluruh konstelasi Starlink sebagai titik ringan (tanpa label atau baris tabel)."
+      "denseDescription": "Tampilkan seluruh konstelasi Starlink sebagai titik ringan (tanpa label atau baris tabel).",
+      "apiKeys": {
+        "title": "Kunci API",
+        "description": "Kunci hanya disimpan di browser ini dan tidak pernah disimpan bersama proyek.",
+        "tomtom": "TomTom (arus langsung lalu lintas jalan)",
+        "aisstream": "AISStream (kapal AIS langsung)",
+        "placeholder": "Tempel kunci API",
+        "save": "Simpan",
+        "clear": "Bersihkan",
+        "fromPanel": "Tersimpan di browser ini",
+        "fromEnvironment": "Menggunakan kunci dari lingkungan",
+        "notSet": "Belum diatur",
+        "getKey": "Dapatkan kunci gratis",
+        "saveFailed": "Tidak dapat menyimpan kunci di browser ini."
+      }
     }
   },
   "toolbar": {

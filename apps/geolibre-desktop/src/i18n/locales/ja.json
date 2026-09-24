@@ -2338,6 +2338,7 @@
       "militaryFlights": "軍用機",
       "bikeShare": "シェアサイクル",
       "transit": "リアルタイム公共交通",
+      "vessels": "ライブAIS船舶",
       "streetTraffic": "シミュレーション道路交通",
       "mappedAlpr": "マッピング済みナンバープレート認識カメラ",
       "cctv": "公共CCTVカメラ",
@@ -2357,6 +2358,12 @@
       "noneInView": "このレイヤーには現在のビューにフィーチャが見つかりません。",
       "never": "未更新",
       "lastUpdated": "最終更新: {{time}}",
+      "vesselsKeyRequired": "船舶をストリーミングするには、APIキーでAISStreamのAPIキーを追加してください。",
+      "vesselsZoomIn": "船舶をストリーミングするには、幅が{{span}}°未満の表示までズームインしてください。",
+      "vesselsConnecting": "AISStreamに接続中…",
+      "vesselsKeyRejected": "AISStreamがAPIキーを拒否しました。",
+      "trafficFlowKeyRejected": "TomTomがAPIキーを拒否したため、交通はライブ交通流で色分けされていません。",
+      "trafficFlowUnavailable": "TomTomのライブ交通流を利用できないため、交通は色分けされていません。",
       "speed": "速度",
       "speedRealTime": "リアルタイム (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2366,7 +2373,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Starlink カタログを読み込めませんでした: {{error}}。選択して再試行してください。",
-      "denseDescription": "Starlink コンステレーション全体を軽量な点として表示します（ラベルやテーブル行はありません）。"
+      "denseDescription": "Starlink コンステレーション全体を軽量な点として表示します（ラベルやテーブル行はありません）。",
+      "apiKeys": {
+        "title": "APIキー",
+        "description": "キーはこのブラウザーにのみ保存され、プロジェクトと一緒に保存されることはありません。",
+        "tomtom": "TomTom(道路交通のライブ交通流)",
+        "aisstream": "AISStream(ライブAIS船舶)",
+        "placeholder": "APIキーを貼り付け",
+        "save": "保存",
+        "clear": "クリア",
+        "fromPanel": "このブラウザーに保存済み",
+        "fromEnvironment": "環境変数のキーを使用中",
+        "notSet": "未設定",
+        "getKey": "無料のキーを取得",
+        "saveFailed": "このブラウザーにキーを保存できませんでした。"
+      }
     }
   },
   "toolbar": {

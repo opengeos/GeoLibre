@@ -2386,6 +2386,7 @@
       "militaryFlights": "Militärflüge",
       "bikeShare": "Bikesharing",
       "transit": "Live-Nahverkehr",
+      "vessels": "Live-AIS-Schiffe",
       "streetTraffic": "Simulierter Straßenverkehr",
       "mappedAlpr": "Kartierte Kennzeichenkameras",
       "cctv": "Öffentliche CCTV-Kameras",
@@ -2405,6 +2406,12 @@
       "noneInView": "Für diese Ebene wurden im aktuellen Kartenausschnitt keine Objekte gefunden.",
       "never": "Nie",
       "lastUpdated": "Zuletzt aktualisiert: {{time}}",
+      "vesselsKeyRequired": "Fügen Sie unter API-Schlüssel einen AISStream-API-Schlüssel hinzu, um Schiffe zu streamen.",
+      "vesselsZoomIn": "Zoomen Sie auf eine Ansicht von weniger als {{span}}° Breite, um Schiffe zu streamen.",
+      "vesselsConnecting": "Verbindung zu AISStream wird hergestellt…",
+      "vesselsKeyRejected": "AISStream hat den API-Schlüssel abgelehnt.",
+      "trafficFlowKeyRejected": "TomTom hat den API-Schlüssel abgelehnt, daher wird der Verkehr nicht nach Live-Verkehrsfluss eingefärbt.",
+      "trafficFlowUnavailable": "Der Live-Verkehrsfluss von TomTom ist nicht verfügbar, daher wird der Verkehr nicht eingefärbt.",
       "speed": "Geschwindigkeit",
       "speedRealTime": "Echtzeit (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2414,7 +2421,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Der Starlink-Katalog konnte nicht geladen werden: {{error}}. Zum erneuten Versuch auswählen.",
-      "denseDescription": "Die vollständige Starlink-Konstellation als ressourcenschonende Punkte anzeigen (ohne Beschriftungen oder Tabellenzeilen)."
+      "denseDescription": "Die vollständige Starlink-Konstellation als ressourcenschonende Punkte anzeigen (ohne Beschriftungen oder Tabellenzeilen).",
+      "apiKeys": {
+        "title": "API-Schlüssel",
+        "description": "Schlüssel werden nur in diesem Browser gespeichert und nie mit dem Projekt gesichert.",
+        "tomtom": "TomTom (Live-Verkehrsfluss für Straßenverkehr)",
+        "aisstream": "AISStream (Live-AIS-Schiffe)",
+        "placeholder": "API-Schlüssel einfügen",
+        "save": "Speichern",
+        "clear": "Löschen",
+        "fromPanel": "In diesem Browser gespeichert",
+        "fromEnvironment": "Schlüssel aus der Umgebung wird verwendet",
+        "notSet": "Nicht festgelegt",
+        "getKey": "Kostenlosen Schlüssel erhalten",
+        "saveFailed": "Der Schlüssel konnte in diesem Browser nicht gespeichert werden."
+      }
     }
   },
   "toolbar": {

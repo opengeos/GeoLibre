@@ -2433,6 +2433,7 @@
       "militaryFlights": "Military Flights",
       "bikeShare": "Bike Share",
       "transit": "Live Transit",
+      "vessels": "Live AIS Vessels",
       "streetTraffic": "Simulated Street Traffic",
       "mappedAlpr": "Mapped ALPR Cameras",
       "cctv": "Public CCTV Cameras",
@@ -2452,6 +2453,12 @@
       "noneInView": "No features found in the current view for this layer.",
       "never": "Never",
       "lastUpdated": "Last updated: {{time}}",
+      "vesselsKeyRequired": "Add an AISStream API key under API keys to stream vessels.",
+      "vesselsZoomIn": "Zoom in to a view less than {{span}}° across to stream vessels.",
+      "vesselsConnecting": "Connecting to AISStream…",
+      "vesselsKeyRejected": "AISStream rejected the API key.",
+      "trafficFlowKeyRejected": "TomTom rejected the API key, so traffic is not colored by live flow.",
+      "trafficFlowUnavailable": "TomTom live flow is unavailable, so traffic is not colored.",
       "speed": "Speed",
       "speedRealTime": "Real time (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2461,7 +2468,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Could not load the Starlink catalog: {{error}}. Select to retry.",
-      "denseDescription": "Show the full Starlink shell as lightweight points (no labels or table rows)."
+      "denseDescription": "Show the full Starlink shell as lightweight points (no labels or table rows).",
+      "apiKeys": {
+        "title": "API keys",
+        "description": "Keys are kept in this browser only and are never saved with the project.",
+        "tomtom": "TomTom (Street Traffic live flow)",
+        "aisstream": "AISStream (Live AIS Vessels)",
+        "placeholder": "Paste API key",
+        "save": "Save",
+        "clear": "Clear",
+        "fromPanel": "Saved in this browser",
+        "fromEnvironment": "Using the key from the environment",
+        "notSet": "Not set",
+        "getKey": "Get a free key",
+        "saveFailed": "Could not save the key in this browser."
+      }
     }
   },
   "toolbar": {

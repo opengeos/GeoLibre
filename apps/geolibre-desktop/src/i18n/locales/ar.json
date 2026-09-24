@@ -2577,6 +2577,7 @@
       "militaryFlights": "الرحلات العسكرية",
       "bikeShare": "مشاركة الدراجات",
       "transit": "النقل العام المباشر",
+      "vessels": "سفن AIS المباشرة",
       "streetTraffic": "حركة مرور الشوارع المحاكاة",
       "mappedAlpr": "كاميرات قراءة لوحات المركبات المرسومة على الخريطة",
       "cctv": "كاميرات المراقبة العامة",
@@ -2596,6 +2597,12 @@
       "noneInView": "لم يُعثر على معالم في العرض الحالي لهذه الطبقة.",
       "never": "أبدًا",
       "lastUpdated": "آخر تحديث: {{time}}",
+      "vesselsKeyRequired": "أضف مفتاح API لـ AISStream ضمن مفاتيح API لبث السفن.",
+      "vesselsZoomIn": "كبّر إلى عرض يقل عرضه عن {{span}}° لبث السفن.",
+      "vesselsConnecting": "جارٍ الاتصال بـ AISStream…",
+      "vesselsKeyRejected": "رفضت AISStream مفتاح API.",
+      "trafficFlowKeyRejected": "رفضت TomTom مفتاح API، لذا لا تُلوَّن حركة المرور حسب التدفق المباشر.",
+      "trafficFlowUnavailable": "التدفق المباشر من TomTom غير متاح، لذا لا تُلوَّن حركة المرور.",
       "speed": "السرعة",
       "speedRealTime": "الزمن الحقيقي (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2605,7 +2612,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "تعذر تحميل كتالوج Starlink: {{error}}. حدده لإعادة المحاولة.",
-      "denseDescription": "اعرض مجموعة Starlink الكاملة كنقاط خفيفة (من دون تسميات أو صفوف في جدول السمات)."
+      "denseDescription": "اعرض مجموعة Starlink الكاملة كنقاط خفيفة (من دون تسميات أو صفوف في جدول السمات).",
+      "apiKeys": {
+        "title": "مفاتيح API",
+        "description": "تُحفظ المفاتيح في هذا المتصفح فقط ولا تُحفظ مع المشروع أبدًا.",
+        "tomtom": "TomTom (التدفق المباشر لحركة الشوارع)",
+        "aisstream": "AISStream (سفن AIS المباشرة)",
+        "placeholder": "الصق مفتاح API",
+        "save": "حفظ",
+        "clear": "مسح",
+        "fromPanel": "محفوظ في هذا المتصفح",
+        "fromEnvironment": "يُستخدم المفتاح من متغيرات البيئة",
+        "notSet": "غير معيّن",
+        "getKey": "احصل على مفتاح مجاني",
+        "saveFailed": "تعذّر حفظ المفتاح في هذا المتصفح."
+      }
     }
   },
   "toolbar": {

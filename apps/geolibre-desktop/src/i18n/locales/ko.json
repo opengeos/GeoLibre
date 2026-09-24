@@ -2338,6 +2338,7 @@
       "militaryFlights": "군용기",
       "bikeShare": "자전거 공유",
       "transit": "실시간 대중교통",
+      "vessels": "실시간 AIS 선박",
       "streetTraffic": "시뮬레이션 도로 교통",
       "mappedAlpr": "지도화된 번호판 인식 카메라",
       "cctv": "공공 CCTV 카메라",
@@ -2357,6 +2358,12 @@
       "noneInView": "이 레이어의 현재 화면에서 피처를 찾을 수 없습니다.",
       "never": "없음",
       "lastUpdated": "마지막 업데이트: {{time}}",
+      "vesselsKeyRequired": "선박을 스트리밍하려면 API 키에서 AISStream API 키를 추가하세요.",
+      "vesselsZoomIn": "선박을 스트리밍하려면 너비가 {{span}}° 미만인 보기로 확대하세요.",
+      "vesselsConnecting": "AISStream에 연결하는 중…",
+      "vesselsKeyRejected": "AISStream이 API 키를 거부했습니다.",
+      "trafficFlowKeyRejected": "TomTom이 API 키를 거부하여 교통이 실시간 흐름에 따라 색상으로 표시되지 않습니다.",
+      "trafficFlowUnavailable": "TomTom 실시간 흐름을 사용할 수 없어 교통이 색상으로 표시되지 않습니다.",
       "speed": "속도",
       "speedRealTime": "실시간 (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2366,7 +2373,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "Starlink 카탈로그를 불러올 수 없습니다: {{error}}. 다시 시도하려면 선택하세요.",
-      "denseDescription": "전체 Starlink 위성군을 가벼운 점으로 표시합니다(레이블 및 테이블 행 없음)."
+      "denseDescription": "전체 Starlink 위성군을 가벼운 점으로 표시합니다(레이블 및 테이블 행 없음).",
+      "apiKeys": {
+        "title": "API 키",
+        "description": "키는 이 브라우저에만 보관되며 프로젝트와 함께 저장되지 않습니다.",
+        "tomtom": "TomTom(도로 교통 실시간 흐름)",
+        "aisstream": "AISStream(실시간 AIS 선박)",
+        "placeholder": "API 키 붙여넣기",
+        "save": "저장",
+        "clear": "지우기",
+        "fromPanel": "이 브라우저에 저장됨",
+        "fromEnvironment": "환경 변수의 키 사용 중",
+        "notSet": "설정되지 않음",
+        "getKey": "무료 키 받기",
+        "saveFailed": "이 브라우저에 키를 저장할 수 없습니다."
+      }
     }
   },
   "toolbar": {

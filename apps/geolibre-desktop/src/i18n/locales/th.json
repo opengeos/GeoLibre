@@ -2338,6 +2338,7 @@
       "militaryFlights": "เที่ยวบินทหาร",
       "bikeShare": "จักรยานสาธารณะ",
       "transit": "ระบบขนส่งสาธารณะแบบเรียลไทม์",
+      "vessels": "เรือ AIS แบบสด",
       "streetTraffic": "การจราจรบนถนนจำลอง",
       "mappedAlpr": "กล้องอ่านป้ายทะเบียนที่ทำแผนที่ไว้",
       "cctv": "กล้องวงจรปิดสาธารณะ",
@@ -2357,6 +2358,12 @@
       "noneInView": "ไม่พบฟีเจอร์ของเลเยอร์นี้ในมุมมองปัจจุบัน",
       "never": "ไม่เคย",
       "lastUpdated": "อัปเดตล่าสุด: {{time}}",
+      "vesselsKeyRequired": "เพิ่มคีย์ API ของ AISStream ในส่วนคีย์ API เพื่อสตรีมข้อมูลเรือ",
+      "vesselsZoomIn": "ซูมเข้าให้มุมมองกว้างน้อยกว่า {{span}}° เพื่อสตรีมข้อมูลเรือ",
+      "vesselsConnecting": "กำลังเชื่อมต่อกับ AISStream…",
+      "vesselsKeyRejected": "AISStream ปฏิเสธคีย์ API",
+      "trafficFlowKeyRejected": "TomTom ปฏิเสธคีย์ API จึงไม่ได้ระบายสีการจราจรตามการไหลแบบสด",
+      "trafficFlowUnavailable": "การไหลแบบสดของ TomTom ไม่พร้อมใช้งาน จึงไม่ได้ระบายสีการจราจร",
       "speed": "ความเร็ว",
       "speedRealTime": "เวลาจริง (1×)",
       "speedMultiple": "{{factor}}×",
@@ -2366,7 +2373,21 @@
       "denseCount": "DENSE · {{count}}",
       "dense": "DENSE",
       "denseError": "ไม่สามารถโหลดแค็ตตาล็อก Starlink ได้: {{error}} เลือกเพื่อลองอีกครั้ง",
-      "denseDescription": "แสดงกลุ่มดาวเทียม Starlink ทั้งหมดเป็นจุดแบบน้ำหนักเบา (ไม่มีป้ายกำกับหรือแถวตาราง)"
+      "denseDescription": "แสดงกลุ่มดาวเทียม Starlink ทั้งหมดเป็นจุดแบบน้ำหนักเบา (ไม่มีป้ายกำกับหรือแถวตาราง)",
+      "apiKeys": {
+        "title": "คีย์ API",
+        "description": "คีย์จะถูกเก็บไว้ในเบราว์เซอร์นี้เท่านั้น และจะไม่ถูกบันทึกไปกับโปรเจกต์",
+        "tomtom": "TomTom (การไหลของการจราจรบนถนนแบบสด)",
+        "aisstream": "AISStream (เรือ AIS แบบสด)",
+        "placeholder": "วางคีย์ API",
+        "save": "บันทึก",
+        "clear": "ล้าง",
+        "fromPanel": "บันทึกไว้ในเบราว์เซอร์นี้",
+        "fromEnvironment": "กำลังใช้คีย์จากตัวแปรสภาพแวดล้อม",
+        "notSet": "ยังไม่ได้ตั้งค่า",
+        "getKey": "รับคีย์ฟรี",
+        "saveFailed": "ไม่สามารถบันทึกคีย์ในเบราว์เซอร์นี้ได้"
+      }
     }
   },
   "toolbar": {
