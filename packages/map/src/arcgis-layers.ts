@@ -1405,14 +1405,20 @@ function assignLabelClasses(overridden: Map<Feature, LabelOverrideValues>): Labe
   const binned = (value: LabelOverrideValues, step: number): LabelOverrideValues => {
     if (step === 0) return value;
     const channel = (c: number) => Math.min(255, Math.round(c / step) * step);
+    const sizeStep = step / 32;
+    const alphaStep = step / 256;
+    const alpha = value.color[3];
     return {
       ...value,
-      size: Math.round(value.size / (step / 32)) * (step / 32),
+      // Binning coarsens the style; it must not hide a label (only the
+      // visibility expression does), so a size or a visible alpha never
+      // rounds to 0.
+      size: Math.max(sizeStep, Math.round(value.size / sizeStep) * sizeStep),
       color: [
         channel(value.color[0]),
         channel(value.color[1]),
         channel(value.color[2]),
-        Math.round(value.color[3] * (256 / step)) / (256 / step),
+        alpha > 0 ? Math.max(alphaStep, Math.round(alpha / alphaStep) * alphaStep) : 0,
       ],
     };
   };

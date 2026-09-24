@@ -2655,8 +2655,10 @@ function planSignature(plan: ArcgisLayerPlan, layer: GeoLibreLayer): string {
  */
 function geojsonCompileKey(layer: GeoLibreLayer): string {
   const { geojson: _g, name: _n, visible: _v, opacity, ...rest } = layer;
-  // A label opacity override is baked against the layer opacity it replaces.
-  const labelOpacity = layer.style?.labels?.opacityExpression?.trim() ? opacity : undefined;
+  // A label opacity override is baked against the layer opacity it replaces,
+  // so only then does an opacity change recompile the layer.
+  const labels = layer.style?.labels;
+  const labelOpacity = labels?.enabled && labels.opacityExpression?.trim() ? opacity : undefined;
   // The blend mode is applied in place, like opacity.
   return JSON.stringify({ ...rest, labelOpacity, style: { ...rest.style, blendMode: undefined } });
 }
