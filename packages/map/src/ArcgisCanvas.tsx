@@ -293,9 +293,13 @@ export function ArcgisCanvas({
         let reported = new Set<string>();
         let selectionKey: string | null = null;
         let popupDispose: (() => void) | null = null;
+        // What closing the open Identify popup gives back (the selection held
+        // before it); leaving Identify runs it as the close button does.
+        let popupOnClose: (() => void) | null = null;
         const removePopup = () => {
           popupDispose?.();
           popupDispose = null;
+          popupOnClose = null;
         };
         // Identify, as on the other maps: popup templates, WMS/pixel/DuckDB
         // reads and "Identify visible layers" (arcgis-identify.ts). The popup
@@ -336,6 +340,7 @@ export function ArcgisCanvas({
             };
             box.append(close, content);
             popupDispose = anchorPopup(sdk, mapView, box, lngLat);
+            popupOnClose = onClose ?? null;
           },
           removePopup,
           labels: () => identifyAllLabelsRef.current,
@@ -495,10 +500,14 @@ export function ArcgisCanvas({
               if (!viewId) next.setPointerElevation(null);
             }
             if (!viewId && (!previous || next.identifyLayerId !== previous.identifyLayerId)) {
-              // A read still in flight for the old target must not reopen a popup.
+              // A read still in flight for the old target must not reopen a
+              // popup, and the selection the popup took is given back, as the
+              // other canvases do when Identify changes.
               if (previous) {
+                const restore = popupOnClose;
                 identify.dispose();
                 removePopup();
+                restore?.();
               }
               // Identify and a selection gesture both own map clicks; the
               // newer one wins, as on the other renderers.
