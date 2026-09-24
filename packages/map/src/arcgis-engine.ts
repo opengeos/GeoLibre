@@ -231,6 +231,14 @@ const CAMERA_KEYS = new Set([
   "S",
   "n",
   "N",
+  // SceneView only: move the camera up (U) and down (J), and look at the
+  // point under the pointer (P).
+  "j",
+  "J",
+  "u",
+  "U",
+  "p",
+  "P",
 ]);
 
 /** Pixel radius the synchronous identify accepts around points and lines. */
