@@ -50,10 +50,12 @@ apply:
   [`?url=` deep link](user-guide/embedding.md#url-parameters) is fetched the same
   way, so a project file behind your SSO layer loads when the app is served from
   that same origin, and fails with a network/CORS error when it is not.
-- **Content Security Policy.** The Docker image and the desktop app both allow
-  `https:` in `connect-src`, plus loopback for local development. A self-hosted
-  data server must therefore be reachable over **HTTPS** (plain `http://` works
-  only on `localhost` / `127.0.0.1`).
+- **Content Security Policy.** The Docker image allows `https:` in
+  `connect-src`, plus loopback for local development, so a self-hosted data
+  server reached through it must be over **HTTPS** (plain `http://` works only
+  on `localhost` / `127.0.0.1`). The desktop app additionally allows plain
+  `http:` to any host, so it can reach a self-hosted Ollama, SamGeo, or other
+  service on your local network without HTTPS (issue #2620).
 
 Putting GeoLibre and the data on one origin turns all five of these from
 configuration problems into non-problems.
