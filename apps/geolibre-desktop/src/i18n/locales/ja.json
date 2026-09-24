@@ -463,9 +463,9 @@
     "xyz": {
       "defaultName": "XYZレイヤー",
       "sampleLabel": "USGS 衛星画像",
-      "errorUrl": "XYZタイルURLテンプレートを入力してください。",
+      "errorUrl": "XYZタイルURLテンプレートまたはラスターTileJSONのURLを入力してください。",
       "urlLabel": "XYZテンプレートまたはTileJSONのURL",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json または https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "短縮URL"
     },

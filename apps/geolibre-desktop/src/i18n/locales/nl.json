@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "XYZ-laag",
       "sampleLabel": "USGS-luchtfoto's",
-      "errorUrl": "Voer een XYZ-tegel-URL-sjabloon in.",
+      "errorUrl": "Voer een XYZ-tegel-URL-sjabloon of een raster-TileJSON-URL in.",
       "urlLabel": "XYZ-sjabloon of TileJSON-URL",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json of https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "Verkorte URL"
     },

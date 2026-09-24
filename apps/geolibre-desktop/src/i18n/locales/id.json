@@ -463,9 +463,9 @@
     "xyz": {
       "defaultName": "Layer XYZ",
       "sampleLabel": "Citra USGS",
-      "errorUrl": "Masukkan templat URL ubin XYZ.",
+      "errorUrl": "Masukkan templat URL ubin XYZ atau URL TileJSON raster.",
       "urlLabel": "Templat XYZ atau URL TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json atau https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "URL pendek"
     },
@@ -8238,7 +8238,7 @@
       "visualize": "Visualisasikan",
       "visualizeTitle": "Tambahkan kanal yang dipilih ke peta sebagai layer RGB",
       "downloadClip": "GeoTIFF",
-      "downloadClipTitle": "Simpan ke-64 kanal di area pencarian sebagai GeoTIFF",
+      "downloadClipTitle": "Simpan semua 64 kanal di area pencarian sebagai GeoTIFF",
       "downloadTile": "Tile penuh",
       "downloadTileTitle": "Unduh seluruh COG sumber (bottom-up; pengguna GDAL sebaiknya membuka .vrt)",
       "downloadVrt": "VRT",

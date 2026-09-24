@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "Layer XYZ",
       "sampleLabel": "Immagini USGS",
-      "errorUrl": "Inserisci un modello di URL di tile XYZ.",
+      "errorUrl": "Inserisci un modello di URL di tile XYZ o un URL TileJSON raster.",
       "urlLabel": "Modello XYZ o URL TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json o https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "URL breve"
     },

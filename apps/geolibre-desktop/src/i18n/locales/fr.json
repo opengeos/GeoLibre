@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "Couche XYZ",
       "sampleLabel": "Imagerie USGS",
-      "errorUrl": "Entrez un modèle d'URL de tuile XYZ.",
+      "errorUrl": "Entrez un modèle d'URL de tuile XYZ ou une URL TileJSON raster.",
       "urlLabel": "Modèle XYZ ou URL TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json ou https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "URL courte"
     },

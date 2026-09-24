@@ -463,9 +463,9 @@
     "xyz": {
       "defaultName": "Lớp XYZ",
       "sampleLabel": "Hình ảnh USGS",
-      "errorUrl": "Nhập mẫu URL ô XYZ.",
+      "errorUrl": "Nhập mẫu URL ô XYZ hoặc URL TileJSON raster.",
       "urlLabel": "Mẫu XYZ hoặc URL TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json hoặc https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "URL ngắn"
     },

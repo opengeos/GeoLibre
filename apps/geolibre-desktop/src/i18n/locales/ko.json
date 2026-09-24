@@ -463,9 +463,9 @@
     "xyz": {
       "defaultName": "XYZ 레이어",
       "sampleLabel": "USGS 영상",
-      "errorUrl": "XYZ 타일 URL 템플릿을 입력하세요.",
+      "errorUrl": "XYZ 타일 URL 템플릿 또는 래스터 TileJSON URL을 입력하세요.",
       "urlLabel": "XYZ 템플릿 또는 TileJSON URL",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json 또는 https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "짧은 URL"
     },

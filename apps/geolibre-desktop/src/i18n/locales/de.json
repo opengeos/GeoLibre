@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "XYZ-Ebene",
       "sampleLabel": "USGS-Luftbilder",
-      "errorUrl": "Geben Sie eine XYZ-Kachel-URL-Vorlage ein.",
+      "errorUrl": "Geben Sie eine XYZ-Kachel-URL-Vorlage oder eine Raster-TileJSON-URL ein.",
       "urlLabel": "XYZ-Vorlage oder TileJSON-URL",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json oder https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "Kurz-URL"
     },

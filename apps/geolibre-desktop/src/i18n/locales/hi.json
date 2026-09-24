@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "XYZ लेयर",
       "sampleLabel": "USGS इमेजरी",
-      "errorUrl": "एक XYZ टाइल URL टेम्पलेट दर्ज करें।",
+      "errorUrl": "एक XYZ टाइल URL टेम्पलेट या रास्टर TileJSON URL दर्ज करें।",
       "urlLabel": "XYZ टेम्पलेट या TileJSON URL",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json या https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "छोटा URL"
     },

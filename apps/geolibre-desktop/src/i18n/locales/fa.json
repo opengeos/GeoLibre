@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "لایهٔ XYZ",
       "sampleLabel": "تصاویر USGS",
-      "errorUrl": "یک الگوی نشانی کاشی XYZ وارد کنید.",
+      "errorUrl": "یک الگوی نشانی کاشی XYZ یا نشانی TileJSON رستری وارد کنید.",
       "urlLabel": "الگوی XYZ یا نشانی TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json یا https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "نشانی کوتاه"
     },
@@ -8371,7 +8371,7 @@
       "footprintsLayer": "کاشی‌های دانلود FTW",
       "tooManyFieldsInArea": "ناحیهٔ جستجو همهٔ {{count}} مزرعهٔ این کاشی را در بر می‌گیرد (حد {{limit}}). کادر کوچک‌تری ترسیم کنید یا GeoParquet را دانلود کنید.",
       "tooManyFields": "این کاشی {{count}} مزرعه دارد (حد {{limit}}). «فقط مزارع درون ناحیهٔ جستجو» را با کادری کوچک‌تر روشن کنید یا GeoParquet را دانلود کنید.",
-      "readingTile": "در حال خواندن {{tile}} ({{size}})…",
+      "readingTile": "در حال خواندن {{tile}} ‏({{size}})…",
       "readingTileProgress": "در حال خواندن {{tile}}… {{percent}}%",
       "tooManyClipped": "ناحیهٔ جستجو در این کاشی بیش از {{limit}} مزرعه دارد. کادر کوچک‌تری ترسیم کنید یا GeoParquet را دانلود کنید.",
       "noFieldsInArea": "در {{tile}} هیچ مزرعه‌ای درون ناحیهٔ جستجو نیست.",

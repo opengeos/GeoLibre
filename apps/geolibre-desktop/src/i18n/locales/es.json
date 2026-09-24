@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "Capa XYZ",
       "sampleLabel": "Imágenes de USGS",
-      "errorUrl": "Introduzca una plantilla de URL de teselas XYZ.",
+      "errorUrl": "Introduzca una plantilla de URL de teselas XYZ o una URL de TileJSON ráster.",
       "urlLabel": "Plantilla XYZ o URL de TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json o https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "URL corta"
     },

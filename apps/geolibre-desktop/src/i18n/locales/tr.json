@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "XYZ Katmanı",
       "sampleLabel": "USGS uydu görüntüsü",
-      "errorUrl": "Bir XYZ döşeme URL şablonu girin.",
+      "errorUrl": "Bir XYZ döşeme URL şablonu veya raster TileJSON URL'si girin.",
       "urlLabel": "XYZ şablonu veya TileJSON URL'si",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json veya https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "Kısa URL"
     },
@@ -8416,7 +8416,7 @@
       "drawCancel": "Çizimi iptal et",
       "drawStart": "Haritada kutu çiz",
       "drawHint": "Bir arama kutusu çizmek için haritada tıklayıp sürükleyin.",
-      "clipTitle": "Haritaya ekle ve GeoJSON yalnızca arama alanıyla çakışan tarlaları tutar; GeoParquet her zaman tüm döşemedir",
+      "clipTitle": "Haritaya eklerken ve GeoJSON olarak indirirken yalnızca arama alanıyla çakışan tarlalar tutulur; GeoParquet her zaman döşemenin tamamını içerir",
       "clip": "Yalnızca arama alanındaki tarlalar",
       "working": "Çalışıyor…",
       "search": "Döşemeleri ara",

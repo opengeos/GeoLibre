@@ -463,9 +463,9 @@
     "xyz": {
       "defaultName": "เลเยอร์ XYZ",
       "sampleLabel": "ภาพถ่าย USGS",
-      "errorUrl": "ป้อนเทมเพลต URL ไทล์แบบ XYZ",
+      "errorUrl": "ป้อนเทมเพลต URL ไทล์แบบ XYZ หรือ URL ของ TileJSON แบบแรสเตอร์",
       "urlLabel": "เทมเพลต XYZ หรือ URL ของ TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json หรือ https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "URL แบบสั้น"
     },

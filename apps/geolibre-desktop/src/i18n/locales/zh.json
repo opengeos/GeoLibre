@@ -463,9 +463,9 @@
     "xyz": {
       "defaultName": "XYZ 图层",
       "sampleLabel": "USGS 影像",
-      "errorUrl": "请输入 XYZ 瓦片 URL 模板。",
+      "errorUrl": "请输入 XYZ 瓦片 URL 模板或栅格 TileJSON URL。",
       "urlLabel": "XYZ 模板或 TileJSON URL",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json 或 https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "短链接"
     },

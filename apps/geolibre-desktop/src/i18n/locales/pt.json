@@ -467,9 +467,9 @@
     "xyz": {
       "defaultName": "Camada XYZ",
       "sampleLabel": "Imagens USGS",
-      "errorUrl": "Digite um modelo de URL de tile XYZ.",
+      "errorUrl": "Digite um modelo de URL de tile XYZ ou uma URL de TileJSON raster.",
       "urlLabel": "Modelo XYZ ou URL TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json ou https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "URL curta"
     },

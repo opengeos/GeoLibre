@@ -475,9 +475,9 @@
     "xyz": {
       "defaultName": "Слой XYZ",
       "sampleLabel": "Снимки USGS",
-      "errorUrl": "Введите шаблон URL тайлов XYZ.",
+      "errorUrl": "Введите шаблон URL тайлов XYZ или URL растрового TileJSON.",
       "urlLabel": "Шаблон XYZ или URL TileJSON",
-      "urlPlaceholder": "https://example.com/{z}/{x}/{y}.png",
+      "urlPlaceholder": "https://example.com/tilejson.json или https://example.com/{z}/{x}/{y}.png",
       "shortUrlPlaceholder": "https://go.example.com/layer",
       "shortUrl": "Короткий URL"
     },
