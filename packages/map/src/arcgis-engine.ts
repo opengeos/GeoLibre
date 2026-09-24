@@ -10,7 +10,7 @@ import { renderFillPatternCanvas } from "./fill-patterns";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import { createCogElevationLayer } from "./arcgis-cog-terrain";
 import type * as maplibregl from "maplibre-gl";
-import type { FeatureCollection, Geometry, Point, Polygon, Position } from "geojson";
+import type { Feature, FeatureCollection, Geometry, Point, Polygon, Position } from "geojson";
 import {
   compileLayerFilters,
   portableWmsTileUrl,
@@ -500,6 +500,12 @@ export class ArcgisEngine implements MapEngine {
   private storyMoveLapse: ReturnType<typeof setTimeout> | undefined;
   /** Integer zoom the zoom-dependent plans were compiled at. */
   private compiledZoom: number;
+  /**
+   * Geometries of service features the hit test has returned, keyed by
+   * `layerId:featureId`: a service layer's features never live in the store,
+   * so this is what a selection of one is highlighted from. Bounded.
+   */
+  private serviceGeometries = new Map<string, Geometry>();
   /** Results of the latest hit test, served by the synchronous identify. */
   private lastHit: { lngLat: [number, number]; features: IdentifiedFeature[] } | null = null;
   private zoomWatch: ArcgisHandle | null = null;
@@ -1335,18 +1341,28 @@ export class ArcgisEngine implements MapEngine {
       case "vector-tile":
         // `fullExtent` is read-only on a VectorTileLayer (it comes from the style).
         return [new layers.VectorTileLayer({ ...common, style: plan.style })];
-      case "feature-service":
-        return [
-          new layers.FeatureLayer({
-            ...common,
-            url: plan.url,
-            popupEnabled: false,
-            outFields: ["*"],
-            ...(plan.definitionExpression
-              ? { definitionExpression: plan.definitionExpression }
-              : {}),
-          }),
-        ];
+      case "feature-service": {
+        const native = new layers.FeatureLayer({
+          ...common,
+          url: plan.url,
+          popupEnabled: false,
+          outFields: ["*"],
+          ...(plan.definitionExpression ? { definitionExpression: plan.definitionExpression } : {}),
+        });
+        // The service's geometry type is known only once it has loaded.
+        const symbols = plan.symbols;
+        if (symbols)
+          void native
+            .when()
+            .then(() => {
+              const type = (native as { geometryType?: string }).geometryType;
+              const kind = type === "multipoint" ? "point" : type;
+              if (kind === "point" || kind === "polyline" || kind === "polygon")
+                native.renderer = { type: "simple", symbol: symbols[kind] };
+            })
+            .catch(() => {});
+        return [native];
+      }
       case "tile-service":
         return [new layers.TileLayer({ ...common, url: plan.url })];
       case "map-image":
@@ -1419,7 +1435,38 @@ export class ArcgisEngine implements MapEngine {
     this.syncLayers(layers);
   }
   async getLayerGeoJson(id: string): Promise<FeatureCollection | null> {
-    return this.layers.find((l) => l.id === id)?.geojson ?? null;
+    const layer = this.layers.find((l) => l.id === id);
+    if (layer?.geojson) return layer.geojson;
+    // A service layer's features live on the server: one query answers with
+    // what the service returns per request (its maxRecordCount).
+    const entry = this.natives.get(id);
+    const native = entry?.plan.kind === "feature-service" ? entry.layers[0] : undefined;
+    if (!native?.queryFeatures) return null;
+    try {
+      const result = await native.queryFeatures({
+        where: "1=1",
+        outFields: ["*"],
+        returnGeometry: true,
+        outSpatialReference: { wkid: 4326 },
+      });
+      return {
+        type: "FeatureCollection",
+        features: result.features.flatMap((graphic) => {
+          const geometry = this.graphicGeometryToGeoJson(graphic.geometry);
+          return geometry
+            ? [
+                {
+                  type: "Feature" as const,
+                  properties: stripSyntheticFields(graphic.attributes ?? {}),
+                  geometry,
+                },
+              ]
+            : [];
+        }),
+      };
+    } catch {
+      return null;
+    }
   }
   /**
    * The store record's tile templates as plain HTTP(S) URLs, as a story export
@@ -1682,14 +1729,13 @@ export class ArcgisEngine implements MapEngine {
       const rawId = attributes[ARCGIS_ID_FIELD];
       // A service layer's features never live in the store; their object id
       // is the identity the SDK offers.
-      const featureId =
-        rawId != null
-          ? String(rawId)
-          : attributes.OBJECTID != null
-            ? String(attributes.OBJECTID)
-            : attributes.__OBJECTID != null
-              ? String(attributes.__OBJECTID)
-              : null;
+      // The service names its own object id field (`objectid`, `FID`, ...).
+      const oidField = (native as { objectIdField?: string } | null)?.objectIdField;
+      const oid =
+        (oidField ? attributes[oidField] : undefined) ??
+        attributes.OBJECTID ??
+        attributes.__OBJECTID;
+      const featureId = rawId != null ? String(rawId) : oid != null ? String(oid) : null;
       const feature =
         rawId != null
           ? storeLayer?.geojson?.features.find((f, i) => String(f.id ?? i) === featureId)
@@ -1697,13 +1743,21 @@ export class ArcgisEngine implements MapEngine {
       const key = `${storeId}:${featureId ?? JSON.stringify(attributes)}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      const hitGeometry =
+        feature?.geometry ?? this.graphicGeometryToGeoJson(result.graphic.geometry);
+      if (!feature && featureId !== null && hitGeometry) {
+        this.serviceGeometries.delete(`${storeId}:${featureId}`);
+        this.serviceGeometries.set(`${storeId}:${featureId}`, hitGeometry);
+        if (this.serviceGeometries.size > 500)
+          this.serviceGeometries.delete(this.serviceGeometries.keys().next().value!);
+      }
       features.push({
         layerId: storeId,
         featureId,
         properties: feature?.properties ?? stripSyntheticFields(attributes),
         // The store's geometry when the feature is there; otherwise the one
         // the hit test found (a service layer's), converted from the view.
-        geometry: feature?.geometry ?? this.graphicGeometryToGeoJson(result.graphic.geometry),
+        geometry: hitGeometry,
       });
     }
     try {
@@ -1913,9 +1967,16 @@ export class ArcgisEngine implements MapEngine {
   ): void {
     this.clearFeatureHighlight();
     const map = this.map;
-    if (!map || !layer?.geojson || featureId === null) return;
+    if (!map || !layer || featureId === null) return;
     const ids = new Set(Array.isArray(featureId) ? featureId : [featureId]);
-    const selected = layer.geojson.features.filter((f, i) => ids.has(String(f.id ?? i)));
+    // A service layer's features are on the server; the ones identify hit
+    // left their geometry behind for this.
+    const selected: Feature[] = layer.geojson
+      ? layer.geojson.features.filter((f, i) => ids.has(String(f.id ?? i)))
+      : [...ids].flatMap((id) => {
+          const geometry = this.serviceGeometries.get(`${layer.id}:${id}`);
+          return geometry ? [{ type: "Feature" as const, id, properties: {}, geometry }] : [];
+        });
     if (!selected.length) return;
     const plan = this.natives.get(layer.id)?.plan;
     const elevated = plan?.kind === "geojson" && plan.parts.some((part) => part.hasZ);

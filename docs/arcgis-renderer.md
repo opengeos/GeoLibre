@@ -97,7 +97,11 @@ override is set aside and the shared basemap is translated instead.
   cache) as `/export` / `/exportImage` bounding-box templates, both drawn as
   above. FeatureServer layers, and any service recorded as `type: "arcgis"`
   (hand-authored or Python records), draw through the SDK's own
-  `FeatureLayer`, `TileLayer`, `MapImageLayer` and `ImageryLayer`. A
+  `FeatureLayer`, `TileLayer`, `MapImageLayer` and `ImageryLayer`; a single
+  MapServer sublayer (`MapServer/2`) is a `FeatureLayer` too. A styled service
+  layer draws with its layer style, an unstyled one with the service's own
+  renderer; its identified features can be highlighted, and its features read
+  back as GeoJSON (one query, up to the service's record limit). A
   FeatureServer layer's filters (quick filters, the expression filter, the time
   and embed filters) become the service's SQL `definitionExpression`; a filter
   with no SQL form is reported in the map's banner and the service draws
@@ -110,7 +114,12 @@ override is set aside and the shared basemap is translated instead.
   as the SDK's CSS-filter `effect` on raster layers, and every layer's blend
   mode as the SDK's `blendMode` (`add` is the SDK's `plus`). A `SceneView`
   ignores the raster effects, and blends only tiled and imagery layers.
-- Feature picking (click identify with a popup), selection highlighting, extent
+- Geo Editor text markers and annotation text, drawn as text at their points
+  in their own colours.
+- Feature picking (click identify with the layer's popup template and field
+  visibility; **Identify visible layers** groups every layer's hits, including
+  WMS GetFeatureInfo, Time Slider pixels, COG/NetCDF pixels and DuckDB
+  layers), selection highlighting, extent
   drawing, draggable placement, and engine-level image capture. **Layers →
   Select features** (single, rectangle, polygon, freehand and radius) runs the
   same gestures as on MapLibre on the primary map. The status bar's pointer

@@ -909,7 +909,7 @@ describe("ArcgisEngine layer sync", () => {
     });
     engine.syncLayers([
       service("tiled", "https://h/rest/services/A/MapServer/", { arcgisTiled: true }),
-      service("dynamic", "https://h/rest/services/B/MapServer/3"),
+      service("dynamic", "https://h/rest/services/B/MapServer"),
       service("imagery", "https://h/rest/services/C/ImageServer"),
     ]);
     assert.deepEqual(engine.getLayerRasterSource("tiled")?.tiles, [
@@ -1111,6 +1111,67 @@ describe("ArcgisEngine picking and highlight", () => {
     assert.equal(feature.featureId, "7");
     assert.deepEqual(feature.properties, { OBJECTID: 7, NAME: "Parcel" });
     assert.equal(feature.geometry?.type, "Polygon");
+  });
+  it("styles, highlights and reads back a native FeatureServer layer", async () => {
+    const { engine, layers, setHitResults, map } = makeEngine();
+    const record = {
+      ...geojsonLayer({ id: "fs", name: "Service", geojson: undefined }),
+      type: "arcgis" as const,
+      source: { type: "geojson", url: "https://h/rest/services/X/FeatureServer/0" },
+    };
+    // An unstyled record keeps the service's cartography.
+    engine.syncLayers([record]);
+    await Promise.resolve();
+    assert.equal(layers.items[0].renderer, undefined);
+    // A styled one draws with its style once the geometry type is known.
+    engine.syncLayers([{ ...record, style: { ...DEFAULT_LAYER_STYLE, fillColor: "#ff0000" } }]);
+    const service = layers.items[0] as (typeof layers.items)[0] & {
+      geometryType?: string;
+      queryFeatures?: unknown;
+    };
+    service.geometryType = "polygon";
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const renderer = service.renderer as { symbol: { type: string } };
+    assert.equal(renderer.symbol.type, "simple-fill");
+    // A hit leaves the feature's geometry behind for its highlight.
+    setHitResults([
+      {
+        type: "graphic",
+        graphic: {
+          attributes: { OBJECTID: 7 },
+          layer: service,
+          geometry: {
+            type: "polygon",
+            rings: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 0],
+              ],
+            ],
+            spatialReference: { wkid: 4326 },
+          },
+        },
+      },
+    ]);
+    await engine.identifyFeaturesAt({ x: 0, y: 0 });
+    const before = (map.layers as unknown as { items: unknown[] }).items.length;
+    engine.highlightFeature(engine["layers"][0], "7");
+    assert.equal((map.layers as unknown as { items: unknown[] }).items.length, before + 1);
+    // GeoJSON comes from a service query.
+    service.queryFeatures = async () => ({
+      features: [
+        {
+          attributes: { OBJECTID: 1, NAME: "A" },
+          geometry: { type: "point", x: 3, y: 4, spatialReference: { wkid: 4326 } },
+          layer: null,
+        },
+      ],
+    });
+    const collection = await engine.getLayerGeoJson("fs");
+    assert.equal(collection?.features.length, 1);
+    assert.deepEqual(collection?.features[0].properties, { OBJECTID: 1, NAME: "A" });
   });
   it("keeps synchronous control results when a native hit test outlives the engine", async () => {
     const { setArcgisControlPicker } = await import("../packages/map/src/arcgis-control-adapters");

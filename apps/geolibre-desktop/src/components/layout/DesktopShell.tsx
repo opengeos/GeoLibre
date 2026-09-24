@@ -2809,6 +2809,8 @@ export function DesktopShell({
                 <PrimaryArcgisCanvas
                   canUseRemoteElevation={hasElevationConsent}
                   engineRef={mapControllerRef}
+                  identifyAllLabels={identifyAllLabels}
+                  identifyRasterLayerAt={identifyRasterLayerAt}
                   onEngineReady={handleMapControllerReady}
                   onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 />

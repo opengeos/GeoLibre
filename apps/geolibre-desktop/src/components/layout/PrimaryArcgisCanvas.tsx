@@ -1,6 +1,8 @@
 import {
   ArcgisCanvas,
   type ArcgisEngineMessages,
+  type MapCanvasIdentifyAllLabels,
+  type MapCanvasRasterIdentify,
   type MapDiagnosticEvent,
   type MapEngine,
 } from "@geolibre/map";
@@ -31,12 +33,16 @@ export function PrimaryArcgisCanvas({
   onEngineReady,
   onMapDiagnosticEvent,
   canUseRemoteElevation,
+  identifyAllLabels,
+  identifyRasterLayerAt,
   viewId,
 }: {
   engineRef?: RefObject<MapEngine | null>;
   onEngineReady?: () => void;
   onMapDiagnosticEvent?: (event: MapDiagnosticEvent) => void;
   canUseRemoteElevation?: () => boolean;
+  identifyAllLabels?: MapCanvasIdentifyAllLabels;
+  identifyRasterLayerAt?: MapCanvasRasterIdentify;
   viewId?: string;
 }) {
   const { t } = useTranslation();
@@ -64,6 +70,8 @@ export function PrimaryArcgisCanvas({
         onMapDiagnosticEvent={onMapDiagnosticEvent}
         messages={messages}
         canUseRemoteElevation={canUseRemoteElevation}
+        identifyAllLabels={identifyAllLabels}
+        identifyRasterLayerAt={identifyRasterLayerAt}
       />
       {apiKey ? null : (
         <div className="pointer-events-none absolute bottom-10 start-2 z-10 max-w-[70%] rounded-md border border-input map-glass px-2 py-1 text-xs text-muted-foreground shadow-sm">
