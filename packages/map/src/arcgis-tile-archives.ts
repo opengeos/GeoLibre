@@ -83,13 +83,14 @@ export function createArcgisArchiveLayer(
         return bytes instanceof ArrayBuffer ? bytes : bytes.slice().buffer;
       },
     };
-    sdk.config.request.interceptors.push(interceptor);
     const source = { type: "vector", url: prefix + "source.json" };
     const sprite = attachArcgisSprite(sdk, {
       version: 8,
       sources: { [plan.sourceId]: source },
       layers: plan.styleLayers,
     });
+    // Registered once the sprite is, so a throw above leaves no interceptor.
+    sdk.config.request.interceptors.push(interceptor);
     const dispose = () => {
       lifetime.abort();
       sprite.dispose();
