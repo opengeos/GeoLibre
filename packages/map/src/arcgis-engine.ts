@@ -61,6 +61,7 @@ import {
   type ArcgisSymbolJson,
 } from "./arcgis-layers";
 import { renderMarkerCanvas } from "./markers";
+import { featurePickIndex } from "./feature-pick-index";
 import { parseLabelOverride } from "./label-style";
 import { planArcgisBasemap, type ArcgisBasemapPlan, sameArcgisBasemapPlan } from "./arcgis-basemap";
 import {
@@ -1986,17 +1987,21 @@ export class ArcgisEngine implements MapEngine {
     for (const layer of this.layers) {
       if (layerId && layer.id !== layerId) continue;
       if (!layer.visible || !layer.geojson || !this.natives.has(layer.id)) continue;
-      layer.geojson.features.forEach((feature, index) => {
+      // The pick runs per pointer frame for hover tips, so only the features
+      // whose bounds are near the point get the exact geometry test (#2629).
+      const collection = layer.geojson;
+      for (const index of featurePickIndex(collection).candidates(lngLat, tolerance)) {
+        const feature = collection.features[index];
         if (!feature.geometry || !geometryContainsPoint(feature.geometry, lngLat, tolerance))
-          return;
-        if (!featurePassesFilters(layer, feature, zoom)) return;
+          continue;
+        if (!featurePassesFilters(layer, feature, zoom)) continue;
         features.push({
           layerId: layer.id,
           featureId: String(feature.id ?? index),
           properties: feature.properties ?? {},
           geometry: feature.geometry,
         });
-      });
+      }
     }
     return features;
   }
