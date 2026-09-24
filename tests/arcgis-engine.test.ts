@@ -1173,8 +1173,8 @@ describe("ArcgisEngine picking and highlight", () => {
     assert.deepEqual(collection?.features[0].properties, { OBJECTID: 1, NAME: "A" });
     // A service past its record limit is paged.
     const starts: unknown[] = [];
-    service.queryFeatures = async (query: { start?: number }) => {
-      starts.push(query.start);
+    service.queryFeatures = async (query: { start?: number; num?: number }) => {
+      starts.push(query.start === undefined ? undefined : [query.start, query.num]);
       const start = query.start ?? 0;
       return {
         exceededTransferLimit: start === 0,
@@ -1188,7 +1188,8 @@ describe("ArcgisEngine picking and highlight", () => {
       };
     };
     assert.equal((await engine.getLayerGeoJson("fs"))?.features.length, 2);
-    assert.deepEqual(starts, [undefined, 1]);
+    // Later pages ask for as many rows as the first page returned.
+    assert.deepEqual(starts, [undefined, [1, 1]]);
     // A service that ignores the offset keeps sending its first page: stop.
     let calls = 0;
     service.queryFeatures = async () => {

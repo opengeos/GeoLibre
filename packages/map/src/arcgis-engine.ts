@@ -1449,15 +1449,42 @@ export class ArcgisEngine implements MapEngine {
     const entry = this.natives.get(id);
     const native = entry?.plan.kind === "feature-service" ? entry.layers[0] : undefined;
     if (!native?.queryFeatures) return null;
+    const graphics: ArcgisGraphic[] = [];
+    let oidField: string | undefined;
+    const toCollection = (): FeatureCollection => ({
+      type: "FeatureCollection",
+      features: graphics.flatMap((graphic) => {
+        const geometry = this.graphicGeometryToGeoJson(graphic.geometry);
+        // The service's object id is the feature's identity, as identify
+        // reports it.
+        const oid = oidField ? graphic.attributes?.[oidField] : undefined;
+        return geometry
+          ? [
+              {
+                type: "Feature" as const,
+                ...(typeof oid === "string" || typeof oid === "number" ? { id: oid } : {}),
+                properties: stripSyntheticFields(graphic.attributes ?? {}),
+                geometry,
+              },
+            ]
+          : [];
+      }),
+    });
     try {
-      const graphics: ArcgisGraphic[] = [];
+      // The service's metadata (object id field, capabilities) is read from
+      // the loaded layer.
+      await native.when();
       // A stable order, so offset pages neither overlap nor skip rows — where
       // the service supports ORDER BY at all.
-      const oidField = (native as { objectIdField?: string }).objectIdField;
+      oidField = (native as { objectIdField?: string }).objectIdField;
       const orderBy =
         (native as { capabilities?: { query?: { supportsOrderBy?: boolean } } }).capabilities?.query
           ?.supportsOrderBy === true;
       let firstOfPreviousPage: string | undefined;
+      // The SDK's query asks for 10 rows once `start` is set unless told
+      // otherwise; later pages ask for as many as the first page returned
+      // (the service's per-request limit).
+      let pageSize = 0;
       for (let page = 0; page < SERVICE_GEOJSON_MAX_PAGES; page++) {
         const result = await native.queryFeatures({
           where: "1=1",
@@ -1465,8 +1492,9 @@ export class ArcgisEngine implements MapEngine {
           returnGeometry: true,
           outSpatialReference: { wkid: 4326 },
           ...(oidField && orderBy ? { orderByFields: [oidField] } : {}),
-          ...(graphics.length ? { start: graphics.length } : {}),
+          ...(graphics.length ? { start: graphics.length, num: pageSize } : {}),
         });
+        if (page === 0) pageSize = result.features.length;
         // A service that ignores the offset returns its first page again;
         // stop rather than repeat it.
         const first = JSON.stringify(result.features[0]?.attributes ?? null);
@@ -1475,27 +1503,10 @@ export class ArcgisEngine implements MapEngine {
         graphics.push(...result.features);
         if (!result.exceededTransferLimit || !result.features.length) break;
       }
-      return {
-        type: "FeatureCollection",
-        features: graphics.flatMap((graphic) => {
-          const geometry = this.graphicGeometryToGeoJson(graphic.geometry);
-          // The service's object id is the feature's identity, as identify
-          // reports it.
-          const oid = oidField ? graphic.attributes?.[oidField] : undefined;
-          return geometry
-            ? [
-                {
-                  type: "Feature" as const,
-                  ...(typeof oid === "string" || typeof oid === "number" ? { id: oid } : {}),
-                  properties: stripSyntheticFields(graphic.attributes ?? {}),
-                  geometry,
-                },
-              ]
-            : [];
-        }),
-      };
+      return toCollection();
     } catch {
-      return null;
+      // A page failing part way still returns what was read before it.
+      return graphics.length ? toCollection() : null;
     }
   }
   /**

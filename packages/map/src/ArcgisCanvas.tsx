@@ -11,6 +11,8 @@ import type { MapDiagnosticEvent } from "./map-diagnostic";
 import { attachFeatureSelection, type FeatureSelectionState } from "./map-feature-selection";
 import { arcgisFeatureSelectionMap } from "./arcgis-feature-selection";
 import { createArcgisIdentify } from "./arcgis-identify";
+import { consumePendingIdentifyRestore } from "./map-identify-lifecycle";
+import { selectionFitKey } from "./map-selection";
 import { DEFAULT_IDENTIFY_ALL_LABELS, type MapCanvasIdentifyAllLabels } from "./identify-all-popup";
 import type { MapCanvasRasterIdentify } from "./MapCanvas";
 import type * as maplibregl from "maplibre-gl";
@@ -460,8 +462,16 @@ export function ArcgisCanvas({
                 next.selectedLayerId && ids !== null && (Array.isArray(ids) ? ids.length : true)
                   ? JSON.stringify([next.selectedLayerId, Array.isArray(ids) ? ids : [ids]])
                   : null;
+              // An Identify popup closing gives the earlier selection back;
+              // that restore is not a new selection to frame (read-once marker,
+              // as on the other canvases; see map-identify-lifecycle.ts).
+              const restored = consumePendingIdentifyRestore(selectionFitKey(next));
               const fit = Boolean(
-                next.ui.zoomToSelectedFeature && key && key !== selectionKey && previous,
+                next.ui.zoomToSelectedFeature &&
+                key &&
+                key !== selectionKey &&
+                previous &&
+                !restored,
               );
               selectionKey = key;
               current.highlightFeature(
