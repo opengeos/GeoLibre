@@ -636,7 +636,11 @@ export function ArcgisCanvas({
         const setPhotoCursor = (active: boolean) => {
           if (photoCursor === active || !mapView.container) return;
           photoCursor = active;
-          mapView.container.style.cursor = active ? "pointer" : "";
+          const cursor = active ? "pointer" : "";
+          mapView.container.style.cursor = cursor;
+          // As setIdentifyCursor: a theme may give the surface its own cursor.
+          const surface = mapView.container.querySelector<HTMLElement>(".esri-view-surface");
+          if (surface) surface.style.cursor = cursor;
         };
         /** Visible layers that show a hover tip, and the geotagged-photo layers. */
         const pointerTargets = () => {
