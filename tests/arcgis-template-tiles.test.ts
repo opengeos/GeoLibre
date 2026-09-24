@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import { compileArcgisLayer, isArcgisSupportedLayer } from "../packages/map/src/arcgis-layers";
-import { sourceTileFor, tileTemplateUrl } from "../packages/map/src/arcgis-template-tiles";
+import {
+  createArcgisTemplateTileLayer,
+  sourceTileFor,
+  tileTemplateUrl,
+} from "../packages/map/src/arcgis-template-tiles";
+import type { ArcgisSdk } from "../packages/map/src/arcgis-sdk";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 // Raster templates the SDK's WebTileLayer cannot express (issue #2477): the
@@ -139,5 +144,95 @@ describe("compileArcgisLayer template tiles", () => {
         rasterLayer("wms", { tiles: ["https://h/wms?bbox={bbox-epsg-4326}&f=image"] }),
       ),
     );
+  });
+});
+
+describe("createArcgisTemplateTileLayer", () => {
+  /** A fake SDK whose BaseTileLayer subclass exposes the definition's methods. */
+  function makeLayer(
+    source: Parameters<typeof createArcgisTemplateTileLayer>[1],
+    respond: (url: string) => { status: number },
+  ) {
+    const draws: unknown[][] = [];
+    const requested: string[] = [];
+    const sdk = {
+      layers: {
+        BaseTileLayer: {
+          createSubclass: (definition: Record<string, unknown>) =>
+            class {
+              constructor(public props: Record<string, unknown>) {
+                Object.assign(this, definition);
+              }
+            },
+        },
+      },
+    } as unknown as ArcgisSdk;
+    const fetchImpl = async (url: string) => {
+      requested.push(url);
+      const { status } = respond(url);
+      return {
+        status,
+        ok: status >= 200 && status < 300,
+        blob: async () => new Blob(["png"]),
+      } as Response;
+    };
+    const layer = createArcgisTemplateTileLayer(
+      sdk,
+      source,
+      { title: "T" },
+      fetchImpl,
+    ) as unknown as {
+      fetchTile(level: number, row: number, col: number): Promise<{ width: number }>;
+    };
+    const previous = {
+      document: globalThis.document,
+      createImageBitmap: globalThis.createImageBitmap,
+    };
+    Object.assign(globalThis, {
+      document: {
+        createElement: () => ({
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage: (...args: unknown[]) => draws.push(args) }),
+        }),
+      },
+      createImageBitmap: async () => ({ width: 512, height: 512, close: () => {} }),
+    });
+    const restore = () => Object.assign(globalThis, previous);
+    return { layer, draws, requested, restore };
+  }
+  const source = {
+    templates: ["https://t/{z}/{x}/{y}.png"],
+    scheme: "xyz" as const,
+    tileSize: 512,
+    minzoom: 2,
+    maxzoom: 22,
+  };
+
+  it("crops the quadrant of a 512 px source tile into the 256 px tile", async () => {
+    const { layer, draws, requested, restore } = makeLayer(source, () => ({ status: 200 }));
+    try {
+      const canvas = await layer.fetchTile(5, 10, 11);
+      assert.equal(canvas.width, 256);
+      assert.deepEqual(requested, ["https://t/4/5/5.png"]);
+      // Column 11 is the right half and row 10 the top half of source tile 5/5.
+      assert.deepEqual(draws[0].slice(1), [256, 0, 256, 256, 0, 0, 256, 256]);
+    } finally {
+      restore();
+    }
+  });
+  it("draws a gap for a missing tile, nothing below minzoom, and fails on a server error", async () => {
+    const { layer, draws, requested, restore } = makeLayer(source, (url) => ({
+      status: url.includes("/9/") ? 500 : 404,
+    }));
+    try {
+      await layer.fetchTile(5, 10, 11);
+      await layer.fetchTile(2, 0, 0);
+      assert.equal(draws.length, 0);
+      assert.deepEqual(requested, ["https://t/4/5/5.png"]);
+      await assert.rejects(layer.fetchTile(10, 0, 0), /500/);
+    } finally {
+      restore();
+    }
   });
 });

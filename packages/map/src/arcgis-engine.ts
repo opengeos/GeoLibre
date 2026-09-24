@@ -864,8 +864,8 @@ export class ArcgisEngine implements MapEngine {
       return;
     }
     // The 2D map frames with 40 px padding; pad the extent by a tenth instead.
-    const padX = Math.max((e - w) * 0.1, 1e-6);
-    const padY = Math.max((n - s) * 0.1, 1e-6);
+    const padX = Math.max((e - w) * 0.1, 1e-4);
+    const padY = Math.max((n - s) * 0.1, 1e-4);
     const extent = new this.sdk.Extent({
       xmin: w - padX,
       ymin: Math.max(-85, s - padY),
