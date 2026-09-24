@@ -776,10 +776,15 @@ export function ArcgisCanvas({
         if (!viewId) {
           window.addEventListener(FEATURE_SELECTION_BEGIN_EVENT, handleSelectionBegin);
           // Turning Identify on closes the photo popup and the tip, as on Mapbox.
+          // A subscription of its own: `update()` above reacts to Identify for
+          // its popup but is defined before these closures exist.
           const stopIdentifyWatch = useAppStore.subscribe((state, previous) => {
             if (state.identifyLayerId && !previous.identifyLayerId) {
               removePhotoPopup();
               removeHoverTip();
+              // Identify sets its own crosshair (setIdentifyCursor); only forget
+              // the photo pointer, so it returns once Identify is off.
+              photoCursor = false;
             }
           });
           handles.push({
