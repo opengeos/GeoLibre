@@ -1474,10 +1474,10 @@ export class ArcgisEngine implements MapEngine {
     if (!path) return null;
     // `/tile` and `/export` live on the service root; a sublayer the record
     // names is drawn alone through `layers=show:`.
-    const sublayer = /\/(\d+)$/.exec(path)?.[1];
-    const service = path.replace(/\/\d+$/, "");
+    const sublayer = plan.kind === "map-image" ? /\/(\d+)$/.exec(path)?.[1] : undefined;
+    const service = sublayer ? path.replace(/\/\d+$/, "") : path;
     const exportParams = `bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true${
-      plan.kind === "map-image" && sublayer ? `&layers=show:${sublayer}` : ""
+      sublayer ? `&layers=show:${sublayer}` : ""
     }&f=image`;
     return {
       type: "raster",
