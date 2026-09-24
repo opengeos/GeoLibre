@@ -209,6 +209,30 @@ interface NativePlan {
 
 const HIGHLIGHT_COLOR = [250, 204, 21, 1];
 
+/** Keys the SDK's keyboard navigation moves the camera with. */
+const CAMERA_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "+",
+  "-",
+  "=",
+  "_",
+  "PageUp",
+  "PageDown",
+  "a",
+  "A",
+  "d",
+  "D",
+  "w",
+  "W",
+  "s",
+  "S",
+  "n",
+  "N",
+]);
+
 /** Pixel radius the synchronous identify accepts around points and lines. */
 const HIT_TOLERANCE_PX = 6;
 
@@ -584,12 +608,18 @@ export class ArcgisEngine implements MapEngine {
     );
     // The user taking the camera ends a story move: the settle that follows is
     // theirs, and viewport history and collaboration must record it.
-    for (const type of ["drag", "mouse-wheel", "key-down", "double-click"] as const)
+    for (const type of ["drag", "mouse-wheel", "double-click"] as const)
       this.handles.add(
         view.on(type, () => {
           this.storyMove = false;
         }),
       );
+    // Only the keys that move the camera; a Shift press does not.
+    this.handles.add(
+      view.on("key-down", (event) => {
+        if (CAMERA_KEYS.has((event as { key?: string }).key ?? "")) this.storyMove = false;
+      }),
+    );
     // Expressions baked at one zoom are re-evaluated when the integer zoom
     // changes, the way MapLibre would evaluate `["zoom"]` live.
     this.zoomWatch = sdk.reactiveUtils.when(
@@ -1430,16 +1460,17 @@ export class ArcgisEngine implements MapEngine {
     }
     // A service record names only the service; MapLibre draws its cache or
     // its export endpoint as a tile template.
-    const service =
+    const path =
       (plan.kind === "tile-service" || plan.kind === "map-image" || plan.kind === "imagery") &&
-      // `/tile` and `/export` live on the service root, not on a sublayer.
-      plan.url
-        .replace(/[?#].*$/, "")
-        .replace(/\/+$/, "")
-        .replace(/\/\d+$/, "");
-    if (!service) return null;
-    const exportParams =
-      "bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true&f=image";
+      plan.url.replace(/[?#].*$/, "").replace(/\/+$/, "");
+    if (!path) return null;
+    // `/tile` and `/export` live on the service root; a sublayer the record
+    // names is drawn alone through `layers=show:`.
+    const sublayer = /\/(\d+)$/.exec(path)?.[1];
+    const service = path.replace(/\/\d+$/, "");
+    const exportParams = `bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png32&transparent=true${
+      plan.kind === "map-image" && sublayer ? `&layers=show:${sublayer}` : ""
+    }&f=image`;
     return {
       type: "raster",
       tileSize: 256,

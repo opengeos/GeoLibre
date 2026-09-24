@@ -146,7 +146,7 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
    * enrich sparse metadata even when the tile matches.) Clears {@link layerId}
    * if the layer was deleted from the panel.
    */
-  const syncStore = (): void => {
+  const syncStore = ({ transient = false }: { transient?: boolean } = {}): void => {
     if (layerId === null || frames.length === 0) return;
     const store = useAppStore.getState();
     const layer = store.layers.find((l) => l.id === layerId);
@@ -159,10 +159,14 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
     const currentTile = Array.isArray(layer.source.tiles) ? layer.source.tiles[0] : undefined;
     const unchanged = currentTile === frame.tileUrl && metadataEqual(layer.metadata, nextMetadata);
     if (unchanged) return;
+    const wasDirty = store.isDirty;
     store.updateLayer(layerId, {
       source: { ...layer.source, tiles: [frame.tileUrl] },
       metadata: nextMetadata,
     });
+    // A playback tick is not an edit: the resting frame is what marks the
+    // project changed, when playback stops.
+    if (transient && !wasDirty) useAppStore.setState({ isDirty: false });
   };
 
   const stopPlaying = (): void => {
@@ -196,7 +200,7 @@ export function createWeatherLayer(config: WeatherLayerConfig): WeatherLayerCont
       // there the frame is written on every tick.
       // engine-audit-allow: arcgis-null-map
       if (getStyleMap(appRef)) applyFrameToMap();
-      else syncStore();
+      else syncStore({ transient: true });
       notify();
     }, config.frameMs);
   };

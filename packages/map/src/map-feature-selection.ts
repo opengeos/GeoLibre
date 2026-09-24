@@ -189,15 +189,15 @@ export function attachFeatureSelection(
         });
       }
       if (ring.length < 3) return null;
-      // A vertex off the globe (a 3D view's horizon) has no ground position;
-      // it is left out rather than written into the ring as NaN.
-      const coordinates = ring
-        .map((point) => {
-          const lngLat = map.unproject([point.x, point.y]);
-          return [lngLat.lng, lngLat.lat] as [number, number];
-        })
-        .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
-      if (coordinates.length < 3) return null;
+      // A vertex off the globe (a 3D view's horizon) has no ground position.
+      // Dropping it would test a smaller shape than the one drawn, so the
+      // selection is cancelled instead of writing NaN into the ring.
+      const coordinates = ring.map((point) => {
+        const lngLat = map.unproject([point.x, point.y]);
+        return [lngLat.lng, lngLat.lat] as [number, number];
+      });
+      if (!coordinates.every(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat)))
+        return null;
       coordinates.push(coordinates[0]);
       return { type: "Polygon", coordinates: [coordinates] };
     };
