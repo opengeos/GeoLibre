@@ -2475,19 +2475,30 @@ export class ArcgisEngine implements MapEngine {
     return new Promise((resolve) => {
       let finished = false;
       let handle: ArcgisHandle | undefined;
+      let frame = 0;
       const done = () => {
         if (finished) return;
         finished = true;
         clearTimeout(timer);
-        handle?.remove();
+        cancelAnimationFrame(frame);
+        if (handle) {
+          handle.remove();
+          this.handles.delete(handle);
+        }
         resolve();
       };
       const timer = setTimeout(done, timeoutMs);
-      // `initial` can answer at once, before the handle is returned.
-      handle = this.sdk.reactiveUtils.when(() => view.stationary && !view.updating, done, {
-        initial: true,
+      // A frame first: right after a jump the layer views have not started
+      // loading the new extent, and `updating` still reads false.
+      frame = requestAnimationFrame(() => {
+        if (finished || this.view !== view) return done();
+        handle = this.sdk.reactiveUtils.when(() => view.stationary && !view.updating, done, {
+          initial: true,
+        });
+        // Torn down with the view, like the class's other subscriptions.
+        if (finished) handle.remove();
+        else this.handles.add(handle);
       });
-      if (finished) handle.remove();
     });
   }
   onCameraIdle(listener: (event?: CameraIdleEvent) => void): () => void {
