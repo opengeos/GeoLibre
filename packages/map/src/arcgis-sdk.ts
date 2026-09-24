@@ -201,6 +201,8 @@ export interface ArcgisViewEvent {
   /** `drag` events carry the phase; the rest do not. */
   action?: "start" | "update" | "end";
   origin?: ArcgisScreenPoint;
+  /** `mouse-wheel` events: positive scrolls down (zooms out). */
+  deltaY?: number;
 }
 
 export interface ArcgisGoToTarget {

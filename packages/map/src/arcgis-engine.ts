@@ -685,7 +685,7 @@ export class ArcgisEngine implements MapEngine {
     this.handles.add(
       view.on("mouse-wheel", (event) => {
         if (view.type !== "2d") return;
-        const deltaY = (event as { deltaY?: number }).deltaY ?? 0;
+        const deltaY = event.deltaY ?? 0;
         const zoom = viewZoom(view);
         const { minZoom, maxZoom } = this.zoomRange();
         if ((deltaY > 0 && zoom <= minZoom + 0.01) || (deltaY < 0 && zoom >= maxZoom - 0.01))
