@@ -356,7 +356,7 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
 
 /**
  * One entry of a directory listing. Structurally matches `LocalDirectoryEntry`
- * in tauri-io.ts (which `listDirectory` returns); duplicated here so this pure
+ * in file-io/local-fs.ts (which `listDirectory` returns); duplicated here so this pure
  * model stays decoupled from tauri-io and unit-tests without the filesystem.
  */
 export interface DirectoryEntry {

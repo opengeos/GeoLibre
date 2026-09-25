@@ -19,7 +19,7 @@
 // when the original URI can no longer be read.
 //
 // Kept free of Tauri and React imports so the rules can be unit-tested in Node;
-// `tauri-io.ts` binds the two I/O calls to `@tauri-apps/plugin-fs`.
+// `file-io/project-files.ts` binds the two I/O calls to `@tauri-apps/plugin-fs`.
 
 import type { StartupSettings } from "../hooks/useDesktopSettings";
 import { isAndroidContentUri } from "./android-content-uri";

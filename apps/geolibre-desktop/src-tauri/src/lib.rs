@@ -557,7 +557,7 @@ fn take_pending_project_paths(state: tauri::State<'_, PendingProjectPaths>) -> V
 /// `/...` or a Windows drive-letter `C:\...`, never a UNC `\\host\share`), free
 /// of `..` traversal, ending in a GeoLibre project extension — `.geolibre` or
 /// `.geolibre.json`. These are the canonical formats `saveProject` writes and
-/// `isGeoLibreProjectPath` recognizes in `tauri-io.ts`.
+/// `isGeoLibreProjectPath` recognizes in `file-io/paths.ts`.
 ///
 /// Without this, the command was an arbitrary local-file reader: any webview JS
 /// or loaded plugin could `invoke("read_project_file", { path: "~/.ssh/id_rsa" })`
@@ -617,9 +617,9 @@ fn read_project_file(path: String) -> Result<String, String> {
 }
 
 /// Local vector file extensions the restore path may re-read (lowercased, no
-/// dot). Mirrors `VECTOR_FILE_DIALOG_EXTENSIONS` in `tauri-io.ts`; keep the two
+/// dot). Mirrors `VECTOR_FILE_DIALOG_EXTENSIONS` in `file-io/paths.ts`; keep the two
 /// in step.
-// SYNC: VECTOR_FILE_DIALOG_EXTENSIONS in src/lib/tauri-io.ts — grep "SYNC:" to
+// SYNC: VECTOR_FILE_DIALOG_EXTENSIONS in src/lib/file-io/paths.ts — grep "SYNC:" to
 // find the partner list and update both together.
 const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
     "geojson",
@@ -648,7 +648,7 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 ///
 /// This is a Rust-side backstop mirroring the frontend guard
 /// (`isAbsoluteLocalPath` + `hasPathTraversal` + `isRestorableVectorPath` in
-/// `tauri-io.ts`). It narrows the attack surface of a compromised webview or
+/// `file-io/paths.ts`). It narrows the attack surface of a compromised webview or
 /// rogue plugin: arbitrary system files (`/etc/passwd`, SSH keys, most shell and
 /// app configs) are blocked. It does not make the command harmless — the
 /// allowlist still includes broad extensions like `json`, so a script that knows

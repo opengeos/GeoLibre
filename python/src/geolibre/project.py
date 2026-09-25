@@ -2121,11 +2121,11 @@ def load_featurecollection(data: Any) -> dict[str, Any]:
 # The split-map (swipe), legend, and colorbar helpers are thin wrappers over the
 # app's built-in map-control plugins, configured through the project's `plugins`
 # block. The shapes here mirror the plugin project-state interfaces in
-# packages/plugins/src/plugins/* (maplibre-swipe.ts, maplibre-components.ts), so
-# the app replays them via PluginManager.restoreProjectState on load.
+# packages/plugins/src/plugins/* (maplibre-swipe.ts, components/gui-state.ts),
+# so the app replays them via PluginManager.restoreProjectState on load.
 
 # The four corners every map control accepts (CONTROL_POSITIONS in
-# maplibre-components.ts; PROJECT_PLUGIN_CONTROL_POSITIONS in core).
+# components/gui-state.ts; PROJECT_PLUGIN_CONTROL_POSITIONS in core).
 CONTROL_POSITIONS = frozenset({"top-left", "top-right", "bottom-left", "bottom-right"})
 
 # Plugin ids registered in apps/geolibre-desktop/src/hooks/usePlugins.ts.
