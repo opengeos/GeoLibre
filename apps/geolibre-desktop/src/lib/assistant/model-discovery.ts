@@ -457,11 +457,12 @@ export function parseBedrockModels(
     if (stringProp(summary, "status") && stringProp(summary, "status") !== "ACTIVE") continue;
     // Profile names mix "GLOBAL" and "Global"; normalize so they sort together.
     const name = stringProp(summary, "inferenceProfileName").replace(/^GLOBAL\b/, "Global");
-    (id.startsWith("global.") ? globalProfiles : regionalProfiles).push({ id, name });
+    // Fall back to the id before sorting, so a blank name sorts by its id.
+    (id.startsWith("global.") ? globalProfiles : regionalProfiles).push({ id, name: name || id });
   }
   const onDemand = [...textModels]
     .filter(([, model]) => model.onDemand)
-    .map(([id, model]) => ({ id, name: model.name }));
+    .map(([id, model]) => ({ id, name: model.name || id }));
 
   return dedupe([
     ...globalProfiles.sort(byName),

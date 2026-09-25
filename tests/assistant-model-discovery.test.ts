@@ -124,6 +124,7 @@ describe("parseBedrockModels", () => {
       modelName: "Qwen3 32B",
       inferenceTypesSupported: ["ON_DEMAND"],
     },
+    { modelId: "zzz.unnamed-model", modelName: "", inferenceTypesSupported: ["ON_DEMAND"] },
     { modelId: "cohere.rerank-v3-5:0", inferenceTypesSupported: ["ON_DEMAND"] },
     { modelId: "mistral.mixtral-8x7b-instruct-v0:1", inferenceTypesSupported: ["ON_DEMAND"] },
     { modelId: "meta.llama3-8b-instruct-v1:0", inferenceTypesSupported: ["ON_DEMAND"] },
@@ -177,6 +178,7 @@ describe("parseBedrockModels", () => {
       { id: "us-gov.amazon.nova-pro-v1:0", name: "US-GOV Nova Pro" },
       { id: "amazon.nova-pro-v1:0", name: "Nova Pro" },
       { id: "qwen.qwen3-32b-v1:0", name: "Qwen3 32B" },
+      { id: "zzz.unnamed-model", name: "zzz.unnamed-model" },
     ]);
   });
 });

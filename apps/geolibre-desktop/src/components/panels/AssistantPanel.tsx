@@ -234,9 +234,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       deploymentProxyConfigured,
     });
   }, [selectedProfileId, aiProfiles, defaultAiProfileId, deploymentProxyConfigured]);
-  // The model picker's discovery credentials. Resolved once per render and not
-  // memoized: the runtime env it reads can change without the profile changing.
-  const activeProfileConfig = activeProfile ? configForProfile(activeProfile) : null;
+  // The model picker's discovery credentials, resolved only when the picker is
+  // shown. Not memoized: the runtime env it reads can change without the
+  // profile changing.
+  const activeProfileConfig =
+    activeProfile && hasModelPicker(activeProfile.provider)
+      ? configForProfile(activeProfile)
+      : null;
 
   // Queue of model-generated code snippets (run_python / run_maplibre_js)
   // awaiting the user's approval, each with the promise resolver its tool
