@@ -5,9 +5,15 @@ export interface WcsCoverage {
   title: string;
   bounds?: WcsBounds;
 }
+/** CRSes GeoLibre can request: bounds are entered in lon/lat and projected. */
+export const WCS_CRSES = ["EPSG:4326", "EPSG:3857"] as const;
+export type WcsCrs = (typeof WCS_CRSES)[number];
 export interface WcsDescription {
   format: string;
-  crs: string;
+  /** The CRS to request, chosen from what the coverage advertises. */
+  crs: WcsCrs;
+  /** Every CRS advertised for both requests and output, upper-cased. */
+  crses?: string[];
 }
 
 /** Stop waiting for a native request promptly; still observe its settlement. */
@@ -37,7 +43,6 @@ export class WcsError extends Error {
       | "version"
       | "empty"
       | "format"
-      | "crs"
       | "bounds"
       | "size"
       | "metadata"
@@ -186,17 +191,43 @@ export function parseWcsDescription(xml: string, coverage: string): WcsDescripti
       .find((value) => /^(?:GeoTIFF|GTiff|image\/(?:x-)?tiff(?:;.*)?)$/i.test(value));
   if (!format) throw new WcsError("format");
   const crs = elements(entry, "supportedCRSs")[0];
-  const supported = crs
+  const [both, requests, responses] = crs
     ? ["requestResponseCRSs", "requestCRSs", "responseCRSs"].map((tag) =>
-        elements(crs, tag).flatMap((el) => (el.textContent ?? "").trim().split(/\s+/)),
+        elements(crs, tag).flatMap((el) =>
+          (el.textContent ?? "").trim().toUpperCase().split(/\s+/).filter(Boolean),
+        ),
       )
     : [[], [], []];
-  // Request and output must both support longitude/latitude. Do not infer
-  // reprojection support from nativeCRSs alone.
-  const has4326 = (list: string[]) => list.some((value) => value.toUpperCase() === "EPSG:4326");
-  if (!has4326(supported[0]) && !(has4326(supported[1]) && has4326(supported[2])))
-    throw new WcsError("crs");
-  return { format, crs: "EPSG:4326" };
+  // A CRS is usable when the coverage accepts it for both the request bbox
+  // and the output grid. nativeCRSs alone does not imply reprojection support.
+  const crses = [...new Set([...both, ...requests.filter((value) => responses.includes(value))])];
+  return { format, crs: defaultWcsCrs(crses), crses };
+}
+
+/**
+ * Picks the request CRS for a coverage from its advertised list.
+ *
+ * Advertised lists are often incomplete (PDOK lists only its national grid yet
+ * serves EPSG:4326 and EPSG:3857), so an unadvertised coverage still gets a
+ * lon/lat attempt and the server's own exception is surfaced if it refuses.
+ */
+export function defaultWcsCrs(crses: readonly string[]): WcsCrs {
+  return WCS_CRSES.find((value) => crses.includes(value)) ?? "EPSG:4326";
+}
+
+const MERCATOR_RADIUS = 6378137;
+const MERCATOR_MAX_LATITUDE = 85.0511287798066;
+
+/** Projects lon/lat bounds to the request CRS's own units. */
+export function projectWcsBounds(bounds: WcsBounds, crs: WcsCrs): WcsBounds {
+  if (crs === "EPSG:4326") return bounds;
+  const x = (lon: number) => (MERCATOR_RADIUS * lon * Math.PI) / 180;
+  const y = (lat: number) => {
+    const clamped = Math.max(-MERCATOR_MAX_LATITUDE, Math.min(MERCATOR_MAX_LATITUDE, lat));
+    return MERCATOR_RADIUS * Math.log(Math.tan(Math.PI / 4 + (clamped * Math.PI) / 360));
+  };
+  const [w, s, e, n] = bounds;
+  return [x(w), y(s), x(e), y(n)];
 }
 
 export function wcsCoverageUrl(
@@ -211,9 +242,12 @@ export function wcsCoverageUrl(
   if (!validWcsBounds(bounds)) throw new WcsError("bounds");
   if (![width, height].every((n) => Number.isInteger(n) && n >= 1 && n <= 4096))
     throw new WcsError("size");
+  // Web Mercator stops short of the poles, so a polar box can collapse.
+  const bbox = projectWcsBounds(bounds, description.crs);
+  if (!(bbox[0] < bbox[2] && bbox[1] < bbox[3])) throw new WcsError("bounds");
   return wcsRequestUrl(endpoint, "GetCoverage", {
     COVERAGE: coverage,
-    BBOX: bounds.join(","),
+    BBOX: bbox.join(","),
     CRS: description.crs,
     RESPONSE_CRS: description.crs,
     WIDTH: String(width),

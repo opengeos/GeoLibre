@@ -49,7 +49,7 @@ see [vector import details](user-guide/adding-data.md#files).
 | --- | --- | --- |
 | XYZ tiles | XYZ Layer | Raster or vector tiles from a `{z}/{x}/{y}` URL template. |
 | WMS | WMS Layer | Rendered map images; discover layers and query GetFeatureInfo where supported. |
-| [WCS 1.0.0](#wcs-raster-subsets) | WCS Layer | Numerical GeoTIFF subsets with chosen extent and pixel dimensions; requires EPSG:4326 request/output support. |
+| [WCS 1.0.0](#wcs-raster-subsets) | WCS Layer | Numerical GeoTIFF subsets with chosen extent, pixel dimensions, and an EPSG:4326 or EPSG:3857 request CRS. |
 | WFS | WFS Layer | Vector features with feature-type discovery and optional refresh. |
 | WMTS | WMTS Layer | Map tiles from a Web Map Tile Service. |
 | OGC API - Features | OGC API - Features | Browse collections and load their features. |
@@ -110,7 +110,8 @@ band values for pixel inspection, raster styling, export, and raster analysis.
 1. Enter the service's WCS endpoint and click **Retrieve coverages**.
 2. Select a coverage. Choose **Use view**, **Use coverage extent**, or enter
    west, south, east, and north in longitude/latitude degrees.
-3. Set the output width and height in pixels and click **Add layer**.
+3. Pick a **Request CRS** (see below), set the output width and height in
+   pixels, and click **Add layer**.
 4. Use the layer's pixel inspector or raster tools. Export the raster as a
    GeoTIFF to keep a copy of the downloaded data.
 
@@ -122,10 +123,19 @@ This is a convenience; GeoServer and other WCS endpoints use the same protocol.
 ### Supported requests
 
 The initial implementation supports **WCS 1.0.0** KVP `GetCapabilities`,
-`DescribeCoverage`, and `GetCoverage`. Services must advertise GeoTIFF output
-and EPSG:4326 for both the request and response. Unsupported versions, formats,
-and coordinate systems produce an error before the coverage download. WCS 1.1
-and 2.x requests are not yet implemented.
+`DescribeCoverage`, and `GetCoverage`. Services must advertise GeoTIFF output;
+unsupported versions and formats produce an error before the coverage download.
+WCS 1.1 and 2.x requests are not yet implemented.
+
+The coverage is requested in **EPSG:4326** or **EPSG:3857** (Web Mercator).
+The box is always entered in longitude/latitude and projected to the chosen
+CRS. **Automatic** picks EPSG:4326 when the coverage advertises it, then
+EPSG:3857, and otherwise still tries EPSG:4326: many services (for example
+PDOK's AHN elevation service, which lists only EPSG:28992) serve CRSes they do
+not advertise. If the server rejects a CRS it did not advertise, the error
+names the advertised list so you can try the other option. Striped GeoTIFF
+responses, which MapServer-based services return, are converted to a
+Cloud-Optimized GeoTIFF in the browser before loading.
 
 The selected extent and pixel dimensions determine output resolution. The
 server may resample values; this is not a guarantee of native-resolution data.

@@ -5,7 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
 import { describeWcs, discoverWcs, downloadWcs } from "../../../../lib/wcs-fetch";
-import { WcsError, wcsCoverageUrl, type WcsBounds, type WcsCoverage } from "../../../../lib/wcs";
+import {
+  WCS_CRSES,
+  WcsError,
+  wcsCoverageUrl,
+  type WcsBounds,
+  type WcsCoverage,
+  type WcsCrs,
+} from "../../../../lib/wcs";
 import { serviceRequestErrorMessage } from "../helpers";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
@@ -38,6 +45,9 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
   const [bounds, setBounds] = useState<string[]>(["", "", "", ""]);
   const [width, setWidth] = useState("1024");
   const [height, setHeight] = useState("1024");
+  // "auto" negotiates from DescribeCoverage; an explicit choice is sent even
+  // when the coverage does not advertise it, since many services under-report.
+  const [crs, setCrs] = useState<WcsCrs | "auto">("auto");
   const [retrieving, setRetrieving] = useState(false);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
@@ -91,7 +101,8 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
         crs: "EPSG:4326",
         format: "GeoTIFF",
       });
-      const description = await describeWcs(endpoint, coverage, request.signal);
+      const described = await describeWcs(endpoint, coverage, request.signal);
+      const description = crs === "auto" ? described : { ...described, crs };
       const url = wcsCoverageUrl(
         endpoint,
         coverage,
@@ -100,7 +111,17 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
         Number(height),
         description,
       );
-      const file = await downloadWcs(url, coverage, request.signal);
+      const file = await downloadWcs(url, coverage, request.signal).catch((error: unknown) => {
+        // Point at the CRS choice when the server refused one it never listed.
+        const advertised = described.crses ?? [];
+        if (!advertised.length || advertised.includes(description.crs)) throw error;
+        throw new Error(
+          `${errorMessage(error)} ${t("addData.wcs.unadvertisedCrs", {
+            crs: description.crs,
+            list: advertised.join(", "),
+          })}`,
+        );
+      });
       request.signal.throwIfAborted();
       const app = createAppAPI(source.shell.mapControllerRef);
       const before = new Set(useAppStore.getState().layers.map((layer) => layer.id));
@@ -222,6 +243,22 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
           ))}
         </div>
         <p className="text-xs text-muted-foreground">{t("rasterSubset.bboxHint")}</p>
+        <div className="space-y-1.5">
+          <Label htmlFor="wcs-crs">{t("addData.wcs.crs")}</Label>
+          <Select
+            id="wcs-crs"
+            value={crs}
+            onChange={(event) => setCrs(event.target.value as WcsCrs | "auto")}
+          >
+            <option value="auto">{t("addData.wcs.crsAuto")}</option>
+            {WCS_CRSES.map((value) => (
+              <option key={value} value={value}>
+                {t(value === "EPSG:4326" ? "addData.wcs.crs4326" : "addData.wcs.crs3857")}
+              </option>
+            ))}
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("addData.wcs.crsHint")}</p>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="wcs-width">{t("addData.wcs.width")}</Label>

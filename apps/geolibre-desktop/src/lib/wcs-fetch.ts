@@ -4,6 +4,7 @@ import {
   readLimitedBody,
 } from "../components/layout/add-data/helpers";
 import { WMS_PROXY_PATH } from "../components/layout/add-data/constants";
+import { convertGeoTiffToCog, isTiledGeoTiff } from "@geolibre/processing";
 import { isTauri } from "./is-tauri";
 import {
   assertWcsTiff,
@@ -76,7 +77,18 @@ export async function downloadWcs(url: string, name: string, signal: AbortSignal
     });
   }
   assertWcsTiff(bytes);
-  return new File([bytes], `${name.replace(/[^\p{L}\p{N}._-]/gu, "_") || "coverage"}.tif`, {
-    type: "image/tiff",
-  });
+  // MapServer and GDAL-backed services (e.g. PDOK) answer with a striped
+  // GeoTIFF, which the raster panel cannot stream as tiles. The whole subset is
+  // already in memory and bounded by MAX_BYTES, so re-encode it as a COG here
+  // rather than failing the layer and falling back to the generic prompt.
+  let raster: Uint8Array = bytes;
+  if (!(await isTiledGeoTiff(bytes))) raster = await convertGeoTiffToCog(bytes);
+  abort.throwIfAborted();
+  return new File(
+    [raster as BlobPart],
+    `${name.replace(/[^\p{L}\p{N}._-]/gu, "_") || "coverage"}.tif`,
+    {
+      type: "image/tiff",
+    },
+  );
 }

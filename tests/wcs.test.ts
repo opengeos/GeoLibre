@@ -3,8 +3,10 @@ import { after, test } from "node:test";
 import { DOMParser } from "linkedom";
 import {
   assertWcsTiff,
+  defaultWcsCrs,
   parseWcsCapabilities,
   parseWcsDescription,
+  projectWcsBounds,
   validWcsBounds,
   wcsCoverageUrl,
   wcsRequestUrl,
@@ -58,36 +60,82 @@ test("discovers namespaced coverages and geographic envelopes", () => {
   assert.throws(() => parseWcsCapabilities('<WCS_Capabilities version="1.0.0"/>'), code("empty"));
 });
 
-test("requires advertised numerical output and both input/output CRS support", () => {
+test("requires advertised numerical output and negotiates the request CRS", () => {
   assert.deepEqual(parseWcsDescription(description, "dem:terrain"), {
     format: "GeoTIFF",
     crs: "EPSG:4326",
+    crses: ["EPSG:4326"],
   });
   assert.throws(() => parseWcsDescription(description, "other"), code("empty"));
   assert.throws(
     () => parseWcsDescription(description.replace("GeoTIFF", "JPEG"), "dem:terrain"),
     code("format"),
   );
-  assert.throws(
-    () =>
-      parseWcsDescription(
-        description.replaceAll("requestResponseCRSs", "nativeCRSs"),
-        "dem:terrain",
-      ),
-    code("crs"),
+  // nativeCRSs alone is not a usable request CRS, but it no longer blocks the
+  // request: services such as PDOK serve lon/lat without advertising it.
+  assert.deepEqual(
+    parseWcsDescription(description.replaceAll("requestResponseCRSs", "nativeCRSs"), "dem:terrain"),
+    { format: "GeoTIFF", crs: "EPSG:4326", crses: [] },
   );
   const separate = description.replace(
     "<requestResponseCRSs>EPSG:4326</requestResponseCRSs>",
     "<requestCRSs>EPSG:4326</requestCRSs><responseCRSs>EPSG:4326</responseCRSs>",
   );
   assert.equal(parseWcsDescription(separate, "dem:terrain").crs, "EPSG:4326");
+  // A CRS accepted for requests but not output is not negotiable.
+  assert.deepEqual(
+    parseWcsDescription(
+      separate.replace("<responseCRSs>EPSG:4326", "<responseCRSs>EPSG:3857"),
+      "dem:terrain",
+    ).crses,
+    [],
+  );
+  // PDOK AHN: only its national grid is advertised.
+  const pdok = description
+    .replace("EPSG:4326</requestResponseCRSs>", "EPSG:28992</requestResponseCRSs>")
+    .replace("<formats>GeoTIFF</formats>", "<formats>GEOTIFF</formats>");
+  assert.deepEqual(parseWcsDescription(pdok, "dem:terrain"), {
+    format: "GEOTIFF",
+    crs: "EPSG:4326",
+    crses: ["EPSG:28992"],
+  });
+  // Web Mercator is chosen when it is advertised and lon/lat is not.
+  const mercator = description.replace(
+    "EPSG:4326</requestResponseCRSs>",
+    "epsg:28992 EPSG:3857</requestResponseCRSs>",
+  );
+  assert.equal(parseWcsDescription(mercator, "dem:terrain").crs, "EPSG:3857");
+  assert.equal(defaultWcsCrs(["EPSG:3857", "EPSG:4326"]), "EPSG:4326");
+  assert.equal(defaultWcsCrs([]), "EPSG:4326");
+});
+
+test("projects lon/lat bounds to Web Mercator for EPSG:3857 requests", () => {
+  const url = new URL(
+    wcsCoverageUrl(
+      "https://service.pdok.nl/rws/ahn/wcs/v1_0",
+      "dtm_05m",
+      [5.9106, 52.2278, 5.9326, 52.2413],
+      256,
+      256,
+      { crs: "EPSG:3857", format: "GEOTIFF" },
+    ),
+  );
+  const bbox = url.searchParams.get("BBOX")!.split(",").map(Number);
+  const expected = [657965.0, 6841419.9, 660414.0, 6843873.7];
+  bbox.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1, `${value}`));
+  assert.equal(url.searchParams.get("CRS"), "EPSG:3857");
+  assert.equal(url.searchParams.get("RESPONSE_CRS"), "EPSG:3857");
+  assert.deepEqual(projectWcsBounds([-180, -90, 180, 90], "EPSG:4326"), [-180, -90, 180, 90]);
+  const world = projectWcsBounds([-180, -90, 180, 90], "EPSG:3857");
+  assert.ok(Math.abs(world[0] + 20037508.34) < 0.01 && Math.abs(world[3] - 20037508.34) < 0.01);
+  // A box entirely above Web Mercator's latitude limit collapses and is rejected.
   assert.throws(
     () =>
-      parseWcsDescription(
-        separate.replace("<responseCRSs>EPSG:4326", "<responseCRSs>EPSG:3857"),
-        "dem:terrain",
-      ),
-    code("crs"),
+      wcsCoverageUrl("https://example.com/wcs", "dem", [0, 86, 1, 89], 10, 10, {
+        crs: "EPSG:3857",
+        format: "GeoTIFF",
+      }),
+    code("bounds"),
   );
 });
 
