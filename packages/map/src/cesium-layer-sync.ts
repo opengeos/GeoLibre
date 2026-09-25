@@ -438,8 +438,10 @@ function tilesetUrl(layer: GeoLibreLayer): string | undefined {
 }
 
 function hasGeoJsonCollection(layer: GeoLibreLayer): boolean {
+  const kind = classifyLayer(layer);
   return (
-    !NON_GEOJSON_KINDS.has(classifyLayer(layer)) && layer.geojson?.type === "FeatureCollection"
+    !(kind !== undefined && NON_GEOJSON_KINDS.has(kind)) &&
+    layer.geojson?.type === "FeatureCollection"
   );
 }
 

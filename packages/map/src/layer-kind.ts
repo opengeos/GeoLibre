@@ -64,24 +64,25 @@ const KIND_BY_TYPE: { readonly [T in LayerType]: LayerKind } = {
  * URL, a FeatureCollection, a plugin's metadata); each engine's support check
  * switches on this kind and then reads what it needs.
  *
- * A type outside `LAYER_TYPES` (a hand-edited project) classifies as
- * `undefined` at runtime, which every engine's `default` branch rejects.
+ * A type outside `LAYER_TYPES` (a hand-edited project; `parseProject` does
+ * not validate `type`) classifies as `undefined`, which every engine's
+ * `default` branch rejects.
  */
-export function classifyLayer(layer: Pick<GeoLibreLayer, "type">): LayerKind {
+export function classifyLayer(layer: Pick<GeoLibreLayer, "type">): LayerKind | undefined {
   // Own properties only, so a type like "constructor" or "__proto__" cannot
   // resolve to an Object.prototype member instead of `undefined`.
-  return (
-    Object.hasOwn(KIND_BY_TYPE, layer.type) ? KIND_BY_TYPE[layer.type] : undefined
-  ) as LayerKind;
+  return Object.hasOwn(KIND_BY_TYPE, layer.type) ? KIND_BY_TYPE[layer.type] : undefined;
 }
 
 /**
- * The `default` branch of an exhaustive `switch` over {@link LayerKind}: a
- * kind no case handles fails to compile here. At runtime (an unknown layer
- * type from untrusted input) it returns `fallback` rather than throwing, so a
- * bad record degrades to "not drawn" instead of breaking a whole sync pass.
+ * The `default` branch of an exhaustive `switch` over {@link classifyLayer}'s
+ * result: once every {@link LayerKind} has a case, only `undefined` (an
+ * unknown layer type from untrusted input) is left, so a kind no case handles
+ * fails to compile here. At runtime it returns `fallback` rather than
+ * throwing, so a bad record degrades to "not drawn" instead of breaking a
+ * whole sync pass.
  */
-export function unhandledLayerKind<T>(kind: never, fallback: T): T {
+export function unhandledLayerKind<T>(kind: undefined, fallback: T): T {
   void kind;
   return fallback;
 }
