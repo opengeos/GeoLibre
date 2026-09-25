@@ -353,6 +353,8 @@ export async function addCloudNetcdfLayer(
     // The references carry the coordinate attributes inline, which is the only
     // way to read a NetCDF cube's CF units: its `url` names the kerchunk
     // manifest, not a Zarr store whose metadata documents could be walked.
+    // Session-only, as for addZarrRasterLayer: never on the layer record.
+    registerZarrHeaders(addedLayerId, options.headers);
     registerZarrTemporalAdapter(addedLayerId, options.url, { refs, headers: options.headers });
     // Record the extent on the layer itself. The control accepts `bounds` as a
     // render hint but does not always carry it back on the "layeradd" event,

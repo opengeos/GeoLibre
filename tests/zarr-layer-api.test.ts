@@ -3,8 +3,10 @@ import { afterEach, describe, it } from "node:test";
 import {
   getExternalNativePaintBridge,
   pluginOwnsPaint,
+  createProjectLayerSerializationCache,
   projectFromStore,
   serializeProject,
+  serializeProjectWithLayerCache,
   useAppStore,
 } from "@geolibre/core";
 import { zarrRequestHeaders } from "@geolibre/map/zarr-source";
@@ -415,9 +417,9 @@ describe("queryZarrLayer", () => {
 // Request headers authenticate a store (a bearer token, an API key), so they are
 // credentials and must never reach a saved, autosaved, or shared project
 // (opengeos/GeoLibre#2643). Every project write goes through projectFromStore.
-describe("Zarr request headers stay out of project files", () => {
-  const TOKEN = "Bearer secret-zarr-token";
+const TOKEN = "Bearer secret-zarr-token";
 
+describe("Zarr request headers stay out of project files", () => {
   it("keeps an ArcGIS-native add's headers in the session, not on the layer", async () => {
     const arcgisApp = {
       ...app,
@@ -482,6 +484,17 @@ describe("Zarr request headers stay out of project files", () => {
     assert.equal(project.layers[0].source.headers, undefined);
     assert.equal(project.layers[0].source.variable, "tmax");
     assert.equal(serializeProject(project).includes("secret-zarr-token"), false);
+    // A project serialized directly, not built from the store, is scrubbed too.
+    const direct = serializeProject({ ...project, layers: useAppStore.getState().layers });
+    assert.equal(direct.includes("secret-zarr-token"), false);
+    assert.equal(
+      serializeProjectWithLayerCache(
+        { ...project, layers: useAppStore.getState().layers },
+        useAppStore.getState().layers,
+        createProjectLayerSerializationCache(),
+      ).includes("secret-zarr-token"),
+      false,
+    );
   });
 });
 
@@ -509,9 +522,14 @@ describe("addCloudNetcdfLayer", () => {
       refs: {},
       variable: "air",
       bounds: [-10, -5, 10, 5],
+      headers: { authorization: TOKEN },
     });
 
     const layer = useAppStore.getState().layers.at(-1);
+    assert.ok(layer);
+    // Remembered for a renderer swap, never written to the layer record.
+    assert.deepEqual(zarrRequestHeaders(layer), { authorization: TOKEN });
+    assert.equal(layer.source.headers, undefined);
     assert.equal(layer?.source.variable, "air");
     assert.deepEqual(layer?.source.bounds, [-10, -5, 10, 5]);
   });

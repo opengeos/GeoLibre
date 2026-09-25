@@ -265,7 +265,7 @@ function serializeProjectValue(
 export function serializeProject(project: GeoLibreProject): string {
   return (
     serializeProjectValue(
-      { ...project, layers: project.layers.map(withoutLocalRasterBytes) },
+      { ...project, layers: project.layers.map(portableLayer) },
       0,
       "",
       new Set(),
@@ -315,7 +315,7 @@ export function serializeProjectWithLayerCache(
   cache: ProjectLayerSerializationCache,
 ): string {
   if (layerSources.length !== project.layers.length) return serializeProject(project);
-  const layers = project.layers.map(withoutLocalRasterBytes);
+  const layers = project.layers.map(portableLayer);
   // Presets are keyed by layer object, so a record listed twice would get one
   // index's text in both places. The store never does that; bypass if it does.
   if (new Set(layers).size !== layers.length) return serializeProject(project);
@@ -1543,6 +1543,35 @@ function withoutLocalRasterBytes(layer: GeoLibreLayer): GeoLibreLayer {
   return { ...layer, metadata };
 }
 
+/**
+ * Drop a Zarr layer's request headers. They authenticate the store (a bearer
+ * token, an API key), so they are credentials: the Zarr adds keep them in a
+ * session-only map the renderer reads (`registerZarrHeaders` in
+ * @geolibre/map), but a project saved before that change carries them on
+ * `source` (opengeos/GeoLibre#2643). Not applied on parse, so such a project
+ * still authenticates for the session it is opened in.
+ *
+ * @param layer - Any layer.
+ * @returns The layer without `source.headers` when it is a Zarr layer, else
+ *   the same object.
+ */
+function withoutZarrHeaders(layer: GeoLibreLayer): GeoLibreLayer {
+  if (layer.type !== "zarr" || layer.source?.headers === undefined) return layer;
+  const { headers: _headers, ...source } = layer.source;
+  return { ...layer, source };
+}
+
+/**
+ * Strip the session-only state every serializer must leave out, whether or not
+ * the project came through `projectFromStore`.
+ *
+ * @param layer - Any layer.
+ * @returns The layer as it may be written to a project file.
+ */
+function portableLayer(layer: GeoLibreLayer): GeoLibreLayer {
+  return withoutZarrHeaders(withoutLocalRasterBytes(layer));
+}
+
 function normalizeLayer(layer: GeoLibreLayer): GeoLibreLayer {
   layer = withoutLocalRasterBytes(layer);
   // `capabilities` is split off the spread rather than overwritten: a raw value
@@ -1790,7 +1819,7 @@ function hasRestorableSourceUrl(layer: GeoLibreLayer): boolean {
 }
 
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
-  layer = withoutLocalRasterBytes(layer);
+  layer = portableLayer(layer);
   // This flag describes unsaved changes to the live source, not persisted
   // project state. A reference-only save reloads the original geometries;
   // carrying the flag into that project would warn about nonexistent edits.
@@ -1827,16 +1856,6 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
   // stores stale positions, and can exceed the history snapshot limit.
   if (layer.source.czmlData !== undefined && layer.metadata.transientCzml === true) {
     const { czmlData: _czmlData, ...source } = layer.source;
-    layer = { ...layer, source };
-  }
-
-  // A Zarr store's request headers authenticate it (a bearer token, an API
-  // key), so they are credentials. The Zarr adds keep them in a session-only
-  // map the renderer reads (`registerZarrHeaders` in @geolibre/map), but a
-  // project saved before that change carries them on `source`; drop them so
-  // no save, autosave, or share writes them back out (opengeos/GeoLibre#2643).
-  if (layer.type === "zarr" && layer.source.headers !== undefined) {
-    const { headers: _headers, ...source } = layer.source;
     layer = { ...layer, source };
   }
 
