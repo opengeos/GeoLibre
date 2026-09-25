@@ -116,8 +116,14 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
       );
       const file = await downloadWcs(url, coverage, request.signal).catch((error: unknown) => {
         // Point at the CRS choice when the server refused one it never listed.
+        // Only a refusal qualifies (an exception report or non-raster body, or
+        // an HTTP 4xx); size, timeout, and conversion failures keep their own
+        // message.
+        const refused =
+          (error instanceof WcsError && error.code === "response") ||
+          (error instanceof Error && /^WCS HTTP 4\d\d$/.test(error.message));
         const advertised = described.crses ?? [];
-        if (!advertised.length || advertised.includes(description.crs)) throw error;
+        if (!refused || !advertised.length || advertised.includes(description.crs)) throw error;
         throw new WcsMessageError(
           `${errorMessage(error)} ${t("addData.wcs.unadvertisedCrs", {
             crs: description.crs,
