@@ -72,7 +72,11 @@ jobs:
         run: npm run lint
 
       - name: Type check (tsc -b, no Vite build)
-        run: npx tsc -b apps/geolibre-desktop --noEmit
+        # The app imports @geolibre/embed through its built dist/ types, which
+        # the desktop workspace's prebuild normally produces.
+        run: |
+          npm run build -w @geolibre/embed
+          npx tsc -b apps/geolibre-desktop --noEmit
 
   e2e:
     # Only the `core` Playwright project gates a PR: the app boots and renders a

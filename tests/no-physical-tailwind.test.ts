@@ -45,7 +45,7 @@ describe("findPhysicalClasses", () => {
       findPhysicalClasses("-ml-1 md:pr-2 text-right").map(
         (hit: { suggestion: string }) => hit.suggestion,
       ),
-      ["ms-1", "pe-2", "text-end"],
+      ["-ms-1", "pe-2", "text-end"],
     );
   });
 
@@ -63,6 +63,9 @@ describe("findPhysicalClasses", () => {
     assert.deepEqual(tokens("absolute left-0 right-0 pl-2 pr-2"), []);
     // A pair only cancels under the same variant.
     assert.deepEqual(tokens("md:left-0 right-0"), ["md:left-0", "right-0"]);
+    // ...and the same sign: a negative and a positive margin are not symmetric.
+    assert.deepEqual(tokens("-ml-2 mr-2"), ["-ml-2", "mr-2"]);
+    assert.deepEqual(tokens("-ml-2 -mr-2"), []);
   });
 
   it("leaves logical utilities and look-alikes alone", () => {

@@ -36,8 +36,9 @@ const PHYSICAL_RE = /^(ml|mr|pl|pr|left|right)-(.+)$/;
  * `hover:`, `rtl:`), the important marker and a negative sign.
  *
  * @param {string} token A single whitespace-delimited class token.
- * @returns {{ utility: string, variants: string }} The bare utility and the
- *   variant prefix it was written under.
+ * @returns {{ utility: string, variants: string, sign: string }} The bare
+ *   utility, the variant prefix it was written under, and `"-"` when it was
+ *   negative (else `""`).
  */
 function splitToken(token) {
   // Variants are colon-separated, but arbitrary values may contain colons
@@ -52,8 +53,10 @@ function splitToken(token) {
   }
   const variants = last >= 0 ? token.slice(0, last + 1) : "";
   let utility = last >= 0 ? token.slice(last + 1) : token;
-  utility = utility.replace(/^!/, "").replace(/!$/, "").replace(/^-/, "");
-  return { utility, variants };
+  utility = utility.replace(/^!/, "").replace(/!$/, "");
+  const sign = utility.startsWith("-") ? "-" : "";
+  utility = utility.slice(sign.length);
+  return { utility, variants, sign };
 }
 
 /**
@@ -66,9 +69,11 @@ function splitToken(token) {
 export function findPhysicalClasses(text) {
   const tokens = text.split(/\s+/).filter(Boolean);
   const parsed = tokens.map((token) => ({ token, ...splitToken(token) }));
-  const present = new Set(parsed.map((p) => p.variants + p.utility));
+  // Keyed with the sign: `-ml-2 mr-2` is not symmetric, so only same-sign
+  // opposites cancel out.
+  const present = new Set(parsed.map((p) => p.variants + p.sign + p.utility));
   const found = [];
-  for (const { token, utility, variants } of parsed) {
+  for (const { token, utility, variants, sign } of parsed) {
     if (TEXT_ALIGN[utility]) {
       found.push({ token, suggestion: TEXT_ALIGN[utility] });
       continue;
@@ -78,8 +83,8 @@ export function findPhysicalClasses(text) {
     if (CENTERING.has(utility)) continue;
     const [, prefix, value] = match;
     const [opposite, logical] = PHYSICAL[prefix];
-    if (present.has(`${variants}${opposite}-${value}`)) continue;
-    found.push({ token, suggestion: `${logical}-${value}` });
+    if (present.has(`${variants}${sign}${opposite}-${value}`)) continue;
+    found.push({ token, suggestion: `${sign}${logical}-${value}` });
   }
   return found;
 }
