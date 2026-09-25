@@ -21,6 +21,7 @@ describe("parseOpenAIModels", () => {
         { id: "gpt-5.7", created: 400 },
         { id: "gpt-5.6-2026-05-01", created: 299 },
         { id: "gpt-3.5-turbo-0125", created: 100 },
+        { id: "gpt-3.5-turbo", created: 90 },
         { id: "gpt-5.3-chat-latest", created: 350 },
         { id: "gpt-live-1", created: 500 },
         { id: "o5-mini", created: 200 },
@@ -36,9 +37,24 @@ describe("parseOpenAIModels", () => {
     });
     assert.deepEqual(
       models.map((model) => model.id),
-      ["gpt-5.7", "gpt-5.6", "o5-mini"],
+      ["gpt-5.7", "gpt-5.6", "o5-mini", "gpt-3.5-turbo"],
     );
     assert.equal(models[0].name, "gpt-5.7");
+  });
+
+  it("keeps a dated snapshot whose alias is not listed", () => {
+    const models = parseOpenAIModels({
+      data: [
+        { id: "gpt-5.8-2026-09-20", created: 500 },
+        { id: "gpt-5.7", created: 400 },
+        { id: "gpt-5.7-2026-08-01", created: 399 },
+        { id: "gpt-4-0613", created: 10 },
+      ],
+    });
+    assert.deepEqual(
+      models.map((model) => model.id),
+      ["gpt-5.8-2026-09-20", "gpt-5.7", "gpt-4-0613"],
+    );
   });
 
   it("rejects a payload without a data array", () => {

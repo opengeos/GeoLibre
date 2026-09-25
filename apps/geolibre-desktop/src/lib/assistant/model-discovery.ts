@@ -225,6 +225,9 @@ function stringProp(entry: unknown, prop: string): string {
 const OPENAI_EXCLUDED =
   /(audio|realtime|live|transcribe|tts|image|search|embedding|moderation|instruct|codex|computer-use|deep-research|chat-latest)/i;
 
+/** The date suffix of an OpenAI snapshot id: `-YYYY-MM-DD`, or the older `-MMDD`. */
+const OPENAI_SNAPSHOT_SUFFIX = /-(\d{4}-\d{2}-\d{2}|\d{4})$/;
+
 /**
  * Keep the chat models from an OpenAI `/v1/models` response. The endpoint lists
  * every model (embeddings, speech, images, dated snapshots) with no capability
@@ -244,14 +247,20 @@ export function parseOpenAIModels(payload: unknown): DiscoveredModel[] {
           ? (entry as { created: number }).created
           : 0,
     }))
-    .filter(
-      ({ id }) =>
-        /^(gpt-|o\d)/i.test(id) &&
-        !OPENAI_EXCLUDED.test(id) &&
-        !/-(\d{4}-\d{2}-\d{2}|\d{4})$/.test(id),
-    )
-    .sort((a, b) => b.created - a.created);
-  return dedupe(entries.map(({ id }) => ({ id, name: id })));
+    .filter(({ id }) => /^(gpt-|o\d)/i.test(id) && !OPENAI_EXCLUDED.test(id));
+  // Drop a dated snapshot only when its alias is listed too. Right after a
+  // release a model can be listed under its dated id alone, and hiding that id
+  // would leave the new model unreachable from the picker.
+  const ids = new Set(entries.map(({ id }) => id));
+  return dedupe(
+    entries
+      .filter(({ id }) => {
+        const alias = id.replace(OPENAI_SNAPSHOT_SUFFIX, "");
+        return alias === id || !ids.has(alias);
+      })
+      .sort((a, b) => b.created - a.created)
+      .map(({ id }) => ({ id, name: id })),
+  );
 }
 
 /**
