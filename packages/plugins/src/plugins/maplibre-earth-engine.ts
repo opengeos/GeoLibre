@@ -111,6 +111,7 @@ export function toggleEarthEnginePanel(app: GeoLibreAppAPI): void {
 
 export function closeEarthEnginePanel(app: GeoLibreAppAPI): void {
   earthEngineOpenGeneration += 1;
+  earthEngineOpenPending = false;
   earthEngineStoreUnsubscribe?.();
   earthEngineStoreUnsubscribe = null;
   if (earthEngineControl && earthEngineControlMounted) {
