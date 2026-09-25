@@ -674,7 +674,14 @@ function bootBundleBudgetPlugin(): Plugin {
         (chunk): chunk is OutputChunk =>
           chunk.type === "chunk" && chunk.isEntry && chunk.name === "main",
       );
-      if (!entry) return;
+      // A missing entry would switch the guard off without anyone noticing,
+      // which is the kind of silent regression it exists to catch.
+      if (!entry) {
+        this.error(
+          'Boot bundle budget: no entry chunk named "main" found. Update ' +
+            "bootBundleBudgetPlugin if the build input key changed.",
+        );
+      }
       const seen = new Set<string>();
       const pending = [entry.fileName];
       let bytes = 0;
