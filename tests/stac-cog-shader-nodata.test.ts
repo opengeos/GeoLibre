@@ -17,6 +17,8 @@ describe("toStacCogShaderNoData", () => {
   it("passes float and signed-integer nodata through unchanged", () => {
     assert.equal(toStacCogShaderNoData(-9999, [32, 32], [3, 3]), -9999);
     assert.equal(toStacCogShaderNoData(-32768, [16, 16], [2, 2]), -32768);
+    // No 32-bit unorm format exists, so a 32-bit uint texture is not normalized.
+    assert.equal(toStacCogShaderNoData(4294967295, [32, 32], [1, 1]), 4294967295);
   });
 
   it("skips the step when there is no usable nodata", () => {

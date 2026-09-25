@@ -630,13 +630,21 @@ async function createStacCogRenderProps(
         textureFormat ??
         inferTextureFormat?.(samplesPerPixel, textureBitsPerSample, textureSampleFormat) ??
         "r8unorm";
+      const isRgb = samplesPerPixel >= 3;
+      const shaderNoData = isRgb
+        ? null
+        : toStacCogShaderNoData(nodata, textureBitsPerSample, textureSampleFormat);
+      // FilterNoDataVal compares the sampled value, and linear sampling blends
+      // nodata with its valid neighbours at the edge, so those texels would
+      // miss the exact match and draw as a fringe. Sample nearest instead.
+      const filter = shaderNoData === null ? "linear" : "nearest";
       const textureObject = device.createTexture({
         data: textureData,
         format,
         height,
         sampler: {
-          magFilter: "linear",
-          minFilter: "linear",
+          magFilter: filter,
+          minFilter: filter,
         },
         width,
       });
@@ -644,8 +652,8 @@ async function createStacCogRenderProps(
       return {
         byteLength: textureData.byteLength,
         height,
-        isRgb: samplesPerPixel >= 3,
-        shaderNoData: toStacCogShaderNoData(nodata, textureBitsPerSample, textureSampleFormat),
+        isRgb,
+        shaderNoData,
         texture: textureObject,
         width,
       };
@@ -832,9 +840,10 @@ function getAlphaValue(data: RasterBandValues, bitsPerSample: ArrayLike<number>)
 /**
  * Maps a GeoTIFF nodata value into the value space the `FilterNoDataVal`
  * shader compares against. The shader tests the sampled red channel, and
- * deck.gl-geotiff uploads unsigned-integer samples as normalized (`unorm`)
- * textures, so an 8-bit nodata of 255 samples as 1.0. Float and signed-integer
- * textures sample their raw values, so their nodata passes through unchanged.
+ * deck.gl-geotiff uploads 8- and 16-bit unsigned-integer samples as normalized
+ * (`unorm`) textures, so an 8-bit nodata of 255 samples as 1.0. Float,
+ * signed-integer and 32-bit unsigned textures sample their raw values, so their
+ * nodata passes through unchanged.
  *
  * Only the non-RGB shader path uses this: single-band tiles are colorized on
  * the CPU, where nodata is already made transparent, and RGB(A) tiles skip the
@@ -853,8 +862,8 @@ export function toStacCogShaderNoData(
   // A NaN nodata can never equal a sampled value, so the step would be a no-op.
   if (nodata === null || nodata === undefined || !Number.isFinite(nodata)) return null;
   const format = sampleFormat[0] ?? 1;
-  if (format !== 1) return nodata;
   const bits = bitsPerSample[0] ?? 8;
+  if (format !== 1 || (bits !== 8 && bits !== 16)) return nodata;
   return nodata / (2 ** bits - 1);
 }
 

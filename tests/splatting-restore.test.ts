@@ -284,4 +284,16 @@ describe("splatting control", () => {
 
     assert.equal(control.flyToDuringLoad.length, 1);
   });
+
+  it("restores a layer added while an earlier restore is still running", async () => {
+    const control = await openControl();
+    useAppStore.getState().addLayer(savedSplatLayer("model-1", "https://example.org/one.glb"));
+    const first = restoreSplattingLayers(app);
+    // The first restore has snapshotted the store and is awaiting its load.
+    useAppStore.getState().addLayer(savedSplatLayer("model-2", "https://example.org/two.glb"));
+    const second = restoreSplattingLayers(app);
+    await Promise.all([first, second]);
+
+    assert.deepEqual([...control._modelLayers.keys()].sort(), ["model-1", "model-2"]);
+  });
 });

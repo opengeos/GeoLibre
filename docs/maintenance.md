@@ -304,6 +304,29 @@ layer, before `loadPointCloud` resolves; it throws if not.
 `tests/lidar-url-layer.test.ts` pins the GeoLibre side of both. Re-read
 `loadPointCloud` on a bump.
 
+### `maplibre-gl-splat` (`packages/plugins/package.json`) — private internals
+
+`packages/plugins/src/plugins/components/splatting.ts` reaches into
+`GaussianSplatControl`'s private fields, which the compiler cannot check:
+
+- `reserveSplattingIds` replaces the `_layerCounter` / `_modelCounter` instance
+  fields with accessors. Upstream names each asset `splat-${this._layerCounter++}`
+  / `model-${this._modelCounter++}`, and a new control restarts at 0, so without
+  the accessors a fresh load could take a saved layer's id and overwrite it.
+  Restoring a saved layer under its own id also goes through them.
+- `recordSplattingPlacements` wraps `loadSplat` / `loadModel` on the instance and
+  reads `_splatLayers` / `_modelLayers` (per-asset longitude/latitude/altitude),
+  `_state.rotation` / `_state.scale` and `_options.defaultModelRotation`, so the
+  store layer carries the placement a restore needs. The restore turns
+  `_options.flyTo` off while it runs.
+
+If upstream renames those fields or changes how it assigns ids, id reservation
+and placement restore stop working without an error.
+`tests/splatting-restore.test.ts` drives a fake with the same shape, so it will
+not catch that either: re-read `loadSplat` / `loadModel` in the package on a bump.
+Better still, upstream an id option and a per-asset placement getter and delete
+the patching.
+
 ### `maplibre-gl-raster` — stretch and gamma curves
 
 `buildContinuousColormapRgba`

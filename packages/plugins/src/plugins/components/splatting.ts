@@ -39,6 +39,8 @@ interface MutableSplattingControl {
   _state?: { rotation?: [number, number, number]; scale?: number };
   loadModel: SplattingLoad;
   loadSplat: SplattingLoad;
+  removeModel: (id: string) => void;
+  removeSplat: (id: string) => void;
 }
 
 const SPLATTING_ID_PATTERN = /^(splat|model)-(\d+)$/;
@@ -118,7 +120,8 @@ async function openStandaloneSplattingControl(
     hideSplattingControl(splattingControl);
   }
   if (reveal) splattingControlRevealed = true;
-  void restoreSplattingLayers(app);
+  // A hidden mount comes from a restore that is already running.
+  if (reveal) void restoreSplattingLayers(app);
   return true;
 }
 
@@ -138,9 +141,15 @@ async function openStandaloneSplattingControl(
  * @param app - The GeoLibre app API.
  * @returns Resolves once every pending layer has been attempted.
  */
-export function restoreSplattingLayers(app: GeoLibreAppAPI): Promise<void> {
-  if (!hasPendingSplattingLayers()) return splattingRestorePromise ?? Promise.resolve();
-  splattingRestorePromise ??= runSplattingRestore(app).finally(() => {
+export async function restoreSplattingLayers(app: GeoLibreAppAPI): Promise<void> {
+  if (splattingRestorePromise) {
+    // A running restore took its snapshot of the store when it started; wait
+    // for it, then look again for layers added since.
+    await splattingRestorePromise.catch(() => {});
+    return restoreSplattingLayers(app);
+  }
+  if (!hasPendingSplattingLayers()) return;
+  splattingRestorePromise = runSplattingRestore(app).finally(() => {
     splattingRestorePromise = null;
   });
   return splattingRestorePromise;
@@ -190,8 +199,8 @@ async function runSplattingRestore(app: GeoLibreAppAPI): Promise<void> {
           // Another load took the forced id first. Drop the duplicate rather
           // than leave a second store layer for the same asset.
           console.warn("[splatting] restored layer got a different id", layer.id, loadedId);
-          if (assetType === "splat") splattingControl?.removeSplat(loadedId);
-          else splattingControl?.removeModel(loadedId);
+          if (assetType === "splat") control.removeSplat(loadedId);
+          else control.removeModel(loadedId);
         }
       } catch (error) {
         console.warn("[splatting] failed to restore saved layer", layer.id, error);
