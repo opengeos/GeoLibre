@@ -49,7 +49,7 @@ const VECTOR_PANEL_CLASS = "geolibre-vector-panel";
 // loads (the spatial extension's GDAL readers), but a guard so a hand-edited
 // project cannot point `sourcePath` at an arbitrary file on disk. Matched
 // case-insensitively against the end of the path. Keep this in sync with
-// `VECTOR_FILE_DIALOG_EXTENSIONS` in the desktop app's `tauri-io.ts` (the
+// `VECTOR_FILE_DIALOG_EXTENSIONS` in the desktop app's `file-io/paths.ts` (the
 // package boundary prevents sharing the list): a format loadable through the
 // picker but missing here would be dropped on reopen.
 const RESTORABLE_VECTOR_PATH =

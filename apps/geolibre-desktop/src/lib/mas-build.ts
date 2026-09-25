@@ -30,7 +30,7 @@ export function masHidesMenuItem(id: string, mas: boolean = IS_MAS_BUILD): boole
 
 // Extensions of the shapefile parts that ride along with a `.shp`, mirroring
 // the full SHAPEFILE_SIDECAR_EXTENSIONS list of the Rust read_shapefile_siblings
-// command (src-tauri/src/lib.rs), not the 4-extension subset in tauri-io.ts:
+// command (src-tauri/src/lib.rs), not the 4-extension subset in file-io/paths.ts:
 // the selection is the only companion source under the sandbox, so it must not
 // forward less than the sibling read would. Exported so the MAS file dialog can
 // make these extensions selectable in the first place.
