@@ -3,6 +3,7 @@ import {
   PROVIDER_LABELS,
   PROVIDER_MODELS,
   defaultModelFor,
+  getApiKey,
   type AssistantProfile,
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
@@ -33,7 +34,8 @@ import {
   withOllamaOriginHint,
 } from "../../lib/assistant/ollama";
 import { classifyFetchFailure } from "../../lib/fetch-error";
-import { OpenRouterModelPicker } from "../OpenRouterModelPicker";
+import { supportsKeyedModelDiscovery } from "../../lib/assistant/model-discovery";
+import { ProviderModelPicker } from "../ProviderModelPicker";
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
 
@@ -325,8 +327,17 @@ export function AiSectionContent({
           {PROVIDER_MODELS[newProfileProvider].length > 0 ? (
             <div className="space-y-1.5">
               <Label className="text-xs">{t("assistant.model")}</Label>
-              {newProfileProvider === "openrouter" ? (
-                <OpenRouterModelPicker value={newProfileModel} onChange={setNewProfileModel} />
+              {newProfileProvider === "openrouter" ||
+              supportsKeyedModelDiscovery(newProfileProvider) ? (
+                <ProviderModelPicker
+                  provider={newProfileProvider}
+                  apiKey={getApiKey(newProfileProvider, {
+                    ...scopedOsEnv,
+                    ...newProfileFieldValues,
+                  })}
+                  value={newProfileModel}
+                  onChange={setNewProfileModel}
+                />
               ) : (
                 <>
                   <div className="flex items-center gap-2">
@@ -670,8 +681,14 @@ function ProfileEditor({
       {models.length > 0 ? (
         <div className="space-y-1.5">
           <Label className="text-xs">{t("assistant.model")}</Label>
-          {profile.provider === "openrouter" ? (
-            <OpenRouterModelPicker
+          {profile.provider === "openrouter" || supportsKeyedModelDiscovery(profile.provider) ? (
+            <ProviderModelPicker
+              key={profile.provider}
+              provider={profile.provider}
+              apiKey={
+                (providerFields[0] ? getProviderField(providerFields[0]) : "") ||
+                getApiKey(profile.provider, scopedOsEnv)
+              }
               value={profile.modelId || defaultModelFor(profile.provider, modelEnv)}
               onChange={updateModel}
             />

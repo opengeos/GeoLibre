@@ -224,7 +224,10 @@ export function mergeRuntimeEnv({
 /**
  * Selectable models per provider, recommended/newest first. The first entry is
  * the provider default. Users can pin any other id via `GEOLIBRE_ASSISTANT_MODEL`
- * (or the per-provider env var) or the model picker. The hosted-model ids were
+ * (or the per-provider env var) or the model picker. For Google, Anthropic,
+ * OpenAI and OpenRouter the picker replaces these with the provider's live
+ * catalog once it loads (see `model-discovery.ts`), so the lists here are only
+ * the default and the offline fallback. The hosted-model ids were
  * verified against the providers' docs as of 2026-07; the `ollama`/`bedrock`
  * lists are common examples (use your own via the env vars). `custom` has no
  * preset — supply the model with `OPENAI_COMPATIBLE_MODEL`.

@@ -33,15 +33,18 @@ import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistan
 import { selectActiveAssistantProfile } from "../../lib/assistant/profiles";
 import { isSendKey } from "../../lib/assistant/send-key";
 import { openSettingsSection } from "../layout/SettingsDialog";
-import { OpenRouterModelPicker } from "../OpenRouterModelPicker";
+import { supportsKeyedModelDiscovery } from "../../lib/assistant/model-discovery";
+import { ProviderModelPicker } from "../ProviderModelPicker";
 import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
   defaultModelFor,
+  getApiKey,
   hasManagedAssistantProxy,
   hasProviderKey,
   PROVIDER_MODELS,
   PROVIDER_LABELS,
+  readRuntimeEnv,
   resolveProviderConfig,
   type AssistantProfile,
   type AssistantProviderId,
@@ -772,9 +775,15 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 ))}
               </Select>
               {activeProfile && PROVIDER_MODELS[activeProfile.provider].length > 0 ? (
-                activeProfile.provider === "openrouter" ? (
-                  <OpenRouterModelPicker
+                activeProfile.provider === "openrouter" ||
+                supportsKeyedModelDiscovery(activeProfile.provider) ? (
+                  <ProviderModelPicker
                     key={activeProfile.id}
+                    provider={activeProfile.provider}
+                    apiKey={getApiKey(activeProfile.provider, {
+                      ...readRuntimeEnv(),
+                      ...activeProfile.fieldValues,
+                    })}
                     value={activeProfile.modelId || defaultModelFor(activeProfile.provider)}
                     onChange={onModelChange}
                     disabled={running}
