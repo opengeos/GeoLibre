@@ -146,10 +146,20 @@ export function LoadFeaturesIntoEditorDialog({
   // whenever the Layers panel changes), resetting the drag position, collapse
   // state, and any in-progress status while the panel is already open.
   const wasOpenRef = useRef(false);
+  // Bumped on every open and close, so a load click still waiting for the
+  // editor to activate can tell the panel was closed (or reopened) meanwhile.
+  const openGenerationRef = useRef(0);
+  // Set while a load click waits for the editor to activate, so a second click
+  // in that window cannot start another load.
+  const activatingRef = useRef(false);
 
   // On the open transition: repopulate the eligible list, preselect any
   // context-menu target, restore the saved editor name, and dock the panel at
   // the bottom-left of the map canvas.
+  useEffect(() => {
+    openGenerationRef.current += 1;
+  }, [open]);
+
   useEffect(() => {
     if (!open) {
       wasOpenRef.current = false;
@@ -361,9 +371,22 @@ export function LoadFeaturesIntoEditorDialog({
       setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
       return;
     }
+    if (activatingRef.current) return;
     setConfirmCount(null);
     setPendingLoad(null);
-    const count = (await ensureEditorActive()) ? getGeoEditorFeatureCount() : 0;
+    const generation = openGenerationRef.current;
+    activatingRef.current = true;
+    setBusy(true);
+    let ready = false;
+    try {
+      ready = await ensureEditorActive();
+    } finally {
+      activatingRef.current = false;
+      setBusy(false);
+    }
+    // The panel was closed (or reopened) while the editor activated.
+    if (generation !== openGenerationRef.current) return;
+    const count = ready ? getGeoEditorFeatureCount() : 0;
     if (count > 0) {
       setConfirmCount(count);
     } else {

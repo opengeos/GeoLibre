@@ -251,6 +251,9 @@ export function SegmentEverythingPanel({
       const tagged = masksToFeatureCollection(masks, raster);
       const { reprojectFeatureCollectionToWgs84 } = await import("../../lib/duckdb-vector-loader");
       const fc = await reprojectFeatureCollectionToWgs84(tagged);
+      // The panel may have been closed while the loader chunk or the
+      // reprojection was pending.
+      if (controller.signal.aborted) return;
       const layerId = addGeoJsonLayer(t("segmentEverything.layerName"), fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
       if (layer) mapControllerRef.current?.fitLayer(layer);

@@ -67,21 +67,31 @@ interface NetcdfCubeWindowProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
-// The cube view draws with three.js (~0.5 MB). This window is mounted for the
-// whole session but shows a cube only on request, so the view and three.js load
-// with the first cube rather than at startup.
-const NetcdfCubeView = lazy(() =>
-  import("../panels/NetcdfCubeView")
-    .then((module) => ({ default: module.NetcdfCubeView }))
-    .catch((error) => {
-      // A failed chunk load (e.g. offline) would otherwise throw during render
-      // and unmount the shell; render nothing in the window instead.
-      console.error("Failed to load NetcdfCubeView", error);
-      const Fallback = (() =>
-        null) as unknown as typeof import("../panels/NetcdfCubeView").NetcdfCubeView;
-      return { default: Fallback };
-    }),
-);
+type NetcdfCubeViewComponent = typeof import("../panels/NetcdfCubeView").NetcdfCubeView;
+
+/**
+ * Builds a lazy NetcdfCubeView. The view draws with three.js (~0.5 MB), and this
+ * window is mounted for the whole session but shows a cube only on request, so
+ * the view and three.js load with the first cube rather than at startup.
+ *
+ * React caches a lazy component's result, including a failed load, so a retry
+ * needs a fresh one from this factory.
+ *
+ * @param onError - Called when the chunk fails to load (e.g. offline).
+ * @returns The lazy component. After a failed load it renders nothing, so the
+ *   failure does not throw during render and unmount the shell.
+ */
+function lazyNetcdfCubeView(onError: (error: unknown) => void) {
+  return lazy(() =>
+    import("../panels/NetcdfCubeView")
+      .then((module) => ({ default: module.NetcdfCubeView }))
+      .catch((error: unknown) => {
+        console.error("Failed to load NetcdfCubeView", error);
+        onError(error);
+        return { default: (() => null) as unknown as NetcdfCubeViewComponent };
+      }),
+  );
+}
 
 /**
  * The 3-D image cube, in a movable window over the map.
@@ -115,6 +125,15 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
   const [cube, setCube] = useState<NetcdfCube | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The lazily loaded cube view, and whether its chunk failed to load.
+  const [viewLoadFailed, setViewLoadFailed] = useState(false);
+  const [NetcdfCubeView, setNetcdfCubeView] = useState(() =>
+    lazyNetcdfCubeView(() => setViewLoadFailed(true)),
+  );
+  const retryCubeView = useCallback(() => {
+    setViewLoadFailed(false);
+    setNetcdfCubeView(() => lazyNetcdfCubeView(() => setViewLoadFailed(true)));
+  }, []);
   const [zScale, setZScale] = useState(DEFAULT_Z_SCALE);
   // Bands kept, counted up from the first: the cut plane, as a fraction so it
   // survives a re-read that changes the band count.
@@ -363,6 +382,14 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
         {error ? (
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <p className="text-center text-xs text-destructive">{error}</p>
+          </div>
+        ) : null}
+        {cube && viewLoadFailed ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4">
+            <p className="text-center text-xs text-destructive">{t("netcdfCube.viewLoadFailed")}</p>
+            <Button type="button" size="sm" variant="outline" onClick={retryCubeView}>
+              {t("netcdfCube.retry")}
+            </Button>
           </div>
         ) : null}
       </div>

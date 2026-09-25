@@ -7849,6 +7849,8 @@
     "reading": "Reading band {{done}} of {{total}}...",
     "summary": "{{nx}} x {{ny}} cells, {{nz}} bands along {{axis}}",
     "errorNoCube": "This layer's source file is no longer open, so a cube cannot be read.",
+    "viewLoadFailed": "The 3D cube viewer could not be loaded. Check your connection and try again.",
+    "retry": "Retry",
     "error": {
       "shapeMismatch": "The variable's band planes do not share one shape, so they cannot be stacked into a cube.",
       "rgbShapeMismatch": "The chosen RGB bands do not match the cube's shape.",

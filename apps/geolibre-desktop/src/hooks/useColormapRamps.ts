@@ -48,8 +48,14 @@ export function useColormapRamps(enabled = true): ColorRampOption[] {
     if (!enabled) return;
     let cancelled = false;
     for (const colormap of SORTED_COLORMAPS) {
-      // Built-in ramps were already seeded synchronously above.
-      if (colormapColors(colormap.name)) continue;
+      // Already known: a built-in ramp, or one another picker sampled into the
+      // shared cache after this hook's state was seeded (it may have stayed
+      // disabled until now). Sync it into state rather than skipping it.
+      const known = colormapColors(colormap.name);
+      if (known) {
+        setRampColors((prev) => (prev[colormap.name] ? prev : { ...prev, [colormap.name]: known }));
+        continue;
+      }
       void warmColormapColors(colormap.name).then((colors) => {
         if (cancelled || !colors) return;
         setRampColors((prev) =>
