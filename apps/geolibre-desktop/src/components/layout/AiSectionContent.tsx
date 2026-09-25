@@ -52,6 +52,8 @@ export interface DraftDesktopSettings {
 
 interface AiSectionContentProps {
   draftDesktopSettings: DraftDesktopSettings;
+  /** The draft project Environment variables (enabled rows only). */
+  draftEnv: Record<string, string>;
   setDraftDesktopSettings: React.Dispatch<React.SetStateAction<any>>;
   editingProfileId: string | null;
   setEditingProfileId: (id: string | null) => void;
@@ -158,6 +160,7 @@ function useOllamaModels() {
  */
 export function AiSectionContent({
   draftDesktopSettings,
+  draftEnv,
   setDraftDesktopSettings,
   editingProfileId,
   setEditingProfileId,
@@ -346,6 +349,7 @@ export function AiSectionContent({
                   provider={newProfileProvider}
                   apiKey={getApiKey(newProfileProvider, {
                     ...scopedOsEnv,
+                    ...draftEnv,
                     ...nonBlankValues(newProfileFieldValues),
                   })}
                   bedrockAuth={
@@ -353,6 +357,7 @@ export function AiSectionContent({
                       ? bedrockAuthFromConfig(
                           configForProvider("bedrock", undefined, {
                             ...scopedOsEnv,
+                            ...draftEnv,
                             ...nonBlankValues(newProfileFieldValues),
                           }),
                         )

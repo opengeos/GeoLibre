@@ -409,8 +409,8 @@ export async function discoverBedrockModels(
 const BEDROCK_EXCLUDED =
   /(rerank|embed|pegasus|sonic|palmyra-vision|safeguard|llama3-(8b|70b)-instruct|mistral-7b|mixtral|deepseek\.r1)/i;
 
-/** Region prefix of a cross-region inference profile id (`global.`, `us.`, `eu.`, …). */
-const PROFILE_PREFIX = /^[a-z]+\./;
+/** Region prefix of a cross-region inference profile id (`global.`, `us.`, `us-gov.`, …). */
+const PROFILE_PREFIX = /^[a-z-]+\./;
 
 /**
  * Build the Bedrock model list from `ListInferenceProfiles` (system-defined)

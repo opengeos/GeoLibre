@@ -136,6 +136,11 @@ describe("parseBedrockModels", () => {
   ];
   const profiles = [
     {
+      inferenceProfileId: "us-gov.amazon.nova-pro-v1:0",
+      inferenceProfileName: "US-GOV Nova Pro",
+      status: "ACTIVE",
+    },
+    {
       inferenceProfileId: "us.anthropic.claude-opus-5-5",
       inferenceProfileName: "US Anthropic Claude Opus 5.5",
       status: "ACTIVE",
@@ -169,6 +174,7 @@ describe("parseBedrockModels", () => {
       { id: "global.anthropic.claude-opus-5-5", name: "Global Anthropic Claude Opus 5.5" },
       { id: "us.anthropic.claude-opus-5-5", name: "US Anthropic Claude Opus 5.5" },
       { id: "us.amazon.nova-pro-v1:0", name: "US Nova Pro" },
+      { id: "us-gov.amazon.nova-pro-v1:0", name: "US-GOV Nova Pro" },
       { id: "amazon.nova-pro-v1:0", name: "Nova Pro" },
       { id: "qwen.qwen3-32b-v1:0", name: "Qwen3 32B" },
     ]);
