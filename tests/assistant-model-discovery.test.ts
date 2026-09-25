@@ -16,6 +16,9 @@ describe("parseOpenAIModels", () => {
         { id: "gpt-5.6", created: 300 },
         { id: "gpt-5.7", created: 400 },
         { id: "gpt-5.6-2026-05-01", created: 299 },
+        { id: "gpt-3.5-turbo-0125", created: 100 },
+        { id: "gpt-5.3-chat-latest", created: 350 },
+        { id: "gpt-live-1", created: 500 },
         { id: "o5-mini", created: 200 },
         { id: "gpt-realtime", created: 500 },
         { id: "gpt-4o-mini-tts", created: 500 },
@@ -75,6 +78,11 @@ describe("parseGeminiModels", () => {
         { name: "models/gemini-3.5-flash-tts", supportedGenerationMethods: ["generateContent"] },
         { name: "models/gemini-3.5-flash-image", supportedGenerationMethods: ["generateContent"] },
         { name: "models/gemma-4-27b-it", supportedGenerationMethods: ["generateContent"] },
+        {
+          name: "models/gemini-omni-flash-preview",
+          supportedGenerationMethods: ["generateContent"],
+        },
+        { name: "models/gemini-3.5-transcribe", supportedGenerationMethods: ["generateContent"] },
         { name: "models/gemini-3.6-flash" },
       ],
     });

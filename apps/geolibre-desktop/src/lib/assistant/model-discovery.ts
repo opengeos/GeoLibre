@@ -146,15 +146,20 @@ function stringProp(entry: unknown, prop: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-/** Model-id fragments for OpenAI models that are not chat/tool models. */
+/**
+ * Model-id fragments for OpenAI models the Responses-API assistant cannot use:
+ * speech, realtime and live voice models, image and embedding models, and the
+ * retired `chat-latest` ChatGPT aliases the endpoint still lists.
+ */
 const OPENAI_EXCLUDED =
-  /(audio|realtime|transcribe|tts|image|search|embedding|moderation|instruct|codex|computer-use|deep-research)/i;
+  /(audio|realtime|live|transcribe|tts|image|search|embedding|moderation|instruct|codex|computer-use|deep-research|chat-latest)/i;
 
 /**
  * Keep the chat models from an OpenAI `/v1/models` response. The endpoint lists
  * every model (embeddings, speech, images, dated snapshots) with no capability
  * metadata, so filter by id: GPT and o-series families, minus the non-chat
- * variants and the `-YYYY-MM-DD` snapshots of an alias that is also listed.
+ * variants and the dated snapshots (`-YYYY-MM-DD`, or the older `-MMDD`) of an
+ * alias that is also listed.
  *
  * @param payload The parsed JSON response.
  * @returns Chat models, newest first by `created`.
@@ -170,7 +175,9 @@ export function parseOpenAIModels(payload: unknown): DiscoveredModel[] {
     }))
     .filter(
       ({ id }) =>
-        /^(gpt-|o\d)/i.test(id) && !OPENAI_EXCLUDED.test(id) && !/-\d{4}-\d{2}-\d{2}$/.test(id),
+        /^(gpt-|o\d)/i.test(id) &&
+        !OPENAI_EXCLUDED.test(id) &&
+        !/-(\d{4}-\d{2}-\d{2}|\d{4})$/.test(id),
     )
     .sort((a, b) => b.created - a.created);
   return dedupe(entries.map(({ id }) => ({ id, name: id })));
@@ -192,8 +199,13 @@ export function parseAnthropicModels(payload: unknown): DiscoveredModel[] {
   );
 }
 
-/** Gemini model-id fragments for variants the text assistant cannot use. */
-const GEMINI_EXCLUDED = /(embedding|image|tts|audio|live|robotics|computer-use|veo|imagen)/i;
+/**
+ * Gemini model-id fragments for variants the text assistant cannot use. `omni`
+ * models only answer the Interactions API, and `transcribe` has no function
+ * calling, although both still advertise `generateContent`.
+ */
+const GEMINI_EXCLUDED =
+  /(embedding|image|tts|audio|live|transcribe|omni|robotics|computer-use|veo|imagen)/i;
 
 /**
  * Keep the text-generation Gemini models from a Generative Language API
