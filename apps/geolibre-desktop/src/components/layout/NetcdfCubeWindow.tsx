@@ -349,7 +349,16 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
 
       <div className="relative min-h-0 flex-1 bg-muted/30">
         {cube ? (
-          <Suspense fallback={null}>
+          <Suspense
+            fallback={
+              <div
+                role="status"
+                className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground"
+              >
+                {t("netcdfCube.viewLoading")}
+              </div>
+            }
+          >
             <NetcdfCubeView
               cube={cube}
               colors={colors}

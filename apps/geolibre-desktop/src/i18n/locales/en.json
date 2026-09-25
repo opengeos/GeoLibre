@@ -7849,6 +7849,7 @@
     "reading": "Reading band {{done}} of {{total}}...",
     "summary": "{{nx}} x {{ny}} cells, {{nz}} bands along {{axis}}",
     "errorNoCube": "This layer's source file is no longer open, so a cube cannot be read.",
+    "viewLoading": "Loading the 3D view…",
     "viewLoadFailed": "The 3D cube viewer could not be loaded. Check your connection and try again.",
     "retry": "Retry",
     "error": {

@@ -250,6 +250,9 @@ export function SegmentEverythingPanel({
       }
       const tagged = masksToFeatureCollection(masks, raster);
       const { reprojectFeatureCollectionToWgs84 } = await import("../../lib/duckdb-vector-loader");
+      // Skip the reprojection (it may open a DuckDB connection) if the panel
+      // closed while the loader chunk was fetched.
+      if (controller.signal.aborted) return;
       const fc = await reprojectFeatureCollectionToWgs84(tagged);
       // The panel may have been closed while the loader chunk or the
       // reprojection was pending.
