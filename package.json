@@ -48,10 +48,13 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.2",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
+    "happy-dom": "^20.14.5",
     "linkedom": "^0.18.13",
     "tsx": "^4.23.13",
     "typescript-eslint": "^8.70.0"
