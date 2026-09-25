@@ -199,6 +199,9 @@ interface ThreeDTilesControlInternals {
 function loadThreeDTilesModule(): Promise<ThreeDTilesModule> {
   if (threeDTilesModulePromise) return threeDTilesModulePromise;
   const promise = import("maplibre-gl-3d-tiles").then((module) => {
+    // When the stale-chunk handler cancels Vite's preload error, the import
+    // resolves to undefined instead of rejecting; treat that as a failure.
+    if (!module) throw new Error("maplibre-gl-3d-tiles failed to load");
     threeDTilesModule = module;
     return module;
   });

@@ -174,6 +174,9 @@ function loadGeoEditorModules(): Promise<GeoEditorModules> {
     import("maplibre-gl-geo-editor"),
     import("./geo-editor-mapbox"),
   ]).then(([geoman, editor, mapbox]) => {
+    // When the stale-chunk handler cancels Vite's preload error, the import
+    // resolves to undefined instead of rejecting; treat that as a failure.
+    if (!geoman || !editor || !mapbox) throw new Error("The Geo Editor packages failed to load");
     geoEditorModules = { geoman, editor, mapbox };
     return geoEditorModules;
   });
