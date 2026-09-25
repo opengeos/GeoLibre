@@ -51,6 +51,7 @@ import { proxyWmsTiles } from "./wms-proxy";
 import { arcgisOpacity, arcgisVectorStyle } from "./arcgis-vector-style";
 import { mapboxFillLayerId, mapboxLineLayerId, mapboxSourceId } from "./style-layer-ids";
 import { detectGeometryProfile, type GeometryProfile } from "./geojson-loader";
+import { classifyLayer, unhandledLayerKind } from "./layer-kind";
 
 export interface MapboxLayerPlan {
   sourceId: string;
@@ -122,10 +123,7 @@ export function isMapboxSupportedLayer(layer: GeoLibreLayer): boolean {
 
 /** These plugins own their Mapbox overlays and synchronize the layer store themselves. */
 export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
-  // Drawn by the shared deck.gl overlay (deckgl-viz plugin) and the DuckDB
-  // control's own deck overlay; both bind to the Mapbox map directly.
-  if (layer.type === "deckgl-viz" && layer.metadata.sourceKind === "deckgl-viz") return true;
-  if (layer.type === "duckdb-query" && layer.metadata.sourceKind === "duckdb-query") return true;
+  if (isMapboxKindPluginLayer(layer)) return true;
   if (layer.metadata.externalNativeLayer === true) {
     // On a renderer switch the Add Vector control first mirrors its persisted
     // source, then asynchronously materializes it as GeoJSON for Mapbox. Until
@@ -134,11 +132,6 @@ export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
     // GeoJSON. A later store sync carries `layer.geojson` and takes the normal
     // native compiler path below.
     if (layer.metadata.sourceKind === "maplibre-gl-vector" && !layer.geojson) return true;
-    if (layer.type === "lidar" && layer.metadata.sourceKind === "lidar-url") return true;
-    // @carbonplan/zarr-layer is a CustomLayerInterface implementation that
-    // targets Mapbox GL as well as MapLibre; the Zarr control adds it to
-    // whichever map hosts the control.
-    if (layer.type === "zarr" && layer.metadata.sourceKind === "zarr-url") return true;
     // The Time Slider dock and the Timelapse control create their own native
     // sources and layers (registered on the mirror as `nativeLayerIds`) and
     // forward the store's visibility/opacity to whatever adapter drew them;
@@ -146,26 +139,7 @@ export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
     // `source: { providerId }`), so the engine could not compile them anyway.
     if (layer.metadata.sourceKind === "time-slider" || layer.metadata.sourceKind === "timelapse")
       return true;
-    // The Overture Maps control adds its PMTiles vector sources and styled
-    // layers to whichever map hosts it (mapbox-gl reads the archives through
-    // its own tile provider). The store rows only mirror those layers for the
-    // Layers panel; their `source.url` names the archive for the record, and
-    // compiling it would draw every theme twice.
-    if (layer.type === "vector-tiles" && layer.metadata.sourceKind === "overture-maps") return true;
-    if (
-      layer.type === "3d-tiles" &&
-      ["3d-tiles-url", "google-photorealistic-3d-tiles", "arcgis-i3s"].includes(
-        String(layer.metadata.sourceKind),
-      )
-    )
-      return true;
   }
-  if (
-    layer.type === "cog" &&
-    layer.metadata.sourceKind === "maplibre-gl-raster" &&
-    layer.metadata.externalNativeLayer === true
-  )
-    return true;
   // A layer a plugin registered as its own native output (the host's
   // `registerExternalNativeLayer`: the Mapillary coverage, the Time Slider's
   // and Timelapse's rasters, ...) whose store record carries nothing the
@@ -177,23 +151,72 @@ export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
   // Esri Wayback's raster URL, the Web Services' tile templates) still go
   // through the compiler, which adopts their native ids.
   const nativeIds = layer.metadata.nativeLayerIds;
-  if (
+  return (
     layer.metadata.externalNativeLayer === true &&
     Array.isArray(nativeIds) &&
     nativeIds.length > 0 &&
     !hasDrawableSource(layer)
-  )
-    return true;
-  // OpenAerialMap's, Satellite Embeddings' and Fields of the World's search
-  // footprints carry their GeoJSON (so the Layers panel can zoom to and restyle
-  // them) but the plugin draws the fill and outline itself on whichever map
-  // hosts it; compiling the record would paint them twice.
-  return (
-    layer.type === "geojson" &&
-    typeof layer.metadata.sourceKind === "string" &&
-    PLUGIN_DRAWN_FOOTPRINT_KINDS.has(layer.metadata.sourceKind) &&
-    layer.metadata.externalNativeLayer === true
   );
+}
+
+/**
+ * The plugin-owned records tied to one layer kind: a control that draws that
+ * kind on the Mapbox map itself, so the store row only mirrors it.
+ */
+function isMapboxKindPluginLayer(layer: GeoLibreLayer): boolean {
+  const external = layer.metadata.externalNativeLayer === true;
+  const sourceKind = layer.metadata.sourceKind;
+  const kind = classifyLayer(layer);
+  switch (kind) {
+    // Drawn by the shared deck.gl overlay (deckgl-viz plugin) and the DuckDB
+    // control's own deck overlay; both bind to the Mapbox map directly.
+    case "deckgl-viz":
+      return sourceKind === "deckgl-viz";
+    case "duckdb-query":
+      return sourceKind === "duckdb-query";
+    case "lidar":
+      return external && sourceKind === "lidar-url";
+    // @carbonplan/zarr-layer is a CustomLayerInterface implementation that
+    // targets Mapbox GL as well as MapLibre; the Zarr control adds it to
+    // whichever map hosts the control.
+    case "zarr":
+      return external && sourceKind === "zarr-url";
+    // The Overture Maps control adds its PMTiles vector sources and styled
+    // layers to whichever map hosts it (mapbox-gl reads the archives through
+    // its own tile provider). The store rows only mirror those layers for the
+    // Layers panel; their `source.url` names the archive for the record, and
+    // compiling it would draw every theme twice.
+    case "vector-tiles":
+      return external && sourceKind === "overture-maps";
+    case "3d-tiles":
+      return (
+        external &&
+        ["3d-tiles-url", "google-photorealistic-3d-tiles", "arcgis-i3s"].includes(
+          String(sourceKind),
+        )
+      );
+    case "cog":
+      return external && sourceKind === "maplibre-gl-raster";
+    // OpenAerialMap's, Satellite Embeddings' and Fields of the World's search
+    // footprints carry their GeoJSON (so the Layers panel can zoom to and
+    // restyle them) but the plugin draws the fill and outline itself on
+    // whichever map hosts it; compiling the record would paint them twice.
+    case "geojson":
+      return (
+        external && typeof sourceKind === "string" && PLUGIN_DRAWN_FOOTPRINT_KINDS.has(sourceKind)
+      );
+    // No kind-specific Mapbox plugin: the compiler draws (or rejects) the record.
+    case "raster-tiles":
+    case "arcgis":
+    case "tile-archive":
+    case "gaussian-splat":
+    case "vector-file":
+    case "video":
+    case "image":
+      return false;
+    default:
+      return unhandledLayerKind(kind, false);
+  }
 }
 
 /** `metadata.sourceKind` of search footprints a plugin draws itself. */
@@ -244,9 +267,6 @@ export interface CompileMapboxLayerOptions {
 }
 
 export const DEFAULT_MAPBOX_TEXT_FONT = ["Open Sans Regular"];
-
-/** Store layer types the engine draws as a raster tile source. */
-const RASTER_TILE_TYPES = new Set(["raster", "wms", "wmts", "xyz"]);
 
 /** Compile only native Mapbox sources. Never hand MapLibre protocol URLs to its workers. */
 export function compileMapboxLayer(
@@ -303,7 +323,7 @@ export function compileMapboxLayer(
   // The basemap kind is matched by name as well: projects saved before the
   // control flagged its layers as external still carry the native ids.
   const adoptNative =
-    RASTER_TILE_TYPES.has(layer.type) &&
+    classifyLayer(layer) === "raster-tiles" &&
     (layer.metadata?.externalNativeLayer === true ||
       layer.metadata?.sourceKind === "maplibre-basemap-control");
   const sourceId =
@@ -854,7 +874,7 @@ export function compileMapboxLayer(
       paint: mapboxPaint(rasterPaint(style, layer.opacity)),
     },
   ] as LayerSpecification[];
-  if (["raster", "wms", "wmts", "xyz"].includes(layer.type) && (tiles.length || url)) {
+  if (classifyLayer(layer) === "raster-tiles" && (tiles.length || url)) {
     // Same dev-server WMS proxy as the MapLibre path (getRenderableRasterTiles),
     // so a WMS layer that works in a MapLibre pane also works here in `npm run dev`.
     const rasterTiles = proxyWmsTiles(layer.type, tiles);

@@ -64,6 +64,7 @@ import {
 } from "./cesium-tileset-style";
 import { renderFillPatternCanvas } from "./fill-patterns";
 import { getLayerBounds } from "./geojson-loader";
+import { classifyLayer, type LayerKind, unhandledLayerKind } from "./layer-kind";
 import { getPMTilesArchive } from "./layer-sync";
 import { renderMarkerCanvas } from "./markers";
 import { normalizePMTilesUrl } from "./pmtiles-layer";
@@ -139,20 +140,15 @@ interface CameraEvent {
   removeEventListener(listener: () => void): unknown;
 }
 
-/** Layer kinds this pass renders on the globe. */
-const IMAGERY_TYPES = new Set(["raster", "xyz", "wms", "wmts", "image"]);
-
 /**
- * Tile-archive kinds that render on the globe when the archive holds raster
- * tiles (issue #2283). Their vector form has no globe renderer (#2284), so the
- * predicate reads the archive's tile type rather than the layer type alone.
+ * Whether a PMTiles/MBTiles layer describes a raster archive. Tile archives
+ * render on the globe when the archive holds raster tiles (issue #2283); their
+ * vector form goes through the drape (#2284), so the predicate reads the
+ * archive's tile type rather than the layer type alone.
  */
-const RASTER_ARCHIVE_TYPES = new Set(["pmtiles", "mbtiles"]);
-
-/** Whether a PMTiles/MBTiles layer describes a raster archive. */
 function isRasterArchive(layer: GeoLibreLayer): boolean {
   return (
-    RASTER_ARCHIVE_TYPES.has(layer.type) &&
+    classifyLayer(layer) === "tile-archive" &&
     (layer.metadata?.tileType === "raster" || layer.source?.type === "raster")
   );
 }
@@ -181,13 +177,13 @@ function isCogLayer(layer: GeoLibreLayer): boolean {
  * carrying a FeatureCollection renders through the GeoJSON path, so a producer
  * that starts populating `layer.geojson` needs no change here.
  */
-const NON_GEOJSON_TYPES = new Set([
-  ...IMAGERY_TYPES,
+const NON_GEOJSON_KINDS: ReadonlySet<LayerKind> = new Set<LayerKind>([
+  "raster-tiles",
+  "image",
   "3d-tiles",
   "cog",
   "vector-tiles",
-  "pmtiles",
-  "mbtiles",
+  "tile-archive",
   "deckgl-viz",
   "arcgis",
 ]);
@@ -442,7 +438,9 @@ function tilesetUrl(layer: GeoLibreLayer): string | undefined {
 }
 
 function hasGeoJsonCollection(layer: GeoLibreLayer): boolean {
-  return !NON_GEOJSON_TYPES.has(layer.type) && layer.geojson?.type === "FeatureCollection";
+  return (
+    !NON_GEOJSON_KINDS.has(classifyLayer(layer)) && layer.geojson?.type === "FeatureCollection"
+  );
 }
 
 function hasRenderableGeoJson(layer: GeoLibreLayer): boolean {
@@ -564,18 +562,38 @@ function wmtsCapabilities(
  * globe pane. See the module header for the supported kinds.
  */
 export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
-  return (
-    isCzmlLayer(layer) ||
-    isCesiumKmlLayer(layer) ||
-    hasGeoJsonCollection(layer) ||
-    layer.type === "geojson" ||
-    isTilesetLayer(layer) ||
-    isDecodedPointCloudLayer(layer) ||
-    IMAGERY_TYPES.has(layer.type) ||
-    isRasterArchive(layer) ||
-    isCogLayer(layer) ||
-    isDrapedLayer(layer)
-  );
+  // Decided by the data whatever the kind: a CZML or KML document, or a
+  // FeatureCollection on a kind that takes the GeoJSON path.
+  if (isCzmlLayer(layer) || isCesiumKmlLayer(layer) || hasGeoJsonCollection(layer)) return true;
+  const kind = classifyLayer(layer);
+  switch (kind) {
+    // GeoJSON (loaded or not yet), imagery (tile templates and a georeferenced
+    // image as a single-tile provider) and COGs, which the globe opens itself.
+    case "geojson":
+    case "raster-tiles":
+    case "image":
+    case "cog":
+      return true;
+    case "3d-tiles":
+    case "gaussian-splat":
+      return isTilesetLayer(layer);
+    case "lidar":
+      return isTilesetLayer(layer) || isDecodedPointCloudLayer(layer);
+    case "tile-archive":
+      return isRasterArchive(layer) || isDrapedLayer(layer);
+    case "vector-tiles":
+    case "arcgis":
+      return isDrapedLayer(layer);
+    // No globe renderer: these stay in the 2D panes.
+    case "zarr":
+    case "vector-file":
+    case "duckdb-query":
+    case "deckgl-viz":
+    case "video":
+      return false;
+    default:
+      return unhandledLayerKind(kind, false);
+  }
 }
 
 /** Whether this layer can render on the globe now (kind supported + data ready). */

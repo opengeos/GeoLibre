@@ -48,6 +48,7 @@ import {
   mapboxRenderableMask,
 } from "./derived-geometry";
 import { arcgisLineDecorationSymbol, hasLineDecoration } from "./arcgis-line-decoration";
+import { classifyLayer, unhandledLayerKind } from "./layer-kind";
 
 /**
  * Translate a store layer into what the ArcGIS Maps SDK can draw (issue #2421).
@@ -1853,9 +1854,6 @@ export function arcgisUnsupportedStyleSettings(
   return settings;
 }
 
-/** Store layer types the engine draws as a raster tile source. */
-const RASTER_TILE_TYPES = new Set(["raster", "wms", "wmts", "xyz"]);
-
 function bounds(layer: GeoLibreLayer): [number, number, number, number] | undefined {
   const value = layer.source.bounds ?? layer.metadata.bounds;
   return Array.isArray(value) && value.length === 4 && value.every((v) => Number.isFinite(v))
@@ -1886,13 +1884,39 @@ export function isArcgisPluginLayer(layer: GeoLibreLayer): boolean {
   );
 }
 
+/**
+ * Whether a plugin draws the record through the ArcGIS map's deck.gl overlay
+ * (the deckgl-viz plugin, DuckDB query results, and the LiDAR and 3D Tiles
+ * controls' URL layers), so the engine only needs that overlay to exist.
+ */
 function isArcgisExternalDeckLayer(layer: GeoLibreLayer): boolean {
-  return (
-    (layer.type === "deckgl-viz" && layer.metadata.sourceKind === "deckgl-viz") ||
-    (layer.type === "lidar" && layer.metadata.sourceKind === "lidar-url") ||
-    (layer.type === "duckdb-query" && layer.metadata.sourceKind === "duckdb-query") ||
-    (layer.type === "3d-tiles" && layer.metadata.sourceKind === "3d-tiles-url")
-  );
+  const sourceKind = layer.metadata.sourceKind;
+  const kind = classifyLayer(layer);
+  switch (kind) {
+    case "deckgl-viz":
+      return sourceKind === "deckgl-viz";
+    case "lidar":
+      return sourceKind === "lidar-url";
+    case "duckdb-query":
+      return sourceKind === "duckdb-query";
+    case "3d-tiles":
+      return sourceKind === "3d-tiles-url";
+    // Compiled natively (or rejected by the compiler) from the record itself.
+    case "geojson":
+    case "raster-tiles":
+    case "vector-tiles":
+    case "arcgis":
+    case "tile-archive":
+    case "zarr":
+    case "gaussian-splat":
+    case "cog":
+    case "vector-file":
+    case "video":
+    case "image":
+      return false;
+    default:
+      return unhandledLayerKind(kind, false);
+  }
 }
 
 /** Store layers are immutable records, so the answer is memoized per object. */
@@ -2129,7 +2153,7 @@ export function compileArcgisLayer(
   const proxied = proxyWmsTiles(layer.type, tiles);
   if (layer.type === "wms" && tiles.length && isWmsGetMap(tiles[0]))
     return { ...base, kind: "wms", ...wmsLayerFromTemplate(proxied[0]) };
-  if (RASTER_TILE_TYPES.has(layer.type) && (tiles.length || url)) {
+  if (classifyLayer(layer) === "raster-tiles" && (tiles.length || url)) {
     const templates = proxied.length ? proxied : [url!];
     // `geolibre-wms://` (the desktop's CORS-exempt WMS fetcher), `cog://` and
     // friends are MapLibre protocol handlers. The template-tile layer asks the

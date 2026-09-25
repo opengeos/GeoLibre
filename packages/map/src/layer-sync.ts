@@ -95,6 +95,7 @@ import {
   markerIconSizeValue,
   prepareKmlFeatureIcons,
 } from "./markers";
+import { classifyLayer, unhandledLayerKind } from "./layer-kind";
 import { isPlaceholderLayer } from "./placeholders";
 import {
   circlePaint,
@@ -484,58 +485,63 @@ export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
 
   if (isPlaceholderLayer(layer)) return;
 
-  if (layer.type === "geojson" && layer.geojson) {
-    // 3D Z-value rendering hands the layer to the shared deck.gl overlay
-    // (deckgl-viz plugin), which honors coordinate Z values that MapLibre's
-    // flat 2D layers ignore. Drop any MapLibre rendering so the layer is not
-    // drawn twice; toggling back off re-adds it through the paths below.
-    // Data without real Z coordinates keeps the normal 2D render even if the
-    // flag is set (e.g. a saved flag after a tool dropped the Z values), so
-    // the flag never leaves a layer invisible; the Z scan is cached per
-    // GeoJSON object.
-    if (
-      styleValue(layer.style, "elevation3dEnabled") === true &&
-      geojsonHasZCoordinates(layer.geojson)
-    ) {
-      removeLayerFromMap(map, layer.id, layer);
+  const kind = classifyLayer(layer);
+  switch (kind) {
+    case "geojson":
+      if (!layer.geojson) return;
+      // 3D Z-value rendering hands the layer to the shared deck.gl overlay
+      // (deckgl-viz plugin), which honors coordinate Z values that MapLibre's
+      // flat 2D layers ignore. Drop any MapLibre rendering so the layer is not
+      // drawn twice; toggling back off re-adds it through the paths below.
+      // Data without real Z coordinates keeps the normal 2D render even if the
+      // flag is set (e.g. a saved flag after a tool dropped the Z values), so
+      // the flag never leaves a layer invisible; the Z scan is cached per
+      // GeoJSON object.
+      if (
+        styleValue(layer.style, "elevation3dEnabled") === true &&
+        geojsonHasZCoordinates(layer.geojson)
+      ) {
+        removeLayerFromMap(map, layer.id, layer);
+        return;
+      }
+      if (shouldUseTiledRendering(layer.geojson)) {
+        syncGeoJsonVtLayer(map, layer, beforeId);
+      } else {
+        syncGeoJsonLayer(map, layer, beforeId);
+      }
       return;
-    }
-    if (shouldUseTiledRendering(layer.geojson)) {
-      syncGeoJsonVtLayer(map, layer, beforeId);
-    } else {
-      syncGeoJsonLayer(map, layer, beforeId);
-    }
-    return;
-  }
-
-  if (
-    layer.type === "raster" ||
-    layer.type === "wms" ||
-    layer.type === "wmts" ||
-    layer.type === "xyz"
-  ) {
-    syncRasterTileLayer(map, layer, beforeId);
-    return;
-  }
-
-  if (layer.type === "vector-tiles") {
-    syncVectorTileLayer(map, layer, beforeId);
-    return;
-  }
-
-  if (layer.type === "mbtiles") {
-    syncMbtilesLayer(map, layer, beforeId);
-    return;
-  }
-
-  if (layer.type === "video") {
-    syncVideoLayer(map, layer, beforeId);
-    return;
-  }
-
-  if (layer.type === "image") {
-    syncImageLayer(map, layer, beforeId);
-    return;
+    case "raster-tiles":
+      syncRasterTileLayer(map, layer, beforeId);
+      return;
+    case "vector-tiles":
+      syncVectorTileLayer(map, layer, beforeId);
+      return;
+    case "tile-archive":
+      // A PMTiles archive is drawn by its plugin control (registered above as
+      // an external native layer) or is a placeholder; MBTiles is read here.
+      if (layer.type === "mbtiles") syncMbtilesLayer(map, layer, beforeId);
+      return;
+    case "video":
+      syncVideoLayer(map, layer, beforeId);
+      return;
+    case "image":
+      syncImageLayer(map, layer, beforeId);
+      return;
+    // Drawn by a plugin control (the ArcGIS, Zarr, LiDAR, splat, 3D Tiles, COG,
+    // vector-file, DuckDB and deck.gl controls), which registers its own native
+    // or deck.gl layers; the store record alone gives layer-sync nothing to add.
+    case "arcgis":
+    case "zarr":
+    case "lidar":
+    case "gaussian-splat":
+    case "3d-tiles":
+    case "cog":
+    case "vector-file":
+    case "duckdb-query":
+    case "deckgl-viz":
+      return;
+    default:
+      unhandledLayerKind(kind, undefined);
   }
 }
 
