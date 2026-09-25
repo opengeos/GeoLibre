@@ -539,8 +539,9 @@ async function apiOfCollection(
   fetcher: FetchLike,
   signal?: AbortSignal,
 ): Promise<StacConnection | undefined> {
+  // A collection that carries its own search link is still one of its API's collections, and
+  // connecting to the API is what lists it and lets the panel search it.
   if (document.type !== "Collection" || typeof document.id !== "string") return undefined;
-  if (links.some((link) => link.rel === "search")) return undefined;
   const rootHref = links.find((link) => link.rel === "root")?.href;
   if (!rootHref || !httpUrl(rootHref) || browserCatalogHref(rootHref) === url) return undefined;
   let api: StacConnection;

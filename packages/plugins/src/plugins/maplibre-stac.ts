@@ -1431,7 +1431,10 @@ function buildPanel(container: HTMLElement): () => void {
     const chosen = collectionSelect.selectedOptions[0]?.value;
     const extent = connection?.collections.find((collection) => collection.id === chosen)?.extent;
     const box = horizontalBbox(extent?.spatial?.bbox?.[0]);
-    void runSearch(false);
+    // The map is only on its way to the collection, so "limit to map extent" would still read the
+    // bounds it is leaving. The collection's own extent stands in for them; a typed bbox still wins.
+    const inView = useExtent.checked && !bboxField.input.value.trim() ? box : undefined;
+    void runSearch(false, undefined, inView);
     if (box) appRef?.fitBounds?.(box);
   }
   // A double-click means the same here as in the tree: search this one.
@@ -1460,7 +1463,11 @@ function buildPanel(container: HTMLElement): () => void {
    * The caller may take it first, when it has its own late answer to check; taking it here would
    * mean it moves on a call that does nothing.
    */
-  async function runSearch(append: boolean, generation?: number): Promise<void> {
+  async function runSearch(
+    append: boolean,
+    generation?: number,
+    extent?: [number, number, number, number],
+  ): Promise<void> {
     if (!connection) return;
     const search = generation ?? ++searchGeneration;
 
@@ -1478,7 +1485,7 @@ function buildPanel(container: HTMLElement): () => void {
       walking = new AbortController();
       const reading = AbortSignal.any([walking.signal, controller.signal]);
       const options = {
-        bbox: parseBbox(),
+        bbox: extent ?? parseBbox(),
         datetime,
         collections: selectedCollections,
         entries: connection.isApi ? [] : tree.selection(),
@@ -1690,6 +1697,11 @@ function mountPanel(container: HTMLElement): void {
  * Args:
  *   url: The STAC URL to connect to.
  */
+/** Drop a {@link requestStacCatalogUrl} request no activation took up. */
+export function cancelStacCatalogRequest(): void {
+  requestedCatalogUrl = "";
+}
+
 export function requestStacCatalogUrl(url: string): void {
   // Only the STAC Catalogs browser takes the request in place. A sibling's (Planet, Portolan) state
   // is left for the activation that replaces it, which reads the request.

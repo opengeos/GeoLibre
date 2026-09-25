@@ -44,7 +44,11 @@ function hasExplicitLaunchPayload(): boolean {
   if (projectUrlFromLocation() !== null) return true;
   if (dataUrlParameters(window.location.search) !== null) return true;
   if (serviceUrlParameter(window.location.search) !== null) return true;
-  if (stacUrlParameter(window.location.search) !== null) return true;
+  // A read-only viewer ignores `?stac=` (see `useStacUrlLoader`), so it must not
+  // keep the startup project from loading either.
+  const viewer =
+    new URLSearchParams(window.location.search).get("layout")?.trim().toLowerCase() === "viewer";
+  if (!viewer && stacUrlParameter(window.location.search) !== null) return true;
   return false;
 }
 

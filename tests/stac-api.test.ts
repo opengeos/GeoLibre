@@ -352,6 +352,39 @@ test("connectStac keeps a collection whose root is not an API as a static catalo
   assert.equal(connection.title, "maps");
 });
 
+test("connectStac focuses a collection that carries its own search link on its API", async () => {
+  const fetcher = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://example.com/stac/collections/sst") {
+      return jsonResponse({
+        type: "Collection",
+        id: "sst",
+        links: [
+          { rel: "search", href: "./sst/search" },
+          { rel: "root", href: "https://example.com/stac/" },
+        ],
+      });
+    }
+    if (url.endsWith("/collections")) return jsonResponse({ collections: [{ id: "sst" }] });
+    return jsonResponse({
+      type: "Catalog",
+      id: "demo",
+      links: [
+        { rel: "search", href: "./search" },
+        { rel: "data", href: "./collections" },
+      ],
+    });
+  }) as typeof fetch;
+
+  const connection = await connectStac("https://example.com/stac/collections/sst", fetcher);
+  assert.equal(connection.searchUrl, "https://example.com/stac/search");
+  assert.equal(connection.focusCollection, "sst");
+  assert.deepEqual(
+    connection.collections.map((collection) => collection.id),
+    ["sst"],
+  );
+});
+
 test("connectStac follows a collection's root link only one hop", async () => {
   const fetched: string[] = [];
   const fetcher = (async (input: RequestInfo | URL) => {
