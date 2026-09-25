@@ -81,6 +81,12 @@ export function selectLayerIds(state: Pick<AppState, "layers">): string[] {
 // lets a shallow comparison of the summary array succeed. Rebuilt on every call
 // so removed layers drop out. Summaries are immutable values, so sharing them
 // between subscribers is safe.
+//
+// The cache is module-level on purpose: every caller reads the one app store,
+// and an entry is reused only after `sameSummary` re-checks it against the
+// current layer. Another subscriber, or a React render that is discarded,
+// can therefore only cause a cache miss (a new summary object), never a stale
+// summary. Tests that care about identity should not rely on a clean cache.
 let summaryCache = new Map<string, LayerSummary>();
 
 function sameSummary(summary: LayerSummary, layer: GeoLibreLayer): boolean {

@@ -216,8 +216,10 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
 
   const selectedRasterLayer = rasterLayerOptions.find((option) => option.id === rasterLayerId);
   useEffect(() => {
-    if (rasterLayerId && !selectedRasterLayer) setRasterLayerId("");
-  }, [rasterLayerId, selectedRasterLayer]);
+    // Gated on `open`: while closed, `layers` is empty by design (see
+    // useLayersWhen), which is not the selected layer disappearing.
+    if (open && rasterLayerId && !selectedRasterLayer) setRasterLayerId("");
+  }, [open, rasterLayerId, selectedRasterLayer]);
 
   const applyRasterLayerSource = () => {
     if (selectedRasterLayer) {

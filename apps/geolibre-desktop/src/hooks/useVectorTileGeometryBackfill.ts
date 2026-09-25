@@ -131,7 +131,8 @@ function needsGeometryBackfill(layer: GeoLibreLayer): boolean {
 }
 
 /**
- * The ids of the layers awaiting a backfill, joined into one comparable string.
+ * The ids and sources of the layers awaiting a backfill, joined into one
+ * comparable string.
  *
  * @param layers - The store's layers.
  * @returns A newline-joined id list; empty when nothing is pending.
@@ -139,7 +140,11 @@ function needsGeometryBackfill(layer: GeoLibreLayer): boolean {
 function backfillPendingKey(layers: readonly GeoLibreLayer[]): string {
   let key = "";
   for (const layer of layers) {
-    if (needsGeometryBackfill(layer)) key += `${layer.id}\n`;
+    // The source is part of the key: swapping a pending layer's source (same
+    // id, metadata still missing) must re-attach and backfill the new one.
+    if (needsGeometryBackfill(layer)) {
+      key += `${JSON.stringify([layer.id, layer.source, layer.metadata.sourceLayers])}\n`;
+    }
   }
   return key;
 }
