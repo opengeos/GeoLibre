@@ -17,7 +17,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Google Earth-style camera resets: `N` north up, `U` top-down, `R` reset view
     - A `?` shortcuts cheat sheet
 - Customizable UI profiles that tailor which menus, panels, and data sources are visible, so a deployment can present a focused subset of the app to its users. See [UI Profiles](ui-profiles.md)
-- Internationalization framework with react-i18next and 18 complete per-build translation catalogs — including right-to-left Arabic and Persian with a fully mirrored interface, Persian set in Vazirmatn — plus a `?locale`/`?lang` query parameter to set the embed language
+- Internationalization framework with react-i18next and 19 complete per-build translation catalogs — including right-to-left Arabic, Persian, and Hebrew with a fully mirrored interface, Persian set in Vazirmatn — plus a `?locale`/`?lang` query parameter to set the embed language
     - Plugin display names resolve through one place, so a plugin reads the same in the Plugins menu, the command palette, Settings, and Manage Plugins, and every processing tool name, description, group label, parameter, and select option is generated into the English catalog for translators to work from. See [Internationalization](i18n.md)
     - The Whitebox toolbox is translated too: its 1066 tool names, 45 subcategory labels, and unlocked tool parameters are generated into the catalogs and rendered through `t()` in the Processing menu, the tool dialog, and Model Builder search, with Simplified Chinese complete and other locales falling back to English per string
 - Accessibility pass with axe-checked screens, keyboard navigation, and screen-reader labels
@@ -65,7 +65,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - Reproject vector layers to EPSG:4326 on load, render vector layers that carry Z coordinates in true 3D rather than flattening them onto the ground plane, and split dragged GPX files into named waypoint, track, and route layers
 - Large local vector layers render through client-side vector tiling, with a warning before loading very large files
 - Add Data menu covering every remote and cloud-native source:
-    - **URL deep links**: open GeoJSON, GeoParquet, PMTiles, a REST endpoint returning a GeoJSON FeatureCollection, a COG, a LiDAR point cloud (LAS/LAZ/COPC/EPT, with `&dataType=lidar` for an extensionless API endpoint), or a ZIP/REST response containing multiple GeoJSON files with `?data=`, repeated as many times as you have sources; optionally apply vector or raster style JSON with `?style=`, automatically fit the layer extent, and associate per-file ZIP styles by filename stem
+    - **URL deep links**: open GeoJSON, GeoParquet, PMTiles, a REST endpoint returning a GeoJSON FeatureCollection, a COG, a LiDAR point cloud (LAS/LAZ/COPC/EPT, with `&dataType=lidar` for an extensionless API endpoint), or a ZIP/REST response containing multiple GeoJSON files with `?data=`, repeated as many times as you have sources; optionally apply vector or raster style JSON with `?style=`, automatically fit the layer extent, and associate per-file ZIP styles by filename stem; `?stac=` opens a STAC catalog or API collection
     - **Tile and map services**: XYZ tiles; WMS and WFS, with layers and feature types discovered from the service's GetCapabilities so you pick from a populated dropdown; vector tiles, including OGC API - Tiles services; and ArcGIS FeatureServer, VectorTileServer, MapServer, and ImageServer layers. The last two load as ordinary raster layers, so opacity, the Style panel's brightness/contrast/saturation, reordering, and project save all apply, drawing from the service's own fused cache when it was built on the standard Web Mercator scheme and from `/export` or `/exportImage` otherwise. MapServer sublayers and ImageServer raster functions are browsed and picked from each service's advertised list, with custom raster function JSON still available for advanced ImageServer rules
     - **Feature services and feeds**: GeoJSON URLs; GeoRSS feeds from a URL or file; and OGC API - Features collections added as vector layers from whatever URL you have in hand — a landing page, `/collections`, a collection, or a full items URL
     - **Raster**: COG and GeoTIFF; Cloud-Optimized NetCDF/HDF via kerchunk references, plus local HDF5 and NetCDF-4 files; and MBTiles
@@ -104,6 +104,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Move one layer or a whole selection into a group in one step, or add new data straight into a group
     - Set a group-level opacity, collapse and expand groups, and reorder them
     - Ungroup while keeping the layers, or delete the group with them
+    - Sort a group's contents A to Z or Z to A
     - Hiding a group hides its layers, and a layer suppressed that way is marked as such rather than looking like one you switched off
 - Auto-generated on-map Legend panel derived from the visible layers' symbology
     - Per-class rows for graduated, categorized, rule-based, and expression styling; gradient bars for heatmaps and continuous raster colormaps; proportional-symbol size ramps; diagram fields; and land-cover labels from a Raster Attribute Table
@@ -129,9 +130,10 @@ kepler.gl, see the [Comparison](comparison.md).
     - Pick which fields appear and in what order, relabel them, and format each value as text, a number with decimals and thousands separators, a date, a link, or an image, with an optional prefix and suffix
     - Title the popup from a field or an expression, or replace the rows entirely with an expression-built sentence, and show or hide the feature id
     - Independent click and hover switches, so a layer can carry a full popup, a light tooltip that follows the pointer, both, or neither
+    - A configurable popup width and image height, so a wide table or a photo field is not squeezed into the default card
     - Saved with the project, so a shared map, a `layout=viewer` embed, and a story-map chapter show the reader the fields that were meant to be read rather than join artifacts, editor-tracking columns, and internal ids. See [Project format](project-format.md)
 - **Identify every visible layer at once**, folding vector features and raster pixel values from all visible queryable layers into one grouped, expandable popup with expand-all and collapse-all, instead of picking a layer first and clicking again
-- Single-band pseudocolor with classification, reversed and custom color ramps, the full colormap list shown as inline gradient swatches in the Color ramp picker, a Legend populated automatically from a paletted raster's embedded color table, and RGB band combination for styling raster layers, plus COG pixel-value inspection from the Identify icon
+- Single-band pseudocolor with classification, reversed and custom color ramps, opacity classes on continuous ramps, the full colormap list shown as inline gradient swatches in the Color ramp picker, a Legend populated automatically from a paletted raster's embedded color table, and RGB band combination for styling raster layers, plus COG pixel-value inspection from the Identify icon
     - A viewport stretch that recomputes an unclassified raster's display range from what is on screen — min/max, 5th to 95th percentile, or mean ± 2 standard deviations — and keeps following the view with the Style panel closed
     - Per-class color and opacity controls for discrete raster classes
 - NetCDF and HDF grids are first-class raster layers rather than a single grey band
@@ -207,6 +209,8 @@ kepler.gl, see the [Comparison](comparison.md).
     - Provider-pluggable with your own API key, also read from OS environment variables
     - A dedicated AI Providers settings section with per-feature provider dropdowns and multiple named profiles (provider, model, and credentials) you can switch between from the assistant panel
     - An in-panel model picker over the active profile's models, credentials that survive a provider change, and arrow-key recall of previous prompts
+    - An OpenRouter provider, and live model discovery for Google, Anthropic, OpenAI, and Bedrock rather than a hard-coded model list
+    - A sub-second fast path that resolves simple map commands (hide a layer, switch the basemap, zoom to a layer) through TypeSafe when a credential is configured, falling through to the full agent whenever it is unsure, and plugin tools loaded on demand once more than twelve are registered
     - Voice commands: click the microphone for an open mic, or hold Space for push-to-talk, and have answers read back — the spoken request runs the same tools, so it stays auditable and undoable (needs a browser with the Web Speech API)
 - In-app Python Console plus a Python automation API for scripting the app
 - Notebook panel docked beside the map for running Jupyter against the live map. See [Notebook Panel](notebook.md)
@@ -288,6 +292,7 @@ kepler.gl, see the [Comparison](comparison.md).
 
 - Built-in plugins for the map surface: basemap, layer control, MapLibre components, and swipe
 - Web Services plugins dock in the shared panel host rather than floating over the map, so a catalog browser resizes, collapses, and sits alongside the Layers and Style panels while keeping its own MapLibre control lifecycle and layer sync
+- **God's Eye View** turns the Cesium globe into a live situation room: USGS earthquakes and CelesTrak satellite orbits as live CZML, keyless NASA FIRMS active fires, public transit (Entur and others), public CCTV and traffic cameras (Austin, New South Wales, Ontario, DriveBC), TomTom live traffic flow, and AIS vessels, with API key entry for the feeds that need one
 - Imagery and street level: street view, Mapillary coverage and street-level image viewer, OpenAerialMap open-aerial-imagery search, and Historical Imagery
 - Data catalog browsers:
     - **Natural Earth** and **Source Cooperative**, including opening or streaming large GeoParquet from Source Cooperative
@@ -305,6 +310,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - USGS NLDI traces flowlines, hydrolocates a clicked point, analyzes basins, and navigates the network to gages, dams, and water-quality sites. See [USGS NLDI](user-guide/usgs-nldi.md)
     - Elevation Profile charts a drawn line or the line features currently selected on a layer, so a route already on the map does not have to be traced again
     - USGS LiDAR clips a point cloud to an area of interest and downloads the result as COPC
+    - IGN LiDAR HD browses and loads France's national LiDAR HD point clouds
     - The GeoEditor can pull the vector features currently visible in the map view into the editor for editing without re-importing the source, and write edits back to their origin, including GeoPackage and GeoJSON files and PostGIS database tables
     - GeoEditor sketches export as an ordinary project layer, carrying their style, opacity, and visibility, so drawn work leaves the editor without being redrawn or re-imported
     - Topological polygon digitizing, so a polygon drawn against its neighbor shares that edge instead of leaving a sliver or an overlap behind
@@ -345,6 +351,8 @@ See the [Plugin API](plugin-api.md) to build your own.
     - A `settingsUrl=` parameter that loads shared presentation settings (language, layout, accent theme, and UI profile) before the first render, restricted to presentation fields so a link cannot inject credentials, plugins, or local paths, and lasting for that page only rather than replacing what the user has saved
 - Self-hostable sharing, accounts, and live collaboration, so a deployment keeps its projects on its own infrastructure
     - A documented version 1 projects and identity HTTP contract that any server may implement, with a FastAPI reference implementation in `backend/geolibre_server_api`. See [Server API](server-api.md)
+    - OAuth sign-in (Authorization Code with S256 PKCE) for project Share and the Gallery on the web and desktop, with desktop session management, plus scoped and expiring personal tokens for scripts
+    - Shares carry access roles (view, comment, edit), link expiry, password protection, and revocation
     - A plain Node collaboration relay alongside the Cloudflare Durable Object one, both driven by a shared session core and both held to a single conformance suite so their permission behavior cannot drift
     - An activity log: a project owner can read who opened and edited a shared project, and a session host can download the session log, bounded in both entry count and stored bytes and read through a bearer token rather than a URL query
     - `GEOLIBRE_SHARE_URL` and `GEOLIBRE_COLLAB_URL` repoint a published web image at those servers at container runtime instead of requiring a rebuilt fork; `off` removes Share and the Project Gallery from the UI entirely, and a malformed value stops the container at boot rather than falling back to the public hosted service
