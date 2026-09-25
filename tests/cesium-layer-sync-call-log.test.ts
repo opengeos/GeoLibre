@@ -303,6 +303,22 @@ function normalize(log: LogEntry[]): unknown {
         if (value instanceof AbortController || value instanceof AbortSignal) return "[abort]";
         const name = (value as object).constructor?.name;
         if (name && name !== "Object" && name !== "Array" && !("__class" in value)) {
+          if (name === "ProtocolImageryProvider") {
+            // Only what shapes the Cesium calls: its private state and the
+            // injected Cesium namespace would tie the golden to internals.
+            const provider = value as Record<string, unknown>;
+            return {
+              __instance: name,
+              template: provider.template,
+              scheme: provider.scheme,
+              rectangle: provider.rectangle,
+              tileWidth: provider.tileWidth,
+              tileHeight: provider.tileHeight,
+              minimumLevel: provider.minimumLevel,
+              maximumLevel: provider.maximumLevel,
+              credit: provider.credit,
+            };
+          }
           return { __instance: name, ...(value as Record<string, unknown>) };
         }
       }

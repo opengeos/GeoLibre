@@ -3535,7 +3535,7 @@ export class CesiumLayerSync {
 
     const { viewer } = this;
     const currentTime = viewer.clock?.currentTime;
-    const indexKey = "__geolibre_cesium_feature_index";
+    const indexKey = FEATURE_INDEX_KEY;
     const features = entry.layer.geojson?.features;
 
     // The things to show or hide: entities of a data source, or the primitives

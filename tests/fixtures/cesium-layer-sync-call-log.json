@@ -2583,95 +2583,8 @@
       "imageryLayers.addImageryProvider",
       {
         "__instance": "ProtocolImageryProvider",
-        "Cesium": {
-          "Cartesian2": "[function]",
-          "Cartesian3": "[function]",
-          "Color": {
-            "fromCssColorString": "[function]",
-            "WHITE": {
-              "css": "WHITE",
-              "alpha": 1,
-              "withAlpha": "[function]"
-            },
-            "BLACK": {
-              "css": "BLACK",
-              "alpha": 1,
-              "withAlpha": "[function]"
-            },
-            "TRANSPARENT": {
-              "css": "TRANSPARENT",
-              "alpha": 0,
-              "withAlpha": "[function]"
-            }
-          },
-          "ConstantProperty": "[function]",
-          "ColorMaterialProperty": "[function]",
-          "ImageMaterialProperty": "[function]",
-          "CallbackProperty": "[function]",
-          "ConstantPositionProperty": "[function]",
-          "Math": {
-            "toDegrees": "[function]",
-            "toRadians": "[function]"
-          },
-          "DistanceDisplayCondition": "[function]",
-          "PointGraphics": "[function]",
-          "LabelGraphics": "[function]",
-          "NearFarScalar": "[function]",
-          "HeightReference": {
-            "NONE": 0,
-            "CLAMP_TO_GROUND": 1,
-            "RELATIVE_TO_GROUND": 2
-          },
-          "HorizontalOrigin": {
-            "CENTER": 0,
-            "LEFT": 1,
-            "RIGHT": -1
-          },
-          "VerticalOrigin": {
-            "CENTER": 0,
-            "BOTTOM": 1,
-            "TOP": -1,
-            "BASELINE": 2
-          },
-          "LabelStyle": {
-            "FILL": 0,
-            "OUTLINE": 1,
-            "FILL_AND_OUTLINE": 2
-          },
-          "BoundingSphere": {
-            "fromPoints": "[function]"
-          },
-          "JulianDate": {
-            "fromDate": "[function]"
-          },
-          "Rectangle": {
-            "fromDegrees": "[function]"
-          },
-          "Resource": "[function]",
-          "Credit": "[function]",
-          "Event": "[function]",
-          "GeographicTilingScheme": "[function]",
-          "WebMercatorTilingScheme": "[function]",
-          "UrlTemplateImageryProvider": "[function]",
-          "WebMapServiceImageryProvider": "[function]",
-          "WebMapTileServiceImageryProvider": "[function]",
-          "ArcGisMapServerImageryProvider": {
-            "fromUrl": "[function]"
-          },
-          "SingleTileImageryProvider": {
-            "fromUrl": "[function]"
-          },
-          "IonImageryProvider": {
-            "fromAssetId": "[function]"
-          },
-          "GeoJsonDataSource": {
-            "load": "[function]"
-          }
-        },
-        "tilingScheme": {
-          "__class": "WebMercatorTilingScheme",
-          "args": []
-        },
+        "template": "pmtiles://https://example.com/a.pmtiles/{z}/{x}/{y}",
+        "scheme": "xyz",
         "rectangle": {
           "west": -20,
           "south": -20,
@@ -2682,24 +2595,7 @@
         "tileHeight": 256,
         "minimumLevel": 1,
         "maximumLevel": 9,
-        "errorEvent": {
-          "__instance": "Event"
-        },
-        "credit": "[undefined]",
-        "hasAlphaChannel": true,
-        "tileDiscardPolicy": "[undefined]",
-        "proxy": "[undefined]",
-        "ready": true,
-        "template": "pmtiles://https://example.com/a.pmtiles/{z}/{x}/{y}",
-        "scheme": "xyz",
-        "loadTile": "[function]",
-        "decodeTile": "[function]",
-        "loadImage": null,
-        "emptyTile": null,
-        "maxConcurrent": 8,
-        "abort": "[abort]",
-        "blank": null,
-        "pending": 0
+        "credit": "[undefined]"
       }
     ],
     [
