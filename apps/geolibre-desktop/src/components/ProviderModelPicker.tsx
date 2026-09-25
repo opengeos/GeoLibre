@@ -117,7 +117,9 @@ export function ProviderModelPicker({
             : cause instanceof Error
               ? cause.message
               : String(cause);
-        setDiscovered(null);
+        // Keep a previously loaded catalog: it is tagged with its provider and
+        // key, so it only stays visible while those still match, and a
+        // transient failure should not drop a known-good list for the presets.
         setError(t("settings.ai.modelsFailedToLoad", { message }));
         console.error(`[GeoLibre] Could not load ${PROVIDER_LABELS[provider]} models`, cause);
       } finally {

@@ -10,6 +10,7 @@ import {
   parseGeminiModels,
   parseOpenAIModels,
   supportsKeyedModelDiscovery,
+  withDeadline,
 } from "../apps/geolibre-desktop/src/lib/assistant/model-discovery";
 
 describe("parseOpenAIModels", () => {
@@ -211,6 +212,23 @@ describe("supportsKeyedModelDiscovery", () => {
   });
 });
 
+describe("withDeadline", () => {
+  it("forwards the caller's abort when AbortSignal.any is unavailable", () => {
+    const original = AbortSignal.any;
+    try {
+      (AbortSignal as { any?: unknown }).any = undefined;
+      const controller = new AbortController();
+      const signal = withDeadline(controller.signal, 60_000);
+      assert.equal(signal.aborted, false);
+      controller.abort(new Error("superseded"));
+      assert.equal(signal.aborted, true);
+      assert.equal((signal.reason as Error).message, "superseded");
+    } finally {
+      AbortSignal.any = original;
+    }
+  });
+});
+
 describe("discoverProviderModels", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {
@@ -261,7 +279,10 @@ describe("discoverProviderModels", () => {
 
   it("reports the HTTP status and does not cache a failure", async () => {
     const requests = stubFetch({ error: { message: "invalid x-api-key" } }, 401);
-    await assert.rejects(discoverProviderModels("anthropic", "bad"), /Anthropic returned HTTP 401/);
+    await assert.rejects(
+      discoverProviderModels("anthropic", "bad"),
+      /Anthropic returned HTTP 401: invalid x-api-key/,
+    );
     await assert.rejects(discoverProviderModels("anthropic", "bad"), /HTTP 401/);
     assert.equal(requests.length, 2);
   });

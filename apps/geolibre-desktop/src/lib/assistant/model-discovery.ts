@@ -78,14 +78,35 @@ async function withCache(
   return models;
 }
 
+/**
+ * Combine a caller's abort signal with a deadline, so either one cancels the
+ * request.
+ *
+ * @param signal The caller's signal, or undefined for the deadline alone.
+ * @param timeoutMs The deadline in milliseconds.
+ * @returns A signal that aborts when `signal` aborts or the deadline passes.
+ */
+export function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!signal) return timeout;
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([signal, timeout]);
+  // AbortSignal.any is newer than some supported WebViews. Forward whichever
+  // fires first by hand, so a superseded request is still cancelled rather
+  // than left running to the deadline.
+  const controller = new AbortController();
+  if (signal.aborted) {
+    controller.abort(signal.reason);
+  } else {
+    for (const source of [signal, timeout]) {
+      source.addEventListener("abort", () => controller.abort(source.reason), { once: true });
+    }
+  }
+  return controller.signal;
+}
+
 /** Combine the caller's abort signal with the discovery deadline. */
 function discoverySignal(signal: AbortSignal | undefined): AbortSignal {
-  const timeout = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
-  // AbortSignal.any is newer than some supported WebViews; without it the
-  // deadline still bounds the request and callers ignore superseded results.
-  return signal && typeof AbortSignal.any === "function"
-    ? AbortSignal.any([signal, timeout])
-    : timeout;
+  return withDeadline(signal, DISCOVERY_TIMEOUT_MS);
 }
 
 /**
@@ -130,6 +151,8 @@ async function fetchKeyedCatalog(
       return parseAnthropicModels(
         await fetchJson(
           "Anthropic",
+          // One page, no cursor: 1000 is the API's maximum page size, far above
+          // the catalog's size, and any id can still be entered by hand.
           "https://api.anthropic.com/v1/models?limit=1000",
           {
             "x-api-key": key,
@@ -144,6 +167,7 @@ async function fetchKeyedCatalog(
       return parseGeminiModels(
         await fetchJson(
           "Google",
+          // One page, no `nextPageToken` follow-up, for the same reason as Anthropic.
           "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
           { "x-goog-api-key": key },
           signal,
@@ -160,7 +184,20 @@ async function fetchJson(
   signal: AbortSignal,
 ): Promise<unknown> {
   const response = await fetch(url, { headers, signal });
-  if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}`);
+  if (!response.ok) {
+    // All three providers explain a rejection in `{ error: { message } }`
+    // (e.g. "invalid x-api-key"); surface it rather than only the status.
+    let detail = "";
+    try {
+      detail = stringProp(
+        ((await response.json()) as { error?: unknown } | null)?.error,
+        "message",
+      );
+    } catch {
+      // A non-JSON error body leaves just the status.
+    }
+    throw new Error(`${label} returned HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
+  }
   return response.json();
 }
 
