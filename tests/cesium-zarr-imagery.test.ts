@@ -148,6 +148,7 @@ describe("zarr layer translation", () => {
         band: "prec",
         depth: { selected: 12.5, type: "value" },
         bad: null,
+        negative: -1,
       }),
       {
         // Names zarr-cesium recognises are filed under its own keys.

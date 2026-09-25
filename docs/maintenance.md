@@ -31,7 +31,7 @@ upstream fixed the bug), rename the patch file, and update both declarations and
   auto-generated catalog, `apps/geolibre-desktop/src/lib/whitebox-menu-catalog.ts`
   (do not hand-edit). Run `node scripts/gen-whitebox-menu-catalog.mjs` and commit
   the result, or new/renamed WASM tools silently miss the menu. The Processing
-  *dialog* lists tools dynamically, so the gap only shows in the menu. Whitebox
+  _dialog_ lists tools dynamically, so the gap only shows in the menu. Whitebox
   translations are optional external packs in `opengeos/geolibre-language-packs`,
   not entries generated into GeoLibre's bundled locale JSON.
 - **`MAX_VECTOR_PMTILES_ZOOM`** (`packages/processing/src/wasm-convert.ts`)
@@ -46,7 +46,7 @@ upstream fixed the bug), rename the patch file, and update both declarations and
   `tests/wasm-convert.test.ts` fails if the mirror drifts.
 - **`DISTANCE_SEGMENTS` / `NON_DISTANCE_NAMES`**
   (`apps/geolibre-desktop/src/lib/whitebox-distance-params.ts`) decide, by
-  parameter *name*, which Whitebox parameters are ground distances and so get the
+  parameter _name_, which Whitebox parameters are ground distances and so get the
   Processing dialog's metric unit picker (GeoLibre#1540). The segments are
   generic (`tolerance`, `radius`, `length`, `resolution`), so a tool can carry a
   matching name that is not a length — `corridor_tolerance` is a 0–1 fraction.
@@ -70,7 +70,7 @@ upstream fixed the bug), rename the patch file, and update both declarations and
   `tests/globe-control-toggle.test.ts` builds a real `GlobeControl` and fails if
   the mirror stops matching.
 - **Per-layer blend modes** (`packages/map/src/layer-blend-modes.ts`) wrap three
-  *unexported* `maplibre-gl` internals, because MapLibre renders every layer into
+  _unexported_ `maplibre-gl` internals, because MapLibre renders every layer into
   one canvas and ships no per-layer blend API (upstream draft:
   maplibre/maplibre-gl-js#8073). The wrappers are `Painter.prototype.renderLayer`
   (brackets one layer's draws), `Painter.prototype.useProgram` (tells the
@@ -81,11 +81,12 @@ upstream fixed the bug), rename the patch file, and update both declarations and
   MapLibre 6's render-to-texture composite so a layer blends **as a whole** rather
   than once per overlapping polygon. `installLayerBlendModes` feature-detects
   every seam and disables the feature (hiding the Style-panel control) rather than
-  breaking the map, so drift fails *quietly* — which is why
+  breaking the map, so drift fails _quietly_ — which is why
   `tests/layer-blend-modes.test.ts` asserts the seams and
   `e2e/blend-modes.spec.ts` asserts real pixels. Run both on a bump.
 
   See [Adding a blend mode](#adding-a-blend-mode) before extending the list.
+
 - **`DEFAULT_MARKER_OFFSET_Y`**
   (`apps/geolibre-desktop/src/components/storymap/storymap-engine.ts`) mirrors the
   `-14` px vertical offset `maplibregl.Marker` applies to its default pin.
@@ -195,7 +196,7 @@ black — it declines the stack.
   and only the control's copy answers the panel. Both schemes are therefore
   matched, and only ids naming a source layer the store actually holds are kept.
 
-  What the user **ticked** is deliberately *not* inferred from those ids:
+  What the user **ticked** is deliberately _not_ inferred from those ids:
   `selectedSourceLayers` is a documented field of the exported
   `PMTilesLayerControlState` handed to every handler, so `pmtilesLayerOptions`
   reads it and the compiler checks it — the rules for a stale selection, and for
@@ -327,6 +328,27 @@ not catch that either: re-read `loadSplat` / `loadModel` in the package on a bum
 Better still, upstream an id option and a per-asset placement getter and delete
 the patching.
 
+### `zarr-cesium` (`packages/map/package.json`) — private internals
+
+`packages/map/src/cesium-zarr-imagery.ts` draws Zarr layers on the globe and
+relies on two things zarr-cesium does not export as API:
+
+- `ZarrLayerProvider` only honours named matplotlib colormaps (its documented
+  `colorScale` option is not forwarded in 0.3.3), so GeoLibre writes the layer's
+  ramp to the provider's private `source.colorScale.colors` and calls
+  `source.updateColormapTexture()`. If those move, the globe draws the default
+  ramp and logs one warning.
+- `ZARR_DIMENSION_ALIASES` mirrors zarr-maps-tiling's `DIMENSION_ALIASES_DEFAULT`
+  (the names it files under `time` / `elevation`). Drift sends a selector to the
+  wrong key, so the Time Slider steps nothing.
+
+`tests/cesium-zarr-imagery.test.ts` constructs the real provider and imports
+the real alias table, so both fail CI on a bump; run it, and check whether
+upstream now forwards `colorScale` so the private write can go. zarr-cesium also
+imports the `cesium` wrapper, which `apps/geolibre-desktop/vite.config.ts`
+aliases to `@cesium/engine`: keep that alias if a bump adds more `cesium`
+imports, or the globe loads a second engine.
+
 ### `maplibre-gl-raster` — stretch and gamma curves
 
 `buildContinuousColormapRgba`
@@ -334,7 +356,7 @@ the patching.
 pipeline's value adjustments **by hand**, inverted. Value-range opacity paints
 its alpha into the injected 256-wide colormap texture, so it has to map a
 texture column back to a data value — and the renderer samples that texture
-*after* rescale, the stretch curve and gamma. The mirror therefore applies each
+_after_ rescale, the stretch curve and gamma. The mirror therefore applies each
 curve's **inverse**, in the reverse of the renderer's order — gamma first, then
 the stretch:
 
@@ -398,13 +420,13 @@ wire format. Only move when `tauri-plugin-persisted-scope` moves. (bincode 3.0.0
 is additionally a deliberately unbuildable release — its whole source is
 `compile_error!("https://xkcd.com/2347/")`.)
 
-### `@tauri-apps/plugin-http` — two upstream *behaviors*, not APIs
+### `@tauri-apps/plugin-http` — two upstream _behaviors_, not APIs
 
 `createNativeSidecarFetch`
 (`apps/geolibre-desktop/src/lib/sidecar-fetch.ts`) routes Windows sidecar traffic
 through the plugin's native `fetch` and hardens it with two options whose effect
 comes from `reqwest`'s implementation rather than from any documented contract.
-The option *names* are compiler-checked — `NativeFetchInit` is derived from
+The option _names_ are compiler-checked — `NativeFetchInit` is derived from
 `typeof import("@tauri-apps/plugin-http").fetch`, so a renamed or dropped option
 fails `npm run typecheck` — but the semantics are not, and both fail silently:
 
@@ -418,7 +440,7 @@ fails `npm run typecheck` — but the semantics are not, and both fail silently:
   call sets `auto_sys_proxy = false` (`reqwest/src/async_impl/client.rs`), and
   `NoProxy::from_string("*")` matches every host
   (`hyper-util/src/client/proxy/matcher.rs`), so the supplied proxy never
-  intercepts either. This matters because reqwest's `system-proxy` feature *is*
+  intercepts either. This matters because reqwest's `system-proxy` feature _is_
   in the resolved graph (confirm with
   `cargo tree -e features -i reqwest`; the plugin's default
   `macos-system-configuration` feature pulls it in), and hyper-util's Windows
@@ -454,10 +476,10 @@ After a bump, check all five — none of these fail the build:
 - **Asset copy.** `vite-plugins/copy-cesium-assets.ts` copies `Assets`,
   `ThirdParty`, `Widgets` and `Workers` out of `cesium/Build/Cesium` into
   `public/cesium/`, keyed on the installed version. The copy is gitignored, so a
-  stale one is refreshed automatically. A directory *renamed or removed*
+  stale one is refreshed automatically. A directory _renamed or removed_
   upstream fails loudly — `cpSync` throws `ENOENT` from `buildStart`, so the dev
   server and the build both stop. The silent case is the opposite one: a runtime
-  directory *added* upstream is simply not in `RUNTIME_DIRS`, so it is never
+  directory _added_ upstream is simply not in `RUNTIME_DIRS`, so it is never
   copied and only surfaces as a 404 when the globe reaches for it.
 - **`CESIUM_BASE_URL`.** `CesiumCanvas.tsx` derives it from the app's
   `BASE_URL`, not a hardcoded `/cesium`, so a sub-path deploy (the `/demo/`
@@ -489,7 +511,7 @@ After a bump, check all five — none of these fail the build:
   onto the element from a `fullscreenchange` listener and survives only because
   DOM listeners fire in registration order. If a bump makes the widget update
   its own title differently — batched on a microtask, or bound to another
-  target — the label reverts to English *after the first toggle*, which is why
+  target — the label reverts to English _after the first toggle_, which is why
   the spec toggles fullscreen and re-reads the title rather than checking it
   once at mount.
 
@@ -499,6 +521,7 @@ After a bump, check all five — none of these fail the build:
   rendering engine and camera, but does not serialize the Cesium scene mode.
   Scene-mode persistence is outside the toolbar integration's scope; adding it
   requires an explicit project/store field and restoration for each Cesium pane.
+
 - **PWA globs.** `**/cesium-*` / `**/Cesium-*` in `vite.config.ts` keep the
   chunk out of the app-shell precache and CacheFirst-cache it instead. A chunk
   renamed out of that pattern would be precached, adding megabytes to first load.
@@ -576,7 +599,7 @@ The Style-panel control (`blendModeControl` in `StylePanel.tsx`, rendered in eac
 of its terminal branches) is gated on `!pluginOwnsPaint && !controlRendersLayer`:
 blending only reaches layers **GeoLibre itself paints**, so anything a control
 renders or paints (3D Tiles, Gaussian splats, LiDAR, the COG raster control, and
-Add Vector Layer, which sets `customLayerType` *and* `controlOwnsPaint`) is
+Add Vector Layer, which sets `customLayerType` _and_ `controlOwnsPaint`) is
 excluded — layer-sync never applies `fillPaint`/`linePaint` to those, so the
 `*-layer-opacity` that elects the composite never lands and a Blend menu there
 would silently do nothing. Keep `docs/user-guide/layers.md` and
@@ -595,14 +618,14 @@ coverage rises comfortably above a floor, raise the floor to lock in the gain.
 
 The frontend report only counts files a test actually imports, so a module with no
 test does not appear at all rather than as 0%. That is the part that bites:
-writing the *first* test for a large untested module reads as a coverage
+writing the _first_ test for a large untested module reads as a coverage
 **regression**, because the module and everything it imports enter the denominator
 at once. GeoLibre#1784 added a test that imported `usePlugins.ts` and so pulled in
 the whole built-in plugin registry, 39 files, dropping function coverage 72.90% →
 60.36% and reddening `main`. The fix is to test against a leaf module rather than
 to lower the floor (GeoLibre#1888 extracted `lib/plugin-layer-queries.ts`;
 `geo-editor-geometry.ts` in `@geolibre/plugins` is the same pattern). Check what a
-new test *transitively* imports before assuming a coverage drop means the code got
+new test _transitively_ imports before assuming a coverage drop means the code got
 worse.
 
 `test:frontend:coverage` runs through `scripts/coverage-check.mjs` rather than
@@ -610,7 +633,7 @@ calling `node --test` directly. Node still enforces all three floors; the wrappe
 only re-measures once when **line** coverage alone comes up short with every test
 passing. Line coverage is nondeterministic on CI (GeoLibre#1889: two runs over
 byte-identical sources reported 81.82% and 76.47%, 114 of 444 files differing on
-lines and *none* on branches or functions), and it is not reproducible locally on
+lines and _none_ on branches or functions), and it is not reproducible locally on
 either Node 22 or 26. Branch and function shortfalls, and any test failure, fail on
 the spot with no retry, so a real regression still fails fast. `classify()` is
 exported and covered by `tests/coverage-check.test.ts` — change the retry policy
@@ -619,7 +642,7 @@ measurement instead of widening the mitigation.
 
 The backend coverage run (and `npm run ci`, which calls the `:coverage` variants)
 needs `pytest-cov` from the backend `dev` extra. Install the **`test`** extra to
-run the *full* backend suite — without the optional engines
+run the _full_ backend suite — without the optional engines
 (geopandas/rasterio/sedona/httpx) the vector/raster/SQL/ML tests skip themselves
 and CI is green but hollow: `pip install -e "backend/geolibre_server[test]"`.
 
@@ -662,7 +685,7 @@ and the CI **`audit` job** runs `npm run audit:ci` (blocking) plus a non-blockin
 `pip-audit` of the resolved backend environment.
 
 `audit:ci` is `scripts/audit-check.mjs`, a thin wrapper over `npm audit
---omit=dev` that still fails on every high/critical advisory *except* the ones
+--omit=dev` that still fails on every high/critical advisory _except_ the ones
 listed in its `ALLOWLIST`. The wrapper exists because plain `npm audit` cannot
 accept a single finding, so one unpatchable transitive advisory reddens every PR
 until upstream ships a fix — which for an unmaintained leaf package may be never.
@@ -730,7 +753,7 @@ bundled into the desktop installers and launched with
 `uv run --frozen --project <resource dir>` from `src-tauri/src/lib.rs` — a
 directory the user cannot write (`C:\Program Files\…`,
 `/usr/lib/GeoLibre Desktop/…`). Ship it lockless and uv resolves, then tries to
-*write* `uv.lock` there, fails with "Permission denied" and exits 2 — which reaches
+_write_ `uv.lock` there, fails with "Permission denied" and exits 2 — which reaches
 the user as "Jupyter server exited before it was ready (exit code: 2)" with the
 cause invisible.
 
@@ -767,13 +790,13 @@ and every guard below blocks one of them.
   `process.env` before Vite reads it. Adding a new build-time var means adding it
   here — otherwise it silently resolves to undefined.
 - **`CREDENTIAL_ENV_KEYS`** is the subset that authenticates as, and bills to,
-  whoever ran the build. In a *redistributable* build these are blanked to `""`
+  whoever ran the build. In a _redistributable_ build these are blanked to `""`
   (blanked, not deleted, so a `.env` file cannot reintroduce them). A build is
   redistributable when `GEOLIBRE_EMBED=1` (the Jupyter wheel) or
   `GEOLIBRE_STRIP_CREDENTIALS=1`.
   The web deploy is **not** redistributable: it is our own site using our own
   referrer-restricted keys, and it keeps them.
-- Public-by-design identifiers stay in every build: the Clerk *publishable* key,
+- Public-by-design identifiers stay in every build: the Clerk _publishable_ key,
   the Auth0 client ID and domain, the GEE OAuth client ID, the GA measurement ID.
   `publish-python.yml` deliberately injects the GEE client ID into the wheel.
 - Prefer `getBuildEnvironment()` from `@geolibre/core` over reading
@@ -844,7 +867,7 @@ output when a build actually runs. Rebuild, or delete the stale directory.
   `languages.geolibre.app` (or local file import); do not add
   `processing.toolMeta.whitebox`, `processing.whitebox.categories`, `menuTool`, or
   `menuSubcategory` back to a bundled locale.
-- **The agent skill.** `skills/geolibre/` is a *user-facing* agent skill — a
+- **The agent skill.** `skills/geolibre/` is a _user-facing_ agent skill — a
   `SKILL.md` plus `references/` that teaches an external AI agent to author
   `.geolibre.json` projects through `geolibre-mcp`, the Python package, or
   hand-written JSON. It is not for contributors working on GeoLibre itself. It

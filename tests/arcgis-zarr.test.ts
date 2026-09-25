@@ -308,3 +308,38 @@ it("reads an int64 CF time axis for the Time Slider", async () => {
     dispose();
   }
 });
+
+it("leaves out an int64 axis whose values cannot survive Number()", async () => {
+  // A datetime64[ns] axis (~1.7e18) would round adjacent timestamps together.
+  const bytes = new Map<string, Uint8Array>();
+  const json = (path: string, value: unknown) =>
+    bytes.set(path, new TextEncoder().encode(JSON.stringify(value)));
+  const meta = (dtype: string, shape: number[]) => ({
+    zarr_format: 2,
+    shape,
+    chunks: shape,
+    dtype,
+    fill_value: null,
+    order: "C",
+    filters: null,
+    compressor: null,
+  });
+  json("/time/.zarray", meta("<i8", [2]));
+  json("/time/.zattrs", { _ARRAY_DIMENSIONS: ["time"] });
+  bytes.set(
+    "/time/0",
+    new Uint8Array(new BigInt64Array([1700000000000000000n, 1700000000000000001n]).buffer),
+  );
+  json("/sst/.zarray", meta("<f8", [2, 1, 1]));
+  json("/sst/.zattrs", { _ARRAY_DIMENSIONS: ["time", "lat", "lon"] });
+  const layer = geojsonLayer({
+    type: "zarr",
+    source: { url: "local-zarr://ns-time", variable: "sst" },
+  });
+  const dispose = registerZarrStore(layer.id, { get: async (key) => bytes.get(key) });
+  try {
+    assert.equal(await readNativeZarrDimensions(layer), null);
+  } finally {
+    dispose();
+  }
+});

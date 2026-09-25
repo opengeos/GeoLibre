@@ -140,8 +140,11 @@ export function zarrGlobeSelectors(
   const result: Record<string, ZarrSelectorsProps> = {};
   for (const [dimension, value] of Object.entries(selector)) {
     const name = selectorKey(dimension);
-    if (typeof value === "number" && Number.isFinite(value)) {
-      result[name] = { selected: Math.max(0, Math.round(value)), type: "index" };
+    // A negative index is dropped like a non-finite one rather than clamped to
+    // 0, which would quietly draw the first slice for a bad selector; the
+    // dimension then takes zarr-cesium's own default.
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      result[name] = { selected: Math.round(value), type: "index" };
     } else if (typeof value === "string") {
       result[name] = { selected: value, type: "value" };
     } else if (value && typeof value === "object" && "selected" in value) {
