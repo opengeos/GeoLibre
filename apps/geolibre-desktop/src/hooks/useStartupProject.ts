@@ -1,7 +1,7 @@
 import { useAppStore, type MapProjection, type MapViewState } from "@geolibre/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { dataUrlParameters, serviceUrlParameter } from "../lib/data-url";
+import { dataUrlParameters, serviceUrlParameter, stacUrlParameter } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
 import { projectUrlFromLocation } from "../lib/project-url";
 import { planStartup, startupDefaultWorkspace, type StartupPlan } from "../lib/startup-project";
@@ -44,6 +44,7 @@ function hasExplicitLaunchPayload(): boolean {
   if (projectUrlFromLocation() !== null) return true;
   if (dataUrlParameters(window.location.search) !== null) return true;
   if (serviceUrlParameter(window.location.search) !== null) return true;
+  if (stacUrlParameter(window.location.search) !== null) return true;
   return false;
 }
 

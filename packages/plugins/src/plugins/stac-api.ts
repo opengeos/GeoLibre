@@ -95,6 +95,11 @@ export interface StacConnection {
   /** A static catalog's top-level children, to be opened on demand. Empty for an API. */
   children?: StacCatalogNode[];
   root: Record<string, unknown>;
+  /**
+   * The collection the URL named, when it was one collection of a STAC API: the connection is to
+   * the API it belongs to, so it can be searched, and this is the collection to search.
+   */
+  focusCollection?: string;
 }
 
 export interface StacCatalogNode {
@@ -509,6 +514,51 @@ export async function openCatalogNode(
   };
 }
 
+/**
+ * Connect to the STAC API a collection document belongs to, focused on that collection.
+ *
+ * A collection of an API (`/collections/{id}`) carries no search link of its own, so connecting to
+ * it directly would find nothing to search. Its `root` link names the API, which does.
+ *
+ * Args:
+ *   document: The fetched document the user's URL returned.
+ *   links: The document's links, resolved against `url`.
+ *   url: The URL the document was fetched from.
+ *   fetcher: The fetch implementation.
+ *   signal: Aborts the root request.
+ *
+ * Returns:
+ *   The API's connection with `focusCollection` set, or undefined when the document is not a
+ *   collection, its root is not an API, or the root cannot be read (the caller then treats the
+ *   collection as a static catalog, as before).
+ */
+async function apiOfCollection(
+  document: Record<string, unknown>,
+  links: StacLink[],
+  url: string,
+  fetcher: FetchLike,
+  signal?: AbortSignal,
+): Promise<StacConnection | undefined> {
+  if (document.type !== "Collection" || typeof document.id !== "string") return undefined;
+  if (links.some((link) => link.rel === "search")) return undefined;
+  const rootHref = links.find((link) => link.rel === "root")?.href;
+  if (!rootHref || !httpUrl(rootHref) || browserCatalogHref(rootHref) === url) return undefined;
+  let api: StacConnection;
+  try {
+    api = await connectStac(rootHref, fetcher, signal);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return undefined;
+  }
+  if (!api.isApi) return undefined;
+  const id = document.id;
+  // The collections walk stops after a page cap, so a large API may not have listed this one.
+  const collections = api.collections.some((collection) => collection.id === id)
+    ? api.collections
+    : [...api.collections, document as unknown as StacCollection];
+  return { ...api, collections, focusCollection: id };
+}
+
 export async function connectStac(
   inputUrl: string,
   fetcher: FetchLike = fetch,
@@ -520,6 +570,8 @@ export async function connectStac(
   if (typeof root !== "object" || root === null)
     throw new Error("The URL did not return a STAC document");
   const links = linksOf(root.links, url);
+  const apiConnection = await apiOfCollection(root, links, url, fetcher, signal);
+  if (apiConnection) return apiConnection;
   const conforms = Array.isArray(root.conformsTo) ? root.conformsTo.map(String) : [];
   const searchLink = links.find((link) => link.rel === "search");
   const isApi =

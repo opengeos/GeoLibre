@@ -383,6 +383,9 @@ let unregisterPanel: (() => void) | null = null;
 let disposePanel: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 let initialCatalogUrl = "";
+// A catalog asked for from outside the panel (the `?stac=` deep link), taking the place of the
+// plugin's own preset on its next activation.
+let requestedCatalogUrl = "";
 interface CatalogBrowserOptions {
   loadIndex?: typeof loadStacIndex;
   indexFromConnection?: (connection: StacConnection) => StacIndexCatalog[];
@@ -1421,14 +1424,16 @@ function buildPanel(container: HTMLElement): () => void {
     return labels.showing(allItems.length);
   };
 
-  // A double-click means the same here as in the tree: search this one.
-  collectionSelect.addEventListener("dblclick", () => {
+  /** Search the chosen collection and send the map to its extent. */
+  function searchChosenCollection(): void {
     const chosen = collectionSelect.selectedOptions[0]?.value;
     const extent = connection?.collections.find((collection) => collection.id === chosen)?.extent;
     const box = horizontalBbox(extent?.spatial?.bbox?.[0]);
     void runSearch(false);
     if (box) appRef?.fitBounds?.(box);
-  });
+  }
+  // A double-click means the same here as in the tree: search this one.
+  collectionSelect.addEventListener("dblclick", searchChosenCollection);
 
   /** The tree asked for a collection: search it, and send the map to it. */
   function showCollection(href: string, bbox?: [number, number, number, number]): void {
@@ -1546,6 +1551,16 @@ function buildPanel(container: HTMLElement): () => void {
       renderSection.hidden = false;
       clearSearchResults(false);
       setStatus(connection.description || labels.connected);
+      // The URL named one collection of an API: search it, as a double-click on it would.
+      const focus = connection.focusCollection;
+      const focusOption = Array.from(collectionSelect.options).find(
+        (option) => option.value === focus,
+      );
+      if (focusOption) {
+        focusOption.selected = true;
+        focusOption.scrollIntoView?.({ block: "nearest" });
+        searchChosenCollection();
+      }
       return connection;
     } catch (error) {
       connection = null;
@@ -1666,6 +1681,23 @@ function mountPanel(container: HTMLElement): void {
 }
 
 /**
+ * Open the STAC Catalogs browser on a catalog, API, or API collection URL and connect to it.
+ *
+ * Takes effect on the plugin's next activation, or at once when its panel is already open.
+ *
+ * Args:
+ *   url: The STAC URL to connect to.
+ */
+export function requestStacCatalogUrl(url: string): void {
+  if (panelContainer && appRef) {
+    initialCatalogUrl = url;
+    mountPanel(panelContainer);
+    return;
+  }
+  requestedCatalogUrl = url;
+}
+
+/**
  * Factory creating a STAC catalog browser plugin instance with optional preset catalog URL.
  *
  * @param id - Unique plugin identifier.
@@ -1687,7 +1719,8 @@ function createStacPlugin(
     engines: ["maplibre", "mapbox"],
     exclusiveGroup: "stac-catalog-browser",
     activate(app) {
-      initialCatalogUrl = presetCatalogUrl;
+      initialCatalogUrl = requestedCatalogUrl || presetCatalogUrl;
+      requestedCatalogUrl = "";
       browserOptions = options;
       appRef = app;
       unregisterPanel =

@@ -102,6 +102,14 @@ function httpUrl(value: string | null): string | null {
   }
 }
 
+/**
+ * The STAC catalog, API, or API collection a `?stac=` deep link asks the STAC Catalogs browser to
+ * connect to, or null when the parameter is missing or not an http(s) URL.
+ */
+export function stacUrlParameter(search: string): string | null {
+  return httpUrl(new URLSearchParams(search).get("stac"));
+}
+
 /** Read remote-layer deep links without claiming the project loader's `url` parameter. */
 export function dataUrlParameters(search: string): DataUrlParameter[] | null {
   const params = new URLSearchParams(search);

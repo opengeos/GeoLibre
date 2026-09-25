@@ -4,6 +4,7 @@ import { strToU8, zipSync } from "fflate";
 import {
   dataUrlParameters,
   serviceUrlParameter,
+  stacUrlParameter,
   fetchRemoteData,
   isStreamedLidarUrl,
   mapboxStyleForDataLayer,
@@ -13,6 +14,22 @@ import {
 const collection = (id: string) => ({
   type: "FeatureCollection" as const,
   features: [{ type: "Feature" as const, id, properties: {}, geometry: null }],
+});
+
+describe("stacUrlParameter", () => {
+  it("reads an http(s) STAC URL, decoded", () => {
+    assert.equal(
+      stacUrlParameter("?stac=https%3A%2F%2Fstac.example.com%2Fcollections%2Fsst%3Fx%3D1"),
+      "https://stac.example.com/collections/sst?x=1",
+    );
+  });
+
+  it("ignores a missing, blank, or non-http value", () => {
+    assert.equal(stacUrlParameter("?data=https://example.com/a.geojson"), null);
+    assert.equal(stacUrlParameter("?stac="), null);
+    assert.equal(stacUrlParameter("?stac=javascript:alert(1)"), null);
+    assert.equal(stacUrlParameter("?stac=file:///etc/passwd"), null);
+  });
 });
 
 describe("serviceUrlParameter", () => {
