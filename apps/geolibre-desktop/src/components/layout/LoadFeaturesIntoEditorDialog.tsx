@@ -380,6 +380,12 @@ export function LoadFeaturesIntoEditorDialog({
     let ready = false;
     try {
       ready = await ensureEditorActive();
+    } catch {
+      // The editor's package loads on first use; offline, activation rejects.
+      if (generation === openGenerationRef.current) {
+        setStatus({ message: t("loadEditorFeatures.editorUnavailable"), kind: "error" });
+      }
+      return;
     } finally {
       activatingRef.current = false;
       setBusy(false);
