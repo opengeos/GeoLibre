@@ -386,6 +386,8 @@ let initialCatalogUrl = "";
 // A catalog asked for from outside the panel (the `?stac=` deep link), taking the place of the
 // plugin's own preset on its next activation.
 let requestedCatalogUrl = "";
+// Which createStacPlugin() instance owns the shared state above, since they all share it.
+let activePluginId: string | null = null;
 interface CatalogBrowserOptions {
   loadIndex?: typeof loadStacIndex;
   indexFromConnection?: (connection: StacConnection) => StacIndexCatalog[];
@@ -1683,18 +1685,22 @@ function mountPanel(container: HTMLElement): void {
 /**
  * Open the STAC Catalogs browser on a catalog, API, or API collection URL and connect to it.
  *
- * Takes effect on the plugin's next activation, or at once when its panel is already open.
+ * Takes effect on the STAC Catalogs plugin's next activation, or at once when it is already active.
  *
  * Args:
  *   url: The STAC URL to connect to.
  */
 export function requestStacCatalogUrl(url: string): void {
-  if (panelContainer && appRef) {
-    initialCatalogUrl = url;
-    mountPanel(panelContainer);
+  // Only the STAC Catalogs browser takes the request in place. A sibling's (Planet, Portolan) state
+  // is left for the activation that replaces it, which reads the request.
+  if (activePluginId !== STAC_PLUGIN_ID) {
+    requestedCatalogUrl = url;
     return;
   }
-  requestedCatalogUrl = url;
+  initialCatalogUrl = url;
+  if (panelContainer) mountPanel(panelContainer);
+  // Active with its panel closed: opening the panel mounts it on the requested catalog.
+  else appRef?.openRightPanel?.(STAC_PLUGIN_ID);
 }
 
 /**
@@ -1719,8 +1725,10 @@ function createStacPlugin(
     engines: ["maplibre", "mapbox"],
     exclusiveGroup: "stac-catalog-browser",
     activate(app) {
-      initialCatalogUrl = requestedCatalogUrl || presetCatalogUrl;
-      requestedCatalogUrl = "";
+      // The `?stac=` request is for the STAC Catalogs browser, never a sibling preset.
+      initialCatalogUrl = (id === STAC_PLUGIN_ID && requestedCatalogUrl) || presetCatalogUrl;
+      if (id === STAC_PLUGIN_ID) requestedCatalogUrl = "";
+      activePluginId = id;
       browserOptions = options;
       appRef = app;
       unregisterPanel =
@@ -1756,6 +1764,7 @@ function createStacPlugin(
         removeSelectionHighlight(map);
       }
       appRef = null;
+      activePluginId = null;
       initialCatalogUrl = "";
       browserOptions = {};
     },

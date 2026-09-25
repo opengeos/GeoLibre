@@ -545,7 +545,8 @@ async function apiOfCollection(
   if (!rootHref || !httpUrl(rootHref) || browserCatalogHref(rootHref) === url) return undefined;
   let api: StacConnection;
   try {
-    api = await connectStac(rootHref, fetcher, signal);
+    // One hop only: a root misreported as another collection must not start a chain of fetches.
+    api = await connectStacAt(rootHref, fetcher, signal, false);
   } catch (error) {
     if (signal?.aborted) throw error;
     return undefined;
@@ -559,10 +560,19 @@ async function apiOfCollection(
   return { ...api, collections, focusCollection: id };
 }
 
-export async function connectStac(
+export function connectStac(
   inputUrl: string,
   fetcher: FetchLike = fetch,
   signal?: AbortSignal,
+): Promise<StacConnection> {
+  return connectStacAt(inputUrl, fetcher, signal, true);
+}
+
+async function connectStacAt(
+  inputUrl: string,
+  fetcher: FetchLike,
+  signal: AbortSignal | undefined,
+  followCollectionRoot: boolean,
 ): Promise<StacConnection> {
   if (!httpUrl(inputUrl)) throw new Error("Enter a valid HTTP or HTTPS STAC URL");
   const url = browserCatalogHref(inputUrl);
@@ -570,7 +580,9 @@ export async function connectStac(
   if (typeof root !== "object" || root === null)
     throw new Error("The URL did not return a STAC document");
   const links = linksOf(root.links, url);
-  const apiConnection = await apiOfCollection(root, links, url, fetcher, signal);
+  const apiConnection = followCollectionRoot
+    ? await apiOfCollection(root, links, url, fetcher, signal)
+    : undefined;
   if (apiConnection) return apiConnection;
   const conforms = Array.isArray(root.conformsTo) ? root.conformsTo.map(String) : [];
   const searchLink = links.find((link) => link.rel === "search");

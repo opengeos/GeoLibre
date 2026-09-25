@@ -352,6 +352,23 @@ test("connectStac keeps a collection whose root is not an API as a static catalo
   assert.equal(connection.title, "maps");
 });
 
+test("connectStac follows a collection's root link only one hop", async () => {
+  const fetched: string[] = [];
+  const fetcher = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    fetched.push(url);
+    // Every document claims to be a collection whose root is the next one along.
+    const next =
+      url === "https://example.com/a" ? "https://example.com/b" : "https://example.com/a";
+    return jsonResponse({ type: "Collection", id: url, links: [{ rel: "root", href: next }] });
+  }) as typeof fetch;
+
+  const connection = await connectStac("https://example.com/a", fetcher);
+  assert.equal(connection.isApi, false);
+  assert.equal(connection.focusCollection, undefined);
+  assert.deepEqual(fetched, ["https://example.com/a", "https://example.com/b"]);
+});
+
 test("connectStac redirects the retired USGS static catalog to its supported API", async () => {
   const fetched: string[] = [];
   const fetcher = (async (input: RequestInfo | URL) => {
