@@ -228,8 +228,13 @@ export function ProviderModelPicker({
       {open ? (
         <div
           ref={panelRef}
+          // Focusable so a click on a non-focusable part of the popup (the
+          // listbox scrollbar, padding, status text) keeps focus inside the
+          // picker. Otherwise focus moves to the nearest focusable ancestor,
+          // such as the Settings dialog, and the blur handler closes the popup.
+          tabIndex={-1}
           className={cn(
-            "absolute top-full z-40 mt-1 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md",
+            "absolute top-full z-40 mt-1 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md outline-none",
             compact ? "end-0" : "start-0",
           )}
           onKeyDown={(event) => {
