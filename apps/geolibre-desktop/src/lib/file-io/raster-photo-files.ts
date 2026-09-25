@@ -8,7 +8,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import i18next from "i18next";
 import type { GeotaggedPhotoResult } from "../geotagged-photos";
-import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "../geotagged-photos";
+// Only the filename predicates are imported statically; the importer itself is
+// loaded with `import()` when photos are read, keeping it off the boot path.
+import { PHOTO_IMAGE_EXTENSIONS, isPhotoDropFileName, isPhotoFileName } from "../photo-file-names";
 import { isDesktopRuntime } from "../is-mobile";
 import { isTauri } from "../is-tauri";
 import {
@@ -75,12 +77,17 @@ export async function loadDroppedRasterPaths(
 }
 
 /**
- * Read one raster file off disk into a browser `File`, for reloading a raster a
- * saved project references by path (issue #1463). Rejects when the file is
- * gone; the caller then drops that layer with a notice.
+ * Resolve one local raster file to an asset-protocol URL, for reloading a
+ * raster a saved project references by path (issue #1463). The path is first
+ * granted to the asset scope; Tauri then serves the file with byte-range
+ * support, so a COG opens lazily instead of being read into memory. Rejects
+ * when the Rust side refuses the grant (not an absolute GeoTIFF path, or one
+ * outside the user-granted scope); the caller then drops that layer with a
+ * notice. The file itself is not read here, so a missing file surfaces only
+ * when the raster loads.
  *
  * @param path - The absolute path recorded when the raster was first added.
- * @returns The file, named after its basename.
+ * @returns The asset-protocol URL for the file.
  */
 export async function readRasterFileAtPath(path: string): Promise<string> {
   await invoke("allow_raster_asset", { path });
@@ -122,6 +129,23 @@ export async function pickLocalRasterFiles(): Promise<{ file: File | string; pat
 }
 
 /**
+ * Normalize an image-picker selection to the paths worth reading. Desktop picks
+ * are real filesystem paths, so non-image names are dropped by extension. Mobile
+ * picks are kept as-is: Android returns extensionless `content://` URIs that the
+ * filename check would reject, and the dialog's own filter already limited the
+ * selection to images.
+ *
+ * @param selected - The dialog result: one path, several, or null on cancel.
+ * @param desktop - Whether the pick came from the desktop (not mobile) dialog.
+ * @returns The paths to read, in selection order.
+ */
+export function photoPickPaths(selected: string | string[] | null, desktop: boolean): string[] {
+  if (!selected) return [];
+  const paths = Array.isArray(selected) ? selected : [selected];
+  return desktop ? paths.filter(isPhotoFileName) : paths;
+}
+
+/**
  * Open a multi-select image picker and read each pick into a browser `File`, so
  * the geotagged-photo importer reads EXIF and renders thumbnails the same way on
  * desktop (Tauri) and in the browser. Resolves to an empty array when the dialog
@@ -139,8 +163,7 @@ export async function pickImageFilesWithFallback(): Promise<File[]> {
           multiple: true,
           filters: [{ name: "Images", extensions: [...PHOTO_IMAGE_EXTENSIONS] }],
         });
-    if (!selected) return [];
-    const paths = (Array.isArray(selected) ? selected : [selected]).filter(isPhotoFileName);
+    const paths = photoPickPaths(selected, desktop);
     const files: File[] = [];
     for (const path of paths) {
       // Read each pick independently so one unreadable file does not abandon the

@@ -66,10 +66,6 @@ export {
 export {
   pickVectorFilesWithSidecars,
   readVectorFileWithSidecars,
-  openGeoJsonFile,
-  openGeoJsonFileBrowser,
-  openGeoJsonFileWithFallback,
-  openVectorFileWithFallback,
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
   type PickedVectorFile,

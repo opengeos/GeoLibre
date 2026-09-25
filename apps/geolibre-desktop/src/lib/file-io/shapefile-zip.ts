@@ -125,7 +125,8 @@ function parseShapefileComponents({ file, sidecar }: UnzippedShapefile): Feature
  * corrupt archive or one without a `.shp` throws, since GeoLibre reads only
  * shapefile `.zip`s.
  *
- * A `.shp` at or above {@link DUCKDB_VECTOR_ROUTE_BYTES} skips shpjs and streams
+ * A `.shp` that {@link shouldRouteToDuckDb} routes (at or above
+ * `DUCKDB_VECTOR_ROUTE_BYTES`, from `@geolibre/core`) skips shpjs and streams
  * through DuckDB: shpjs would otherwise freeze the main thread reprojecting
  * every coordinate synchronously, with no progress, no cancel, and no
  * feature-count guard. The threshold is measured on the *uncompressed* `.shp`,

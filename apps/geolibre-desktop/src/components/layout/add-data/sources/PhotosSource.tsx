@@ -3,12 +3,7 @@ import { Button, Label } from "@geolibre/ui";
 import { Images, MapPin } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  type GeotaggedPhotoResult,
-  loadGeotaggedPhotos,
-  loadPhotosAtLocation,
-  relocatePhotoFeatures,
-} from "../../../../lib/geotagged-photos";
+import type { GeotaggedPhotoResult } from "../../../../lib/geotagged-photos";
 import { pickImageFilesWithFallback } from "../../../../lib/tauri-io";
 import { createBaseLayer, errorMessage } from "../helpers";
 import { AddDataError, AddDataSourceForm, useAddDataSource } from "../shared";
@@ -58,6 +53,8 @@ export function PhotosSource() {
       throw new Error(t("addData.photos.errorChooseFiles"));
     }
 
+    // Loaded on demand so the importer stays out of the boot bundle.
+    const { loadGeotaggedPhotos } = await import("../../../../lib/geotagged-photos");
     const result = await loadGeotaggedPhotos(selectedFiles);
     if (result.located === 0) {
       // A single photo with no GPS pivots to manual placement instead of a hard
@@ -98,6 +95,8 @@ export function PhotosSource() {
   const handleManualPlace = source.runSubmit(async () => {
     if (!manualCenter) return;
     const name = source.layerName.trim() || defaultName;
+    const { loadPhotosAtLocation, relocatePhotoFeatures } =
+      await import("../../../../lib/geotagged-photos");
     const result = await loadPhotosAtLocation(selectedFiles, manualCenter);
     const layer = {
       ...createBaseLayer(

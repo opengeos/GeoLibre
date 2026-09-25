@@ -75,6 +75,15 @@ interface SaveTextFileOptions {
 
 interface SaveBinaryFileOptions extends SaveTextFileOptions {}
 
+/** Options for {@link saveTextFileBrowser}; the native dialog filters are not needed. */
+export interface BrowserSaveTextFileOptions {
+  defaultName: string;
+  browserTypes: BrowserFilePickerType[];
+  mimeType: string;
+  /** Console warning logged when the save picker fails (not when it is cancelled). */
+  pickerFailureWarning?: string;
+}
+
 /**
  * Whether saving a project in the current environment would silently fall back
  * to an anchor download under a fixed name — i.e. a browser (not Tauri) that
@@ -91,9 +100,19 @@ export function browserSaveFallsBackToDownload(): boolean {
   return typeof (window as BrowserFilePickerWindow).showSaveFilePicker !== "function";
 }
 
-async function saveTextFileBrowser(
+/**
+ * Browser text save: the File System Access save picker when available, else
+ * an anchor download under the default name (also the fallback when the picker
+ * fails for any reason other than the user cancelling).
+ *
+ * @param content - The text to write.
+ * @param options - Suggested name, picker file types, download MIME type and
+ *   the warning to log if the picker fails.
+ * @returns The saved file name, or null when the picker was cancelled.
+ */
+export async function saveTextFileBrowser(
   content: string,
-  options: SaveTextFileOptions,
+  options: BrowserSaveTextFileOptions,
 ): Promise<string | null> {
   const fileName = browserSafeFileName(options.defaultName);
   const pickerWindow = window as BrowserFilePickerWindow;
@@ -111,7 +130,7 @@ async function saveTextFileBrowser(
       return handle.name || fileName;
     } catch (error) {
       if (isAbortError(error)) return null;
-      console.warn("Browser file save picker failed", error);
+      console.warn(options.pickerFailureWarning ?? "Browser file save picker failed", error);
     }
   }
 

@@ -557,7 +557,7 @@ fn take_pending_project_paths(state: tauri::State<'_, PendingProjectPaths>) -> V
 /// `/...` or a Windows drive-letter `C:\...`, never a UNC `\\host\share`), free
 /// of `..` traversal, ending in a GeoLibre project extension — `.geolibre` or
 /// `.geolibre.json`. These are the canonical formats `saveProject` writes and
-/// `isGeoLibreProjectPath` recognizes in `file-io/paths.ts`.
+/// `isGeoLibreProjectFileName` recognizes in `file-io/paths.ts`.
 ///
 /// Without this, the command was an arbitrary local-file reader: any webview JS
 /// or loaded plugin could `invoke("read_project_file", { path: "~/.ssh/id_rsa" })`

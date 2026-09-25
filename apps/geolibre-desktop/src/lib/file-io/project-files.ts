@@ -20,10 +20,11 @@ import {
 } from "../startup-project-snapshot";
 import {
   openLocalDataFileWithFallback,
+  saveTextFileBrowser,
   type BrowserFilePickerType,
   type BrowserFilePickerWindow,
 } from "./file-dialogs";
-import { browserSafeFileName, isHttpUrl } from "./paths";
+import { isHttpUrl } from "./paths";
 import { isAbortError } from "./shared";
 
 const GEOLIBRE_PROJECT_FILE_TYPES: BrowserFilePickerType[] = [
@@ -73,43 +74,6 @@ async function openProjectFileBrowser(): Promise<{
     path: result.path,
     text: result.text,
   };
-}
-
-async function saveProjectFileBrowser(
-  content: string,
-  defaultName?: string,
-): Promise<string | null> {
-  const fileName = browserSafeFileName(defaultName ?? "project.geolibre");
-  const pickerWindow = window as BrowserFilePickerWindow;
-
-  if (pickerWindow.showSaveFilePicker) {
-    try {
-      const handle = await pickerWindow.showSaveFilePicker({
-        suggestedName: fileName,
-        types: GEOLIBRE_PROJECT_FILE_TYPES,
-        excludeAcceptAllOption: false,
-      });
-      const writable = await handle.createWritable();
-      await writable.write(content);
-      await writable.close();
-      return handle.name || fileName;
-    } catch (error) {
-      if (isAbortError(error)) return null;
-      console.warn("Browser project save picker failed", error);
-    }
-  }
-
-  const blob = new Blob([content], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-  return fileName;
 }
 
 /**
@@ -370,7 +334,12 @@ export async function saveProjectFile(
   defaultName?: string,
 ): Promise<string | null> {
   if (!isTauri()) {
-    return saveProjectFileBrowser(content, defaultName);
+    return saveTextFileBrowser(content, {
+      defaultName: defaultName ?? "project.geolibre",
+      browserTypes: GEOLIBRE_PROJECT_FILE_TYPES,
+      mimeType: "application/json",
+      pickerFailureWarning: "Browser project save picker failed",
+    });
   }
 
   const path = await save({

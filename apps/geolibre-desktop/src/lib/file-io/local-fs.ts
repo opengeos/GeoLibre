@@ -6,6 +6,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { readDir, readFile, readTextFile, stat, writeTextFile } from "@tauri-apps/plugin-fs";
 import { isTauri } from "../is-tauri";
+import { joinLocalPath } from "./paths";
 
 /** One entry of a local directory listing (from {@link listDirectory}). */
 export interface LocalDirectoryEntry {
@@ -31,13 +32,11 @@ export interface LocalDirectoryEntry {
 export async function listDirectory(path: string): Promise<LocalDirectoryEntry[]> {
   if (!isTauri()) return [];
   const entries = await readDir(path);
-  // Join with the parent's own separator style so a Windows path stays
-  // all-backslash (readDir returns names only, no path).
-  const sep = path.includes("\\") ? "\\" : "/";
-  const base = /[/\\]$/.test(path) ? path : `${path}${sep}`;
+  // readDir returns names only, so join with the parent's own separator style
+  // (see joinLocalPath: `\\` is a separator only on Windows-style paths).
   return entries.map((entry) => ({
     name: entry.name,
-    path: `${base}${entry.name}`,
+    path: joinLocalPath(path, entry.name),
     isDirectory: entry.isDirectory,
   }));
 }

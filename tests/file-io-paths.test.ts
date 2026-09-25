@@ -13,6 +13,8 @@ import {
   isRasterFileName,
   isRestorableVectorPath,
   isVectorFileName,
+  isWindowsStylePath,
+  joinLocalPath,
   pathWithoutExtension,
 } from "../apps/geolibre-desktop/src/lib/file-io/paths";
 
@@ -72,5 +74,33 @@ describe("file-io path predicates", () => {
     assert.equal(isAbsoluteLocalPath("C:\\data\\a.geojson"), true);
     assert.equal(isAbsoluteLocalPath("data/a.geojson"), false);
     assert.equal(isAbsoluteLocalPath("\\\\host\\share\\a.geojson"), false);
+  });
+
+  it("classifies only drive-letter and UNC paths as Windows-style", () => {
+    assert.equal(isWindowsStylePath("C:\\data"), true);
+    assert.equal(isWindowsStylePath("d:/data"), true);
+    assert.equal(isWindowsStylePath("\\\\host\\share"), true);
+    assert.equal(isWindowsStylePath("/home/u/a\\b"), false);
+    assert.equal(isWindowsStylePath("C:relative"), false);
+  });
+
+  it("joins POSIX paths with / even when a name contains a backslash", () => {
+    assert.equal(joinLocalPath("/home/u/a\\b", "file.tif"), "/home/u/a\\b/file.tif");
+    // A trailing backslash is part of the POSIX directory name, not a separator.
+    assert.equal(joinLocalPath("/home/u/dir\\", "file.tif"), "/home/u/dir\\/file.tif");
+    assert.equal(joinLocalPath("/home/u/", "file.tif"), "/home/u/file.tif");
+    assert.equal(joinLocalPath("/", "tmp"), "/tmp");
+  });
+
+  it("joins Windows drive paths with the directory's own separator", () => {
+    assert.equal(joinLocalPath("C:\\data", "a.tif"), "C:\\data\\a.tif");
+    assert.equal(joinLocalPath("C:\\", "a.tif"), "C:\\a.tif");
+    assert.equal(joinLocalPath("C:/data", "a.tif"), "C:/data/a.tif");
+    assert.equal(joinLocalPath("C:/data/", "a.tif"), "C:/data/a.tif");
+  });
+
+  it("joins UNC paths with a backslash", () => {
+    assert.equal(joinLocalPath("\\\\host\\share", "a.tif"), "\\\\host\\share\\a.tif");
+    assert.equal(joinLocalPath("\\\\host\\share\\", "a.tif"), "\\\\host\\share\\a.tif");
   });
 });

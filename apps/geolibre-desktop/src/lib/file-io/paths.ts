@@ -134,3 +134,32 @@ export function isAbsoluteLocalPath(path: string): boolean {
 export function fileBaseName(path: string): string {
   return localFileName(path) || path;
 }
+
+/**
+ * Whether a local path is Windows-style: a drive-letter prefix (`C:\`, `C:/`)
+ * or a UNC prefix (`\\server`). Only these use `\` as a separator; on
+ * Linux/macOS `\` is a legal filename character.
+ *
+ * @param path - The local path to classify.
+ * @returns True for a drive-letter or UNC path.
+ */
+export function isWindowsStylePath(path: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
+}
+
+/**
+ * Join a directory path and an entry name with the directory's own separator
+ * style, so a Windows path stays all-backslash while a POSIX directory whose
+ * name contains a literal `\` is still joined with `/`.
+ *
+ * @param dir - The directory path.
+ * @param name - The entry name to append.
+ * @returns The joined path.
+ */
+export function joinLocalPath(dir: string, name: string): string {
+  if (isWindowsStylePath(dir)) {
+    if (/[/\\]$/.test(dir)) return `${dir}${name}`;
+    return `${dir}${dir.includes("\\") ? "\\" : "/"}${name}`;
+  }
+  return dir.endsWith("/") ? `${dir}${name}` : `${dir}/${name}`;
+}

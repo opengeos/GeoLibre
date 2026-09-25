@@ -13,7 +13,8 @@ import {
   useState,
 } from "react";
 import { importGeoPackageDrops } from "../../lib/geopackage-drop";
-import { isPhotoDropFileName, type GeotaggedPhotoResult } from "../../lib/geotagged-photos";
+import type { GeotaggedPhotoResult } from "../../lib/geotagged-photos";
+import { isPhotoDropFileName } from "../../lib/photo-file-names";
 import {
   addOsmPbfLayers,
   isOsmPbfFileName,

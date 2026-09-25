@@ -7,7 +7,7 @@
 import { hasPathTraversal } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readFile, readTextFile } from "@tauri-apps/plugin-fs";
+import { readFile } from "@tauri-apps/plugin-fs";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
 import { IS_MAS_BUILD } from "../build-flags";
@@ -301,41 +301,6 @@ async function loadBrowserVectorFile(
     ),
     path: file.name,
   };
-}
-
-async function openVectorFileBrowser(options?: DuckDbVectorLoadOptions): Promise<{
-  data: FeatureCollection;
-  path: string;
-} | null> {
-  return new Promise((resolve, reject) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = async () => {
-      try {
-        const file = input.files?.[0];
-        if (!file) {
-          resolve(null);
-          return;
-        }
-
-        resolve(await loadBrowserVectorFile(file, [], options));
-      } catch (error) {
-        reject(error);
-      }
-    };
-    input.click();
-  });
-}
-
-async function openVectorFileTauri(options?: DuckDbVectorLoadOptions): Promise<{
-  data: FeatureCollection;
-  path: string;
-} | null> {
-  const selected = await open({
-    multiple: false,
-  });
-  if (!selected || typeof selected !== "string") return null;
-  return loadTauriVectorFile(selected, options);
 }
 
 /** A vector file picked from the desktop dialog, with any shapefile sidecars. */
@@ -671,65 +636,6 @@ async function readShapefileCompanionFiles(path: string, selectedPaths: string[]
     }
   }
   return files;
-}
-
-export async function openGeoJsonFile(): Promise<{
-  data: FeatureCollection;
-  path: string;
-} | null> {
-  if (!isTauri()) {
-    console.warn("File dialog requires Tauri runtime");
-    return null;
-  }
-  const selected = await open({
-    multiple: false,
-    filters: [{ name: "GeoJSON", extensions: ["geojson", "json"] }],
-  });
-  if (!selected || typeof selected !== "string") return null;
-  const text = await readTextFile(selected);
-  const data = await parseGeoJsonText(text);
-  return { data, path: selected };
-}
-
-/** Browser fallback: pick a local GeoJSON file when not running in Tauri */
-export function openGeoJsonFileBrowser(): Promise<{
-  data: FeatureCollection;
-  path: string;
-} | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".geojson,.json";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) {
-        resolve(null);
-        return;
-      }
-      const text = await file.text();
-      resolve({
-        data: await parseGeoJsonText(text),
-        path: file.name,
-      });
-    };
-    input.click();
-  });
-}
-
-export async function openGeoJsonFileWithFallback(): Promise<{
-  data: FeatureCollection;
-  path: string;
-} | null> {
-  if (isTauri()) return openGeoJsonFile();
-  return openGeoJsonFileBrowser();
-}
-
-export async function openVectorFileWithFallback(options?: DuckDbVectorLoadOptions): Promise<{
-  data: FeatureCollection;
-  path: string;
-} | null> {
-  if (isTauri()) return openVectorFileTauri(options);
-  return openVectorFileBrowser(options);
 }
 
 export async function loadDroppedVectorFiles(
