@@ -13,7 +13,6 @@ import {
   quoteIdentifier,
   quoteSqlString,
   releaseSqlDatabase,
-  resetSqlDatabase,
   rowsFromResult,
 } from "./duckdb-vector-loader";
 import { GDAL_AUTO_FID_COLUMN, stripAutoFidColumn } from "./duckdb-geometry";
@@ -117,12 +116,8 @@ const BARE_SOURCE_PATTERN =
 const REMOTE_READER_ARG_PATTERN =
   /\b(read_parquet|parquet_scan|read_csv_auto|read_csv|read_json_auto|read_json|read_ndjson_auto|read_ndjson)\s*\(\s*'(https?:\/\/[^']+)'/gi;
 
-// Public sample dataset used both by the dialog's example queries and as the
-// pre-spatial HTTP warm-up read. A pre-spatial remote read_parquet is what
-// initialises the HTTP read path (see ensureSpatialExtension); when a query has
-// no remote parquet of its own to warm up with (e.g. a local-only first query
-// that would otherwise load spatial cold), this parquet is read instead — only
-// its footer is fetched. Exported so the dialog shares the same single URL.
+// Public sample dataset used by the dialog's example queries.
+// Exported so the dialog shares the same single URL.
 export const SAMPLE_DATASET_URL = "https://data.source.coop/giswqs/opengeos/countries.parquet";
 
 /** Result of running a single SQL statement in the workspace. */
@@ -639,45 +634,13 @@ export async function runSqlQuery(sql: string, layers: GeoLibreLayer[]): Promise
   // convenient `SELECT * FROM https://…/x.parquet` form runs.
   const rewritten = rewriteBareSources(withCloudUrls);
 
-  // Only a query that actually reads a remote source can hit the poisoned-
-  // instance path, so gate the recovery on a real remote reader call (not an
-  // http URL that merely appears in a string literal or WHERE clause).
-  const hasRemoteReader = statementHasRemoteReader(rewritten);
-
-  // Run one attempt, ref-counting the instance so a poison recovery can defer
-  // terminating it until no query is still using it.
-  const attempt = async (db: AsyncDuckDB): Promise<SqlQueryResult> => {
-    acquireSqlDatabase(db);
-    try {
-      return await runSqlStatementOnce(rewritten, layers, db);
-    } finally {
-      await releaseSqlDatabase(db);
-    }
-  };
-
   const db = await getSqlDatabase();
+  acquireSqlDatabase(db);
   try {
-    return await attempt(db);
-  } catch (error) {
-    // Recover from a poisoned WASM instance: duckdb-wasm 1.33.1-dev45 breaks
-    // remote read_parquet with "stoi: no conversion" on an instance that ran
-    // LOAD spatial before its first successful remote read (e.g. after an
-    // earlier query's warm-up failed). That state cannot be undone in place, so
-    // rebuild the SQL Workspace's dedicated instance — which re-runs the
-    // pre-spatial warm-up — and retry once. `attempt` has already released `db`,
-    // so resetSqlDatabase tears it down now unless another query is still on it.
-    if (hasRemoteReader && isStoiConversionError(error)) {
-      await resetSqlDatabase(db);
-      return await attempt(await getSqlDatabase());
-    }
-    throw error;
+    return await runSqlStatementOnce(rewritten, layers, db);
+  } finally {
+    await releaseSqlDatabase(db);
   }
-}
-
-/** True when an error is the duckdb-wasm poisoned-instance "stoi" symptom. */
-function isStoiConversionError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /stoi:\s*no conversion/i.test(message);
 }
 
 /**
@@ -692,14 +655,6 @@ function matchRemoteReaderCalls(statement: string): RegExpMatchArray[] {
   return [...statement.matchAll(REMOTE_READER_ARG_PATTERN)].filter(
     (match) => masked[match.index ?? 0] !== " ",
   );
-}
-
-/**
- * True when the statement contains a real remote-reader call (a native reader
- * with an http(s) URL argument), ignoring URLs inside string literals.
- */
-function statementHasRemoteReader(statement: string): boolean {
-  return matchRemoteReaderCalls(statement).length > 0;
 }
 
 /**
@@ -724,31 +679,8 @@ async function runSqlStatementOnce(
     // Register remote URLs as DuckDB file handles so they stream over HTTP
     // range requests instead of the unreliable in-WASM httpfs path. Done before
     // loading spatial so the handles can warm up the HTTP read path first.
-    const { statement, readerCalls } = await registerRemoteSources(
-      db,
-      filePrefix,
-      rewritten,
-      registeredFiles,
-    );
-    // Load spatial, warming up the HTTP read path first: duckdb-wasm breaks
-    // remote read_parquet if spatial is loaded before the first remote read. A
-    // single pre-spatial read_parquet initialises the path for all later remote
-    // reads. Warm up with the query's own remote readers (no extra request),
-    // and guarantee at least one read_parquet runs by falling back to a tiny
-    // default parquet when the query has none of its own.
-    const warmups = [...readerCalls];
-    // read_parquet and its alias parquet_scan both initialise the HTTP read
-    // path; only fall back to the default warmup when neither is present.
-    if (
-      !warmups.some((call) => call.startsWith("read_parquet") || call.startsWith("parquet_scan"))
-    ) {
-      warmups.push(`read_parquet(${quoteSqlString(SAMPLE_DATASET_URL)})`);
-    }
-    await ensureSpatialExtension(db, connection, async () => {
-      for (const readerCall of warmups) {
-        await connection.query(`SELECT 1 FROM ${readerCall} LIMIT 0`);
-      }
-    });
+    const { statement } = await registerRemoteSources(db, filePrefix, rewritten, registeredFiles);
+    await ensureSpatialExtension(db, connection);
     await registerLayerTables(db, connection, layers, filePrefix, registeredFiles);
 
     const described = await describeQuery(connection, statement);

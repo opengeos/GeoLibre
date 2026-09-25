@@ -115,14 +115,7 @@ async function withIcebergConnection<T>(
       // inside the callback below.
       const active = await db.connect();
       connection = active;
-      // Warm the HTTP read path with a pre-spatial remote read_parquet before
-      // any LOAD: duckdb-wasm otherwise breaks remote reads on a connection
-      // that loaded spatial first, which every Iceberg data-file read needs.
-      await ensureSpatialExtension(db, active, async () => {
-        await active.query(
-          `SELECT 1 FROM read_parquet(${quoteSqlString(SAMPLE_DATASET_URL)}) LIMIT 0`,
-        );
-      });
+      await ensureSpatialExtension(db, active);
       await ensureIcebergExtension(db, active);
       if (config.mode === "catalog") {
         await active.query(buildIcebergAttachSql(config));
