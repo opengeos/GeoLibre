@@ -7,6 +7,7 @@ import {
   isCesiumOnlyLayer,
   isDuckDBQueryLayer,
   pluginOwnsPaint,
+  rendererAppliesOpacity,
   resolveLayerCapabilities,
   supportsBridgedOpacity,
   useAppStore,
@@ -134,6 +135,7 @@ export function LayerRow({
   const { i18n, t } = useTranslation();
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
   const selectLayer = useAppStore((s) => s.selectLayer);
   const setIdentifyLayer = useAppStore((s) => s.setIdentifyLayer);
@@ -483,8 +485,11 @@ export function LayerRow({
       {/* A plugin-painted layer (a MapLibre custom WebGL layer)
           has no paint property for opacity to land on, so the
           slider is only shown when the plugin bridged a setter for
-          it — otherwise it would move with no effect (#1445). */}
-      {(!pluginOwnsPaint(layer) || supportsBridgedOpacity(layer.id)) && (
+          it — otherwise it would move with no effect (#1445) — or
+          when the primary renderer draws the layer itself. */}
+      {(!pluginOwnsPaint(layer) ||
+        supportsBridgedOpacity(layer.id) ||
+        rendererAppliesOpacity(layer, primaryRenderer)) && (
         <LayerOpacitySlider
           label={t("layers.opacity")}
           ariaLabel={t("layers.opacityFor", { name: layer.name })}

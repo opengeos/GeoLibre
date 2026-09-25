@@ -6,6 +6,7 @@ import {
   type GeoLibreLayer,
   getExternalNativePaintBridge,
   pluginOwnsPaint,
+  rendererAppliesOpacity,
   setExternalNativePaintBridge,
   supportsBridgedOpacity,
 } from "@geolibre/core";
@@ -264,5 +265,18 @@ describe("layer-sync paint bridge", () => {
     syncLayer(map as never, layer);
 
     assert.ok(calls.some((call) => call.method === "setPaintProperty"));
+  });
+});
+
+describe("rendererAppliesOpacity", () => {
+  it("offers opacity for a Zarr layer the ArcGIS view or the globe draws itself", () => {
+    // Those renderers apply `layer.opacity` natively and mount no Zarr control
+    // to bridge a setter, so the slider must not depend on a bridge there.
+    assert.equal(rendererAppliesOpacity({ type: "zarr" }, "cesium"), true);
+    assert.equal(rendererAppliesOpacity({ type: "zarr" }, "arcgis"), true);
+    // On the 2D engines the Zarr control's bridge decides.
+    assert.equal(rendererAppliesOpacity({ type: "zarr" }, "maplibre"), false);
+    assert.equal(rendererAppliesOpacity({ type: "zarr" }, "mapbox"), false);
+    assert.equal(rendererAppliesOpacity({ type: "lidar" }, "cesium"), false);
   });
 });

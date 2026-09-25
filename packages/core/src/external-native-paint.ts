@@ -103,3 +103,24 @@ export function getExternalNativePaintBridge(
 export function supportsBridgedOpacity(layerId: string): boolean {
   return typeof paintBridges.get(layerId)?.setOpacity === "function";
 }
+
+/**
+ * True when the primary renderer draws this plugin-painted layer itself, from
+ * the store record, and so applies `layer.opacity` without any plugin bridge.
+ *
+ * A Zarr layer is a MapLibre custom layer owned by the Zarr control on the 2D
+ * map, but the ArcGIS view and the Cesium globe render it natively (an ArcGIS
+ * layer's `opacity`, a Cesium `ImageryLayer.alpha`) and mount no control to
+ * register a bridge. Without this the Opacity slider would be hidden there
+ * although it works (opengeos/GeoLibre#2261).
+ *
+ * @param layer - A store layer.
+ * @param renderer - The primary renderer (`useAppStore().primaryRenderer`).
+ * @returns Whether an Opacity slider reaches the layer through the renderer.
+ */
+export function rendererAppliesOpacity(
+  layer: { type: string },
+  renderer: string | undefined,
+): boolean {
+  return (renderer === "arcgis" || renderer === "cesium") && layer.type === "zarr";
+}

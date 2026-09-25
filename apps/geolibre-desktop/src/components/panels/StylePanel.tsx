@@ -4,6 +4,7 @@ import {
   isCzmlLayer,
   pluginOwnsPaint,
   styleValue,
+  rendererAppliesOpacity,
   supportsBridgedOpacity,
   useAppStore,
   useLayer,
@@ -108,6 +109,7 @@ export function StylePanel({
   // Likewise for ArcGIS, whose 3D SceneView (the globe, or any view with
   // terrain) draws a different subset from its flat MapView.
   const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const arcgisScene = useAppStore(
     (s) => s.preferences.map.projection === "globe" || s.preferences.map.terrainEnabled,
   );
@@ -258,9 +260,12 @@ export function StylePanel({
   // own paint: layer sync forwards only opacity, order, zoom range, and
   // filters to its native layers, so the color editors would be inert.
   const isServiceStyledLayer = layer.type === "arcgis" && arcgisVectorStyle(layer) !== null;
-  // Opacity survives the suppression when (and only when) the plugin bridged a
-  // setter for it; otherwise the slider would be the same inert control.
-  const hasBridgedOpacity = isPluginPaintedLayer && supportsBridgedOpacity(layer.id);
+  // Opacity survives the suppression when the plugin bridged a setter for it,
+  // or when the primary renderer draws the layer itself (a Zarr layer on the
+  // ArcGIS view or the globe); otherwise the slider would be an inert control.
+  const hasBridgedOpacity =
+    isPluginPaintedLayer &&
+    (supportsBridgedOpacity(layer.id) || rendererAppliesOpacity(layer, primaryRenderer));
   const hasVectorPaintControls =
     !isThreeDTilesLayer &&
     !isRasterTileLayer &&
