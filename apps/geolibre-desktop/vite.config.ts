@@ -1592,6 +1592,11 @@ export default defineConfig({
       // discovers the package on first open of the globe and triggers a
       // full-page reload to re-optimize.
       "@cesium/widgets",
+      // The globe's Zarr imagery provider, imported on the first Zarr layer the
+      // globe draws; listed so that first draw does not trigger a re-optimize
+      // reload. Its `cesium` import resolves to `@cesium/engine` (see
+      // `resolve.alias`), so it shares the pre-bundled engine above.
+      "zarr-cesium",
     ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).
@@ -1657,12 +1662,22 @@ export default defineConfig({
     // these forces resolution from this app's node_modules — where they are always
     // installed — so the build is deterministic across environments (see #331).
     dedupe: ["react", "react-dom", "maplibre-gl", "@anthropic-ai/sdk", "openai", "@google/genai"],
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
       // The published package resolves to dist, but the monorepo app should
       // hot-reload SDK source during development.
-      "@geolibre/embed": path.resolve(__dirname, "../../packages/embed/src/index.ts"),
-      module: path.resolve(__dirname, "./src/lib/browser-node-module.ts"),
-    },
+      {
+        find: "@geolibre/embed",
+        replacement: path.resolve(__dirname, "../../packages/embed/src/index.ts"),
+      },
+      { find: "module", replacement: path.resolve(__dirname, "./src/lib/browser-node-module.ts") },
+      // zarr-cesium (the globe's Zarr layers) and its wind layer import the
+      // `cesium` wrapper, but only engine classes. Point the bare specifier at
+      // the `@cesium/engine` the globe already loads, so there is one engine
+      // instance (one set of classes, one worker pool) and the wrapper's
+      // `@cesium/widgets` barrel stays out of the bundle. Exact match only:
+      // nothing in the bundle imports a `cesium/...` subpath.
+      { find: /^cesium$/, replacement: "@cesium/engine" },
+    ],
   },
 });

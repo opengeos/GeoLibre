@@ -374,7 +374,8 @@ describe("Cesium Parity Fixes (#2476)", () => {
         source: {},
         style: { ...DEFAULT_LAYER_STYLE },
       }),
-      false,
+      // Drawn through zarr-cesium since opengeos/GeoLibre#2261.
+      true,
     );
   });
 

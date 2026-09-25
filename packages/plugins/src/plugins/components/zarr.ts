@@ -59,6 +59,16 @@ import { layerNameFromUrl } from "./shared";
 
 const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
 
+/**
+ * Whether `renderer` draws Zarr layers itself from the store record, rather
+ * than through the MapLibre Zarr control: the ArcGIS view and the Cesium globe
+ * (opengeos/GeoLibre#2261). Neither mounts the control, so their layers are
+ * added, restored, and time-stepped through the record alone.
+ */
+function isNativeZarrRenderer(renderer: string | undefined): boolean {
+  return renderer === "arcgis" || renderer === "cesium";
+}
+
 const ZARR_SAMPLE_URL =
   "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month";
 /**
@@ -253,7 +263,7 @@ export async function addCloudNetcdfLayer(
   app: GeoLibreAppAPI,
   options: CloudNetcdfLayerOptions,
 ): Promise<void> {
-  if (app.getMapRenderer?.() === "arcgis") {
+  if (isNativeZarrRenderer(app.getMapRenderer?.())) {
     const refs =
       options.refs ?? (await loadKerchunkReference(options.url, { headers: options.headers }));
     await addNativeArcgisZarrLayer(
@@ -487,7 +497,7 @@ export async function addZarrRasterLayer(
     throw new Error("A Zarr variable is required (pass options.variable).");
   }
 
-  if (app.getMapRenderer?.() === "arcgis")
+  if (isNativeZarrRenderer(app.getMapRenderer?.()))
     return addNativeArcgisZarrLayer({ ...options, url, variable });
   return queueZarrAdd(() => addZarrLayerExclusively(app, options, url, variable));
 }
@@ -702,7 +712,7 @@ export async function setZarrLayerSelector(
     | { setSelector?: (selector: Record<string, number | string>) => Promise<void> | void }
     | undefined;
   const native =
-    useAppStore.getState().primaryRenderer === "arcgis" &&
+    isNativeZarrRenderer(useAppStore.getState().primaryRenderer) &&
     useAppStore.getState().layers.some((layer) => layer.id === layerId && layer.type === "zarr");
   if (!native && (!instance || typeof instance.setSelector !== "function")) return false;
 
@@ -832,7 +842,7 @@ const ZARR_DIMENSION_ATTEMPTS = 24;
 async function readZarrDimensionValues(
   layerId: string,
 ): Promise<Record<string, (number | string)[]> | null> {
-  if (useAppStore.getState().primaryRenderer === "arcgis") {
+  if (isNativeZarrRenderer(useAppStore.getState().primaryRenderer)) {
     const layer = useAppStore.getState().layers.find((layer) => layer.id === layerId);
     return layer ? readNativeZarrDimensions(layer) : null;
   }
@@ -925,7 +935,7 @@ function registerZarrTemporalAdapter(
     // The layer may have been removed while the axis was being resolved.
     if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) return true;
     if (
-      useAppStore.getState().primaryRenderer !== "arcgis" &&
+      !isNativeZarrRenderer(useAppStore.getState().primaryRenderer) &&
       !zarrControl?.getLayersMap().has(layerId)
     )
       return true;
@@ -942,7 +952,7 @@ function registerZarrTemporalAdapter(
         });
       },
     });
-    if (useAppStore.getState().primaryRenderer === "arcgis") {
+    if (isNativeZarrRenderer(useAppStore.getState().primaryRenderer)) {
       // Native layers have no Zarr control to own their temporal cleanup.
       arcgisZarrTemporalUnsubscribes.get(layerId)?.();
       const unsubscribe = useAppStore.subscribe((state, previous) => {

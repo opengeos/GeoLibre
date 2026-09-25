@@ -1383,17 +1383,19 @@ describe("CesiumLayerSync", () => {
   });
 
   it("classifies supported vs 2D-only layer kinds", () => {
-    for (const type of ["geojson", "xyz", "raster", "wms", "wmts", "image", "3d-tiles"] as const) {
+    for (const type of [
+      "geojson",
+      "xyz",
+      "raster",
+      "wms",
+      "wmts",
+      "image",
+      "3d-tiles",
+      "zarr",
+    ] as const) {
       assert.equal(isCesiumSupportedLayerType(mkLayer({ type })), true, type);
     }
-    for (const type of [
-      "pmtiles",
-      "mbtiles",
-      "zarr",
-      "lidar",
-      "gaussian-splat",
-      "deckgl-viz",
-    ] as const) {
+    for (const type of ["pmtiles", "mbtiles", "lidar", "gaussian-splat", "deckgl-viz"] as const) {
       assert.equal(isCesiumSupportedLayerType(mkLayer({ type })), false, type);
     }
   });
@@ -1403,16 +1405,18 @@ describe("CesiumLayerSync", () => {
     const layers = [
       // A PMTiles layer without a source to read is neither draped nor bridged.
       mkLayer({ id: "p", type: "pmtiles", source: {} }),
+      // A Zarr kind the globe draws, but with no store or variable to open.
       mkLayer({ id: "z", type: "zarr", source: {} }),
       mkLayer({ id: "a", type: "arcgis", source: { tiles: ["https://a/{z}/{x}/{y}.pbf"] } }),
     ];
     sync.sync(layers);
     assert.equal(f.calls.imageryAdded.length, 0);
     assert.equal(f.calls.primitivesAdded.length, 0);
-    // The kind-level predicate the UI uses to flag "2D only" layers agrees.
+    // The kind-level predicate the UI uses to flag "2D only" layers agrees,
+    // except for the Zarr kind, which is supported once it names a store.
     assert.deepEqual(
       layers.filter((l) => !isCesiumSupportedLayerType(l)).map((l) => l.id),
-      ["p", "z", "a"],
+      ["p", "a"],
     );
   });
 

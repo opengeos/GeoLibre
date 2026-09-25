@@ -128,6 +128,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "satellite.js": "^7.1.0",
+    "zarr-cesium": "^0.3.3",
     "zarrita": "^0.7.5"
   },
   "devDependencies": {

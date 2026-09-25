@@ -275,3 +275,36 @@ it("renders the selected CF slice with north-up orientation, packing and fill ma
     dispose();
   }
 });
+
+it("reads an int64 CF time axis for the Time Slider", async () => {
+  // NOAA OISST's `time` is `<i8` days since 1900, which zarrita reads as
+  // BigInt; the reader used to skip it, so the cube offered no time binding.
+  const bytes = new Map<string, Uint8Array>();
+  const json = (path: string, value: unknown) =>
+    bytes.set(path, new TextEncoder().encode(JSON.stringify(value)));
+  const meta = (dtype: string, shape: number[]) => ({
+    zarr_format: 2,
+    shape,
+    chunks: shape,
+    dtype,
+    fill_value: null,
+    order: "C",
+    filters: null,
+    compressor: null,
+  });
+  json("/time/.zarray", meta("<i8", [2]));
+  json("/time/.zattrs", { _ARRAY_DIMENSIONS: ["time"], units: "days since 1900-01-01" });
+  bytes.set("/time/0", new Uint8Array(new BigInt64Array([66443n, 66474n]).buffer));
+  json("/sst/.zarray", meta("<f8", [2, 1, 1]));
+  json("/sst/.zattrs", { _ARRAY_DIMENSIONS: ["time", "lat", "lon"] });
+  const layer = geojsonLayer({
+    type: "zarr",
+    source: { url: "local-zarr://int64-time", variable: "sst" },
+  });
+  const dispose = registerZarrStore(layer.id, { get: async (key) => bytes.get(key) });
+  try {
+    assert.deepEqual(await readNativeZarrDimensions(layer), { time: [66443, 66474] });
+  } finally {
+    dispose();
+  }
+});

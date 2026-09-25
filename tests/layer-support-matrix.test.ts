@@ -139,7 +139,7 @@ const MATRIX: Record<string, Row> = {
   "pmtiles (vector)":             { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: true },
   "pmtiles (raster)":             { maplibre: "plugin", mapbox: false, arcgis: true,  cesium: true },
   "mbtiles (raster)":             { maplibre: "sync",   mapbox: false, arcgis: true,  cesium: true },
-  zarr:                           { maplibre: "plugin", mapbox: false, arcgis: true,  cesium: false },
+  zarr:                           { maplibre: "plugin", mapbox: false, arcgis: true,  cesium: true },
   "lidar (COPC)":                 { maplibre: "plugin", mapbox: false, arcgis: false, cesium: true },
   "lidar (LiDAR control)":        { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: false },
   "gaussian-splat (.ply)":        { maplibre: "plugin", mapbox: false, arcgis: false, cesium: false },

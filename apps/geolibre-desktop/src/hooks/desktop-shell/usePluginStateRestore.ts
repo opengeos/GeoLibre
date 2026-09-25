@@ -194,7 +194,9 @@ export function usePluginStateRestore({
     reattachGodsEyeView(appAPI);
     if (!engine.capabilities.nativeMapInstance) {
       if (engine.kind === "mapbox" || engine.kind === "arcgis") restoreRasterLayers(appAPI);
-      if (engine.kind === "arcgis") restoreArcgisZarrLayers();
+      // Both draw Zarr from the layer record, so only the Time Slider binding
+      // needs restoring (opengeos/GeoLibre#2261).
+      if (engine.kind === "arcgis" || engine.kind === "cesium") restoreArcgisZarrLayers();
       void restoreLocalFileLayers();
       return;
     }

@@ -33,7 +33,8 @@ Clipping polygons, terrain sampling in the measurement tools, and
 Ion terrain assets (#2552) remain outstanding; Google Photorealistic 3D Tiles
 and the Asset Depot samples are now Ion quick picks in the Add Data dialog.
 The layer-format gaps listed below also remain, including ArcGIS vector tiles,
-drape picking, Zarr, raw point clouds and splats, and deck.gl visualizations.
+drape picking, raw point clouds and splats, and deck.gl visualizations.
+Zarr layers render on the globe since #2261's zarr-cesium follow-up.
 
 The control host now forwards camera and geographic pointer events and reports
 the actual canvas container dimensions. It rejects source mutations as well as
