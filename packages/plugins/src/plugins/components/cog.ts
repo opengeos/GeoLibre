@@ -1,26 +1,19 @@
-// The COG raster control (CogLayerControl) and its Layer Swipe integration.
+// The Layer Swipe integration for rasters drawn by CogLayerControl.
 // Split out of maplibre-components.ts (opengeos/GeoLibre#2633).
+//
+// GeoLibre no longer adds COGs through the main-map CogLayerControl: the host's
+// `addCogLayer` goes to maplibre-gl-raster (see raster-layer-sync). What stays
+// here is the swipe provider, which lists both maplibre-gl-raster layers and
+// legacy "cog-url" layers from older project files and mirrors them onto the
+// comparison map through a hidden CogLayerControl.
 
 import type * as maplibregl from "maplibre-gl";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
-import type {
-  CogLayerControl,
-  CogLayerControlOptions,
-  CogLayerEventHandler,
-  CogLayerInfo,
-} from "maplibre-gl-components";
-import type { GeoLibreAppAPI } from "../../types";
-import { ensureMercatorProjection } from "../map-projection-utils";
+import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import type { CogLayerControl, CogLayerControlOptions } from "maplibre-gl-components";
 import { savedRasterState } from "../raster-layer-sync";
 import type { SwipeRasterSnapshot } from "../swipe-raster-mirror";
-import { type CogLayerControlConstructor, getComponentsConstructors } from "./constructors";
-import { addGeoTiffRasterLayer, shouldUseGenericGeoTiffRenderer } from "./geotiff";
-import {
-  cogRasterControlPosition,
-  type CogRasterLayerOptions,
-  isRemoteHttpUrl,
-  layerNameFromUrl,
-} from "./shared";
+import { getComponentsConstructors } from "./constructors";
+import type { CogRasterLayerOptions } from "./shared";
 
 const COG_RASTER_OPTIONS = {
   backgroundColor: "hsl(var(--popover))",
@@ -35,10 +28,6 @@ const COG_RASTER_OPTIONS = {
   fontColor: "hsl(var(--popover-foreground))",
   visible: false,
 } satisfies CogLayerControlOptions;
-
-let cogRasterControl: CogLayerControl | null = null;
-let cogRasterControlMounted = false;
-let cogRasterStoreUnsubscribe: (() => void) | null = null;
 
 type MutableCogLayerControl = {
   _options?: CogLayerControlOptions;
@@ -56,114 +45,11 @@ type MutableCogLayerControl = {
   };
 };
 
-const pendingCogRasterLayerOptions: CogRasterLayerOptions[] = [];
-const ignoredCogRasterLayerUrls = new Set<string>();
-
-export async function addCogRasterLayer(
-  app: GeoLibreAppAPI,
-  options: CogRasterLayerOptions,
-): Promise<string> {
-  if (options.data || shouldUseGenericGeoTiffRenderer(options.url)) {
-    return addGeoTiffRasterLayer(app, options);
-  }
-
-  // The Components plugin itself is MapLibre-only (no `engines`); this read is
-  // reached from the STAC plugin's audit closure. The COG control is
-  // maplibre-gl-raster, whose tile protocol only registers with MapLibre, and
-  // on Mapbox the STAC plugin draws COGs through the engine instead.
-  // engine-audit-allow: getMap-mapbox
-  ensureMercatorProjection(app.getMap?.());
-  const control = await ensureCogRasterControl(app);
-  if (!control) {
-    throw new Error("The COG raster layer control could not be added to the map.");
-  }
-
-  try {
-    return await addLayerWithCogRasterControl(control, options);
-  } catch (error) {
-    if (isRemoteHttpUrl(options.url)) throw error;
-    return addGeoTiffRasterLayer(app, options, error);
-  }
-}
-
-async function ensureCogRasterControl(app: GeoLibreAppAPI): Promise<CogLayerControl | null> {
-  const { CogLayerControl: CogLayerControlClass } = await getComponentsConstructors();
-
-  cogRasterControl ??= createCogRasterControl(CogLayerControlClass);
-
-  if (!cogRasterControlMounted) {
-    const added = app.addMapControl(cogRasterControl, cogRasterControlPosition);
-    if (!added) {
-      cogRasterControl = null;
-      return null;
-    }
-    cogRasterControlMounted = true;
-  }
-
-  setTimeout(() => {
-    cogRasterControl?.hide();
-    cogRasterControl?.collapse();
-  }, 0);
-  return cogRasterControl;
-}
-
-function createCogRasterControl(CogLayerControlClass: CogLayerControlConstructor): CogLayerControl {
-  const control = new CogLayerControlClass(COG_RASTER_OPTIONS);
-  control.on("layeradd", createCogRasterLayerAddHandler());
-  control.on("layerremove", (event) => {
-    const store = useAppStore.getState();
-    const activeLayerIds = new Set(event.state.layers.map((layer) => layer.id));
-    for (const layer of store.layers) {
-      if (!isCogRasterControlLayer(layer)) continue;
-      const shouldRemove = event.layerId
-        ? layer.id === event.layerId
-        : !activeLayerIds.has(layer.id);
-      if (shouldRemove) {
-        store.removeLayer(layer.id);
-      }
-    }
-  });
-  cogRasterStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
-    const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
-
-    for (const layer of previous.layers) {
-      if (!isCogRasterControlLayer(layer)) continue;
-
-      const currentLayer = currentById.get(layer.id);
-      if (!currentLayer) {
-        cogRasterControl?.removeLayer(layer.id);
-        continue;
-      }
-
-      if (!isCogRasterControlLayer(currentLayer)) continue;
-
-      if (currentLayer.visible !== layer.visible) {
-        cogRasterControl?.setLayerVisibility(
-          currentLayer.id,
-          currentLayer.visible,
-          currentLayer.opacity,
-        );
-      }
-
-      if (currentLayer.opacity !== layer.opacity) {
-        if (currentLayer.visible) {
-          cogRasterControl?.setLayerOpacity(currentLayer.id, currentLayer.opacity);
-        } else {
-          cogRasterControl?.setLayerVisibility(currentLayer.id, false, currentLayer.opacity);
-        }
-      }
-    }
-  });
-  return control;
-}
-
 // --- Layer Swipe COG integration -------------------------------------------
-// GeoLibre renders COG rasters (Vantor Open Data, STAC "Visualize", etc.)
-// through the CogLayerControl deck.gl overlay, so they are MapLibre custom
-// layers that Layer Swipe cannot see through getStyle(). These helpers let the
-// swipe plugin's layerProvider list them and render each per its side
-// assignment: mirror right/both onto the swipe comparison map, hide right-only
-// on the main map. See #1240 and swipe-cog-mirror.ts.
+// COG rasters are deck.gl custom layers that Layer Swipe cannot see through
+// getStyle(). These helpers let the swipe plugin's layerProvider list them and
+// render each per its side assignment: mirror right/both onto the swipe
+// comparison map. See #1240 and swipe-cog-mirror.ts.
 
 /**
  * A COG raster snapshot for the Layer Swipe provider, read from the app store
@@ -267,8 +153,8 @@ export function subscribeSwipeCogChanges(listener: () => void): () => void {
   swipeCogChangeListeners.add(listener);
   // A change to any COG raster surfaces as a store `layers` array change; the
   // provider recompute is cheap, so notify on any layers change rather than
-  // diffing here. Swipe's own main-map hide goes through the control directly
-  // (setCogRasterMainVisibility), not the store, so it cannot loop back.
+  // diffing here. Swipe's own main-map hide goes through the raster control
+  // directly, not the store, so it cannot loop back.
   swipeCogStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     // Cheap reference gate first; then only notify when the COG-raster subset
     // actually changed, so unrelated layer edits during a swipe don't trigger a
@@ -354,36 +240,6 @@ export function getSwipeMaplibreRasters(): SwipeMaplibreRasterSnapshot[] {
         },
       ];
     });
-}
-
-/**
- * Shows or hides a COG raster on the main map without writing the change back
- * to the store, so Layer Swipe can hide a right-only raster on the main map
- * while the Layers panel still lists it as visible. Visibility is opacity-based
- * in CogLayerControl, so the stored opacity is restored when showing it again.
- * A no-op when the control is not mounted.
- *
- * @param id - The raster layer id.
- * @param visible - Whether it should render on the main map.
- * @param opacity - The opacity to restore when making it visible.
- */
-export function setCogRasterMainVisibility(id: string, visible: boolean, opacity: number): void {
-  cogRasterControl?.setLayerVisibility(id, visible, opacity);
-}
-
-/**
- * Reads a COG raster's current visibility on the main map from the control
- * itself, so Layer Swipe can compare against the live state rather than its own
- * cached intent. The control's visibility is also driven independently by the
- * store-diff subscription (a Layers-panel visibility toggle), so a cached value
- * can drift; reading live avoids leaving a right-only raster shown after such a
- * toggle. Defaults to visible when the control or layer is absent.
- *
- * @param id - The raster layer id.
- * @returns Whether the raster currently renders on the main map.
- */
-export function getCogRasterMainVisibility(id: string): boolean {
-  return cogRasterControl?.getLayerVisibility(id) ?? true;
 }
 
 /**
@@ -481,98 +337,6 @@ export function clearMirrorCogLayers(control: CogLayerControl): void {
   control.removeLayer();
 }
 
-export function teardownCogRasterControl(app: GeoLibreAppAPI): void {
-  cogRasterStoreUnsubscribe?.();
-  cogRasterStoreUnsubscribe = null;
-  if (cogRasterControl && cogRasterControlMounted) {
-    app.removeMapControl(cogRasterControl);
-  }
-  cogRasterControl = null;
-  cogRasterControlMounted = false;
-}
-
-function createCogRasterLayerAddHandler(): CogLayerEventHandler {
-  return (event) => {
-    if (!event.layerId) return;
-    const layerInfo = event.state.layers.find((layer) => layer.id === event.layerId);
-    if (!layerInfo) return;
-
-    const pendingOptions = pendingCogRasterLayerOptions.shift();
-    if (!pendingOptions && ignoredCogRasterLayerUrls.delete(layerInfo.url || event.url || "")) {
-      cogRasterControl?.removeLayer(event.layerId);
-      return;
-    }
-
-    const store = useAppStore.getState();
-    const layer = createCogRasterStoreLayer(event.layerId, layerInfo, pendingOptions);
-    if (store.layers.some((item) => item.id === layer.id)) {
-      store.updateLayer(layer.id, {
-        metadata: layer.metadata,
-        opacity: layer.opacity,
-        source: layer.source,
-        style: layer.style,
-        visible: layer.visible,
-      });
-      return;
-    }
-    store.addLayer(layer, pendingOptions?.beforeLayerId);
-  };
-}
-
-function addLayerWithCogRasterControl(
-  control: CogLayerControl,
-  options: CogRasterLayerOptions,
-): Promise<string> {
-  configureCogRasterControl(control, options);
-  pendingCogRasterLayerOptions.push(options);
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const timeout = window.setTimeout(() => {
-      ignoredCogRasterLayerUrls.add(options.url);
-      settle(() =>
-        reject(
-          new Error(
-            "The COG raster layer did not finish loading. Trying generic GeoTIFF rendering.",
-          ),
-        ),
-      );
-    }, 30000);
-    const cleanup = () => {
-      window.clearTimeout(timeout);
-      control.off("layeradd", handleLayerAdd);
-      control.off("error", handleError);
-      const pendingIndex = pendingCogRasterLayerOptions.indexOf(options);
-      if (pendingIndex >= 0) {
-        pendingCogRasterLayerOptions.splice(pendingIndex, 1);
-      }
-    };
-    const settle = (callback: () => void) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      callback();
-    };
-    const handleLayerAdd: CogLayerEventHandler = (event) => {
-      if (!event.layerId || event.url !== options.url) return;
-      settle(() => resolve(event.layerId!));
-    };
-    const handleError: CogLayerEventHandler = (event) => {
-      settle(() => reject(new Error(event.error || "Failed to load the COG raster layer.")));
-    };
-
-    control.on("layeradd", handleLayerAdd);
-    control.on("error", handleError);
-
-    void control.addLayer(options.url).then(() => {
-      const state = control.getState();
-      if (!settled && state.error) {
-        settle(() => reject(new Error(state.error || "Failed to load COG.")));
-      }
-    });
-  });
-}
-
 function configureCogRasterControl(control: CogLayerControl, options: CogRasterLayerOptions): void {
   const mutableControl = control as unknown as MutableCogLayerControl;
   const state = mutableControl._state;
@@ -591,56 +355,6 @@ function configureCogRasterControl(control: CogLayerControl, options: CogRasterL
     mutableControl._options.beforeId = options.beforeLayerId || "";
   }
   mutableControl._render?.();
-}
-
-function createCogRasterStoreLayer(
-  id: string,
-  layerInfo: CogLayerInfo,
-  options?: CogRasterLayerOptions,
-): GeoLibreLayer {
-  const url = options?.url ?? layerInfo.url;
-  const bands = options?.bands?.trim() || layerInfo.bands || "1";
-  const colormap = options?.colormap ?? layerInfo.colormap;
-  const rescaleMin = options?.rescaleMin ?? layerInfo.rescaleMin;
-  const rescaleMax = options?.rescaleMax ?? layerInfo.rescaleMax;
-  const nodata = options?.nodata ?? layerInfo.nodata;
-
-  return {
-    id,
-    name: options?.name?.trim() || layerInfo.name || layerNameFromUrl(url, id),
-    type: "cog",
-    source: {
-      bands,
-      colormap,
-      nodata,
-      rescaleMax,
-      rescaleMin,
-      sourceId: id,
-      type: "raster",
-      url,
-    },
-    visible: true,
-    opacity: options?.opacity ?? layerInfo.opacity,
-    style: {
-      ...DEFAULT_LAYER_STYLE,
-      fillOpacity: 1,
-    },
-    metadata: {
-      bands,
-      colormap,
-      customLayerType: "raster",
-      externalNativeLayer: true,
-      identifiable: false,
-      nativeLayerIds: [id],
-      nodata,
-      rescaleMax,
-      rescaleMin,
-      sourceId: id,
-      sourceKind: "cog-url",
-      tileType: "raster",
-    },
-    sourcePath: url,
-  };
 }
 
 function isCogRasterControlLayer(layer: GeoLibreLayer): boolean {

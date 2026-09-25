@@ -13,10 +13,8 @@ import { getStyleMap } from "./style-map";
 import { resolveSwipeSideIds, type SwipeStyleLayer } from "./swipe-layer-ids";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
-  getCogRasterMainVisibility,
   getSwipeCogRasters,
   getSwipeMaplibreRasters,
-  setCogRasterMainVisibility,
   subscribeSwipeCogChanges,
   type SwipeCogRasterSnapshot,
 } from "./maplibre-components";
@@ -49,17 +47,11 @@ let unsubscribeBasemap: (() => void) | null = null;
 // fresh comparison map (basemap change, re-activation).
 let cogMirror: SwipeCogMirror | null = null;
 let rasterMirror: SwipeRasterMirror | null = null;
-// The main-map visibility this provider last forced per raster id (with the
-// opacity to restore when showing it again), so it only toggles on change and
-// can restore visibility on teardown. `kind` records which control owns the
-// raster -- CogLayerControl or maplibre-gl-raster's RasterControl -- so teardown
-// restores through that one instead of poking both and relying on the other to
-// no-op an id it never managed.
-type ForcedRasterKind = "cog" | "raster";
-const cogMainForced = new Map<
-  string,
-  { kind: ForcedRasterKind; visible: boolean; opacity: number }
->();
+// The main-map visibility this provider last forced per maplibre-gl-raster
+// layer id, so it only toggles on change and can restore visibility on
+// teardown. Legacy "cog-url" rasters have no main-map control any more (nothing
+// draws them there), so only maplibre-gl-raster layers are tracked.
+const cogMainForced = new Map<string, { visible: boolean }>();
 // Side assignments accumulated during one _updateLayerVisibility pass (the
 // control calls applySide once per provider layer); reconciled together so the
 // comparison mirror syncs in a single pass.
@@ -72,11 +64,11 @@ let unsubscribeCogRasterChanges: (() => void) | null = null;
 export function getSwipeRasterLoadState(layerId: string) {
   const forced = cogMainForced.get(layerId);
   // This probe covers maplibre-gl-raster, including the Nepal flood project.
-  // Legacy CogLayerControl (kind "cog", sourceKind "cog-url") uses a separate
-  // private overlay in SwipeCogMirror with no tile-readiness probe. Leave it
-  // on the inspector's existing fail-closed path; opacity-based main-map
-  // visibility is not evidence that the comparison tiles have finished.
-  if (!forced || forced.kind !== "raster") return null;
+  // Legacy CogLayerControl rasters (sourceKind "cog-url") use a separate
+  // private overlay in SwipeCogMirror with no tile-readiness probe and are
+  // never in cogMainForced, so they stay on the inspector's existing
+  // fail-closed path.
+  if (!forced) return null;
   const state = swipeControl?.getState();
   // Left-only rasters are not mirrored. Unassigned and both-side rasters are.
   if (state?.leftLayers.includes(layerId) && !state.rightLayers.includes(layerId)) return null;
@@ -169,24 +161,10 @@ function reconcileCogSwipe(): void {
   // Main map: hide right-only rasters (shown on the comparison side instead);
   // keep every other visible raster on the main map. Rasters the user hid are
   // left untouched (their store `visible` is false). Compare against the
-  // control's LIVE visibility, not a cached value: the store-diff subscription
-  // in maplibre-components also toggles the control (a Layers-panel visibility
-  // flip), so a cached target can drift and leave a right-only raster shown.
-  for (const raster of rasters) {
-    if (!raster.visible) {
-      cogMainForced.delete(raster.id);
-      continue;
-    }
-    const wantVisible = sideFor(raster) !== "right";
-    if (getCogRasterMainVisibility(raster.id) !== wantVisible) {
-      setCogRasterMainVisibility(raster.id, wantVisible, raster.opacity);
-    }
-    cogMainForced.set(raster.id, {
-      kind: "cog",
-      visible: wantVisible,
-      opacity: raster.opacity,
-    });
-  }
+  // control's LIVE visibility, not a cached value: a Layers-panel visibility
+  // flip also toggles the control, so a cached target can drift and leave a
+  // right-only raster shown. Legacy "cog-url" rasters have nothing on the main
+  // map to hide, so only maplibre-gl-raster layers are visited here.
   for (const raster of maplibreRasters) {
     if (!raster.visible) {
       // The user hid it: drop this provider's bookkeeping so teardown does not
@@ -200,11 +178,7 @@ function reconcileCogSwipe(): void {
     if (getRasterMainVisibility(raster.id) !== wantVisible) {
       setRasterMainVisibility(raster.id, wantVisible);
     }
-    cogMainForced.set(raster.id, {
-      kind: "raster",
-      visible: wantVisible,
-      opacity: raster.opacity,
-    });
+    cogMainForced.set(raster.id, { visible: wantVisible });
   }
 }
 
@@ -216,12 +190,9 @@ function teardownCogSwipe(): void {
   cogPendingSides.clear();
   cogPendingComparisonMap = undefined;
   cogReconcileScheduled = false;
-  // Restore any raster this provider hid on the main map, through the control
-  // that owns it.
+  // Restore any raster this provider hid on the main map.
   for (const [id, forced] of cogMainForced) {
-    if (forced.visible) continue;
-    if (forced.kind === "cog") setCogRasterMainVisibility(id, true, forced.opacity);
-    else setRasterMainVisibility(id, true);
+    if (!forced.visible) setRasterMainVisibility(id, true);
   }
   cogMainForced.clear();
 }

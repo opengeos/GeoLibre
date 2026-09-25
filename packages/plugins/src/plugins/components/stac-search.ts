@@ -259,6 +259,8 @@ interface StacCogTileData {
   byteLength: number;
   height: number;
   isRgb: boolean;
+  /** The tile's nodata value in the texture's sampled value space, if any. */
+  shaderNoData: number | null;
   texture: unknown;
   width: number;
 }
@@ -590,11 +592,12 @@ async function createStacCogRenderProps(
         pool,
         signal,
       });
-      const { data, height, layout, mask, nodata, width } = tile.array;
+      const { data, height, layout, mask, width } = tile.array;
       if (layout === "band-separate") {
         throw new Error("Band-separate GeoTIFF tiles are not supported.");
       }
       const tags = image.cachedTags;
+      const nodata = tile.array.nodata ?? tags?.nodata ?? null;
       let samplesPerPixel = tags?.samplesPerPixel ?? 1;
       const bitsPerSample = tags?.bitsPerSample ?? [8];
       const sampleFormat = tags?.sampleFormat ?? [1];
@@ -608,7 +611,7 @@ async function createStacCogRenderProps(
           colormap: renderOptions.colormap,
           getColormap,
           mask,
-          nodata: nodata ?? tags?.nodata ?? null,
+          nodata,
           rescaleMax: renderOptions.rescaleMax,
           rescaleMin: renderOptions.rescaleMin,
         });
@@ -642,6 +645,7 @@ async function createStacCogRenderProps(
         byteLength: textureData.byteLength,
         height,
         isRgb: samplesPerPixel >= 3,
+        shaderNoData: toStacCogShaderNoData(nodata, textureBitsPerSample, textureSampleFormat),
         texture: textureObject,
         width,
       };
@@ -659,11 +663,10 @@ async function createStacCogRenderProps(
       if (tileData.isRgb) {
         return { renderPipeline };
       }
-      const nodata = getStacCogShaderNoData();
-      if (nodata !== null) {
+      if (tileData.shaderNoData !== null) {
         renderPipeline.push({
           module: FilterNoDataVal,
-          props: { value: nodata },
+          props: { value: tileData.shaderNoData },
         });
       }
       renderPipeline.push({
@@ -826,8 +829,33 @@ function getAlphaValue(data: RasterBandValues, bitsPerSample: ArrayLike<number>)
   return bits >= 16 ? 65535 : 255;
 }
 
-function getStacCogShaderNoData(): number | null {
-  return null;
+/**
+ * Maps a GeoTIFF nodata value into the value space the `FilterNoDataVal`
+ * shader compares against. The shader tests the sampled red channel, and
+ * deck.gl-geotiff uploads unsigned-integer samples as normalized (`unorm`)
+ * textures, so an 8-bit nodata of 255 samples as 1.0. Float and signed-integer
+ * textures sample their raw values, so their nodata passes through unchanged.
+ *
+ * Only the non-RGB shader path uses this: single-band tiles are colorized on
+ * the CPU, where nodata is already made transparent, and RGB(A) tiles skip the
+ * nodata step.
+ *
+ * @param nodata - The GeoTIFF nodata value (GDAL_NODATA), or null when unset.
+ * @param bitsPerSample - The texture's BitsPerSample tag.
+ * @param sampleFormat - The texture's SampleFormat tag (1 uint, 2 int, 3 float).
+ * @returns The value to hand `FilterNoDataVal`, or null to skip the step.
+ */
+export function toStacCogShaderNoData(
+  nodata: number | null | undefined,
+  bitsPerSample: ArrayLike<number>,
+  sampleFormat: ArrayLike<number>,
+): number | null {
+  // A NaN nodata can never equal a sampled value, so the step would be a no-op.
+  if (nodata === null || nodata === undefined || !Number.isFinite(nodata)) return null;
+  const format = sampleFormat[0] ?? 1;
+  if (format !== 1) return nodata;
+  const bits = bitsPerSample[0] ?? 8;
+  return nodata / (2 ** bits - 1);
 }
 
 async function patchStacSearchCOGLayerClass(COGLayerClass: unknown): Promise<void> {

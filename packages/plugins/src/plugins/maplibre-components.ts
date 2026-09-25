@@ -12,7 +12,6 @@ import type { ControlGrid, ControlGridOptions, DefaultControlName } from "maplib
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import { teardownBookmarkControl } from "./components/bookmark";
-import { teardownCogRasterControl } from "./components/cog";
 import {
   colorbarControl,
   colorbarPanelVisible,
@@ -21,7 +20,6 @@ import {
 } from "./components/colorbar";
 import { getComponentsConstructors } from "./components/constructors";
 import { teardownFlatGeobufControl } from "./components/flatgeobuf";
-import { teardownGeoTiffRasterOverlay } from "./components/geotiff";
 import {
   type ComponentsProjectState,
   normalizeColorbarState,
@@ -61,16 +59,13 @@ export {
   subscribeBookmarkPanel,
 } from "./components/bookmark";
 export {
-  addCogRasterLayer,
   clearMirrorCogLayers,
   createSwipeCogMirrorControl,
-  getCogRasterMainVisibility,
   getSwipeCogRasters,
   getSwipeMaplibreRasters,
   mirrorAddCogLayer,
   mirrorRemoveCogLayer,
   mirrorSetCogOpacity,
-  setCogRasterMainVisibility,
   subscribeSwipeCogChanges,
   type SwipeCogRasterSnapshot,
   type SwipeMaplibreRasterSnapshot,
@@ -146,14 +141,13 @@ export {
   openSearchPlacesPanel,
   subscribeSearchPlacesPanel,
 } from "./components/search";
-export { type CogRasterLayerOptions } from "./components/shared";
 export {
   closeSpinGlobePanel,
   isSpinGlobePanelVisible,
   openSpinGlobePanel,
   subscribeSpinGlobePanel,
 } from "./components/spin-globe";
-export { openSplattingLayerPanel } from "./components/splatting";
+export { openSplattingLayerPanel, restoreSplattingLayers } from "./components/splatting";
 export { applyStacSearchLayerOrder, openStacSearchLayerPanel } from "./components/stac-search";
 export {
   closeViewStatePanel,
@@ -269,8 +263,6 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
     componentsControlRevision += 1;
-    teardownCogRasterControl(app);
-    teardownGeoTiffRasterOverlay(app);
     teardownFlatGeobufControl(app);
     teardownPMTilesControl(app);
     teardownPrintControl(app);
@@ -344,8 +336,6 @@ function applyComponentsProjectState(app: GeoLibreAppAPI, state: unknown): void 
 }
 
 export function closeMaplibreComponentControls(app: GeoLibreAppAPI): void {
-  teardownCogRasterControl(app);
-  teardownGeoTiffRasterOverlay(app);
   teardownFlatGeobufControl(app);
   teardownPMTilesControl(app);
   teardownPrintControl(app);

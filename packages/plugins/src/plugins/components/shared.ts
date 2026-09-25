@@ -2,11 +2,6 @@
 // Split out of maplibre-components.ts (opengeos/GeoLibre#2633).
 
 import type { CogLayerControlOptions, PrintTheme } from "maplibre-gl-components";
-import type { GeoLibreMapControlPosition } from "../../types";
-
-// Shared by the COG control (./cog) and the generic GeoTIFF overlay (./geotiff),
-// which docks in the same corner.
-export const cogRasterControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const GUI_PANEL_VIEWPORT_MARGIN = 16;
 // Poll interval / cap for re-measuring a just-expanded GUI panel while its
@@ -85,11 +80,10 @@ export function constrainGuiPanelToViewport(panelSelector: string): void {
   requestAnimationFrame(settle);
 }
 
-// The options of a COG/GeoTIFF raster add. Lives here because both the COG
-// control (./cog) and its GeoTIFF fallback (./geotiff) take them.
+// The visualization a CogLayerControl raster is added with (the Layer Swipe
+// COG mirror in ./cog).
 export interface CogRasterLayerOptions {
   url: string;
-  data?: ArrayBuffer;
   name?: string;
   bands?: string;
   colormap?: CogLayerControlOptions["defaultColormap"];

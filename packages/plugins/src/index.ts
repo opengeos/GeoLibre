@@ -109,7 +109,6 @@ export {
   type ArcGISSourceType,
 } from "./plugins/arcgis-layer";
 export {
-  addCogRasterLayer,
   closeBookmarkPanel,
   closeColorbarPanel,
   closeHtmlPanel,
@@ -152,6 +151,7 @@ export {
   openSearchPlacesPanel,
   openSpinGlobePanel,
   openSplattingLayerPanel,
+  restoreSplattingLayers,
   openStacSearchLayerPanel,
   openViewStatePanel,
   openZarrLayerPanel,
@@ -177,7 +177,6 @@ export {
   subscribeSearchPlacesPanel,
   subscribeSpinGlobePanel,
   subscribeViewStatePanel,
-  type CogRasterLayerOptions,
 } from "./plugins/maplibre-components";
 export {
   KerchunkReferenceStore,
