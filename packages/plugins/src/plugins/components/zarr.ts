@@ -17,7 +17,12 @@ import {
   setExternalNativePaintBridge,
   useAppStore,
 } from "@geolibre/core";
-import { readNativeZarrDimensions, registerZarrStore } from "@geolibre/map/zarr-source";
+import {
+  readNativeZarrDimensions,
+  registerZarrHeaders,
+  registerZarrStore,
+  zarrRequestHeaders,
+} from "@geolibre/map/zarr-source";
 import type {
   ZarrLayerControl,
   ZarrLayerControlOptions,
@@ -241,7 +246,8 @@ export interface CloudNetcdfLayerOptions {
  *
  * @param app The GeoLibre app API.
  * @param options Reference URL, variable, and optional styling/selector.
- * @throws If the Zarr control cannot be mounted or the reference fails to load.
+ * @throws If the Zarr control cannot be mounted, the reference fails to load,
+ *   or the control reports that the store or variable failed to load.
  */
 export async function addCloudNetcdfLayer(
   app: GeoLibreAppAPI,
@@ -307,10 +313,18 @@ export async function addCloudNetcdfLayer(
     // The same event names the new layer, which the temporal registration below
     // needs so this add's own references reach the time-axis lookup.
     let addedLayerId: string | null = null;
+    let failure: string | null = null;
     const captureLayerId: ZarrLayerEventHandler = (event) => {
       if (event.layerId) addedLayerId = event.layerId;
     };
+    // The control reports a failed load by emitting "error" rather than
+    // rejecting. Listening only while this add runs (the queue keeps adds from
+    // overlapping) scopes the failure to this request.
+    const captureError: ZarrLayerEventHandler = (event) => {
+      failure = event.error ?? null;
+    };
     control.on("layeradd", captureLayerId);
+    control.on("error", captureError);
     // Claim this add, so the shared handler leaves the adapter to us.
     const endAdd = beginProgrammaticZarrAdd(options.url);
     try {
@@ -325,20 +339,26 @@ export async function addCloudNetcdfLayer(
       });
     } finally {
       control.off("layeradd", captureLayerId);
+      control.off("error", captureError);
       endAdd();
+    }
+
+    // Without a layer the add failed, whether or not the control said why, so
+    // reject and let the dialog show the error instead of closing as if the
+    // add succeeded.
+    if (!addedLayerId) {
+      throw new Error(failure ?? "Failed to add the NetCDF layer.");
     }
 
     // The references carry the coordinate attributes inline, which is the only
     // way to read a NetCDF cube's CF units: its `url` names the kerchunk
     // manifest, not a Zarr store whose metadata documents could be walked.
-    if (addedLayerId) {
-      registerZarrTemporalAdapter(addedLayerId, options.url, { refs, headers: options.headers });
-      // Record the extent on the layer itself. The control accepts `bounds` as a
-      // render hint but does not always carry it back on the "layeradd" event,
-      // and the renderer never reports the extent it resolved — so without this
-      // write the Layers panel's "Zoom to layer" has nothing to fly to.
-      if (options.bounds) applyZarrLayerBounds(addedLayerId, options.bounds);
-    }
+    registerZarrTemporalAdapter(addedLayerId, options.url, { refs, headers: options.headers });
+    // Record the extent on the layer itself. The control accepts `bounds` as a
+    // render hint but does not always carry it back on the "layeradd" event,
+    // and the renderer never reports the extent it resolved — so without this
+    // write the Layers panel's "Zoom to layer" has nothing to fly to.
+    if (options.bounds) applyZarrLayerBounds(addedLayerId, options.bounds);
   });
 
   // Unlike openZarrLayerPanel, the dialog-based flow intentionally leaves the
@@ -493,9 +513,11 @@ async function addNativeArcgisZarrLayer(
     // Local NetCDF refs inline the entire decoded raster. Keep those in the
     // session store so saving a project cannot embed megabytes of base64 data.
     ...(refs && !options.url.startsWith("local:") ? { kerchunkRefs: refs } : {}),
-    headers: options.headers,
     spatialDimensions: options.spatialDimensions,
   };
+  // Headers are credentials: keep them in the session map the renderer reads,
+  // never on `layer.source`, which is saved and shared with the project.
+  registerZarrHeaders(id, options.headers);
   if (options.store) {
     const dispose = registerZarrStore(id, options.store);
     const unsubscribe = useAppStore.subscribe((state, previous) => {
@@ -633,6 +655,9 @@ async function addZarrLayerExclusively(
   // here rather than from the shared `layeradd` handler so this add's own
   // headers reach the metadata lookup even when another add of the same store
   // overlaps it (opengeos/GeoLibre#1448 review).
+  // Remembered for the session (never on the layer record) so the ArcGIS
+  // renderer can still authenticate this layer after a renderer swap.
+  registerZarrHeaders(addedLayerId, headers);
   registerZarrTemporalAdapter(addedLayerId, url, {
     headers,
     ...(options.readTimeAttributes ? { readAttributes: options.readTimeAttributes } : {}),
@@ -940,7 +965,7 @@ export function restoreArcgisZarrLayers(): void {
     if (restoredArcgisZarrLayerIds.has(layer.id)) continue;
     trackRestoredArcgisZarrLayer(layer.id);
     void registerZarrTemporalAdapter(layer.id, String(layer.source.url), {
-      headers: layer.source.headers as Record<string, string> | undefined,
+      headers: zarrRequestHeaders(layer),
       refs: layer.source.kerchunkRefs as KerchunkRefs | undefined,
     }).then((registered) => {
       if (!registered) restoredArcgisZarrLayerIds.delete(layer.id);

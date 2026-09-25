@@ -1830,6 +1830,16 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     layer = { ...layer, source };
   }
 
+  // A Zarr store's request headers authenticate it (a bearer token, an API
+  // key), so they are credentials. The Zarr adds keep them in a session-only
+  // map the renderer reads (`registerZarrHeaders` in @geolibre/map), but a
+  // project saved before that change carries them on `source`; drop them so
+  // no save, autosave, or share writes them back out (opengeos/GeoLibre#2643).
+  if (layer.type === "zarr" && layer.source.headers !== undefined) {
+    const { headers: _headers, ...source } = layer.source;
+    layer = { ...layer, source };
+  }
+
   // External native layers that restore their features from a source URL keep
   // a `geojson` copy on the map only for the attribute table; it is redundant
   // in a saved project and would only bloat it, so strip it. Layers without a

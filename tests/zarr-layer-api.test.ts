@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { getExternalNativePaintBridge, pluginOwnsPaint, useAppStore } from "@geolibre/core";
+import {
+  getExternalNativePaintBridge,
+  pluginOwnsPaint,
+  projectFromStore,
+  serializeProject,
+  useAppStore,
+} from "@geolibre/core";
+import { zarrRequestHeaders } from "@geolibre/map/zarr-source";
 import {
   __setComponentsModuleLoaderForTests,
+  addCloudNetcdfLayer,
   addZarrRasterLayer,
   queryZarrLayer,
   setZarrLayerSelector,
@@ -401,5 +409,110 @@ describe("queryZarrLayer", () => {
       await queryZarrLayer("not-a-zarr-layer", { type: "Point", coordinates: [0, 0] }),
       null,
     );
+  });
+});
+
+// Request headers authenticate a store (a bearer token, an API key), so they are
+// credentials and must never reach a saved, autosaved, or shared project
+// (opengeos/GeoLibre#2643). Every project write goes through projectFromStore.
+describe("Zarr request headers stay out of project files", () => {
+  const TOKEN = "Bearer secret-zarr-token";
+
+  it("keeps an ArcGIS-native add's headers in the session, not on the layer", async () => {
+    const arcgisApp = {
+      ...app,
+      getMapRenderer: () => "arcgis",
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addZarrRasterLayer(arcgisApp, {
+      url: "https://example.org/private.zarr",
+      variable: "tmax",
+      headers: { authorization: TOKEN },
+    });
+
+    const layer = useAppStore.getState().layers.find((item) => item.id === id);
+    assert.ok(layer, "expected the native Zarr layer in the store");
+    assert.equal(layer.source.headers, undefined);
+    // The renderer still authenticates the live layer.
+    assert.deepEqual(zarrRequestHeaders(layer), { authorization: TOKEN });
+    const saved = serializeProject(projectFromStore(useAppStore.getState()));
+    assert.equal(saved.includes("secret-zarr-token"), false);
+  });
+
+  it("remembers a MapLibre add's headers for the session without persisting them", async () => {
+    installStubModule();
+    const id = await addZarrRasterLayer(app, {
+      url: "https://example.org/private.zarr",
+      variable: "tmax",
+      headers: { authorization: TOKEN },
+    });
+
+    const layer = useAppStore.getState().layers.find((item) => item.id === id);
+    assert.ok(layer);
+    assert.deepEqual(zarrRequestHeaders(layer), { authorization: TOKEN });
+    const saved = serializeProject(projectFromStore(useAppStore.getState()));
+    assert.equal(saved.includes("secret-zarr-token"), false);
+  });
+
+  it("strips headers a project saved before the fix still carries on source", () => {
+    useAppStore.setState({
+      layers: [
+        {
+          id: "legacy-zarr",
+          name: "Legacy",
+          type: "zarr",
+          source: {
+            url: "https://example.org/private.zarr",
+            variable: "tmax",
+            headers: { authorization: TOKEN },
+          },
+          visible: true,
+          opacity: 1,
+          style: {},
+          metadata: {},
+        } as never,
+      ],
+    });
+
+    // Still readable for the live session...
+    const live = useAppStore.getState().layers[0];
+    assert.deepEqual(zarrRequestHeaders(live), { authorization: TOKEN });
+    // ...but never written back out.
+    const project = projectFromStore(useAppStore.getState());
+    assert.equal(project.layers[0].source.headers, undefined);
+    assert.equal(project.layers[0].source.variable, "tmax");
+    assert.equal(serializeProject(project).includes("secret-zarr-token"), false);
+  });
+});
+
+describe("addCloudNetcdfLayer", () => {
+  it("rejects with the renderer's error when the store or variable fails to load", async () => {
+    installStubModule();
+    failNextAdd = "Variable 'missing' not found";
+
+    await assert.rejects(
+      addCloudNetcdfLayer(app, {
+        url: "https://example.org/manifest.json",
+        refs: {},
+        variable: "missing",
+      }),
+      /Variable 'missing' not found/,
+    );
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
+  it("resolves and mirrors the layer when the add succeeds", async () => {
+    installStubModule();
+
+    await addCloudNetcdfLayer(app, {
+      url: "https://example.org/manifest.json",
+      refs: {},
+      variable: "air",
+      bounds: [-10, -5, 10, 5],
+    });
+
+    const layer = useAppStore.getState().layers.at(-1);
+    assert.equal(layer?.source.variable, "air");
+    assert.deepEqual(layer?.source.bounds, [-10, -5, 10, 5]);
   });
 });
