@@ -36,6 +36,9 @@ const SAMPLES = [
 ];
 const AXES = ["west", "south", "east", "north"] as const;
 
+/** An already-localized message that the submit handler must not re-classify. */
+class WcsMessageError extends Error {}
+
 export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.kind.wcs.label"));
@@ -115,7 +118,7 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
         // Point at the CRS choice when the server refused one it never listed.
         const advertised = described.crses ?? [];
         if (!advertised.length || advertised.includes(description.crs)) throw error;
-        throw new Error(
+        throw new WcsMessageError(
           `${errorMessage(error)} ${t("addData.wcs.unadvertisedCrs", {
             crs: description.crs,
             list: advertised.join(", "),
@@ -150,7 +153,7 @@ export function WcsSource({ initialUrl = "" }: { initialUrl?: string }) {
       useAppStore.getState().moveLayerToGroup(id, source.shell.targetGroupId, source.beforeLayer);
       source.shell.closeDialog();
     } catch (error) {
-      throw new Error(errorMessage(error));
+      throw error instanceof WcsMessageError ? error : new Error(errorMessage(error));
     }
   });
 
