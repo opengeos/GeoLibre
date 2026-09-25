@@ -59,7 +59,10 @@ export function ProviderModelPicker({
             bedrockAuth.sessionToken ?? "",
           ].join("\u0000")
         : ""
-      : (apiKey?.trim() ?? "");
+      : provider === "openrouter"
+        ? // OpenRouter's catalog is public: typing its key must not refetch.
+          ""
+        : (apiKey?.trim() ?? "");
   const bedrockAuthRef = useRef(bedrockAuth);
   bedrockAuthRef.current = bedrockAuth;
   const canDiscover = provider === "openrouter" || key.length > 0;

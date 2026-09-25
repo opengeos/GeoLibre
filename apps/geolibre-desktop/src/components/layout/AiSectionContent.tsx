@@ -68,6 +68,18 @@ interface AiSectionContentProps {
   osFieldEnvName: (field: ProviderField) => string | null;
 }
 
+/**
+ * Trim draft field values and drop blank ones, so a field the user cleared does
+ * not override a value from the environment when overlaid on it.
+ */
+function nonBlankValues(values: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values)
+      .map(([key, value]) => [key, value.trim()])
+      .filter(([, value]) => value),
+  );
+}
+
 /** Shared Ollama discovery state for profile editors. */
 function useOllamaModels() {
   const { t } = useTranslation();
@@ -334,14 +346,14 @@ export function AiSectionContent({
                   provider={newProfileProvider}
                   apiKey={getApiKey(newProfileProvider, {
                     ...scopedOsEnv,
-                    ...newProfileFieldValues,
+                    ...nonBlankValues(newProfileFieldValues),
                   })}
                   bedrockAuth={
                     newProfileProvider === "bedrock"
                       ? bedrockAuthFromConfig(
                           configForProvider("bedrock", undefined, {
                             ...scopedOsEnv,
-                            ...newProfileFieldValues,
+                            ...nonBlankValues(newProfileFieldValues),
                           }),
                         )
                       : null
