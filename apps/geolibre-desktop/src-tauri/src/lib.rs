@@ -507,12 +507,6 @@ fn project_path_string(path: &Path) -> String {
     value.into_owned()
 }
 
-/// Resolve existing GeoLibre project files supplied by the operating system.
-///
-/// Other CLI flags are deliberately ignored. Resolving the path before it
-/// reaches the webview both handles a relative command-line path correctly and
-/// prevents a symlink with a project-looking name from bypassing the existing
-/// `read_project_file` extension check.
 /// A launch argument as a local path.
 ///
 /// The Linux desktop entry uses the `%u` field code, which is the only one that
@@ -538,6 +532,12 @@ fn launch_argument_path(argument: std::ffi::OsString) -> PathBuf {
     PathBuf::from(argument)
 }
 
+/// Resolve existing GeoLibre project files supplied by the operating system.
+///
+/// Other CLI flags are deliberately ignored. Resolving the path before it
+/// reaches the webview both handles a relative command-line path correctly and
+/// prevents a symlink with a project-looking name from bypassing the existing
+/// `read_project_file` extension check.
 fn project_paths_from_args<I>(args: I, cwd: &Path) -> Vec<String>
 where
     I: IntoIterator<Item = std::ffi::OsString>,
