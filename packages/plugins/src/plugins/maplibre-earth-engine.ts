@@ -1,8 +1,8 @@
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
-import {
+import type {
   PluginControl,
-  type PluginControlOptions,
-  type VisualizeOptions,
+  PluginControlOptions,
+  VisualizeOptions,
 } from "maplibre-gl-earth-engine";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import {
@@ -78,7 +78,11 @@ const earthEnginePanelListeners = new Set<() => void>();
 const syncedEarthEngineControls = new WeakSet<PluginControl>();
 
 export function openEarthEnginePanel(app: GeoLibreAppAPI): void {
-  void openStandaloneEarthEngineControl(app);
+  openStandaloneEarthEngineControl(app).catch((error: unknown) => {
+    // The control's package is fetched on first open; offline this can fail.
+    console.warn("[GeoLibre] Failed to open the Earth Engine panel", error);
+    setEarthEngineControlVisible(false);
+  });
 }
 
 export function toggleEarthEnginePanel(app: GeoLibreAppAPI): void {
@@ -110,7 +114,11 @@ export function subscribeEarthEnginePanel(listener: () => void): () => void {
 }
 
 async function openStandaloneEarthEngineControl(app: GeoLibreAppAPI): Promise<boolean> {
-  earthEngineControl ??= new GeoLibreEarthEngineControl(earthEngineOptions());
+  if (!earthEngineControl) {
+    const EarthEngineControl = await loadEarthEngineControlClass();
+    // Another open may have created the control while the package loaded.
+    earthEngineControl ??= new EarthEngineControl(earthEngineOptions());
+  }
   wireEarthEngineLayerSync(earthEngineControl);
 
   if (!earthEngineControlMounted) {
@@ -134,58 +142,82 @@ async function openStandaloneEarthEngineControl(app: GeoLibreAppAPI): Promise<bo
   return true;
 }
 
-class GeoLibreEarthEngineControl extends PluginControl {
-  async authenticate(projectId?: string, oauthClientId?: string): Promise<void> {
-    const isTauriAuth = shouldUseTauriEarthEngineOAuth();
-    if (isTauriAuth) {
-      const activeOAuthClientId = oauthClientIdValue(
-        oauthClientId || activeOAuthClientIdFromControl(this),
-      );
-      const existingToken = tokenFromControlOptions(this);
-      if (existingToken?.accessToken) {
+type EarthEngineControlClass = new (
+  options: Omit<PluginControlOptions, "position">,
+) => PluginControl;
+
+let earthEngineControlClass: Promise<EarthEngineControlClass> | null = null;
+
+/**
+ * Loads maplibre-gl-earth-engine and builds the GeoLibre control subclass.
+ *
+ * The package is about 1.7 MB, so it is imported only when the panel first
+ * opens rather than at app startup.
+ *
+ * @returns The GeoLibre Earth Engine control class.
+ */
+function loadEarthEngineControlClass(): Promise<EarthEngineControlClass> {
+  earthEngineControlClass ??= import("maplibre-gl-earth-engine").then(({ PluginControl }) => {
+    class GeoLibreEarthEngineControl extends PluginControl {
+      async authenticate(projectId?: string, oauthClientId?: string): Promise<void> {
+        const isTauriAuth = shouldUseTauriEarthEngineOAuth();
+        if (isTauriAuth) {
+          const activeOAuthClientId = oauthClientIdValue(
+            oauthClientId || activeOAuthClientIdFromControl(this),
+          );
+          const existingToken = tokenFromControlOptions(this);
+          if (existingToken?.accessToken) {
+            try {
+              clearEarthEngineFunctionInfo();
+              await super.authenticate(projectId, activeOAuthClientId);
+            } finally {
+              await closeTauriOauthPopups();
+            }
+            return;
+          }
+
+          const token = await authenticateEarthEngine(activeOAuthClientId);
+          if (token?.accessToken) {
+            await closeTauriOauthPopups();
+            applyTokenToControlOptions(this, token);
+            try {
+              clearEarthEngineFunctionInfo();
+              await super.authenticate(projectId, activeOAuthClientId);
+            } finally {
+              await closeTauriOauthPopups();
+            }
+            return;
+          }
+        }
+
+        // The base implementation consumes options.accessToken when present
+        // (no second OAuth prompt) and still handles project ID persistence,
+        // ee.initialize, and status updates.
         try {
           clearEarthEngineFunctionInfo();
-          await super.authenticate(projectId, activeOAuthClientId);
+          await super.authenticate(projectId, oauthClientId);
         } finally {
-          await closeTauriOauthPopups();
+          if (isTauriAuth) await closeTauriOauthPopups();
         }
-        return;
       }
 
-      const token = await authenticateEarthEngine(activeOAuthClientId);
-      if (token?.accessToken) {
-        await closeTauriOauthPopups();
-        applyTokenToControlOptions(this, token);
-        try {
-          clearEarthEngineFunctionInfo();
-          await super.authenticate(projectId, activeOAuthClientId);
-        } finally {
-          await closeTauriOauthPopups();
-        }
-        return;
+      async loadAsset(assetId: string, vis: VisualizeOptions): Promise<void> {
+        clearEarthEngineFunctionInfo();
+        await super.loadAsset(assetId, vis);
+      }
+
+      async runScript(script: string, vis: VisualizeOptions): Promise<void> {
+        clearEarthEngineFunctionInfo();
+        await super.runScript(script, vis);
       }
     }
-
-    // The base implementation consumes options.accessToken when present
-    // (no second OAuth prompt) and still handles project ID persistence,
-    // ee.initialize, and status updates.
-    try {
-      clearEarthEngineFunctionInfo();
-      await super.authenticate(projectId, oauthClientId);
-    } finally {
-      if (isTauriAuth) await closeTauriOauthPopups();
-    }
-  }
-
-  async loadAsset(assetId: string, vis: VisualizeOptions): Promise<void> {
-    clearEarthEngineFunctionInfo();
-    await super.loadAsset(assetId, vis);
-  }
-
-  async runScript(script: string, vis: VisualizeOptions): Promise<void> {
-    clearEarthEngineFunctionInfo();
-    await super.runScript(script, vis);
-  }
+    return GeoLibreEarthEngineControl;
+  });
+  // Drop a failed load (e.g. offline) so the next open retries the import.
+  earthEngineControlClass.catch(() => {
+    earthEngineControlClass = null;
+  });
+  return earthEngineControlClass;
 }
 
 function activeOAuthClientIdFromControl(control: PluginControl): string {

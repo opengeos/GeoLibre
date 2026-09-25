@@ -630,8 +630,8 @@ function manualChunks(id: string): string | undefined {
 // chunk swallowed Vite's dynamic-import preload helper, tslib, and dompurify.
 // The entry imports the preload helper, so the whole ~4.7 MB Cesium chunk was
 // modulepreloaded on every boot. The higher-priority groups here claim those
-// shared modules first. Cesium's own group does not follow dependencies, so it
-// holds only the engine and its third-party dependencies land in a lazy chunk.
+// shared modules first. The Cesium and manualChunks groups do not follow
+// dependencies, so each named chunk holds only its own package.
 const CODE_SPLITTING_GROUPS = [
   { name: "preload-helper", test: /vite\/preload-helper/, priority: 3 },
   { name: "tslib", test: /\/node_modules\/tslib\//, priority: 3 },
@@ -647,7 +647,18 @@ const CODE_SPLITTING_GROUPS = [
     includeDependenciesRecursively: false,
     priority: 2,
   },
-  { name: (id: string) => manualChunks(id) ?? null, priority: 1 },
+  // The named chunks from manualChunks do not follow dependencies either. With
+  // recursion, whichever named chunk reached a shared library first absorbed
+  // it: `maplibre-duckdb` held all of deck.gl and luma.gl, `maplibre-gl-raster`
+  // held loaders.gl, and `maplibre-gl-components` held three.js. Any startup
+  // code that needed one of those libraries then fetched the whole plugin
+  // chunk, about 5.7 MB of plugins at boot. Shared libraries now land in
+  // Rolldown's default chunks and load only with code that uses them.
+  {
+    name: (id: string) => manualChunks(id) ?? null,
+    includeDependenciesRecursively: false,
+    priority: 1,
+  },
 ];
 
 // Upper bound on the minified JS the app entry imports statically, i.e. what

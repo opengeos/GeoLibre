@@ -2,11 +2,7 @@
 
 import type { GeoAgentControl, GeoAgentControlOptions } from "maplibre-gl-geoagent";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import {
-  authenticateWithOAuth,
-  renderEeLayer,
-  type VisualizeOptions,
-} from "maplibre-gl-earth-engine";
+import type { VisualizeOptions } from "maplibre-gl-earth-engine";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import {
   removeGeoAgentStoreLayers,
@@ -309,6 +305,8 @@ async function loadGeoAgentDatasetWithGeoLibreEarthEngine(
     accessToken = earthEngineAccessTokenOverride;
   }
 
+  // Loaded on first use: the package is about 1.7 MB and not needed at startup.
+  const { authenticateWithOAuth, renderEeLayer } = await import("maplibre-gl-earth-engine");
   clearEarthEngineFunctionInfo();
   await authenticateWithOAuth({
     accessToken: accessToken || undefined,

@@ -257,7 +257,9 @@ starfield canvases can sit underneath. That package renders point clouds into an
 after the map canvas, tagged `DECK_CANVAS_CLASS`
 (`maplibre-gl-lidar-canvas`). `effectsOverlayCss()`
 (`packages/plugins/src/plugins/maplibre-effects.ts`) hands that wrapper the
-canvas's own z-index. Drop the rule and the wrapper falls below the raised
+canvas's own z-index. The class name is a hand-kept copy, not an import, so the
+lidar chunk stays off the startup path; `tests/effects-settings.test.ts` checks
+it against the package's `DECK_CANVAS_CLASS`. Drop the rule and the wrapper falls below the raised
 canvas, hiding the point cloud outright; drop the re-parenting upstream and the
 wrapper goes back to covering the Measure/Colorbar/Legend/HTML/Bookmark panels
 (#2530).

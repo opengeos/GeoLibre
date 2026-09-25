@@ -3,7 +3,6 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { getActiveEllipsoid } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getStyleMap } from "./style-map";
-import { DECK_CANVAS_CLASS as LIDAR_CANVAS_CLASS } from "maplibre-gl-lidar";
 
 /**
  * GeoLibre atmosphere & particle effects plugin.
@@ -96,11 +95,12 @@ const MARKER_Z_INDEX = CONTROL_CONTAINER_Z_INDEX;
 // while markers and the control container -- both one step higher -- stay above
 // the points, which is what the issue asked for.
 //
-// The class comes from the package rather than a local copy so a rename cannot
-// silently un-fix the stacking. The package is side-effect-free, so the import
-// tree-shakes down to the string: it does not pull the deck.gl-heavy
-// LidarControl into this eagerly loaded plugin (verified against the build
-// output -- the chunk set and sizes are unchanged).
+// The class is copied from the package's DECK_CANVAS_CLASS instead of imported.
+// maplibre-gl-lidar builds into its own lazy chunk, and importing even this one
+// string pulls that ~0.6 MB chunk onto the startup path. A rename upstream
+// would silently un-fix the stacking; tests/effects-settings.test.ts builds its
+// expected selector from the package export, so it fails on a rename.
+const LIDAR_CANVAS_CLASS = "maplibre-gl-lidar-canvas";
 const OVERLAID_DECK_CANVAS_Z_INDEX = MAP_CANVAS_Z_INDEX;
 
 /**
