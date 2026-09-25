@@ -47,6 +47,22 @@
         }
       }
     ],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "main.desktop",
+        "files": {
+          "/usr/share/mime/packages/org.geolibre.project.xml": "../../../packaging/linux/org.geolibre.project.xml"
+        },
+        "postInstallScript": "../../../packaging/linux/post-install.sh"
+      },
+      "rpm": {
+        "desktopTemplate": "main.desktop",
+        "files": {
+          "/usr/share/mime/packages/org.geolibre.project.xml": "../../../packaging/linux/org.geolibre.project.xml"
+        },
+        "postInstallScript": "../../../packaging/linux/post-install.sh"
+      }
+    },
     "icon": [
       "icons/icon.png",
       "icons/32x32.png",

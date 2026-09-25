@@ -513,13 +513,38 @@ fn project_path_string(path: &Path) -> String {
 /// reaches the webview both handles a relative command-line path correctly and
 /// prevents a symlink with a project-looking name from bypassing the existing
 /// `read_project_file` extension check.
+/// A launch argument as a local path.
+///
+/// The Linux desktop entry uses the `%u` field code, which is the only one that
+/// serves both the project file association and the OAuth callback scheme, and
+/// it hands over a URI. GIO localizes `file://` to a plain path before exec, but
+/// KIO and others do not, so both spellings arrive in practice (#2671).
+///
+/// Anything that is not a resolvable local `file://` URI is passed through
+/// untouched, so a non-UTF-8 path keeps its original bytes and a URI that names
+/// a remote host falls through to the caller's extension and canonicalize
+/// checks, which reject it.
+fn launch_argument_path(argument: std::ffi::OsString) -> PathBuf {
+    if let Some(text) = argument.to_str() {
+        if text.starts_with("file://") {
+            if let Some(path) = tauri::Url::parse(text)
+                .ok()
+                .and_then(|url| url.to_file_path().ok())
+            {
+                return path;
+            }
+        }
+    }
+    PathBuf::from(argument)
+}
+
 fn project_paths_from_args<I>(args: I, cwd: &Path) -> Vec<String>
 where
     I: IntoIterator<Item = std::ffi::OsString>,
 {
     args.into_iter()
         .filter_map(|argument| {
-            let candidate = PathBuf::from(argument);
+            let candidate = launch_argument_path(argument);
             if !has_geolibre_project_extension(&candidate) {
                 return None;
             }
@@ -4664,6 +4689,41 @@ mod tests {
                 project_path_string(&legacy.canonicalize().unwrap()),
             ]
         );
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn accepts_file_uri_arguments_from_linux_launchers() {
+        let root = ScratchDir::new("project-argument-file-uri");
+        let spaced = root.path().join("my project.geolibre");
+        std::fs::write(&spaced, "{}").unwrap();
+        let canonical = spaced.canonicalize().unwrap();
+        // Percent-encoded, exactly as a launcher that does not localize `%u`
+        // spells it. The bare path spelling is covered above.
+        let uri = format!(
+            "file://{}",
+            canonical
+                .to_str()
+                .unwrap()
+                .replace('%', "%25")
+                .replace(' ', "%20")
+        );
+
+        assert_eq!(
+            project_paths_from_args([OsString::from(uri)], root.path()),
+            [project_path_string(&canonical)]
+        );
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn rejects_file_uris_that_name_a_remote_host() {
+        let root = ScratchDir::new("project-argument-remote-uri");
+        assert!(project_paths_from_args(
+            [OsString::from("file://example.com/shared/project.geolibre")],
+            root.path()
+        )
+        .is_empty());
     }
 
     #[cfg(all(unix, not(feature = "mas")))]
