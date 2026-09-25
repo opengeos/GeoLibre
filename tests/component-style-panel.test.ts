@@ -78,7 +78,7 @@ describe("StylePanel", () => {
 
   it("writes a new fill color to the selected layer only", () => {
     selectPolygonLayer();
-    const otherBefore = style("other");
+    const otherBefore = structuredClone(style("other"));
     renderStylePanel();
 
     fireEvent.change(input("Fill color"), { target: { value: "#ff0000" } });

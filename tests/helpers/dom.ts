@@ -194,8 +194,26 @@ export function render(
   return rtl.render(ui, { ...options, wrapper: AppProviders });
 }
 
-const initialAppState = useAppStore.getInitialState();
-const initialDesktopSettings = useDesktopSettingsStore.getInitialState();
+/**
+ * Freeze every plain object and array reachable from `value`, leaving
+ * functions (store actions) alone. `resetStores` hands the same initial state
+ * object to every test, so an in-place mutation of it would leak between
+ * tests; frozen, such a mutation throws (ES modules run in strict mode)
+ * instead of silently poisoning the baseline.
+ *
+ * @param value The state to freeze.
+ * @returns The same value, frozen.
+ */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+const initialAppState = deepFreeze(useAppStore.getInitialState());
+const initialDesktopSettings = deepFreeze(useDesktopSettingsStore.getInitialState());
 
 /**
  * Restore the app store and the desktop-settings store to their initial state

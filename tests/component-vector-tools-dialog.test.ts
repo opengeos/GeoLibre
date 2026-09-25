@@ -113,6 +113,17 @@ describe("VectorToolsDialog", () => {
     );
   });
 
+  it("preselects a non-default tool requested before the first open", () => {
+    renderDialog();
+    const dialog = openTool("centroids");
+
+    assert.ok(
+      within(dialog).getByText(/Compute the centroid point of each feature/),
+      "the Centroids description is not shown",
+    );
+    assert.equal(within(dialog).queryAllByLabelText(/^Distance/).length, 0);
+  });
+
   it("renders the selected tool's parameters with their defaults", () => {
     renderDialog();
     const dialog = openTool("buffer");
