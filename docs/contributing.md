@@ -23,8 +23,10 @@ before you invest time in a pull request.
 
 ## Prerequisites
 
-- **Node.js** 22 or newer
+- **Node.js** 22 or newer (`.nvmrc` pins the major version, so `nvm use`
+  picks it up)
 - **Rust** toolchain ([rustup](https://rustup.rs/)) for Tauri desktop builds
+  (`rust-toolchain.toml` selects the stable channel CI uses)
 - Linux only: `webkit2gtk` and `libayatana-appindicator` (see the
   [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
 - **Python** 3.10 or newer for [pre-commit](https://pre-commit.com/) (the
@@ -71,7 +73,7 @@ packages/map            # MapLibre integration and layer sync
 packages/ui             # Tailwind + shadcn/ui primitives
 packages/plugins        # Plugin API and built-in plugins
 packages/processing     # Client-side algorithm registry
-workers/viewer          # Cloudflare viewer worker (geolibre-viewer-worker)
+workers/                # viewer, collab, collab-node, tiles and ai-proxy workers
 backend/geolibre_server # Optional FastAPI conversion sidecar (Python)
 docs/                   # This documentation site (MkDocs)
 ```
@@ -94,8 +96,9 @@ schema.
 4. Commit with a clear message. The history follows a
    [Conventional Commits](https://www.conventionalcommits.org/) style prefix,
    for example `feat:`, `fix:`, `docs:`, `refactor:`, or `chore:`.
-5. Push your branch and open a pull request against `main`. Describe what
-   changed and why, and link any related issue.
+5. Push your branch and open a pull request against `main`. The pull request
+   template asks what changed and why, how you tested it, and which issue it
+   relates to.
 
 Pull requests are reviewed before merging. Automated reviewers may leave inline
 comments; address them or explain why a suggestion does not apply.
@@ -108,27 +111,47 @@ Run the fast TypeScript unit tests while you work:
 npm run test:frontend
 ```
 
-Before opening a pull request, run the formatting hooks and the full local
-quality gate:
+For a type check without the Vite build, run `npm run typecheck:fast`
+(`tsc -b` over the app, no output written besides its incremental cache).
+`npm run typecheck` is an alias for the full production build.
+
+Before opening a pull request, run the pre-commit hooks on the files you
+changed, then the local quality gate:
 
 ```bash
-pre-commit run --all-files
-npm run ci
+pre-commit run --files <paths you changed>
+npm run ci:web   # frontend-only changes: no Rust or Python needed
+npm run ci       # the full gate that CI runs
 ```
 
-`npm run ci` runs the complete gate that mirrors continuous integration:
+Scope pre-commit to your files with `--files` rather than `--all-files`:
+`--all-files` reformats and re-checks every file in the repository, which is
+slow and can churn files you did not touch. The local `npm-build` hook still
+runs the full production build once per invocation; if you already built, add
+`SKIP=npm-build` in front of the command.
 
-| Step             | Command                 | Covers                            |
-| ---------------- | ----------------------- | --------------------------------- |
-| Build            | `npm run build`         | TypeScript compile and Vite build |
-| Frontend tests   | `npm run test:frontend` | Fast unit tests under `tests/`    |
-| Worker typecheck | `npm run test:worker`   | The viewer worker package         |
-| Backend tests    | `npm run test:backend`  | `pytest` for the Python sidecar   |
-| Rust check       | `npm run check:rust`    | `cargo check` for the Tauri shell |
+`npm run ci:web` is the quick gate for changes that only touch the web app and
+its packages: lint, the i18n catalog check, `typecheck:fast`, and the frontend
+unit tests. It needs only Node.
+
+`npm run ci` runs the complete gate that mirrors continuous integration, in this
+order:
+
+| Step               | Command                         | Covers                                                                                                              |
+| ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Lint               | `npm run lint`                  | ESLint over `apps/`, `packages/`, `workers/` and `tests/`                                                           |
+| i18n catalog check | `npm run i18n:tools:check`      | The processing-tool strings in `en.json` match the tool registries (regenerate with `npm run i18n:tools`)           |
+| Build              | `npm run build`                 | TypeScript compile (`tsc -b`) and Vite build                                                                        |
+| Frontend tests     | `npm run test:frontend:coverage` | Unit tests under `tests/`, gated on a [coverage floor](maintenance.md#coverage-floors)                              |
+| Worker checks      | `npm run test:worker`           | Type checks all five workers (`viewer`, `collab`, `collab-node`, `tiles`, `ai-proxy`) and runs the `collab-node` tests |
+| Backend tests      | `npm run test:backend:coverage` | `pytest` for the Python sidecar, gated on a [coverage floor](maintenance.md#coverage-floors)                        |
+| Rust check         | `npm run check:rust`            | `cargo check` for the Tauri shell                                                                                   |
 
 You only need the toolchains for the areas you touched. A docs-only or
-frontend-only change does not require Rust or Python, though the full `npm run
-ci` gate does.
+frontend-only change does not require Rust or Python (use `npm run ci:web`),
+though the full `npm run ci` gate does. The backend step needs the sidecar's
+`test` extra (`pip install -e "backend/geolibre_server[test]"`); without it the
+vector, raster, SQL and ML tests skip themselves.
 
 ### End-to-end smoke tests
 

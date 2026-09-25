@@ -18,7 +18,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
     "@auth0/auth0-react": "^2.27.0",
-    "@carbonplan/zarr-layer": "^0.9.1",
+    "@carbonplan/zarr-layer": "0.9.1",
     "@cereusdb/standard": "^0.2.0",
     "@cesium/engine": "^26.3.0",
     "@cesium/widgets": "^16.2.0",

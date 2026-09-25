@@ -21,9 +21,13 @@ npm run dev          # web build at http://localhost:5173
 Before opening a pull request:
 
 ```bash
-pre-commit run --all-files
-npm run ci
+pre-commit run --files <paths you changed>
+npm run ci:web   # frontend-only changes: lint, i18n check, type check, unit tests
+npm run ci       # the full gate CI runs (also needs Rust and Python)
 ```
+
+Prefer `--files` over `--all-files`, which re-checks the whole repository. See
+[Quality checks](docs/contributing.md#quality-checks) for what each gate runs.
 
 Branch off `main` (never commit to it directly), keep changes focused, follow
 [Conventional Commits](https://www.conventionalcommits.org/) for messages, and

@@ -15,6 +15,16 @@ error** — the feature just stops working. After bumping any of the packages
 below (**including Dependabot PRs**), do the listed check and run the frontend
 suite.
 
+### Patched packages (`patches/`)
+
+`postinstall` applies the `patch-package` patches in `patches/`, and each patch
+file names the exact version it was made against. `@carbonplan/zarr-layer` is
+declared with an exact version (no `^`) in both `apps/geolibre-desktop` and
+`packages/plugins` so a routine install can never move it past the patched
+version. To bump it, regenerate the patch against the new version (or drop it if
+upstream fixed the bug), rename the patch file, and update both declarations and
+`package-lock.json` in the same PR.
+
 ### `geolibre-wasm` (`packages/processing/package.json`)
 
 - **Processing menu catalog.** `ProcessingMenu.tsx` renders from a checked-in,

@@ -18,7 +18,7 @@
     "./zarr-time-axis": "./src/plugins/zarr-time-axis.ts"
   },
   "dependencies": {
-    "@carbonplan/zarr-layer": "^0.9.1",
+    "@carbonplan/zarr-layer": "0.9.1",
     "@deck.gl/aggregation-layers": "^9.4.0",
     "@deck.gl/core": "^9.4.0",
     "@deck.gl/geo-layers": "^9.4.0",
