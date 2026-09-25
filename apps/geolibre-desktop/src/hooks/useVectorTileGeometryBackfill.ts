@@ -116,6 +116,35 @@ function attributeFields(features: Feature[]): string[] {
 }
 
 /**
+ * Whether a vector-tile layer still lacks its geometry type or attribute fields.
+ *
+ * @param layer - The layer to check.
+ * @returns `true` when the layer is a vector-tile layer awaiting a backfill.
+ */
+function needsGeometryBackfill(layer: GeoLibreLayer): boolean {
+  return (
+    VECTOR_TILE_TYPES.has(layer.type) &&
+    (typeof layer.metadata.geometryType !== "string" ||
+      !Array.isArray(layer.metadata.fields) ||
+      layer.metadata.fields.length === 0)
+  );
+}
+
+/**
+ * The ids of the layers awaiting a backfill, joined into one comparable string.
+ *
+ * @param layers - The store's layers.
+ * @returns A newline-joined id list; empty when nothing is pending.
+ */
+function backfillPendingKey(layers: readonly GeoLibreLayer[]): string {
+  let key = "";
+  for (const layer of layers) {
+    if (needsGeometryBackfill(layer)) key += `${layer.id}\n`;
+  }
+  return key;
+}
+
+/**
  * Keep vector-tile layers' `metadata.geometryType` populated from their tiles.
  *
  * @param app - The host app API (stably memoized by the caller).
@@ -127,22 +156,17 @@ export function useVectorTileGeometryBackfill(
   app: ReturnType<typeof createAppAPI>,
   mapReadyGeneration: number,
 ): void {
-  const layers = useAppStore((state) => state.layers);
+  // Subscribe to the ids still awaiting a backfill (a string, so it compares by
+  // value), not the whole `layers` array: the host (TopToolbar) would otherwise
+  // re-render on every edit of any layer. The effect only needs to re-attach
+  // when that set changes.
+  const pendingKey = useAppStore((state) => backfillPendingKey(state.layers));
 
   useEffect(() => {
     const map = app.getMap?.() ?? app.getMapboxMap?.();
     if (!map) return;
 
-    const needsBackfill = () =>
-      useAppStore
-        .getState()
-        .layers.filter(
-          (layer) =>
-            VECTOR_TILE_TYPES.has(layer.type) &&
-            (typeof layer.metadata.geometryType !== "string" ||
-              !Array.isArray(layer.metadata.fields) ||
-              layer.metadata.fields.length === 0),
-        );
+    const needsBackfill = () => useAppStore.getState().layers.filter(needsGeometryBackfill);
 
     if (needsBackfill().length === 0) return;
 
@@ -179,5 +203,5 @@ export function useVectorTileGeometryBackfill(
     return () => {
       map.off("idle", backfill);
     };
-  }, [app, layers, mapReadyGeneration]);
+  }, [app, pendingKey, mapReadyGeneration]);
 }

@@ -36,6 +36,8 @@ import {
   supportsBridgedOpacity,
   useAppStore,
   validateMapExpression,
+  useLayer,
+  useLayerSummaries,
 } from "@geolibre/core";
 import {
   Button,
@@ -1026,7 +1028,10 @@ export function StylePanel({
 }: StylePanelProps) {
   const { t, i18n } = useTranslation();
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
-  const layers = useAppStore((s) => s.layers);
+  // Only the other layers' ids and names are read (the "place below" list);
+  // the selected layer itself comes from useLayer, so editing another layer's
+  // style or opacity does not re-render this panel.
+  const layerSummaries = useLayerSummaries();
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
@@ -1201,7 +1206,7 @@ export function StylePanel({
     return () => window.clearTimeout(timer);
   }, [pasteStyleNotice]);
 
-  const layer = layers.find((l) => l.id === selectedLayerId);
+  const layer = useLayer(selectedLayerId);
 
   useEffect(() => {
     if (!layer) {
@@ -2128,7 +2133,7 @@ export function StylePanel({
   const applyBeforeId = (value: string) => {
     // Picking another user layer is a one-shot reorder in the layer list;
     // beforeId metadata only works for raw MapLibre (basemap) layer ids.
-    const otherLayers = layers.filter((l) => l.id !== layer.id);
+    const otherLayers = layerSummaries.filter((l) => l.id !== layer.id);
     const targetIndex = otherLayers.findIndex((l) => l.id === value);
     if (targetIndex >= 0) {
       setDraftBeforeId("");
@@ -2182,7 +2187,7 @@ export function StylePanel({
   // NOTE: not reactive to basemap switches — the ref does not trigger a
   // re-render, so the list refreshes on the next store-driven render.
   const basemapStyleLayerIds = mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
-  const otherLayers = layers.filter((l) => l.id !== layer.id);
+  const otherLayers = layerSummaries.filter((l) => l.id !== layer.id);
   // While 3D (Z values) is active the basemap group below is hidden, so a
   // saved basemap target surfaces under "Saved (unavailable)" instead of
   // leaving the select pointing at a missing option.

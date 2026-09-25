@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, useLayersWhen } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@geolibre/ui";
 import { Database } from "lucide-react";
@@ -174,7 +174,9 @@ export function AddDataDialog({
   const { t } = useTranslation();
   const open = kind !== null;
   const addLayer = useAppStore((s) => s.addLayer);
-  const existingLayers = useAppStore((s) => s.layers);
+  // Layers are only read while the dialog is open; closed, it stays mounted
+  // without re-rendering on layer edits.
+  const existingLayers = useLayersWhen(open);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const martin = useMartinConnection();
 

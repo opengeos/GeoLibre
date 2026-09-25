@@ -1,4 +1,4 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, useLayersWhen, type GeoLibreLayer } from "@geolibre/core";
 import { getLayerBounds, type MapEngine } from "@geolibre/map";
 import {
   clearRemoteWhiteboxCatalogSnapshotCache,
@@ -422,7 +422,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
   const processingInitialTool = useAppStore((s) => s.ui.processingInitialTool);
   const setProcessingInitialTool = useAppStore((s) => s.setProcessingInitialTool);
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the dialog is open; closed, it stays mounted (to
+  // keep its form, window position and job polling) without re-rendering on
+  // layer edits.
+  const layers = useLayersWhen(open);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const rerun = useAppStore((s) => s.ui.processingRerun);
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);

@@ -7,6 +7,7 @@ import {
   type ModelGraphNodeKind,
   type ProcessingModel,
   type ProcessingModelGraph,
+  useLayersWhen,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
@@ -273,7 +274,9 @@ export function ModelBuilderPanel({
   const requestedModelId = useAppStore((s) => s.ui.modelBuilderRequestedModelId);
   const setOpen = useAppStore((s) => s.setModelBuilderOpen);
   const setRequestedModelId = useAppStore((s) => s.setModelBuilderRequestedModelId);
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the panel is open (it stays mounted closed to
+  // keep the model on the canvas).
+  const layers = useLayersWhen(open);
   const savedModels = useAppStore((s) => s.models);
   const saveModel = useAppStore((s) => s.saveModel);
   const deleteModel = useAppStore((s) => s.deleteModel);

@@ -26,6 +26,7 @@ import {
   useAppStore,
   type StyleLibraryEntry,
   type StyleLibraryEntryKind,
+  useLayer,
 } from "@geolibre/core";
 import { applyQmlImport, applySldImport, parseQml, parseSld } from "@geolibre/map";
 import {
@@ -275,7 +276,6 @@ export function StyleManagerPanel() {
   const saveStyleLibraryEntry = useAppStore((s) => s.saveStyleLibraryEntry);
   const setStyleLibrary = useAppStore((s) => s.setStyleLibrary);
   const deleteStyleLibraryEntry = useAppStore((s) => s.deleteStyleLibraryEntry);
-  const layers = useAppStore((s) => s.layers);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const updateLayer = useAppStore((s) => s.updateLayer);
@@ -338,7 +338,7 @@ export function StyleManagerPanel() {
     [pos],
   );
 
-  const layer = layers.find((l) => l.id === selectedLayerId);
+  const layer = useLayer(selectedLayerId);
   const canUseLayer = layer !== undefined && isStyleLibraryTargetLayer(layer.type);
 
   // The panel is non-modal, so the selection can change while the save form

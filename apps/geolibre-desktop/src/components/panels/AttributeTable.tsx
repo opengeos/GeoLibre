@@ -16,6 +16,7 @@ import {
   type AttributeFormFieldConfig,
   type AttributeFormFieldError,
   type EditorTrackingStampOptions,
+  useLayer,
 } from "@geolibre/core";
 import {
   getDuckDBLayerRows,
@@ -386,7 +387,6 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // The Radix ScrollArea viewport, used as the virtualizer's scroll container.
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
-  const layers = useAppStore((s) => s.layers);
   const attributeFilter = useAppStore((s) => s.attributeFilter);
   const setAttributeFilter = useAppStore((s) => s.setAttributeFilter);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
@@ -454,7 +454,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const [calcGeomUnit, setCalcGeomUnit] = useState<string>("meters");
   const calcExpressionRef = useRef<HTMLTextAreaElement>(null);
 
-  const layer = layers.find((l) => l.id === selectedLayerId);
+  const layer = useLayer(selectedLayerId);
   const hasLayer = Boolean(layer);
   // Columns materialized by persistent joins are derived data: every save
   // re-derives them from the join table, so an edit, rename, or delete here

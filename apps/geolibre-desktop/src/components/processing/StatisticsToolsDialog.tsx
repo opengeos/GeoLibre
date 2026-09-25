@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, useLayersWhen } from "@geolibre/core";
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   STATISTICS_TOOLS,
@@ -92,7 +92,9 @@ export function StatisticsToolsDialog({
   const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.statisticsToolOpen);
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the dialog is open; closed, it stays mounted (to
+  // keep its form, log and in-flight run) without re-rendering on layer edits.
+  const layers = useLayersWhen(openTool !== null);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const rerun = useAppStore((s) => s.ui.processingRerun);

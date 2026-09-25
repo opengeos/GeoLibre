@@ -17,6 +17,7 @@ import {
   type LegendConfig,
   type LegendCustomEntry,
   type LegendPanelPosition,
+  useLayersWhen,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { colormapColors, warmColormapColors } from "@geolibre/plugins";
@@ -179,7 +180,10 @@ export function MapLegendPanel({
   mapReadyGeneration: number;
 }) {
   const { t, i18n } = useTranslation();
-  const storeLayers = useAppStore((state) => state.layers);
+  // Layers are only read while the legend panel is shown; hidden (the default),
+  // it stays mounted without re-rendering on layer edits.
+  const legendPanelVisible = useAppStore((state) => state.legend.panelVisible === true);
+  const storeLayers = useLayersWhen(legendPanelVisible);
   const storyPresenting = useAppStore((state) => state.ui.storymapPresenting);
   const storyOpacity = useAppStore((state) => state.ui.storymapLayerOpacity);
   // During a story presentation the legend follows the chapters: a layer the

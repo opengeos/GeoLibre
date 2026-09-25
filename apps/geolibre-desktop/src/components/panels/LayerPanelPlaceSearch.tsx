@@ -15,6 +15,7 @@ import {
   geocoderMinIntervalMs,
   resolveGeocoderConfig,
   useAppStore,
+  useLayersWhen,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { Input } from "@geolibre/ui";
@@ -90,9 +91,11 @@ export function LayerPanelPlaceSearch({
   // Per-instance id so multiple mounts never collide on the aria-controls link.
   const resultsId = `${useId()}-results`;
   const geocodingPrefs = useAppStore((s) => s.preferences.geocoding);
-  const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const [query, setQuery] = useState("");
+  // The layers are only scanned for a query long enough to search features, so
+  // subscribe to them only then; an empty box ignores layer edits entirely.
+  const layers = useLayersWhen(query.trim().length >= MIN_FEATURE_QUERY_LENGTH);
   const [placeRows, setPlaceRows] = useState<SearchRow[]>([]);
   const [featureGroups, setFeatureGroups] = useState<FeatureSearchGroup[]>([]);
   const [open, setOpen] = useState(false);

@@ -1,4 +1,4 @@
-import { getRoutingConfig, useAppStore } from "@geolibre/core";
+import { getRoutingConfig, useAppStore, useLayersWhen } from "@geolibre/core";
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   NETWORK_TOOLS,
@@ -45,7 +45,9 @@ export function NetworkToolsDialog({ mapControllerRef }: NetworkToolsDialogProps
   const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.networkToolOpen);
   const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the dialog is open; closed, it stays mounted (to
+  // keep its form, log and in-flight run) without re-rendering on layer edits.
+  const layers = useLayersWhen(openTool !== null);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const rerun = useAppStore((s) => s.ui.processingRerun);
   const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);

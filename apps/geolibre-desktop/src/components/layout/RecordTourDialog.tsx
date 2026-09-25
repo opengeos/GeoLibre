@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, useLayersWhen } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
@@ -112,7 +112,9 @@ const RECORDING_SUPPORTED = isTourRecordingSupported();
  */
 export function RecordTourDialog({ open, onOpenChange, mapControllerRef }: RecordTourDialogProps) {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the panel is open; it stays mounted closed (the
+  // tour survives toggling) without re-rendering on layer edits.
+  const layers = useLayersWhen(open);
   const [keyframes, setKeyframes] = useState<TourKeyframe[]>([]);
   const [fps, setFps] = useState(DEFAULT_FPS);
   // Mirror the FPS as editable text so the field can be cleared and retyped;

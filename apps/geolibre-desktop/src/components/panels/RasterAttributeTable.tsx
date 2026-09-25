@@ -1,4 +1,4 @@
-import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import { type GeoLibreLayer, useAppStore, useLayer } from "@geolibre/core";
 import { getPaletteLegend, savedRasterSymbology } from "@geolibre/plugins";
 import { type RasterData, readRasterData } from "@geolibre/processing";
 import { Button, Input, Select } from "@geolibre/ui";
@@ -113,10 +113,9 @@ export function RasterAttributeTable() {
   const open = useAppStore((s) => s.ui.rasterAttributeTableOpen);
   const setOpen = useAppStore((s) => s.setRasterAttributeTableOpen);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
-  const layers = useAppStore((s) => s.layers);
   const updateLayer = useAppStore((s) => s.updateLayer);
 
-  const layer = layers.find((l) => l.id === selectedLayerId);
+  const layer = useLayer(selectedLayerId);
   const ratLayer = isRatLayer(layer) ? layer : null;
   // Derived only while open: the panel stays mounted when closed, and
   // validating/sorting a stored table on every layers write would be dead work.

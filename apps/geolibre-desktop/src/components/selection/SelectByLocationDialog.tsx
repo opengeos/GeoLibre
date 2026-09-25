@@ -1,4 +1,4 @@
-import { featureSelectionId, type SelectionMode, useAppStore } from "@geolibre/core";
+import { featureSelectionId, type SelectionMode, useAppStore, useLayersWhen } from "@geolibre/core";
 import {
   MAX_CLIENT_PAIRS,
   matchFeaturesByLocation,
@@ -44,7 +44,8 @@ export function SelectByLocationDialog(): ReactElement | null {
   const open = useAppStore((s) => s.ui.selectByLocationOpen);
   const setOpen = useAppStore((s) => s.setSelectByLocationOpen);
   const preselectedLayerId = useAppStore((s) => s.ui.selectByLocationLayerId);
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the panel is open (it stays mounted closed).
+  const layers = useLayersWhen(open);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectionCount = useAppStore((s) => s.selectedFeatureIds.length);
 

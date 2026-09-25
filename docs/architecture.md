@@ -42,6 +42,8 @@ flowchart LR
 6. Attribute table selections update the highlighted feature source and can zoom the map to the selected feature.
 7. Desktop save uses `projectFromStore` and writes `.geolibre` to disk. The earlier `.geolibre.json` name remains readable.
 
+Every layer action replaces the `layers` array, so `useAppStore((s) => s.layers)` re-renders a component on any edit of any layer. Only subscribers that genuinely need every field of every layer (the map canvases' sync, the Layers panel) should do that. Everything else uses the narrow hooks in `packages/core/src/layer-selectors.ts`: `useLayer(id)` for one record, `useLayerIds()` for the id list, `useLayerSummaries()` for `{ id, name, type, visible, groupId }` rows, and `useLayersWhen(open)` for always-mounted dialogs and panels that need the full array only while open.
+
 ## Rendering-engine model
 
 The Zustand store is renderer-neutral: it contains plain `GeoLibreLayer`

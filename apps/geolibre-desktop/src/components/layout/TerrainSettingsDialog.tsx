@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, useLayersWhen } from "@geolibre/core";
 import {
   CogDemError,
   DEFAULT_TERRAIN_EXAGGERATION,
@@ -72,7 +72,9 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   // Committed (parsed/clamped) on blur or Enter; kept in sync when the value
   // changes elsewhere (slider, dialog open, reset).
   const [draft, setDraft] = useState(String(DEFAULT_EXAGGERATION));
-  const layers = useAppStore((state) => state.layers);
+  // Layers are only read while the dialog is open, so layer edits made with it
+  // closed do not re-render it; handleOpen reads the store directly to seed.
+  const layers = useLayersWhen(open);
   const rasterLayerOptions = useMemo(() => terrainRasterLayerOptions(layers), [layers]);
   useEffect(() => setDraft(String(exaggeration)), [exaggeration]);
 
@@ -90,7 +92,9 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       setExaggeration(value);
       setDraft(String(value));
       const currentSource = mapControllerRef.current?.getTerrainCogSource() ?? "";
-      const currentLayer = rasterLayerOptions.find((option) => option.source === currentSource);
+      const currentLayer = terrainRasterLayerOptions(useAppStore.getState().layers).find(
+        (option) => option.source === currentSource,
+      );
       setTerrainUrl(!currentLayer && /^https?:\/\//i.test(currentSource) ? currentSource : "");
       setRasterLayerId(currentLayer?.id ?? "");
       setSourceError(null);
@@ -111,7 +115,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       window.removeEventListener(TERRAIN_SETTINGS_EVENT, handleOpen);
       window.removeEventListener(TERRAIN_SETTINGS_CLOSE_EVENT, handleClose);
     };
-  }, [mapControllerRef, rasterLayerOptions]);
+  }, [mapControllerRef]);
 
   // Coalesce the live map update to one per animation frame so a fast slider
   // drag (Radix fires onValueChange on every 0.1 step) doesn't spray dozens of

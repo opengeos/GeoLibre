@@ -5,6 +5,7 @@ import {
   type SelectionMode,
   useAppStore,
   validateMapExpression,
+  useLayersWhen,
 } from "@geolibre/core";
 import { Button, Label, Select, Textarea } from "@geolibre/ui";
 import { Filter, FilterX, SquareFunction } from "lucide-react";
@@ -49,7 +50,8 @@ export function SelectByExpressionDialog({
   const open = useAppStore((s) => s.ui.selectByExpressionOpen);
   const setOpen = useAppStore((s) => s.setSelectByExpressionOpen);
   const preselectedLayerId = useAppStore((s) => s.ui.selectByExpressionLayerId);
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the panel is open (it stays mounted closed).
+  const layers = useLayersWhen(open);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectionCount = useAppStore((s) => s.selectedFeatureIds.length);
   const projectName = useAppStore((s) => s.projectName);

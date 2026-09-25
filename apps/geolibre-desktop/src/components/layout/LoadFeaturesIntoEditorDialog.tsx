@@ -1,5 +1,5 @@
 import { Button, cn, Input, Label, Select } from "@geolibre/ui";
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, useLayersWhen } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   buildEditorSaveCollection,
@@ -89,7 +89,9 @@ export function LoadFeaturesIntoEditorDialog({
   initialLayerId,
 }: LoadFeaturesIntoEditorDialogProps) {
   const { t } = useTranslation();
-  const storeLayers = useAppStore((s) => s.layers);
+  // Layers are only read while the panel is open; closed, it stays mounted
+  // without re-rendering on layer edits.
+  const storeLayers = useLayersWhen(open);
   // While an in-place "Edit geometry" session is active the shared editor holds
   // that layer's geometry (not the loaded view features), so loading/saving here
   // would be wrong; the panel disables its actions and shows a note instead.

@@ -17,6 +17,7 @@ import {
   type StoryLayerOpacityChange,
   type StoryMap,
   type StorySlideMode,
+  useLayersWhen,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
@@ -85,7 +86,8 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const setPresenting = useAppStore((s) => s.setStorymapPresenting);
   const setComposing = useAppStore((s) => s.setStorymapComposing);
   const storymap = useAppStore((s) => s.storymap);
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the panel is open (it stays mounted closed).
+  const layers = useLayersWhen(open);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const projection = useAppStore((s) => s.preferences.map.projection);
 

@@ -6,6 +6,7 @@ import {
   useAppStore,
   VECTOR_COLOR_RAMPS,
   type PrintLayoutConfig,
+  useLayersWhen,
 } from "@geolibre/core";
 import { loadMarkerSvgImage, type MapEngine } from "@geolibre/map";
 import { GRATICULE_LABEL_LAYER_ID } from "@geolibre/plugins";
@@ -189,7 +190,9 @@ export function PrintLayoutDialog({
   mapControllerRef,
 }: PrintLayoutDialogProps) {
   const { t } = useTranslation();
-  const layers = useAppStore((s) => s.layers);
+  // Layers are only read while the dialog is open; it stays mounted closed (to
+  // keep the layout being composed) without re-rendering on layer edits.
+  const layers = useLayersWhen(open);
   const projectName = useAppStore((s) => s.projectName);
   const legendConfig = useAppStore((s) => s.legend);
   const setLegendConfig = useAppStore((s) => s.setLegend);
