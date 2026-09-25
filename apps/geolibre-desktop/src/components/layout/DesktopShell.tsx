@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
 import { COMMENTS_PANEL_ID, useRegisterCommentsPanel } from "../../hooks/useRegisterCommentsPanel";
 import { UrlLoadErrorBanner } from "./UrlLoadErrorBanner";
+import { MountWhenOpened } from "./MountWhenOpened";
 import { CommentsPanel } from "../comments/CommentsPanel";
 import { CommentMapOverlay } from "../comments/CommentMapOverlay";
 import { useCommentTool } from "../comments/useCommentTool";
@@ -652,12 +653,16 @@ export function DesktopShell({
                     onMapDiagnosticEvent={handleMapDiagnosticEvent}
                     onControllerReady={handleMapControllerReady}
                   />
-                  <Suspense fallback={null}>
-                    <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
-                  </Suspense>
-                  <Suspense fallback={null}>
-                    <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
-                  </Suspense>
+                  <MountWhenOpened isOpen={(ui) => ui.objectDetectionOpen}>
+                    <Suspense fallback={null}>
+                      <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
+                    </Suspense>
+                  </MountWhenOpened>
+                  <MountWhenOpened isOpen={(ui) => ui.segmentEverythingOpen}>
+                    <Suspense fallback={null}>
+                      <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
+                    </Suspense>
+                  </MountWhenOpened>
                 </>
               )}
               {/* Renderer-neutral: these use the store or `MapEngine`, so they
@@ -732,9 +737,11 @@ export function DesktopShell({
               <BoundsRestrictionIndicator />
               <QuickAnalysisBanner />
               <NetcdfProfileWindow />
-              <Suspense fallback={null}>
-                <StyleManagerPanel />
-              </Suspense>
+              <MountWhenOpened isOpen={(ui) => ui.styleManagerOpen}>
+                <Suspense fallback={null}>
+                  <StyleManagerPanel />
+                </Suspense>
+              </MountWhenOpened>
             </MapGrid>
           </SectionErrorBoundary>
           <SectionErrorBoundary
@@ -747,20 +754,22 @@ export function DesktopShell({
               floats over the map and drag-clamps to it, not to the whole
               window — the user keeps their layers in view while building. */}
           <SectionErrorBoundary label="Model Builder" displayName={t("shell.section.modelBuilder")}>
-            <Suspense fallback={null}>
-              <ModelBuilderPanel
-                mapControllerRef={mapControllerRef}
-                onAddRaster={async (bytes, name, fileName) => {
-                  // Same Uint8Array -> BlobPart cast as ProcessingDialog below.
-                  const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
-                    type: "image/tiff",
-                  });
-                  await addRasterToMap(createAppAPI(mapControllerRef), file, {
-                    name,
-                  });
-                }}
-              />
-            </Suspense>
+            <MountWhenOpened isOpen={(ui) => ui.modelBuilderOpen}>
+              <Suspense fallback={null}>
+                <ModelBuilderPanel
+                  mapControllerRef={mapControllerRef}
+                  onAddRaster={async (bytes, name, fileName) => {
+                    // Same Uint8Array -> BlobPart cast as ProcessingDialog below.
+                    const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
+                      type: "image/tiff",
+                    });
+                    await addRasterToMap(createAppAPI(mapControllerRef), file, {
+                      name,
+                    });
+                  }}
+                />
+              </Suspense>
+            </MountWhenOpened>
           </SectionErrorBoundary>
           {/* Mounted here (inside the map area, like FloatingPanels) so the
               selection panels anchor to the map canvas's top-left corner and
@@ -769,12 +778,16 @@ export function DesktopShell({
             label="Selection panels"
             displayName={t("shell.section.selectionPanels")}
           >
-            <Suspense fallback={null}>
-              <SelectByExpressionDialog canEditLayer={collaboration.canEditLayer} />
-            </Suspense>
-            <Suspense fallback={null}>
-              <SelectByLocationDialog />
-            </Suspense>
+            <MountWhenOpened isOpen={(ui) => ui.selectByExpressionOpen}>
+              <Suspense fallback={null}>
+                <SelectByExpressionDialog canEditLayer={collaboration.canEditLayer} />
+              </Suspense>
+            </MountWhenOpened>
+            <MountWhenOpened isOpen={(ui) => ui.selectByLocationOpen}>
+              <Suspense fallback={null}>
+                <SelectByLocationDialog />
+              </Suspense>
+            </MountWhenOpened>
           </SectionErrorBoundary>
           <SectionErrorBoundary
             label="Sun simulation panel"
@@ -1018,51 +1031,71 @@ export function DesktopShell({
       {/* Trust prompt for plugin URLs carried by an opened project (#1062);
           inert unless the project references an untrusted plugin URL. */}
       <ProjectPluginTrustDialog trust={projectPluginTrust} />
-      <Suspense fallback={null}>
-        <ProcessingDialog
-          mapControllerRef={mapControllerRef}
-          onAddRaster={async (bytes, name, fileName) => {
-            // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
-            // which is not directly assignable to BlobPart under this lib.
-            // `fileName` (when given) becomes the layer's sourcePath while `name`
-            // stays the human-readable display name; the control keeps them
-            // separate (info.source.fileName vs info.name).
-            const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
-              type: "image/tiff",
-            });
-            await addRasterToMap(createAppAPI(mapControllerRef), file, {
-              name,
-            });
-          }}
-        />
-      </Suspense>
-      <Suspense fallback={null}>
-        <ConversionDialog />
-      </Suspense>
-      <Suspense fallback={null}>
-        <VectorToolsDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <NetworkToolsDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <BatchToolsDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <StatisticsToolsDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <GeocodeDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <ProcessingHistoryDialog />
-      </Suspense>
-      <Suspense fallback={null}>
-        <RasterToolsDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <SegmentationDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
+      <MountWhenOpened isOpen={(ui) => ui.processingOpen}>
+        <Suspense fallback={null}>
+          <ProcessingDialog
+            mapControllerRef={mapControllerRef}
+            onAddRaster={async (bytes, name, fileName) => {
+              // Cast required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
+              // which is not directly assignable to BlobPart under this lib.
+              // `fileName` (when given) becomes the layer's sourcePath while `name`
+              // stays the human-readable display name; the control keeps them
+              // separate (info.source.fileName vs info.name).
+              const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
+                type: "image/tiff",
+              });
+              await addRasterToMap(createAppAPI(mapControllerRef), file, {
+                name,
+              });
+            }}
+          />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.conversionOpen}>
+        <Suspense fallback={null}>
+          <ConversionDialog />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.vectorToolOpen}>
+        <Suspense fallback={null}>
+          <VectorToolsDialog mapControllerRef={mapControllerRef} />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.networkToolOpen}>
+        <Suspense fallback={null}>
+          <NetworkToolsDialog mapControllerRef={mapControllerRef} />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.batchToolsOpen}>
+        <Suspense fallback={null}>
+          <BatchToolsDialog mapControllerRef={mapControllerRef} />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.statisticsToolOpen}>
+        <Suspense fallback={null}>
+          <StatisticsToolsDialog mapControllerRef={mapControllerRef} />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.geocodeOpen}>
+        <Suspense fallback={null}>
+          <GeocodeDialog mapControllerRef={mapControllerRef} />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.processingHistoryOpen}>
+        <Suspense fallback={null}>
+          <ProcessingHistoryDialog />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.rasterToolOpen}>
+        <Suspense fallback={null}>
+          <RasterToolsDialog mapControllerRef={mapControllerRef} />
+        </Suspense>
+      </MountWhenOpened>
+      <MountWhenOpened isOpen={(ui) => ui.segmentationOpen}>
+        <Suspense fallback={null}>
+          <SegmentationDialog mapControllerRef={mapControllerRef} />
+        </Suspense>
+      </MountWhenOpened>
       <StoryMapPanel mapControllerRef={mapControllerRef} />
       <StoryMapPresenter
         mapControllerRef={mapControllerRef}

@@ -1042,6 +1042,10 @@ function selectiveJsMinifyPlugin(): Plugin {
           }
 
           const result = await transform(asset.code, {
+            // esbuild's default ASCII charset escapes every non-ASCII character,
+            // which inflates chunks that embed binary data as a string (the
+            // h5wasm HDF5 chunk grows ~0.8 MB). Vite emits UTF-8 anyway.
+            charset: "utf8",
             legalComments: "none",
             minify: true,
             target: "esnext",
@@ -1529,6 +1533,10 @@ export default defineConfig({
   },
   worker: {
     format: "es",
+    // Worker bundles are separate builds that do not inherit the top-level
+    // plugins, and `build.minify` is off, so without this the MapLibre worker
+    // (loaded on every map start) and the tool workers ship unminified.
+    plugins: () => [selectiveJsMinifyPlugin()],
   },
   envPrefix: ["VITE_", "TAURI_"],
   optimizeDeps: {
