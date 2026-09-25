@@ -68,7 +68,11 @@ const KIND_BY_TYPE: { readonly [T in LayerType]: LayerKind } = {
  * `undefined` at runtime, which every engine's `default` branch rejects.
  */
 export function classifyLayer(layer: Pick<GeoLibreLayer, "type">): LayerKind {
-  return KIND_BY_TYPE[layer.type];
+  // Own properties only, so a type like "constructor" or "__proto__" cannot
+  // resolve to an Object.prototype member instead of `undefined`.
+  return (
+    Object.hasOwn(KIND_BY_TYPE, layer.type) ? KIND_BY_TYPE[layer.type] : undefined
+  ) as LayerKind;
 }
 
 /**

@@ -113,8 +113,8 @@ const FIXTURES: Record<string, GeoLibreLayer> = {
 };
 
 /**
- * How MapLibre draws the record: `"sync"` when layer-sync adds a source for it
- * from the store record, `"plugin"` when a plugin control draws it (and
+ * How MapLibre draws the record: `"sync"` when layer-sync adds a source and a
+ * render layer for it from the store record, `"plugin"` when a plugin control draws it (and
  * registers native or deck.gl layers that layer-sync then only mirrors).
  */
 type MaplibreSupport = "sync" | "plugin";
@@ -155,9 +155,10 @@ const MATRIX: Record<string, Row> = {
   image:                          { maplibre: "sync",   mapbox: true,  arcgis: true,  cesium: true },
 };
 
-/** Whether MapLibre's layer-sync adds a source for the record on an empty map. */
+/** Whether MapLibre's layer-sync adds a source and a render layer for the record. */
 function maplibreSupport(record: GeoLibreLayer): MaplibreSupport {
   let added = false;
+  let addedLayer = false;
   const noop = () => {};
   const map = {
     getStyle: () => ({ layers: [] }),
@@ -176,13 +177,15 @@ function maplibreSupport(record: GeoLibreLayer): MaplibreSupport {
     on: noop,
     off: noop,
     once: noop,
-    addLayer: noop,
+    addLayer: () => {
+      addedLayer = true;
+    },
     addSource: () => {
       added = true;
     },
   };
   syncLayer(map as never, record);
-  return added ? "sync" : "plugin";
+  return added && addedLayer ? "sync" : "plugin";
 }
 
 function actual(record: GeoLibreLayer): Row {
@@ -207,6 +210,12 @@ describe("classifyLayer", () => {
     assert.deepEqual(kinds(["raster", "wms", "wmts", "xyz"]), Array(4).fill("raster-tiles"));
     assert.deepEqual(kinds(["pmtiles", "mbtiles"]), Array(2).fill("tile-archive"));
     assert.deepEqual(kinds(["flatgeobuf", "geoparquet"]), Array(2).fill("vector-file"));
+  });
+
+  it("classifies an unknown type as undefined, including Object.prototype names", () => {
+    for (const type of ["not-a-layer", "constructor", "toString", "__proto__"]) {
+      assert.equal(classifyLayer({ type } as unknown as GeoLibreLayer), undefined, type);
+    }
   });
 });
 
