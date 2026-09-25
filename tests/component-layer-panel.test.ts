@@ -155,4 +155,41 @@ describe("LayerPanel", () => {
     );
     assert.deepEqual(rowNames(), ["Rivers", "Parks"]);
   });
+
+  it("keeps the metadata dialog in step with the live layer", () => {
+    useAppStore.setState({
+      layers: [geojsonLayer({ id: "parks", name: "Parks", metadata: { featureCount: 3 } })],
+    });
+    renderLayerPanel();
+
+    fireEvent.click(within(row("Parks")).getByRole("button", { name: "Metadata" }));
+    let dialog = screen.getByRole("dialog");
+    within(dialog).getByText("Parks Metadata");
+
+    // A rename and a metadata change made while the dialog is open (the row's
+    // rename, a refresh) show up in it rather than the snapshot taken on open.
+    act(() => {
+      useAppStore.getState().updateLayer("parks", {
+        name: "City parks",
+        metadata: { featureCount: 5 },
+      });
+    });
+    dialog = screen.getByRole("dialog");
+    within(dialog).getByText("City parks Metadata");
+    const json = JSON.parse(dialog.querySelector("pre")?.textContent ?? "{}");
+    assert.equal(json.layerName, "City parks");
+    assert.equal(json.featureCount, 5);
+
+    // Removing the layer closes the dialog instead of leaving it on a ghost.
+    act(() => {
+      useAppStore.getState().removeLayer("parks");
+    });
+    assert.equal(screen.queryAllByRole("dialog").length, 0);
+
+    // The id was dropped too: a new layer that reuses it does not reopen it.
+    act(() => {
+      useAppStore.setState({ layers: [geojsonLayer({ id: "parks", name: "Parks again" })] });
+    });
+    assert.equal(screen.queryAllByRole("dialog").length, 0);
+  });
 });

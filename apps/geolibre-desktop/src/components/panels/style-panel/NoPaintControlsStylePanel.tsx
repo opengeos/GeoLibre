@@ -18,6 +18,12 @@ interface NoPaintControlsStylePanelProps {
   blendModeControl: ReactNode;
   hasTilesetSymbology: boolean;
   vectorSymbologyControls: ReactNode;
+  /**
+   * The shared Expression Builder dialog (null while closed). The tileset
+   * symbology's builder buttons open it, so it must be drawn here as well as
+   * in the full vector panel.
+   */
+  expressionBuilderDialog: ReactNode;
   hasQuickFilterControls: boolean;
   isNativeDocumentScene: boolean;
   mapControllerRef: RefObject<MapEngine | null>;
@@ -40,6 +46,7 @@ export function NoPaintControlsStylePanel({
   blendModeControl,
   hasTilesetSymbology,
   vectorSymbologyControls,
+  expressionBuilderDialog,
   hasQuickFilterControls,
   isNativeDocumentScene,
   mapControllerRef,
@@ -122,6 +129,7 @@ export function NoPaintControlsStylePanel({
           type: isCesiumKmlLayer(layer) ? "KML / KMZ" : isNativeDocumentScene ? "czml" : layer.type,
         })}
       </p>
+      {expressionBuilderDialog}
     </aside>
   );
 }

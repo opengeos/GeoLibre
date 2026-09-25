@@ -452,6 +452,7 @@ export function StylePanel({
         blendModeControl={blendModeControl}
         hasTilesetSymbology={hasTilesetSymbology}
         vectorSymbologyControls={vectorSymbologyControls}
+        expressionBuilderDialog={expressionBuilderDialog}
         hasQuickFilterControls={hasQuickFilterControls}
         isNativeDocumentScene={isNativeDocumentScene}
         mapControllerRef={mapControllerRef}

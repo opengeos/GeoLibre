@@ -46,11 +46,6 @@ export function ExtrusionControls({
     extrusionError,
     setExtrusionError,
   } = drafts;
-  const extrusionHeightProperties = extrusionHeightPropertyOptions.includes(
-    draftExtrusionHeightProperty,
-  )
-    ? extrusionHeightPropertyOptions
-    : extrusionHeightPropertyOptions;
   const extrusionSettingsChanged =
     draftExtrusionColor !== styleValue(style, "extrusionColor") ||
     draftExtrusionOpacity !== styleValue(style, "extrusionOpacity") ||
@@ -152,12 +147,12 @@ export function ExtrusionControls({
               id="extrusionHeightProperty"
               value={draftExtrusionHeightProperty}
               onChange={(event) => setDraftExtrusionHeightProperty(event.target.value)}
-              disabled={extrusionHeightProperties.length === 0}
+              disabled={extrusionHeightPropertyOptions.length === 0}
             >
-              {extrusionHeightProperties.length === 0 ? (
+              {extrusionHeightPropertyOptions.length === 0 ? (
                 <option value="">{t("style.labels.noAttributes")}</option>
               ) : (
-                extrusionHeightProperties.map((property) => (
+                extrusionHeightPropertyOptions.map((property) => (
                   <option key={property} value={property}>
                     {property}
                   </option>

@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { useLayer, type GeoLibreLayer } from "@geolibre/core";
 import {
   Button,
   Dialog,
@@ -22,15 +22,33 @@ import { readRasterInfo } from "../../../lib/raster-info";
 import { layerMetadataPayload, rasterInfoUrl, type RasterInfoState } from "./layer-panel-utils";
 
 /**
- * State of the layer metadata dialog: the layer it shows, the copy
+ * State of the layer metadata dialog: the id of the layer it shows, the copy
  * confirmation, the GeoTIFF header read for rasters, and the user-chosen
  * dialog size (kept across open/close).
  *
  * @returns The dialog state, the JSON it shows, and the copy/resize handlers.
  */
 export function useLayerMetadataDialog() {
-  const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(null);
+  // Only the id is held: the record is read live from the store, so a rename,
+  // restyle or refresh while the dialog is open shows up in it rather than the
+  // snapshot taken when it opened.
+  const [metadataLayerId, setMetadataLayerId] = useState<string | null>(null);
+  const metadataLayer = useLayer(metadataLayerId) ?? null;
   const [metadataCopied, setMetadataCopied] = useState(false);
+  const openMetadata = useCallback((layer: GeoLibreLayer) => {
+    setMetadataLayerId(layer.id);
+    setMetadataCopied(false);
+  }, []);
+  const closeMetadata = useCallback(() => {
+    setMetadataLayerId(null);
+    setMetadataCopied(false);
+  }, []);
+  // The layer was removed while its dialog was open: the dialog already reads
+  // as closed (no record), so drop the id too, or a later layer that reuses it
+  // (an undo, a re-add under the same id) would pop the dialog back open.
+  useEffect(() => {
+    if (metadataLayerId !== null && !metadataLayer) closeMetadata();
+  }, [metadataLayerId, metadataLayer, closeMetadata]);
   // GeoTIFF header facts (CRS, pixel size, storage) for the raster whose
   // metadata dialog is open. The store layer does not carry them, so they are
   // read from the file on open (#1420): "loading" while the header is being
@@ -131,14 +149,18 @@ export function useLayerMetadataDialog() {
   // report the native CRS and pixel size the store layer never captured
   // (#1420). Only the header is fetched, and the result is dropped when the
   // dialog closes or moves to another layer while the read is in flight.
+  // Keyed on the id and URL rather than the record, which changes identity on
+  // every edit of the layer: a restyle must not re-read the header, while a
+  // refresh that points the layer at a new file must.
+  const metadataRasterUrl = metadataLayer ? rasterInfoUrl(metadataLayer) : null;
   useEffect(() => {
-    const url = metadataLayer ? rasterInfoUrl(metadataLayer) : null;
-    if (!metadataLayer || !url) {
+    const url = metadataRasterUrl;
+    if (!metadataLayerId || !url) {
       setRasterInfoState(null);
       return;
     }
 
-    const layerId = metadataLayer.id;
+    const layerId = metadataLayerId;
     let cancelled = false;
     setRasterInfoState({ layerId, status: "loading" });
     void readRasterInfo(url)
@@ -154,13 +176,13 @@ export function useLayerMetadataDialog() {
     return () => {
       cancelled = true;
     };
-  }, [metadataLayer]);
+  }, [metadataLayerId, metadataRasterUrl]);
 
   return {
     metadataLayer,
-    setMetadataLayer,
+    openMetadata,
+    closeMetadata,
     metadataCopied,
-    setMetadataCopied,
     metadataDialogRef,
     metadataDialogSize,
     startMetadataResize,
@@ -180,9 +202,8 @@ export function LayerMetadataDialog({ metadata }: LayerMetadataDialogProps) {
   const { t } = useTranslation();
   const {
     metadataLayer,
-    setMetadataLayer,
+    closeMetadata,
     metadataCopied,
-    setMetadataCopied,
     metadataDialogRef,
     metadataDialogSize,
     startMetadataResize,
@@ -194,10 +215,7 @@ export function LayerMetadataDialog({ metadata }: LayerMetadataDialogProps) {
     <Dialog
       open={!!metadataLayer}
       onOpenChange={(open: boolean) => {
-        if (!open) {
-          setMetadataLayer(null);
-          setMetadataCopied(false);
-        }
+        if (!open) closeMetadata();
       }}
     >
       <DialogContent

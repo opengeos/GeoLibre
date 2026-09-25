@@ -54,6 +54,11 @@ function selectPolygonLayer() {
   });
 }
 
+/** A fresh copy of the default layer style. */
+function style0() {
+  return { ...geojsonLayer().style };
+}
+
 function style(id: string) {
   const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
   assert.ok(layer, `no layer ${id}`);
@@ -141,6 +146,45 @@ describe("StylePanel", () => {
     assert.deepEqual(
       [...titleField.options].map((option) => option.value),
       ["", "area", "name"],
+    );
+  });
+
+  it("opens the Expression Builder from a 3D tileset's symbology and applies to its draft", () => {
+    // A tileset has no MapLibre paint controls, so it takes the no-paint panel;
+    // the builder dialog used to be drawn only in the full vector panel, so
+    // this button set a target and nothing opened.
+    useAppStore.setState({
+      layers: [
+        geojsonLayer({
+          id: "buildings",
+          name: "Buildings",
+          type: "3d-tiles",
+          source: { type: "3d-tiles", url: "https://example.test/tileset.json" },
+          geojson: undefined,
+          style: { ...style0(), vectorStyleMode: "expression" },
+          metadata: { fields: [{ name: "height", type: "number" }] },
+        }),
+      ],
+      selectedLayerId: "buildings",
+    });
+    renderStylePanel();
+
+    assert.equal(screen.queryAllByRole("dialog").length, 0);
+    fireEvent.click(screen.getByRole("button", { name: "Open expression builder" }));
+
+    const dialog = screen.getByRole("dialog");
+    within(dialog).getByText("Expression Builder");
+    const expression = '["case", [">", ["get", "height"], 50], "#ff0000", "#0000ff"]';
+    fireEvent.change(within(dialog).getByLabelText("Expression"), {
+      target: { value: expression },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply" }));
+
+    assert.equal(screen.queryAllByRole("dialog").length, 0);
+    // The builder re-serializes the expression compactly on apply.
+    assert.deepEqual(
+      JSON.parse((screen.getByLabelText("Color expression") as HTMLTextAreaElement).value),
+      JSON.parse(expression),
     );
   });
 });

@@ -562,7 +562,7 @@ export function LayerPanel({
                     arcgisPrimary={arcgisPrimary}
                     deckOverlay={capabilities.deckOverlay}
                     canEditLayer={canEditLayer}
-                    onOpenMetadata={metadata.setMetadataLayer}
+                    onOpenMetadata={metadata.openMetadata}
                     onRequestRemove={setLayerPendingRemoval}
                     menu={menu}
                   />
