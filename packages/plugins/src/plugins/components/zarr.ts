@@ -429,7 +429,7 @@ export type ZarrTimeAttributesReader = (dimension: string) => Promise<ZarrTimeAt
  * Add a Zarr layer through GeoLibre's own `@carbonplan/zarr-layer` instance and
  * mirror it into the layer store, without opening the Zarr panel.
  *
- * This is the Zarr counterpart of {@link addCogRasterLayer}: the host owns the
+ * This is the Zarr counterpart of `app.addCogLayer`: the host owns the
  * renderer, so an external plugin does not bundle a second copy of
  * `@carbonplan/zarr-layer` (plus its numcodecs WASM) and does not have to add a
  * raw MapLibre custom layer whose paint the Style panel cannot reach

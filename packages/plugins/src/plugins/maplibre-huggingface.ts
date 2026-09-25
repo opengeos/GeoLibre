@@ -682,12 +682,9 @@ async function addFileToMap(
     case "pmtiles":
       return addPMTilesLayerFromUrl(app, file.url);
     case "cog":
-      // Deliberately the Add Raster Layer control rather than `app.addCogLayer`.
-      // Both render a COG, but they are different controls: `addCogLayer` goes
-      // to the components CogLayerControl, whose store layer does not carry
-      // RASTER_SOURCE_KIND, so the Style panel shows only opacity. This one
-      // syncs through raster-layer-sync and gets the full Raster symbology
-      // section (band pickers, colormap, classification).
+      // The Add Raster Layer control (the same one `app.addCogLayer` uses), so
+      // the layer syncs through raster-layer-sync and gets the full Raster
+      // symbology section (band pickers, colormap, classification).
       await addRasterToMap(app, file.url, { name: file.name, defaults: rasterDefaults });
       return true;
     case "mosaic": {
