@@ -1,6 +1,6 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import { createColormapTexture } from "@developmentseed/deck.gl-raster/gpu-modules";
-import { type AutoStats, computeAutoStats, loadGeoTIFF } from "maplibre-gl-raster";
+import type { AutoStats } from "maplibre-gl-raster";
 import {
   COLORMAP_TEXTURE_WIDTH,
   RASTER_MIN_CUSTOM_COLORS,
@@ -449,6 +449,7 @@ export async function getRasterBandStats(
   const controller = new AbortController();
   statsInflight.set(layerId, controller);
   try {
+    const { computeAutoStats, loadGeoTIFF } = await import("maplibre-gl-raster");
     const tiff = await loadGeoTIFF(url);
     const auto = await computeAutoStats(tiff, controller.signal);
     statsCache.set(layerId, auto);

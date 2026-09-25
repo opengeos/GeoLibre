@@ -6,7 +6,6 @@ import {
   type TimeSliderConfig,
   type TimeSliderOptions,
 } from "maplibre-gl-time-slider";
-import { loadMosaic } from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 import {
   buildTimeFilter,
@@ -1226,6 +1225,7 @@ function ensureSourceBounds(control: TimeSliderControl, spec: SourceSpec): void 
       // Guard the fetch: an engine-rewritten COG also reports `type: "mosaic"`,
       // and parsing it as a manifest would download the whole GeoTIFF.
       if (!usesMosaicManifest(spec, url)) return;
+      const { loadMosaic } = await import("maplibre-gl-raster");
       const { bounds } = await loadMosaic(url);
       const extent = normalizeBounds([bounds.west, bounds.south, bounds.east, bounds.north]);
       // The control may have been rebuilt or torn down while the manifest was

@@ -15,7 +15,7 @@ import {
   Select,
   Separator,
 } from "@geolibre/ui";
-import { COLORMAP_OPTIONS } from "maplibre-gl-raster";
+import { COLORMAP_OPTIONS } from "../../lib/raster-picker-mirror";
 import { boundText, nextRescaleWindow } from "../../lib/rescale-window";
 import { useEffect, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";

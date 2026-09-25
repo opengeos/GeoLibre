@@ -31,7 +31,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
-import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import {
   fetchSegmentModel,
   SLIMSAM_DECODER_URL,
@@ -250,6 +249,7 @@ export function SegmentEverythingPanel({
         return;
       }
       const tagged = masksToFeatureCollection(masks, raster);
+      const { reprojectFeatureCollectionToWgs84 } = await import("../../lib/duckdb-vector-loader");
       const fc = await reprojectFeatureCollectionToWgs84(tagged);
       const layerId = addGeoJsonLayer(t("segmentEverything.layerName"), fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);

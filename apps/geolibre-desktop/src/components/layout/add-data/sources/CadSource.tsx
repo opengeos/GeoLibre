@@ -2,12 +2,7 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import { FileUp, Layers } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  type CadLayerInfo,
-  type DuckDbVectorFile,
-  loadDuckDbVectorFile,
-  readCadLayers,
-} from "../../../../lib/duckdb-vector-loader";
+import type { CadLayerInfo, DuckDbVectorFile } from "../../../../lib/duckdb-vector-loader";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
 import { COMMON_CRS_PRESETS, CAD_SAMPLES } from "../constants";
 import {
@@ -96,6 +91,8 @@ export function CadSource() {
       current.trim() && current !== defaultName ? current : layerNameFromPath(path, defaultName),
     );
 
+    // Imported on use so the DuckDB loader stays off the startup path.
+    const { readCadLayers } = await import("../../../../lib/duckdb-vector-loader");
     const cadLayers = await readCadLayers(buildVectorFile(file));
     if (requestId !== loadSeq.current) return; // superseded by a newer load
     if (cadLayers.length === 0) {
@@ -167,6 +164,7 @@ export function CadSource() {
 
     let featureCollection;
     try {
+      const { loadDuckDbVectorFile } = await import("../../../../lib/duckdb-vector-loader");
       featureCollection = await loadDuckDbVectorFile(buildVectorFile(selectedFile), {
         layer: selectedLayer,
         overrideSourceCrs,

@@ -19,7 +19,8 @@ import { FileDown, Loader2 } from "lucide-react";
 import { captureEngineMapImage } from "../../lib/print-layout-export";
 import { googleMapsUrl } from "../../lib/external-map-links";
 import { PAPER_SIZES, type Orientation, type PaperSizeId } from "../../lib/print-layout";
-import { buildStoryMapHandoutPdf, singleLine, type HandoutChapter } from "../../lib/storymap-pdf";
+import type { HandoutChapter } from "../../lib/storymap-pdf";
+import { singleLine } from "../../lib/storymap-text";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
 import {
@@ -379,6 +380,8 @@ export function StoryMapHandoutDialog({
         if (abortRef.current) setNotice(t("storymap.handout.cancelled"));
         return;
       }
+      // The PDF builder (and jsPDF) loads on first export, not at startup.
+      const { buildStoryMapHandoutPdf } = await import("../../lib/storymap-pdf");
       const bytes = buildStoryMapHandoutPdf(captures, {
         paperSize,
         orientation,

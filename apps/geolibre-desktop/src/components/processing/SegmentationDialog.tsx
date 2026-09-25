@@ -27,7 +27,6 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from "rea
 import { useTranslation } from "react-i18next";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { isTauri, openLocalDataFileWithFallback } from "../../lib/tauri-io";
-import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import { UPDATE_URL } from "../../lib/updates";
 import { SidecarHelpBanner, SIDECAR_PORT, SIDECAR_URL } from "./SidecarHelpBanner";
@@ -180,6 +179,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
       });
       // samgeo-api returns polygons in the source raster's CRS (e.g. EPSG:3857)
       // tagged with a GeoJSON `crs` member; the map and store need WGS84.
+      const { reprojectFeatureCollectionToWgs84 } = await import("../../lib/duckdb-vector-loader");
       const fc = await reprojectFeatureCollectionToWgs84(raw);
       const features = Array.isArray(fc?.features) ? fc.features : [];
       if (!features.length) {

@@ -578,6 +578,10 @@ function manualChunks(id: string): string | undefined {
   // and the shell never mounts (see e2e/pwa.spec.ts). Let CSS and other assets
   // fall through to default handling so only their JS is code-split.
   if (!/\.[mc]?[jt]sx?(?:\?|$)/.test(id)) return undefined;
+  // A `?url` import (e.g. the DuckDB worker script) is a one-line module that
+  // exports the asset's URL. Named after its package, it landed in that
+  // package's chunk, so importing the URL string fetched all of DuckDB-WASM.
+  if (/\?(?:[^#]*&)?url(?:&|$)/.test(id)) return undefined;
   // Keep @duckdb/duckdb-wasm AND its apache-arrow dependency together in one
   // lazily-fetched chunk. apache-arrow is shared with maplibre-gl-duckdb; if it
   // is left to default chunking it can be hoisted into a chunk the eager

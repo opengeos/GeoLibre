@@ -1,4 +1,4 @@
-import { loadGeoTIFF, summarizeGeoTIFF, type MetadataSummary } from "maplibre-gl-raster";
+import type { MetadataSummary } from "maplibre-gl-raster";
 
 /**
  * The `gdalinfo`-style facts about a raster that the store layer does not
@@ -87,6 +87,8 @@ export function rasterInfoFromSummary(summary: MetadataSummary): RasterInfo {
  * @throws If the URL cannot be fetched or is not a readable GeoTIFF.
  */
 export async function readRasterInfo(url: string): Promise<RasterInfo> {
+  // Imported on demand so the raster library stays off the startup path.
+  const { loadGeoTIFF, summarizeGeoTIFF } = await import("maplibre-gl-raster");
   const tiff = await loadGeoTIFF(url);
   return rasterInfoFromSummary(summarizeGeoTIFF(tiff));
 }

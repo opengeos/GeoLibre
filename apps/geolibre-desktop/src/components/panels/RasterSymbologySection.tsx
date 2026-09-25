@@ -35,18 +35,18 @@ import {
   Separator,
   Textarea,
 } from "@geolibre/ui";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useTranslation } from "react-i18next";
+import { useColormapRamps } from "../../hooks/useColormapRamps";
+import { formatLegendNumber, setLegendCustomEntry } from "../../lib/auto-legend";
+import { savedRasterAttributeTable } from "../../lib/raster-attribute-table";
 import {
   COLORMAP_OPTIONS,
   CUSTOM_NORMALIZED_DIFFERENCE,
   guessBandForRole,
   indexById,
   NORMALIZED_DIFFERENCE_INDICES,
-} from "maplibre-gl-raster";
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { useTranslation } from "react-i18next";
-import { useColormapRamps } from "../../hooks/useColormapRamps";
-import { formatLegendNumber, setLegendCustomEntry } from "../../lib/auto-legend";
-import { savedRasterAttributeTable } from "../../lib/raster-attribute-table";
+} from "../../lib/raster-picker-mirror";
 import {
   normalizeStretchMethod,
   stretchSamples,

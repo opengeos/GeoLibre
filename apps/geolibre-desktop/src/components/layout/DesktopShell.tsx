@@ -1101,8 +1101,10 @@ export function DesktopShell({
         await ensureLayerGeojsonFromSource(layerId);
         const manager = getPluginManager();
         if (!manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
-          manager.activate(GEO_EDITOR_PLUGIN_ID, appAPI);
-          if (!manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
+          // The editor's packages load on first activation, so the result can
+          // be a promise; awaiting a plain boolean is harmless.
+          const activated = await manager.activate(GEO_EDITOR_PLUGIN_ID, appAPI);
+          if (!activated || !manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
             setDropError(t("layers.editGeometryActivateFailed"));
             clearDropMessageLater();
             return;

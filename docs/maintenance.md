@@ -344,6 +344,20 @@ assignability against the real imported type, so a renamed or dropped engine
 identifier fails `npm run typecheck`. Nothing extra to do on a bump beyond letting
 the build run.
 
+### `maplibre-gl-raster` — picker data copied to keep it off startup
+
+`apps/geolibre-desktop/src/lib/raster-picker-mirror.ts` is a hand-kept copy of
+the package's `COLORMAP_OPTIONS`, `NORMALIZED_DIFFERENCE_INDICES`,
+`CUSTOM_NORMALIZED_DIFFERENCE`, `indexById` and `guessBandForRole`. The Style
+panel's colormap and spectral index pickers need them as soon as they render,
+and the package ships as one shared chunk, so importing even one constant put
+the whole ~0.35 MB library on the startup path. Everything else GeoLibre takes
+from the package is async and dynamic-imports it instead; keep new value
+imports that way.
+`tests/raster-picker-mirror.test.ts` compares every value and both helpers with
+the package export, so a colormap added or renamed upstream fails
+`npm run test:frontend`. Regenerate the copy from the package when it does.
+
 ### `tauri-plugin-persisted-scope` — private on-disk format
 
 `PersistedScopeState` (`apps/geolibre-desktop/src-tauri/src/lib.rs`) mirrors the

@@ -1,5 +1,3 @@
-import { loadGeoTIFF } from "maplibre-gl-raster";
-
 /**
  * One legend entry derived from a paletted raster: the raw pixel value and the
  * hex color the embedded color table assigns it. The label is intentionally the
@@ -90,6 +88,7 @@ export async function extractPaletteLegend(
   url: string,
   signal?: AbortSignal,
 ): Promise<PaletteLegendEntry[] | null> {
+  const { loadGeoTIFF } = await import("maplibre-gl-raster");
   const tiff = (await loadGeoTIFF(url)) as unknown as LoadedTiff;
   return await buildPaletteLegend(tiff, signal);
 }

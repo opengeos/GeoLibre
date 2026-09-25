@@ -1,6 +1,6 @@
 import { colormapColors, warmColormapColors } from "@geolibre/plugins";
 import type { ColorRampOption } from "@geolibre/ui";
-import { COLORMAP_OPTIONS } from "maplibre-gl-raster";
+import { COLORMAP_OPTIONS } from "../lib/raster-picker-mirror";
 import { useEffect, useState } from "react";
 
 /**
@@ -26,9 +26,15 @@ export const SORTED_COLORMAPS = [...COLORMAP_OPTIONS].sort((a, b) =>
  * previously carried its own short list, which left it offering a fraction of
  * what the Style panel's Raster symbology did for the same kind of data.
  *
+ * Sampling imports maplibre-gl-raster and decodes its colormap sprite, so a
+ * picker that is mounted while hidden (a closed dialog) passes `enabled: false`
+ * and samples only once it is shown. That keeps the raster library off the
+ * startup path.
+ *
+ * @param enabled - Whether to sample the non-built-in ramps now. Defaults to true.
  * @returns One option per colormap, sorted by label.
  */
-export function useColormapRamps(): ColorRampOption[] {
+export function useColormapRamps(enabled = true): ColorRampOption[] {
   const [rampColors, setRampColors] = useState<Record<string, readonly string[]>>(() => {
     const seed: Record<string, readonly string[]> = {};
     for (const colormap of SORTED_COLORMAPS) {
@@ -39,6 +45,7 @@ export function useColormapRamps(): ColorRampOption[] {
   });
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     for (const colormap of SORTED_COLORMAPS) {
       // Built-in ramps were already seeded synchronously above.
@@ -56,7 +63,7 @@ export function useColormapRamps(): ColorRampOption[] {
       // colormapColors() seed above instead of re-fetching.
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
   return SORTED_COLORMAPS.map((colormap) => ({
     value: colormap.name,

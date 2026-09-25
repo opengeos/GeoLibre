@@ -31,7 +31,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
-import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import { BUILTIN_DETECTION_MODELS, fetchDetectionModel } from "../../lib/detection-models";
 import { readPhotoLocation } from "../../lib/geotagged-photos";
 import {
@@ -96,7 +95,7 @@ function classLabel(names: string[], index: number): string {
  *
  * Each box becomes a rectangular polygon in the raster's CRS (via the
  * geotransform), tagged with its class label and score, and a legacy `crs`
- * member so {@link reprojectFeatureCollectionToWgs84} can lift it to WGS84.
+ * member so `reprojectFeatureCollectionToWgs84` can lift it to WGS84.
  *
  * @param detections Boxes in source raster pixels.
  * @param raster The source raster (for the geotransform + CRS).
@@ -392,7 +391,9 @@ export function ObjectDetectionDialog({
         .filter(Boolean);
       const fc = photoLocation
         ? detectionsToPhotoFeatureCollection(detections, photoLocation, names, imageName)
-        : await reprojectFeatureCollectionToWgs84(
+        : await (
+            await import("../../lib/duckdb-vector-loader")
+          ).reprojectFeatureCollectionToWgs84(
             detectionsToFeatureCollection(detections, raster, names),
           );
       // Split by class so each class becomes its own layer (issue #902:

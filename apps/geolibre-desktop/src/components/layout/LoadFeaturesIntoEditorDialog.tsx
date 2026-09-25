@@ -197,14 +197,17 @@ export function LoadFeaturesIntoEditorDialog({
     }
   };
 
-  /** Activate the GeoEditor plugin if needed; returns whether it is ready. */
-  const ensureEditorActive = useCallback((): boolean => {
+  /**
+   * Activate the GeoEditor plugin if needed; resolves to whether it is ready.
+   * The editor's packages load on first activation, so this can take a moment.
+   */
+  const ensureEditorActive = useCallback(async (): Promise<boolean> => {
     if (isGeoEditorAvailableForImport()) return true;
     const appAPI = createAppAPI(mapControllerRef);
     const manager = getPluginManager();
-    if (!manager.isActive("maplibre-gl-geo-editor")) {
-      manager.activate("maplibre-gl-geo-editor", appAPI);
-    }
+    // A manager that is already activating the editor hands back that pending
+    // result, so awaiting here also covers an activation started elsewhere.
+    await manager.activate("maplibre-gl-geo-editor", appAPI);
     return isGeoEditorAvailableForImport();
   }, [mapControllerRef]);
 
@@ -214,7 +217,7 @@ export function LoadFeaturesIntoEditorDialog({
       setBusy(true);
       setStatus({ message: t("loadEditorFeatures.loading"), kind: "info" });
       try {
-        if (!ensureEditorActive()) {
+        if (!(await ensureEditorActive())) {
           setStatus({
             message: t("loadEditorFeatures.editorUnavailable"),
             kind: "error",
@@ -353,14 +356,14 @@ export function LoadFeaturesIntoEditorDialog({
     [editorName, t],
   );
 
-  const handleLoadClick = () => {
+  const handleLoadClick = async () => {
     if (!selectedLayer) {
       setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
       return;
     }
     setConfirmCount(null);
     setPendingLoad(null);
-    const count = ensureEditorActive() ? getGeoEditorFeatureCount() : 0;
+    const count = (await ensureEditorActive()) ? getGeoEditorFeatureCount() : 0;
     if (count > 0) {
       setConfirmCount(count);
     } else {
@@ -596,7 +599,7 @@ export function LoadFeaturesIntoEditorDialog({
             type="button"
             className="w-full"
             disabled={busy || !selectedId || geometryEditActive}
-            onClick={handleLoadClick}
+            onClick={() => void handleLoadClick()}
           >
             {t("loadEditorFeatures.loadFeatures")}
           </Button>

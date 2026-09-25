@@ -1,17 +1,19 @@
 import type { DuckDbCapability, DuckDbGeoJsonSource } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
 import { stripAutoFidColumn } from "./duckdb-geometry";
-import {
-  ensureA5Extension,
-  ensureDuckDggsExtension,
-  ensureH3Extension,
-  ensureSpatialExtension,
-  getDatabase,
-  quoteSqlString,
-  rowsFromResult,
-} from "./duckdb-vector-loader";
 
 let counter = 0;
+
+/**
+ * Imports the DuckDB loader on first use. The processing dialogs that build a
+ * capability stay mounted from startup, so a static import would put the loader
+ * and its Arrow dependency on the startup path.
+ *
+ * @returns The DuckDB vector loader module.
+ */
+function loadDuckDbLoader(): Promise<typeof import("./duckdb-vector-loader")> {
+  return import("./duckdb-vector-loader");
+}
 
 /**
  * A {@link DuckDbCapability} backed by the shared DuckDB-WASM instance. Each
@@ -22,6 +24,13 @@ let counter = 0;
 export function createDuckDbCapability(): DuckDbCapability {
   return {
     async ensureExtensions(names: string[]): Promise<void> {
+      const {
+        ensureA5Extension,
+        ensureDuckDggsExtension,
+        ensureH3Extension,
+        ensureSpatialExtension,
+        getDatabase,
+      } = await loadDuckDbLoader();
       const db = await getDatabase();
       const connection = await db.connect();
       try {
@@ -35,6 +44,7 @@ export function createDuckDbCapability(): DuckDbCapability {
     },
 
     async registerGeoJson(geojson: FeatureCollection): Promise<DuckDbGeoJsonSource> {
+      const { getDatabase, quoteSqlString } = await loadDuckDbLoader();
       const db = await getDatabase();
       counter += 1;
       const name = `__geolibre_geojson_${Date.now()}_${counter}.geojson`;
@@ -57,6 +67,7 @@ export function createDuckDbCapability(): DuckDbCapability {
     },
 
     async query(sql: string): Promise<Record<string, unknown>[]> {
+      const { getDatabase, rowsFromResult } = await loadDuckDbLoader();
       const db = await getDatabase();
       const connection = await db.connect();
       try {

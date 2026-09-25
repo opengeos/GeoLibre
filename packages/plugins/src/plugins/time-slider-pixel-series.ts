@@ -1,11 +1,5 @@
 import { generateSteps, resolveUrl } from "maplibre-gl-time-slider";
-import {
-  type BandReading,
-  loadGeoTIFF,
-  type PixelReading,
-  readBandNames,
-  readPixelValues,
-} from "maplibre-gl-raster";
+import type { BandReading, PixelReading } from "maplibre-gl-raster";
 import type { Feature, FeatureCollection, Point } from "geojson";
 import { getActiveTimeSliderControl } from "./maplibre-time-slider";
 import {
@@ -386,6 +380,7 @@ export async function queryPixelTimeSeries(
     const cached = readingCache.get(url);
     if (cached) return cached;
     const promise = (async () => {
+      const { loadGeoTIFF, readBandNames, readPixelValues } = await import("maplibre-gl-raster");
       const tiff = await loadGeoTIFF(url);
       // loadGeoTIFF does not accept the abort signal, so once its header fetch
       // resolves, skip the pixel read if the query was cancelled meanwhile.

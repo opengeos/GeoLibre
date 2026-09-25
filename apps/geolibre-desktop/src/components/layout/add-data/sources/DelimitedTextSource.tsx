@@ -23,7 +23,6 @@ import {
   parseDelimitedTextLayer,
   parseDelimitedTextRows,
 } from "../../../../lib/delimited-text";
-import { reprojectFeatureCollectionToWgs84 } from "../../../../lib/duckdb-vector-loader";
 import {
   type ExcelWorksheet,
   isExcelFile,
@@ -483,7 +482,9 @@ export function DelimitedTextSource() {
     const geojson =
       result.isTable || isGeographicCrs(sourceCrs)
         ? result.data
-        : await reprojectFeatureCollectionToWgs84(result.data, sourceCrs);
+        : await (
+            await import("../../../../lib/duckdb-vector-loader")
+          ).reprojectFeatureCollectionToWgs84(result.data, sourceCrs);
     source.addAndClose(
       {
         ...createBaseLayer(

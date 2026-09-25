@@ -1,4 +1,4 @@
-import * as duckdb from "@duckdb/duckdb-wasm";
+import type * as duckdb from "@duckdb/duckdb-wasm";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import { rowsFromResult } from "./arrow-decimal";
 import { isGeographicCrs } from "./crs-utils";
@@ -328,12 +328,14 @@ export async function ensureIcebergExtension(
 }
 
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
+  // The DuckDB-WASM JS (~0.4 MB) loads with the first database, not at startup.
+  const { AsyncDuckDB, ConsoleLogger, LogLevel } = await import("@duckdb/duckdb-wasm");
   const bundle = await selectDuckDbBundle();
   // Not `new Worker(bundle.mainWorker)`: a CDN-loaded bundle needs a same-origin
   // blob shim, so each bundles variant supplies its own worker factory.
   const worker = createDuckDbWorker(bundle);
-  const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
-  const db = new duckdb.AsyncDuckDB(logger, worker);
+  const logger = new ConsoleLogger(LogLevel.WARNING);
+  const db = new AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
   // Open the database so its runtime/filesystem config is initialised. Without
   // this, locally registered buffers still read, but remote HTTP reads fail

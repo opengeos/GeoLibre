@@ -1,4 +1,4 @@
-import * as duckdb from "@duckdb/duckdb-wasm";
+import type * as duckdb from "@duckdb/duckdb-wasm";
 
 /**
  * DuckDB-WASM loaded from jsDelivr instead of the build output.
@@ -22,8 +22,11 @@ import * as duckdb from "@duckdb/duckdb-wasm";
  * WASM cannot drift from the loader that instantiates it. Deriving the URL here
  * from package.json would reintroduce exactly that drift.
  */
-export function selectDuckDbBundle(): Promise<duckdb.DuckDBBundle> {
-  return duckdb.selectBundle(duckdb.getJsDelivrBundles());
+export async function selectDuckDbBundle(): Promise<duckdb.DuckDBBundle> {
+  // Imported lazily, like the bundled variant, to keep DuckDB-WASM's JS off the
+  // startup path.
+  const { getJsDelivrBundles, selectBundle } = await import("@duckdb/duckdb-wasm");
+  return selectBundle(getJsDelivrBundles());
 }
 
 /**

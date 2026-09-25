@@ -3,7 +3,15 @@ import type { MapEngine } from "@geolibre/map";
 import { gridPixelAt, type LocalNetcdfGrid, type LocalNetcdfWindow } from "@geolibre/plugins";
 import { Button, ColorRampSelect, Label } from "@geolibre/ui";
 import { Boxes, GripVertical, Settings2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useColormapRamps } from "../../hooks/useColormapRamps";
 import { bandLabel, defaultRgbBands, MAX_AXIS_OPTIONS } from "../../lib/netcdf-band-axis";
@@ -32,7 +40,6 @@ import {
   rampRgb,
   warmNetcdfColormap,
 } from "../../lib/netcdf-image-symbology";
-import { NetcdfCubeView } from "../panels/NetcdfCubeView";
 
 /** Panel geometry (px). */
 const PANEL_MIN_W = 360;
@@ -60,6 +67,22 @@ interface NetcdfCubeWindowProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
 }
 
+// The cube view draws with three.js (~0.5 MB). This window is mounted for the
+// whole session but shows a cube only on request, so the view and three.js load
+// with the first cube rather than at startup.
+const NetcdfCubeView = lazy(() =>
+  import("../panels/NetcdfCubeView")
+    .then((module) => ({ default: module.NetcdfCubeView }))
+    .catch((error) => {
+      // A failed chunk load (e.g. offline) would otherwise throw during render
+      // and unmount the shell; render nothing in the window instead.
+      console.error("Failed to load NetcdfCubeView", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/NetcdfCubeView").NetcdfCubeView;
+      return { default: Fallback };
+    }),
+);
+
 /**
  * The 3-D image cube, in a movable window over the map.
  *
@@ -78,8 +101,10 @@ interface NetcdfCubeWindowProps {
  */
 export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
   const { t } = useTranslation();
-  const rampOptions = useColormapRamps();
   const state = useSyncExternalStore(subscribeNetcdfCube, getNetcdfCubeState, getNetcdfCubeState);
+  // The window stays mounted with no cube, so sample the ramps only once one is
+  // shown (the same condition the render below returns null on).
+  const rampOptions = useColormapRamps(Boolean(state.layerId) && state.readToken !== 0);
   // Mounted for both phases, so a trip to the settings dialog and back does not
   // throw away the decoded cube; the modal simply sits over it. `readToken` is
   // what says a *new* read was asked for.
@@ -305,14 +330,16 @@ export function NetcdfCubeWindow({ mapControllerRef }: NetcdfCubeWindowProps) {
 
       <div className="relative min-h-0 flex-1 bg-muted/30">
         {cube ? (
-          <NetcdfCubeView
-            cube={cube}
-            colors={colors}
-            clim={clim}
-            zScale={zScale}
-            sliceBands={sliceBands}
-            showRgb={showRgb}
-          />
+          <Suspense fallback={null}>
+            <NetcdfCubeView
+              cube={cube}
+              colors={colors}
+              clim={clim}
+              zScale={zScale}
+              sliceBands={sliceBands}
+              showRgb={showRgb}
+            />
+          </Suspense>
         ) : null}
         {reading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70 text-xs">

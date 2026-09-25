@@ -165,7 +165,8 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   const addImageOverlayLayer = useAppStore((state) => state.addImageOverlayLayer);
   // The same catalogue the Style panel's Raster symbology offers, so the choice
   // made here and the choice made after the fact are drawn from one list.
-  const rampOptions = useColormapRamps();
+  // Sampled only while the dialog is open: it stays mounted while closed.
+  const rampOptions = useColormapRamps(open);
   // Local file first: it is the common case, and it is the path that renders the
   // pixels itself (see `useImagePath`) rather than through the Zarr control.
   const [source, setSource] = useState<"url" | "file">(DEFAULT_SOURCE);

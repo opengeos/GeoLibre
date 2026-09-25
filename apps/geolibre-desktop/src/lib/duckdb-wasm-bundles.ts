@@ -1,4 +1,4 @@
-import * as duckdb from "@duckdb/duckdb-wasm";
+import type * as duckdb from "@duckdb/duckdb-wasm";
 import duckdbWasmEh from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
 import ehWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import duckdbWasmMvp from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
@@ -15,8 +15,11 @@ const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
   },
 };
 
-export function selectDuckDbBundle(): Promise<duckdb.DuckDBBundle> {
-  return duckdb.selectBundle(MANUAL_BUNDLES);
+export async function selectDuckDbBundle(): Promise<duckdb.DuckDBBundle> {
+  // Imported here rather than at module scope so DuckDB-WASM's JS stays off the
+  // startup path; this runs only when a database is first created.
+  const { selectBundle } = await import("@duckdb/duckdb-wasm");
+  return selectBundle(MANUAL_BUNDLES);
 }
 
 /**
