@@ -251,6 +251,26 @@ struct MartinProcess {
 }
 
 #[cfg(not(feature = "mas"))]
+impl MartinProcess {
+    /// Whether the Martin child is still alive. A server that crashed or was
+    /// killed from outside must not keep blocking new starts with "already
+    /// running", so the start path clears the slot when this reports false.
+    fn is_running(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(None))
+    }
+}
+
+/// Clear a recorded Martin process that has already exited, then report
+/// whether a live one is still holding the slot.
+#[cfg(not(feature = "mas"))]
+fn martin_slot_is_busy(process: &mut Option<MartinProcess>) -> bool {
+    if process.as_mut().is_some_and(|martin| !martin.is_running()) {
+        *process = None;
+    }
+    process.is_some()
+}
+
+#[cfg(not(feature = "mas"))]
 struct SidecarProcess {
     child: Child,
 }
@@ -2163,11 +2183,11 @@ fn start_martin_server_blocking(
     let binary = ensure_martin_binary_path(&app)?;
     let state = app.state::<MartinServerState>();
     {
-        let process = state
+        let mut process = state
             .process
             .lock()
             .map_err(|_| "Could not lock Martin process state.".to_string())?;
-        if process.is_some() {
+        if martin_slot_is_busy(&mut process) {
             return Err(
                 "A Martin server is already running. Stop it before starting a new one."
                     .to_string(),
@@ -2187,7 +2207,7 @@ fn start_martin_server_blocking(
                     .process
                     .lock()
                     .map_err(|_| "Could not lock Martin process state.".to_string())?;
-                if process.is_some() {
+                if martin_slot_is_busy(&mut process) {
                     drop(info.process);
                     return Err(
                         "A Martin server is already running. Stop it before starting a new one."
@@ -2753,8 +2773,9 @@ fn wait_for_jupyter_health(
 // is the only thing that identifies *why* startup failed (a uv resolution error,
 // a missing `jupyter` executable, a port conflict...), and in an installed build
 // there is no terminal to read it from, so it has to travel with the error.
-// Shared by the Jupyter and sidecar waiters, and by both of their failure paths
-// (early exit and timeout), so no path can quietly drop the one useful detail.
+// Shared by the Jupyter, sidecar and Martin waiters, and by both of their
+// failure paths (early exit and timeout), so no path can quietly drop the one
+// useful detail.
 #[cfg(not(feature = "mas"))]
 fn child_failure_message(summary: &str, output: &CapturedOutput) -> String {
     // The child may have only just exited, with its last lines still in flight.
@@ -4002,15 +4023,18 @@ fn spawn_martin_server(
     let mut child = command
         .spawn()
         .map_err(|error| format!("Could not start Martin: {error}"))?;
+    // Drain both pipes from the moment we spawn, and for as long as Martin
+    // runs. Martin logs at least one line per auto-published table before it
+    // binds its port, so a database with a few hundred tables overflows the
+    // pipe buffer during discovery: reading only after exit (the old shape)
+    // left Martin blocked on a log write and every health poll timing out.
+    let output = CapturedOutput::attach(&mut child);
 
-    if let Err(error) = wait_for_martin_health(&base_url, &mut child) {
+    if let Err(error) = wait_for_martin_health(&base_url, &mut child, &output) {
         let _ = child.kill();
         let _ = child.wait();
         return Err(error);
     }
-
-    let _ = child.stdout.take();
-    let _ = child.stderr.take();
 
     Ok(SpawnedMartinServer {
         base_url,
@@ -4020,7 +4044,11 @@ fn spawn_martin_server(
 }
 
 #[cfg(not(feature = "mas"))]
-fn wait_for_martin_health(base_url: &str, child: &mut Child) -> Result<(), String> {
+fn wait_for_martin_health(
+    base_url: &str,
+    child: &mut Child,
+    output: &CapturedOutput,
+) -> Result<(), String> {
     let health_url = format!("{base_url}/health");
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
@@ -4032,12 +4060,10 @@ fn wait_for_martin_health(base_url: &str, child: &mut Child) -> Result<(), Strin
             .try_wait()
             .map_err(|error| format!("Could not inspect Martin process: {error}"))?
         {
-            let output = read_child_output(child);
-            return Err(if output.trim().is_empty() {
-                format!("Martin exited before it was ready: {status}")
-            } else {
-                format!("Martin exited before it was ready: {output}")
-            });
+            return Err(child_failure_message(
+                &format!("Martin exited before it was ready (exit status: {status})."),
+                output,
+            ));
         }
 
         if client
@@ -4052,19 +4078,10 @@ fn wait_for_martin_health(base_url: &str, child: &mut Child) -> Result<(), Strin
         thread::sleep(Duration::from_millis(100));
     }
 
-    Err("Martin did not become ready in time.".to_string())
-}
-
-#[cfg(not(feature = "mas"))]
-fn read_child_output(child: &mut Child) -> String {
-    let mut output = String::new();
-    if let Some(mut stdout) = child.stdout.take() {
-        let _ = stdout.read_to_string(&mut output);
-    }
-    if let Some(mut stderr) = child.stderr.take() {
-        let _ = stderr.read_to_string(&mut output);
-    }
-    output
+    Err(child_failure_message(
+        "Martin did not become ready in time.",
+        output,
+    ))
 }
 
 #[derive(Serialize)]
@@ -4573,8 +4590,9 @@ mod tests {
     #[cfg(not(feature = "mas"))]
     use super::{
         add_main_sidecar_extras, child_failure_message, clear_appimage_python_env,
-        find_zip_manifest_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
-        CapturedOutput, CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
+        find_zip_manifest_path, martin_slot_is_busy, plugin_archive_file_name,
+        resolve_sidecar_in_resource_dir, wait_for_martin_health, CapturedOutput, MartinProcess,
+        CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
     };
     #[cfg(not(feature = "mas"))]
     use std::env;
@@ -5273,6 +5291,76 @@ mod tests {
     fn child_failure_message_says_so_when_there_was_no_output() {
         let message = child_failure_message("Jupyter server exited.", &CapturedOutput::new());
         assert_eq!(message, "Jupyter server exited. It produced no output.");
+    }
+
+    // Regression for #2677. Martin writes one or more log lines per discovered
+    // table before it binds its port, so a large schema overflows the pipe
+    // buffer during startup. With the pipes left unread the child blocked on
+    // that write and never exited, and the waiter reported a bare timeout. A
+    // child that writes well past the buffer and then exits must be seen to
+    // exit, with its last line quoted.
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn martin_waiter_drains_a_log_larger_than_the_pipe_buffer() {
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg(
+                "i=0; while [ $i -lt 2000 ]; do \
+                 echo \"INFO martin: source public.table_$i added, no spatial index\"; \
+                 i=$((i+1)); done; echo 'error: last line' >&2; exit 3",
+            )
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn a chatty child");
+        let output = CapturedOutput::attach(&mut child);
+        // Port 9 (discard) is never serving HTTP, so health never succeeds and
+        // the only way out before the timeout is the child exiting.
+        let error = wait_for_martin_health("http://127.0.0.1:9", &mut child, &output)
+            .expect_err("the child exits without becoming healthy");
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(error.contains("exited before it was ready"), "got: {error}");
+        assert!(error.contains("error: last line"), "got: {error}");
+    }
+
+    // A Martin that died or was killed from outside must not keep blocking new
+    // starts with "already running"; a live one still must.
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn martin_slot_clears_an_exited_process_but_keeps_a_live_one() {
+        use std::process::{Command, Stdio};
+
+        let spawn = |script: &str| {
+            Command::new("sh")
+                .arg("-c")
+                .arg(script)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("spawn a child")
+        };
+
+        let mut exited = spawn("exit 0");
+        exited.wait().expect("wait for the child to exit");
+        let mut slot = Some(MartinProcess { child: exited });
+        assert!(!martin_slot_is_busy(&mut slot));
+        assert!(slot.is_none());
+
+        let mut slot = Some(MartinProcess {
+            child: spawn("sleep 30"),
+        });
+        assert!(martin_slot_is_busy(&mut slot));
+        assert!(slot.is_some());
+        // Dropping the MartinProcess kills and reaps the sleeper.
+        drop(slot);
+
+        let mut empty: Option<MartinProcess> = None;
+        assert!(!martin_slot_is_busy(&mut empty));
     }
 
     // The whole point of the capture is that the child's *last* lines — the
