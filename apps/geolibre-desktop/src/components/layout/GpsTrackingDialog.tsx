@@ -74,6 +74,25 @@ import { saveTextFileWithFallback } from "../../lib/tauri-io";
 import { createGpsOverlay, type GpsOverlay } from "../../lib/gps-overlay";
 import { engineMarkerMap } from "../../lib/engine-style-map";
 import { createAnnotationMarker, type AnnotationMarker } from "@geolibre/plugins";
+import { appendDiagnostic, formatUnknown, type DiagnosticLevel } from "../../lib/diagnostics";
+
+/**
+ * Records a GPS failure in the diagnostics log. The dialog only shows the user
+ * a short translated message, so the underlying error would otherwise be lost.
+ *
+ * @param message What failed, in English, for the diagnostics panel.
+ * @param error The caught error.
+ * @param level Severity; defaults to "error".
+ */
+function logGpsFailure(message: string, error: unknown, level: DiagnosticLevel = "error"): void {
+  appendDiagnostic({
+    category: "runtime",
+    level,
+    message,
+    detail: formatUnknown(error),
+    source: "gps-tracking",
+  });
+}
 
 interface GpsTrackingDialogProps {
   open: boolean;
@@ -541,6 +560,9 @@ export function GpsTrackingDialog({
         else unsubscribe = unsub;
       })
       .catch((err) => {
+        // A denied permission is the user's choice; anything else is a real
+        // failure hidden behind the generic "no geolocation" message.
+        if (!err?.permissionDenied) logGpsFailure("GPS: starting the position watch failed", err);
         setError(t(err?.permissionDenied ? "gps.permissionDenied" : "gps.noGeolocation"));
         setTracking(false);
       });
@@ -690,10 +712,12 @@ export function GpsTrackingDialog({
     setNmeaStats(null);
     try {
       await conn?.close();
-    } catch {
+    } catch (error) {
       // A device that will not release cleanly (unplugged mid-close, GATT
       // already gone) must not surface as an unhandled rejection from the
-      // `void disconnectNmea()` call sites. The readout is cleared regardless.
+      // `void disconnectNmea()` call sites. The readout is cleared regardless;
+      // keep a warning so a receiver that never releases can be diagnosed.
+      logGpsFailure("GPS: the NMEA receiver did not close cleanly", error, "warning");
     }
   }, []);
 
@@ -913,7 +937,8 @@ export function GpsTrackingDialog({
           mimeType: format === "gpx" ? "application/gpx+xml" : "application/geo+json",
         });
         setNotice(path ? t("gps.trackExported") : t("gps.exportCancelled"));
-      } catch {
+      } catch (error) {
+        logGpsFailure(`GPS: exporting the track as ${format} failed`, error);
         setNotice(t("gps.exportFailed"));
       }
     },

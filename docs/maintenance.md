@@ -574,6 +574,25 @@ run the *full* backend suite — without the optional engines
 (geopandas/rasterio/sedona/httpx) the vector/raster/SQL/ML tests skip themselves
 and CI is green but hollow: `pip install -e "backend/geolibre_server[test]"`.
 
+## Lint warning ratchet
+
+`npm run lint` passes `--max-warnings` (in the root `package.json`) set to the
+current warning count, so lint warnings work like the coverage floors: the
+count can only go down. The warnings come from `react-hooks/exhaustive-deps`,
+`@typescript-eslint/no-explicit-any`, the type-aware
+`@typescript-eslint/no-floating-promises` (app, package and worker `src/`
+only, checked against each file's nearest `tsconfig.json`), and
+`local/no-physical-tailwind` (`eslint-rules/no-physical-tailwind.mjs`, the
+right-to-left rule from [Internationalization](i18n.md#right-to-left-languages)).
+
+- **A PR adds a warning:** fix it. For a floating promise that is a deliberate
+  fire-and-forget, prefix the call with `void` and make sure it handles its own
+  rejection. For a class that must stay physical (a map-anchored overlay, say),
+  add `// eslint-disable-next-line local/no-physical-tailwind -- <why>`. Do
+  not raise the limit.
+- **A PR fixes warnings:** lower the limit to the new total that ESLint prints,
+  in the same PR, so the gain is kept.
+
 ## Dependency updates and the audit allowlist
 
 Dependencies are watched two ways: **Dependabot** (`.github/dependabot.yml`) opens

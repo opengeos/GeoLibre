@@ -17,7 +17,7 @@
     "build:embed": "node scripts/build-embed.mjs",
     "build:chrome-extension": "node scripts/package-chrome-extension.mjs",
     "typecheck": "npm run build",
-    "lint": "eslint apps packages workers tests",
+    "lint": "eslint apps packages workers tests --max-warnings 240",
     "test": "npm run test:frontend",
     "test:frontend": "node --import tsx --test tests/*.test.ts",
     "test:frontend:coverage": "node scripts/coverage-check.mjs",

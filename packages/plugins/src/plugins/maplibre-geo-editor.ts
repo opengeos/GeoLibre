@@ -903,9 +903,34 @@ async function ensureGeomanReady(): Promise<void> {
   if (!geoman || geoman.loaded) return;
   try {
     await geoman.waitForGeomanLoaded();
-  } catch {
-    // If readiness cannot be awaited, the caller's load will no-op safely.
+  } catch (error) {
+    // The caller's load will no-op safely, but a readiness wait that rejects
+    // is not expected, so leave a trace in the diagnostics log.
+    console.warn("Geo Editor: waiting for Geoman to load failed", error);
   }
+}
+
+// Messages Geoman and maplibre-gl-geo-editor throw when an import runs before
+// Geoman's async init has finished (no instance yet, or no sources yet).
+const GEOMAN_NOT_READY_MESSAGES = ["Missing source", "Geoman not initialized"];
+
+/**
+ * Logs a failed Geoman import unless it is one of the expected "not ready
+ * yet" failures. The callers recover from those (a later store sync restores
+ * again); anything else, such as malformed GeoJSON, would otherwise vanish.
+ * The app captures `console.warn` into its diagnostics log.
+ *
+ * @param context Which operation failed, for the log message.
+ * @param error The rejection from `loadGeoJson`.
+ */
+function warnUnlessGeomanNotReady(context: string, error: unknown): void {
+  if (
+    error instanceof Error &&
+    GEOMAN_NOT_READY_MESSAGES.some((message) => error.message.includes(message))
+  ) {
+    return;
+  }
+  console.warn(`Geo Editor: ${context} failed`, error);
 }
 
 /**
@@ -983,9 +1008,7 @@ export async function startLayerGeometryEdit(
     // A "Missing source" failure means Geoman is not ready yet (handled by the
     // rollback below). Log anything else so unexpected failures (e.g. malformed
     // geojson) are not silently swallowed.
-    if (!(error instanceof Error) || !error.message.includes("Missing source")) {
-      console.warn("startLayerGeometryEdit: loadGeoJson failed", error);
-    }
+    warnUnlessGeomanNotReady("startLayerGeometryEdit: loadGeoJson", error);
   } finally {
     restoringSketchesToEditor = false;
   }
@@ -1112,8 +1135,9 @@ async function restoreSketchesAfterSession(): Promise<void> {
     restoringSketchesToEditor = true;
     try {
       await geoEditorControl.loadGeoJson(savedSketchesCollection, SKETCHES_SOURCE_PATH);
-    } catch {
+    } catch (error) {
       // Geoman may not be ready; the store subscription will re-restore.
+      warnUnlessGeomanNotReady("restoring sketches after an edit session", error);
     } finally {
       restoringSketchesToEditor = false;
     }
@@ -1152,8 +1176,9 @@ async function restoreSketchesLayerToEditor(): Promise<void> {
   restoringSketchesToEditor = true;
   try {
     await geoEditorControl.loadGeoJson(storeCollection, SKETCHES_SOURCE_PATH);
-  } catch {
+  } catch (error) {
     // Geoman may not be ready until the map style finishes loading.
+    warnUnlessGeomanNotReady("loading the Sketches layer into the editor", error);
   } finally {
     restoringSketchesToEditor = false;
   }
@@ -1170,8 +1195,9 @@ async function clearSketchesFromEditor(): Promise<void> {
       { type: "FeatureCollection", features: [] },
       SKETCHES_SOURCE_PATH,
     );
-  } catch {
-    // Ignore when Geoman is not initialized yet.
+  } catch (error) {
+    // Expected when Geoman is not initialized yet.
+    warnUnlessGeomanNotReady("clearing the editor", error);
   } finally {
     restoringSketchesToEditor = false;
   }

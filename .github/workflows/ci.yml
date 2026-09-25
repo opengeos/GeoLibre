@@ -42,6 +42,38 @@ jobs:
       - name: Audit npm dependencies (high and critical)
         run: npm run audit:ci
 
+  lint:
+    # Lint and types on their own, so a lint-ratchet or type failure reports in
+    # a few minutes instead of at the end of "Build and test" (which still runs
+    # both through `npm run ci`). The type check is `tsc -b` without the Vite
+    # build, the same command as `npm run typecheck:fast`.
+    name: Lint and type check
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `--max-warnings` in the lint script is a ratchet: a PR that adds a
+      # warning fails here. Fix it (or disable it on that line with a reason);
+      # lower the limit when warnings are fixed.
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check (tsc -b, no Vite build)
+        run: npx tsc -b apps/geolibre-desktop --noEmit
+
   e2e:
     # Only the `core` Playwright project gates a PR: the app boots and renders a
     # map, and the shared UI surfaces still work. The per-feature specs

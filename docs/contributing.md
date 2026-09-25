@@ -182,8 +182,12 @@ Both jobs upload their Playwright report as an artifact on failure.
     assets, MapLibre sprite atlases, the Whitebox tool-catalog snapshot, which
     grows ~64% under oxfmt). The intentionally malformed
     `e2e/fixtures/malformed.geojson` fixture is also excluded.
-  - **ESLint** enforces the React Hooks rules on TS/JS; a `npm run build`
-    typecheck runs too.
+  - **ESLint** fails on React Hooks rule violations and warns on floating
+    promises, `any`, missing Hook dependencies, and physical Tailwind
+    direction classes (`ml-*`, `left-*`, `text-right`; see
+    [Internationalization](i18n.md#right-to-left-languages)). Warnings are
+    held by a [ratchet](maintenance.md#lint-warning-ratchet), so a change
+    that adds one fails lint. A `npm run build` typecheck runs too.
 - **Notebook outputs are stripped repo-wide on every commit.** The
   `strip-notebook-outputs` hook runs `nbstripout` over *every tracked*
   `.ipynb`, not just the notebooks in your commit, so an output that was
