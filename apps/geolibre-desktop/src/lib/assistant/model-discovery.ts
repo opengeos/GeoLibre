@@ -1,4 +1,4 @@
-import type { AssistantProviderId } from "./provider";
+import type { AssistantProviderConfig, AssistantProviderId } from "./provider";
 
 /** One entry in a provider's live model catalog. */
 export interface DiscoveredModel {
@@ -38,9 +38,54 @@ export function supportsKeyedModelDiscovery(
   return KEYED_DISCOVERY_PROVIDERS.has(provider);
 }
 
+/** Providers the model picker serves: every one with a live catalog. */
+export type PickerProvider = "openrouter" | "bedrock" | KeyedDiscoveryProvider;
+
+/**
+ * Whether a provider gets the searchable model picker with live discovery.
+ *
+ * @param provider The assistant provider id.
+ * @returns True for OpenRouter, Bedrock, and the key-based hosted providers.
+ */
+export function hasModelPicker(provider: AssistantProviderId): provider is PickerProvider {
+  return (
+    provider === "openrouter" || provider === "bedrock" || supportsKeyedModelDiscovery(provider)
+  );
+}
+
 /** Drop the cached catalogs, so the next discovery hits the network. */
 export function clearModelDiscoveryCache(): void {
   cache.clear();
+}
+
+/**
+ * Return the cached catalog for `cacheKey`, or run `load` and cache its result.
+ * Expired entries are evicted on every call, so a credential the user tried and
+ * replaced does not stay resident for the rest of the session. A failed load is
+ * not cached.
+ */
+async function withCache(
+  cacheKey: string,
+  force: boolean | undefined,
+  load: () => Promise<DiscoveredModel[]>,
+): Promise<DiscoveredModel[]> {
+  const now = Date.now();
+  for (const [entryKey, entry] of cache) if (entry.expires <= now) cache.delete(entryKey);
+  const cached = cache.get(cacheKey);
+  if (!force && cached) return cached.models;
+  const models = await load();
+  cache.set(cacheKey, { models, expires: Date.now() + CACHE_TTL_MS });
+  return models;
+}
+
+/** Combine the caller's abort signal with the discovery deadline. */
+function discoverySignal(signal: AbortSignal | undefined): AbortSignal {
+  const timeout = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
+  // AbortSignal.any is newer than some supported WebViews; without it the
+  // deadline still bounds the request and callers ignore superseded results.
+  return signal && typeof AbortSignal.any === "function"
+    ? AbortSignal.any([signal, timeout])
+    : timeout;
 }
 
 /**
@@ -60,26 +105,20 @@ export async function discoverProviderModels(
   options: { signal?: AbortSignal; force?: boolean } = {},
 ): Promise<DiscoveredModel[]> {
   const key = apiKey.trim();
-  const cacheKey = `${provider}\u0000${key}`;
-  // Drop expired entries on every call, so a key the user tried and replaced
-  // does not stay resident for the rest of the session.
-  const now = Date.now();
-  for (const [entryKey, entry] of cache) if (entry.expires <= now) cache.delete(entryKey);
-  const cached = cache.get(cacheKey);
-  if (!options.force && cached) return cached.models;
+  return withCache(`${provider}\u0000${key}`, options.force, () =>
+    fetchKeyedCatalog(provider, key, discoverySignal(options.signal)),
+  );
+}
 
-  const timeout = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
-  // AbortSignal.any is newer than some supported WebViews; without it the
-  // deadline still bounds the request and callers ignore superseded results.
-  const signal =
-    options.signal && typeof AbortSignal.any === "function"
-      ? AbortSignal.any([options.signal, timeout])
-      : timeout;
-
-  let models: DiscoveredModel[];
+/** Fetch and filter one key-based provider's catalog, uncached. */
+async function fetchKeyedCatalog(
+  provider: KeyedDiscoveryProvider,
+  key: string,
+  signal: AbortSignal,
+): Promise<DiscoveredModel[]> {
   switch (provider) {
     case "openai":
-      models = parseOpenAIModels(
+      return parseOpenAIModels(
         await fetchJson(
           "OpenAI",
           "https://api.openai.com/v1/models",
@@ -87,9 +126,8 @@ export async function discoverProviderModels(
           signal,
         ),
       );
-      break;
     case "anthropic":
-      models = parseAnthropicModels(
+      return parseAnthropicModels(
         await fetchJson(
           "Anthropic",
           "https://api.anthropic.com/v1/models?limit=1000",
@@ -102,9 +140,8 @@ export async function discoverProviderModels(
           signal,
         ),
       );
-      break;
     case "google":
-      models = parseGeminiModels(
+      return parseGeminiModels(
         await fetchJson(
           "Google",
           "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
@@ -112,10 +149,7 @@ export async function discoverProviderModels(
           signal,
         ),
       );
-      break;
   }
-  cache.set(cacheKey, { models, expires: Date.now() + CACHE_TTL_MS });
-  return models;
 }
 
 /** GET a JSON document, turning a non-2xx status into a readable error. */
@@ -243,4 +277,158 @@ function dedupe(models: DiscoveredModel[]): DiscoveredModel[] {
     result.push({ id, name: name || id });
   }
   return result;
+}
+
+/** The AWS credentials and region Bedrock discovery signs its requests with. */
+export interface BedrockDiscoveryAuth {
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+}
+
+/**
+ * Extract Bedrock discovery credentials from a resolved provider config.
+ *
+ * @param config A config from `configForProvider`/`configForProfile`, or null.
+ * @returns The region and credentials, or null when it is not a usable Bedrock config.
+ */
+export function bedrockAuthFromConfig(
+  config: AssistantProviderConfig | null | undefined,
+): BedrockDiscoveryAuth | null {
+  if (config?.provider !== "bedrock" || !config.region || !config.credentials) return null;
+  const { accessKeyId, secretAccessKey, sessionToken } = config.credentials;
+  return { region: config.region, accessKeyId, secretAccessKey, sessionToken };
+}
+
+/**
+ * Fetch the Bedrock models the credentials can run through the Converse API:
+ * the system-defined cross-region inference profiles (`global.*`, `us.*`, …)
+ * plus the foundation models that support on-demand throughput. Cached like
+ * {@link discoverProviderModels}. The control-plane SDK client is imported on
+ * demand, so it only loads for Bedrock users.
+ *
+ * @param auth The region and AWS credentials.
+ * @param options `signal` aborts the requests; `force` skips the cache.
+ * @returns The filtered model list, global profiles first.
+ * @throws When either list call fails or times out.
+ */
+export async function discoverBedrockModels(
+  auth: BedrockDiscoveryAuth,
+  options: { signal?: AbortSignal; force?: boolean } = {},
+): Promise<DiscoveredModel[]> {
+  const cacheKey = [
+    "bedrock",
+    auth.region,
+    auth.accessKeyId,
+    auth.secretAccessKey,
+    auth.sessionToken ?? "",
+  ].join("\u0000");
+  return withCache(cacheKey, options.force, async () => {
+    const { BedrockClient, ListFoundationModelsCommand, ListInferenceProfilesCommand } =
+      await import("@aws-sdk/client-bedrock");
+    const client = new BedrockClient({
+      region: auth.region,
+      credentials: {
+        accessKeyId: auth.accessKeyId,
+        secretAccessKey: auth.secretAccessKey,
+        sessionToken: auth.sessionToken,
+      },
+    });
+    const abortSignal = discoverySignal(options.signal);
+    try {
+      const profiles: unknown[] = [];
+      let nextToken: string | undefined;
+      do {
+        const page = await client.send(
+          new ListInferenceProfilesCommand({
+            typeEquals: "SYSTEM_DEFINED",
+            maxResults: 1000,
+            nextToken,
+          }),
+          { abortSignal },
+        );
+        profiles.push(...(page.inferenceProfileSummaries ?? []));
+        nextToken = page.nextToken;
+      } while (nextToken);
+      const foundation = await client.send(
+        new ListFoundationModelsCommand({ byOutputModality: "TEXT" }),
+        { abortSignal },
+      );
+      return parseBedrockModels(profiles, foundation.modelSummaries ?? []);
+    } finally {
+      client.destroy();
+    }
+  });
+}
+
+/**
+ * Bedrock model-id fragments to drop although the model outputs text: rerank,
+ * embedding, video (Pegasus), speech (Sonic) and vision-only models the
+ * Converse API rejects, the gpt-oss safeguard classifiers, and the older
+ * models Converse refuses tools for. Checked by probing every listed model
+ * with a tool-calling Converse request (2026-09).
+ */
+const BEDROCK_EXCLUDED =
+  /(rerank|embed|pegasus|sonic|palmyra-vision|safeguard|llama3-(8b|70b)-instruct|mistral-7b|mixtral|deepseek\.r1)/i;
+
+/** Region prefix of a cross-region inference profile id (`global.`, `us.`, `eu.`, …). */
+const PROFILE_PREFIX = /^[a-z]+\./;
+
+/**
+ * Build the Bedrock model list from `ListInferenceProfiles` (system-defined)
+ * and `ListFoundationModels` (text output) summaries. Keeps active text models
+ * only: a profile is kept when its underlying foundation model is in the text
+ * list and not `LEGACY` (legacy models are refused unless recently used), and a
+ * foundation model is listed by its bare id only when it supports on-demand
+ * throughput — the newest models run through inference profiles only.
+ *
+ * @param profiles Inference-profile summaries.
+ * @param foundationModels Foundation-model summaries.
+ * @returns Global profiles, then regional profiles, then on-demand models,
+ *   each group sorted by name with numeric collation.
+ */
+export function parseBedrockModels(
+  profiles: unknown[],
+  foundationModels: unknown[],
+): DiscoveredModel[] {
+  const textModels = new Map<string, { name: string; onDemand: boolean }>();
+  for (const summary of foundationModels) {
+    const id = stringProp(summary, "modelId");
+    const record = summary as {
+      modelLifecycle?: { status?: unknown };
+      inferenceTypesSupported?: unknown;
+      inputModalities?: unknown;
+    } | null;
+    if (!id || BEDROCK_EXCLUDED.test(id) || record?.modelLifecycle?.status === "LEGACY") continue;
+    const inputs = record?.inputModalities;
+    if (Array.isArray(inputs) && !inputs.includes("TEXT")) continue;
+    const inference = record?.inferenceTypesSupported;
+    textModels.set(id, {
+      name: stringProp(summary, "modelName"),
+      onDemand: Array.isArray(inference) && inference.includes("ON_DEMAND"),
+    });
+  }
+
+  const byName = (a: DiscoveredModel, b: DiscoveredModel) =>
+    a.name.localeCompare(b.name, "en", { numeric: true });
+  const globalProfiles: DiscoveredModel[] = [];
+  const regionalProfiles: DiscoveredModel[] = [];
+  for (const summary of profiles) {
+    const id = stringProp(summary, "inferenceProfileId");
+    if (!id || !textModels.has(id.replace(PROFILE_PREFIX, ""))) continue;
+    if (stringProp(summary, "status") && stringProp(summary, "status") !== "ACTIVE") continue;
+    // Profile names mix "GLOBAL" and "Global"; normalize so they sort together.
+    const name = stringProp(summary, "inferenceProfileName").replace(/^GLOBAL\b/, "Global");
+    (id.startsWith("global.") ? globalProfiles : regionalProfiles).push({ id, name });
+  }
+  const onDemand = [...textModels]
+    .filter(([, model]) => model.onDemand)
+    .map(([id, model]) => ({ id, name: model.name }));
+
+  return dedupe([
+    ...globalProfiles.sort(byName),
+    ...regionalProfiles.sort(byName),
+    ...onDemand.sort(byName),
+  ]);
 }

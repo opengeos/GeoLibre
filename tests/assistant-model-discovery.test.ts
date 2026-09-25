@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
+  bedrockAuthFromConfig,
   clearModelDiscoveryCache,
   discoverProviderModels,
+  hasModelPicker,
   parseAnthropicModels,
+  parseBedrockModels,
   parseGeminiModels,
   parseOpenAIModels,
   supportsKeyedModelDiscovery,
@@ -90,6 +93,110 @@ describe("parseGeminiModels", () => {
       { id: "gemini-3.10-pro", name: "Gemini 3.10 Pro" },
       { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash" },
     ]);
+  });
+});
+
+describe("parseBedrockModels", () => {
+  const foundation = [
+    {
+      modelId: "anthropic.claude-opus-5-5",
+      modelName: "Claude Opus 5.5",
+      inferenceTypesSupported: ["INFERENCE_PROFILE"],
+      inputModalities: ["TEXT", "IMAGE"],
+      modelLifecycle: { status: "ACTIVE" },
+    },
+    {
+      modelId: "anthropic.claude-sonnet-4-20250514-v1:0",
+      modelName: "Claude Sonnet 4",
+      inferenceTypesSupported: ["INFERENCE_PROFILE"],
+      modelLifecycle: { status: "LEGACY" },
+    },
+    {
+      modelId: "amazon.nova-pro-v1:0",
+      modelName: "Nova Pro",
+      inferenceTypesSupported: ["ON_DEMAND", "INFERENCE_PROFILE"],
+      modelLifecycle: { status: "ACTIVE" },
+    },
+    { modelId: "amazon.nova-pro-v1:0:300k", inferenceTypesSupported: ["PROVISIONED"] },
+    {
+      modelId: "qwen.qwen3-32b-v1:0",
+      modelName: "Qwen3 32B",
+      inferenceTypesSupported: ["ON_DEMAND"],
+    },
+    { modelId: "cohere.rerank-v3-5:0", inferenceTypesSupported: ["ON_DEMAND"] },
+    { modelId: "mistral.mixtral-8x7b-instruct-v0:1", inferenceTypesSupported: ["ON_DEMAND"] },
+    { modelId: "meta.llama3-8b-instruct-v1:0", inferenceTypesSupported: ["ON_DEMAND"] },
+    { modelId: "twelvelabs.pegasus-1-2-v1:0", inferenceTypesSupported: ["ON_DEMAND"] },
+    {
+      modelId: "vendor.speech-only",
+      inferenceTypesSupported: ["ON_DEMAND"],
+      inputModalities: ["SPEECH"],
+    },
+  ];
+  const profiles = [
+    {
+      inferenceProfileId: "us.anthropic.claude-opus-5-5",
+      inferenceProfileName: "US Anthropic Claude Opus 5.5",
+      status: "ACTIVE",
+    },
+    {
+      inferenceProfileId: "global.anthropic.claude-opus-5-5",
+      inferenceProfileName: "GLOBAL Anthropic Claude Opus 5.5",
+      status: "ACTIVE",
+    },
+    {
+      inferenceProfileId: "us.amazon.nova-pro-v1:0",
+      inferenceProfileName: "US Nova Pro",
+      status: "ACTIVE",
+    },
+    {
+      inferenceProfileId: "us.anthropic.claude-sonnet-4-20250514-v1:0",
+      inferenceProfileName: "US Claude Sonnet 4",
+    },
+    {
+      inferenceProfileId: "us.stability.stable-image-inpaint-v1:0",
+      inferenceProfileName: "US Stable Image Inpaint",
+    },
+    {
+      inferenceProfileId: "global.cohere.embed-v4:0",
+      inferenceProfileName: "Global Cohere Embed v4",
+    },
+  ];
+
+  it("keeps active text profiles and on-demand models, global profiles first", () => {
+    assert.deepEqual(parseBedrockModels(profiles, foundation), [
+      { id: "global.anthropic.claude-opus-5-5", name: "Global Anthropic Claude Opus 5.5" },
+      { id: "us.anthropic.claude-opus-5-5", name: "US Anthropic Claude Opus 5.5" },
+      { id: "us.amazon.nova-pro-v1:0", name: "US Nova Pro" },
+      { id: "amazon.nova-pro-v1:0", name: "Nova Pro" },
+      { id: "qwen.qwen3-32b-v1:0", name: "Qwen3 32B" },
+    ]);
+  });
+});
+
+describe("bedrockAuthFromConfig", () => {
+  it("extracts region and credentials from a Bedrock config only", () => {
+    assert.deepEqual(
+      bedrockAuthFromConfig({
+        provider: "bedrock",
+        modelId: "m",
+        region: "us-west-2",
+        credentials: { accessKeyId: "AK", secretAccessKey: "SK", sessionToken: "TK" },
+      }),
+      { region: "us-west-2", accessKeyId: "AK", secretAccessKey: "SK", sessionToken: "TK" },
+    );
+    assert.equal(bedrockAuthFromConfig({ provider: "openai", modelId: "m", apiKey: "k" }), null);
+    assert.equal(bedrockAuthFromConfig(null), null);
+  });
+});
+
+describe("hasModelPicker", () => {
+  it("covers the providers with a live catalog", () => {
+    for (const id of ["openrouter", "bedrock", "openai", "anthropic", "google"] as const) {
+      assert.equal(hasModelPicker(id), true, id);
+    }
+    assert.equal(hasModelPicker("ollama"), false);
+    assert.equal(hasModelPicker("custom"), false);
   });
 });
 

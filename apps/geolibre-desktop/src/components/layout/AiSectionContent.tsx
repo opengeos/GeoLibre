@@ -2,6 +2,7 @@ import {
   ASSISTANT_PROVIDER_IDS,
   PROVIDER_LABELS,
   PROVIDER_MODELS,
+  configForProvider,
   defaultModelFor,
   getApiKey,
   type AssistantProfile,
@@ -34,7 +35,7 @@ import {
   withOllamaOriginHint,
 } from "../../lib/assistant/ollama";
 import { classifyFetchFailure } from "../../lib/fetch-error";
-import { supportsKeyedModelDiscovery } from "../../lib/assistant/model-discovery";
+import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
 import { ProviderModelPicker } from "../ProviderModelPicker";
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
@@ -327,8 +328,7 @@ export function AiSectionContent({
           {PROVIDER_MODELS[newProfileProvider].length > 0 ? (
             <div className="space-y-1.5">
               <Label className="text-xs">{t("assistant.model")}</Label>
-              {newProfileProvider === "openrouter" ||
-              supportsKeyedModelDiscovery(newProfileProvider) ? (
+              {hasModelPicker(newProfileProvider) ? (
                 <ProviderModelPicker
                   key={newProfileProvider}
                   provider={newProfileProvider}
@@ -336,6 +336,16 @@ export function AiSectionContent({
                     ...scopedOsEnv,
                     ...newProfileFieldValues,
                   })}
+                  bedrockAuth={
+                    newProfileProvider === "bedrock"
+                      ? bedrockAuthFromConfig(
+                          configForProvider("bedrock", undefined, {
+                            ...scopedOsEnv,
+                            ...newProfileFieldValues,
+                          }),
+                        )
+                      : null
+                  }
                   value={newProfileModel}
                   onChange={setNewProfileModel}
                 />
@@ -624,6 +634,21 @@ function ProfileEditor({
       ? ollamaDiscovery.models
       : [...new Set([profile.modelId, ...models].filter(Boolean))];
   const docsUrl = PROVIDER_DOCS_URL[profile.provider];
+  // Bedrock discovery signs with the same credentials the profile would chat
+  // with: the fields shown here (profile, then project env), then the OS env.
+  const bedrockAuth =
+    profile.provider === "bedrock"
+      ? bedrockAuthFromConfig(
+          configForProvider("bedrock", undefined, {
+            ...scopedOsEnv,
+            ...Object.fromEntries(
+              providerFields
+                .map((field) => [field.envKey, getProviderField(field).trim()])
+                .filter(([, value]) => value),
+            ),
+          }),
+        )
+      : null;
 
   const refreshOllamaModels = async () => {
     const baseUrlField = PROVIDER_FIELDS.ollama.find((field) => field.envKey === "OLLAMA_BASE_URL");
@@ -682,7 +707,7 @@ function ProfileEditor({
       {models.length > 0 ? (
         <div className="space-y-1.5">
           <Label className="text-xs">{t("assistant.model")}</Label>
-          {profile.provider === "openrouter" || supportsKeyedModelDiscovery(profile.provider) ? (
+          {hasModelPicker(profile.provider) ? (
             <ProviderModelPicker
               key={profile.provider}
               provider={profile.provider}
@@ -690,6 +715,7 @@ function ProfileEditor({
                 (providerFields[0] ? getProviderField(providerFields[0]).trim() : "") ||
                 getApiKey(profile.provider, scopedOsEnv)
               }
+              bedrockAuth={bedrockAuth}
               value={profile.modelId || defaultModelFor(profile.provider, modelEnv)}
               onChange={updateModel}
             />

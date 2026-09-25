@@ -4,21 +4,25 @@ import { type ReactElement, useCallback, useEffect, useId, useMemo, useRef, useS
 import { useTranslation } from "react-i18next";
 import { classifyFetchFailure } from "../lib/fetch-error";
 import {
+  type BedrockDiscoveryAuth,
   type DiscoveredModel,
-  type KeyedDiscoveryProvider,
+  type PickerProvider,
+  discoverBedrockModels,
   discoverProviderModels,
 } from "../lib/assistant/model-discovery";
 import { discoverOpenRouterModels } from "../lib/assistant/openrouter";
 import { PROVIDER_LABELS, PROVIDER_MODELS } from "../lib/assistant/provider";
 
-/** Wait this long after the API key last changed before discovering, so typing a key does not fire a request per keystroke. */
+/** Wait this long after the credentials last changed before discovering, so typing a key does not fire a request per keystroke. */
 const KEY_SETTLE_MS = 500;
 
 export interface ProviderModelPickerProps {
   /** The provider whose live catalog to list. */
-  provider: "openrouter" | KeyedDiscoveryProvider;
-  /** The provider API key; required for discovery except on OpenRouter's public catalog. */
+  provider: PickerProvider;
+  /** The provider API key; required for Google, Anthropic and OpenAI discovery. */
   apiKey?: string | null;
+  /** The AWS region and credentials; required for Bedrock discovery. */
+  bedrockAuth?: BedrockDiscoveryAuth | null;
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
@@ -27,13 +31,15 @@ export interface ProviderModelPickerProps {
 
 /**
  * Searchable model picker backed by the provider's live catalog, with refresh
- * and manual model-ID entry. Until discovery succeeds (no key yet, offline, a
- * rejected key) it lists the built-in presets from {@link PROVIDER_MODELS}.
+ * and manual model-ID entry. Until discovery succeeds (no credentials yet,
+ * offline, rejected credentials) it lists the built-in presets from
+ * {@link PROVIDER_MODELS}.
  * Failed discovery never changes {@link ProviderModelPickerProps.value}.
  */
 export function ProviderModelPicker({
   provider,
   apiKey,
+  bedrockAuth,
   value,
   onChange,
   disabled = false,
@@ -41,7 +47,21 @@ export function ProviderModelPicker({
 }: ProviderModelPickerProps): ReactElement {
   const { t } = useTranslation();
   const listId = `${useId()}-${provider}-models`;
-  const key = apiKey?.trim() ?? "";
+  // A string identity for the credentials, so discovery reruns when a value
+  // changes but not when a caller passes an equal Bedrock object each render.
+  const key =
+    provider === "bedrock"
+      ? bedrockAuth
+        ? [
+            bedrockAuth.region,
+            bedrockAuth.accessKeyId,
+            bedrockAuth.secretAccessKey,
+            bedrockAuth.sessionToken ?? "",
+          ].join("\u0000")
+        : ""
+      : (apiKey?.trim() ?? "");
+  const bedrockAuthRef = useRef(bedrockAuth);
+  bedrockAuthRef.current = bedrockAuth;
   const canDiscover = provider === "openrouter" || key.length > 0;
   // Tagged with the inputs that produced it, so a catalog loaded for one
   // provider or key is never shown under another while the next one loads.
@@ -79,10 +99,13 @@ export function ProviderModelPicker({
       inFlight.current = controller;
       setLoading(true);
       try {
+        const options = { signal: controller.signal, force };
         const models =
           provider === "openrouter"
             ? await discoverOpenRouterModels(controller.signal)
-            : await discoverProviderModels(provider, key, { signal: controller.signal, force });
+            : provider === "bedrock"
+              ? await discoverBedrockModels(bedrockAuthRef.current!, options)
+              : await discoverProviderModels(provider, key, options);
         if (generation !== requestGeneration.current) return;
         setDiscovered({ provider, key, models });
       } catch (cause) {
@@ -157,6 +180,24 @@ export function ProviderModelPicker({
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [close, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    /**
+     * Close only the popup on Escape. A Radix dialog around the picker (the
+     * Settings dialog) listens for Escape on `document` in the capture phase,
+     * before any React handler runs, and dismisses itself unless the event is
+     * already default-prevented. Listening on `window` in the capture phase
+     * runs first, so preventing the default here keeps the dialog open.
+     */
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !containerRef.current?.contains(event.target as Node)) return;
+      event.preventDefault();
+      close(true);
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [close, open]);
 
   useEffect(() => {
@@ -237,12 +278,6 @@ export function ProviderModelPicker({
             "absolute top-full z-40 mt-1 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md outline-none",
             compact ? "end-0" : "start-0",
           )}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              close(true);
-            }
-          }}
         >
           <div className="flex items-center gap-1 border-b p-1.5">
             <div className="relative min-w-0 flex-1">

@@ -33,7 +33,7 @@ import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistan
 import { configForProfile, selectActiveAssistantProfile } from "../../lib/assistant/profiles";
 import { isSendKey } from "../../lib/assistant/send-key";
 import { openSettingsSection } from "../layout/SettingsDialog";
-import { supportsKeyedModelDiscovery } from "../../lib/assistant/model-discovery";
+import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
 import { ProviderModelPicker } from "../ProviderModelPicker";
 import {
   ASSISTANT_PROVIDER_IDS,
@@ -773,12 +773,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 ))}
               </Select>
               {activeProfile && PROVIDER_MODELS[activeProfile.provider].length > 0 ? (
-                activeProfile.provider === "openrouter" ||
-                supportsKeyedModelDiscovery(activeProfile.provider) ? (
+                hasModelPicker(activeProfile.provider) ? (
                   <ProviderModelPicker
                     key={activeProfile.id}
                     provider={activeProfile.provider}
                     apiKey={configForProfile(activeProfile)?.apiKey}
+                    bedrockAuth={bedrockAuthFromConfig(configForProfile(activeProfile))}
                     value={activeProfile.modelId || defaultModelFor(activeProfile.provider)}
                     onChange={onModelChange}
                     disabled={running}
