@@ -2799,6 +2799,7 @@ export function SettingsDialog({
               {effectiveSection === "ai" ? (
                 <AiSectionContent
                   draftDesktopSettings={draftDesktopSettings}
+                  draftEnv={draftEnv}
                   setDraftDesktopSettings={setDraftDesktopSettings}
                   editingProfileId={editingProfileId}
                   setEditingProfileId={setEditingProfileId}

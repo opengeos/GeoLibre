@@ -507,6 +507,37 @@ fn project_path_string(path: &Path) -> String {
     value.into_owned()
 }
 
+/// A launch argument as a local path.
+///
+/// The Linux desktop entry uses the `%u` field code, which is the only one that
+/// serves both the project file association and the OAuth callback scheme, and
+/// it hands over a URI. GIO localizes `file://` to a plain path before exec, but
+/// KIO and others do not, so both spellings arrive in practice (#2671).
+///
+/// Anything that is not a resolvable local `file://` URI is passed through
+/// untouched, so a non-UTF-8 path keeps its original bytes and a URI that names
+/// a remote host falls through to the caller's extension and canonicalize
+/// checks, which reject it.
+fn launch_argument_path(argument: std::ffi::OsString) -> PathBuf {
+    if let Some(text) = argument.to_str() {
+        // Scheme comparison is case-insensitive per RFC 3986. Every real
+        // launcher emits lowercase, but matching exactly would silently drop
+        // the launch rather than fall back to anything useful.
+        if text
+            .get(..7)
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("file://"))
+        {
+            if let Some(path) = tauri::Url::parse(text)
+                .ok()
+                .and_then(|url| url.to_file_path().ok())
+            {
+                return path;
+            }
+        }
+    }
+    PathBuf::from(argument)
+}
+
 /// Resolve existing GeoLibre project files supplied by the operating system.
 ///
 /// Other CLI flags are deliberately ignored. Resolving the path before it
@@ -519,7 +550,7 @@ where
 {
     args.into_iter()
         .filter_map(|argument| {
-            let candidate = PathBuf::from(argument);
+            let candidate = launch_argument_path(argument);
             if !has_geolibre_project_extension(&candidate) {
                 return None;
             }
@@ -4664,6 +4695,64 @@ mod tests {
                 project_path_string(&legacy.canonicalize().unwrap()),
             ]
         );
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn accepts_file_uri_arguments_from_linux_launchers() {
+        let root = ScratchDir::new("project-argument-file-uri");
+        let spaced = root.path().join("my project.geolibre");
+        std::fs::write(&spaced, "{}").unwrap();
+        let canonical = spaced.canonicalize().unwrap();
+        // Percent-encoded, exactly as a launcher that does not localize `%u`
+        // spells it. The bare path spelling is covered above.
+        let uri = format!(
+            "file://{}",
+            canonical
+                .to_str()
+                .unwrap()
+                .replace('%', "%25")
+                .replace(' ', "%20")
+        );
+
+        assert_eq!(
+            project_paths_from_args([OsString::from(uri)], root.path()),
+            [project_path_string(&canonical)]
+        );
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn accepts_file_uris_whatever_the_scheme_casing() {
+        let root = ScratchDir::new("project-argument-uri-casing");
+        let project = root.path().join("cased.geolibre");
+        std::fs::write(&project, "{}").unwrap();
+        let canonical = project.canonicalize().unwrap();
+
+        for scheme in ["file", "FILE", "File"] {
+            assert_eq!(
+                project_paths_from_args(
+                    [OsString::from(format!(
+                        "{scheme}://{}",
+                        canonical.to_str().unwrap()
+                    ))],
+                    root.path()
+                ),
+                [project_path_string(&canonical)],
+                "{scheme}:// was not accepted"
+            );
+        }
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn rejects_file_uris_that_name_a_remote_host() {
+        let root = ScratchDir::new("project-argument-remote-uri");
+        assert!(project_paths_from_args(
+            [OsString::from("file://example.com/shared/project.geolibre")],
+            root.path()
+        )
+        .is_empty());
     }
 
     #[cfg(all(unix, not(feature = "mas")))]

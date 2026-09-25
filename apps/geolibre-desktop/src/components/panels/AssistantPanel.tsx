@@ -30,10 +30,11 @@ import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
 import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistant/ollama";
-import { selectActiveAssistantProfile } from "../../lib/assistant/profiles";
+import { configForProfile, selectActiveAssistantProfile } from "../../lib/assistant/profiles";
 import { isSendKey } from "../../lib/assistant/send-key";
 import { openSettingsSection } from "../layout/SettingsDialog";
-import { OpenRouterModelPicker } from "../OpenRouterModelPicker";
+import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
+import { ProviderModelPicker } from "../ProviderModelPicker";
 import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
@@ -233,6 +234,13 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       deploymentProxyConfigured,
     });
   }, [selectedProfileId, aiProfiles, defaultAiProfileId, deploymentProxyConfigured]);
+  // The model picker's discovery credentials, resolved only when the picker is
+  // shown. Not memoized: the runtime env it reads can change without the
+  // profile changing.
+  const activeProfileConfig =
+    activeProfile && hasModelPicker(activeProfile.provider)
+      ? configForProfile(activeProfile)
+      : null;
 
   // Queue of model-generated code snippets (run_python / run_maplibre_js)
   // awaiting the user's approval, each with the promise resolver its tool
@@ -772,9 +780,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 ))}
               </Select>
               {activeProfile && PROVIDER_MODELS[activeProfile.provider].length > 0 ? (
-                activeProfile.provider === "openrouter" ? (
-                  <OpenRouterModelPicker
+                hasModelPicker(activeProfile.provider) ? (
+                  <ProviderModelPicker
                     key={activeProfile.id}
+                    provider={activeProfile.provider}
+                    apiKey={activeProfileConfig?.apiKey}
+                    bedrockAuth={bedrockAuthFromConfig(activeProfileConfig)}
                     value={activeProfile.modelId || defaultModelFor(activeProfile.provider)}
                     onChange={onModelChange}
                     disabled={running}

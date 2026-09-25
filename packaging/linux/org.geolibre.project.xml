@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maps the .geolibre extension onto the project media type. Without this the
+  desktop entry's MimeType= never matches: nothing else defines the type, so a
+  project file sniffs as text/plain and a file manager offers a text editor
+  instead of GeoLibre (#2671).
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.geolibre.project+json">
+    <comment>GeoLibre Project</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.geolibre"/>
+    <icon name="geolibre-desktop"/>
+  </mime-type>
+</mime-info>

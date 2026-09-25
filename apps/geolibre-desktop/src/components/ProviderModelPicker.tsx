@@ -3,9 +3,26 @@ import { ChevronDown, RefreshCw, Search } from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { classifyFetchFailure } from "../lib/fetch-error";
-import { discoverOpenRouterModels, type OpenRouterModel } from "../lib/assistant/openrouter";
+import {
+  type BedrockDiscoveryAuth,
+  type DiscoveredModel,
+  type PickerProvider,
+  discoverBedrockModels,
+  discoverProviderModels,
+} from "../lib/assistant/model-discovery";
+import { discoverOpenRouterModels } from "../lib/assistant/openrouter";
+import { PROVIDER_LABELS, PROVIDER_MODELS } from "../lib/assistant/provider";
 
-export interface OpenRouterModelPickerProps {
+/** Wait this long after the credentials last changed before discovering, so typing a key does not fire a request per keystroke. */
+const KEY_SETTLE_MS = 500;
+
+export interface ProviderModelPickerProps {
+  /** The provider whose live catalog to list. */
+  provider: PickerProvider;
+  /** The provider API key; required for Google, Anthropic and OpenAI discovery. */
+  apiKey?: string | null;
+  /** The AWS region and credentials; required for Bedrock discovery. */
+  bedrockAuth?: BedrockDiscoveryAuth | null;
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
@@ -13,18 +30,49 @@ export interface OpenRouterModelPickerProps {
 }
 
 /**
- * Searchable OpenRouter model picker with a live catalog, refresh, and manual
- * model-ID entry. Failed discovery never changes {@link OpenRouterModelPickerProps.value}.
+ * Searchable model picker backed by the provider's live catalog, with refresh
+ * and manual model-ID entry. Until discovery succeeds (no credentials yet,
+ * offline, rejected credentials) it lists the built-in presets from
+ * {@link PROVIDER_MODELS}.
+ * Failed discovery never changes {@link ProviderModelPickerProps.value}.
  */
-export function OpenRouterModelPicker({
+export function ProviderModelPicker({
+  provider,
+  apiKey,
+  bedrockAuth,
   value,
   onChange,
   disabled = false,
   compact = false,
-}: OpenRouterModelPickerProps): ReactElement {
+}: ProviderModelPickerProps): ReactElement {
   const { t } = useTranslation();
-  const listId = `${useId()}-openrouter-models`;
-  const [models, setModels] = useState<OpenRouterModel[]>([]);
+  const listId = `${useId()}-${provider}-models`;
+  // A string identity for the credentials, so discovery reruns when a value
+  // changes but not when a caller passes an equal Bedrock object each render.
+  const key =
+    provider === "bedrock"
+      ? bedrockAuth
+        ? [
+            bedrockAuth.region,
+            bedrockAuth.accessKeyId,
+            bedrockAuth.secretAccessKey,
+            bedrockAuth.sessionToken ?? "",
+          ].join("\u0000")
+        : ""
+      : provider === "openrouter"
+        ? // OpenRouter's catalog is public: typing its key must not refetch.
+          ""
+        : (apiKey?.trim() ?? "");
+  const bedrockAuthRef = useRef(bedrockAuth);
+  bedrockAuthRef.current = bedrockAuth;
+  const canDiscover = provider === "openrouter" || key.length > 0;
+  // Tagged with the inputs that produced it, so a catalog loaded for one
+  // provider or key is never shown under another while the next one loads.
+  const [discovered, setDiscovered] = useState<{
+    provider: string;
+    key: string;
+    models: DiscoveredModel[];
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -38,48 +86,71 @@ export function OpenRouterModelPicker({
   const searchRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  /** Load the live OpenRouter catalog, ignoring stale results after a newer refresh or unmount. */
-  const refresh = useCallback(async () => {
-    const generation = ++requestGeneration.current;
-    inFlight.current?.abort();
-    const controller = new AbortController();
-    inFlight.current = controller;
-    setLoading(true);
-    setError(null);
-    try {
-      const discovered = await discoverOpenRouterModels(controller.signal);
-      if (generation !== requestGeneration.current) return;
-      setModels(discovered);
-    } catch (cause) {
-      if (generation !== requestGeneration.current || controller.signal.aborted) return;
-      const failure = classifyFetchFailure(cause);
-      const message =
-        failure.kind === "network" || failure.kind === "timeout"
-          ? (failure.hint ?? (cause instanceof Error ? cause.message : String(cause)))
-          : cause instanceof Error
-            ? cause.message
-            : String(cause);
-      setError(t("settings.ai.modelsFailedToLoad", { message }));
-      console.error("[GeoLibre] Could not load OpenRouter models", cause);
-    } finally {
-      if (generation === requestGeneration.current) setLoading(false);
-    }
-  }, [t]);
+  /** Load the live catalog, ignoring stale results after a newer refresh or unmount. */
+  const refresh = useCallback(
+    async (force = false) => {
+      const generation = ++requestGeneration.current;
+      inFlight.current?.abort();
+      setError(null);
+      if (!canDiscover) {
+        inFlight.current = null;
+        setDiscovered(null);
+        setLoading(false);
+        return;
+      }
+      const controller = new AbortController();
+      inFlight.current = controller;
+      setLoading(true);
+      try {
+        const options = { signal: controller.signal, force };
+        const models =
+          provider === "openrouter"
+            ? await discoverOpenRouterModels(controller.signal)
+            : provider === "bedrock"
+              ? await discoverBedrockModels(bedrockAuthRef.current!, options)
+              : await discoverProviderModels(provider, key, options);
+        if (generation !== requestGeneration.current) return;
+        setDiscovered({ provider, key, models });
+      } catch (cause) {
+        if (generation !== requestGeneration.current || controller.signal.aborted) return;
+        const failure = classifyFetchFailure(cause);
+        const message =
+          failure.kind === "network" || failure.kind === "timeout"
+            ? (failure.hint ?? (cause instanceof Error ? cause.message : String(cause)))
+            : cause instanceof Error
+              ? cause.message
+              : String(cause);
+        // Keep a previously loaded catalog: it is tagged with its provider and
+        // key, so it only stays visible while those still match, and a
+        // transient failure should not drop a known-good list for the presets.
+        setError(t("settings.ai.modelsFailedToLoad", { message }));
+        console.error(`[GeoLibre] Could not load ${PROVIDER_LABELS[provider]} models`, cause);
+      } finally {
+        if (generation === requestGeneration.current) setLoading(false);
+      }
+    },
+    [canDiscover, key, provider, t],
+  );
 
   useEffect(() => {
-    void refresh();
+    const timer = setTimeout(() => void refresh(), provider === "openrouter" ? 0 : KEY_SETTLE_MS);
     return () => {
+      clearTimeout(timer);
       requestGeneration.current += 1;
       inFlight.current?.abort();
     };
-  }, [refresh]);
+  }, [provider, refresh]);
 
   useEffect(() => setManualModelId(value), [value]);
 
   const catalogModels = useMemo(() => {
+    const current =
+      discovered?.provider === provider && discovered.key === key ? discovered.models : [];
+    const models =
+      current.length > 0 ? current : PROVIDER_MODELS[provider].map((id) => ({ id, name: id }));
     if (!value || models.some((model) => model.id === value)) return models;
     return [...models, { id: value, name: value }];
-  }, [models, value]);
+  }, [discovered, key, provider, value]);
   const matchingModels = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return catalogModels;
@@ -118,6 +189,24 @@ export function OpenRouterModelPicker({
 
   useEffect(() => {
     if (!open) return;
+    /**
+     * Close only the popup on Escape. A Radix dialog around the picker (the
+     * Settings dialog) listens for Escape on `document` in the capture phase,
+     * before any React handler runs, and dismisses itself unless the event is
+     * already default-prevented. Listening on `window` in the capture phase
+     * runs first, so preventing the default here keeps the dialog open.
+     */
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !containerRef.current?.contains(event.target as Node)) return;
+      event.preventDefault();
+      close(true);
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [close, open]);
+
+  useEffect(() => {
+    if (!open) return;
     searchRef.current?.focus();
     panelRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [open]);
@@ -130,7 +219,7 @@ export function OpenRouterModelPicker({
   }, [activeIndex, listId, matchingModels.length, open]);
 
   /** Apply a catalog model and close the popup, restoring focus. */
-  const choose = (model: OpenRouterModel) => {
+  const choose = (model: DiscoveredModel) => {
     if (disabled) return;
     onChange(model.id);
     close(true);
@@ -185,16 +274,15 @@ export function OpenRouterModelPicker({
       {open ? (
         <div
           ref={panelRef}
+          // Focusable so a click on a non-focusable part of the popup (the
+          // listbox scrollbar, padding, status text) keeps focus inside the
+          // picker. Otherwise focus moves to the nearest focusable ancestor,
+          // such as the Settings dialog, and the blur handler closes the popup.
+          tabIndex={-1}
           className={cn(
-            "absolute top-full z-40 mt-1 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md",
+            "absolute top-full z-40 mt-1 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md outline-none",
             compact ? "end-0" : "start-0",
           )}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              close(true);
-            }
-          }}
         >
           <div className="flex items-center gap-1 border-b p-1.5">
             <div className="relative min-w-0 flex-1">
@@ -240,10 +328,10 @@ export function OpenRouterModelPicker({
               type="button"
               size={error ? "sm" : "icon"}
               variant="ghost"
-              disabled={loading}
+              disabled={loading || !canDiscover}
               aria-label={t("settings.ai.refreshModels")}
               title={t("settings.ai.refreshModels")}
-              onClick={() => void refresh()}
+              onClick={() => void refresh(true)}
             >
               {error ? (
                 t("settings.ai.refreshModels")
@@ -289,7 +377,9 @@ export function OpenRouterModelPicker({
                   onFocus={() => setActiveIndex(index)}
                 >
                   <span className="min-w-0 truncate">{model.name}</span>
-                  <span className="shrink-0 text-muted-foreground">{model.id}</span>
+                  {model.name !== model.id ? (
+                    <span className="shrink-0 text-muted-foreground">{model.id}</span>
+                  ) : null}
                 </button>
               ))}
             </div>

@@ -1,3 +1,5 @@
+import { withDeadline } from "./model-discovery";
+
 export interface OpenRouterModel {
   id: string;
   name: string;
@@ -9,12 +11,7 @@ const DISCOVERY_TIMEOUT_MS = 10_000;
 
 /** Fetch the public text/tool-capable model catalog without sending user credentials. */
 export async function discoverOpenRouterModels(signal?: AbortSignal): Promise<OpenRouterModel[]> {
-  const timeout = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
-  // AbortSignal.any is newer than the WebViews supported by the app. When it is
-  // absent, the deadline still bounds fetch and body reading; consumers also
-  // ignore results from an aborted or superseded request.
-  const requestSignal =
-    signal && typeof AbortSignal.any === "function" ? AbortSignal.any([signal, timeout]) : timeout;
+  const requestSignal = withDeadline(signal, DISCOVERY_TIMEOUT_MS);
   const response = await fetch(OPENROUTER_MODELS_URL, { signal: requestSignal });
   if (!response.ok) throw new Error(`OpenRouter returned HTTP ${response.status}`);
 

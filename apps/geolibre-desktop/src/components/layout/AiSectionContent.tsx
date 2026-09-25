@@ -2,7 +2,9 @@ import {
   ASSISTANT_PROVIDER_IDS,
   PROVIDER_LABELS,
   PROVIDER_MODELS,
+  configForProvider,
   defaultModelFor,
+  getApiKey,
   type AssistantProfile,
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
@@ -33,7 +35,8 @@ import {
   withOllamaOriginHint,
 } from "../../lib/assistant/ollama";
 import { classifyFetchFailure } from "../../lib/fetch-error";
-import { OpenRouterModelPicker } from "../OpenRouterModelPicker";
+import { bedrockAuthFromConfig, hasModelPicker } from "../../lib/assistant/model-discovery";
+import { ProviderModelPicker } from "../ProviderModelPicker";
 
 // ── Locally-defined types to avoid circular import with SettingsDialog ──
 
@@ -49,6 +52,8 @@ export interface DraftDesktopSettings {
 
 interface AiSectionContentProps {
   draftDesktopSettings: DraftDesktopSettings;
+  /** The draft project Environment variables (enabled rows only). */
+  draftEnv: Record<string, string>;
   setDraftDesktopSettings: React.Dispatch<React.SetStateAction<any>>;
   editingProfileId: string | null;
   setEditingProfileId: (id: string | null) => void;
@@ -63,6 +68,18 @@ interface AiSectionContentProps {
   getProviderField: (field: ProviderField) => string;
   setProviderField: (field: ProviderField, value: string) => void;
   osFieldEnvName: (field: ProviderField) => string | null;
+}
+
+/**
+ * Trim draft field values and drop blank ones, so a field the user cleared does
+ * not override a value from the environment when overlaid on it.
+ */
+function nonBlankValues(values: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values)
+      .map(([key, value]) => [key, value.trim()])
+      .filter(([, value]) => value),
+  );
 }
 
 /** Shared Ollama discovery state for profile editors. */
@@ -143,6 +160,7 @@ function useOllamaModels() {
  */
 export function AiSectionContent({
   draftDesktopSettings,
+  draftEnv,
   setDraftDesktopSettings,
   editingProfileId,
   setEditingProfileId,
@@ -325,8 +343,29 @@ export function AiSectionContent({
           {PROVIDER_MODELS[newProfileProvider].length > 0 ? (
             <div className="space-y-1.5">
               <Label className="text-xs">{t("assistant.model")}</Label>
-              {newProfileProvider === "openrouter" ? (
-                <OpenRouterModelPicker value={newProfileModel} onChange={setNewProfileModel} />
+              {hasModelPicker(newProfileProvider) ? (
+                <ProviderModelPicker
+                  key={newProfileProvider}
+                  provider={newProfileProvider}
+                  apiKey={getApiKey(newProfileProvider, {
+                    ...scopedOsEnv,
+                    ...draftEnv,
+                    ...nonBlankValues(newProfileFieldValues),
+                  })}
+                  bedrockAuth={
+                    newProfileProvider === "bedrock"
+                      ? bedrockAuthFromConfig(
+                          configForProvider("bedrock", undefined, {
+                            ...scopedOsEnv,
+                            ...draftEnv,
+                            ...nonBlankValues(newProfileFieldValues),
+                          }),
+                        )
+                      : null
+                  }
+                  value={newProfileModel}
+                  onChange={setNewProfileModel}
+                />
               ) : (
                 <>
                   <div className="flex items-center gap-2">
@@ -612,6 +651,21 @@ function ProfileEditor({
       ? ollamaDiscovery.models
       : [...new Set([profile.modelId, ...models].filter(Boolean))];
   const docsUrl = PROVIDER_DOCS_URL[profile.provider];
+  // Bedrock discovery signs with the same credentials the profile would chat
+  // with: the fields shown here (profile, then project env), then the OS env.
+  const bedrockAuth =
+    profile.provider === "bedrock"
+      ? bedrockAuthFromConfig(
+          configForProvider("bedrock", undefined, {
+            ...scopedOsEnv,
+            ...Object.fromEntries(
+              providerFields
+                .map((field) => [field.envKey, getProviderField(field).trim()])
+                .filter(([, value]) => value),
+            ),
+          }),
+        )
+      : null;
 
   const refreshOllamaModels = async () => {
     const baseUrlField = PROVIDER_FIELDS.ollama.find((field) => field.envKey === "OLLAMA_BASE_URL");
@@ -670,8 +724,15 @@ function ProfileEditor({
       {models.length > 0 ? (
         <div className="space-y-1.5">
           <Label className="text-xs">{t("assistant.model")}</Label>
-          {profile.provider === "openrouter" ? (
-            <OpenRouterModelPicker
+          {hasModelPicker(profile.provider) ? (
+            <ProviderModelPicker
+              key={profile.provider}
+              provider={profile.provider}
+              apiKey={
+                (providerFields[0] ? getProviderField(providerFields[0]).trim() : "") ||
+                getApiKey(profile.provider, scopedOsEnv)
+              }
+              bedrockAuth={bedrockAuth}
               value={profile.modelId || defaultModelFor(profile.provider, modelEnv)}
               onChange={updateModel}
             />
