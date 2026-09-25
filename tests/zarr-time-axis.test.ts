@@ -330,7 +330,7 @@ describe("the @carbonplan/zarr-layer coordinate mirror", () => {
     // The renderer keeps every non-spatial coordinate it loaded on a
     // `dimensionValues` instance property. It is declared `private`, so the Zarr
     // temporal adapter reads it through a structural cast (see
-    // `readZarrDimensionValues` in maplibre-components.ts) and TypeScript cannot
+    // `readZarrDimensionValues` in components/zarr.ts) and TypeScript cannot
     // catch a rename. If the property moves, Zarr layers silently stop offering
     // a Time Slider binding — so pin the name against the real class here.
     // Imported dynamically: the package publishes an `import`-only exports map,

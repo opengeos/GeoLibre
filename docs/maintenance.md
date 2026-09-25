@@ -183,7 +183,7 @@ black — it declines the stack.
 - **The PMTiles control's layer ids** (`pmtilesControlLayerId` /
   `pmtilesIdsForSourceLayers` / `pmtilesIdNamesSourceLayer`,
   `packages/map/src/pmtiles-layer.ts`, read from `layer-sync.ts` and
-  `packages/plugins/src/plugins/maplibre-components.ts`) mirror an unexported fact
+  `packages/plugins/src/plugins/components/pmtiles.ts`) mirror an unexported fact
   about `PMTilesLayerControl`: it names its MapLibre layers
   `${sourceId}-${name}-${kind}` from the **raw** source-layer name, where
   `pmtilesVectorLayerId` percent-encodes it. The two agree for every name needing
