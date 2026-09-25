@@ -327,6 +327,26 @@ not catch that either: re-read `loadSplat` / `loadModel` in the package on a bum
 Better still, upstream an id option and a per-asset placement getter and delete
 the patching.
 
+### `maplibre-gl-planetary-computer` (`packages/plugins/package.json`) — private STAC client
+
+The Planetary Computer STAC API sends no CORS headers on `GET /collections` and
+rejects the preflight a JSON `POST /search` needs, so the library's own
+`STACClient` fails with "Failed to fetch" in the browser and the Tauri webview.
+`packages/plugins/src/plugins/planetary-computer-stac.ts` subclasses it: search
+goes out as a `GET /search`, and the collection list falls back to the bundled
+`planetary-computer-collections.json` when the live one cannot be read. The
+subclass reuses the private `fetch` / `abortController` fields, and
+`maplibre-gl-planetary-computer.ts` swaps it into the control's private
+`_stacClient` field before the control is added (collections load in `onAdd`).
+
+If upstream renames those fields, loads collections in its constructor, or adds
+new POST requests, the panel breaks again without a compiler error. Re-read
+`STACClient` and the control's constructor/`onAdd` on a bump, and run
+`tests/planetary-computer-stac.test.ts`. Regenerate the bundled list with
+`node scripts/gen-planetary-computer-collections.mjs` to pick up new
+collections. Better still, upstream a GET search and a client/fetch option and
+delete the swap.
+
 ### `maplibre-gl-raster` — stretch and gamma curves
 
 `buildContinuousColormapRgba`

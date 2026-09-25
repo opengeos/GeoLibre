@@ -11,6 +11,7 @@ import type {
   TileParams,
 } from "maplibre-gl-planetary-computer";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
+import { createCorsSafeStacClientClass } from "./planetary-computer-stac";
 
 /**
  * `metadata.sourceKind` marking the Planetary Computer raster layers this plugin adds. Exported so the
@@ -106,7 +107,7 @@ function getPlanetaryComputerConstructors(): Promise<{
       } = module;
       planetaryComputerConstructors = {
         PlanetaryComputerControl: PlanetaryComputerControlClass,
-        STACClient: STACClientClass,
+        STACClient: createCorsSafeStacClientClass(STACClientClass),
         TiTilerClient: TiTilerClientClass,
       };
       return planetaryComputerConstructors;
@@ -126,6 +127,7 @@ async function ensurePlanetaryComputerControl(
     await getPlanetaryComputerConstructors();
 
   planetaryComputerControl ??= createPlanetaryComputerControl(PlanetaryComputerControlClass);
+  installPlanetaryComputerCorsSafeStacClient(planetaryComputerControl);
 
   if (!planetaryComputerControlMounted) {
     const added = app.addMapControl(planetaryComputerControl, planetaryComputerControlPosition);
@@ -141,6 +143,19 @@ async function ensurePlanetaryComputerControl(
   }
 
   return planetaryComputerControl;
+}
+
+// The control builds its own `STACClient` in its constructor and offers no
+// option to supply one, so swap in the CORS-safe subclass through the private
+// `_stacClient` field (a plain field at runtime in
+// maplibre-gl-planetary-computer 0.4.0). Without it the panel's collection list
+// and search fail with "Failed to fetch" in the browser and the Tauri webview.
+function installPlanetaryComputerCorsSafeStacClient(control: PlanetaryComputerControl): void {
+  const internals = control as unknown as { _stacClient?: STACClient };
+  const { STACClient: STACClientClass } = getResolvedPlanetaryComputerConstructors();
+  const current = internals._stacClient;
+  if (current instanceof STACClientClass) return;
+  internals._stacClient = new STACClientClass((current as STACClient | undefined)?.getBaseUrl());
 }
 
 function createPlanetaryComputerControl(

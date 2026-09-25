@@ -1,0 +1,3296 @@
+[
+  {
+    "id": "3dep-lidar-classification",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Classification",
+    "description": "This collection is derived from the [USGS 3DEP COPC collection](https://planetarycomputer.microsoft.com/dataset/3dep-lidar-copc). It uses the [ASPRS](https://www.asprs.org/) (American Society for Photogrammetry and Remote Sensing) [Lidar point classification](https://desktop.arcgis.com/en/arcmap/lat…",
+    "keywords": ["USGS", "3DEP", "COG", "Classification"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-lidar-copc",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Point Cloud",
+    "description": "This collection contains source data from the [USGS 3DEP program](https://www.usgs.gov/3d-elevation-program) reformatted into the [COPC](https://copc.io) format. A COPC file is a LAZ 1.4 file that stores point data organized in a clustered octree. It contains a VLR that describes the octree organiza…",
+    "keywords": ["USGS", "3DEP", "COG", "Point cloud"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "application/vnd.laszip+copc" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-lidar-dsm",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Digital Surface Model",
+    "description": "This collection is derived from the [USGS 3DEP COPC collection](https://planetarycomputer.microsoft.com/dataset/3dep-lidar-copc). It creates a Digital Surface Model (DSM) using [`pdal.filters.range`](https://pdal.io/stages/filters.range.html#filters-range) to output a collection of Cloud Optimized G…",
+    "keywords": ["USGS", "3DEP", "COG", "DSM"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-lidar-dtm",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Digital Terrain Model",
+    "description": "This collection is derived from the [USGS 3DEP COPC collection](https://planetarycomputer.microsoft.com/dataset/3dep-lidar-copc). It creates a Digital Terrain Model (DTM) using [`pdal.filters.smrf`](https://pdal.io/stages/filters.smrf.html#filters-smrf) to output a collection of Cloud Optimized GeoT…",
+    "keywords": ["USGS", "3DEP", "COG", "DTM"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-lidar-dtm-native",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Digital Terrain Model (Native)",
+    "description": "This collection is derived from the [USGS 3DEP COPC collection](https://planetarycomputer.microsoft.com/dataset/3dep-lidar-copc). It creates a Digital Terrain Model (DTM) using the vendor provided (native) ground classification and [`pdal.filters.range`](https://pdal.io/stages/filters.range.html#fil…",
+    "keywords": ["USGS", "3DEP", "COG", "DTM"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-lidar-hag",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Height above Ground",
+    "description": "This COG type is generated using the Z dimension of the [COPC data](https://planetarycomputer.microsoft.com/dataset/3dep-lidar-copc) data and removes noise, water, and using [`pdal.filters.smrf`](https://pdal.io/stages/filters.smrf.html#filters-smrf) followed by [pdal.filters.hag_nn](https://pdal.io…",
+    "keywords": ["USGS", "3DEP", "COG", "Elevation"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-lidar-intensity",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Intensity",
+    "description": "This collection is derived from the [USGS 3DEP COPC collection](https://planetarycomputer.microsoft.com/dataset/3dep-lidar-copc). It is a collection of Cloud Optimized GeoTIFFs representing the pulse return magnitude. The values are based on the Intensity [PDAL dimension](https://pdal.io/dimensions.…",
+    "keywords": ["USGS", "3DEP", "COG", "Intensity"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-lidar-pointsourceid",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Point Source",
+    "description": "This collection is derived from the [USGS 3DEP COPC collection](https://planetarycomputer.microsoft.com/dataset/3dep-lidar-copc). It is a collection of Cloud Optimized GeoTIFFs representing the file source ID from which the point originated. Zero indicates that the point originated in the current fi…",
+    "keywords": ["USGS", "3DEP", "COG", "PointSourceId"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-lidar-returns",
+    "type": "Collection",
+    "title": "USGS 3DEP Lidar Returns",
+    "description": "This collection is derived from the [USGS 3DEP COPC collection](https://planetarycomputer.microsoft.com/dataset/3dep-lidar-copc). It is a collection of Cloud Optimized GeoTIFFs representing the number of returns for a given pulse. This values are based on the PointSourceId [PDAL dimension](https://p…",
+    "keywords": ["USGS", "3DEP", "COG", "NumberOfReturns"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.8547, 17.6554, -64.5612, 71.3933]] },
+      "temporal": { "interval": [["2012-01-01T00:00:00Z", "2022-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "3dep-seamless",
+    "type": "Collection",
+    "title": "USGS 3DEP Seamless DEMs",
+    "description": "U.S.-wide digital elevation data at horizontal resolutions ranging from one to sixty meters. The [USGS 3D Elevation Program (3DEP) Datasets](https://www.usgs.gov/core-science-systems/ngp/3dep) from the [National Map](https://www.usgs.gov/core-science-systems/national-geospatial-program/national-map)…",
+    "keywords": ["USGS", "3DEP", "NED", "Elevation", "DEM"],
+    "license": "PDDL-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-174.0017, -15.0017, 164.0017, 84.0017]] },
+      "temporal": { "interval": [["1925-01-01T00:00:00Z", "2020-05-06T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "gpkg": { "type": "application/geopackage+sqlite3" },
+      "metadata": { "type": "application/xml" },
+      "thumbnail": { "type": "image/jpeg" }
+    },
+    "links": []
+  },
+  {
+    "id": "alos-dem",
+    "type": "Collection",
+    "title": "ALOS World 3D-30m",
+    "description": "The \"ALOS World 3D-30m\" (AW3D30) dataset is a 30 meter resolution global digital surface model (DSM), developed by the Japan Aerospace Exploration Agency (JAXA). AWD30 was constructed from the Panchromatic Remote-sensing Instrument for Stereo Mapping (PRISM) on board Advanced Land Observing Satellit…",
+    "keywords": ["ALOS", "PRISM", "JAXA", "DEM", "DSM", "Elevation"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2016-12-07T00:00:00Z", "2016-12-07T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "alos-fnf-mosaic",
+    "type": "Collection",
+    "title": "ALOS Forest/Non-Forest Annual Mosaic",
+    "description": "The global 25m resolution SAR mosaics and forest/non-forest maps are free and open annual datasets generated by [JAXA](https://www.eorc.jaxa.jp/ALOS/en/dataset/fnf_e.htm) using the L-band Synthetic Aperture Radar sensors on the Advanced Land Observing Satellite-2 (ALOS-2 PALSAR-2), the Advanced Land…",
+    "keywords": ["ALOS", "JAXA", "Forest", "Land Cover", "Global"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, 85, 180, -56]] },
+      "temporal": { "interval": [["2015-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
+    },
+    "item_assets": { "C": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" } },
+    "links": []
+  },
+  {
+    "id": "alos-palsar-mosaic",
+    "type": "Collection",
+    "title": "ALOS PALSAR Annual Mosaic",
+    "description": "Global 25 m Resolution PALSAR-2/PALSAR Mosaic (MOS)",
+    "keywords": ["ALOS", "JAXA", "Remote Sensing", "Global"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, 85, 180, -56]] },
+      "temporal": { "interval": [["2015-01-01T00:00:00Z", "2021-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "HH": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "HV": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "VH": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "VV": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "date": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "mask": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "linci": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "aster-l1t",
+    "type": "Collection",
+    "title": "ASTER L1T",
+    "description": "The [ASTER](https://terra.nasa.gov/about/terra-instruments/aster) instrument, launched on-board NASA's [Terra](https://terra.nasa.gov/) satellite in 1999, provides multispectral images of the Earth at 15m-90m resolution. ASTER images provide information about land surface temperature, color, elevati…",
+    "keywords": ["ASTER", "USGS", "NASA", "Satellite", "Global"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-03-04T12:00:00Z", "2006-12-31T12:00:00Z"]] }
+    },
+    "item_assets": {
+      "TIR": {},
+      "xml": { "type": "application/xml" },
+      "SWIR": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "VNIR": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "qa-txt": { "type": "text/plain" },
+      "qa-browse": { "type": "image/jpeg" },
+      "tir-browse": { "type": "image/jpeg" },
+      "vnir-browse": { "type": "image/jpeg" }
+    },
+    "links": []
+  },
+  {
+    "id": "chesapeake-lc-13",
+    "type": "Collection",
+    "title": "Chesapeake Land Cover (13-class)",
+    "description": "A high-resolution 1-meter [land cover data product](https://www.chesapeakeconservancy.org/conservation-innovation-center/high-resolution-data/land-cover-data-project/) in raster format for the entire Chesapeake Bay watershed based on 2013-2014 imagery from the National Agriculture Imagery Program (N…",
+    "keywords": ["Land Cover", "Chesapeake Bay Watershed", "Chesapeake Conservancy"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-81.1466, 36.2129, -73.2736, 44.7782]] },
+      "temporal": { "interval": [["2013-01-01T00:00:00Z", "2014-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "chesapeake-lc-7",
+    "type": "Collection",
+    "title": "Chesapeake Land Cover (7-class)",
+    "description": "A high-resolution 1-meter [land cover data product](https://www.chesapeakeconservancy.org/conservation-innovation-center/high-resolution-data/land-cover-data-project/) in raster format for the entire Chesapeake Bay watershed based on 2013-2014 imagery from the National Agriculture Imagery Program (N…",
+    "keywords": ["Land Cover", "Chesapeake Bay Watershed", "Chesapeake Conservancy"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-81.1466, 36.2129, -73.2736, 44.7782]] },
+      "temporal": { "interval": [["2013-01-01T00:00:00Z", "2014-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "chesapeake-lu",
+    "type": "Collection",
+    "title": "Chesapeake Land Use",
+    "description": "A high-resolution 1-meter [land use data product](https://www.chesapeakeconservancy.org/conservation-innovation-center/high-resolution-data/land-use-data-project/) in raster format for the entire Chesapeake Bay watershed. The dataset was created by modifying the 2013-2014 high-resolution [land cover…",
+    "keywords": ["Land Use", "Chesapeake Bay Watershed", "Chesapeake Conservancy"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-81.1465, 36.1873, -73.1108, 44.7782]] },
+      "temporal": { "interval": [["2013-01-01T00:00:00Z", "2014-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "chloris-biomass",
+    "type": "Collection",
+    "title": "Chloris Biomass",
+    "description": "The Chloris Global Biomass 2003 - 2019 dataset provides estimates of stock and change in aboveground biomass for Earth's terrestrial woody vegetation ecosystems. It covers the period 2003 - 2019, at annual time steps. The global dataset has a circa 4.6 km spatial resolution. The maps and data sets w…",
+    "keywords": ["Chloris", "Biomass", "MODIS", "Carbon"],
+    "license": "CC-BY-NC-SA-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-179.95, -60, 179.95, 90]] },
+      "temporal": { "interval": [["2003-07-31T00:00:00Z", "2019-07-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "biomass": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "biomass_wm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "biomass_change": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "biomass_change_wm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "cil-gdpcir-cc-by",
+    "type": "Collection",
+    "title": "CIL Global Downscaled Projections for Climate Impacts Research (CC-BY-4.0)",
+    "description": "The World Climate Research Programme's [6th Coupled Model Intercomparison Project (CMIP6)](https://www.wcrp-climate.org/wgcm-cmip/wgcm-cmip6) represents an enormous advance in the quality, detail, and scope of climate modeling. The [Global Downscaled Projections for Climate Impacts Research](https:/…",
+    "keywords": ["CMIP6", "Climate Impact Lab", "Rhodium Group", "Precipitation", "Temperature"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1950-01-01T00:00:00Z", "2100-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "pr": { "type": "application/vnd+zarr" },
+      "tasmax": { "type": "application/vnd+zarr" },
+      "tasmin": { "type": "application/vnd+zarr" }
+    },
+    "links": []
+  },
+  {
+    "id": "cil-gdpcir-cc-by-sa",
+    "type": "Collection",
+    "title": "CIL Global Downscaled Projections for Climate Impacts Research (CC-BY-SA-4.0)",
+    "description": "The World Climate Research Programme's [6th Coupled Model Intercomparison Project (CMIP6)](https://www.wcrp-climate.org/wgcm-cmip/wgcm-cmip6) represents an enormous advance in the quality, detail, and scope of climate modeling. The [Global Downscaled Projections for Climate Impacts Research](https:/…",
+    "keywords": ["CMIP6", "Climate Impact Lab", "Rhodium Group", "Precipitation", "Temperature"],
+    "license": "CC-BY-SA-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1950-01-01T00:00:00Z", "2100-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "pr": { "type": "application/vnd+zarr" },
+      "tasmax": { "type": "application/vnd+zarr" },
+      "tasmin": { "type": "application/vnd+zarr" }
+    },
+    "links": []
+  },
+  {
+    "id": "cil-gdpcir-cc0",
+    "type": "Collection",
+    "title": "CIL Global Downscaled Projections for Climate Impacts Research (CC0-1.0)",
+    "description": "The World Climate Research Programme's [6th Coupled Model Intercomparison Project (CMIP6)](https://www.wcrp-climate.org/wgcm-cmip/wgcm-cmip6) represents an enormous advance in the quality, detail, and scope of climate modeling. The [Global Downscaled Projections for Climate Impacts Research](https:/…",
+    "keywords": ["CMIP6", "Climate Impact Lab", "Rhodium Group", "Precipitation", "Temperature"],
+    "license": "CC0-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1950-01-01T00:00:00Z", "2100-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "pr": { "type": "application/vnd+zarr" },
+      "tasmax": { "type": "application/vnd+zarr" },
+      "tasmin": { "type": "application/vnd+zarr" }
+    },
+    "links": []
+  },
+  {
+    "id": "conus404",
+    "type": "Collection",
+    "title": "CONUS404",
+    "description": "[CONUS404](https://www.usgs.gov/data/conus404-four-kilometer-long-term-regional-hydroclimate-reanalysis-over-conterminous-united) is a unique, high-resolution hydro-climate dataset appropriate for forcing hydrological models and conducting meteorological analysis over the conterminous United States.…",
+    "keywords": [
+      "CONUS404",
+      "Hydroclimate",
+      "Hydrology",
+      "Inland Waters",
+      "Precipitation",
+      "Weather",
+      "Climate"
+    ],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-137.873, 17.631, -58.463, 56.704]] },
+      "temporal": { "interval": [["1979-10-01T00:00:00Z", "2022-09-30T23:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "cop-dem-glo-30",
+    "type": "Collection",
+    "title": "Copernicus DEM GLO-30",
+    "description": "The Copernicus DEM is a digital surface model (DSM), which represents the surface of the Earth including buildings, infrastructure, and vegetation. This DSM is based on radar satellite data acquired during the TanDEM-X Mission, which was funded by a public-private partnership between the German Aero…",
+    "keywords": ["Copernicus", "DEM", "DSM", "Elevation"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2021-04-22T00:00:00Z", "2021-04-22T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "cop-dem-glo-90",
+    "type": "Collection",
+    "title": "Copernicus DEM GLO-90",
+    "description": "The Copernicus DEM is a digital surface model (DSM), which represents the surface of the Earth including buildings, infrastructure, and vegetation. This DSM is based on radar satellite data acquired during the TanDEM-X Mission, which was funded by a public-private partnership between the German Aero…",
+    "keywords": ["Copernicus", "DEM", "Elevation"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2021-04-22T00:00:00Z", "2021-04-22T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-annual-hi",
+    "type": "Collection",
+    "title": "Daymet Annual Hawaii",
+    "description": "Annual climate summaries derived from [Daymet](https://daymet.ornl.gov) Version 4 daily data at a 1 km x 1 km spatial resolution for five variables: minimum and maximum temperature, precipitation, vapor pressure, and snow water equivalent. Annual averages are provided for minimum and maximum tempera…",
+    "keywords": ["Daymet", "Hawaii", "Temperature", "Precipitation", "Vapor Pressure", "Climate"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-160.3056, 17.9539, -154.772, 23.5186]] },
+      "temporal": { "interval": [["1980-07-01T12:00:00Z", "2020-07-01T12:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-annual-na",
+    "type": "Collection",
+    "title": "Daymet Annual North America",
+    "description": "Annual climate summaries derived from [Daymet](https://daymet.ornl.gov) Version 4 daily data at a 1 km x 1 km spatial resolution for five variables: minimum and maximum temperature, precipitation, vapor pressure, and snow water equivalent. Annual averages are provided for minimum and maximum tempera…",
+    "keywords": [
+      "Daymet",
+      "North America",
+      "Temperature",
+      "Precipitation",
+      "Vapor Pressure",
+      "Climate"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-178.1333, 14.0749, -53.0567, 82.9143]] },
+      "temporal": { "interval": [["1980-07-01T12:00:00Z", "2020-07-01T12:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-annual-pr",
+    "type": "Collection",
+    "title": "Daymet Annual Puerto Rico",
+    "description": "Annual climate summaries derived from [Daymet](https://daymet.ornl.gov) Version 4 daily data at a 1 km x 1 km spatial resolution for five variables: minimum and maximum temperature, precipitation, vapor pressure, and snow water equivalent. Annual averages are provided for minimum and maximum tempera…",
+    "keywords": [
+      "Daymet",
+      "Puerto Rico",
+      "Temperature",
+      "Precipitation",
+      "Vapor Pressure",
+      "Climate"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-67.9927, 16.8444, -64.1196, 19.9382]] },
+      "temporal": { "interval": [["1980-07-01T12:00:00Z", "2020-07-01T12:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-daily-hi",
+    "type": "Collection",
+    "title": "Daymet Daily Hawaii",
+    "description": "Gridded estimates of daily weather parameters. [Daymet](https://daymet.ornl.gov) Version 4 variables include the following parameters: minimum temperature, maximum temperature, precipitation, shortwave radiation, vapor pressure, snow water equivalent, and day length. [Daymet](https://daymet.ornl.gov…",
+    "keywords": ["Daymet", "Hawaii", "Temperature", "Precipitation", "Vapor Pressure", "Weather"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-160.3056, 17.9539, -154.772, 23.5186]] },
+      "temporal": { "interval": [["1980-01-01T12:00:00Z", "2020-12-30T12:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-daily-na",
+    "type": "Collection",
+    "title": "Daymet Daily North America",
+    "description": "Gridded estimates of daily weather parameters. [Daymet](https://daymet.ornl.gov) Version 4 variables include the following parameters: minimum temperature, maximum temperature, precipitation, shortwave radiation, vapor pressure, snow water equivalent, and day length. [Daymet](https://daymet.ornl.gov…",
+    "keywords": [
+      "Daymet",
+      "North America",
+      "Temperature",
+      "Precipitation",
+      "Vapor Pressure",
+      "Weather"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-178.1333, 14.0749, -53.0567, 82.9143]] },
+      "temporal": { "interval": [["1980-01-01T12:00:00Z", "2020-12-30T12:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-daily-pr",
+    "type": "Collection",
+    "title": "Daymet Daily Puerto Rico",
+    "description": "Gridded estimates of daily weather parameters. [Daymet](https://daymet.ornl.gov) Version 4 variables include the following parameters: minimum temperature, maximum temperature, precipitation, shortwave radiation, vapor pressure, snow water equivalent, and day length. [Daymet](https://daymet.ornl.gov…",
+    "keywords": [
+      "Daymet",
+      "Puerto Rico",
+      "Temperature",
+      "Precipitation",
+      "Vapor Pressure",
+      "Weather"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-67.9927, 16.8444, -64.1196, 19.9382]] },
+      "temporal": { "interval": [["1980-01-01T12:00:00Z", "2020-12-30T12:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-monthly-hi",
+    "type": "Collection",
+    "title": "Daymet Monthly Hawaii",
+    "description": "Monthly climate summaries derived from [Daymet](https://daymet.ornl.gov) Version 4 daily data at a 1 km x 1 km spatial resolution for five variables: minimum and maximum temperature, precipitation, vapor pressure, and snow water equivalent. Annual averages are provided for minimum and maximum temper…",
+    "keywords": ["Daymet", "Hawaii", "Temperature", "Precipitation", "Vapor Pressure", "Climate"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-160.3056, 17.9539, -154.772, 23.5186]] },
+      "temporal": { "interval": [["1980-01-16T12:00:00Z", "2020-12-16T00:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-monthly-na",
+    "type": "Collection",
+    "title": "Daymet Monthly North America",
+    "description": "Monthly climate summaries derived from [Daymet](https://daymet.ornl.gov) Version 4 daily data at a 1 km x 1 km spatial resolution for five variables: minimum and maximum temperature, precipitation, vapor pressure, and snow water equivalent. Annual averages are provided for minimum and maximum temper…",
+    "keywords": [
+      "Daymet",
+      "North America",
+      "Temperature",
+      "Precipitation",
+      "Vapor Pressure",
+      "Climate"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-178.1333, 14.0749, -53.0567, 82.9143]] },
+      "temporal": { "interval": [["1980-01-16T12:00:00Z", "2020-12-16T00:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "daymet-monthly-pr",
+    "type": "Collection",
+    "title": "Daymet Monthly Puerto Rico",
+    "description": "Monthly climate summaries derived from [Daymet](https://daymet.ornl.gov) Version 4 daily data at a 1 km x 1 km spatial resolution for five variables: minimum and maximum temperature, precipitation, vapor pressure, and snow water equivalent. Annual averages are provided for minimum and maximum temper…",
+    "keywords": [
+      "Daymet",
+      "Puerto Rico",
+      "Temperature",
+      "Precipitation",
+      "Vapor Pressure",
+      "Climate"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-67.9927, 16.8444, -64.1196, 19.9382]] },
+      "temporal": { "interval": [["1980-01-16T12:00:00Z", "2020-12-16T00:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "deltares-floods",
+    "type": "Collection",
+    "title": "Deltares Global Flood Maps",
+    "description": "[Deltares](https://www.deltares.nl/en/) has produced inundation maps of flood depth using a model that takes into account water level attenuation and is forced by sea level. At the coastline, the model is forced by extreme water levels containing surge and tide from GTSMip6. The water level at the c…",
+    "keywords": ["Deltares", "Flood", "Sea level rise", "Water", "Global"],
+    "license": "CDLA-Permissive-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, 90, 180, -90]] },
+      "temporal": { "interval": [["2018-01-01T00:00:00Z", "2018-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "application/x-netcdf" },
+      "index": { "type": "application/json" }
+    },
+    "links": []
+  },
+  {
+    "id": "deltares-water-availability",
+    "type": "Collection",
+    "title": "Deltares Global Water Availability",
+    "description": "[Deltares](https://www.deltares.nl/en/) has produced a hydrological model approach to simulate historical daily reservoir variations for 3,236 locations across the globe for the period 1970-2020 using the distributed [wflow_sbm](https://deltares.github.io/Wflow.jl/stable/model_docs/model_configurati…",
+    "keywords": ["Deltares", "Water availability", "Reservoir", "Water", "Precipitation"],
+    "license": "CDLA-Permissive-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, 90, 180, -90]] },
+      "temporal": { "interval": [["1970-01-01T00:00:00Z", "2020-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "application/x-netcdf" },
+      "index": { "type": "application/json" }
+    },
+    "links": []
+  },
+  {
+    "id": "drcog-lulc",
+    "type": "Collection",
+    "title": "Denver Regional Council of Governments Land Use Land Cover",
+    "description": "The [Denver Regional Council of Governments (DRCOG) Land Use/Land Cover (LULC)](https://drcog.org/services-and-resources/data-maps-and-modeling/regional-land-use-land-cover-project) datasets are developed in partnership with the [Babbit Center for Land and Water Policy](https://www.lincolninst.edu/o…",
+    "keywords": ["Land Cover", "Land Use", "NAIP", "USDA"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-105.9396, 39.1044, -103.668, 40.3206]] },
+      "temporal": { "interval": [["2018-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "eclipse",
+    "type": "Collection",
+    "title": "Urban Innovation Eclipse Sensor Data",
+    "description": "The [Project Eclipse](https://www.microsoft.com/en-us/research/project/project-eclipse/) Network is a low-cost air quality sensing network for cities and a research project led by the [Urban Innovation Group]( https://www.microsoft.com/en-us/research/urban-innovation-research/) at Microsoft Research…",
+    "keywords": ["Eclipse", "PM25", "air pollution"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-87.9401, 41.6445, -87.5241, 42.023]] },
+      "temporal": { "interval": [["2021-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": { "data": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "ecmwf-forecast",
+    "type": "Collection",
+    "title": "ECMWF Open Data (real-time)",
+    "description": "The [ECMWF catalog of real-time products](https://www.ecmwf.int/en/forecasts/datasets/catalogue-ecmwf-real-time-products) offers real-time meterological and oceanographic productions from the ECMWF forecast system. Users should consult the [ECMWF Forecast User Guide](https://confluence.ecmwf.int/dis…",
+    "keywords": ["ECMWF", "forecast", "weather"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, 90, 180, -90]] },
+      "temporal": { "interval": [[null, null]] }
+    },
+    "item_assets": {
+      "data": { "type": "application/wmo-GRIB2" },
+      "index": { "type": "application/x-ndjson" }
+    },
+    "links": []
+  },
+  {
+    "id": "era5-pds",
+    "type": "Collection",
+    "title": "ERA5 - PDS",
+    "description": "ERA5 is the fifth generation ECMWF atmospheric reanalysis of the global climate covering the period from January 1950 to present. ERA5 is produced by the Copernicus Climate Change Service (C3S) at ECMWF. Reanalysis combines model data with observations from across the world into a globally complete…",
+    "keywords": ["ERA5", "ECMWF", "Precipitation", "Temperature", "Reanalysis", "Weather"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1979-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "surface_air_pressure": { "type": "application/vnd+zarr" },
+      "sea_surface_temperature": { "type": "application/vnd+zarr" },
+      "eastward_wind_at_10_metres": { "type": "application/vnd+zarr" },
+      "air_temperature_at_2_metres": { "type": "application/vnd+zarr" },
+      "eastward_wind_at_100_metres": { "type": "application/vnd+zarr" },
+      "northward_wind_at_10_metres": { "type": "application/vnd+zarr" },
+      "northward_wind_at_100_metres": { "type": "application/vnd+zarr" },
+      "air_pressure_at_mean_sea_level": { "type": "application/vnd+zarr" },
+      "dew_point_temperature_at_2_metres": { "type": "application/vnd+zarr" },
+      "precipitation_amount_1hour_Accumulation": { "type": "application/vnd+zarr" },
+      "air_temperature_at_2_metres_1hour_Maximum": { "type": "application/vnd+zarr" },
+      "air_temperature_at_2_metres_1hour_Minimum": { "type": "application/vnd+zarr" },
+      "integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air_1hour_Accumulation": {
+        "type": "application/vnd+zarr"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "esa-cci-lc",
+    "type": "Collection",
+    "title": "ESA Climate Change Initiative Land Cover Maps (Cloud Optimized GeoTIFF)",
+    "description": "The ESA Climate Change Initiative (CCI) [Land Cover dataset](https://cds.climate.copernicus.eu/cdsapp#!/dataset/satellite-land-cover?tab=overview) provides consistent global annual land cover maps at 300m spatial resolution from 1992 to 2020. The land cover classes are defined using the United Natio…",
+    "keywords": ["Land Cover", "ESA", "CCI", "Global"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1992-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "lccs_class": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "change_count": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "processed_flag": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "observation_count": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "current_pixel_state": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "esa-cci-lc-netcdf",
+    "type": "Collection",
+    "title": "ESA Climate Change Initiative Land Cover Maps (NetCDF)",
+    "description": "The ESA Climate Change Initiative (CCI) [Land Cover dataset](https://cds.climate.copernicus.eu/cdsapp#!/dataset/satellite-land-cover?tab=overview) provides consistent global annual land cover maps at 300m spatial resolution from 1992 to 2020. The land cover classes are defined using the United Natio…",
+    "keywords": ["Land Cover", "ESA", "CCI", "Global"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1992-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
+    },
+    "item_assets": { "netcdf": { "type": "application/netcdf" } },
+    "links": []
+  },
+  {
+    "id": "esa-worldcover",
+    "type": "Collection",
+    "title": "ESA WorldCover",
+    "description": "The European Space Agency (ESA) [WorldCover](https://esa-worldcover.org/en) product provides global land cover maps for the years 2020 and 2021 at 10 meter resolution based on the combination of [Sentinel-1](https://sentinel.esa.int/web/sentinel/missions/sentinel-1) radar data and [Sentinel-2](https…",
+    "keywords": ["Global", "Land Cover", "Sentinel", "ESA"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -60, 180, 82.75]] },
+      "temporal": { "interval": [["2020-01-01T00:00:00Z", "2021-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "map": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "input_quality": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "fia",
+    "type": "Collection",
+    "title": "Forest Inventory and Analysis",
+    "description": "Status and trends on U.S. forest location, health, growth, mortality, and production, from the U.S. Forest Service's [Forest Inventory and Analysis](https://www.fia.fs.fed.us/) (FIA) program. The Forest Inventory and Analysis (FIA) dataset is a nationwide survey of the forest assets of the United St…",
+    "keywords": ["Forest", "Species", "Carbon", "Biomass", "USDA", "Forest Service"],
+    "license": "CC0-1.0",
+    "extent": {
+      "spatial": { "bbox": [[138.06, 0.92, 163.05, 9.78]] },
+      "temporal": { "interval": [["2020-06-01T00:00:00Z", null]] }
+    },
+    "item_assets": { "data": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "fws-nwi",
+    "type": "Collection",
+    "title": "FWS National Wetlands Inventory",
+    "description": "The Wetlands Data Layer is the product of over 45 years of work by the National Wetlands Inventory (NWI) and its collaborators and currently contains more than 35 million wetland and deepwater features. This dataset, covering the conterminous United States, Hawaii, Puerto Rico, the Virgin Islands, G…",
+    "keywords": ["USFWS", "Wetlands", "United States"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-64.5496, 13.1667, 144.6, 71.9963]] },
+      "temporal": { "interval": [["2022-10-01T00:00:00Z", "2022-10-01T00:00:00Z"]] }
+    },
+    "item_assets": { "zip": { "type": "application/zip" } },
+    "links": []
+  },
+  {
+    "id": "gap",
+    "type": "Collection",
+    "title": "USGS Gap Land Cover",
+    "description": "The [USGS GAP/LANDFIRE National Terrestrial Ecosystems data](https://www.sciencebase.gov/catalog/item/573cc51be4b0dae0d5e4b0c5), based on the [NatureServe Terrestrial Ecological Systems](https://www.natureserve.org/products/terrestrial-ecological-systems-united-states), are the foundation of the mos…",
+    "keywords": ["USGS", "GAP", "LANDFIRE", "Land Cover", "United States"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-127.971, 22.7978, -65.2663, 51.6469]] },
+      "temporal": { "interval": [["1999-01-01T00:00:00Z", "2011-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "gbif",
+    "type": "Collection",
+    "title": "Global Biodiversity Information Facility (GBIF)",
+    "description": "The [Global Biodiversity Information Facility](https://www.gbif.org) (GBIF) is an international network and data infrastructure funded by the world's governments, providing global data that document the occurrence of species. GBIF currently integrates datasets documenting over 1.6 billion species oc…",
+    "keywords": ["GBIF", "Biodiversity", "Species"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2021-04-13T00:00:00Z", null]] }
+    },
+    "item_assets": { "data": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "gnatsgo-rasters",
+    "type": "Collection",
+    "title": "gNATSGO Soil Database - Rasters",
+    "description": "This collection contains the raster data for gNATSGO. In order to use the map unit values contained in the `mukey` raster asset, you'll need to join to tables represented as Items in the [gNATSGO Tables](https://planetarycomputer.microsoft.com/dataset/gnatsgo-tables) Collection. Many items have comm…",
+    "keywords": ["Soils", "NATSGO", "SSURGO", "STATSGO2", "RSS", "USDA", "United States"],
+    "license": "CC0-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-170.8513, -14.3799, -169.4152, -14.1432]] },
+      "temporal": { "interval": [["2020-07-01T00:00:00Z", "2020-07-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "mukey": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws0_5": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc0_5": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_5a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_5s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws0_20": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws0_30": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws5_20": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc0_20": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc0_30": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc5_20": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_20a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_20s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_30a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_30s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk5_20a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk5_20s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws0_100": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws0_150": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws0_999": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws20_50": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "droughty": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "nccpi3sg": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc0_100": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc0_150": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc0_999": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc20_50": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_100a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_100s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_150a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_150s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_999a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk0_999s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk20_50a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk20_50s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws50_100": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "musumcpct": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "nccpi3all": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "nccpi3cot": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "nccpi3soy": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "pwsl1pomu": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "rootznaws": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "rootznemc": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc50_100": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk50_100a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk50_100s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws100_150": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aws150_999": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "musumcpcta": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "musumcpcts": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "nccpi3corn": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "pctearthmc": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc100_150": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soc150_999": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk100_150a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk100_150s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk150_999a": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tk150_999s": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "gnatsgo-tables",
+    "type": "Collection",
+    "title": "gNATSGO Soil Database - Tables",
+    "description": "This collection contains the table data for gNATSGO. This table data can be used to determine the values of raster data cells for Items in the [gNATSGO Rasters](https://planetarycomputer.microsoft.com/dataset/gnatsgo-rasters) Collection. The gridded National Soil Survey Geographic Database (gNATSGO)…",
+    "keywords": ["Soils", "NATSGO", "SSURGO", "STATSGO2", "RSS", "USDA", "United States"],
+    "license": "CC0-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-170.8513, -14.3799, -169.4152, -14.1432]] },
+      "temporal": { "interval": [["2020-07-01T00:00:00Z", "2020-07-01T00:00:00Z"]] }
+    },
+    "item_assets": { "data": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "goes-cmi",
+    "type": "Collection",
+    "title": "GOES-R Cloud & Moisture Imagery",
+    "description": "The GOES-R Advanced Baseline Imager (ABI) L2 Cloud and Moisture Imagery product provides 16 reflective and emissive bands at high temporal cadence over the Western Hemisphere. The GOES-R series is the latest in the Geostationary Operational Environmental Satellites (GOES) program, which has been ope…",
+    "keywords": ["GOES", "NOAA", "NASA", "Satellite", "Cloud", "Moisture"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -81.33, 6.3, 81.33]] },
+      "temporal": { "interval": [["2017-02-28T00:16:52Z", null]] }
+    },
+    "item_assets": {
+      "C01_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C01_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C02_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C03_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C03_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C04_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C05_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C05_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C06_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C07_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C08_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C09_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C10_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C11_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C12_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C13_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C14_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C15_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C16_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "MCMIP-nc": { "type": "application/netcdf" },
+      "C02_0.5km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C01_2km_wm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C02_2km_wm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C03_2km_wm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C01_DQF_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C01_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C02_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C03_DQF_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C03_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C04_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C05_DQF_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C05_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C06_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C07_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C08_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C09_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C10_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C11_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C12_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C13_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C14_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C15_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "C16_DQF_2km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "CMIP_C01-nc": { "type": "application/netcdf" },
+      "CMIP_C02-nc": { "type": "application/netcdf" },
+      "CMIP_C03-nc": { "type": "application/netcdf" },
+      "CMIP_C04-nc": { "type": "application/netcdf" },
+      "CMIP_C05-nc": { "type": "application/netcdf" },
+      "CMIP_C06-nc": { "type": "application/netcdf" },
+      "CMIP_C07-nc": { "type": "application/netcdf" },
+      "CMIP_C08-nc": { "type": "application/netcdf" },
+      "CMIP_C09-nc": { "type": "application/netcdf" },
+      "CMIP_C10-nc": { "type": "application/netcdf" },
+      "CMIP_C11-nc": { "type": "application/netcdf" },
+      "CMIP_C12-nc": { "type": "application/netcdf" },
+      "CMIP_C13-nc": { "type": "application/netcdf" },
+      "CMIP_C14-nc": { "type": "application/netcdf" },
+      "CMIP_C15-nc": { "type": "application/netcdf" },
+      "CMIP_C16-nc": { "type": "application/netcdf" },
+      "C02_DQF_0.5km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "goes-glm",
+    "type": "Collection",
+    "title": "GOES-R Lightning Detection",
+    "description": "The [Geostationary Lightning Mapper (GLM)](https://www.goes-r.gov/spacesegment/glm.html) is a single-channel, near-infrared optical transient detector that can detect the momentary changes in an optical scene, indicating the presence of lightning. GLM measures total lightning (in-cloud, cloud-to-clo…",
+    "keywords": ["GOES", "NOAA", "NASA", "Satellite", "Lightning", "Weather"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -66.56, -8.44, 66.56]] },
+      "temporal": { "interval": [["2018-02-13T16:10:00Z", null]] }
+    },
+    "item_assets": { "netcdf": { "type": "application/netcdf" } },
+    "links": []
+  },
+  {
+    "id": "gpm-imerg-hhr",
+    "type": "Collection",
+    "title": "GPM IMERG",
+    "description": "The Integrated Multi-satellitE Retrievals for GPM (IMERG) algorithm combines information from the [GPM satellite constellation](https://gpm.nasa.gov/missions/gpm/constellation) to estimate precipitation over the majority of the Earth's surface. This algorithm is particularly valuable over the majori…",
+    "keywords": ["IMERG", "GPM", "Precipitation"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-06-01T00:00:00Z", "2021-05-31T23:30:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "gridmet",
+    "type": "Collection",
+    "title": "gridMET",
+    "description": "gridMET is a dataset of daily surface meteorological data at approximately four-kilometer resolution, covering the contiguous U.S. from 1979 to the present. These data can provide important inputs for ecological, agricultural, and hydrological models.",
+    "keywords": ["gridMET", "Water", "Precipitation", "Temperature", "Vapor Pressure", "Climate"],
+    "license": "CC0-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-124.7667, 25.0667, -67.0583, 49.4]] },
+      "temporal": { "interval": [["1979-01-01T00:00:00Z", "2020-12-31T00:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "hgb",
+    "type": "Collection",
+    "title": "HGB: Harmonized Global Biomass for 2010",
+    "description": "This dataset provides temporally consistent and harmonized global maps of aboveground and belowground biomass carbon density for the year 2010 at 300m resolution. The aboveground biomass map integrates land-cover-specific, remotely sensed maps of woody, grassland, cropland, and tundra biomass. Input…",
+    "keywords": ["Biomass", "Carbon", "ORNL"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -61.0028, 180, 84]] },
+      "temporal": { "interval": [["2010-12-31T00:00:00Z", "2010-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "aboveground": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "belowground": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "aboveground_uncertainty": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "belowground_uncertainty": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "hls2-l30",
+    "type": "Collection",
+    "title": "Harmonized Landsat Sentinel-2 (HLS) Version 2.0, Landsat Data",
+    "description": "Harmonized Landsat Sentinel-2 (HLS) Version 2.0 provides consistent surface reflectance (SR) and top of atmosphere (TOA) brightness data from the Operational Land Imager (OLI) aboard the joint NASA/USGS Landsat 8 and Landsat 9 satellites and the Multi-Spectral Instrument (MSI) aboard the ESA (Europe…",
+    "keywords": ["Sentinel", "Landsat", "HLS", "Satellite", "Global", "Imagery"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2020-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "B01": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B02": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B03": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B04": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B05": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B06": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B07": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B09": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B10": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B11": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "SAA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "SZA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "VAA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "VZA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Fmask": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "hls2-s30",
+    "type": "Collection",
+    "title": "Harmonized Landsat Sentinel-2 (HLS) Version 2.0, Sentinel-2 Data",
+    "description": "Harmonized Landsat Sentinel-2 (HLS) Version 2.0 provides consistent surface reflectance (SR) and top of atmosphere (TOA) brightness data from the Operational Land Imager (OLI) aboard the joint NASA/USGS Landsat 8 and Landsat 9 satellites and the Multi-Spectral Instrument (MSI) aboard the ESA (Europe…",
+    "keywords": ["Sentinel", "Landsat", "HLS", "Satellite", "Global", "Imagery"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2020-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "B01": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B02": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B03": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B04": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B05": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B06": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B07": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B08": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B09": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B10": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B11": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B12": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B8A": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "SAA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "SZA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "VAA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "VZA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Fmask": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "hrea",
+    "type": "Collection",
+    "title": "HREA: High Resolution Electricity Access",
+    "description": "The [HREA](http://www-personal.umich.edu/~brianmin/HREA/index.html) project aims to provide open access to new indicators of electricity access and reliability across the world. Leveraging satellite imagery with computational methods, these high-resolution data provide new tools to track progress to…",
+    "keywords": ["HREA", "Electricity", "VIIRS"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-117.414, -55.5423, -53.0927, 32.7184]] },
+      "temporal": { "interval": [["2012-12-31T00:00:00Z", "2019-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "lightscore": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "light-composite": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "night-proportion": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "estimated-brightness": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "io-biodiversity",
+    "type": "Collection",
+    "title": "Biodiversity Intactness",
+    "description": "Generated by [Impact Observatory](https://www.impactobservatory.com/), in collaboration with [Vizzuality](https://www.vizzuality.com/), these datasets estimate terrestrial Biodiversity Intactness as 100-meter gridded maps for the years 2017-2020. Maps depicting the intactness of global biodiversity…",
+    "keywords": ["Global", "Biodiversity"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2017-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "io-lulc",
+    "type": "Collection",
+    "title": "Esri 10-Meter Land Cover (10-class)",
+    "description": "__Note__: _A new version of this item is available for your use. This mature version of the map remains available for use in existing applications. This item will be retired in December 2024. There is 2020 data available in the newer [9-class dataset](https://planetarycomputer.microsoft.com/dataset/…",
+    "keywords": ["Global", "Land Cover", "Land Use", "Sentinel"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2017-01-01T00:00:00Z", "2021-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "io-lulc-9-class",
+    "type": "Collection",
+    "title": "10m Annual Land Use Land Cover (9-class) V1",
+    "description": "__Note__: _A new version of this item is available for your use. This mature version of the map remains available for use in existing applications. This item will be retired in December 2024. There is 2023 data available in the newer [9-class v2 dataset](https://planetarycomputer.microsoft.com/datas…",
+    "keywords": ["Global", "Land Cover", "Land Use", "Sentinel"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2017-01-01T00:00:00Z", "2023-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "io-lulc-annual-v02",
+    "type": "Collection",
+    "title": "10m Annual Land Use Land Cover (9-class) V2",
+    "description": "Time series of annual global maps of land use and land cover (LULC). It currently has data from 2017-2023. The maps are derived from ESA Sentinel-2 imagery at 10m resolution. Each map is a composite of LULC predictions for 9 classes throughout the year in order to generate a representative snapshot…",
+    "keywords": ["Global", "Land Cover", "Land Use", "Sentinel"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2017-01-01T00:00:00Z", "2024-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "jrc-gsw",
+    "type": "Collection",
+    "title": "JRC Global Surface Water",
+    "description": "Global surface water products from the European Commission Joint Research Centre, based on Landsat 5, 7, and 8 imagery. Layers in this collection describe the occurrence, change, and seasonality of surface water from 1984-2020. Complete documentation for each layer is available in the [Data Users Gu…",
+    "keywords": ["Global", "Water", "Landsat"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -56, 180, 78]] },
+      "temporal": { "interval": [["1984-03-01T00:00:00Z", "2020-12-31T11:59:59Z"]] }
+    },
+    "item_assets": {
+      "change": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "extent": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "occurrence": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "recurrence": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "seasonality": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "transitions": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "kaza-hydroforecast",
+    "type": "Collection",
+    "title": "HydroForecast - Kwando & Upper Zambezi Rivers",
+    "description": "This dataset is a daily updated set of HydroForecast seasonal river flow forecasts at six locations in the Kwando and Upper Zambezi river basins. More details about the locations, project context, and to interactively view current and previous forecasts, visit our [public website](https://dashboard.…",
+    "keywords": ["Water", "HydroForecast", "Streamflow", "Hydrology", "Upstream Tech"],
+    "license": "CDLA-Sharing-1.0",
+    "extent": {
+      "spatial": { "bbox": [[21.0449, -17.7925, 23.3434, -13.0806]] },
+      "temporal": { "interval": [["2022-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": { "data": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "landsat-c2-l1",
+    "type": "Collection",
+    "title": "Landsat Collection 2 Level-1",
+    "description": "Landsat Collection 2 Level-1 data, consisting of quantized and calibrated scaled Digital Numbers (DN) representing the multispectral image data. These [Level-1](https://www.usgs.gov/landsat-missions/landsat-collection-2-level-1-data) data can be [rescaled](https://www.usgs.gov/landsat-missions/using…",
+    "keywords": ["Landsat", "USGS", "NASA", "Satellite", "Global", "Imagery"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1972-07-25T00:00:00Z", "2013-01-07T23:23:59Z"]] }
+    },
+    "item_assets": {
+      "red": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "green": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "nir08": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "nir09": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "mtl.txt": { "type": "text/plain" },
+      "mtl.xml": { "type": "application/xml" },
+      "mtl.json": { "type": "application/json" },
+      "qa_pixel": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "qa_radsat": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "landsat-c2-l2",
+    "type": "Collection",
+    "title": "Landsat Collection 2 Level-2",
+    "description": "Landsat Collection 2 Level-2 [Science Products](https://www.usgs.gov/landsat-missions/landsat-collection-2-level-2-science-products), consisting of atmospherically corrected [surface reflectance](https://www.usgs.gov/landsat-missions/landsat-collection-2-surface-reflectance) and [surface temperature…",
+    "keywords": [
+      "Landsat",
+      "USGS",
+      "NASA",
+      "Satellite",
+      "Global",
+      "Imagery",
+      "Reflectance",
+      "Temperature"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1982-08-22T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "qa": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "ang": { "type": "text/plain" },
+      "red": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "blue": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "drad": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "emis": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "emsd": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lwir": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "trad": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "urad": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "atran": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "cdist": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "green": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "nir08": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lwir11": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "swir16": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "swir22": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "coastal": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "mtl.txt": { "type": "text/plain" },
+      "mtl.xml": { "type": "application/xml" },
+      "cloud_qa": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "mtl.json": { "type": "application/json" },
+      "qa_pixel": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "qa_radsat": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "qa_aerosol": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "atmos_opacity": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "met-office-global-deterministic-height",
+    "type": "Collection",
+    "title": "Height levels collection Met Office Global 10km deterministic weather forecast",
+    "description": "This collection offers 1 parameter at 33 available height levels (5m to 6000m) from the Met Office global deterministic 10km forecast. This is a numerical weather prediction forecast for the whole globe, with a resolution of approximately 0.09 degrees i.e. 10km (2,560 x 1,920 grid points). The data…",
+    "keywords": ["Met Office", "Weather", "Forecast", "Global", "Cloud"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2023-12-15T00:00:00Z", null]] }
+    },
+    "item_assets": { "cloud_amount_on_height_levels": { "type": "application/netcdf" } },
+    "links": []
+  },
+  {
+    "id": "met-office-global-deterministic-near-surface",
+    "type": "Collection",
+    "title": "Near-surface level collection Met Office global deterministic 10km forecast",
+    "description": "This collection offers 48 parameters at near-surface level from the Met Office global deterministic 10km forecast. This is a numerical weather prediction forecast for the whole globe, with a resolution of approximately 0.09 degrees i.e. 10km (2,560 x 1,920 grid points). The data is available as NetC…",
+    "keywords": [
+      "Met Office",
+      "Global",
+      "Forecast",
+      "Cloud",
+      "Fog",
+      "Heat Flux",
+      "Precipitation",
+      "Pressure"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2023-12-15T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "rainfall_rate": { "type": "application/netcdf" },
+      "snowfall_rate": { "type": "application/netcdf" },
+      "wind_gust_at_10m": { "type": "application/netcdf" },
+      "wind_speed_at_10m": { "type": "application/netcdf" },
+      "precipitation_rate": { "type": "application/netcdf" },
+      "height_of_orography": { "type": "application/netcdf" },
+      "wind_direction_at_10m": { "type": "application/netcdf" },
+      "temperature_at_surface": { "type": "application/netcdf" },
+      "pressure_at_mean_sea_level": { "type": "application/netcdf" },
+      "visibility_at_screen_level": { "type": "application/netcdf" },
+      "wind_gust_at_10m_max-PT01H": { "type": "application/netcdf" },
+      "wind_gust_at_10m_max-PT03H": { "type": "application/netcdf" },
+      "wind_gust_at_10m_max-PT06H": { "type": "application/netcdf" },
+      "rainfall_accumulation-PT01H": { "type": "application/netcdf" },
+      "rainfall_accumulation-PT03H": { "type": "application/netcdf" },
+      "rainfall_accumulation-PT06H": { "type": "application/netcdf" },
+      "snow_depth_water_equivalent": { "type": "application/netcdf" },
+      "temperature_at_screen_level": { "type": "application/netcdf" },
+      "fog_fraction_at_screen_level": { "type": "application/netcdf" },
+      "rainfall_rate_from_convection": { "type": "application/netcdf" },
+      "snowfall_rate_from_convection": { "type": "application/netcdf" },
+      "precipitation_accumulation-PT01H": { "type": "application/netcdf" },
+      "precipitation_accumulation-PT03H": { "type": "application/netcdf" },
+      "precipitation_accumulation-PT06H": { "type": "application/netcdf" },
+      "relative_humidity_at_screen_level": { "type": "application/netcdf" },
+      "temperature_at_screen_level_max-PT01H": { "type": "application/netcdf" },
+      "temperature_at_screen_level_max-PT03H": { "type": "application/netcdf" },
+      "temperature_at_screen_level_max-PT06H": { "type": "application/netcdf" },
+      "temperature_at_screen_level_min-PT01H": { "type": "application/netcdf" },
+      "temperature_at_screen_level_min-PT03H": { "type": "application/netcdf" },
+      "temperature_at_screen_level_min-PT06H": { "type": "application/netcdf" },
+      "latent_heat_flux_at_surface_mean-PT01H": { "type": "application/netcdf" },
+      "latent_heat_flux_at_surface_mean-PT03H": { "type": "application/netcdf" },
+      "latent_heat_flux_at_surface_mean-PT06H": { "type": "application/netcdf" },
+      "rainfall_rate_from_convection_max-PT01H": { "type": "application/netcdf" },
+      "rainfall_rate_from_convection_max-PT03H": { "type": "application/netcdf" },
+      "rainfall_rate_from_convection_max-PT06H": { "type": "application/netcdf" },
+      "snowfall_rate_from_convection_max-PT01H": { "type": "application/netcdf" },
+      "snowfall_rate_from_convection_max-PT03H": { "type": "application/netcdf" },
+      "snowfall_rate_from_convection_max-PT06H": { "type": "application/netcdf" },
+      "radiation_flux_in_uv_downward_at_surface": { "type": "application/netcdf" },
+      "snowfall_rate_from_convection_mean-PT01H": { "type": "application/netcdf" },
+      "snowfall_rate_from_convection_mean-PT03H": { "type": "application/netcdf" },
+      "snowfall_rate_from_convection_mean-PT06H": { "type": "application/netcdf" },
+      "temperature_of_dew_point_at_screen_level": { "type": "application/netcdf" },
+      "radiation_flux_in_longwave_downward_at_surface": { "type": "application/netcdf" },
+      "radiation_flux_in_shortwave_total_downward_at_surface": { "type": "application/netcdf" },
+      "radiation_flux_in_shortwave_direct_downward_at_surface": { "type": "application/netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "met-office-global-deterministic-pressure",
+    "type": "Collection",
+    "title": "Pressure levels collection Met Office Global 10km deterministic weather forecast",
+    "description": "This collection offers 8 parameters at 33 available pressure levels (from 100000Pa to 1000Pa) from the Met Office global deterministic 10km forecast. This is a numerical weather prediction forecast for the whole globe, with a resolution of approximately 0.09 degrees i.e. 10km (2,560 x 1,920 grid poi…",
+    "keywords": ["MetOffice", "Global", "Cloud"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2023-12-15T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "height_ASL_on_pressure_levels": { "type": "application/netcdf" },
+      "wind_speed_on_pressure_levels": { "type": "application/netcdf" },
+      "temperature_on_pressure_levels": { "type": "application/netcdf" },
+      "wind_direction_on_pressure_levels": { "type": "application/netcdf" },
+      "relative_humidity_on_pressure_levels": { "type": "application/netcdf" },
+      "geopotential_height_on_pressure_levels": { "type": "application/netcdf" },
+      "wind_vertical_velocity_on_pressure_levels": { "type": "application/netcdf" },
+      "wet_bulb_potential_temperature_on_pressure_levels": { "type": "application/netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "met-office-global-deterministic-whole-atmosphere",
+    "type": "Collection",
+    "title": "Whole Atmosphere collection Met Office Global 10km deterministic weather forecast",
+    "description": "This collection offers 14 whole-atmosphere parameters from the Met Office global deterministic 10km forecast. This is a numerical weather prediction forecast for the whole globe, with a resolution of approximately 0.09 degrees i.e. 10km (2,560 x 1,920 grid points). The data is available as NetCDF fi…",
+    "keywords": ["MetOffice", "Global", "Cloud"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2023-12-15T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "CIN_surface": { "type": "application/netcdf" },
+      "CAPE_surface": { "type": "application/netcdf" },
+      "pressure_at_tropopause": { "type": "application/netcdf" },
+      "cloud_amount_of_low_cloud": { "type": "application/netcdf" },
+      "temperature_at_tropopause": { "type": "application/netcdf" },
+      "cloud_amount_of_high_cloud": { "type": "application/netcdf" },
+      "CIN_mixed_layer_lowest_500m": { "type": "application/netcdf" },
+      "cloud_amount_of_total_cloud": { "type": "application/netcdf" },
+      "CAPE_mixed_layer_lowest_500m": { "type": "application/netcdf" },
+      "cloud_amount_of_medium_cloud": { "type": "application/netcdf" },
+      "cloud_amount_below_1000ft_ASL": { "type": "application/netcdf" },
+      "CIN_most_unstable_below_500hPa": { "type": "application/netcdf" },
+      "CAPE_most_unstable_below_500hPa": { "type": "application/netcdf" },
+      "cloud_amount_of_total_convective_cloud": { "type": "application/netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "met-office-uk-deterministic-height",
+    "type": "Collection",
+    "title": "Height levels collection Met Office UKV 2km deterministic forecast",
+    "description": "This collection offers 4 parameters at 33 available height levels (5m to 6000m) from the Met Office UKV 2km deterministic forecast. This is a high-resolution gridded weather forecast for the UK, with a resolution of 0.018 degrees, projected on to a 2km horizontal grid. The data is available as NetCD…",
+    "keywords": [
+      "Met Office",
+      "Weather",
+      "Forecast",
+      "UK",
+      "Cloud",
+      "Temperature",
+      "Wind",
+      "Height"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-13.7254, 48.8643, 4.3408, 61.6102]] },
+      "temporal": { "interval": [["2023-12-15T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "wind_speed_on_height_levels": { "type": "application/netcdf" },
+      "temperature_on_height_levels": { "type": "application/netcdf" },
+      "cloud_amount_on_height_levels": { "type": "application/netcdf" },
+      "wind_direction_on_height_levels": { "type": "application/netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "met-office-uk-deterministic-near-surface",
+    "type": "Collection",
+    "title": "Near-surface level collection Met Office UKV 2km deterministic forecast",
+    "description": "This collection offers 35 parameters at near-surface level from the Met Office UKV 2km deterministic forecast. This is a high-resolution gridded weather forecast for the UK, with a resolution of 0.018 degrees, projected on to a 2km horizontal grid. The data is available as NetCDF files. It's offered…",
+    "keywords": [
+      "Met Office",
+      "Weather",
+      "Forecast",
+      "UK",
+      "Precipitation",
+      "Temperature",
+      "Wind",
+      "Pressure"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-13.7254, 48.8643, 4.3408, 61.6102]] },
+      "temporal": { "interval": [["2023-12-15T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "landsea_mask": { "type": "application/netcdf" },
+      "rainfall_rate": { "type": "application/netcdf" },
+      "snowfall_rate": { "type": "application/netcdf" },
+      "hail_fall_rate": { "type": "application/netcdf" },
+      "wind_gust_at_10m": { "type": "application/netcdf" },
+      "wind_speed_at_10m": { "type": "application/netcdf" },
+      "precipitation_rate": { "type": "application/netcdf" },
+      "height_of_orography": { "type": "application/netcdf" },
+      "pressure_at_surface": { "type": "application/netcdf" },
+      "wind_direction_at_10m": { "type": "application/netcdf" },
+      "temperature_at_surface": { "type": "application/netcdf" },
+      "pressure_at_mean_sea_level": { "type": "application/netcdf" },
+      "visibility_at_screen_level": { "type": "application/netcdf" },
+      "wind_gust_at_10m_max-PT01H": { "type": "application/netcdf" },
+      "wind_gust_at_10m_max-PT03H": { "type": "application/netcdf" },
+      "rainfall_accumulation-PT01H": { "type": "application/netcdf" },
+      "rainfall_accumulation-PT03H": { "type": "application/netcdf" },
+      "snow_depth_water_equivalent": { "type": "application/netcdf" },
+      "snowfall_accumulation-PT01H": { "type": "application/netcdf" },
+      "snowfall_accumulation-PT03H": { "type": "application/netcdf" },
+      "temperature_at_screen_level": { "type": "application/netcdf" },
+      "fog_fraction_at_screen_level": { "type": "application/netcdf" },
+      "hail_fall_accumulation-PT01H": { "type": "application/netcdf" },
+      "sensible_heat_flux_at_surface": { "type": "application/netcdf" },
+      "precipitation_accumulation-PT01H": { "type": "application/netcdf" },
+      "precipitation_accumulation-PT03H": { "type": "application/netcdf" },
+      "relative_humidity_at_screen_level": { "type": "application/netcdf" },
+      "temperature_at_screen_level_max-PT01H": { "type": "application/netcdf" },
+      "temperature_at_screen_level_min-PT01H": { "type": "application/netcdf" },
+      "radiation_flux_in_uv_downward_at_surface": { "type": "application/netcdf" },
+      "temperature_of_dew_point_at_screen_level": { "type": "application/netcdf" },
+      "radiation_flux_in_longwave_downward_at_surface": { "type": "application/netcdf" },
+      "radiation_flux_in_shortwave_total_downward_at_surface": { "type": "application/netcdf" },
+      "radiation_flux_in_shortwave_direct_downward_at_surface": { "type": "application/netcdf" },
+      "radiation_flux_in_shortwave_diffuse_downward_at_surface": { "type": "application/netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "met-office-uk-deterministic-pressure",
+    "type": "Collection",
+    "title": "Pressure levels collection Met Office UKV 2km deterministic forecast",
+    "description": "This collection offers 7 parameters at 33 available pressure levels (from 100000Pa to 1000Pa) from the Met Office UKV 2km deterministic forecast. This is a high-resolution gridded weather forecast for the UK, with a resolution of 0.018 degrees, projected on to a 2km horizontal grid. The data is avai…",
+    "keywords": [
+      "Met Office",
+      "Weather",
+      "Forecast",
+      "UK",
+      "Temperature",
+      "Wind",
+      "Pressure",
+      "Humidity"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-13.7254, 48.8643, 4.3408, 61.6102]] },
+      "temporal": { "interval": [["2023-12-15T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "height_ASL_on_pressure_levels": { "type": "application/netcdf" },
+      "wind_speed_on_pressure_levels": { "type": "application/netcdf" },
+      "temperature_on_pressure_levels": { "type": "application/netcdf" },
+      "wind_direction_on_pressure_levels": { "type": "application/netcdf" },
+      "relative_humidity_on_pressure_levels": { "type": "application/netcdf" },
+      "geopotential_height_on_pressure_levels": { "type": "application/netcdf" },
+      "wet_bulb_potential_temperature_on_pressure_levels": { "type": "application/netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "met-office-uk-deterministic-whole-atmosphere",
+    "type": "Collection",
+    "title": "Whole Atmosphere collection Met Office UKV 2km deterministic forecast",
+    "description": "This collection offers 11 whole-atmosphere parameters from the Met Office UKV 2km deterministic forecast. This is a high-resolution gridded weather forecast for the UK, with a resolution of 0.018 degrees, projected on to a 2km horizontal grid. The data is available as NetCDF files. ## Coverage area…",
+    "keywords": [
+      "Met Office",
+      "Weather",
+      "Forecast",
+      "UK",
+      "CAPE",
+      "Cloud",
+      "Freezing",
+      "Wet Bulb"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-13.7254, 48.8643, 4.3408, 61.6102]] },
+      "temporal": { "interval": [["2023-12-15T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "CAPE_surface": { "type": "application/netcdf" },
+      "cloud_amount_of_low_cloud": { "type": "application/netcdf" },
+      "cloud_amount_of_high_cloud": { "type": "application/netcdf" },
+      "cloud_amount_of_total_cloud": { "type": "application/netcdf" },
+      "cloud_amount_of_medium_cloud": { "type": "application/netcdf" },
+      "height_AGL_at_freezing_level": { "type": "application/netcdf" },
+      "cloud_amount_below_1000ft_ASL": { "type": "application/netcdf" },
+      "CAPE_most_unstable_below_500hPa": { "type": "application/netcdf" },
+      "lightning_flash_accumulation-PT01H": { "type": "application/netcdf" },
+      "height_AGL_at_wet_bulb_freezing_level": { "type": "application/netcdf" },
+      "height_AGL_at_cloud_base_where_cloud_cover_2p5_oktas": { "type": "application/netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "mobi",
+    "type": "Collection",
+    "title": "MoBI: Map of Biodiversity Importance",
+    "description": "The [Map of Biodiversity Importance](https://www.natureserve.org/conservation-tools/projects/map-biodiversity-importance) (MoBI) consists of raster maps that combine habitat information for 2,216 imperiled species occurring in the conterminous United States, using weightings based on range size and…",
+    "keywords": ["MoBI", "Natureserve", "United States", "Biodiversity"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-130.2375, 21.7367, -63.662, 49.1842]] },
+      "temporal": { "interval": [["2020-04-14T00:00:00Z", "2020-04-14T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "RSR_All": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "RSR_Plants": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "RSR_Vertebrates": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "RSR_AquaticInverts": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "PWRSR_GAP12_SUM_All": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "SpeciesRichness_All": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "RSR_PollinatorInverts": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "PWRSR_GAP12_SUM_Plants": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "SpeciesRichness_Plants": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "PWRSR_GAP12_SUM_Vertebrates": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "SpeciesRichness_Vertebrates": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "PWRSR_GAP12_SUM_AquaticInverts": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "SpeciesRichness_AquaticInverts": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "PWRSR_GAP12_SUM_PollinatorInverts": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "SpeciesRichness_PollinatorInverts": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-09A1-061",
+    "type": "Collection",
+    "title": "MODIS Surface Reflectance 8-Day (500m)",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) 09A1 Version 6.1 product provides an estimate of the surface spectral reflectance of MODIS Bands 1 through 7 corrected for atmospheric conditions such as gasses, aerosols, and Rayleigh scattering. Along with the seven 500 meter (m) reflectanc…",
+    "keywords": [
+      "NASA",
+      "MODIS",
+      "Satellite",
+      "Imagery",
+      "Global",
+      "Reflectance",
+      "MOD09A1",
+      "MYD09A1"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "metadata": { "type": "application/xml" },
+      "sur_refl_b01": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_b02": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_b03": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_b04": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_b05": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_b06": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_b07": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_raz": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_szen": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_vzen": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_qc_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_state_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_day_of_year": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-09Q1-061",
+    "type": "Collection",
+    "title": "MODIS Surface Reflectance 8-Day (250m)",
+    "description": "The 09Q1 Version 6.1 product provides an estimate of the surface spectral reflectance of Moderate Resolution Imaging Spectroradiometer (MODIS) Bands 1 and 2, corrected for atmospheric conditions such as gasses, aerosols, and Rayleigh scattering. Provided along with the 250 meter (m) surface reflecta…",
+    "keywords": [
+      "NASA",
+      "MODIS",
+      "Satellite",
+      "Imagery",
+      "Global",
+      "Reflectance",
+      "MOD09Q1",
+      "MYD09Q1"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "metadata": { "type": "application/xml" },
+      "sur_refl_b01": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_b02": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_qc_250m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sur_refl_state_250m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-10A1-061",
+    "type": "Collection",
+    "title": "MODIS Snow Cover Daily",
+    "description": "This global Level-3 (L3) data set provides a daily composite of snow cover and albedo derived from the 'MODIS Snow Cover 5-Min L2 Swath 500m' data set. Each data granule is a 10degx10deg tile projected to a 500 m sinusoidal grid.",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Snow", "MOD10A1", "MYD10A1"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-24T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "NDSI": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "orbit_pnt": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "granule_pnt": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "NDSI_Snow_Cover": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Snow_Albedo_Daily_Tile": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "NDSI_Snow_Cover_Basic_QA": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "NDSI_Snow_Cover_Algorithm_Flags_QA": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-10A2-061",
+    "type": "Collection",
+    "title": "MODIS Snow Cover 8-day",
+    "description": "This global Level-3 (L3) data set provides the maximum snow cover extent observed over an eight-day period within 10degx10deg MODIS sinusoidal grid tiles. Tiles are generated by compositing 500 m observations from the 'MODIS Snow Cover Daily L3 Global 500m Grid' data set. A bit flag index is used to…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Snow", "MOD10A2", "MYD10A2"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "metadata": { "type": "application/xml" },
+      "Maximum_Snow_Extent": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Eight_Day_Snow_Cover": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-11A1-061",
+    "type": "Collection",
+    "title": "MODIS Land Surface Temperature/Emissivity Daily",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) Land Surface Temperature/Emissivity Daily Version 6.1 product provides daily per-pixel Land Surface Temperature and Emissivity (LST&E) with 1 kilometer (km) spatial resolution in a 1,200 by 1,200 km grid. The pixel temperature value is derive…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Temperature", "MOD11A1", "MYD11A1"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-24T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "QC_Day": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Emis_31": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Emis_32": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "QC_Night": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "LST_Day_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Clear_day_cov": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Day_view_angl": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Day_view_time": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "LST_Night_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Clear_night_cov": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Night_view_angl": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Night_view_time": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-11A2-061",
+    "type": "Collection",
+    "title": "MODIS Land Surface Temperature/Emissivity 8-Day",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) Land Surface Temperature/Emissivity 8-Day Version 6.1 product provides an average 8-day per-pixel Land Surface Temperature and Emissivity (LST&E) with a 1 kilometer (km) spatial resolution in a 1,200 by 1,200 km grid. Each pixel value in the…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Temperature", "MOD11A2", "MYD11A2"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "QC_Day": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Emis_31": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Emis_32": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "QC_Night": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "LST_Day_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Day_view_angl": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Day_view_time": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "LST_Night_1km": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Clear_sky_days": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Night_view_angl": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Night_view_time": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Clear_sky_nights": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-13A1-061",
+    "type": "Collection",
+    "title": "MODIS Vegetation Indices 16-Day (500m)",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) Vegetation Indices 16-Day Version 6.1 product provides Vegetation Index (VI) values at a per pixel basis at 500 meter (m) spatial resolution. There are two primary vegetation layers. The first is the Normalized Difference Vegetation Index (ND…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Vegetation", "MOD13A1", "MYD13A1"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "metadata": { "type": "application/xml" },
+      "500m_16_days_EVI": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "500m_16_days_NDVI": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "500m_16_days_VI_Quality": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_MIR_reflectance": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_NIR_reflectance": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_red_reflectance": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_blue_reflectance": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_sun_zenith_angle": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_pixel_reliability": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_view_zenith_angle": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_relative_azimuth_angle": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "500m_16_days_composite_day_of_the_year": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-13Q1-061",
+    "type": "Collection",
+    "title": "MODIS Vegetation Indices 16-Day (250m)",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) Vegetation Indices Version 6.1 data are generated every 16 days at 250 meter (m) spatial resolution as a Level 3 product. The MOD13Q1 product provides two primary vegetation layers. The first is the Normalized Difference Vegetation Index (NDV…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Vegetation", "MOD13Q1", "MYD13Q1"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "metadata": { "type": "application/xml" },
+      "250m_16_days_EVI": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "250m_16_days_NDVI": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "250m_16_days_VI_Quality": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_MIR_reflectance": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_NIR_reflectance": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_red_reflectance": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_blue_reflectance": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_sun_zenith_angle": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_pixel_reliability": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_view_zenith_angle": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_relative_azimuth_angle": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "250m_16_days_composite_day_of_the_year": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-14A1-061",
+    "type": "Collection",
+    "title": "MODIS Thermal Anomalies/Fire Daily",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) Thermal Anomalies and Fire Daily Version 6.1 data are generated every eight days at 1 kilometer (km) spatial resolution as a Level 3 product. MOD14A1 contains eight consecutive days of fire data conveniently packaged into a single file. The S…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Fire", "MOD14A1", "MYD14A1"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "QA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "hdf": { "type": "application/x-hdf" },
+      "MaxFRP": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sample": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "FireMask": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-14A2-061",
+    "type": "Collection",
+    "title": "MODIS Thermal Anomalies/Fire 8-Day",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) Thermal Anomalies and Fire 8-Day Version 6.1 data are generated at 1 kilometer (km) spatial resolution as a Level 3 product. The MOD14A2 gridded composite contains the maximum value of the individual fire pixel classes detected during the eig…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Fire", "MOD14A2", "MYD14A2"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "QA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "hdf": { "type": "application/x-hdf" },
+      "FireMask": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-15A2H-061",
+    "type": "Collection",
+    "title": "MODIS Leaf Area Index/FPAR 8-Day",
+    "description": "The Version 6.1 Moderate Resolution Imaging Spectroradiometer (MODIS) Level 4, Combined Fraction of Photosynthetically Active Radiation (FPAR), and Leaf Area Index (LAI) product is an 8-day composite dataset with 500 meter pixel size. The algorithm chooses the best pixel available from within the 8-…",
+    "keywords": [
+      "NASA",
+      "MODIS",
+      "Satellite",
+      "Global",
+      "Vegetation",
+      "MCD15A2H",
+      "MOD15A2H",
+      "MYD15A2H"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2002-07-04T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "Lai_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "Fpar_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "FparLai_QC": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "FparExtra_QC": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "LaiStdDev_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "FparStdDev_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-15A3H-061",
+    "type": "Collection",
+    "title": "MODIS Leaf Area Index/FPAR 4-Day",
+    "description": "The MCD15A3H Version 6.1 Moderate Resolution Imaging Spectroradiometer (MODIS) Level 4, Combined Fraction of Photosynthetically Active Radiation (FPAR), and Leaf Area Index (LAI) product is a 4-day composite data set with 500 meter pixel size. The algorithm chooses the best pixel available from all…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Vegetation", "MCD15A3H"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2002-07-04T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "Lai_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "Fpar_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "FparLai_QC": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "FparExtra_QC": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "LaiStdDev_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "FparStdDev_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-16A3GF-061",
+    "type": "Collection",
+    "title": "MODIS Net Evapotranspiration Yearly Gap-Filled",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) MOD16A3GF Version 6.1 Evapotranspiration/Latent Heat Flux (ET/LE) product is a year-end gap-filled yearly composite dataset produced at 500 meter (m) pixel resolution. The algorithm used for the MOD16 data product collection is based on the l…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Vegetation", "MOD16A3GF", "MYD16A3GF"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2001-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "ET_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "LE_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "PET_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "PLE_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "ET_QC_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-17A2H-061",
+    "type": "Collection",
+    "title": "MODIS Gross Primary Productivity 8-Day",
+    "description": "The Version 6.1 Gross Primary Productivity (GPP) product is a cumulative 8-day composite of values with 500 meter (m) pixel size based on the radiation use efficiency concept that can be potentially used as inputs to data models to calculate terrestrial energy, carbon, water cycle processes, and bio…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Vegetation", "Global", "MOD17A2H", "MYD17A2H"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "Gpp_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "PsnNet_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Psn_QC_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-17A2HGF-061",
+    "type": "Collection",
+    "title": "MODIS Gross Primary Productivity 8-Day Gap-Filled",
+    "description": "The Version 6.1 Gross Primary Productivity (GPP) product is a cumulative 8-day composite of values with 500 meter (m) pixel size based on the radiation use efficiency concept that can be potentially used as inputs to data models to calculate terrestrial energy, carbon, water cycle processes, and bio…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Vegetation", "Global", "MOD17A2HGF", "MYD17A2HGF"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "Gpp_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "PsnNet_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Psn_QC_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-17A3HGF-061",
+    "type": "Collection",
+    "title": "MODIS Net Primary Production Yearly Gap-Filled",
+    "description": "The Version 6.1 product provides information about annual Net Primary Production (NPP) at 500 meter (m) pixel resolution. Annual Moderate Resolution Imaging Spectroradiometer (MODIS) NPP is derived from the sum of all 8-day Net Photosynthesis (PSN) products (MOD17A2H) from the given year. The PSN va…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Vegetation", "Global", "MOD17A3HGF", "MYD17A3HGF"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-18T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "Gpp_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Npp_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "Npp_QC_500m": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-21A2-061",
+    "type": "Collection",
+    "title": "MODIS Land Surface Temperature/3-Band Emissivity 8-Day",
+    "description": "A suite of Moderate Resolution Imaging Spectroradiometer (MODIS) Land Surface Temperature and Emissivity (LST&E) products are available in Collection 6.1. The MOD21 Land Surface Temperatuer (LST) algorithm differs from the algorithm of the MOD11 LST products, in that the MOD21 algorithm is based on…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Global", "Temperature", "MOD21A2", "MYD21A2"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-16T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "QC_Day": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Emis_29": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Emis_31": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Emis_32": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "QC_Night": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "LST_Day_1KM": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "LST_Night_1KM": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "View_Time_Day": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "View_Angle_Day": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "View_Time_Night": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "View_Angle_Night": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-43A4-061",
+    "type": "Collection",
+    "title": "MODIS Nadir BRDF-Adjusted Reflectance (NBAR) Daily",
+    "description": "The Moderate Resolution Imaging Spectroradiometer (MODIS) MCD43A4 Version 6.1 Nadir Bidirectional Reflectance Distribution Function (BRDF)-Adjusted Reflectance (NBAR) dataset is produced daily using 16 days of Terra and Aqua MODIS data at 500 meter (m) resolution. The view angle effects are removed…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Imagery", "Global", "Reflectance", "MCD43A4"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-02-16T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "hdf": { "type": "application/x-hdf" },
+      "metadata": { "type": "application/xml" },
+      "Nadir_Reflectance_Band1": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "Nadir_Reflectance_Band2": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "Nadir_Reflectance_Band3": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "Nadir_Reflectance_Band4": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "Nadir_Reflectance_Band5": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "Nadir_Reflectance_Band6": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "Nadir_Reflectance_Band7": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "BRDF_Albedo_Band_Mandatory_Quality_Band1": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "BRDF_Albedo_Band_Mandatory_Quality_Band2": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "BRDF_Albedo_Band_Mandatory_Quality_Band3": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "BRDF_Albedo_Band_Mandatory_Quality_Band4": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "BRDF_Albedo_Band_Mandatory_Quality_Band5": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "BRDF_Albedo_Band_Mandatory_Quality_Band6": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "BRDF_Albedo_Band_Mandatory_Quality_Band7": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "modis-64A1-061",
+    "type": "Collection",
+    "title": "MODIS Burned Area Monthly",
+    "description": "The Terra and Aqua combined MCD64A1 Version 6.1 Burned Area data product is a monthly, global gridded 500 meter (m) product containing per-pixel burned-area and quality information. The MCD64A1 burned-area mapping approach employs 500 m Moderate Resolution Imaging Spectroradiometer (MODIS) Surface R…",
+    "keywords": ["NASA", "MODIS", "Satellite", "Imagery", "Global", "Fire", "MCD64A1"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2000-11-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "QA": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "hdf": { "type": "application/x-hdf" },
+      "Last_Day": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" },
+      "Burn_Date": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "First_Day": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "Burn_Date_Uncertainty": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "ms-buildings",
+    "type": "Collection",
+    "title": "Microsoft Building Footprints",
+    "description": "Bing Maps is releasing open building footprints around the world. We have detected over 999 million buildings from Bing Maps imagery between 2014 and 2021 including Maxar and Airbus imagery. The data is freely available for download and use under ODbL. This dataset complements our other releases. Fo…",
+    "keywords": ["Bing Maps", "Buildings", "geoparquet", "Microsoft", "Footprint", "Delta"],
+    "license": "ODbL-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, 90, 180, -90]] },
+      "temporal": { "interval": [["2014-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": { "data": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "mtbs",
+    "type": "Collection",
+    "title": "MTBS: Monitoring Trends in Burn Severity",
+    "description": "[Monitoring Trends in Burn Severity](https://www.mtbs.gov/) (MTBS) is an inter-agency program whose goal is to consistently map the burn severity and extent of large fires across the United States from 1984 to the present. This includes all fires 1000 acres or greater in the Western United States an…",
+    "keywords": ["MTBS", "USGS", "USFS", "USDA", "Forest", "Fire"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-166.705, 56.3312, -137.6648, 69.9801]] },
+      "temporal": { "interval": [["1984-12-31T00:00:00Z", "2018-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "metadata": { "type": "text/html" },
+      "burn-severity": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "naip",
+    "type": "Collection",
+    "title": "NAIP: National Agriculture Imagery Program",
+    "description": "The [National Agriculture Imagery Program](https://www.fsa.usda.gov/programs-and-services/aerial-photography/imagery-programs/naip-imagery/) (NAIP) provides U.S.-wide, high-resolution aerial imagery, with four spectral bands (R, G, B, IR). NAIP is administered by the [Aerial Field Photography Office…",
+    "keywords": ["NAIP", "Aerial", "Imagery", "USDA", "AFPO", "Agriculture", "United States"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-124.784, 24.744, -66.951, 49.346]] },
+      "temporal": { "interval": [["2010-01-01T00:00:00Z", "2023-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "image": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "text/plain" },
+      "thumbnail": { "type": "image/jpeg" }
+    },
+    "links": []
+  },
+  {
+    "id": "nasa-nex-gddp-cmip6",
+    "type": "Collection",
+    "title": "Earth Exchange Global Daily Downscaled Projections (NEX-GDDP-CMIP6)",
+    "description": "The NEX-GDDP-CMIP6 dataset is comprised of global downscaled climate scenarios derived from the General Circulation Model (GCM) runs conducted under the Coupled Model Intercomparison Project Phase 6 (CMIP6) and across two of the four “Tier 1” greenhouse gas emissions scenarios known as Shared Socioe…",
+    "keywords": ["CMIP6", "NASA", "Climate", "Humidity", "Precipitation", "Temperature"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1950-01-01T00:00:00Z", "2100-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "pr": { "type": "application/netcdf" },
+      "tas": { "type": "application/netcdf" },
+      "hurs": { "type": "application/netcdf" },
+      "huss": { "type": "application/netcdf" },
+      "rlds": { "type": "application/netcdf" },
+      "rsds": { "type": "application/netcdf" },
+      "tasmax": { "type": "application/netcdf" },
+      "tasmin": { "type": "application/netcdf" },
+      "sfcWind": { "type": "application/netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "nasadem",
+    "type": "Collection",
+    "title": "NASADEM HGT v001",
+    "description": "[NASADEM](https://earthdata.nasa.gov/esds/competitive-programs/measures/nasadem) provides global topographic data at 1 arc-second (~30m) horizontal resolution, derived primarily from data captured via the [Shuttle Radar Topography Mission](https://www2.jpl.nasa.gov/srtm/) (SRTM).",
+    "keywords": ["NASA", "JPL", "Elevation", "DEM", "USGS", "NGA", "SRTM"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-179.0001, -56.0001, 179.0001, 61.0001]] },
+      "temporal": { "interval": [["2000-02-20T00:00:00Z", "2000-02-20T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "elevation": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "nested-eagle-conus",
+    "type": "Collection",
+    "title": "NOAA Nested-EAGLE (CONUS)",
+    "description": "The nested-Experimental Artificial Intelligence (AI) Global and Limited-area Ensemble (<a href=\"https://github.com/NOAA-EPIC/eagle/\">nested-EAGLE</a>) is part of the NOAA EAGLE product suite that is designed to bridge the skill of short and medium range weather forecasts (see <a href=\"https://arxiv.…",
+    "keywords": ["weather", "forecast", "AI", "NOAA", "EAGLE", "HRRR", "GFS", "CONUS"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-131.53, 22.75, -63.61, 51.32]] },
+      "temporal": { "interval": [["2024-10-01T00:00:00Z", null]] }
+    },
+    "item_assets": { "conus": { "type": "application/netcdf" } },
+    "links": []
+  },
+  {
+    "id": "nested-eagle-global",
+    "type": "Collection",
+    "title": "NOAA Nested-EAGLE (Global)",
+    "description": "The nested-Experimental Artificial Intelligence (AI) Global and Limited-area Ensemble (<a href=\"https://github.com/NOAA-EPIC/eagle/\">nested-EAGLE</a>) is part of the NOAA EAGLE product suite that is designed to bridge the skill of short and medium range weather forecasts (see <a href=\"https://arxiv.…",
+    "keywords": ["weather", "forecast", "AI", "NOAA", "EAGLE", "HRRR", "GFS", "CONUS"],
+    "license": "CC-BY-4.0.",
+    "extent": {
+      "spatial": { "bbox": [[-180, -89.75, 180, 89.75]] },
+      "temporal": { "interval": [["2024-10-01T00:00:00Z", null]] }
+    },
+    "item_assets": { "global": { "type": "application/netcdf" } },
+    "links": []
+  },
+  {
+    "id": "noaa-c-cap",
+    "type": "Collection",
+    "title": "C-CAP Regional Land Cover and Change",
+    "description": "Nationally standardized, raster-based inventories of land cover for the coastal areas of the U.S. Data are derived, through the Coastal Change Analysis Program, from the analysis of multiple dates of remotely sensed imagery. Two file types are available: individual dates that supply a wall-to-wall m…",
+    "keywords": ["Land Cover", "Land Use", "NOAA", "Coastal"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-160.316, 17.8928, -64.9669, 49.4711]] },
+      "temporal": { "interval": [["1975-01-01T00:00:00Z", "2016-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "metadata": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "noaa-cdr-ocean-heat-content",
+    "type": "Collection",
+    "title": "Global Ocean Heat Content CDR",
+    "description": "The Ocean Heat Content Climate Data Record (CDR) is a set of ocean heat content anomaly (OHCA) time-series for 1955-present on 3-monthly, yearly, and pentadal (five-yearly) scales. This CDR quantifies ocean heat content change over time, which is an essential metric for understanding climate change…",
+    "keywords": ["Global", "Climate", "NOAA", "Temperature", "Ocean"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1972-03-01T00:00:00Z", "2022-03-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "heat_content": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "mean_salinity": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "mean_temperature": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "mean_halosteric_sea_level": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "mean_thermosteric_sea_level": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      },
+      "mean_total_steric_sea_level": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "noaa-cdr-ocean-heat-content-netcdf",
+    "type": "Collection",
+    "title": "Global Ocean Heat Content CDR NetCDFs",
+    "description": "The Ocean Heat Content Climate Data Record (CDR) is a set of ocean heat content anomaly (OHCA) time-series for 1955-present on 3-monthly, yearly, and pentadal (five-yearly) scales. This CDR quantifies ocean heat content change over time, which is an essential metric for understanding climate change…",
+    "keywords": ["Global", "Climate", "NOAA", "Temperature", "Ocean"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1972-03-01T00:00:00Z", "2022-03-31T23:59:59Z"]] }
+    },
+    "item_assets": { "netcdf": { "type": "application/netcdf" } },
+    "links": []
+  },
+  {
+    "id": "noaa-cdr-sea-surface-temperature-optimum-interpolation",
+    "type": "Collection",
+    "title": "Sea Surface Temperature - Optimum Interpolation CDR",
+    "description": "The NOAA 1/4° daily Optimum Interpolation Sea Surface Temperature (or daily OISST) Climate Data Record (CDR) provides complete ocean temperature fields constructed by combining bias-adjusted observations from different platforms (satellites, ships, buoys) on a regular global grid, with gaps filled i…",
+    "keywords": ["Global", "Climate", "NOAA", "Temperature", "Ocean"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1981-09-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "err": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "ice": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sst": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "anom": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "netcdf": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "noaa-cdr-sea-surface-temperature-whoi",
+    "type": "Collection",
+    "title": "Sea Surface Temperature - WHOI CDR",
+    "description": "The Sea Surface Temperature-Woods Hole Oceanographic Institution (WHOI) Climate Data Record (CDR) is one of three CDRs which combine to form the NOAA Ocean Surface Bundle (OSB) CDR. The resultant sea surface temperature (SST) data are produced through modeling the diurnal variability in combination…",
+    "keywords": ["Global", "Climate", "NOAA", "Ocean", "Temperature"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1988-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "fill_missing_qc": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sea_surface_temperature": {
+        "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+      }
+    },
+    "links": []
+  },
+  {
+    "id": "noaa-cdr-sea-surface-temperature-whoi-netcdf",
+    "type": "Collection",
+    "title": "Sea Surface Temperature - WHOI CDR NetCDFs",
+    "description": "The Sea Surface Temperature-Woods Hole Oceanographic Institution (WHOI) Climate Data Record (CDR) is one of three CDRs which combine to form the NOAA Ocean Surface Bundle (OSB) CDR. The resultant sea surface temperature (SST) data are produced through modeling the diurnal variability in combination…",
+    "keywords": ["Global", "Climate", "NOAA", "Ocean", "Temperature"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1988-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": { "netcdf": { "type": "application/netcdf" } },
+    "links": []
+  },
+  {
+    "id": "noaa-climate-normals-gridded",
+    "type": "Collection",
+    "title": "NOAA US Gridded Climate Normals (Cloud-Optimized GeoTIFF)",
+    "description": "The [NOAA Gridded United States Climate Normals](https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals#tab-1027) provide a continuous grid of temperature and precipitation data across the contiguous United States (CONUS). The grids are derived from NOAA's [NClimGrid dataset](https…",
+    "keywords": [
+      "NOAA",
+      "Climate Normals",
+      "Weather",
+      "Surface Observations",
+      "Climatology",
+      "CONUS"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-124.7083, 24.5417, -67, 49.375]] },
+      "temporal": { "interval": [["1901-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "prcp_max": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "prcp_min": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "prcp_std": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tavg_max": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tavg_min": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tavg_std": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmax_max": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmax_min": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmax_std": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmin_max": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmin_min": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmin_std": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "prcp_flag": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "prcp_norm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tavg_flag": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tavg_norm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmax_flag": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmax_norm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmin_flag": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmin_norm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "m2dprcp_norm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "y2dprcp_norm": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "noaa-climate-normals-netcdf",
+    "type": "Collection",
+    "title": "NOAA US Gridded Climate Normals (NetCDF)",
+    "description": "The [NOAA Gridded United States Climate Normals](https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals#tab-1027) provide a continuous grid of temperature and precipitation data across the contiguous United States (CONUS). The grids are derived from NOAA's [NClimGrid dataset](https…",
+    "keywords": [
+      "NOAA",
+      "Climate Normals",
+      "Weather",
+      "Surface Observations",
+      "Climatology",
+      "CONUS"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-124.7083, 24.5417, -67, 49.375]] },
+      "temporal": { "interval": [["1901-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
+    },
+    "item_assets": { "netcdf": { "type": "application/netcdf" } },
+    "links": []
+  },
+  {
+    "id": "noaa-climate-normals-tabular",
+    "type": "Collection",
+    "title": "NOAA US Tabular Climate Normals",
+    "description": "The [NOAA United States Climate Normals](https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals) provide information about typical climate conditions for thousands of weather station locations across the United States. Normals act both as a ruler to compare current weather and as a…",
+    "keywords": [
+      "NOAA",
+      "Climate Normals",
+      "Weather",
+      "Surface Observations",
+      "Climatology",
+      "CONUS"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-177.3833, -14.3306, 174.1, 71.3214]] },
+      "temporal": { "interval": [["1981-01-01T00:00:00Z", "2020-12-31T23:59:59Z"]] }
+    },
+    "item_assets": { "geoparquet": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "noaa-mrms-qpe-1h-pass1",
+    "type": "Collection",
+    "title": "NOAA MRMS QPE 1-Hour Pass 1",
+    "description": "The [Multi-Radar Multi-Sensor (MRMS) Quantitative Precipitation Estimation (QPE)](https://www.nssl.noaa.gov/projects/mrms/) products are seamless 1-km mosaics of precipitation accumulation covering the continental United States, Alaska, Hawaii, the Caribbean, and Guam. The products are automatically…",
+    "keywords": [
+      "NOAA",
+      "MRMS",
+      "QPE",
+      "Precipitation",
+      "Weather",
+      "United States",
+      "Guam",
+      "Caribbean"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-176, 9, 150, 72]] },
+      "temporal": { "interval": [["2022-07-21T20:00:00Z", null]] }
+    },
+    "item_assets": {
+      "cog": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "grib2": { "type": "application/wmo-GRIB2" }
+    },
+    "links": []
+  },
+  {
+    "id": "noaa-mrms-qpe-1h-pass2",
+    "type": "Collection",
+    "title": "NOAA MRMS QPE 1-Hour Pass 2",
+    "description": "The [Multi-Radar Multi-Sensor (MRMS) Quantitative Precipitation Estimation (QPE)](https://www.nssl.noaa.gov/projects/mrms/) products are seamless 1-km mosaics of precipitation accumulation covering the continental United States, Alaska, Hawaii, the Caribbean, and Guam. The products are automatically…",
+    "keywords": [
+      "NOAA",
+      "MRMS",
+      "QPE",
+      "Precipitation",
+      "Weather",
+      "United States",
+      "Guam",
+      "Caribbean"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-176, 9, 150, 72]] },
+      "temporal": { "interval": [["2022-07-21T20:00:00Z", null]] }
+    },
+    "item_assets": {
+      "cog": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "grib2": { "type": "application/wmo-GRIB2" }
+    },
+    "links": []
+  },
+  {
+    "id": "noaa-mrms-qpe-24h-pass2",
+    "type": "Collection",
+    "title": "NOAA MRMS QPE 24-Hour Pass 2",
+    "description": "The [Multi-Radar Multi-Sensor (MRMS) Quantitative Precipitation Estimation (QPE)](https://www.nssl.noaa.gov/projects/mrms/) products are seamless 1-km mosaics of precipitation accumulation covering the continental United States, Alaska, Hawaii, the Caribbean, and Guam. The products are automatically…",
+    "keywords": [
+      "NOAA",
+      "MRMS",
+      "QPE",
+      "Precipitation",
+      "Weather",
+      "United States",
+      "Guam",
+      "Caribbean"
+    ],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-176, 9, 150, 72]] },
+      "temporal": { "interval": [["2022-07-21T20:00:00Z", null]] }
+    },
+    "item_assets": {
+      "cog": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "grib2": { "type": "application/wmo-GRIB2" }
+    },
+    "links": []
+  },
+  {
+    "id": "noaa-nclimgrid-monthly",
+    "type": "Collection",
+    "title": "Monthly NOAA U.S. Climate Gridded Dataset (NClimGrid)",
+    "description": "The [NOAA U.S. Climate Gridded Dataset (NClimGrid)](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00332) consists of four climate variables derived from the [Global Historical Climatology Network daily (GHCNd)](https://www.ncei.noaa.gov/products/land-based-station/…",
+    "keywords": ["United States", "NOAA", "NClimGrid", "Climate", "Precipitation", "Temperature"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-124.7083, 24.5417, -67, 49.375]] },
+      "temporal": { "interval": [["1895-01-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "prcp": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tavg": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmax": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "tmin": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "nrcan-landcover",
+    "type": "Collection",
+    "title": "Land Cover of Canada",
+    "description": "Collection of Land Cover products for Canada as produced by Natural Resources Canada using Landsat satellite imagery. This collection of cartographic products offers classified Land Cover of Canada at a 30 metre scale, updated on a 5 year basis.",
+    "keywords": ["Land Cover", "Remote Sensing", "Landsat", "North America", "Canada"],
+    "license": "OGL-Canada-2.0",
+    "extent": {
+      "spatial": { "bbox": [[-141.003, 41.6755, -52.6174, 83.1139]] },
+      "temporal": { "interval": [["2015-01-01T00:00:00Z", "2020-01-01T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "metadata": { "type": "application/json" },
+      "landcover": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "planet-nicfi-analytic",
+    "type": "Collection",
+    "title": "Planet-NICFI Basemaps (Analytic)",
+    "description": "*Note: Assets in this collection are only available to winners of the [GEO-Microsoft Planetary Computer RFP](https://www.earthobservations.org/geo_blog_obs.php?id=528). Others wishing to use the data can sign up and access it from Planet at [https://www.planet.com/nicfi/](https://www.planet.com/nicf…",
+    "keywords": ["Planet", "NICFI", "Satellite", "Tropics", "Imagery"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -34.1618, 180, 30.1451]] },
+      "temporal": { "interval": [["2015-12-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "planet-nicfi-visual",
+    "type": "Collection",
+    "title": "Planet-NICFI Basemaps (Visual)",
+    "description": "*Note: Assets in this collection are only available to winners of the [GEO-Microsoft Planetary Computer RFP](https://www.earthobservations.org/geo_blog_obs.php?id=528). Others wishing to use the data can sign up and access it from Planet at [https://www.planet.com/nicfi/](https://www.planet.com/nicf…",
+    "keywords": ["Planet", "NICFI", "Satellite", "Tropics", "Imagery"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -34.1618, 180, 30.1451]] },
+      "temporal": { "interval": [["2015-12-01T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "data": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" }
+    },
+    "links": []
+  },
+  {
+    "id": "predicted-damage-colombia-2026",
+    "type": "Collection",
+    "title": "Predicted Building Damage: Colombia Earthquake 2026",
+    "description": "Creamos evaluaciones de daños a nivel de edificio tras el terremoto en Colombia mediante el entrenamiento y la posterior ejecución de un modelo de inteligencia artificial sobre imágenes satelitales adquiridas después del desastre. El modelo de IA clasifica cada edificio identificado en las imágenes…",
+    "keywords": [
+      "Colombia",
+      "Cali",
+      "Pereira",
+      "Earthquake",
+      "Building damage",
+      "Damage assessment",
+      "Buildings",
+      "Microsoft AI for Good Lab"
+    ],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-76.6146, 3.4127, -75.6922, 4.8433]] },
+      "temporal": { "interval": [["2026-08-08T00:00:00Z", null]] }
+    },
+    "item_assets": {
+      "visual": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "valid-area-mask": { "type": "application/geo+json" },
+      "google-buildings": { "type": "application/geopackage+sqlite3" },
+      "overture-buildings": { "type": "application/geopackage+sqlite3" }
+    },
+    "links": []
+  },
+  {
+    "id": "predicted-damage-venezuela-2026",
+    "type": "Collection",
+    "title": "Predicted Building Damage: Venezuela Earthquakes (Catia La Mar, La Guaira, and Caraballeda) 2026",
+    "description": "Following the June 2026 earthquakes that struck the central coast of Venezuela, the [Microsoft AI for Good Lab](https://www.microsoft.com/en-us/research/group/ai-for-good-research-lab/) ran their building damage assessment AI models to map and classify the buildings affected by the earthquakes. The…",
+    "keywords": [
+      "Venezuela",
+      "Catia La Mar",
+      "La Guaira",
+      "Caraballeda",
+      "Earthquake",
+      "Building damage",
+      "Damage assessment",
+      "Buildings"
+    ],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-73.354, 0.647, -59.7589, 12.2019]] },
+      "temporal": { "interval": [["2026-06-25T00:00:00Z", "2026-06-25T23:59:59Z"]] }
+    },
+    "item_assets": { "data": { "type": "application/geopackage+sqlite3" } },
+    "links": []
+  },
+  {
+    "id": "sentinel-1-grd",
+    "type": "Collection",
+    "title": "Sentinel 1 Level-1 Ground Range Detected (GRD)",
+    "description": "The [Sentinel-1](https://sentinel.esa.int/web/sentinel/missions/sentinel-1) mission is a constellation of two polar-orbiting satellites, operating day and night performing C-band synthetic aperture radar imaging. The Level-1 Ground Range Detected (GRD) products in this Collection consist of focused…",
+    "keywords": ["ESA", "Copernicus", "Sentinel", "C-Band", "SAR", "GRD"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2014-10-10T00:28:21Z", null]] }
+    },
+    "item_assets": {
+      "hh": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "hv": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "vh": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "vv": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "thumbnail": { "type": "image/png" },
+      "safe-manifest": { "type": "application/xml" },
+      "schema-noise-hh": { "type": "application/xml" },
+      "schema-noise-hv": { "type": "application/xml" },
+      "schema-noise-vh": { "type": "application/xml" },
+      "schema-noise-vv": { "type": "application/xml" },
+      "schema-product-hh": { "type": "application/xml" },
+      "schema-product-hv": { "type": "application/xml" },
+      "schema-product-vh": { "type": "application/xml" },
+      "schema-product-vv": { "type": "application/xml" },
+      "schema-calibration-hh": { "type": "application/xml" },
+      "schema-calibration-hv": { "type": "application/xml" },
+      "schema-calibration-vh": { "type": "application/xml" },
+      "schema-calibration-vv": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-1-rtc",
+    "type": "Collection",
+    "title": "Sentinel 1 Radiometrically Terrain Corrected (RTC)",
+    "description": "The [Sentinel-1](https://sentinel.esa.int/web/sentinel/missions/sentinel-1) mission is a constellation of two polar-orbiting satellites, operating day and night performing C-band synthetic aperture radar imaging. The Sentinel-1 Radiometrically Terrain Corrected (RTC) data in this collection is a rad…",
+    "keywords": ["ESA", "Copernicus", "Sentinel", "C-Band", "SAR", "RTC"],
+    "license": "CC-BY-4.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2014-10-10T00:28:21Z", null]] }
+    },
+    "item_assets": {
+      "hh": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "hv": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "vh": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "vv": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-2-l2a",
+    "type": "Collection",
+    "title": "Sentinel-2 Level-2A",
+    "description": "The [Sentinel-2](https://sentinel.esa.int/web/sentinel/missions/sentinel-2) program provides global imagery in thirteen spectral bands at 10m-60m resolution and a revisit time of approximately five days. This dataset represents the global Sentinel-2 archive, from 2016 to the present, processed to L2…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Global", "Imagery", "Reflectance"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2015-06-27T10:25:31Z", null]] }
+    },
+    "item_assets": {
+      "AOT": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B01": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B02": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B03": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B04": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B05": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B06": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B07": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B08": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B09": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B11": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B12": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "B8A": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "SCL": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "WVP": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "visual": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "preview": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "safe-manifest": { "type": "application/xml" },
+      "granule-metadata": { "type": "application/xml" },
+      "inspire-metadata": { "type": "application/xml" },
+      "product-metadata": { "type": "application/xml" },
+      "datastrip-metadata": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-olci-lfr-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Land (Full Resolution)",
+    "description": "This collection provides Sentinel-3 Full Resolution [OLCI Level-2 Land][olci-l2] products containing data on global vegetation, chlorophyll, and water vapor. ## Data files This dataset includes data on three primary variables: * OLCI global vegetation index file * terrestrial Chlorophyll index file…",
+    "keywords": ["ESA", "Copernicus", "Sentinel", "Land", "Biomass"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2016-04-25T11:33:47.368562Z", null]] }
+    },
+    "item_assets": {
+      "iwv": { "type": "application/x-netcdf" },
+      "lqsf": { "type": "application/x-netcdf" },
+      "ogvi": { "type": "application/x-netcdf" },
+      "otci": { "type": "application/x-netcdf" },
+      "gifapar": { "type": "application/x-netcdf" },
+      "rc-ogvi": { "type": "application/x-netcdf" },
+      "tie-meteo": { "type": "application/x-netcdf" },
+      "rc-gifapar": { "type": "application/x-netcdf" },
+      "safe-manifest": { "type": "application/xml" },
+      "tie-geometries": { "type": "application/x-netcdf" },
+      "geo-coordinates": { "type": "application/x-netcdf" },
+      "instrument-data": { "type": "application/x-netcdf" },
+      "time-coordinates": { "type": "application/x-netcdf" },
+      "tie-geo-coordinates": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-olci-wfr-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Water (Full Resolution)",
+    "description": "This Collection provides Sentinel-3 Full Resolution [OLCI Level-2 Water][olci-l2] products containing data on water-leaving reflectance, ocean color, and more. ## Data files This dataset includes data on: - Surface directional reflectance - Chlorophyll-a concentration - Suspended matter concentratio…",
+    "keywords": ["ESA", "Copernicus", "Sentinel", "Water", "Ocean"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2017-11-01T00:07:01.738487Z", null]] }
+    },
+    "item_assets": {
+      "iwv": { "type": "application/x-netcdf" },
+      "par": { "type": "application/x-netcdf" },
+      "trsp": { "type": "application/x-netcdf" },
+      "wqsf": { "type": "application/x-netcdf" },
+      "w-aer": { "type": "application/x-netcdf" },
+      "chl-nn": { "type": "application/x-netcdf" },
+      "iop-nn": { "type": "application/x-netcdf" },
+      "tsm-nn": { "type": "application/x-netcdf" },
+      "chl-oc4me": { "type": "application/x-netcdf" },
+      "tie-meteo": { "type": "application/x-netcdf" },
+      "browse-jpg": { "type": "image/jpeg" },
+      "eop-metadata": { "type": "application/xml" },
+      "safe-manifest": { "type": "application/xml" },
+      "tie-geometries": { "type": "application/x-netcdf" },
+      "geo-coordinates": { "type": "application/x-netcdf" },
+      "instrument-data": { "type": "application/x-netcdf" },
+      "oa01-reflectance": { "type": "application/x-netcdf" },
+      "oa02-reflectance": { "type": "application/x-netcdf" },
+      "oa03-reflectance": { "type": "application/x-netcdf" },
+      "oa04-reflectance": { "type": "application/x-netcdf" },
+      "oa05-reflectance": { "type": "application/x-netcdf" },
+      "oa06-reflectance": { "type": "application/x-netcdf" },
+      "oa07-reflectance": { "type": "application/x-netcdf" },
+      "oa08-reflectance": { "type": "application/x-netcdf" },
+      "oa09-reflectance": { "type": "application/x-netcdf" },
+      "oa10-reflectance": { "type": "application/x-netcdf" },
+      "oa11-reflectance": { "type": "application/x-netcdf" },
+      "oa12-reflectance": { "type": "application/x-netcdf" },
+      "oa16-reflectance": { "type": "application/x-netcdf" },
+      "oa17-reflectance": { "type": "application/x-netcdf" },
+      "oa18-reflectance": { "type": "application/x-netcdf" },
+      "oa21-reflectance": { "type": "application/x-netcdf" },
+      "time-coordinates": { "type": "application/x-netcdf" },
+      "tie-geo-coordinates": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-slstr-frp-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Fire Radiative Power",
+    "description": "This Collection provides Sentinel-3 [SLSTR Level-2 Fire Radiative Power](https://sentinel.esa.int/web/sentinel/user-guides/sentinel-3-slstr/product-types/level-2-frp) (FRP) products containing data on fires detected over land and ocean. ## Data files The primary measurement data is contained in the…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Temperature", "Fire"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2020-08-08T23:11:15.617203Z", null]] }
+    },
+    "item_assets": {
+      "frp-in": { "type": "application/x-netcdf" },
+      "slstr-met-tx": { "type": "application/x-netcdf" },
+      "safe-manifest": { "type": "application/xml" },
+      "slstr-time-in": { "type": "application/x-netcdf" },
+      "slstr-flags-fn": { "type": "application/x-netcdf" },
+      "slstr-flags-in": { "type": "application/x-netcdf" },
+      "slstr-indices-fn": { "type": "application/x-netcdf" },
+      "slstr-indices-in": { "type": "application/x-netcdf" },
+      "slstr-geodetic-fn": { "type": "application/x-netcdf" },
+      "slstr-geodetic-in": { "type": "application/x-netcdf" },
+      "slstr-geodetic-tx": { "type": "application/x-netcdf" },
+      "slstr-geometry-tn": { "type": "application/x-netcdf" },
+      "slstr-cartesian-fn": { "type": "application/x-netcdf" },
+      "slstr-cartesian-in": { "type": "application/x-netcdf" },
+      "slstr-cartesian-tx": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-slstr-lst-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Land Surface Temperature",
+    "description": "This Collection provides Sentinel-3 [SLSTR Level-2 Land Surface Temperature](https://sentinel.esa.int/web/sentinel/user-guides/sentinel-3-slstr/product-types/level-2-lst) products containing data on land surface temperature measurements on a 1km grid. Radiance is measured in two channels to determin…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Temperature", "Land"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2016-04-19T01:35:17.188500Z", null]] }
+    },
+    "item_assets": {
+      "lst-in": { "type": "application/x-netcdf" },
+      "slstr-met-tx": { "type": "application/x-netcdf" },
+      "safe-manifest": { "type": "application/xml" },
+      "slstr-time-in": { "type": "application/x-netcdf" },
+      "slstr-flags-in": { "type": "application/x-netcdf" },
+      "lst-ancillary-ds": { "type": "application/x-netcdf" },
+      "slstr-indices-in": { "type": "application/x-netcdf" },
+      "slstr-geodetic-in": { "type": "application/x-netcdf" },
+      "slstr-geodetic-tx": { "type": "application/x-netcdf" },
+      "slstr-geometry-tn": { "type": "application/x-netcdf" },
+      "slstr-cartesian-in": { "type": "application/x-netcdf" },
+      "slstr-cartesian-tx": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-slstr-wst-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Sea Surface Temperature",
+    "description": "This Collection provides Sentinel-3 [SLSTR Level-2 Water Surface Temperature](https://sentinel.esa.int/web/sentinel/user-guides/sentinel-3-slstr/product-types/level-2-wst) products containing data on sea surface temperature measurements on a 1km grid. Each product consists of a single NetCDF file co…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Temperature", "Ocean"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2017-10-31T23:59:57.451604Z", null]] }
+    },
+    "item_assets": {
+      "l2p": { "type": "application/x-netcdf" },
+      "browse-jpg": { "type": "image/jpeg" },
+      "eop-metadata": { "type": "application/xml" },
+      "safe-manifest": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-sral-lan-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Land Radar Altimetry",
+    "description": "This Collection provides Sentinel-3 [SRAL Level-2 Land Altimetry](https://sentinel.esa.int/web/sentinel/technical-guides/sentinel-3-altimetry/level-2-algorithms-products) products, which contain data on land radar altimetry measurements. Each product contains three NetCDF files: - A reduced data fil…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Radar", "Altimetry"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -81.5, 180, 81.5]] },
+      "temporal": { "interval": [["2016-03-01T14:07:51.632846Z", null]] }
+    },
+    "item_assets": {
+      "safe-manifest": { "type": "application/xml" },
+      "reduced-measurement": { "type": "application/x-netcdf" },
+      "enhanced-measurement": { "type": "application/x-netcdf" },
+      "standard-measurement": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-sral-wat-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Ocean Radar Altimetry",
+    "description": "This Collection provides Sentinel-3 [SRAL Level-2 Ocean Altimetry](https://sentinel.esa.int/web/sentinel/technical-guides/sentinel-3-altimetry/level-2-algorithms-products) products, which contain data on ocean radar altimetry measurements. Each product contains three NetCDF files: - A reduced data f…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Radar", "Altimetry", "Ocean"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -81.5, 180, 81.5]] },
+      "temporal": { "interval": [["2017-01-28T00:59:14.149496Z", null]] }
+    },
+    "item_assets": {
+      "eop-metadata": { "type": "application/xml" },
+      "safe-manifest": { "type": "application/xml" },
+      "reduced-measurement": { "type": "application/x-netcdf" },
+      "enhanced-measurement": { "type": "application/x-netcdf" },
+      "standard-measurement": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-synergy-aod-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Global Aerosol",
+    "description": "This Collection provides the Sentinel-3 [Synergy Level-2 Aerosol Optical Depth](https://sentinels.copernicus.eu/web/sentinel/level-2-aod) product, which is a downstream development of the Sentinel-2 Level-1 [OLCI Full Resolution](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-3-ol…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Global", "Aerosol"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2020-04-16T19:36:28.012367Z", null]] }
+    },
+    "item_assets": {
+      "ntc-aod": { "type": "application/x-netcdf" },
+      "safe-manifest": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-synergy-syn-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Land Surface Reflectance and Aerosol",
+    "description": "This Collection provides the Sentinel-3 [Synergy Level-2 Land Surface Reflectance and Aerosol](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-3-synergy/product-types/level-2-syn) product, which contains data on Surface Directional Reflectance, Aerosol Optical Thickness, and an Ang…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Land", "Reflectance", "Aerosol"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2018-09-22T16:51:00.001276Z", null]] }
+    },
+    "item_assets": {
+      "time": { "type": "application/x-netcdf" },
+      "syn-amin": { "type": "application/x-netcdf" },
+      "syn-flags": { "type": "application/x-netcdf" },
+      "syn-ato550": { "type": "application/x-netcdf" },
+      "geolocation": { "type": "application/x-netcdf" },
+      "safe-manifest": { "type": "application/xml" },
+      "tiepoints-olci": { "type": "application/x-netcdf" },
+      "tiepoints-meteo": { "type": "application/x-netcdf" },
+      "tiepoints-slstr-n": { "type": "application/x-netcdf" },
+      "tiepoints-slstr-o": { "type": "application/x-netcdf" },
+      "syn-angstrom-exp550": { "type": "application/x-netcdf" },
+      "syn-s1n-reflectance": { "type": "application/x-netcdf" },
+      "syn-s1o-reflectance": { "type": "application/x-netcdf" },
+      "syn-s2n-reflectance": { "type": "application/x-netcdf" },
+      "syn-s2o-reflectance": { "type": "application/x-netcdf" },
+      "syn-s3n-reflectance": { "type": "application/x-netcdf" },
+      "syn-s3o-reflectance": { "type": "application/x-netcdf" },
+      "syn-s5n-reflectance": { "type": "application/x-netcdf" },
+      "syn-s5o-reflectance": { "type": "application/x-netcdf" },
+      "syn-s6n-reflectance": { "type": "application/x-netcdf" },
+      "syn-s6o-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa01-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa02-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa03-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa04-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa05-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa06-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa07-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa08-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa09-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa10-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa11-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa12-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa16-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa17-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa18-reflectance": { "type": "application/x-netcdf" },
+      "syn-oa21-reflectance": { "type": "application/x-netcdf" },
+      "syn-sdr-removed-pixels": { "type": "application/x-netcdf" },
+      "annotations-removed-pixels": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-synergy-v10-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 10-Day Surface Reflectance and NDVI (SPOT VEGETATION)",
+    "description": "This Collection provides the Sentinel-3 [Synergy Level-2 10-Day Surface Reflectance and NDVI](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-3-synergy/product-types/level-2-vg1-v10) products, which are SPOT VEGETATION Continuity Products similar to those obtained from the [VEGETAT…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Reflectance", "NDVI"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -56, 180, 75]] },
+      "temporal": { "interval": [["2018-09-27T11:17:21Z", null]] }
+    },
+    "item_assets": {
+      "ag": { "type": "application/x-netcdf" },
+      "b0": { "type": "application/x-netcdf" },
+      "b2": { "type": "application/x-netcdf" },
+      "b3": { "type": "application/x-netcdf" },
+      "og": { "type": "application/x-netcdf" },
+      "sm": { "type": "application/x-netcdf" },
+      "tg": { "type": "application/x-netcdf" },
+      "mir": { "type": "application/x-netcdf" },
+      "saa": { "type": "application/x-netcdf" },
+      "sza": { "type": "application/x-netcdf" },
+      "vaa": { "type": "application/x-netcdf" },
+      "vza": { "type": "application/x-netcdf" },
+      "wvg": { "type": "application/x-netcdf" },
+      "ndvi": { "type": "application/x-netcdf" },
+      "safe-manifest": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-synergy-vg1-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 1-Day Surface Reflectance and NDVI (SPOT VEGETATION)",
+    "description": "This Collection provides the Sentinel-3 [Synergy Level-2 1-Day Surface Reflectance and NDVI](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-3-synergy/product-types/level-2-vg1-v10) products, which are SPOT VEGETATION Continuity Products similar to those obtained from the [VEGETATI…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Reflectance", "NDVI"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -56, 180, 75]] },
+      "temporal": { "interval": [["2018-10-04T23:17:21Z", null]] }
+    },
+    "item_assets": {
+      "ag": { "type": "application/x-netcdf" },
+      "b0": { "type": "application/x-netcdf" },
+      "b2": { "type": "application/x-netcdf" },
+      "b3": { "type": "application/x-netcdf" },
+      "og": { "type": "application/x-netcdf" },
+      "sm": { "type": "application/x-netcdf" },
+      "tg": { "type": "application/x-netcdf" },
+      "mir": { "type": "application/x-netcdf" },
+      "saa": { "type": "application/x-netcdf" },
+      "sza": { "type": "application/x-netcdf" },
+      "vaa": { "type": "application/x-netcdf" },
+      "vza": { "type": "application/x-netcdf" },
+      "wvg": { "type": "application/x-netcdf" },
+      "ndvi": { "type": "application/x-netcdf" },
+      "safe-manifest": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-3-synergy-vgp-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-3 Top of Atmosphere Reflectance (SPOT VEGETATION)",
+    "description": "This Collection provides the Sentinel-3 [Synergy Level-2 Top of Atmosphere Reflectance](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-3-synergy/product-types/level-2-vgp) product, which is a SPOT VEGETATION Continuity Product containing measurement data similar to that obtained b…",
+    "keywords": ["Sentinel", "Copernicus", "ESA", "Satellite", "Reflectance"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2018-10-08T08:09:40.491227Z", null]] }
+    },
+    "item_assets": {
+      "ag": { "type": "application/x-netcdf" },
+      "b0": { "type": "application/x-netcdf" },
+      "b2": { "type": "application/x-netcdf" },
+      "b3": { "type": "application/x-netcdf" },
+      "og": { "type": "application/x-netcdf" },
+      "sm": { "type": "application/x-netcdf" },
+      "mir": { "type": "application/x-netcdf" },
+      "saa": { "type": "application/x-netcdf" },
+      "sza": { "type": "application/x-netcdf" },
+      "vaa": { "type": "application/x-netcdf" },
+      "vza": { "type": "application/x-netcdf" },
+      "wvg": { "type": "application/x-netcdf" },
+      "safe-manifest": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "sentinel-5p-l2-netcdf",
+    "type": "Collection",
+    "title": "Sentinel-5P Level-2",
+    "description": "The Copernicus [Sentinel-5 Precursor](https://sentinels.copernicus.eu/web/sentinel/missions/sentinel-5p) mission provides high spatio-temporal resolution measurements of the Earth's atmosphere. The mission consists of one satellite carrying the [TROPOspheric Monitoring Instrument](http://www.tropomi…",
+    "keywords": ["ESA", "Copernicus", "Sentinel", "Air Quality", "Climate Change", "Forecasting"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["2018-04-30T00:18:50Z", null]] }
+    },
+    "item_assets": {
+      "co": { "type": "application/x-netcdf" },
+      "o3": { "type": "application/x-netcdf" },
+      "ch4": { "type": "application/x-netcdf" },
+      "no2": { "type": "application/x-netcdf" },
+      "so2": { "type": "application/x-netcdf" },
+      "hcho": { "type": "application/x-netcdf" },
+      "cloud": { "type": "application/x-netcdf" },
+      "aer-ai": { "type": "application/x-netcdf" },
+      "aer-lh": { "type": "application/x-netcdf" },
+      "np-bd3": { "type": "application/x-netcdf" },
+      "np-bd6": { "type": "application/x-netcdf" },
+      "np-bd7": { "type": "application/x-netcdf" },
+      "o3-tcl": { "type": "application/x-netcdf" }
+    },
+    "links": []
+  },
+  {
+    "id": "terraclimate",
+    "type": "Collection",
+    "title": "TerraClimate",
+    "description": "[TerraClimate](http://www.climatologylab.org/terraclimate.html) is a dataset of monthly climate and climatic water balance for global terrestrial surfaces from 1958 to the present. These data provide important inputs for ecological and hydrological studies at global scales that require high spatial…",
+    "keywords": [
+      "TerraClimate",
+      "Water",
+      "Precipitation",
+      "Temperature",
+      "Vapor Pressure",
+      "Climate"
+    ],
+    "license": "CC0-1.0",
+    "extent": {
+      "spatial": { "bbox": [[-180, -90, 180, 90]] },
+      "temporal": { "interval": [["1958-01-01T00:00:00Z", "2021-12-01T00:00:00Z"]] }
+    },
+    "links": []
+  },
+  {
+    "id": "us-census",
+    "type": "Collection",
+    "title": "US Census",
+    "description": "The [2020 Census](https://www.census.gov/programs-surveys/decennial-census/decade/2020/2020-census-main.html) counted every person living in the United States and the five U.S. territories. It marked the 24th census in U.S. history and the first time that households were invited to respond to the ce…",
+    "keywords": ["US Census Bureau", "Administrative boundaries", "Population", "Demographics"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-124.7631, 24.5231, -66.9499, 49.3844]] },
+      "temporal": { "interval": [["2021-08-01T00:00:00Z", "2021-08-01T00:00:00Z"]] }
+    },
+    "item_assets": { "data": { "type": "application/x-parquet" } },
+    "links": []
+  },
+  {
+    "id": "usda-cdl",
+    "type": "Collection",
+    "title": "USDA Cropland Data Layers (CDLs)",
+    "description": "The Cropland Data Layer (CDL) is a product of the USDA National Agricultural Statistics Service (NASS) with the mission \"to provide timely, accurate and useful statistics in service to U.S. agriculture\" (Johnson and Mueller, 2010, p. 1204). The CDL is a crop-specific land cover classification produc…",
+    "keywords": ["USDA", "United States", "Land Cover", "Land Use", "Agriculture"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-127.8872, 22.9403, -65.3455, 51.6035]] },
+      "temporal": { "interval": [["2008-01-01T00:00:00Z", "2021-12-31T23:59:59Z"]] }
+    },
+    "item_assets": {
+      "corn": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "wheat": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "cotton": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "cropland": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "soybeans": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "confidence": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "cultivated": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" }
+    },
+    "links": []
+  },
+  {
+    "id": "usgs-lcmap-conus-v13",
+    "type": "Collection",
+    "title": "USGS LCMAP CONUS Collection 1.3",
+    "description": "The [Land Change Monitoring, Assessment, and Projection](https://www.usgs.gov/special-topics/lcmap) (LCMAP) product provides land cover mapping and change monitoring from the U.S. Geological Survey's [Earth Resources Observation and Science](https://www.usgs.gov/centers/eros) (EROS) Center. LCMAP's…",
+    "keywords": ["USGS", "LCMAP", "Land Cover", "Land Cover Change", "CONUS"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-129.2773, 21.8051, -63.1184, 52.9217]] },
+      "temporal": { "interval": [["1985-01-01T00:00:00Z", "2021-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "dates": { "type": "text/plain" },
+      "lcpri": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcsec": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "scmag": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "scmqa": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "browse": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcachg": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sclast": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "scstab": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sctime": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcpconf": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcsconf": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcpri_metadata": { "type": "application/xml" },
+      "lcsec_metadata": { "type": "application/xml" },
+      "scmag_metadata": { "type": "application/xml" },
+      "scmqa_metadata": { "type": "application/xml" },
+      "lcachg_metadata": { "type": "application/xml" },
+      "sclast_metadata": { "type": "application/xml" },
+      "scstab_metadata": { "type": "application/xml" },
+      "sctime_metadata": { "type": "application/xml" },
+      "lcpconf_metadata": { "type": "application/xml" },
+      "lcsconf_metadata": { "type": "application/xml" }
+    },
+    "links": []
+  },
+  {
+    "id": "usgs-lcmap-hawaii-v10",
+    "type": "Collection",
+    "title": "USGS LCMAP Hawaii Collection 1.0",
+    "description": "The [Land Change Monitoring, Assessment, and Projection](https://www.usgs.gov/special-topics/lcmap) (LCMAP) product provides land cover mapping and change monitoring from the U.S. Geological Survey's [Earth Resources Observation and Science](https://www.usgs.gov/centers/eros) (EROS) Center. LCMAP's…",
+    "keywords": ["USGS", "LCMAP", "Land Cover", "Land Cover Change", "Hawaii"],
+    "license": "proprietary",
+    "extent": {
+      "spatial": { "bbox": [[-161.2758, 18.5051, -154.0586, 22.6245]] },
+      "temporal": { "interval": [["2000-01-01T00:00:00Z", "2020-12-31T00:00:00Z"]] }
+    },
+    "item_assets": {
+      "dates": { "type": "text/plain" },
+      "lcpri": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcsec": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "scmag": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "scmqa": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "browse": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcachg": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sclast": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "scstab": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "sctime": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcpconf": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcsconf": { "type": "image/tiff; application=geotiff; profile=cloud-optimized" },
+      "lcpri_metadata": { "type": "application/xml" },
+      "lcsec_metadata": { "type": "application/xml" },
+      "scmag_metadata": { "type": "application/xml" },
+      "scmqa_metadata": { "type": "application/xml" },
+      "lcachg_metadata": { "type": "application/xml" },
+      "sclast_metadata": { "type": "application/xml" },
+      "scstab_metadata": { "type": "application/xml" },
+      "sctime_metadata": { "type": "application/xml" },
+      "lcpconf_metadata": { "type": "application/xml" },
+      "lcsconf_metadata": { "type": "application/xml" }
+    },
+    "links": []
+  }
+]
