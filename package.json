@@ -17,7 +17,7 @@
     "build:embed": "node scripts/build-embed.mjs",
     "build:chrome-extension": "node scripts/package-chrome-extension.mjs",
     "typecheck": "npm run build",
-    "lint": "eslint apps packages workers tests --max-warnings 240",
+    "lint": "eslint apps packages workers tests --max-warnings 265",
     "test": "npm run test:frontend",
     "test:frontend": "node --import tsx --test tests/*.test.ts",
     "test:frontend:coverage": "node scripts/coverage-check.mjs",
@@ -53,6 +53,7 @@
     "@types/node": "^26.6.2",
     "esbuild": "^0.28.1",
     "eslint": "^10.11.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
     "happy-dom": "^20.14.5",
@@ -65,6 +66,9 @@
       "fflate": "^0.8.3"
     },
     "brace-expansion": "^5.0.9",
+    "eslint-plugin-jsx-a11y": {
+      "eslint": "$eslint"
+    },
     "fast-uri": "^3.1.7",
     "filelist": "^2.0.2",
     "maplibre-gl": "^6.3.0",

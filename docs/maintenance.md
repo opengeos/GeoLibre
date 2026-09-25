@@ -595,7 +595,16 @@ count can only go down. The warnings come from `react-hooks/exhaustive-deps`,
 `@typescript-eslint/no-floating-promises` (app, package and worker `src/`
 only, checked against each file's nearest `tsconfig.json`), and
 `local/no-physical-tailwind` (`eslint-rules/no-physical-tailwind.mjs`, the
-right-to-left rule from [Internationalization](i18n.md#right-to-left-languages)).
+right-to-left rule from [Internationalization](i18n.md#right-to-left-languages)),
+and two `eslint-plugin-jsx-a11y` rules (`control-has-associated-label`,
+`no-static-element-interactions`) on app and package `.tsx`.
+
+`eslint-plugin-jsx-a11y` 6.10 declares ESLint up to 9 as a peer. It runs under
+ESLint 10, and the `overrides` entry for it in the root `package.json` points its
+peer at the installed ESLint. When the plugin publishes ESLint 10 support, drop
+that override. If a future ESLint breaks the plugin, `npm run lint` fails
+loudly; pin ESLint or disable the two rules rather than reaching for
+`--legacy-peer-deps`.
 
 - **A PR adds a warning:** fix it. For a floating promise that is a deliberate
   fire-and-forget, prefix the call with `void` and make sure it handles its own
@@ -604,6 +613,9 @@ right-to-left rule from [Internationalization](i18n.md#right-to-left-languages))
   not raise the limit.
 - **A PR fixes warnings:** lower the limit to the new total that ESLint prints,
   in the same PR, so the gain is kept.
+- **A PR turns on a new rule:** the one time the limit goes up. Raise it by
+  exactly the new rule's count on the code as it is, say so in the PR, and fix
+  those warnings over time like the rest.
 
 ## Dependency updates and the audit allowlist
 

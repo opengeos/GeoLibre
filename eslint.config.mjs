@@ -10,6 +10,7 @@
 // you fix warnings, lower the limit in package.json to the new count in the
 // same PR (the lint output prints it). Never raise it to make a PR pass; fix
 // the new warning or disable it on that line with a reason.
+import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 import local from "./eslint-rules/no-physical-tailwind.mjs";
@@ -74,6 +75,41 @@ export default [
     files: ["**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
+    },
+  },
+  {
+    // Accessibility: an icon-only control needs an accessible name, and a
+    // click handler on a plain element needs a role and keyboard support.
+    // eslint-plugin-jsx-a11y 6.10 declares ESLint <= 9 as a peer; it runs
+    // under ESLint 10, and the root package.json `overrides` entry points its
+    // peer at the installed ESLint.
+    files: ["apps/**/*.{tsx,jsx}", "packages/**/*.{tsx,jsx}"],
+    plugins: { "jsx-a11y": jsxA11y },
+    rules: {
+      // Form fields are labelled by a wrapping <label> or `htmlFor`, which this
+      // rule cannot see, so they are ignored here (the plugin's recommended
+      // ignoreElements); it targets unlabelled buttons, links and ARIA controls.
+      "jsx-a11y/control-has-associated-label": [
+        "warn",
+        {
+          ignoreElements: ["audio", "canvas", "embed", "input", "textarea", "tr", "video"],
+          ignoreRoles: [
+            "grid",
+            "listbox",
+            "menu",
+            "menubar",
+            "radiogroup",
+            "row",
+            "tablist",
+            "toolbar",
+            "tree",
+            "treegrid",
+          ],
+          includeRoles: ["alert", "dialog"],
+          depth: 7,
+        },
+      ],
+      "jsx-a11y/no-static-element-interactions": "warn",
     },
   },
   {
