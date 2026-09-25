@@ -550,6 +550,11 @@ async function apiOfCollection(
     api = await connectStacAt(rootHref, fetcher, signal, false);
   } catch (error) {
     if (signal?.aborted) throw error;
+    // Say why, since the static-catalog fallback looks the same as a root that is not an API.
+    console.warn(
+      `[STAC] Could not read the API root ${rootHref} of collection ${document.id}`,
+      error,
+    );
     return undefined;
   }
   if (!api.isApi) return undefined;

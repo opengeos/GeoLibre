@@ -38,6 +38,19 @@ export function useLayoutOptions(): LayoutOptions {
   return useMemo(() => layoutOptionsFromLocation(layoutSettings), [layoutSettings]);
 }
 
+/**
+ * Whether a query string asks for the read-only `layout=viewer` chrome.
+ *
+ * Args:
+ *   search: The URL's query string.
+ *
+ * Returns:
+ *   True for a viewer launch.
+ */
+export function isViewerLayout(search: string): boolean {
+  return normalizedParam(new URLSearchParams(search).get("layout")) === "viewer";
+}
+
 export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings): LayoutOptions {
   if (typeof window === "undefined") {
     return {
@@ -61,7 +74,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
   // truthy value (`?maponly=true`).
   const mapOnly =
     params.has("maponly") && MAP_ONLY_VALUES.has(normalizedParam(params.get("maponly")));
-  const viewer = layout === "viewer";
+  const viewer = isViewerLayout(window.location.search);
   // `maponly` implies `compact` so the map fills its container (the `<main>`
   // element gets `min-h-0`). This also forces `toolbarLabels` and
   // `showProjectInfo` to false below, which is harmless since the toolbar is

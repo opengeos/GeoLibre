@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataUrlParameters, serviceUrlParameter, stacUrlParameter } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
+import { isViewerLayout } from "./useLayoutOptions";
 import { projectUrlFromLocation } from "../lib/project-url";
 import { planStartup, startupDefaultWorkspace, type StartupPlan } from "../lib/startup-project";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
@@ -46,9 +47,8 @@ function hasExplicitLaunchPayload(): boolean {
   if (serviceUrlParameter(window.location.search) !== null) return true;
   // A read-only viewer ignores `?stac=` (see `useStacUrlLoader`), so it must not
   // keep the startup project from loading either.
-  const viewer =
-    new URLSearchParams(window.location.search).get("layout")?.trim().toLowerCase() === "viewer";
-  if (!viewer && stacUrlParameter(window.location.search) !== null) return true;
+  if (!isViewerLayout(window.location.search) && stacUrlParameter(window.location.search) !== null)
+    return true;
   return false;
 }
 

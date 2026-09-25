@@ -1689,6 +1689,11 @@ function mountPanel(container: HTMLElement): void {
   disposePanel = buildPanel(container);
 }
 
+/** Drop a {@link requestStacCatalogUrl} request no activation took up. */
+export function cancelStacCatalogRequest(): void {
+  requestedCatalogUrl = "";
+}
+
 /**
  * Open the STAC Catalogs browser on a catalog, API, or API collection URL and connect to it.
  *
@@ -1697,11 +1702,6 @@ function mountPanel(container: HTMLElement): void {
  * Args:
  *   url: The STAC URL to connect to.
  */
-/** Drop a {@link requestStacCatalogUrl} request no activation took up. */
-export function cancelStacCatalogRequest(): void {
-  requestedCatalogUrl = "";
-}
-
 export function requestStacCatalogUrl(url: string): void {
   // Only the STAC Catalogs browser takes the request in place. A sibling's (Planet, Portolan) state
   // is left for the activation that replaces it, which reads the request.
