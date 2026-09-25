@@ -255,8 +255,10 @@ impl MartinProcess {
     /// Whether the Martin child is still alive. A server that crashed or was
     /// killed from outside must not keep blocking new starts with "already
     /// running", so the start path clears the slot when this reports false.
+    /// Only a confirmed exit counts: a failed `try_wait` keeps the process, so
+    /// a transient inspection error can never kill a healthy server.
     fn is_running(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(None))
+        !matches!(self.child.try_wait(), Ok(Some(_)))
     }
 }
 
