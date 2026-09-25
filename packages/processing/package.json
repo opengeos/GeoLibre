@@ -36,7 +36,7 @@
     "@turf/voronoi": "^7.4.0",
     "dggal": "^0.0.6",
     "fflate": "^0.8.3",
-    "geolibre-wasm": "^1.5.3",
+    "geolibre-wasm": "^1.5.4",
     "geotiff": "^3.0.5",
     "onnxruntime-web": "1.30.0",
     "s2js": "^1.44.0"
