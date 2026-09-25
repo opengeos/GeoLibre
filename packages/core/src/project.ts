@@ -278,7 +278,7 @@ export function serializeProject(project: GeoLibreProject): string {
  * calls, keyed by the layer record each entry was built from. A `WeakMap`, so a
  * layer the store has replaced or removed drops its text with it.
  */
-export type ProjectLayerSerializationCache = WeakMap<object, string>;
+export type ProjectLayerSerializationCache = WeakMap<object, { index: number; text: string }>;
 
 /** Create an empty {@link ProjectLayerSerializationCache}. */
 export function createProjectLayerSerializationCache(): ProjectLayerSerializationCache {
@@ -319,11 +319,14 @@ export function serializeProjectWithLayerCache(
   const presets = new Map<object, string>();
   layers.forEach((layer, index) => {
     const source = layerSources[index];
-    let text = cache.get(source);
+    const cached = cache.get(source);
+    // The layer is serialized under its array index as the key (a `toJSON`
+    // hook would see it), so text is reused only at the index it was built for.
+    let text = cached?.index === index ? cached.text : undefined;
     if (text === undefined) {
       // Depth 2: the root object is depth 0 and its `layers` array depth 1.
       text = serializeProjectValue(layer, 2, String(index), new Set()) ?? "null";
-      cache.set(source, text);
+      cache.set(source, { index, text });
     }
     presets.set(layer, text);
   });

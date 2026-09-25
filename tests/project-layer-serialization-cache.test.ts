@@ -128,8 +128,31 @@ describe("serializeProjectWithLayerCache", () => {
     const reordered = [layers[1], layers[0]];
     const project = snapshotOf(reordered, view);
     const text = serializeProjectWithLayerCache(project, reordered, cache);
-    assert.deepEqual(Object.fromEntries(counts), { a: 1, b: 1 });
+    // A moved layer is re-serialized: its cached text was built for another index.
+    assert.deepEqual(Object.fromEntries(counts), { a: 2, b: 2 });
     assert.equal(text, serializeProject(project));
+  });
+
+  it("does not reuse text built for another index when a layer's toJSON reads its key", () => {
+    const keyed = (id: string) =>
+      ({
+        ...geojsonLayer({ id }),
+        toJSON(this: GeoLibreLayer, key: string) {
+          return { id: this.id, key };
+        },
+      }) as GeoLibreLayer;
+    const layers = [keyed("a"), keyed("b")];
+    const empty = createEmptyProject("Keyed");
+    const cache = createProjectLayerSerializationCache();
+    serializeProjectWithLayerCache({ ...empty, layers }, layers, cache);
+    const reordered = [layers[1], layers[0]];
+    const project = { ...empty, layers: reordered };
+    const text = serializeProjectWithLayerCache(project, reordered, cache);
+    assert.equal(text, serializeProject(project));
+    assert.deepEqual(JSON.parse(text).layers, [
+      { id: "b", key: "0" },
+      { id: "a", key: "1" },
+    ]);
   });
 
   it("bypasses the cache when the sources do not line up with the layers", () => {
