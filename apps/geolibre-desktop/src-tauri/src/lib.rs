@@ -4592,10 +4592,12 @@ mod tests {
     #[cfg(not(feature = "mas"))]
     use super::{
         add_main_sidecar_extras, child_failure_message, clear_appimage_python_env,
-        find_zip_manifest_path, martin_slot_is_busy, plugin_archive_file_name,
-        resolve_sidecar_in_resource_dir, wait_for_martin_health, CapturedOutput, MartinProcess,
-        CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
+        find_zip_manifest_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
+        CapturedOutput, CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
     };
+    // Only the unix-only Martin tests (they spawn `sh`) use these.
+    #[cfg(all(unix, not(feature = "mas")))]
+    use super::{martin_slot_is_busy, wait_for_martin_health, MartinProcess};
     #[cfg(not(feature = "mas"))]
     use std::env;
     #[cfg(not(feature = "mas"))]
