@@ -1,0 +1,2746 @@
+{
+  "geojson-flat": [
+    [
+      "GeoJsonDataSource.load",
+      {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "A",
+              "kind": "a",
+              "h": 10,
+              "__geolibre_cesium_feature_index": 0
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",0]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "B",
+              "kind": "b",
+              "h": -5,
+              "__geolibre_cesium_feature_index": 1
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [2, 0],
+                  [3, 0],
+                  [3, 1],
+                  [2, 1],
+                  [2, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",1]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "C",
+              "kind": "a",
+              "h": "30",
+              "__geolibre_cesium_feature_index": 2
+            },
+            "geometry": {
+              "type": "MultiPolygon",
+              "coordinates": [
+                [
+                  [
+                    [4, 0],
+                    [5, 0],
+                    [5, 1],
+                    [4, 1],
+                    [4, 0]
+                  ]
+                ],
+                [
+                  [
+                    [6, 0],
+                    [7, 0],
+                    [7, 1],
+                    [6, 1],
+                    [6, 0]
+                  ]
+                ]
+              ]
+            },
+            "id": "[\"l1\",2]"
+          }
+        ]
+      },
+      {
+        "stroke": {
+          "css": "#00ff00",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "strokeWidth": 3,
+        "fill": {
+          "css": "#ff0000",
+          "alpha": 0.4,
+          "withAlpha": "[function]"
+        },
+        "markerColor": {
+          "css": "#3b82f6",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "clampToGround": true
+      }
+    ],
+    ["entities.suspendEvents"],
+    ["scene.requestRender"],
+    ["entities.suspendEvents"],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#ff0000",
+          "alpha": 0.4,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#00ff00",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 3
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#ff0000",
+          "alpha": 0.4,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#00ff00",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 3
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#ff0000",
+          "alpha": 0.4,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#00ff00",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 3
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#ff0000",
+          "alpha": 0.4,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#00ff00",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 3
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["entities.suspendEvents"],
+    ["entities.resumeEvents"],
+    ["entities.resumeEvents"],
+    ["dataSources.add"]
+  ],
+  "geojson-categorized-labels": [
+    [
+      "GeoJsonDataSource.load",
+      {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "A",
+              "kind": "a",
+              "h": 10,
+              "__geolibre_cesium_feature_index": 0
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",0]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "B",
+              "kind": "b",
+              "h": -5,
+              "__geolibre_cesium_feature_index": 1
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [2, 0],
+                  [3, 0],
+                  [3, 1],
+                  [2, 1],
+                  [2, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",1]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "C",
+              "kind": "a",
+              "h": "30",
+              "__geolibre_cesium_feature_index": 2
+            },
+            "geometry": {
+              "type": "MultiPolygon",
+              "coordinates": [
+                [
+                  [
+                    [4, 0],
+                    [5, 0],
+                    [5, 1],
+                    [4, 1],
+                    [4, 0]
+                  ]
+                ],
+                [
+                  [
+                    [6, 0],
+                    [7, 0],
+                    [7, 1],
+                    [6, 1],
+                    [6, 0]
+                  ]
+                ]
+              ]
+            },
+            "id": "[\"l1\",2]"
+          }
+        ]
+      },
+      {
+        "stroke": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "strokeWidth": 2,
+        "fill": {
+          "css": "#3b82f6",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        },
+        "markerColor": {
+          "css": "#3b82f6",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "clampToGround": true
+      }
+    ],
+    ["entities.suspendEvents"],
+    [
+      "new ConstantPositionProperty",
+      {
+        "__instance": "Cartesian3",
+        "x": 0,
+        "y": 0,
+        "z": 0
+      }
+    ],
+    [
+      "set",
+      "e0.position",
+      {
+        "__class": "ConstantPositionProperty",
+        "args": ["[seen]"]
+      }
+    ],
+    ["new Cartesian2", 0, 0],
+    ["new CallbackProperty", "[function]", false],
+    [
+      "new LabelGraphics",
+      {
+        "text": "A",
+        "font": "13px sans-serif",
+        "fillColor": {
+          "css": "#111827",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineColor": {
+          "css": "#ffffff",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineWidth": 1.5,
+        "style": 2,
+        "pixelOffset": {
+          "__class": "Cartesian2",
+          "args": [0, 0]
+        },
+        "heightReference": 1,
+        "disableDepthTestDistance": "Infinity",
+        "distanceDisplayCondition": {
+          "__class": "CallbackProperty",
+          "args": ["[function]", false]
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.label",
+      {
+        "__class": "LabelGraphics",
+        "args": ["[seen]"],
+        "fillColor": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#111827",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
+        },
+        "outlineColor": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#ffffff",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
+        }
+      }
+    ],
+    [
+      "new ConstantPositionProperty",
+      {
+        "__instance": "Cartesian3",
+        "x": 2,
+        "y": 0,
+        "z": 0
+      }
+    ],
+    [
+      "set",
+      "e1.position",
+      {
+        "__class": "ConstantPositionProperty",
+        "args": ["[seen]"]
+      }
+    ],
+    ["new Cartesian2", 0, 0],
+    ["new CallbackProperty", "[function]", false],
+    [
+      "new LabelGraphics",
+      {
+        "text": "B",
+        "font": "13px sans-serif",
+        "fillColor": {
+          "css": "#111827",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineColor": {
+          "css": "#ffffff",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineWidth": 1.5,
+        "style": 2,
+        "pixelOffset": {
+          "__class": "Cartesian2",
+          "args": [0, 0]
+        },
+        "heightReference": 1,
+        "disableDepthTestDistance": "Infinity",
+        "distanceDisplayCondition": {
+          "__class": "CallbackProperty",
+          "args": ["[function]", false]
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.label",
+      {
+        "__class": "LabelGraphics",
+        "args": ["[seen]"],
+        "fillColor": {
+          "__instance": "ConstantProperty",
+          "value": "[seen]"
+        },
+        "outlineColor": {
+          "__instance": "ConstantProperty",
+          "value": "[seen]"
+        }
+      }
+    ],
+    [
+      "new ConstantPositionProperty",
+      {
+        "__instance": "Cartesian3",
+        "x": 4,
+        "y": 0,
+        "z": 0
+      }
+    ],
+    [
+      "set",
+      "e2.position",
+      {
+        "__class": "ConstantPositionProperty",
+        "args": ["[seen]"]
+      }
+    ],
+    ["new Cartesian2", 0, 0],
+    ["new CallbackProperty", "[function]", false],
+    [
+      "new LabelGraphics",
+      {
+        "text": "C",
+        "font": "13px sans-serif",
+        "fillColor": {
+          "css": "#111827",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineColor": {
+          "css": "#ffffff",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineWidth": 1.5,
+        "style": 2,
+        "pixelOffset": {
+          "__class": "Cartesian2",
+          "args": [0, 0]
+        },
+        "heightReference": 1,
+        "disableDepthTestDistance": "Infinity",
+        "distanceDisplayCondition": {
+          "__class": "CallbackProperty",
+          "args": ["[function]", false]
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.label",
+      {
+        "__class": "LabelGraphics",
+        "args": ["[seen]"],
+        "fillColor": {
+          "__instance": "ConstantProperty",
+          "value": "[seen]"
+        },
+        "outlineColor": {
+          "__instance": "ConstantProperty",
+          "value": "[seen]"
+        }
+      }
+    ],
+    ["scene.requestRender"],
+    ["new CallbackProperty", "[function]", false],
+    [
+      "set",
+      "e0.polygon.distanceDisplayCondition",
+      {
+        "__class": "CallbackProperty",
+        "args": ["[function]", false]
+      }
+    ],
+    ["set", "e1.polygon.distanceDisplayCondition", "[seen]"],
+    ["set", "e2.polygon.distanceDisplayCondition", "[seen]"],
+    ["set", "e3.polygon.distanceDisplayCondition", "[seen]"],
+    ["entities.suspendEvents"],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "rgba(170,0,0,1)",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "rgba(30,64,175,1)",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "rgba(0,170,0,1)",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "rgba(30,64,175,1)",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "rgba(170,0,0,1)",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "rgba(30,64,175,1)",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "rgba(170,0,0,1)",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "rgba(30,64,175,1)",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["entities.suspendEvents"],
+    ["entities.resumeEvents"],
+    ["entities.resumeEvents"],
+    ["dataSources.add"]
+  ],
+  "geojson-extrusion": [
+    [
+      "GeoJsonDataSource.load",
+      {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "A",
+              "kind": "a",
+              "h": 10,
+              "__geolibre_cesium_feature_index": 0
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",0]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "B",
+              "kind": "b",
+              "h": -5,
+              "__geolibre_cesium_feature_index": 1
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [2, 0],
+                  [3, 0],
+                  [3, 1],
+                  [2, 1],
+                  [2, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",1]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "C",
+              "kind": "a",
+              "h": "30",
+              "__geolibre_cesium_feature_index": 2
+            },
+            "geometry": {
+              "type": "MultiPolygon",
+              "coordinates": [
+                [
+                  [
+                    [4, 0],
+                    [5, 0],
+                    [5, 1],
+                    [4, 1],
+                    [4, 0]
+                  ]
+                ],
+                [
+                  [
+                    [6, 0],
+                    [7, 0],
+                    [7, 1],
+                    [6, 1],
+                    [6, 0]
+                  ]
+                ]
+              ]
+            },
+            "id": "[\"l1\",2]"
+          }
+        ]
+      },
+      {
+        "stroke": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "strokeWidth": 2,
+        "fill": {
+          "css": "#3b82f6",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        },
+        "markerColor": {
+          "css": "#3b82f6",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "clampToGround": false
+      }
+    ],
+    ["entities.suspendEvents"],
+    ["scene.requestRender"],
+    ["entities.suspendEvents"],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.5599999999999999,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": "[seen]"
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": "[seen]"
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": "[seen]"
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["entities.suspendEvents"],
+    ["entities.resumeEvents"],
+    [
+      "set",
+      "e0.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 21
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.height",
+      {
+        "__instance": "ConstantProperty",
+        "value": 1
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.heightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.extrudedHeightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.5599999999999999,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 1
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.height",
+      {
+        "__instance": "ConstantProperty",
+        "value": 1
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.heightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.extrudedHeightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.5599999999999999,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 61
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.height",
+      {
+        "__instance": "ConstantProperty",
+        "value": 1
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.heightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.extrudedHeightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.5599999999999999,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 61
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.height",
+      {
+        "__instance": "ConstantProperty",
+        "value": 1
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.heightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.extrudedHeightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.5599999999999999,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["dataSources.add"]
+  ],
+  "geojson-extrusion-expressions": [
+    [
+      "GeoJsonDataSource.load",
+      {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "A",
+              "kind": "a",
+              "h": 10,
+              "__geolibre_cesium_feature_index": 0
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [0, 0],
+                  [1, 0],
+                  [1, 1],
+                  [0, 1],
+                  [0, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",0]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "B",
+              "kind": "b",
+              "h": -5,
+              "__geolibre_cesium_feature_index": 1
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [2, 0],
+                  [3, 0],
+                  [3, 1],
+                  [2, 1],
+                  [2, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",1]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "C",
+              "kind": "a",
+              "h": "30",
+              "__geolibre_cesium_feature_index": 2
+            },
+            "geometry": {
+              "type": "MultiPolygon",
+              "coordinates": [
+                [
+                  [
+                    [4, 0],
+                    [5, 0],
+                    [5, 1],
+                    [4, 1],
+                    [4, 0]
+                  ]
+                ],
+                [
+                  [
+                    [6, 0],
+                    [7, 0],
+                    [7, 1],
+                    [6, 1],
+                    [6, 0]
+                  ]
+                ]
+              ]
+            },
+            "id": "[\"l1\",2]"
+          }
+        ]
+      },
+      {
+        "stroke": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "strokeWidth": 2,
+        "fill": {
+          "css": "#3b82f6",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        },
+        "markerColor": {
+          "css": "#3b82f6",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "clampToGround": false
+      }
+    ],
+    ["entities.suspendEvents"],
+    ["scene.requestRender"],
+    ["entities.suspendEvents"],
+    [
+      "set",
+      "e0.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["entities.suspendEvents"],
+    ["entities.resumeEvents"],
+    [
+      "set",
+      "e0.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 30
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.height",
+      {
+        "__instance": "ConstantProperty",
+        "value": 0
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.heightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.extrudedHeightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "rgba(255,0,255,1)",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 0
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.height",
+      {
+        "__instance": "ConstantProperty",
+        "value": 0
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.heightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.extrudedHeightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "rgba(0,255,255,1)",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 90
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.height",
+      {
+        "__instance": "ConstantProperty",
+        "value": 0
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.heightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.extrudedHeightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e2.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "rgba(255,0,255,1)",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 90
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.height",
+      {
+        "__instance": "ConstantProperty",
+        "value": 0
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.heightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.extrudedHeightReference",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e3.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "rgba(255,0,255,1)",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["dataSources.add"]
+  ],
+  "geojson-extrusion-z": [
+    [
+      "GeoJsonDataSource.load",
+      {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "Z",
+              "h": 20,
+              "__geolibre_cesium_feature_index": 0
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [0, 0, 50],
+                  [1, 0, 50],
+                  [1, 1, 50],
+                  [0, 1, 50],
+                  [0, 0, 50]
+                ]
+              ]
+            },
+            "id": "[\"l1\",0]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "flat",
+              "h": 20,
+              "__geolibre_cesium_feature_index": 1
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [2, 0, 0],
+                  [3, 0, 0],
+                  [3, 1, 0],
+                  [2, 1, 0],
+                  [2, 0, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",1]"
+          }
+        ]
+      },
+      {
+        "stroke": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "strokeWidth": 2,
+        "fill": {
+          "css": "#3b82f6",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        },
+        "markerColor": {
+          "css": "#3b82f6",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "clampToGround": false
+      }
+    ],
+    ["entities.suspendEvents"],
+    ["scene.requestRender"],
+    ["entities.suspendEvents"],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": "[seen]"
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["entities.suspendEvents"],
+    ["entities.resumeEvents"],
+    [
+      "set",
+      "e0.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 70
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 20
+      }
+    ],
+    [
+      "set",
+      "e1.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["dataSources.add"]
+  ],
+  "geojson-elevation-3d": [
+    [
+      "GeoJsonDataSource.load",
+      {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "poly",
+              "h": 5,
+              "__geolibre_cesium_feature_index": 0
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [0, 0, 10],
+                  [1, 0, 10],
+                  [1, 1, 10],
+                  [0, 1, 10],
+                  [0, 0, 10]
+                ]
+              ]
+            },
+            "id": "[\"l1\",0]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "line",
+              "__geolibre_cesium_feature_index": 1
+            },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [0, 0, 20],
+                [1, 1, 30]
+              ]
+            },
+            "id": "[\"l1\",1]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "pt",
+              "__geolibre_cesium_feature_index": 2
+            },
+            "geometry": {
+              "type": "Point",
+              "coordinates": [3, 3, 24]
+            },
+            "id": "[\"l1\",2]"
+          }
+        ]
+      },
+      {
+        "stroke": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "strokeWidth": 2,
+        "fill": {
+          "css": "#3b82f6",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        },
+        "markerColor": {
+          "css": "#3b82f6",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "clampToGround": false
+      }
+    ],
+    ["entities.suspendEvents"],
+    ["set", "e2.billboard", "[undefined]"],
+    [
+      "new PointGraphics",
+      {
+        "pixelSize": 12,
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineColor": {
+          "css": "#1e40af",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineWidth": 2,
+        "heightReference": 0,
+        "disableDepthTestDistance": "Infinity"
+      }
+    ],
+    [
+      "set",
+      "e2.point",
+      {
+        "__class": "PointGraphics",
+        "args": ["[seen]"],
+        "pixelSize": {
+          "__instance": "ConstantProperty",
+          "value": 12
+        },
+        "color": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#3b82f6",
+            "alpha": 0.48,
+            "withAlpha": "[function]"
+          }
+        },
+        "outlineColor": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#1e40af",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
+        },
+        "outlineWidth": {
+          "__instance": "ConstantProperty",
+          "value": 2
+        },
+        "heightReference": {
+          "__instance": "ConstantProperty",
+          "value": 2
+        }
+      }
+    ],
+    ["scene.requestRender"],
+    ["entities.suspendEvents"],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polyline.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polyline.width",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["entities.suspendEvents"],
+    ["entities.resumeEvents"],
+    [
+      "set",
+      "e1.polyline.clampToGround",
+      {
+        "__instance": "ConstantProperty",
+        "value": false
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["dataSources.add"]
+  ],
+  "geojson-extrusion-and-z": [
+    [
+      "GeoJsonDataSource.load",
+      {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "poly",
+              "h": 5,
+              "__geolibre_cesium_feature_index": 0
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [0, 0, 0],
+                  [1, 0, 0],
+                  [1, 1, 0],
+                  [0, 1, 0],
+                  [0, 0, 0]
+                ]
+              ]
+            },
+            "id": "[\"l1\",0]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "line",
+              "__geolibre_cesium_feature_index": 1
+            },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [0, 0, 5],
+                [1, 1, 10]
+              ]
+            },
+            "id": "[\"l1\",1]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "pt",
+              "__geolibre_cesium_feature_index": 2
+            },
+            "geometry": {
+              "type": "Point",
+              "coordinates": [3, 3, 7]
+            },
+            "id": "[\"l1\",2]"
+          }
+        ]
+      },
+      {
+        "stroke": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "strokeWidth": 2,
+        "fill": {
+          "css": "#3b82f6",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        },
+        "markerColor": {
+          "css": "#3b82f6",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "clampToGround": false
+      }
+    ],
+    ["entities.suspendEvents"],
+    ["set", "e2.billboard", "[undefined]"],
+    [
+      "new PointGraphics",
+      {
+        "pixelSize": 12,
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineColor": {
+          "css": "#1e40af",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineWidth": 2,
+        "heightReference": 0,
+        "disableDepthTestDistance": "Infinity"
+      }
+    ],
+    [
+      "set",
+      "e2.point",
+      {
+        "__class": "PointGraphics",
+        "args": ["[seen]"],
+        "pixelSize": {
+          "__instance": "ConstantProperty",
+          "value": 12
+        },
+        "color": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#3b82f6",
+            "alpha": 0.48,
+            "withAlpha": "[function]"
+          }
+        },
+        "outlineColor": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#1e40af",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
+        },
+        "outlineWidth": {
+          "__instance": "ConstantProperty",
+          "value": 2
+        },
+        "heightReference": {
+          "__instance": "ConstantProperty",
+          "value": 2
+        }
+      }
+    ],
+    ["scene.requestRender"],
+    ["entities.suspendEvents"],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineColor",
+      {
+        "__instance": "ConstantProperty",
+        "value": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.outlineWidth",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    [
+      "set",
+      "e1.polyline.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polyline.width",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["entities.suspendEvents"],
+    ["entities.resumeEvents"],
+    [
+      "set",
+      "e0.polygon.extrudedHeight",
+      {
+        "__instance": "ConstantProperty",
+        "value": 5
+      }
+    ],
+    [
+      "set",
+      "e0.polygon.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#3b82f6",
+          "alpha": 0.6400000000000001,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.polyline.clampToGround",
+      {
+        "__instance": "ConstantProperty",
+        "value": false
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["dataSources.add"]
+  ],
+  "geojson-lines-points": [
+    [
+      "GeoJsonDataSource.load",
+      {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "road",
+              "kind": "a",
+              "__geolibre_cesium_feature_index": 0
+            },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [0, 0],
+                [2, 2]
+              ]
+            },
+            "id": "[\"l1\",0]"
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "P1",
+              "kind": "b",
+              "__geolibre_cesium_feature_index": 1
+            },
+            "geometry": {
+              "type": "Point",
+              "coordinates": [1, 1]
+            },
+            "id": "[\"l1\",1]"
+          }
+        ]
+      },
+      {
+        "stroke": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "strokeWidth": 2,
+        "fill": {
+          "css": "#123456",
+          "alpha": 0.48,
+          "withAlpha": "[function]"
+        },
+        "markerColor": {
+          "css": "#3b82f6",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        },
+        "clampToGround": true
+      }
+    ],
+    ["entities.suspendEvents"],
+    [
+      "new ConstantPositionProperty",
+      {
+        "__instance": "Cartesian3",
+        "x": 1,
+        "y": 1,
+        "z": 0
+      }
+    ],
+    [
+      "set",
+      "e0.position",
+      {
+        "__class": "ConstantPositionProperty",
+        "args": ["[seen]"]
+      }
+    ],
+    ["new Cartesian2", 0, 0],
+    ["new CallbackProperty", "[function]", false],
+    [
+      "new LabelGraphics",
+      {
+        "text": "ROAD",
+        "font": "13px sans-serif",
+        "fillColor": {
+          "css": "#111827",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineColor": {
+          "css": "#ffffff",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineWidth": 1.5,
+        "style": 2,
+        "pixelOffset": {
+          "__class": "Cartesian2",
+          "args": [0, 0]
+        },
+        "heightReference": 1,
+        "disableDepthTestDistance": "Infinity",
+        "distanceDisplayCondition": {
+          "__class": "CallbackProperty",
+          "args": ["[function]", false]
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.label",
+      {
+        "__class": "LabelGraphics",
+        "args": ["[seen]"],
+        "fillColor": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#111827",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
+        },
+        "outlineColor": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#ffffff",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
+        }
+      }
+    ],
+    ["new Cartesian2", 0, 0],
+    ["new CallbackProperty", "[function]", false],
+    [
+      "new LabelGraphics",
+      {
+        "text": "P1",
+        "font": "13px sans-serif",
+        "fillColor": {
+          "css": "#111827",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineColor": {
+          "css": "#ffffff",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineWidth": 1.5,
+        "style": 2,
+        "pixelOffset": {
+          "__class": "Cartesian2",
+          "args": [0, 0]
+        },
+        "heightReference": 1,
+        "disableDepthTestDistance": "Infinity",
+        "distanceDisplayCondition": {
+          "__class": "CallbackProperty",
+          "args": ["[function]", false]
+        }
+      }
+    ],
+    [
+      "set",
+      "e1.label",
+      {
+        "__class": "LabelGraphics",
+        "args": ["[seen]"],
+        "fillColor": {
+          "__instance": "ConstantProperty",
+          "value": "[seen]"
+        },
+        "outlineColor": {
+          "__instance": "ConstantProperty",
+          "value": "[seen]"
+        }
+      }
+    ],
+    ["set", "e1.billboard", "[undefined]"],
+    [
+      "new PointGraphics",
+      {
+        "pixelSize": 12,
+        "color": {
+          "css": "#123456",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineColor": {
+          "css": "#1e40af",
+          "alpha": 1,
+          "withAlpha": "[function]"
+        },
+        "outlineWidth": 2,
+        "heightReference": 1,
+        "disableDepthTestDistance": "Infinity"
+      }
+    ],
+    [
+      "set",
+      "e1.point",
+      {
+        "__class": "PointGraphics",
+        "args": ["[seen]"],
+        "pixelSize": {
+          "__instance": "ConstantProperty",
+          "value": 12
+        },
+        "color": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#123456",
+            "alpha": 0.48,
+            "withAlpha": "[function]"
+          }
+        },
+        "outlineColor": {
+          "__instance": "ConstantProperty",
+          "value": {
+            "css": "#1e40af",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
+        },
+        "outlineWidth": {
+          "__instance": "ConstantProperty",
+          "value": 2
+        }
+      }
+    ],
+    ["scene.requestRender"],
+    ["entities.suspendEvents"],
+    [
+      "set",
+      "e0.polyline.material",
+      {
+        "__instance": "ColorMaterialProperty",
+        "color": {
+          "css": "#1e40af",
+          "alpha": 0.8,
+          "withAlpha": "[function]"
+        }
+      }
+    ],
+    [
+      "set",
+      "e0.polyline.width",
+      {
+        "__instance": "ConstantProperty",
+        "value": 2
+      }
+    ],
+    ["entities.resumeEvents"],
+    ["entities.suspendEvents"],
+    ["entities.resumeEvents"],
+    ["entities.resumeEvents"],
+    ["dataSources.add"]
+  ],
+  "imagery-xyz": [
+    ["Rectangle.fromDegrees", -10, -10, 10, 10],
+    [
+      "new UrlTemplateImageryProvider",
+      {
+        "url": "https://tiles.example.com/{z}/{x}/{y}.png",
+        "tileWidth": 512,
+        "tileHeight": 512,
+        "rectangle": {
+          "west": -10,
+          "south": -10,
+          "east": 10,
+          "north": 10
+        },
+        "maximumLevel": 18,
+        "minimumLevel": 2,
+        "credit": "Example",
+        "customTags": {
+          "bbox-epsg-3857": "[function]",
+          "quadkey": "[function]",
+          "-y": "[function]",
+          "ratio": "[function]"
+        }
+      }
+    ],
+    [
+      "imageryLayers.addImageryProvider",
+      {
+        "__class": "UrlTemplateImageryProvider",
+        "args": ["[seen]"]
+      }
+    ],
+    [
+      "imageryLayers.raiseToTop",
+      {
+        "provider": "[seen]",
+        "show": true,
+        "alpha": 0.8,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0
+      }
+    ]
+  ],
+  "imagery-tms-headers": [
+    [
+      "new Resource",
+      {
+        "url": "https://tiles.example.com/{z}/{x}/{-y}.png",
+        "headers": {
+          "Authorization": "Bearer x"
+        }
+      }
+    ],
+    [
+      "new UrlTemplateImageryProvider",
+      {
+        "url": {
+          "__class": "Resource",
+          "args": ["[seen]"]
+        },
+        "tileWidth": "[undefined]",
+        "tileHeight": "[undefined]",
+        "rectangle": "[undefined]",
+        "maximumLevel": "[undefined]",
+        "minimumLevel": "[undefined]",
+        "credit": "[undefined]",
+        "customTags": {
+          "bbox-epsg-3857": "[function]",
+          "quadkey": "[function]",
+          "-y": "[function]",
+          "ratio": "[function]"
+        }
+      }
+    ],
+    [
+      "imageryLayers.addImageryProvider",
+      {
+        "__class": "UrlTemplateImageryProvider",
+        "args": ["[seen]"]
+      }
+    ],
+    [
+      "imageryLayers.raiseToTop",
+      {
+        "provider": "[seen]",
+        "show": true,
+        "alpha": 0.8,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0
+      }
+    ]
+  ],
+  "imagery-insecure-headers": [
+    [
+      "console.warn",
+      "[GeoLibre] skipping \"layer\" on the globe: request headers cannot be sent over http://tiles.example.com/{z}/{x}/{y}.png"
+    ]
+  ],
+  "imagery-unregistered-protocol": [],
+  "imagery-wms": [
+    [
+      "new WebMapServiceImageryProvider",
+      {
+        "url": "https://wms.example.com/wms",
+        "layers": "a,b",
+        "parameters": {
+          "transparent": false,
+          "format": "image/jpeg",
+          "styles": "",
+          "version": "1.3.0"
+        },
+        "credit": "[undefined]"
+      }
+    ],
+    [
+      "imageryLayers.addImageryProvider",
+      {
+        "__class": "WebMapServiceImageryProvider",
+        "args": ["[seen]"]
+      }
+    ],
+    [
+      "imageryLayers.raiseToTop",
+      {
+        "provider": "[seen]",
+        "show": true,
+        "alpha": 0.8,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0
+      }
+    ]
+  ],
+  "imagery-wmts": [
+    ["new GeographicTilingScheme"],
+    [
+      "new WebMapTileServiceImageryProvider",
+      {
+        "url": "https://wmts.example.com/{TileMatrix}/{TileRow}/{TileCol}",
+        "layer": "roads",
+        "style": "",
+        "format": "image/jpeg",
+        "tileMatrixSetID": "EPSG:4326",
+        "maximumLevel": 12,
+        "minimumLevel": "[undefined]",
+        "tilingScheme": {
+          "__class": "GeographicTilingScheme",
+          "args": []
+        },
+        "tileMatrixLabels": ["0", "1"],
+        "credit": "[undefined]"
+      }
+    ],
+    [
+      "imageryLayers.addImageryProvider",
+      {
+        "__class": "WebMapTileServiceImageryProvider",
+        "args": ["[seen]"]
+      }
+    ],
+    [
+      "imageryLayers.raiseToTop",
+      {
+        "provider": "[seen]",
+        "show": true,
+        "alpha": 0.8,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0
+      }
+    ]
+  ],
+  "imagery-wmts-bad-scheme": [
+    [
+      "console.warn",
+      "[GeoLibre] skipping \"layer\" on the globe: unsupported WMTS tiling scheme \"PolarTilingScheme\""
+    ]
+  ],
+  "imagery-arcgis": [
+    [
+      "ArcGisMapServerImageryProvider.fromUrl",
+      "https://services.example.com/arcgis/rest/services/X/MapServer",
+      {
+        "layers": "0,2",
+        "token": "abc"
+      }
+    ],
+    [
+      "imageryLayers.addImageryProvider",
+      {
+        "__from": "ArcGisMapServerImageryProvider.fromUrl",
+        "args": ["https://services.example.com/arcgis/rest/services/X/MapServer", "[seen]"]
+      }
+    ],
+    [
+      "imageryLayers.raiseToTop",
+      {
+        "provider": "[seen]",
+        "show": true,
+        "alpha": 0.8,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0
+      }
+    ]
+  ],
+  "imagery-image": [
+    ["Rectangle.fromDegrees", 0, 0, 10, 10],
+    [
+      "SingleTileImageryProvider.fromUrl",
+      "https://example.com/overlay.png",
+      {
+        "rectangle": {
+          "west": 0,
+          "south": 0,
+          "east": 10,
+          "north": 10
+        }
+      }
+    ],
+    [
+      "imageryLayers.addImageryProvider",
+      {
+        "__from": "SingleTileImageryProvider.fromUrl",
+        "args": ["https://example.com/overlay.png", "[seen]"]
+      }
+    ],
+    [
+      "imageryLayers.raiseToTop",
+      {
+        "provider": "[seen]",
+        "show": true,
+        "alpha": 0.8,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0
+      }
+    ]
+  ],
+  "imagery-pmtiles": [
+    ["Rectangle.fromDegrees", -20, -20, 20, 20],
+    ["new WebMercatorTilingScheme"],
+    [
+      "imageryLayers.addImageryProvider",
+      {
+        "__instance": "ProtocolImageryProvider",
+        "Cesium": {
+          "Cartesian2": "[function]",
+          "Cartesian3": "[function]",
+          "Color": {
+            "fromCssColorString": "[function]",
+            "WHITE": {
+              "css": "WHITE",
+              "alpha": 1,
+              "withAlpha": "[function]"
+            },
+            "BLACK": {
+              "css": "BLACK",
+              "alpha": 1,
+              "withAlpha": "[function]"
+            },
+            "TRANSPARENT": {
+              "css": "TRANSPARENT",
+              "alpha": 0,
+              "withAlpha": "[function]"
+            }
+          },
+          "ConstantProperty": "[function]",
+          "ColorMaterialProperty": "[function]",
+          "ImageMaterialProperty": "[function]",
+          "CallbackProperty": "[function]",
+          "ConstantPositionProperty": "[function]",
+          "Math": {
+            "toDegrees": "[function]",
+            "toRadians": "[function]"
+          },
+          "DistanceDisplayCondition": "[function]",
+          "PointGraphics": "[function]",
+          "LabelGraphics": "[function]",
+          "NearFarScalar": "[function]",
+          "HeightReference": {
+            "NONE": 0,
+            "CLAMP_TO_GROUND": 1,
+            "RELATIVE_TO_GROUND": 2
+          },
+          "HorizontalOrigin": {
+            "CENTER": 0,
+            "LEFT": 1,
+            "RIGHT": -1
+          },
+          "VerticalOrigin": {
+            "CENTER": 0,
+            "BOTTOM": 1,
+            "TOP": -1,
+            "BASELINE": 2
+          },
+          "LabelStyle": {
+            "FILL": 0,
+            "OUTLINE": 1,
+            "FILL_AND_OUTLINE": 2
+          },
+          "BoundingSphere": {
+            "fromPoints": "[function]"
+          },
+          "JulianDate": {
+            "fromDate": "[function]"
+          },
+          "Rectangle": {
+            "fromDegrees": "[function]"
+          },
+          "Resource": "[function]",
+          "Credit": "[function]",
+          "Event": "[function]",
+          "GeographicTilingScheme": "[function]",
+          "WebMercatorTilingScheme": "[function]",
+          "UrlTemplateImageryProvider": "[function]",
+          "WebMapServiceImageryProvider": "[function]",
+          "WebMapTileServiceImageryProvider": "[function]",
+          "ArcGisMapServerImageryProvider": {
+            "fromUrl": "[function]"
+          },
+          "SingleTileImageryProvider": {
+            "fromUrl": "[function]"
+          },
+          "IonImageryProvider": {
+            "fromAssetId": "[function]"
+          },
+          "GeoJsonDataSource": {
+            "load": "[function]"
+          }
+        },
+        "tilingScheme": {
+          "__class": "WebMercatorTilingScheme",
+          "args": []
+        },
+        "rectangle": {
+          "west": -20,
+          "south": -20,
+          "east": 20,
+          "north": 20
+        },
+        "tileWidth": 256,
+        "tileHeight": 256,
+        "minimumLevel": 1,
+        "maximumLevel": 9,
+        "errorEvent": {
+          "__instance": "Event"
+        },
+        "credit": "[undefined]",
+        "hasAlphaChannel": true,
+        "tileDiscardPolicy": "[undefined]",
+        "proxy": "[undefined]",
+        "ready": true,
+        "template": "pmtiles://https://example.com/a.pmtiles/{z}/{x}/{y}",
+        "scheme": "xyz",
+        "loadTile": "[function]",
+        "decodeTile": "[function]",
+        "loadImage": null,
+        "emptyTile": null,
+        "maxConcurrent": 8,
+        "abort": "[abort]",
+        "blank": null,
+        "pending": 0
+      }
+    ],
+    [
+      "imageryLayers.raiseToTop",
+      {
+        "provider": "[seen]",
+        "show": true,
+        "alpha": 0.8,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0
+      }
+    ]
+  ],
+  "imagery-ion": [
+    [
+      "IonImageryProvider.fromAssetId",
+      3954,
+      {
+        "accessToken": "ion-token"
+      }
+    ],
+    [
+      "imageryLayers.addImageryProvider",
+      {
+        "__from": "IonImageryProvider.fromAssetId",
+        "args": [3954, "[seen]"]
+      }
+    ],
+    [
+      "imageryLayers.raiseToTop",
+      {
+        "provider": "[seen]",
+        "show": true,
+        "alpha": 0.8,
+        "brightness": 1,
+        "contrast": 1,
+        "saturation": 1,
+        "hue": 0
+      }
+    ]
+  ]
+}
