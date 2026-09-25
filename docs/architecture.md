@@ -44,6 +44,8 @@ flowchart LR
 
 Every layer action replaces the `layers` array, so `useAppStore((s) => s.layers)` re-renders a component on any edit of any layer. Only subscribers that genuinely need every field of every layer (the map canvases' sync, the Layers panel) should do that. Everything else uses the narrow hooks in `packages/core/src/layer-selectors.ts`: `useLayer(id)` for one record, `useLayerIds()` for the id list, `useLayerSummaries()` for `{ id, name, type, visible, groupId }` rows, and `useLayersWhen(open)` for always-mounted dialogs and panels that need the full array only while open.
 
+`useAppStore` is one Zustand store, but its code is split into slices under `packages/core/src/store/` (project, map view, layers, layer groups, project content, processing, libraries, session, collaboration, capabilities, and the `ui` dialog flags), composed in `packages/core/src/store.ts`. Add a new field or action to the slice that owns its data; an action that must also update another slice's fields (as `removeLayer` scrubs references everywhere) reads and writes the whole state through `set`/`get`. Undo history (`store/undo-history.ts`) tracks only the fields `partializeHistory` lists (layers, layer groups, basemap, story map, comments). Everything else, including the whole `ui` sub-state, the selection and the camera, never records an undo step and is never reverted by undo or redo.
+
 ## Rendering-engine model
 
 The Zustand store is renderer-neutral: it contains plain `GeoLibreLayer`
