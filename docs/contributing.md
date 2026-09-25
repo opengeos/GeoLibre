@@ -112,14 +112,16 @@ npm run test:frontend
 ```
 
 For a type check without the Vite build, run `npm run typecheck:fast`
-(`tsc -b` over the app, no output written besides its incremental cache).
+(`tsc -b` over the app, no output written besides its incremental cache; it
+first builds the small `@geolibre/embed` package, whose `dist/` types the app
+imports).
 `npm run typecheck` is an alias for the full production build.
 
 Before opening a pull request, run the pre-commit hooks on the files you
 changed, then the local quality gate:
 
 ```bash
-pre-commit run --files <paths you changed>
+pre-commit run --files path/to/changed.ts path/to/other.tsx   # list each file you changed
 npm run ci:web   # frontend-only changes: no Rust or Python needed
 npm run ci       # the full gate that CI runs
 ```

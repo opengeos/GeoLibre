@@ -21,7 +21,7 @@ npm run dev          # web build at http://localhost:5173
 Before opening a pull request:
 
 ```bash
-pre-commit run --files <paths you changed>
+pre-commit run --files path/to/changed.ts path/to/other.tsx   # list each file you changed
 npm run ci:web   # frontend-only changes: lint, i18n check, type check, unit tests
 npm run ci       # the full gate CI runs (also needs Rust and Python)
 ```
