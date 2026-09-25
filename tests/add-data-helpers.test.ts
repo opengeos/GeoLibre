@@ -6,11 +6,13 @@ import {
   type GeoLibreLayer,
   LAYER_PALETTE,
   useAppStore,
+  VECTOR_COLOR_RAMPS,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   EOX_S2CLOUDLESS_ATTRIBUTION,
   GEBCO_ATTRIBUTION,
+  ZARR_GLOBE_SAMPLES,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/constants";
 import {
   appendQuery,
@@ -710,5 +712,17 @@ describe("readLimitedBody", () => {
 
   it("stops a chunked body that streams past the ceiling", async () => {
     await assert.rejects(readLimitedBody(streamed(["abcd", "efgh", "ijkl"]), 8), /download limit/);
+  });
+});
+
+describe("ZARR_GLOBE_SAMPLES", () => {
+  it("names ramps the form offers, increasing limits, and HTTPS stores", () => {
+    const ramps = new Set(VECTOR_COLOR_RAMPS.map((ramp) => ramp.value));
+    for (const sample of ZARR_GLOBE_SAMPLES) {
+      assert.ok(ramps.has(sample.colormap), `${sample.label}: ${sample.colormap}`);
+      assert.ok(sample.clim[1] > sample.clim[0], sample.label);
+      assert.equal(new URL(sample.url).protocol, "https:", sample.label);
+      assert.ok(sample.variable, sample.label);
+    }
   });
 });

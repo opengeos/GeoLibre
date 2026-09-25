@@ -1,10 +1,11 @@
 import { Input, Label, Select } from "@geolibre/ui";
-import { VECTOR_COLOR_RAMPS } from "@geolibre/core";
+import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
 import { addZarrRasterLayer } from "@geolibre/plugins";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { ZARR_GLOBE_SAMPLES, type ZarrSample } from "../constants";
+import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 export function ZarrSource() {
   const { t } = useTranslation();
@@ -15,6 +16,22 @@ export function ZarrSource() {
   const [min, setMin] = useState("0"),
     [max, setMax] = useState("1");
   const [colormap, setColormap] = useState("viridis");
+  // The form has no selector field, so a sample's selector rides along here and
+  // is sent only while the URL and variable still name that sample.
+  const [sample, setSample] = useState<ZarrSample | null>(null);
+  // The samples are the stores the globe's zarr-cesium provider was checked
+  // against; the ArcGIS view reads Zarr through its own, stricter grid reader.
+  const nativeGlobe = useAppStore((s) => s.primaryRenderer === "cesium");
+  const selectSample = (next: ZarrSample) => {
+    setSample(next);
+    setUrl(next.url);
+    setVariable(next.variable);
+    setCrs("");
+    setMin(String(next.clim[0]));
+    setMax(String(next.clim[1]));
+    setColormap(next.colormap);
+    source.setLayerName(next.label);
+  };
   const submit = source.runSubmit(async () => {
     let address: URL;
     try {
@@ -28,7 +45,12 @@ export function ZarrSource() {
     const clim: [number, number] = [Number(min), Number(max)];
     if (!clim.every(Number.isFinite) || clim[1] <= clim[0])
       throw new Error(t("addData.zarr.errorColorLimits"));
+    const selector =
+      sample && sample.url === url.trim() && sample.variable === variable.trim()
+        ? sample.selector
+        : undefined;
     await addZarrRasterLayer(createAppAPI(source.shell.mapControllerRef), {
+      ...(selector ? { selector } : {}),
       url: address.href,
       variable: variable.trim(),
       name: source.layerName,
@@ -93,6 +115,12 @@ export function ZarrSource() {
           ))}
         </Select>
       </div>
+      {nativeGlobe && (
+        <SampleDataSelect
+          samples={ZARR_GLOBE_SAMPLES.map((entry) => ({ label: entry.label, value: entry }))}
+          onSelect={selectSample}
+        />
+      )}
     </AddDataSourceForm>
   );
 }

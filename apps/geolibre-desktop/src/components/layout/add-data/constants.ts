@@ -282,6 +282,69 @@ export const CSW_SAMPLES: readonly {
   },
 ];
 
+/** A public Zarr store the Add Zarr Layer form can fill itself in with. */
+export interface ZarrSample {
+  label: string;
+  url: string;
+  variable: string;
+  clim: [number, number];
+  /** A GeoLibre ramp name (see `VECTOR_COLOR_RAMPS`). */
+  colormap: string;
+  /** Array indices for the non-spatial dimensions, as the Time Slider writes them. */
+  selector?: Record<string, number>;
+}
+
+// Samples for the Add Zarr Layer form on the 3D globe (opengeos/GeoLibre#2261).
+// Each is a public, CORS-enabled store in EPSG:4326 or EPSG:3857 with
+// longitudes in -180..180, which is what the globe's zarr-cesium provider can
+// place (a 0..360 grid such as NOC's ERA5 hurricane store draws nothing). They
+// cover the layouts it reads: a single-scale v2 cube with an int64 CF time axis
+// (NOAA, which also binds to the Time Slider), a v2 ndpyramid with band/month
+// dimensions (CarbonPlan), and v2 and v3 multiscale ocean model output with
+// depth (NOC's NEMO runs, from zarr-cesium's own demo). Labels name the dataset
+// and its publisher, so like CAD_SAMPLES above they stay untranslated.
+export const ZARR_GLOBE_SAMPLES: readonly ZarrSample[] = [
+  {
+    label: "Sea surface temperature, monthly 1981-2023 (NOAA OISST)",
+    url: "https://data.source.coop/giswqs/opengeos/noaa-oisst-v2-monthly.zarr",
+    variable: "sst",
+    clim: [-2, 32],
+    colormap: "turbo",
+  },
+  {
+    label: "Air temperature, January climatology (CarbonPlan)",
+    url: "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month",
+    variable: "climate",
+    clim: [-20, 30],
+    colormap: "coolwarm",
+    // band 0 is `tavg` (band 1 is `prec`); month 0 is January.
+    selector: { band: 0, month: 0 },
+  },
+  {
+    label: "Precipitation, July climatology (CarbonPlan)",
+    url: "https://carbonplan-maps.s3.us-west-2.amazonaws.com/v2/demo/4d/tavg-prec-month",
+    variable: "climate",
+    clim: [0, 300],
+    colormap: "blues",
+    selector: { band: 1, month: 6 },
+  },
+  {
+    label: "Ocean temperature at the surface, yearly (NOC NEMO eORCA025)",
+    url: "https://atlantis-vis-o.s3-ext.jc.rl.ac.uk/noc-npd-era5-demo/npd-eorca025-era5v1/gn/T1y_4d/thetao_con",
+    variable: "thetao_con",
+    clim: [0, 30],
+    colormap: "plasma",
+    selector: { deptht: 0, time: 0 },
+  },
+  {
+    label: "Sea surface salinity, daily (NOC NEMO eORCA1)",
+    url: "https://atlantis-vis-o.s3-ext.jc.rl.ac.uk/nemotest101/pyramid2/T1d/sos_abs.zarr",
+    variable: "sos_abs",
+    clim: [30, 37],
+    colormap: "viridis",
+  },
+];
+
 export const DELIMITED_TEXT_DELIMITERS: Record<
   Exclude<DelimitedTextDelimiter, "custom">,
   string
