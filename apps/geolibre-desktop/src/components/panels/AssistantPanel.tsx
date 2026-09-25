@@ -234,6 +234,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
       deploymentProxyConfigured,
     });
   }, [selectedProfileId, aiProfiles, defaultAiProfileId, deploymentProxyConfigured]);
+  // The model picker's discovery credentials. Resolved once per render and not
+  // memoized: the runtime env it reads can change without the profile changing.
+  const activeProfileConfig = activeProfile ? configForProfile(activeProfile) : null;
 
   // Queue of model-generated code snippets (run_python / run_maplibre_js)
   // awaiting the user's approval, each with the promise resolver its tool
@@ -777,8 +780,8 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   <ProviderModelPicker
                     key={activeProfile.id}
                     provider={activeProfile.provider}
-                    apiKey={configForProfile(activeProfile)?.apiKey}
-                    bedrockAuth={bedrockAuthFromConfig(configForProfile(activeProfile))}
+                    apiKey={activeProfileConfig?.apiKey}
+                    bedrockAuth={bedrockAuthFromConfig(activeProfileConfig)}
                     value={activeProfile.modelId || defaultModelFor(activeProfile.provider)}
                     onChange={onModelChange}
                     disabled={running}
