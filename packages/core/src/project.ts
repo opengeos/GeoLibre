@@ -316,6 +316,9 @@ export function serializeProjectWithLayerCache(
 ): string {
   if (layerSources.length !== project.layers.length) return serializeProject(project);
   const layers = project.layers.map(withoutLocalRasterBytes);
+  // Presets are keyed by layer object, so a record listed twice would get one
+  // index's text in both places. The store never does that; bypass if it does.
+  if (new Set(layers).size !== layers.length) return serializeProject(project);
   const presets = new Map<object, string>();
   layers.forEach((layer, index) => {
     const source = layerSources[index];
