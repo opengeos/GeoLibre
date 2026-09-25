@@ -61,8 +61,12 @@ export async function discoverProviderModels(
 ): Promise<DiscoveredModel[]> {
   const key = apiKey.trim();
   const cacheKey = `${provider}\u0000${key}`;
+  // Drop expired entries on every call, so a key the user tried and replaced
+  // does not stay resident for the rest of the session.
+  const now = Date.now();
+  for (const [entryKey, entry] of cache) if (entry.expires <= now) cache.delete(entryKey);
   const cached = cache.get(cacheKey);
-  if (!options.force && cached && cached.expires > Date.now()) return cached.models;
+  if (!options.force && cached) return cached.models;
 
   const timeout = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
   // AbortSignal.any is newer than some supported WebViews; without it the
