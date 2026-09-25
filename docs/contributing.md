@@ -155,6 +155,54 @@ though the full `npm run ci` gate does. The backend step needs the sidecar's
 `test` extra (`pip install -e "backend/geolibre_server[test]"`); without it the
 vector, raster, SQL and ML tests skip themselves.
 
+### Component tests
+
+React panels are tested under the same `node --test` runner, against a
+[happy-dom](https://github.com/capricorn86/happy-dom) DOM with
+[Testing Library](https://testing-library.com/docs/react-testing-library/intro/),
+and with no map behind them. The `tests/component-*.test.ts` files are the
+examples to copy. A component test imports `tests/helpers/dom.ts` first and
+then loads the component with a dynamic `import()`:
+
+```ts
+import { fireEvent, render, screen, useAppStore } from "./helpers/dom";
+import { createElement } from "react";
+
+const { LayerPanel } = await import("../apps/geolibre-desktop/src/components/panels/LayerPanel");
+```
+
+The component has to be imported dynamically. The helper registers loader hooks
+that let Node load a component the way Vite does: CSS and `?url`/`?raw` imports
+become stubs, `virtual:` modules and `import.meta.env` get stand-ins, and `.tsx`
+compiles with the automatic JSX runtime. Hooks only apply to modules loaded after
+they are registered, and a static import is loaded before any module code runs.
+The helper also installs the DOM and initializes the app's own i18next with
+`en.json`, so queries use the real English strings. Its `render` wraps the
+element in the app's i18n, tooltip and direction providers.
+
+Set up state through the store (`useAppStore.setState(...)`) and assert on what
+the user sees or what lands in the store. After each test the helper unmounts
+everything and resets the app and desktop-settings stores, `localStorage`,
+`fetch` and any `stubLayout()`. Some other rules:
+
+- Pass `{ current: null }` for `mapControllerRef`. A panel that needs a live map
+  for a behaviour is a sign that logic belongs in a `lib/` module, where a plain
+  unit test can cover it.
+- Wrap store writes made after `render` in `act(...)` so React re-renders before
+  you assert.
+- `fetch` rejects by default. Serve a response with `mockFetch(...)`.
+- Call `stubLayout()` for virtualized lists such as the attribute table.
+  happy-dom does no layout, so without it every element is 0px tall and the list
+  renders no rows.
+- Assert on plain values (`textContent`, `.checked`, `.value`, store state), not
+  on DOM nodes. When an `assert.equal` on a node fails, Node formats the whole
+  happy-dom tree, which looks like a hang. Count query results with
+  `queryAll…().length` instead.
+
+These tests count towards the frontend [coverage floor](maintenance.md#coverage-floors)
+like any other test, so the first test for a large panel adds that panel to the
+report.
+
 ### End-to-end smoke tests
 
 `npm run test:e2e` runs the Playwright suite in `e2e/` against the built web app
