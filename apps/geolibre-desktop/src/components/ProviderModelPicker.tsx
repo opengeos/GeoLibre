@@ -43,7 +43,13 @@ export function ProviderModelPicker({
   const listId = `${useId()}-${provider}-models`;
   const key = apiKey?.trim() ?? "";
   const canDiscover = provider === "openrouter" || key.length > 0;
-  const [discovered, setDiscovered] = useState<DiscoveredModel[]>([]);
+  // Tagged with the inputs that produced it, so a catalog loaded for one
+  // provider or key is never shown under another while the next one loads.
+  const [discovered, setDiscovered] = useState<{
+    provider: string;
+    key: string;
+    models: DiscoveredModel[];
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -65,7 +71,7 @@ export function ProviderModelPicker({
       setError(null);
       if (!canDiscover) {
         inFlight.current = null;
-        setDiscovered([]);
+        setDiscovered(null);
         setLoading(false);
         return;
       }
@@ -78,7 +84,7 @@ export function ProviderModelPicker({
             ? await discoverOpenRouterModels(controller.signal)
             : await discoverProviderModels(provider, key, { signal: controller.signal, force });
         if (generation !== requestGeneration.current) return;
-        setDiscovered(models);
+        setDiscovered({ provider, key, models });
       } catch (cause) {
         if (generation !== requestGeneration.current || controller.signal.aborted) return;
         const failure = classifyFetchFailure(cause);
@@ -88,7 +94,7 @@ export function ProviderModelPicker({
             : cause instanceof Error
               ? cause.message
               : String(cause);
-        setDiscovered([]);
+        setDiscovered(null);
         setError(t("settings.ai.modelsFailedToLoad", { message }));
         console.error(`[GeoLibre] Could not load ${PROVIDER_LABELS[provider]} models`, cause);
       } finally {
@@ -110,13 +116,13 @@ export function ProviderModelPicker({
   useEffect(() => setManualModelId(value), [value]);
 
   const catalogModels = useMemo(() => {
+    const current =
+      discovered?.provider === provider && discovered.key === key ? discovered.models : [];
     const models =
-      discovered.length > 0
-        ? discovered
-        : PROVIDER_MODELS[provider].map((id) => ({ id, name: id }));
+      current.length > 0 ? current : PROVIDER_MODELS[provider].map((id) => ({ id, name: id }));
     if (!value || models.some((model) => model.id === value)) return models;
     return [...models, { id: value, name: value }];
-  }, [discovered, provider, value]);
+  }, [discovered, key, provider, value]);
   const matchingModels = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return catalogModels;

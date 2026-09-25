@@ -330,6 +330,7 @@ export function AiSectionContent({
               {newProfileProvider === "openrouter" ||
               supportsKeyedModelDiscovery(newProfileProvider) ? (
                 <ProviderModelPicker
+                  key={newProfileProvider}
                   provider={newProfileProvider}
                   apiKey={getApiKey(newProfileProvider, {
                     ...scopedOsEnv,
@@ -686,7 +687,7 @@ function ProfileEditor({
               key={profile.provider}
               provider={profile.provider}
               apiKey={
-                (providerFields[0] ? getProviderField(providerFields[0]) : "") ||
+                (providerFields[0] ? getProviderField(providerFields[0]).trim() : "") ||
                 getApiKey(profile.provider, scopedOsEnv)
               }
               value={profile.modelId || defaultModelFor(profile.provider, modelEnv)}

@@ -30,7 +30,7 @@ import { useTranslation } from "react-i18next";
 import { AssistantSession } from "../../lib/assistant/agent";
 import { renderAssistantMarkdown } from "../../lib/assistant/markdown";
 import { isOllamaNetworkFailure, withOllamaOriginHint } from "../../lib/assistant/ollama";
-import { selectActiveAssistantProfile } from "../../lib/assistant/profiles";
+import { configForProfile, selectActiveAssistantProfile } from "../../lib/assistant/profiles";
 import { isSendKey } from "../../lib/assistant/send-key";
 import { openSettingsSection } from "../layout/SettingsDialog";
 import { supportsKeyedModelDiscovery } from "../../lib/assistant/model-discovery";
@@ -39,12 +39,10 @@ import {
   ASSISTANT_PROVIDER_IDS,
   availableProviders,
   defaultModelFor,
-  getApiKey,
   hasManagedAssistantProxy,
   hasProviderKey,
   PROVIDER_MODELS,
   PROVIDER_LABELS,
-  readRuntimeEnv,
   resolveProviderConfig,
   type AssistantProfile,
   type AssistantProviderId,
@@ -780,10 +778,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                   <ProviderModelPicker
                     key={activeProfile.id}
                     provider={activeProfile.provider}
-                    apiKey={getApiKey(activeProfile.provider, {
-                      ...readRuntimeEnv(),
-                      ...activeProfile.fieldValues,
-                    })}
+                    apiKey={configForProfile(activeProfile)?.apiKey}
                     value={activeProfile.modelId || defaultModelFor(activeProfile.provider)}
                     onChange={onModelChange}
                     disabled={running}
