@@ -5821,7 +5821,6 @@
         ["getLayer", "layer-kml-heatmap"],
         ["getLayer", "layer-kml-cluster"],
         ["getLayer", "layer-kml-cluster-count"],
-        ["getLayer", "layer-kml-circle"],
         ["getLayer", "layer-kml-marker"],
         ["getLayer", "anchor-layer"],
         [

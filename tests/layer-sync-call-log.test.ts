@@ -420,3 +420,21 @@ describe("layer-sync vector render call log", () => {
     });
   }
 });
+
+describe("layer-sync KML icon layer resync", () => {
+  it("keeps the circle layer for icon-less features instead of re-adding it", () => {
+    const { map, calls } = makeRecordingMap();
+    const layer = vectorLayer("kml", kmlPoints);
+    syncLayer(map, layer, ANCHOR);
+    const firstAdds = calls.filter(([method]) => method === "addLayer").map(([, spec]) => spec);
+    assert.ok(
+      firstAdds.some((spec) => (spec as { id?: string }).id === "layer-kml-circle"),
+      "the first sync adds the circle layer for features without a KML icon",
+    );
+
+    calls.length = 0;
+    syncLayer(map, layer, ANCHOR);
+    const churn = calls.filter(([method]) => method === "removeLayer" || method === "addLayer");
+    assert.deepEqual(churn, []);
+  });
+});

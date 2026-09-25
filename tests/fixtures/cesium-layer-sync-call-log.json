@@ -2429,9 +2429,26 @@
     [
       "console.warn",
       "[GeoLibre] skipping \"layer\" on the globe: request headers cannot be sent over http://tiles.example.com/{z}/{x}/{y}.png"
+    ],
+    [
+      "onLayerError",
+      {
+        "layerId": "l1",
+        "layerName": "layer",
+        "message": "credentials require https"
+      }
     ]
   ],
-  "imagery-unregistered-protocol": [],
+  "imagery-unregistered-protocol": [
+    [
+      "onLayerError",
+      {
+        "layerId": "l1",
+        "layerName": "layer",
+        "message": "no MapLibre protocol handler registered for \"nosuchproto://\""
+      }
+    ]
+  ],
   "imagery-wms": [
     [
       "new WebMapServiceImageryProvider",
@@ -2511,6 +2528,14 @@
     [
       "console.warn",
       "[GeoLibre] skipping \"layer\" on the globe: unsupported WMTS tiling scheme \"PolarTilingScheme\""
+    ],
+    [
+      "onLayerError",
+      {
+        "layerId": "l1",
+        "layerName": "layer",
+        "message": "unsupported WMTS tiling scheme \"PolarTilingScheme\""
+      }
     ]
   ],
   "imagery-arcgis": [

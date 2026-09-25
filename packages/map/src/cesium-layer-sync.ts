@@ -2619,7 +2619,10 @@ export class CesiumLayerSync {
   /** Runs the once-loaded work for `entry`: a pending fit, or a load failure. */
   private settleEntry(entry: LayerEntry): void {
     this.flushPendingZoom(entry);
-    if (entry.loadError && !entry.cancelled) {
+    // Report a failure only while the entry is still the layer's current one:
+    // a removed or rebuilt entry is gone from `entries`. `cancelled` cannot
+    // decide this, since a failed imagery entry is parked as cancelled too.
+    if (entry.loadError && this.entries.get(entry.layer.id) === entry) {
       this.deps.onLayerError?.({
         layerId: entry.layer.id,
         layerName: entry.layer.name,
@@ -2759,14 +2762,21 @@ export class CesiumLayerSync {
       if (provider === null) return;
       this.attachImageryProvider(entry, provider, request.isAsync);
     } catch (error) {
+      // The layer was removed or rebuilt while its provider loaded: a real
+      // cancellation, not a failure worth reporting.
+      if (entry.cancelled) return;
       // A provider that throws synchronously (e.g. malformed params) or rejects
+      // should not abort the sync pass; mirror createGeoJson/createTileset's
+      // best-effort. The failure is recorded so settleEntry reports it.
       entry.loadError = error instanceof Error ? error.message : String(error);
-      // should not abort the sync pass; mirror createGeoJson/createTileset's best-effort.
       // The entry stays registered with a null handle rather than being deleted:
       // sync() re-runs on every unrelated store change (an opacity drag, a
-      // reorder), so a deleted entry would be recreated — re-issuing the failing
-      // request and re-warning — on every pass. Retrying is left to needsRebuild,
-      // i.e. an actual change to this layer's source.
+      // reorder), so a deleted entry would be recreated (re-issuing the failing
+      // request and re-warning) on every pass. Retrying is left to needsRebuild,
+      // i.e. an actual change to this layer's source. Marking it cancelled keeps
+      // later passes off it, and any imagery layer it did add is taken off the
+      // globe, since an unready provider left there stops the whole globe
+      // drawing.
       if (this.entries.get(entry.layer.id) === entry) {
         entry.cancelled = true;
         if (entry.handle) {

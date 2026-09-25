@@ -298,6 +298,50 @@ describe("CesiumLayerSync with Ion assets", () => {
     sync.destroy();
   });
 
+  it("reports an imagery provider that rejects, once, and leaves nothing on the globe", async () => {
+    const g = makeGlobe();
+    g.Cesium.IonImageryProvider.fromAssetId = async () => {
+      throw new Error("401 token revoked");
+    };
+    const errors: Array<{ layerId: string; message: string }> = [];
+    const sync = new CesiumLayerSync(g.Cesium as never, g.viewer as never, () => 10, {
+      ionToken: () => "tok",
+      onLayerError: ({ layerId, message }) => errors.push({ layerId, message }),
+    });
+    const layer = createCesiumIonLayer({ id: "i", name: "Aerial", assetId: 2, kind: "imagery" });
+    sync.sync([layer]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.deepEqual(errors, [{ layerId: "i", message: "401 token revoked" }]);
+    assert.equal(g.calls.imagery.length, 0, "a failed provider is never added to the globe");
+
+    // An unrelated pass (an opacity drag) neither retries nor re-reports.
+    sync.sync([{ ...layer, opacity: 0.5 }]);
+    for (let i = 0; i < 4; i++) await flush();
+    assert.equal(errors.length, 1);
+    sync.destroy();
+  });
+
+  it("does not report an imagery load that fails after its layer was removed", async () => {
+    const g = makeGlobe();
+    let reject: (error: Error) => void = () => {};
+    g.Cesium.IonImageryProvider.fromAssetId = () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      });
+    const errors: unknown[] = [];
+    const sync = new CesiumLayerSync(g.Cesium as never, g.viewer as never, () => 10, {
+      ionToken: () => "tok",
+      onLayerError: (error) => errors.push(error),
+    });
+    sync.sync([createCesiumIonLayer({ id: "i", name: "Aerial", assetId: 2, kind: "imagery" })]);
+    sync.sync([]);
+    reject(new Error("aborted"));
+    for (let i = 0; i < 4; i++) await flush();
+    assert.deepEqual(errors, [], "a cancelled load is not a failure");
+    assert.equal(g.calls.imagery.length, 0);
+    sync.destroy();
+  });
+
   it("drops a pending fit when its layer is removed before it loads", async () => {
     const g = makeGlobe();
     const sync = new CesiumLayerSync(g.Cesium as never, g.viewer as never, () => 10, {

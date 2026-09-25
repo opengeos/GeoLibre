@@ -2488,7 +2488,10 @@ function applySinglePointLayers(
     hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
   );
   if (markerImage || kmlIconImage) {
-    removeIfExists(map, circleLayerId(layer.id));
+    // KML icons without a marker image keep the circle layer for features
+    // that have no icon (ensured below), so removing it here would drop and
+    // re-add it on every sync.
+    if (markerImage) removeIfExists(map, circleLayerId(layer.id));
     ensureLayer(
       map,
       markerLayerId(layer.id),
