@@ -3016,6 +3016,7 @@ export class CesiumLayerSync {
       // abort controller and the handler requests still in flight.
       viewer.imageryLayers.remove(imageryLayer, true);
       if (provider instanceof ProtocolImageryProvider) provider.destroy();
+      if (isZarrImageryProvider(provider)) provider.destroy();
       return;
     }
     this.imageryRefs.set(imageryLayer, layer.id);
