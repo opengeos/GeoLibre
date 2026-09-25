@@ -447,6 +447,26 @@ pub fn run() {
         ])
         .setup(|app| {
             create_main_window(app)?;
+            // Nothing on Linux claims the OAuth callback scheme for us.
+            // `tauri-bundler` writes `Exec=` into the bundled .desktop with no
+            // field code, so `xdg-open org.geolibre.desktop:/oauth/callback?...`
+            // starts the app with an empty argv and the authorization code is
+            // dropped on the floor; an AppImage installs no .desktop at all.
+            // Registering at runtime writes a `%u`-qualified handler entry and
+            // makes it the scheme default, which covers deb, rpm, AppImage and
+            // the AUR/COPR repackages alike (#2667). Off the main thread: this
+            // shells out to update-desktop-database and xdg-mime, and window
+            // creation must not wait on them.
+            #[cfg(target_os = "linux")]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    if let Err(error) = handle.deep_link().register_all() {
+                        eprintln!("Deep link: could not register URL schemes ({error}).");
+                    }
+                });
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

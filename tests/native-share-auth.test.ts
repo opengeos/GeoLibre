@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   DESKTOP_SHARE_CALLBACK,
@@ -150,5 +151,24 @@ describe("desktop OAuth callback", () => {
     } finally {
       Date.now = originalNow;
     }
+  });
+});
+
+describe("desktop callback scheme registration", () => {
+  // The Rust setup hook hands `register_all()` whatever schemes this config
+  // lists, and that is what claims the callback URI on Linux. If the two drift,
+  // the OS keeps launching the app with an empty argv and sign-in hangs on a
+  // code that never arrives (#2667), with nothing failing at build time.
+  it("registers the scheme the callback URI actually uses", () => {
+    const config = JSON.parse(
+      readFileSync("apps/geolibre-desktop/src-tauri/tauri.conf.json", "utf8"),
+    ) as { plugins?: { "deep-link"?: { desktop?: { schemes?: string[] } } } };
+    const schemes = config.plugins?.["deep-link"]?.desktop?.schemes ?? [];
+    const scheme = DESKTOP_SHARE_CALLBACK.slice(0, DESKTOP_SHARE_CALLBACK.indexOf(":"));
+    assert.ok(scheme.length > 0, "callback URI carries no scheme");
+    assert.ok(
+      schemes.includes(scheme),
+      `tauri.conf.json does not register "${scheme}" (registers ${JSON.stringify(schemes)})`,
+    );
   });
 });
