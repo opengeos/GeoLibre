@@ -520,7 +520,13 @@ fn project_path_string(path: &Path) -> String {
 /// checks, which reject it.
 fn launch_argument_path(argument: std::ffi::OsString) -> PathBuf {
     if let Some(text) = argument.to_str() {
-        if text.starts_with("file://") {
+        // Scheme comparison is case-insensitive per RFC 3986. Every real
+        // launcher emits lowercase, but matching exactly would silently drop
+        // the launch rather than fall back to anything useful.
+        if text
+            .get(..7)
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("file://"))
+        {
             if let Some(path) = tauri::Url::parse(text)
                 .ok()
                 .and_then(|url| url.to_file_path().ok())
@@ -4713,6 +4719,29 @@ mod tests {
             project_paths_from_args([OsString::from(uri)], root.path()),
             [project_path_string(&canonical)]
         );
+    }
+
+    #[cfg(all(unix, not(feature = "mas")))]
+    #[test]
+    fn accepts_file_uris_whatever_the_scheme_casing() {
+        let root = ScratchDir::new("project-argument-uri-casing");
+        let project = root.path().join("cased.geolibre");
+        std::fs::write(&project, "{}").unwrap();
+        let canonical = project.canonicalize().unwrap();
+
+        for scheme in ["file", "FILE", "File"] {
+            assert_eq!(
+                project_paths_from_args(
+                    [OsString::from(format!(
+                        "{scheme}://{}",
+                        canonical.to_str().unwrap()
+                    ))],
+                    root.path()
+                ),
+                [project_path_string(&canonical)],
+                "{scheme}:// was not accepted"
+            );
+        }
     }
 
     #[cfg(all(unix, not(feature = "mas")))]
