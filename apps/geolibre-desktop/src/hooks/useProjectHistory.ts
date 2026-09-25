@@ -1,7 +1,8 @@
 import {
+  createProjectLayerSerializationCache,
   parseProject,
   registerProjectRestoreHistory,
-  serializeProject,
+  serializeProjectWithLayerCache,
   useAppStore,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
@@ -39,6 +40,10 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
   const [recoverySnapshot, setRecoverySnapshot] = useState<ProjectHistorySnapshot | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
+  // Each layer's serialized text, reused while the store keeps the same layer
+  // record. Without it a camera move re-stringified every embedded GeoJSON
+  // layer on the main thread (GeoLibre#2633).
+  const layerCacheRef = useRef(createProjectLayerSerializationCache());
   const refresh = useCallback(async () => {
     try {
       setSnapshots(await listProjectSnapshots(currentProjectKey()));
@@ -100,7 +105,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
-        // `serializeProject` runs synchronously, so its failure cannot be caught
+        // Serialization runs synchronously, so its failure cannot be caught
         // by the promise chain below. A project embedding a large vector layer
         // serializes to more than V8's 536,870,888-byte string cap and throws
         // `RangeError: Invalid string length`, which previously escaped as an
@@ -111,6 +116,9 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
         // conflated: a snapshot that cannot be constructed is a genuine error,
         // while one too large to stringify is an expected limit.
         let snapshot: ReturnType<typeof buildProjectSnapshot>;
+        // Read in the same synchronous turn as the snapshot build, so each
+        // entry is the record `snapshot.layers` at the same index came from.
+        const layerSources = useAppStore.getState().layers;
         try {
           snapshot = buildProjectSnapshot(mapControllerRef);
         } catch (error) {
@@ -119,7 +127,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
         }
         let content: string;
         try {
-          content = serializeProject(snapshot);
+          content = serializeProjectWithLayerCache(snapshot, layerSources, layerCacheRef.current);
         } catch (error) {
           // Only the string-length cap means "too large"; anything else is a
           // real serialization bug and must not be filed under a size problem,
