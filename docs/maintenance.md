@@ -257,9 +257,7 @@ starfield canvases can sit underneath. That package renders point clouds into an
 after the map canvas, tagged `DECK_CANVAS_CLASS`
 (`maplibre-gl-lidar-canvas`). `effectsOverlayCss()`
 (`packages/plugins/src/plugins/maplibre-effects.ts`) hands that wrapper the
-canvas's own z-index. The class name is a hand-kept copy, not an import, so the
-lidar chunk stays off the startup path; `tests/effects-settings.test.ts` checks
-it against the package's `DECK_CANVAS_CLASS`. Drop the rule and the wrapper falls below the raised
+canvas's own z-index. Drop the rule and the wrapper falls below the raised
 canvas, hiding the point cloud outright; drop the re-parenting upstream and the
 wrapper goes back to covering the Measure/Colorbar/Legend/HTML/Bookmark panels
 (#2530).
@@ -275,10 +273,11 @@ field, since neither library exposes a public reader. Losing either costs only
 the mirror — the measured line goes back to being hidden inside the cloud, which
 is what #2533 was.
 
-The **class** is imported from the package rather than copied, so a rename
-fails `npm run typecheck`. Keep it that way: the package is side-effect-free, so
-the import tree-shakes to the string and does not pull deck.gl into this
-eagerly loaded plugin. The **placement** is not visible to the compiler, so
+The **class** is a hand-kept copy of the package's `DECK_CANVAS_CLASS`, not an
+import: `maplibre-gl-lidar` builds into its own lazy chunk, and importing even
+this one string would pull that chunk onto the startup path.
+`tests/effects-settings.test.ts` builds its expected selector from the package
+export, so a rename upstream fails `npm run test:frontend`. The **placement** is not visible to the compiler, so
 `e2e/lidar-canvas-stacking.spec.ts` mounts the real control and asserts the
 resulting DOM order and z-indices — run it on a bump
 (`npx playwright test e2e/lidar-canvas-stacking.spec.ts --project=features`).

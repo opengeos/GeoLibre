@@ -71,6 +71,9 @@ function earthEngineOptions(): Omit<PluginControlOptions, "position"> {
 let earthEngineControl: PluginControl | null = null;
 let earthEngineControlMounted = false;
 let earthEngineControlVisible = false;
+// Bumped by closeEarthEnginePanel so an open still awaiting the package import
+// does not mount the control after the panel was closed.
+let earthEngineOpenGeneration = 0;
 let earthEngineStoreUnsubscribe: (() => void) | null = null;
 let syncingEarthEngineControlToStore = false;
 let syncingEarthEngineStoreToControl = false;
@@ -94,6 +97,7 @@ export function toggleEarthEnginePanel(app: GeoLibreAppAPI): void {
 }
 
 export function closeEarthEnginePanel(app: GeoLibreAppAPI): void {
+  earthEngineOpenGeneration += 1;
   earthEngineStoreUnsubscribe?.();
   earthEngineStoreUnsubscribe = null;
   if (earthEngineControl && earthEngineControlMounted) {
@@ -115,7 +119,10 @@ export function subscribeEarthEnginePanel(listener: () => void): () => void {
 
 async function openStandaloneEarthEngineControl(app: GeoLibreAppAPI): Promise<boolean> {
   if (!earthEngineControl) {
+    const generation = earthEngineOpenGeneration;
     const EarthEngineControl = await loadEarthEngineControlClass();
+    // The panel was closed while the package loaded.
+    if (generation !== earthEngineOpenGeneration) return false;
     // Another open may have created the control while the package loaded.
     earthEngineControl ??= new EarthEngineControl(earthEngineOptions());
   }
@@ -157,7 +164,8 @@ let earthEngineControlClass: Promise<EarthEngineControlClass> | null = null;
  * @returns The GeoLibre Earth Engine control class.
  */
 function loadEarthEngineControlClass(): Promise<EarthEngineControlClass> {
-  earthEngineControlClass ??= import("maplibre-gl-earth-engine").then(({ PluginControl }) => {
+  if (earthEngineControlClass) return earthEngineControlClass;
+  earthEngineControlClass = import("maplibre-gl-earth-engine").then(({ PluginControl }) => {
     class GeoLibreEarthEngineControl extends PluginControl {
       async authenticate(projectId?: string, oauthClientId?: string): Promise<void> {
         const isTauriAuth = shouldUseTauriEarthEngineOAuth();
