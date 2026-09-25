@@ -277,7 +277,8 @@ The **class** is a hand-kept copy of the package's `DECK_CANVAS_CLASS`, not an
 import: `maplibre-gl-lidar` builds into its own lazy chunk, and importing even
 this one string would pull that chunk onto the startup path.
 `tests/effects-settings.test.ts` builds its expected selector from the package
-export, so a rename upstream fails `npm run test:frontend`. The **placement** is not visible to the compiler, so
+export, so a rename upstream fails `npm run test:frontend`. The **placement**
+is not visible to the compiler, so
 `e2e/lidar-canvas-stacking.spec.ts` mounts the real control and asserts the
 resulting DOM order and z-indices — run it on a bump
 (`npx playwright test e2e/lidar-canvas-stacking.spec.ts --project=features`).

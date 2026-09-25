@@ -74,6 +74,8 @@ let earthEngineControlVisible = false;
 // Bumped by closeEarthEnginePanel so an open still awaiting the package import
 // does not mount the control after the panel was closed.
 let earthEngineOpenGeneration = 0;
+// True while an open is waiting for the package import, before the panel shows.
+let earthEngineOpenPending = false;
 let earthEngineStoreUnsubscribe: (() => void) | null = null;
 let syncingEarthEngineControlToStore = false;
 let syncingEarthEngineStoreToControl = false;
@@ -81,14 +83,25 @@ const earthEnginePanelListeners = new Set<() => void>();
 const syncedEarthEngineControls = new WeakSet<PluginControl>();
 
 export function openEarthEnginePanel(app: GeoLibreAppAPI): void {
-  openStandaloneEarthEngineControl(app).catch((error: unknown) => {
-    // The control's package is fetched on first open; offline this can fail.
-    console.warn("[GeoLibre] Failed to open the Earth Engine panel", error);
-    setEarthEngineControlVisible(false);
-  });
+  earthEngineOpenPending = true;
+  openStandaloneEarthEngineControl(app)
+    .catch((error: unknown) => {
+      // The control's package is fetched on first open; offline this can fail.
+      console.error("[GeoLibre] Failed to open the Earth Engine panel", error);
+      setEarthEngineControlVisible(false);
+    })
+    .finally(() => {
+      earthEngineOpenPending = false;
+    });
 }
 
 export function toggleEarthEnginePanel(app: GeoLibreAppAPI): void {
+  if (earthEngineOpenPending && !earthEngineControl) {
+    // A second press while the package is still loading cancels that open.
+    earthEngineOpenGeneration += 1;
+    earthEngineOpenPending = false;
+    return;
+  }
   if (earthEngineControlVisible) {
     hideEarthEngineControl(earthEngineControl);
     return;
