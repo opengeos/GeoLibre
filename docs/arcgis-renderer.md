@@ -39,9 +39,11 @@ Consequences:
 
 ## API key
 
-The renderer works without a key. It translates the project basemap into tiles
-the SDK can draw (the same translation the 3D globe uses) and draws your layers
-through the SDK's own layer classes.
+The renderer works without a key. New projects then show keyless **Esri World
+Imagery** as the ArcGIS basemap; a basemap you pick from the shared
+**Basemaps** panel is translated into tiles the SDK can draw (the same
+translation the 3D globe uses), with World Imagery as the fallback for a style
+that has no tiled form. Your layers draw through the SDK's own layer classes.
 
 An **ArcGIS API key** adds Esri's basemap styles. Create one in your ArcGIS
 account (ArcGIS Online or ArcGIS Location Platform) under **Content → New item
@@ -63,7 +65,7 @@ choice is saved as `preferences.map.arcgisBasemap` (an Esri basemap style id
 such as `arcgis/streets`, `arcgis/imagery` or `osm/standard`); selecting a
 basemap from the shared **Basemaps** panel while ArcGIS is active clears it,
 so the pane follows the shared MapLibre/Cesium basemap again. Without a key the
-override is set aside and the shared basemap is translated instead.
+override draws Esri World Imagery instead.
 
 ## Supported paths
 

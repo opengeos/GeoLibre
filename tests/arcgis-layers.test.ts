@@ -1018,17 +1018,30 @@ describe("ArcGIS SQL filter translation", () => {
 });
 
 describe("ArcGIS basemap planning", () => {
-  it("uses an Esri style only with an API key, else translates the shared basemap", () => {
+  it("uses an Esri style only with an API key, else keyless World Imagery", () => {
     assert.deepEqual(planArcgisBasemap(undefined, "arcgis/streets", true), {
       kind: "esri-style",
       id: "arcgis/streets",
     });
-    const keyless = planArcgisBasemap(undefined, "arcgis/streets", false);
-    assert.equal(keyless.kind, "web-tile");
+    // Without a key the pinned style (the new-project default) draws Esri
+    // World Imagery, not a translation of the shared basemap.
+    const imagery = {
+      kind: "tile-service",
+      url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+    };
+    assert.deepEqual(planArcgisBasemap(undefined, "arcgis/streets", false), imagery);
+    assert.deepEqual(
+      planArcgisBasemap(
+        "https://tiles.openfreemap.org/styles/liberty",
+        "arcgis/topographic",
+        false,
+      ),
+      imagery,
+    );
     // A malformed override never reaches the SDK.
     assert.notEqual(planArcgisBasemap(undefined, "https://evil/{z}", true).kind, "esri-style");
   });
-  it("draws nothing for the Blank basemap and falls back to keyless streets otherwise", () => {
+  it("translates an explicitly chosen shared basemap, with World Imagery as the fallback", () => {
     assert.deepEqual(planArcgisBasemap(BLANK_BASEMAP, undefined, false), { kind: "none" });
     const plan = planArcgisBasemap(
       "https://tiles.openfreemap.org/styles/liberty",
@@ -1040,6 +1053,11 @@ describe("ArcGIS basemap planning", () => {
       assert.ok(plan.urlTemplate.includes("{level}/{col}/{row}"));
       assert.ok(!/<[^>]+>/.test(plan.copyright));
     }
+    // A style with no raster form falls back to imagery, not OpenStreetMap.
+    assert.deepEqual(planArcgisBasemap("https://example.com/style.json", undefined, false), {
+      kind: "tile-service",
+      url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+    });
   });
 });
 

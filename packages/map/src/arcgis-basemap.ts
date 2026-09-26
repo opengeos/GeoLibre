@@ -10,9 +10,11 @@ import { webTileTemplate } from "./arcgis-layers";
  * things are ArcGIS-specific:
  *
  * - A project can pin an Esri basemap style (`preferences.map.arcgisBasemap`,
- *   e.g. `arcgis/streets`) the way it pins a Mapbox style. Esri's basemap
- *   styles service needs an API key, so without one the choice is set aside
- *   and the shared basemap is translated instead of showing an error tile.
+ *   e.g. `arcgis/streets`, the new-project default) the way it pins a Mapbox
+ *   style. Esri's basemap styles service needs an API key, so without one the
+ *   pin draws Esri World Imagery, a keyless tiled service, instead of showing
+ *   an error tile. Picking a shared basemap clears the pin, and that basemap
+ *   is then translated.
  * - The translation is engine-free (plain descriptors), so it is tested
  *   without the SDK and the engine only instantiates the result.
  */
@@ -56,8 +58,12 @@ export function isArcgisBasemapStyle(id: unknown): id is string {
   return typeof id === "string" && /^(?:arcgis|osm)\/[a-z0-9-]+(?:\/[a-z0-9-]+)?$/.test(id);
 }
 
-const OSM_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const OSM_COPYRIGHT = "© OpenStreetMap contributors";
+/**
+ * Keyless Esri World Imagery: the basemap without an API key, and the
+ * fallback for a shared basemap with no raster form.
+ */
+export const ARCGIS_KEYLESS_BASEMAP_URL =
+  "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
 
 /**
  * Plan the basemap for the shared project basemap `styleUrl`, the project's
@@ -68,8 +74,10 @@ export function planArcgisBasemap(
   arcgisBasemap: string | undefined,
   hasApiKey: boolean,
 ): ArcgisBasemapPlan {
-  if (hasApiKey && isArcgisBasemapStyle(arcgisBasemap))
-    return { kind: "esri-style", id: arcgisBasemap };
+  if (isArcgisBasemapStyle(arcgisBasemap))
+    return hasApiKey
+      ? { kind: "esri-style", id: arcgisBasemap }
+      : { kind: "tile-service", url: ARCGIS_KEYLESS_BASEMAP_URL };
   if (styleUrl === BLANK_BASEMAP) return { kind: "none" };
   const imagery = basemapToCesiumImagery(styleUrl);
   switch (imagery.kind) {
@@ -78,7 +86,7 @@ export function planArcgisBasemap(
     case "arcgis":
       return { kind: "tile-service", url: imagery.url };
     case "xyz": {
-      // A TMS template has no SDK form, so it falls back to the keyless streets tone.
+      // A TMS template has no SDK form, so it falls back to keyless imagery.
       if (imagery.scheme === "tms") break;
       try {
         const template = webTileTemplate(imagery.template);
@@ -95,7 +103,7 @@ export function planArcgisBasemap(
     default:
       break;
   }
-  return { kind: "web-tile", ...webTileTemplate(OSM_TEMPLATE), copyright: OSM_COPYRIGHT };
+  return { kind: "tile-service", url: ARCGIS_KEYLESS_BASEMAP_URL };
 }
 
 /** The SDK renders copyright as text; the catalog carries HTML links. */
