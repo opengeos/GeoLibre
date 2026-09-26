@@ -3277,6 +3277,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "美国州级 GIS",
       "geolibre-osm-downloader": "OSM 下载器",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC 目录",
@@ -3906,6 +3907,16 @@
     "searchPlaceholder": "搜索田纳西州 GIS 数据",
     "noResults": "未找到匹配的田纳西州数据集。",
     "searchError": "无法搜索田纳西州 GIS 门户。"
+  },
+  "usStateGis": {
+    "hint": "选择一个州，浏览并搜索其公开 GIS 数据门户。可将图层添加到地图或下载数据。",
+    "searchPlaceholder": "搜索该州的 GIS 数据",
+    "noResults": "此门户中未找到匹配的数据集。",
+    "searchError": "无法搜索该州的 GIS 门户。",
+    "chooseState": "选择州",
+    "portal": "门户",
+    "chooseStateHint": "选择一个州以列出其 GIS 数据。",
+    "openPortal": "打开门户"
   },
   "openDataCatalogs": {
     "socrataHint": "搜索公开的 Socrata 开放数据目录并添加 GeoJSON 数据集。",

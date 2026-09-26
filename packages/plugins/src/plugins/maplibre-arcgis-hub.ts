@@ -1,6 +1,7 @@
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { addArcGISLayer } from "./arcgis-layer";
 import {
+  fetchArcGisHubSiteGroups,
   arcGisHubItemDataUrl,
   arcGisHubItemPageUrl,
   arcGisHubItemThumbnailUrl,
@@ -44,6 +45,14 @@ export interface ArcGisHubLabels {
   downloadFirstLayer: (title: string, layerCount: number) => string;
   downloadError: string;
   details: string;
+  /** Picker label and placeholder option for a plugin with `catalogSets`. */
+  catalogSet?: string;
+  /** Picker label for the catalogs inside the chosen set. */
+  catalog?: string;
+  /** Status shown until a catalog set is chosen. */
+  chooseCatalogSet?: string;
+  /** Opens the chosen catalog's home page. */
+  openPortal?: string;
 }
 
 export const DEFAULT_ARCGIS_HUB_LABELS: ArcGisHubLabels = {
@@ -76,6 +85,73 @@ export const DEFAULT_ARCGIS_HUB_LABELS: ArcGisHubLabels = {
   details: "Details",
 };
 
+/**
+ * One searchable catalog in a plugin's picker, such as a state GIS portal.
+ * A Hub site scopes the search to its catalog groups; a catalog without one
+ * (or whose site cannot be read) falls back to its organization's items.
+ */
+export interface ArcGisHubCatalog {
+  /** Stable id, unique within the plugin. */
+  id: string;
+  /** Name shown in the picker. */
+  name: string;
+  /** The catalog's home page, opened by Open portal. */
+  url: string;
+  /** Hub site item id; its catalog groups scope the search. */
+  siteId?: string;
+  /** ArcGIS organization id, the fallback scope. */
+  orgId?: string;
+}
+
+/** A group of catalogs picked together, such as one state's portals. */
+export interface ArcGisHubCatalogSet {
+  /** Stable id, unique within the plugin. */
+  id: string;
+  /** Name shown in the picker. */
+  name: string;
+  /** The set's catalogs, the first being the default. */
+  catalogs: readonly ArcGisHubCatalog[];
+}
+
+/** What a catalog's search is limited to. */
+interface CatalogScope {
+  groups?: readonly string[];
+  orgId?: string;
+}
+
+/**
+ * Resolve the search scope of a picker catalog: its Hub site's groups when
+ * they load, otherwise its organization.
+ *
+ * Args:
+ *   catalog: The catalog to scope.
+ *   signal: Aborts the site lookup.
+ *
+ * Returns:
+ *   The groups or organization the catalog's search is limited to.
+ */
+async function resolveCatalogScope(
+  catalog: ArcGisHubCatalog,
+  signal: AbortSignal,
+): Promise<CatalogScope> {
+  if (catalog.siteId) {
+    try {
+      const groups = await fetchArcGisHubSiteGroups(catalog.siteId, undefined, signal);
+      if (groups.length > 0) return { groups };
+    } catch (error) {
+      if ((error as Error).name === "AbortError" || !catalog.orgId) throw error;
+      console.warn(
+        `Could not read the ${catalog.name} catalog; searching its organization.`,
+        error,
+      );
+    }
+  }
+  // Never search without a scope: that would widen a state catalog to all of
+  // ArcGIS Online.
+  if (!catalog.orgId) throw new Error(`${catalog.name} has no catalog groups.`);
+  return { orgId: catalog.orgId };
+}
+
 /** Configures one ArcGIS Hub catalog panel built by {@link createArcGisHubPlugin}. */
 export interface ArcGisHubPluginConfig {
   /** Plugin id, also used as the right-panel id. */
@@ -105,6 +181,13 @@ export interface ArcGisHubPluginConfig {
   viewOnlyByDefault?: boolean;
   /** Fallback download file name when a title sanitizes to nothing. */
   filenameFallback?: string;
+  /**
+   * Catalogs the user picks between (e.g. one set per state). When given, the
+   * panel shows a picker, searches only the chosen catalog, and ignores
+   * `resolveGroups` and `pageUrl`: Details opens the dataset page on the chosen
+   * catalog's site.
+   */
+  catalogSets?: readonly ArcGisHubCatalogSet[];
 }
 
 /** A catalog panel plugin plus the hook that translates its labels. */
@@ -135,6 +218,10 @@ const styles = {
   thumbnail:
     "width:88px;height:66px;flex:0 0 88px;object-fit:cover;border-radius:4px;" +
     "background:hsl(var(--accent));cursor:zoom-in;",
+  picker: "display:flex;gap:6px;align-items:center;flex-wrap:wrap;",
+  select:
+    "min-width:0;flex:1 1 140px;padding:5px 6px;border:1px solid hsl(var(--border));" +
+    "border-radius:6px;background:hsl(var(--background));color:hsl(var(--foreground));",
   thumbnailPreview:
     "position:fixed;z-index:2147483000;max-width:360px;max-height:270px;object-fit:contain;" +
     "pointer-events:none;border:1px solid hsl(var(--border));border-radius:8px;" +
@@ -202,6 +289,56 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
   let panelContainer: HTMLElement | null = null;
   let labels: ArcGisHubLabels = { ...config.defaultLabels };
   let groups: readonly string[] | null = null;
+  const catalogSets = config.catalogSets ?? [];
+  // The picker's choice outlives a panel rebuild (a label change, a reopen),
+  // and is remembered across sessions so the user's state comes back.
+  let selectedSetId: string | null = null;
+  const selectedCatalogIds = new Map<string, string>();
+  const catalogScopes = new Map<string, CatalogScope>();
+  const pickerStorageKey = `geolibre:${config.id}:catalog`;
+  let pickerRestored = false;
+
+  /** Restore the remembered picker choice, ignoring unknown or stale ids. */
+  function restorePicker(): void {
+    if (pickerRestored || !catalogSets.length) return;
+    pickerRestored = true;
+    try {
+      const raw = globalThis.localStorage?.getItem(pickerStorageKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { set?: unknown; catalogs?: unknown };
+      const set = catalogSets.find((candidate) => candidate.id === saved.set);
+      if (set) selectedSetId = set.id;
+      if (saved.catalogs && typeof saved.catalogs === "object") {
+        for (const [setId, catalogId] of Object.entries(saved.catalogs)) {
+          const owner = catalogSets.find((candidate) => candidate.id === setId);
+          if (owner?.catalogs.some((catalog) => catalog.id === catalogId)) {
+            selectedCatalogIds.set(setId, catalogId as string);
+          }
+        }
+      }
+    } catch {
+      // Storage blocked (private window, sandboxed iframe) or corrupt: start fresh.
+    }
+  }
+
+  /** Remember the picker choice; a convenience, so failures are ignored. */
+  function savePicker(): void {
+    try {
+      globalThis.localStorage?.setItem(
+        pickerStorageKey,
+        JSON.stringify({ set: selectedSetId, catalogs: Object.fromEntries(selectedCatalogIds) }),
+      );
+    } catch {
+      // Storage blocked or full; the choice still holds for this session.
+    }
+  }
+
+  function selectedCatalog(): ArcGisHubCatalog | null {
+    const set = catalogSets.find((candidate) => candidate.id === selectedSetId);
+    if (!set) return null;
+    const catalogId = selectedCatalogIds.get(set.id);
+    return set.catalogs.find((catalog) => catalog.id === catalogId) ?? set.catalogs[0] ?? null;
+  }
 
   async function visualize(item: ArcGisHubItem): Promise<void> {
     const app = appRef;
@@ -312,8 +449,72 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
     more.type = "button";
     more.style.cssText = styles.button;
     more.hidden = true;
-    panel.append(hint, form, viewRow, status, results, more);
+    panel.append(hint);
+    if (catalogSets.length) panel.append(buildPicker());
+    panel.append(form, viewRow, status, results, more);
     container.append(panel);
+
+    function buildPicker(): HTMLElement {
+      restorePicker();
+      const row = element("div");
+      row.style.cssText = styles.picker;
+      const setSelect = element("select");
+      setSelect.style.cssText = styles.select;
+      setSelect.ariaLabel = labels.catalogSet ?? "";
+      const placeholder = element("option", labels.catalogSet ?? "");
+      placeholder.value = "";
+      placeholder.disabled = true;
+      setSelect.append(placeholder);
+      for (const set of catalogSets) {
+        const option = element("option", set.name);
+        option.value = set.id;
+        if (set.id === selectedSetId) option.selected = true;
+        setSelect.append(option);
+      }
+      if (!selectedSetId) placeholder.selected = true;
+      const catalogSelect = element("select");
+      catalogSelect.style.cssText = styles.select;
+      catalogSelect.ariaLabel = labels.catalog ?? "";
+      const openPortal = element("button", labels.openPortal ?? "");
+      openPortal.type = "button";
+      openPortal.style.cssText = styles.button;
+
+      const syncCatalogs = () => {
+        const set = catalogSets.find((candidate) => candidate.id === selectedSetId);
+        const current = selectedCatalog();
+        catalogSelect.replaceChildren(
+          ...(set?.catalogs ?? []).map((catalog) => {
+            const option = element("option", catalog.name);
+            option.value = catalog.id;
+            if (catalog.id === current?.id) option.selected = true;
+            return option;
+          }),
+        );
+        // A single portal needs no second picker; its name is in the option.
+        catalogSelect.hidden = (set?.catalogs.length ?? 0) < 2;
+        openPortal.disabled = !current;
+      };
+      syncCatalogs();
+
+      setSelect.addEventListener("change", () => {
+        selectedSetId = setSelect.value || null;
+        savePicker();
+        syncCatalogs();
+        void runSearch(false);
+      });
+      catalogSelect.addEventListener("change", () => {
+        if (selectedSetId) selectedCatalogIds.set(selectedSetId, catalogSelect.value);
+        savePicker();
+        syncCatalogs();
+        void runSearch(false);
+      });
+      openPortal.addEventListener("click", () => {
+        const catalog = selectedCatalog();
+        if (catalog) appRef?.openExternalUrl?.(catalog.url);
+      });
+      row.append(setSelect, catalogSelect, openPortal);
+      return row;
+    }
 
     let start = 1;
     let total = 0;
@@ -324,6 +525,9 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
     // Snapshotted with activeQuery: `start` is an offset into one specific result
     // set, so Load more has to repeat the filter the offset was measured against.
     let activeBbox: [number, number, number, number] | undefined;
+    // Picker search state, snapshotted with activeQuery for the same reason.
+    let activeCatalog: ArcGisHubCatalog | null = null;
+    let detailsPageUrl: string | undefined;
     let thumbnailPreview: HTMLImageElement | null = null;
     const downloadControllers = new Set<AbortController>();
 
@@ -458,8 +662,10 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
       const details = element("button", labels.details);
       details.type = "button";
       details.style.cssText = styles.button;
+      // Captured with the card: the picker may move on before Details is clicked.
+      const itemPageUrl = catalogSets.length ? detailsPageUrl : pageUrl;
       details.addEventListener("click", () =>
-        appRef?.openExternalUrl?.(arcGisHubItemPageUrl(item, pageUrl)),
+        appRef?.openExternalUrl?.(arcGisHubItemPageUrl(item, itemPageUrl)),
       );
       actions.append(zoom, save, details);
       body.append(title, meta, summary, actions);
@@ -469,6 +675,11 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
 
     const runSearch = async (append: boolean) => {
       const query = append ? activeQuery : input.value.trim();
+      const catalog = append ? activeCatalog : selectedCatalog();
+      if (catalogSets.length && !catalog) {
+        status.textContent = labels.chooseCatalogSet ?? labels.enterKeyword;
+        return;
+      }
       if (!query && !config.browseWithoutKeyword) {
         status.textContent = labels.enterKeyword;
         return;
@@ -499,6 +710,10 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
         // would page a stale `start` offset into a differently filtered result
         // set if the user panned, silently skipping or repeating datasets.
         activeBbox = viewBounds ? [...viewBounds] : undefined;
+        activeCatalog = catalog;
+        // A site catalog's datasets have pages on that site; an organization
+        // scope may reach items the site does not list, so use the global Hub.
+        detailsPageUrl = catalog?.siteId ? catalog.url : undefined;
         start = 1;
         shown = 0;
         removeThumbnailPreview();
@@ -508,18 +723,27 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
       setBusy(true);
       status.textContent = append ? labels.loadingMore : labels.searching;
       try {
-        if (config.resolveGroups && !groups) {
-          const resolved = await config.resolveGroups(controller.signal);
-          // An empty group list would silently widen the search to all of
-          // ArcGIS Online, which is not this catalog.
-          if (resolved.length === 0) throw new Error(`${config.name} has no catalog groups.`);
-          groups = resolved;
+        let scope: CatalogScope;
+        if (catalog) {
+          const cached = catalogScopes.get(catalog.id);
+          scope = cached ?? (await resolveCatalogScope(catalog, controller.signal));
+          if (!cached) catalogScopes.set(catalog.id, scope);
+        } else {
+          if (config.resolveGroups && !groups) {
+            const resolved = await config.resolveGroups(controller.signal);
+            // An empty group list would silently widen the search to all of
+            // ArcGIS Online, which is not this catalog.
+            if (resolved.length === 0) throw new Error(`${config.name} has no catalog groups.`);
+            groups = resolved;
+          }
+          scope = { groups: groups ?? undefined };
         }
         const page = await searchArcGisHub(query, {
           start,
           num: PAGE_SIZE,
           bbox: activeBbox,
-          groups: groups ?? undefined,
+          groups: scope.groups,
+          orgId: scope.orgId,
           types: config.types,
           signal: controller.signal,
         });

@@ -3379,6 +3379,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "GIS של מדינות ארה״ב",
       "geolibre-osm-downloader": "מוריד OSM",
       "geolibre-ign-lidar-hd": "מוריד IGN LiDAR HD",
       "geolibre-stac-catalogs": "קטלוגי STAC",
@@ -4088,6 +4089,16 @@
     "searchPlaceholder": "חיפוש בנתוני GIS של טנסי",
     "noResults": "לא נמצאו מערכי נתונים תואמים של טנסי.",
     "searchError": "לא ניתן לחפש בפורטל ה-GIS של טנסי."
+  },
+  "usStateGis": {
+    "hint": "בחרו מדינה כדי לעיין ולחפש בפורטל נתוני ה-GIS הציבורי שלה. הוסיפו שכבות למפה או הורידו נתונים.",
+    "searchPlaceholder": "חיפוש בנתוני ה-GIS של המדינה",
+    "noResults": "לא נמצאו מערכי נתונים תואמים בפורטל זה.",
+    "searchError": "לא ניתן היה לחפש בפורטל ה-GIS של מדינה זו.",
+    "chooseState": "בחירת מדינה",
+    "portal": "פורטל",
+    "chooseStateHint": "בחרו מדינה כדי להציג את נתוני ה-GIS שלה.",
+    "openPortal": "פתיחת הפורטל"
   },
   "openDataCatalogs": {
     "socrataHint": "חיפוש בקטלוגים ציבוריים של נתונים פתוחים ב-Socrata והוספת מערכי נתוני GeoJSON.",

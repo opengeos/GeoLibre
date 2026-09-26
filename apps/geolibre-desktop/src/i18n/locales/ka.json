@@ -3328,6 +3328,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "აშშ-ის შტატების GIS",
       "geolibre-osm-downloader": "OSM ჩამომტვირთველი",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC კატალოგები",
@@ -3965,6 +3966,16 @@
     "searchPlaceholder": "ტენესის GIS მონაცემების ძიება",
     "noResults": "ტენესის შესაბამისი მონაცემთა ნაკრები ვერ მოიძებნა.",
     "searchError": "ტენესის GIS პორტალში ძიება ვერ მოხერხდა."
+  },
+  "usStateGis": {
+    "hint": "აირჩიეთ შტატი მისი საჯარო GIS მონაცემთა პორტალის დასათვალიერებლად და მოსაძიებლად. დაამატეთ ფენები რუკაზე ან ჩამოტვირთეთ მონაცემები.",
+    "searchPlaceholder": "შტატის GIS მონაცემების ძიება",
+    "noResults": "ამ პორტალში შესაბამისი მონაცემთა ნაკრები ვერ მოიძებნა.",
+    "searchError": "ამ შტატის GIS პორტალში ძიება ვერ მოხერხდა.",
+    "chooseState": "აირჩიეთ შტატი",
+    "portal": "პორტალი",
+    "chooseStateHint": "აირჩიეთ შტატი მისი GIS მონაცემების ჩამოსათვლელად.",
+    "openPortal": "პორტალის გახსნა"
   },
   "openDataCatalogs": {
     "socrataHint": "მოძებნეთ Socrata-ს საჯარო ღია მონაცემთა კატალოგებში და დაამატეთ GeoJSON ნაკრებები.",

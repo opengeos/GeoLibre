@@ -3430,6 +3430,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "ГИС штатов США",
       "geolibre-osm-downloader": "Загрузчик OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Каталоги STAC",
@@ -4083,6 +4084,16 @@
     "searchPlaceholder": "Поиск ГИС-данных Теннесси",
     "noResults": "Подходящие наборы данных Теннесси не найдены.",
     "searchError": "Не удалось выполнить поиск на ГИС-портале Теннесси."
+  },
+  "usStateGis": {
+    "hint": "Выберите штат, чтобы просматривать его открытый портал ГИС-данных и искать в нём. Добавляйте слои на карту или скачивайте данные.",
+    "searchPlaceholder": "Поиск ГИС-данных штата",
+    "noResults": "В этом портале не найдено подходящих наборов данных.",
+    "searchError": "Не удалось выполнить поиск в ГИС-портале этого штата.",
+    "chooseState": "Выберите штат",
+    "portal": "Портал",
+    "chooseStateHint": "Выберите штат, чтобы увидеть список его ГИС-данных.",
+    "openPortal": "Открыть портал"
   },
   "openDataCatalogs": {
     "socrataHint": "Поиск в общедоступных каталогах открытых данных Socrata и добавление наборов данных GeoJSON.",

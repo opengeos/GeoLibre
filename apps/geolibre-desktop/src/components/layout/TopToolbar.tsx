@@ -57,6 +57,7 @@ import {
   setOpenAerialMapLabels,
   setArcGisHubLabels,
   setTennesseeGisLabels,
+  setUsStateGisLabels,
   type ArcGisHubLabels,
   setOpenDataCatalogLabels,
   setHuggingFaceLabels,
@@ -421,6 +422,17 @@ export function TopToolbar({
       searchPlaceholder: t("tennesseeGis.searchPlaceholder"),
       noResults: t("tennesseeGis.noResults"),
       searchError: t("tennesseeGis.searchError"),
+    });
+    setUsStateGisLabels({
+      ...arcGisHubLabels,
+      hint: t("usStateGis.hint"),
+      searchPlaceholder: t("usStateGis.searchPlaceholder"),
+      noResults: t("usStateGis.noResults"),
+      searchError: t("usStateGis.searchError"),
+      catalogSet: t("usStateGis.chooseState"),
+      catalog: t("usStateGis.portal"),
+      chooseCatalogSet: t("usStateGis.chooseStateHint"),
+      openPortal: t("usStateGis.openPortal"),
     });
     setOpenDataCatalogLabels({
       socrataHint: t("openDataCatalogs.socrataHint"),

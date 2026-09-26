@@ -3328,6 +3328,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "SIG des États américains",
       "geolibre-osm-downloader": "Téléchargeur OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Catalogues STAC",
@@ -3965,6 +3966,16 @@
     "searchPlaceholder": "Rechercher des données SIG du Tennessee",
     "noResults": "Aucun jeu de données du Tennessee correspondant.",
     "searchError": "Impossible d’interroger le portail SIG du Tennessee."
+  },
+  "usStateGis": {
+    "hint": "Choisissez un État pour parcourir et rechercher son portail public de données SIG. Ajoutez des couches à la carte ou téléchargez des données.",
+    "searchPlaceholder": "Rechercher dans les données SIG de l'État",
+    "noResults": "Aucun jeu de données correspondant dans ce portail.",
+    "searchError": "Impossible de rechercher dans le portail SIG de cet État.",
+    "chooseState": "Choisir un État",
+    "portal": "Portail",
+    "chooseStateHint": "Choisissez un État pour lister ses données SIG.",
+    "openPortal": "Ouvrir le portail"
   },
   "openDataCatalogs": {
     "socrataHint": "Recherchez dans les catalogues publics de données ouvertes Socrata et ajoutez des jeux de données GeoJSON.",

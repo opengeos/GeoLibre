@@ -3328,6 +3328,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "ABD Eyalet CBS",
       "geolibre-osm-downloader": "OSM İndirici",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC Katalogları",
@@ -3965,6 +3966,16 @@
     "searchPlaceholder": "Tennessee CBS verilerinde ara",
     "noResults": "Eşleşen Tennessee veri kümesi bulunamadı.",
     "searchError": "Tennessee CBS portalında arama yapılamadı."
+  },
+  "usStateGis": {
+    "hint": "Açık CBS veri portalına göz atmak ve arama yapmak için bir eyalet seçin. Haritaya katman ekleyin veya verileri indirin.",
+    "searchPlaceholder": "Eyaletin CBS verilerinde ara",
+    "noResults": "Bu portalda eşleşen veri kümesi bulunamadı.",
+    "searchError": "Bu eyaletin CBS portalında arama yapılamadı.",
+    "chooseState": "Eyalet seçin",
+    "portal": "Portal",
+    "chooseStateHint": "CBS verilerini listelemek için bir eyalet seçin.",
+    "openPortal": "Portalı aç"
   },
   "openDataCatalogs": {
     "socrataHint": "Herkese açık Socrata açık veri kataloglarında arama yapın ve GeoJSON veri kümeleri ekleyin.",

@@ -3531,6 +3531,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "نظم المعلومات الجغرافية للولايات الأمريكية",
       "geolibre-osm-downloader": "مُنزِّل OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "كتالوجات STAC",
@@ -4200,6 +4201,16 @@
     "searchPlaceholder": "ابحث في بيانات GIS لولاية تينيسي",
     "noResults": "لم يُعثر على مجموعات بيانات مطابقة لولاية تينيسي.",
     "searchError": "تعذّر البحث في بوابة GIS لولاية تينيسي."
+  },
+  "usStateGis": {
+    "hint": "اختر ولاية لتصفح بوابة بياناتها الجغرافية العامة والبحث فيها. أضف طبقات إلى الخريطة أو نزّل البيانات.",
+    "searchPlaceholder": "البحث في بيانات GIS للولاية",
+    "noResults": "لم يتم العثور على مجموعات بيانات مطابقة في هذه البوابة.",
+    "searchError": "تعذر البحث في بوابة GIS لهذه الولاية.",
+    "chooseState": "اختر ولاية",
+    "portal": "البوابة",
+    "chooseStateHint": "اختر ولاية لعرض بياناتها الجغرافية.",
+    "openPortal": "فتح البوابة"
   },
   "openDataCatalogs": {
     "socrataHint": "ابحث في فهارس البيانات المفتوحة العامة من Socrata وأضف مجموعات بيانات GeoJSON.",

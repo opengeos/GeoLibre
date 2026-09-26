@@ -3277,6 +3277,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "GIS รัฐในสหรัฐฯ",
       "geolibre-osm-downloader": "ตัวดาวน์โหลด OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "แคตตาล็อก STAC",
@@ -3906,6 +3907,16 @@
     "searchPlaceholder": "ค้นหาข้อมูล GIS ของเทนเนสซี",
     "noResults": "ไม่พบชุดข้อมูลของเทนเนสซีที่ตรงกัน",
     "searchError": "ไม่สามารถค้นหาในพอร์ทัล GIS ของเทนเนสซีได้"
+  },
+  "usStateGis": {
+    "hint": "เลือกรัฐเพื่อเรียกดูและค้นหาพอร์ทัลข้อมูล GIS สาธารณะของรัฐนั้น เพิ่มชั้นข้อมูลลงในแผนที่หรือดาวน์โหลดข้อมูล",
+    "searchPlaceholder": "ค้นหาข้อมูล GIS ของรัฐ",
+    "noResults": "ไม่พบชุดข้อมูลที่ตรงกันในพอร์ทัลนี้",
+    "searchError": "ไม่สามารถค้นหาในพอร์ทัล GIS ของรัฐนี้ได้",
+    "chooseState": "เลือกรัฐ",
+    "portal": "พอร์ทัล",
+    "chooseStateHint": "เลือกรัฐเพื่อแสดงรายการข้อมูล GIS",
+    "openPortal": "เปิดพอร์ทัล"
   },
   "openDataCatalogs": {
     "socrataHint": "ค้นหาแคตตาล็อกข้อมูลเปิดสาธารณะของ Socrata แล้วเพิ่มชุดข้อมูล GeoJSON",

@@ -36,6 +36,9 @@ export const ARCGIS_HUB_SEARCH_TYPES = [
 // ArcGIS group ids are 32 hex characters; anything else would be pasted into
 // the Lucene query verbatim, so it is dropped rather than escaped.
 const GROUP_ID_RE = /^[0-9a-f]{32}$/i;
+// ArcGIS Online organization ids are 16 alphanumeric characters; checked for
+// the same reason as group ids.
+const ORG_ID_RE = /^[0-9A-Za-z]{16}$/;
 const LUCENE_METACHARACTERS_RE = /["\\/(){}[\]^~:!?+]|&&|\|\|/g;
 
 export function sanitizeArcGisHubSearchText(value: string): string {
@@ -56,6 +59,11 @@ export interface ArcGisHubSearchOptions {
    * (such as a state open-data portal) defines its catalog.
    */
   groups?: readonly string[];
+  /**
+   * Restrict results to items owned by this ArcGIS organization — the scope
+   * for a portal whose Hub site has no catalog groups to search.
+   */
+  orgId?: string;
   /** Item types to include. Defaults to {@link ARCGIS_HUB_SEARCH_TYPES}. */
   types?: readonly string[];
 }
@@ -73,9 +81,11 @@ export function buildArcGisHubSearchUrl(
   const groupQuery = groups.length
     ? ` AND (${groups.map((group) => `group:${group}`).join(" OR ")})`
     : "";
+  const orgQuery =
+    options.orgId && ORG_ID_RE.test(options.orgId) ? ` AND orgid:${options.orgId}` : "";
   url.searchParams.set(
     "q",
-    `${text ? `(${text}) AND ` : ""}(${typeQuery})${groupQuery} AND access:public`,
+    `${text ? `(${text}) AND ` : ""}(${typeQuery})${groupQuery}${orgQuery} AND access:public`,
   );
   url.searchParams.set("f", "json");
   url.searchParams.set("start", String(options.start ?? 1));
@@ -110,10 +120,25 @@ export function arcGisHubItemPageUrl(
 }
 
 /**
+ * Collect the group ids of one catalog predicate's `group` value, which Hub
+ * writes as a bare id, a list, or an `{ any, all }` object.
+ */
+function predicateGroups(value: unknown): unknown[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") {
+    const { any, all } = value as { any?: unknown; all?: unknown };
+    return [...predicateGroups(any), ...predicateGroups(all)];
+  }
+  return [];
+}
+
+/**
  * Read the catalog groups of a Hub site from its site item.
  *
- * A Hub site's dataset catalog is the union of the groups listed under the
- * site item's `data.catalog.groups`, so searching those groups reproduces the
+ * A Hub site's dataset catalog is the union of the groups its site item lists:
+ * under `data.catalogV2.scopes.item` (group predicates) on current sites, or
+ * `data.catalog.groups` on older ones. Searching those groups reproduces the
  * site's own search.
  *
  * Args:
@@ -122,7 +147,7 @@ export function arcGisHubItemPageUrl(
  *   signal: Aborts the request.
  *
  * Returns:
- *   The catalog's group ids (only well-formed ones).
+ *   The catalog's group ids (only well-formed ones, without duplicates).
  */
 export async function fetchArcGisHubSiteGroups(
   siteId: string,
@@ -135,13 +160,28 @@ export async function fetchArcGisHubSiteGroups(
   if (!response.ok) throw new Error(`Hub site lookup failed with ${response.status}.`);
   const json = (await response.json()) as ArcGisErrorEnvelope & {
     catalog?: { groups?: unknown };
+    catalogV2?: { scopes?: { item?: { filters?: unknown } } };
   };
   if (json.error) throw new Error(json.error.message || "Hub site lookup failed.");
-  const groups = json.catalog?.groups;
+  const filters = json.catalogV2?.scopes?.item?.filters;
+  const v2Groups = Array.isArray(filters)
+    ? filters.flatMap((filter: { predicates?: unknown }) =>
+        Array.isArray(filter?.predicates)
+          ? filter.predicates.flatMap((predicate: { group?: unknown }) =>
+              predicateGroups(predicate?.group),
+            )
+          : [],
+      )
+    : [];
+  const groups = v2Groups.length > 0 ? v2Groups : json.catalog?.groups;
   if (!Array.isArray(groups)) throw new Error("The Hub site has no catalog groups.");
-  return groups.filter(
-    (group): group is string => typeof group === "string" && GROUP_ID_RE.test(group),
-  );
+  return [
+    ...new Set(
+      groups.filter(
+        (group): group is string => typeof group === "string" && GROUP_ID_RE.test(group),
+      ),
+    ),
+  ];
 }
 
 export function arcGisHubItemDataUrl(

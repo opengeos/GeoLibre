@@ -3277,6 +3277,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "미국 주 GIS",
       "geolibre-osm-downloader": "OSM 다운로더",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC 카탈로그",
@@ -3906,6 +3907,16 @@
     "searchPlaceholder": "테네시 GIS 데이터 검색",
     "noResults": "일치하는 테네시 데이터셋이 없습니다.",
     "searchError": "테네시 GIS 포털을 검색할 수 없습니다."
+  },
+  "usStateGis": {
+    "hint": "주를 선택해 공개 GIS 데이터 포털을 둘러보고 검색하세요. 지도에 레이어를 추가하거나 데이터를 다운로드할 수 있습니다.",
+    "searchPlaceholder": "주 GIS 데이터 검색",
+    "noResults": "이 포털에서 일치하는 데이터 세트를 찾지 못했습니다.",
+    "searchError": "이 주의 GIS 포털을 검색할 수 없습니다.",
+    "chooseState": "주 선택",
+    "portal": "포털",
+    "chooseStateHint": "주를 선택하면 GIS 데이터 목록이 표시됩니다.",
+    "openPortal": "포털 열기"
   },
   "openDataCatalogs": {
     "socrataHint": "공개 Socrata 오픈 데이터 카탈로그를 검색하고 GeoJSON 데이터셋을 추가합니다.",

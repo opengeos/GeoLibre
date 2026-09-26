@@ -3328,6 +3328,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "US State GIS",
       "geolibre-osm-downloader": "OSM Downloader",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC Catalogs",
@@ -4030,6 +4031,16 @@
     "searchPlaceholder": "Search Tennessee GIS data",
     "noResults": "No matching Tennessee datasets found.",
     "searchError": "Could not search the Tennessee GIS portal."
+  },
+  "usStateGis": {
+    "hint": "Choose a state to browse and search its public GIS data portal. Add layers to the map or download data.",
+    "searchPlaceholder": "Search the state's GIS data",
+    "noResults": "No matching datasets found in this portal.",
+    "searchError": "Could not search this state GIS portal.",
+    "chooseState": "Choose a state",
+    "portal": "Portal",
+    "chooseStateHint": "Choose a state to list its GIS data.",
+    "openPortal": "Open portal"
   },
   "openDataCatalogs": {
     "socrataHint": "Search public Socrata open-data catalogs and add GeoJSON datasets.",

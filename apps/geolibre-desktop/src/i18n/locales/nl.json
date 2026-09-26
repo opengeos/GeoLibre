@@ -3328,6 +3328,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "GIS van Amerikaanse staten",
       "geolibre-osm-downloader": "OSM-downloader",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC-catalogi",
@@ -3965,6 +3966,16 @@
     "searchPlaceholder": "Tennessee GIS-gegevens zoeken",
     "noResults": "Geen overeenkomende datasets van Tennessee gevonden.",
     "searchError": "Kan het GIS-portaal van Tennessee niet doorzoeken."
+  },
+  "usStateGis": {
+    "hint": "Kies een staat om het openbare GIS-dataportaal ervan te doorbladeren en te doorzoeken. Voeg lagen toe aan de kaart of download gegevens.",
+    "searchPlaceholder": "GIS-gegevens van de staat doorzoeken",
+    "noResults": "Geen overeenkomende datasets gevonden in dit portaal.",
+    "searchError": "Kan het GIS-portaal van deze staat niet doorzoeken.",
+    "chooseState": "Kies een staat",
+    "portal": "Portaal",
+    "chooseStateHint": "Kies een staat om de GIS-gegevens ervan te tonen.",
+    "openPortal": "Portaal openen"
   },
   "openDataCatalogs": {
     "socrataHint": "Zoek in openbare Socrata-opendatacatalogi en voeg GeoJSON-datasets toe.",

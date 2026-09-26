@@ -3328,6 +3328,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "GIS ایالت‌های آمریکا",
       "geolibre-osm-downloader": "بارگیر OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "فهرست‌های STAC",
@@ -3965,6 +3966,16 @@
     "searchPlaceholder": "جست‌وجوی داده‌های GIS تنسی",
     "noResults": "هیچ مجموعه‌داده منطبقی از تنسی یافت نشد.",
     "searchError": "جست‌وجو در درگاه GIS تنسی ممکن نشد."
+  },
+  "usStateGis": {
+    "hint": "یک ایالت را انتخاب کنید تا درگاه عمومی داده‌های GIS آن را مرور و جست‌وجو کنید. لایه‌ها را به نقشه اضافه کنید یا داده‌ها را دانلود کنید.",
+    "searchPlaceholder": "جست‌وجوی داده‌های GIS ایالت",
+    "noResults": "هیچ مجموعه‌داده منطبقی در این درگاه یافت نشد.",
+    "searchError": "جست‌وجو در درگاه GIS این ایالت ممکن نشد.",
+    "chooseState": "انتخاب ایالت",
+    "portal": "درگاه",
+    "chooseStateHint": "برای فهرست کردن داده‌های GIS یک ایالت را انتخاب کنید.",
+    "openPortal": "باز کردن درگاه"
   },
   "openDataCatalogs": {
     "socrataHint": "فهرست‌های دادهٔ باز عمومی Socrata را جستجو کنید و مجموعه‌داده‌های GeoJSON را بیفزایید.",

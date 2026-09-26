@@ -580,6 +580,8 @@ export {
   DEFAULT_ARCGIS_HUB_LABELS,
   maplibreArcGisHubPlugin,
   setArcGisHubLabels,
+  type ArcGisHubCatalog,
+  type ArcGisHubCatalogSet,
   type ArcGisHubLabels,
   type ArcGisHubPluginConfig,
   type ArcGisHubPluginInstance,
@@ -593,6 +595,13 @@ export {
   TENNESSEE_GIS_PORTAL_URL,
   TENNESSEE_GIS_SITE_ID,
 } from "./plugins/maplibre-tennessee-gis";
+export {
+  DEFAULT_US_STATE_GIS_LABELS,
+  maplibreUsStateGisPlugin,
+  setUsStateGisLabels,
+  US_STATE_GIS_PLUGIN_ID,
+} from "./plugins/maplibre-us-state-gis";
+export { US_STATE_GIS_CATALOGS } from "./plugins/us-state-gis-catalogs";
 export {
   ARCGIS_HUB_PAGE_URL,
   ARCGIS_HUB_PORTAL_URL,

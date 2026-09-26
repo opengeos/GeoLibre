@@ -3328,6 +3328,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "अमेरिकी राज्य GIS",
       "geolibre-osm-downloader": "OSM डाउनलोडर",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC कैटलॉग",
@@ -3965,6 +3966,16 @@
     "searchPlaceholder": "टेनेसी GIS डेटा खोजें",
     "noResults": "कोई मेल खाने वाला टेनेसी डेटासेट नहीं मिला।",
     "searchError": "टेनेसी GIS पोर्टल में खोज नहीं की जा सकी।"
+  },
+  "usStateGis": {
+    "hint": "किसी राज्य का सार्वजनिक GIS डेटा पोर्टल ब्राउज़ करने और खोजने के लिए राज्य चुनें। मानचित्र में लेयर जोड़ें या डेटा डाउनलोड करें।",
+    "searchPlaceholder": "राज्य का GIS डेटा खोजें",
+    "noResults": "इस पोर्टल में कोई मेल खाता डेटासेट नहीं मिला।",
+    "searchError": "इस राज्य के GIS पोर्टल में खोज नहीं की जा सकी।",
+    "chooseState": "राज्य चुनें",
+    "portal": "पोर्टल",
+    "chooseStateHint": "GIS डेटा सूचीबद्ध करने के लिए राज्य चुनें।",
+    "openPortal": "पोर्टल खोलें"
   },
   "openDataCatalogs": {
     "socrataHint": "सार्वजनिक Socrata ओपन-डेटा कैटलॉग खोजें और GeoJSON डेटासेट जोड़ें।",

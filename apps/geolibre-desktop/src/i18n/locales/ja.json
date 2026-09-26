@@ -3277,6 +3277,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "米国州 GIS",
       "geolibre-osm-downloader": "OSM ダウンローダー",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC カタログ",
@@ -3906,6 +3907,16 @@
     "searchPlaceholder": "テネシー州の GIS データを検索",
     "noResults": "一致するテネシー州のデータセットが見つかりません。",
     "searchError": "テネシー州 GIS ポータルを検索できませんでした。"
+  },
+  "usStateGis": {
+    "hint": "州を選んで、その公開 GIS データポータルを閲覧・検索します。レイヤーを地図に追加したり、データをダウンロードしたりできます。",
+    "searchPlaceholder": "州の GIS データを検索",
+    "noResults": "このポータルに一致するデータセットはありません。",
+    "searchError": "この州の GIS ポータルを検索できませんでした。",
+    "chooseState": "州を選択",
+    "portal": "ポータル",
+    "chooseStateHint": "州を選ぶと GIS データが一覧表示されます。",
+    "openPortal": "ポータルを開く"
   },
   "openDataCatalogs": {
     "socrataHint": "公開されている Socrata オープンデータカタログを検索し、GeoJSON データセットを追加します。",

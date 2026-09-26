@@ -3277,6 +3277,7 @@
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
+      "geolibre-us-state-gis": "GIS Negara Bagian AS",
       "geolibre-osm-downloader": "Pengunduh OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Katalog STAC",
@@ -3906,6 +3907,16 @@
     "searchPlaceholder": "Cari data GIS Tennessee",
     "noResults": "Tidak ditemukan dataset Tennessee yang cocok.",
     "searchError": "Tidak dapat mencari di portal GIS Tennessee."
+  },
+  "usStateGis": {
+    "hint": "Pilih negara bagian untuk menjelajahi dan mencari portal data GIS publiknya. Tambahkan layer ke peta atau unduh data.",
+    "searchPlaceholder": "Cari data GIS negara bagian",
+    "noResults": "Tidak ada dataset yang cocok di portal ini.",
+    "searchError": "Tidak dapat mencari di portal GIS negara bagian ini.",
+    "chooseState": "Pilih negara bagian",
+    "portal": "Portal",
+    "chooseStateHint": "Pilih negara bagian untuk menampilkan data GIS-nya.",
+    "openPortal": "Buka portal"
   },
   "openDataCatalogs": {
     "socrataHint": "Cari di katalog data terbuka Socrata publik dan tambahkan kumpulan data GeoJSON.",
