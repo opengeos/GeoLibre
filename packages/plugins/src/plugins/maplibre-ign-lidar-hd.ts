@@ -198,16 +198,22 @@ function sleep(ms: number): Promise<void> {
 
 type AddTileToMapResult = "added" | "duplicate" | "unsupported-renderer" | "no-download";
 
+/**
+ * Whether a renderer draws `lidar-url` layers: the 2D engines, ArcGIS through
+ * its deck overlay. Not the globe. An allowlist, so a renderer added later is
+ * refused until it is known to draw them.
+ */
+function drawsPointClouds(renderer: string): boolean {
+  return renderer === "maplibre" || renderer === "mapbox" || renderer === "arcgis";
+}
+
 /** Adds a tile's point cloud to the map as a `lidar-url` layer. */
 async function addTileToMap(
   app: GeoLibreAppAPI,
   tile: IgnLidarHdTile,
 ): Promise<AddTileToMapResult> {
   const renderer = app.getMapRenderer?.();
-  // The globe cannot host the point-cloud overlay; ArcGIS draws it through its
-  // deck overlay. A denylist, unlike `engines`: keep the two in step when a
-  // renderer is added, or it will be treated as able to draw point clouds here.
-  if (renderer === "cesium") return "unsupported-renderer";
+  if (renderer && !drawsPointClouds(renderer)) return "unsupported-renderer";
   if (!tile.downloadUrl) return "no-download";
   const store = useAppStore.getState();
   const alreadyAdded = store.layers.some(
@@ -624,7 +630,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const tiles = currentTiles.filter((tile) => selectedTileIds.has(tile.id) && tile.downloadUrl);
     if (tiles.length === 0) return;
     const renderer = app.getMapRenderer?.();
-    if (renderer === "cesium") {
+    if (renderer && !drawsPointClouds(renderer)) {
       status.textContent = tr(
         app,
         "unsupportedRenderer",

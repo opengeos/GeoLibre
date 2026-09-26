@@ -155,7 +155,7 @@ export class ArcgisControlHost {
       // A control's layer is either mirrored by a store layer, which the
       // engine draws and picks, or drawn by this host's overlay.
       pick: (lngLat, layerId, sourceId) =>
-        sourceId !== undefined && hooks.isMirrored(layerId, sourceId)
+        hooks.isMirrored(layerId, sourceId)
           ? hooks.pick(lngLat, layerId, sourceId)
           : pickOverlayGraphics(this.overlayGraphics, lngLat, layerId, hooks.tolerance(lngLat)),
       layerSource: (layerId) => {
@@ -368,7 +368,7 @@ export interface ArcgisControlHostHooks {
   /** Hits on the store layers mirroring a control's layer (see `NativeLayerPicker`). */
   pick: NativeLayerPicker;
   /** Whether a store layer draws a control's style layer, so the overlay must not. */
-  isMirrored: (layerId: string, sourceId: string) => boolean;
+  isMirrored: (layerId: string, sourceId: string | undefined) => boolean;
   /** Pick tolerance in degrees of longitude at a point, as the engine's identify uses. */
   tolerance: (lngLat: [number, number]) => number;
   toGeometry: (geometry: Geometry) => ArcgisGeometryJson | null;
