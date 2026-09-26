@@ -68,6 +68,12 @@ export function arcgisQuantizationParams(
   };
 }
 
+/** A record's id and attributes, without its geometry. */
+export interface ArcGISRecordIdentity {
+  id?: number | string;
+  properties: Record<string, unknown>;
+}
+
 /** The Esri JSON feature set a quantized query returns. */
 export interface ArcGISQuantizedFeatureSet {
   exceededTransferLimit?: boolean;
@@ -125,10 +131,17 @@ export function isArcGISQuantizedFeatureSet(value: unknown): value is ArcGISQuan
  *   plus `recordCount`: how many records the server returned, which exceeds
  *   the feature count when shapes collapsed below the grid. Paging must count
  *   records, or a page thinned by collapsed shapes would read as the last one.
+ *   `firstRecord` is the page's first record (id and attributes) whether or
+ *   not its shape survived, so a repeated page is recognizable even when every
+ *   shape on it collapsed.
  */
 export function decodeArcGISQuantizedFeatures(
   featureSet: ArcGISQuantizedFeatureSet,
-): FeatureCollection & { exceededTransferLimit: boolean; recordCount: number } {
+): FeatureCollection & {
+  exceededTransferLimit: boolean;
+  recordCount: number;
+  firstRecord: ArcGISRecordIdentity | undefined;
+} {
   const grid = featureSet.transform;
   const [scaleX, scaleY] = grid.scale;
   const [translateX, translateY] = grid.translate;
@@ -149,26 +162,28 @@ export function decodeArcGISQuantizedFeatures(
   };
   const oidField = featureSet.objectIdFieldName;
 
+  const recordIdentity = (source: ArcGISQuantizedFeatureSet["features"][number]) => {
+    const properties = { ...(source.attributes ?? {}) };
+    const oid = oidField ? properties[oidField] : undefined;
+    return {
+      ...(typeof oid === "number" || typeof oid === "string" ? { id: oid } : {}),
+      properties,
+    };
+  };
   const features: Feature[] = [];
   for (const source of featureSet.features) {
     const geometry = decodeGeometry(source.geometry ?? null, toLngLat, decodePath);
     // A shape smaller than the grid collapses to nothing; it would not have
     // covered a pixel, and it is back at full resolution once zoomed in.
     if (!geometry) continue;
-    const properties = { ...(source.attributes ?? {}) };
-    const oid = oidField ? properties[oidField] : undefined;
-    features.push({
-      type: "Feature",
-      ...(typeof oid === "number" || typeof oid === "string" ? { id: oid } : {}),
-      properties,
-      geometry,
-    });
+    features.push({ type: "Feature", ...recordIdentity(source), geometry });
   }
   return {
     type: "FeatureCollection",
     features,
     exceededTransferLimit: featureSet.exceededTransferLimit === true,
     recordCount: featureSet.features.length,
+    firstRecord: featureSet.features.length ? recordIdentity(featureSet.features[0]) : undefined,
   };
 }
 
@@ -222,7 +237,7 @@ function groupRings(rings: Position[][]): Position[][][] {
   for (const hole of holes) {
     let owner: (typeof outers)[number] | undefined;
     for (const outer of outers) {
-      if ((!owner || outer.area < owner.area) && pointInRing(hole[0], outer.ring)) owner = outer;
+      if ((!owner || outer.area < owner.area) && mostlyInside(hole, outer.ring)) owner = outer;
     }
     // A counter-clockwise ring no outer ring holds is a shell wound the other
     // way (as in data from services that ignore the convention), not a hole.
@@ -242,6 +257,17 @@ function signedArea(ring: Position[]): number {
     twiceArea += ring[index][0] * ring[index + 1][1] - ring[index + 1][0] * ring[index][1];
   }
   return twiceArea / 2;
+}
+
+/**
+ * Whether most of a ring's vertices fall inside another ring. Snapping to the
+ * grid can put a hole's vertices exactly on its shell's edge, where the
+ * point-in-ring test may go either way, so no single vertex decides.
+ */
+function mostlyInside(ring: Position[], container: Position[]): boolean {
+  const vertices = ring.slice(0, -1);
+  const inside = vertices.filter((point) => pointInRing(point, container)).length;
+  return inside * 2 > vertices.length;
 }
 
 function pointInRing(point: Position, ring: Position[]): boolean {

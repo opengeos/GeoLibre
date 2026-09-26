@@ -154,6 +154,32 @@ describe("decodeArcGISQuantizedFeatures", () => {
     assert.ok(area(polygons[0][1]) < 0);
   });
 
+  it("assigns a hole whose first vertex snapped onto its shell's edge", () => {
+    // The hole's first vertex, column 10 row 5, lies on the shell's right edge
+    // (which a point-in-ring test counts as outside); the rest are well inside.
+    const shell = [
+      [0, 0],
+      [10, 0],
+      [0, 10],
+      [-10, 0],
+      [0, -10],
+    ];
+    const hole = [
+      [10, 5],
+      [-4, -2],
+      [-3, 0],
+      [0, 4],
+      [3, 0],
+      [4, -2],
+    ];
+    const decoded = decodeArcGISQuantizedFeatures(
+      featureSet([{ attributes: { OBJECTID: 1 }, geometry: { rings: [shell, hole] } }]),
+    );
+    const geometry = decoded.features[0].geometry;
+    assert.equal(geometry?.type, "Polygon");
+    assert.equal((geometry as Polygon).coordinates.length, 2);
+  });
+
   it("drops a feature whose shape collapsed below the grid", () => {
     const decoded = decodeArcGISQuantizedFeatures(
       featureSet([
@@ -405,6 +431,59 @@ describe("generalized viewport loading", () => {
       layer?.geojson?.features.map((feature) => feature.properties?.OBJECTID),
       [1, 3, 4, 5],
     );
+  });
+
+  it("spots a service ignoring resultOffset even when every shape collapsed", async () => {
+    const collapsed = (oid: number) => ({
+      attributes: { OBJECTID: oid },
+      geometry: {
+        rings: [
+          [
+            [0, 0],
+            [0, 0],
+            [0, 0],
+          ],
+        ],
+      },
+    });
+    let queries = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      const onQuery = url.pathname.endsWith("/query");
+      if (onQuery && !url.searchParams.has("returnIdsOnly")) queries += 1;
+      // Every offset answers with the same full page of collapsed shapes.
+      const body = !onQuery
+        ? { ...LAYER_INFO, maxRecordCount: 2 }
+        : url.searchParams.has("returnIdsOnly")
+          ? { objectIdFieldName: "OBJECTID", objectIds: [1, 2] }
+          : { ...featureSet([collapsed(1), collapsed(2)]), exceededTransferLimit: false };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+      } as Response;
+    }) as typeof fetch;
+    const map = {
+      getBounds: () => ({
+        getWest: () => -100,
+        getSouth: () => 30,
+        getEast: () => -90,
+        getNorth: () => 40,
+      }),
+      getZoom: () => 4,
+      isMoving: () => false,
+      on: () => {},
+      off: () => {},
+    };
+    await addArcGISLayer({ getMap: () => map, fitBounds: () => {} } as unknown as GeoLibreAppAPI, {
+      layerType: "feature",
+      sourceType: "url",
+      url: "https://example.com/arcgis/rest/services/Districts/FeatureServer/0",
+    });
+    for (let tick = 0; tick < 10; tick += 1) await new Promise((r) => setTimeout(r, 0));
+    // Two offset pages reveal the repeat; one ObjectID range reads the rest.
+    assert.ok(queries <= 4, `stopped after ${queries} queries instead of paging to the cap`);
   });
 
   it("loads full-resolution GeoJSON zoomed in", async () => {

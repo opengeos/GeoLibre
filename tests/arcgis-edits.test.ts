@@ -127,6 +127,7 @@ async function load(
     }
     if (requestUrl.pathname.endsWith("/query")) {
       const ids = requestUrl.searchParams.get("objectIds");
+      if (ids) refreshGeometry.push(requestUrl.searchParams.get("returnGeometry"));
       return Response.json(
         ids ? fc(...ids.split(",").map((id) => feature(Number(id), "server"))) : initial,
       );
@@ -171,6 +172,7 @@ it("reconciles partial results and server IDs; retry does not repeat successful 
   assert.equal(connection.posts(), 2);
 });
 
+const refreshGeometry: Array<string | null> = [];
 it("never writes back geometry that was loaded generalized", async () => {
   const { id, posts } = await load(
     (body) => {
@@ -196,7 +198,15 @@ it("never writes back geometry that was loaded generalized", async () => {
   await assert.rejects(saveArcGISLayerEdits(id), /Zoom in to edit/);
   assert.equal(posts(), 0);
 
-  useAppStore.getState().updateLayer(id, { geojson: fc(feature(1, "after")) });
+  // The loaded (simplified) shape differs from the service's full one.
+  const simplified = (name: string): Feature => ({
+    ...feature(1, name),
+    geometry: { type: "Point", coordinates: [-84.5, 35.5] },
+  });
+  useAppStore.getState().updateLayer(id, {
+    geojson: fc(simplified("after")),
+    metadata: { ...layer(id).metadata, arcgisEditBaseline: fc(simplified("before")) },
+  });
   assert.equal((await saveArcGISLayerEdits(id)).updated, 1);
   assert.equal(posts(), 1);
   assert.equal(
@@ -204,6 +214,11 @@ it("never writes back geometry that was loaded generalized", async () => {
     true,
     "the save keeps the marker for the shapes still loaded",
   );
+  // The post-save refresh reads attributes only and keeps the loaded shape,
+  // rather than mixing a full-resolution copy into a generalized layer.
+  assert.equal(refreshGeometry.at(-1), "false");
+  assert.deepEqual(layer(id).geojson!.features[0].geometry, simplified("x").geometry);
+  assert.equal(layer(id).geojson!.features[0].properties!.name, "server");
 });
 
 it("supports deleting the last feature", async () => {
