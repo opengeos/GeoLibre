@@ -697,6 +697,7 @@ export class ArcgisEngine implements MapEngine {
           this.storyMove = false;
         }),
       );
+    this.handles.add(this.bindCtrlDragRotate(view));
     // Only the keys that move the camera; a Shift press does not.
     this.handles.add(
       view.on("key-down", (event) => {
@@ -784,6 +785,33 @@ export class ArcgisEngine implements MapEngine {
       ...(bearing === undefined ? {} : { heading: normalizeBearing(bearing) }),
       ...(pitch === undefined ? {} : { tilt: this.clampPitch(pitch) }),
     };
+  }
+  /**
+   * MapLibre's Ctrl+drag: horizontal movement rotates and vertical movement
+   * tilts, at MapLibre's rates. The SDK binds neither to a modifier (a scene
+   * orbits on right-drag), so a Ctrl drag steers the camera itself. A flat
+   * `MapView` only rotates.
+   *
+   * @param view The view whose drags to steer.
+   * @returns The handle that removes the listener.
+   */
+  private bindCtrlDragRotate(view: ArcgisView): ArcgisHandle {
+    let last: { x: number; y: number } | null = null;
+    return view.on("drag", (event) => {
+      if (event.action === "start") {
+        const native = event.native as MouseEvent | undefined;
+        last = native?.ctrlKey && (event.button ?? 0) === 0 ? { x: event.x, y: event.y } : null;
+      }
+      if (!last) return;
+      event.stopPropagation();
+      const dx = event.x - last.x;
+      const dy = event.y - last.y;
+      last = event.action === "end" ? null : { x: event.x, y: event.y };
+      if (dx === 0 && dy === 0) return;
+      const pitch = this.sceneView()?.camera?.tilt ?? 0;
+      const target = this.orientation(this.bearing() + dx * 0.8, pitch - dy * 0.5);
+      void this.view?.goTo(target, { animate: false }).catch(reportGoToFailure);
+    });
   }
   private clampPitch(pitch: number): number {
     const max = this.preferences ? Math.min(85, Math.max(0, this.preferences.maxPitch)) : 85;
@@ -2624,11 +2652,17 @@ export class ArcgisEngine implements MapEngine {
         return new widgets.Zoom({ view });
       case "fullscreen":
         return new widgets.Fullscreen({ view, element: view.container ?? undefined });
-      case "compass":
-        return new widgets.Compass({
+      case "compass": {
+        const compass = new widgets.Compass({
           view,
           ...(this.compassLabel ? { label: this.compassLabel } : {}),
         });
+        // The SDK's compass only restores the heading; MapLibre's also levels
+        // the pitch, so a click resets both.
+        const viewModel = (compass as { viewModel?: { reset?: () => void } }).viewModel;
+        if (viewModel) viewModel.reset = () => this.resetNorthPitch();
+        return compass;
+      }
       case "geolocate":
         return new widgets.Locate({ view });
       case "globe":

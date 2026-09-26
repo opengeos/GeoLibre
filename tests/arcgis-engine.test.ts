@@ -92,6 +92,7 @@ function makeSdk() {
       kind = kind;
       label: unknown;
       destroyed = false;
+      viewModel = { reset: () => {} };
       constructor(public props: Record<string, unknown> = {}) {
         this.label = props.label;
         widgets.push(this as never);
@@ -532,6 +533,42 @@ describe("ArcgisEngine camera moves", () => {
     fireWatchers();
     engine.destroy();
     assert.deepEqual(seen, [false, true, false, false]);
+  });
+  it("rotates and tilts on a Ctrl drag at MapLibre's rates, and leaves plain drags alone", () => {
+    const { goTo, fireViewEvent } = makeSceneEngine();
+    let stopped = 0;
+    const drag = (action: string, x: number, y: number, ctrlKey: boolean) =>
+      fireViewEvent("drag", {
+        action,
+        x,
+        y,
+        button: 0,
+        native: { ctrlKey },
+        stopPropagation: () => stopped++,
+      });
+    drag("start", 100, 100, false);
+    drag("update", 150, 50, false);
+    drag("end", 150, 50, false);
+    assert.equal(goTo.length, 0);
+    assert.equal(stopped, 0);
+    // The fake camera looks at heading 30, tilt 45: right 10px turns 8
+    // degrees, up 20px tilts 10 degrees further.
+    drag("start", 100, 100, true);
+    drag("update", 110, 80, true);
+    assert.deepEqual(goTo.at(-1), {
+      target: { heading: 38, tilt: 55 },
+      options: { animate: false },
+    });
+    drag("end", 110, 80, true);
+    assert.equal(stopped, 3);
+  });
+  it("resets both heading and pitch from the compass, as MapLibre's does", () => {
+    const { goTo, widgets } = makeSceneEngine();
+    const compass = widgets.find((w) => w.kind === "Compass") as unknown as {
+      viewModel: { reset(): void };
+    };
+    compass.viewModel.reset();
+    assert.deepEqual((goTo.at(-1) as { target: unknown }).target, { heading: 0, tilt: 0 });
   });
   it("reads and steps the zoom of a view with no tiling scheme through its scale", () => {
     const { engine, goTo, rawView } = makeEngine();
