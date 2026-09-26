@@ -36,6 +36,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "geolibre-ign-lidar-hd",
   "maplibre-gl-arcgis-hub",
   "geolibre-tennessee-gis",
+  "geolibre-us-federal-gis",
   "geolibre-us-state-gis",
   "geolibre-us-local-gis",
   "maplibre-gl-socrata",

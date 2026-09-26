@@ -3533,6 +3533,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "نظم المعلومات الجغرافية للولايات الأمريكية",
       "geolibre-us-local-gis": "نظم المعلومات الجغرافية المحلية الأمريكية",
+      "geolibre-us-federal-gis": "نظم المعلومات الجغرافية الفيدرالية الأمريكية",
       "geolibre-osm-downloader": "مُنزِّل OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "كتالوجات STAC",
@@ -4224,6 +4225,16 @@
     "chooseState": "اختر ولاية",
     "portal": "مدينة أو مقاطعة",
     "chooseStateHint": "اختر ولاية ثم مدينة أو مقاطعة لعرض بيانات نظم المعلومات الجغرافية الخاصة بها.",
+    "openPortal": "فتح البوابة"
+  },
+  "usFederalGis": {
+    "hint": "اختر وزارة ثم وكالة لتصفح بيانات نظم المعلومات الجغرافية العامة الخاصة بها والبحث فيها. أضف طبقات إلى الخريطة أو نزّل البيانات.",
+    "searchPlaceholder": "ابحث في بيانات نظم المعلومات الجغرافية للوكالة",
+    "noResults": "لم يُعثر على مجموعات بيانات مطابقة لهذه الوكالة.",
+    "searchError": "تعذّر البحث في بوابة نظم المعلومات الجغرافية الفيدرالية هذه.",
+    "chooseDepartment": "اختر وزارة",
+    "agency": "الوكالة",
+    "chooseDepartmentHint": "اختر وزارة ثم وكالة لعرض بيانات نظم المعلومات الجغرافية الخاصة بها.",
     "openPortal": "فتح البوابة"
   },
   "openDataCatalogs": {

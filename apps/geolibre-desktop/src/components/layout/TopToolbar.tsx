@@ -59,6 +59,7 @@ import {
   setTennesseeGisLabels,
   setUsStateGisLabels,
   setUsLocalGisLabels,
+  setUsFederalGisLabels,
   type ArcGisHubLabels,
   setOpenDataCatalogLabels,
   setHuggingFaceLabels,
@@ -450,6 +451,17 @@ export function TopToolbar({
       catalog: t("usLocalGis.portal"),
       chooseCatalogSet: t("usLocalGis.chooseStateHint"),
       openPortal: t("usLocalGis.openPortal"),
+    });
+    setUsFederalGisLabels({
+      ...arcGisHubLabels,
+      hint: t("usFederalGis.hint"),
+      searchPlaceholder: t("usFederalGis.searchPlaceholder"),
+      noResults: t("usFederalGis.noResults"),
+      searchError: t("usFederalGis.searchError"),
+      catalogSet: t("usFederalGis.chooseDepartment"),
+      catalog: t("usFederalGis.agency"),
+      chooseCatalogSet: t("usFederalGis.chooseDepartmentHint"),
+      openPortal: t("usFederalGis.openPortal"),
     });
     setOpenDataCatalogLabels({
       socrataHint: t("openDataCatalogs.socrataHint"),

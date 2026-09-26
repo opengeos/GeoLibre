@@ -3279,6 +3279,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "美国州级 GIS",
       "geolibre-us-local-gis": "美国地方 GIS",
+      "geolibre-us-federal-gis": "美国联邦 GIS",
       "geolibre-osm-downloader": "OSM 下载器",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC 目录",
@@ -3930,6 +3931,16 @@
     "chooseState": "选择州",
     "portal": "城市或县",
     "chooseStateHint": "选择一个州，再选择一个城市或县，以列出其 GIS 数据。",
+    "openPortal": "打开门户"
+  },
+  "usFederalGis": {
+    "hint": "选择一个部门，再选择一个机构，即可浏览和搜索其公共 GIS 数据。可将图层添加到地图或下载数据。",
+    "searchPlaceholder": "搜索该机构的 GIS 数据",
+    "noResults": "未找到该机构的匹配数据集。",
+    "searchError": "无法搜索此联邦 GIS 门户。",
+    "chooseDepartment": "选择部门",
+    "agency": "机构",
+    "chooseDepartmentHint": "选择一个部门，再选择一个机构，以列出其 GIS 数据。",
     "openPortal": "打开门户"
   },
   "openDataCatalogs": {

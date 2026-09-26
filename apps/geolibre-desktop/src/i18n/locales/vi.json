@@ -3286,6 +3286,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS các bang Hoa Kỳ",
       "geolibre-us-local-gis": "GIS địa phương Hoa Kỳ",
+      "geolibre-us-federal-gis": "GIS liên bang Hoa Kỳ",
       "geolibre-osm-downloader": "Trình tải xuống OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Sơ đồ cơ sở OpenStreetMap",
@@ -3930,6 +3931,16 @@
     "chooseState": "Chọn một bang",
     "portal": "Thành phố hoặc quận",
     "chooseStateHint": "Chọn một bang, rồi chọn một thành phố hoặc quận, để liệt kê dữ liệu GIS của nơi đó.",
+    "openPortal": "Mở cổng dữ liệu"
+  },
+  "usFederalGis": {
+    "hint": "Chọn một bộ, rồi chọn một cơ quan, để duyệt và tìm kiếm dữ liệu GIS công khai của cơ quan đó. Thêm lớp vào bản đồ hoặc tải dữ liệu xuống.",
+    "searchPlaceholder": "Tìm kiếm dữ liệu GIS của cơ quan",
+    "noResults": "Không tìm thấy bộ dữ liệu phù hợp cho cơ quan này.",
+    "searchError": "Không thể tìm kiếm cổng GIS liên bang này.",
+    "chooseDepartment": "Chọn một bộ",
+    "agency": "Cơ quan",
+    "chooseDepartmentHint": "Chọn một bộ, rồi chọn một cơ quan, để liệt kê dữ liệu GIS của cơ quan đó.",
     "openPortal": "Mở cổng dữ liệu"
   },
   "openDataCatalogs": {

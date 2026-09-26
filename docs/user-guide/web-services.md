@@ -29,6 +29,7 @@ They are grouped together because they behave the same way, not because they sha
 | [OSM Downloader](#osm-downloader) | OpenStreetMap / Overpass | Buildings, roads, amenities, waterways, land use, or custom OSM tags |
 | [ArcGIS Hub](#arcgis-hub) | Esri | Public datasets published to ArcGIS Hub |
 | [Tennessee GIS](#tennessee-gis) | State of Tennessee | The geodata.tn.gov open GIS data portal |
+| [US Federal GIS](#us-federal-gis) | US federal agencies | The public GIS portals of 24 federal agencies, from the Census Bureau and NOAA to USGS and FEMA |
 | [US State GIS](#us-state-gis) | US state GIS offices | The public GIS data portals of all 50 states and DC |
 | [US Local GIS](#us-local-gis) | US cities and counties | The GIS and open-data portals of about 150 large US cities, counties, and regional agencies |
 | [Socrata](#socrata) | Socrata | Government open-data portals |
@@ -158,6 +159,16 @@ Browses the State of Tennessee's [downloadable GIS data portal](https://geodata.
 - The panel lists the whole catalog as soon as it opens, alphabetically; type a keyword to narrow it. **Search the current map area** starts off, since most layers are statewide.
 - **Add to map** loads feature services as editable vector layers and map or image services (such as statewide imagery) as raster layers. **Zoom** and **Details** work as in ArcGIS Hub, and Details opens the dataset's page on geodata.tn.gov. **Download** saves feature services as GeoJSON; map and image services only render imagery, so they have nothing to download.
 - The portal is an ArcGIS Hub site, so the panel searches the groups that make up its catalog. It reads that list from the site when it opens, so datasets the state adds show up without a GeoLibre update.
+
+## US Federal GIS
+
+Browses the public GIS portals of US federal agencies, for the national layers a state or city portal does not hold: Census boundaries, NOAA radar and weather warnings, USGS land cover, LANDFIRE fuels and PAD-US protected areas, NRCS soils, Fish and Wildlife Service wetlands, national transportation networks (NTAD), FEMA flood data, and NAIP imagery.
+
+- Choose a department, then an agency from the second menu; the panel lists that agency's catalog alphabetically, and a keyword narrows it. **Open portal** opens the agency's own site. The map-area filter starts off, since most federal layers are national; turn it on to keep only datasets that cover the current view.
+- Feature services add as vector layers, map and image services (radar, land cover and fuel rasters, imagery) as raster layers, and Download saves feature services as GeoJSON, as in [US State GIS](#us-state-gis).
+- Agencies with an ArcGIS Hub site (Forest Service, BLM, National Park Service, Fish and Wildlife Service, FEMA, BTS, and others) are searched through the site's catalog. Agencies without one (USGS, NOAA, EPA, NRCS, NASA, the Census Bureau, NGA) are searched across everything their ArcGIS Online organization shares publicly, which is larger and includes some non-GIS items.
+- The Census Bureau's own organization publishes mostly statistics (community resilience estimates, business patterns) rather than its boundary files, so TIGER boundaries (tracts, counties, ZCTAs, congressional districts) are easiest to find under **Multi-agency → Esri U.S. Federal Datasets**, which Esri maintains from the federal sources. The same menu holds the federal GeoPlatform, home of the National Geospatial Data Assets.
+- HIFLD Open is not listed, since its ArcGIS Hub site no longer exists. Every listed agency was checked to return datasets in September 2026; `npm run check:gis-portals -- federal` repeats the check.
 
 ## US State GIS
 

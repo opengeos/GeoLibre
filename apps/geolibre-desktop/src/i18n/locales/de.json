@@ -3330,6 +3330,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "US-Bundesstaaten-GIS",
       "geolibre-us-local-gis": "US-Kommunal-GIS",
+      "geolibre-us-federal-gis": "US-Bundes-GIS",
       "geolibre-osm-downloader": "OSM-Downloader",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC-Kataloge",
@@ -3989,6 +3990,16 @@
     "chooseState": "Bundesstaat wählen",
     "portal": "Stadt oder County",
     "chooseStateHint": "Einen Bundesstaat und dann eine Stadt oder ein County wählen, um die GIS-Daten aufzulisten.",
+    "openPortal": "Portal öffnen"
+  },
+  "usFederalGis": {
+    "hint": "Ein Ministerium und dann eine Behörde wählen, um deren öffentliche GIS-Daten zu durchsuchen. Layer zur Karte hinzufügen oder Daten herunterladen.",
+    "searchPlaceholder": "GIS-Daten der Behörde durchsuchen",
+    "noResults": "Keine passenden Datensätze für diese Behörde gefunden.",
+    "searchError": "Dieses GIS-Portal des Bundes konnte nicht durchsucht werden.",
+    "chooseDepartment": "Ministerium wählen",
+    "agency": "Behörde",
+    "chooseDepartmentHint": "Ein Ministerium und dann eine Behörde wählen, um die GIS-Daten aufzulisten.",
     "openPortal": "Portal öffnen"
   },
   "openDataCatalogs": {

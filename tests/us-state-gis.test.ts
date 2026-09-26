@@ -12,6 +12,7 @@ import {
   type ArcGisHubCatalogSet,
 } from "../packages/plugins/src/plugins/maplibre-arcgis-hub";
 import { TENNESSEE_GIS_PLUGIN_ID } from "../packages/plugins/src/plugins/maplibre-tennessee-gis";
+import { US_FEDERAL_GIS_PLUGIN_ID } from "../packages/plugins/src/plugins/maplibre-us-federal-gis";
 import {
   maplibreUsStateGisPlugin,
   US_STATE_GIS_PLUGIN_ID,
@@ -103,11 +104,16 @@ describe("US State GIS catalog", () => {
     }
   });
 
-  it("is a Web Services plugin next to Tennessee GIS", () => {
+  it("is a Web Services plugin below Tennessee GIS and US Federal GIS", () => {
     assert.equal(maplibreUsStateGisPlugin.id, US_STATE_GIS_PLUGIN_ID);
     assert.equal(maplibreUsStateGisPlugin.name, "US State GIS");
+    // US Federal GIS sits between them, so the three US tiers read top-down.
     assert.equal(
       WEB_SERVICE_PLUGIN_IDS.indexOf(US_STATE_GIS_PLUGIN_ID),
+      WEB_SERVICE_PLUGIN_IDS.indexOf(US_FEDERAL_GIS_PLUGIN_ID) + 1,
+    );
+    assert.equal(
+      WEB_SERVICE_PLUGIN_IDS.indexOf(US_FEDERAL_GIS_PLUGIN_ID),
       WEB_SERVICE_PLUGIN_IDS.indexOf(TENNESSEE_GIS_PLUGIN_ID) + 1,
     );
     assert.ok(WEB_SERVICE_PLUGIN_IDS.includes(ARCGIS_HUB_PLUGIN_ID));
