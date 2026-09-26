@@ -90,8 +90,10 @@ export interface ArcGisHubPluginConfig {
   /** Item types to search. Defaults to the global Hub set. */
   types?: readonly string[];
   /**
-   * Resolves the groups that scope the search, for a Hub site's catalog. Called
-   * once per search until it succeeds; the result is then cached.
+   * Resolves the groups that scope the search, for a Hub site's catalog. A
+   * search calls it while no list is cached, so a rejection is retried by the
+   * next search; the first list it resolves to (including any fallback the
+   * resolver substitutes itself) is kept for the plugin's lifetime.
    */
   resolveGroups?: (signal: AbortSignal) => Promise<readonly string[]>;
   /**
@@ -169,7 +171,7 @@ const SERVICE_LAYER_TYPES: Record<string, ArcGISLayerType> = {
 };
 
 function canVisualize(item: ArcGisHubItem): boolean {
-  return item.type in SERVICE_LAYER_TYPES || item.type === "GeoJson";
+  return Object.hasOwn(SERVICE_LAYER_TYPES, item.type) || item.type === "GeoJson";
 }
 
 // A Feature Service is downloaded by querying its FeatureServer URL; without one
@@ -204,7 +206,11 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
   async function visualize(item: ArcGisHubItem): Promise<void> {
     const app = appRef;
     if (!app) return;
-    const serviceLayerType = SERVICE_LAYER_TYPES[item.type];
+    // Own keys only: `type` comes from the portal, and a value such as
+    // "constructor" must not resolve to an Object.prototype member.
+    const serviceLayerType = Object.hasOwn(SERVICE_LAYER_TYPES, item.type)
+      ? SERVICE_LAYER_TYPES[item.type]
+      : undefined;
     if (serviceLayerType) {
       await addArcGISLayer(app, {
         layerType: serviceLayerType,
@@ -544,6 +550,9 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
     // Load more button stays for keyboard users and as a retry after an error.
     const loadMoreIfNearBottom = () => {
       if (busy || more.hidden) return;
+      // A collapsed or hidden panel lays the list out with zero height, which
+      // would otherwise read as "at the bottom" and page through everything.
+      if (results.clientHeight === 0) return;
       const remaining = results.scrollHeight - results.scrollTop - results.clientHeight;
       if (remaining <= AUTO_LOAD_THRESHOLD_PX) void runSearch(true);
     };

@@ -154,7 +154,7 @@ Searches public datasets published to [ArcGIS Hub](https://hub.arcgis.com/).
 Browses the State of Tennessee's [downloadable GIS data portal](https://geodata.tn.gov/) — roads, boundaries, parcels, hydrography, wildlife management areas, state parks, and the other datasets state agencies publish there.
 
 - The panel lists the whole catalog as soon as it opens, alphabetically; type a keyword to narrow it. **Search the current map area** starts off, since most layers are statewide.
-- **Add to map** loads feature services as editable vector layers and map or image services (such as statewide imagery) as raster layers. **Zoom**, **Download**, and **Details** work as in ArcGIS Hub; Details opens the dataset's page on geodata.tn.gov.
+- **Add to map** loads feature services as editable vector layers and map or image services (such as statewide imagery) as raster layers. **Zoom** and **Details** work as in ArcGIS Hub, and Details opens the dataset's page on geodata.tn.gov. **Download** saves feature services as GeoJSON; map and image services only render imagery, so they have nothing to download.
 - The portal is an ArcGIS Hub site, so the panel searches the groups that make up its catalog. It reads that list from the site when it opens, so datasets the state adds show up without a GeoLibre update.
 
 ## Socrata

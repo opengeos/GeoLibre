@@ -236,6 +236,19 @@ describe("Hub panel infinite scroll", () => {
     }
   });
 
+  it("does not page through a collapsed panel whose list has no height", async () => {
+    const panel = openPanel({ rowHeight: 0, clientHeight: 0 });
+    try {
+      await settle();
+      panel.scroll();
+      await settle();
+      assert.equal(panel.requests.length, 1);
+      assert.equal(panel.cards(), 20);
+    } finally {
+      panel.close();
+    }
+  });
+
   it("keeps loading while the results do not fill the list, then stops at the end", async () => {
     const panel = openPanel({ rowHeight: 5, clientHeight: 400 });
     try {

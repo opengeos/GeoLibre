@@ -3276,6 +3276,7 @@
       "maplibre-gl-esri-wayback": "ภาพถ่ายย้อนหลัง",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
+      "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-osm-downloader": "ตัวดาวน์โหลด OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "แคตตาล็อก STAC",
