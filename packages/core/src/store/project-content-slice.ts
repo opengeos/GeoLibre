@@ -11,6 +11,7 @@ import {
   type CommentReply,
   type DashboardWidget,
   type ProjectComment,
+  type ProjectInteraction,
   type StoryChapter,
   type StoryMap,
 } from "../types";
@@ -24,6 +25,12 @@ export interface ProjectContentSlice {
   dashboardColumns: number;
   /** Anchored review comments on map points or features (issue #1518). */
   comments: ProjectComment[];
+  /**
+   * The loaded project's startup `interaction` block (issue #2688). Applied
+   * once on load and written back unchanged on save; live Identify and control
+   * changes do not edit it.
+   */
+  projectInteraction: ProjectInteraction | null;
 
   /** Append a new dashboard widget. */
   addWidget: (widget: DashboardWidget) => void;
@@ -60,6 +67,7 @@ export const createProjectContentSlice: SliceCreator<ProjectContentSlice> = (set
   widgets: [],
   dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
   comments: [],
+  projectInteraction: null,
 
   addComment: (comment) =>
     set((s) => {

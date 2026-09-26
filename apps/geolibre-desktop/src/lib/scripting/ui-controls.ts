@@ -1,10 +1,12 @@
-import { IDENTIFY_ALL_LAYERS_ID, useAppStore } from "@geolibre/core";
+import { IDENTIFY_ALL_LAYERS_ID, resolveIdentifyTarget, useAppStore } from "@geolibre/core";
 import type { BuiltInMapControl } from "@geolibre/map";
 
 // Scripted control of UI state that is not part of the project: which layer
 // Identify is armed on, and which map controls and toolbar panels are shown.
 // The Jupyter widget replays these on load, so a notebook can open a map with
 // popups armed and the bookmark or search panel already up (discussion #2600).
+// A project can also carry them as its startup `interaction` block, which
+// `useProjectInteractionRestore` applies through the same commands (#2688).
 
 /** The value a script passes to arm Identify on every visible queryable layer. */
 export const SCRIPT_IDENTIFY_ALL = "all";
@@ -122,43 +124,56 @@ export function isScriptablePanel(name: unknown): name is ScriptablePanel {
 }
 
 /**
- * Arm Identify on one layer, on every visible layer, or turn it off.
+ * Arm Identify on one layer, on several, on every visible layer, or turn it off.
  *
  * {@link SCRIPT_IDENTIFY_ALL} is matched before `layerId` is resolved against
  * the project, so a layer whose id is literally `"all"` cannot be targeted on
  * its own. Generated ids are nanoid-style, so only a hand-authored project can
  * reach that, and the sentinel is part of the documented API.
  *
- * @param layerId - A layer id, {@link SCRIPT_IDENTIFY_ALL}, or null to disarm.
- * @returns The store's resulting `identifyLayerId` in script terms.
- * @throws If `layerId` is not a string or null, or names no layer.
+ * A list limits the all-layers mode to those layers (issue #2688), so clicking
+ * the map opens popups for them and not for base or context layers.
+ *
+ * @param layerId - A layer id, a list of layer ids, {@link SCRIPT_IDENTIFY_ALL},
+ *   or null to disarm.
+ * @returns The resulting Identify target in script terms (see
+ *   {@link getScriptIdentify}).
+ * @throws If `layerId` is not a string, a list of strings, or null, or names a
+ *   layer that does not exist.
  */
-export function setScriptIdentify(layerId: unknown): string | null {
+export function setScriptIdentify(layerId: unknown): string | string[] | null {
   const state = useAppStore.getState();
   if (layerId === null || layerId === undefined) {
     state.setIdentifyLayer(null);
     return null;
   }
-  if (typeof layerId !== "string" || !layerId) {
-    throw new Error('setIdentify: layerId must be a layer id, "all", or null');
+  const ids = Array.isArray(layerId) ? layerId : [layerId];
+  if (ids.length === 0 || ids.some((id) => typeof id !== "string" || !id)) {
+    throw new Error('setIdentify: layerId must be a layer id, a list of layer ids, "all", or null');
   }
   if (layerId === SCRIPT_IDENTIFY_ALL) {
     state.setIdentifyLayer(IDENTIFY_ALL_LAYERS_ID);
     return SCRIPT_IDENTIFY_ALL;
   }
-  if (!state.layers.some((layer) => layer.id === layerId)) {
-    throw new Error(`No layer with id "${layerId}"`);
-  }
-  state.setIdentifyLayer(layerId);
-  return layerId;
+  const missing = (ids as string[]).find((id) => !state.layers.some((layer) => layer.id === id));
+  if (missing !== undefined) throw new Error(`No layer with id "${missing}"`);
+  state.setIdentifyState(
+    resolveIdentifyTarget(
+      ids as string[],
+      state.layers.map((layer) => layer.id),
+    ),
+  );
+  return getScriptIdentify();
 }
 
 /**
- * Read which layer Identify is armed on, in script terms.
+ * Read which layers Identify is armed on, in script terms.
  *
- * @returns A layer id, {@link SCRIPT_IDENTIFY_ALL}, or null when disarmed.
+ * @returns A layer id, a list of layer ids when the all-layers mode is limited
+ *   to several, {@link SCRIPT_IDENTIFY_ALL}, or null when disarmed.
  */
-export function getScriptIdentify(): string | null {
-  const id = useAppStore.getState().identifyLayerId;
-  return id === IDENTIFY_ALL_LAYERS_ID ? SCRIPT_IDENTIFY_ALL : id;
+export function getScriptIdentify(): string | string[] | null {
+  const { identifyLayerId: id, identifyLayerIds } = useAppStore.getState();
+  if (id !== IDENTIFY_ALL_LAYERS_ID) return id;
+  return identifyLayerIds ? [...identifyLayerIds] : SCRIPT_IDENTIFY_ALL;
 }

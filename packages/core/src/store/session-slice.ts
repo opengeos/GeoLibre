@@ -28,6 +28,84 @@ export interface GpsStatusFix {
 /** Reserved Identify target for querying every visible queryable layer at once. */
 export const IDENTIFY_ALL_LAYERS_ID = "__geolibre_identify_all_layers__";
 
+/** The Identify fields of the store, as set together by an Identify change. */
+export interface IdentifyState {
+  identifyLayerId: string | null;
+  identifyLayerIds: string[] | null;
+}
+
+/**
+ * Resolve an Identify target against the layers that exist.
+ *
+ * Shared by the scripting `setIdentify` command and by project load, which
+ * applies a project's saved `interaction.identify` (issue #2688).
+ *
+ * @param target - A layer id, `"all"`, a list of layer ids, or null/undefined.
+ * @param layerIds - Ids of the layers currently in the project.
+ * @returns The store fields to set. Ids that name no layer are dropped; a list
+ *   that keeps one id becomes a single-layer target, and one that keeps several
+ *   becomes the all-layers mode restricted to those ids.
+ */
+export function resolveIdentifyTarget(
+  target: string | readonly string[] | null | undefined,
+  layerIds: Iterable<string>,
+): IdentifyState {
+  const off: IdentifyState = { identifyLayerId: null, identifyLayerIds: null };
+  if (target === null || target === undefined) return off;
+  if (target === "all") return { identifyLayerId: IDENTIFY_ALL_LAYERS_ID, identifyLayerIds: null };
+  const known = new Set(layerIds);
+  if (typeof target === "string") {
+    return known.has(target) ? { identifyLayerId: target, identifyLayerIds: null } : off;
+  }
+  const ids = [...new Set(target)].filter((id) => known.has(id));
+  if (ids.length === 0) return off;
+  if (ids.length === 1) return { identifyLayerId: ids[0], identifyLayerIds: null };
+  return { identifyLayerId: IDENTIFY_ALL_LAYERS_ID, identifyLayerIds: ids };
+}
+
+/**
+ * Whether the all-layers Identify mode may query a layer.
+ *
+ * @param layerId - The candidate layer's id.
+ * @param identifyLayerIds - The store's `identifyLayerIds` restriction.
+ * @returns True when there is no restriction or the layer is in it.
+ */
+export function identifyAllIncludes(
+  layerId: string,
+  identifyLayerIds: readonly string[] | null | undefined,
+): boolean {
+  return !identifyLayerIds || identifyLayerIds.includes(layerId);
+}
+
+/**
+ * Drop removed layers from the Identify state.
+ *
+ * @param state - The current Identify fields.
+ * @param removed - Ids of the layers being removed.
+ * @returns The Identify fields with those layers gone. A restricted all-layers
+ *   mode left with one layer narrows to it, and with none turns Identify off.
+ */
+export function identifyStateWithoutLayers(
+  state: IdentifyState,
+  removed: ReadonlySet<string>,
+): IdentifyState {
+  if (state.identifyLayerId !== null && removed.has(state.identifyLayerId)) {
+    return { identifyLayerId: null, identifyLayerIds: null };
+  }
+  // Return fresh fields, never `state` itself: callers spread the result into
+  // a store update and pass the whole store as `state`.
+  const unchanged = {
+    identifyLayerId: state.identifyLayerId,
+    identifyLayerIds: state.identifyLayerIds,
+  };
+  if (!state.identifyLayerIds) return unchanged;
+  const ids = state.identifyLayerIds.filter((id) => !removed.has(id));
+  if (ids.length === state.identifyLayerIds.length) return unchanged;
+  if (ids.length === 0) return { identifyLayerId: null, identifyLayerIds: null };
+  if (ids.length === 1) return { identifyLayerId: ids[0], identifyLayerIds: null };
+  return { identifyLayerId: state.identifyLayerId, identifyLayerIds: ids };
+}
+
 export interface SessionSlice {
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
@@ -45,6 +123,14 @@ export interface SessionSlice {
    * DuckDB query, WMS, COG, NetCDF image and time-slider raster alike.
    */
   identifyLayerId: string | null;
+  /**
+   * Layers the all-layers Identify mode is limited to, or null for every
+   * visible queryable layer. Set only alongside {@link IDENTIFY_ALL_LAYERS_ID},
+   * by a script or project that names several layers (issue #2688), and
+   * cleared by every `setIdentifyLayer` call so the in-app buttons keep their
+   * plain meaning.
+   */
+  identifyLayerIds: string[] | null;
   pointerCoords: [number, number] | null;
   /**
    * Ground elevation in true metres under the pointer, for the status bar
@@ -79,6 +165,8 @@ export interface SessionSlice {
    */
   selectFeatures: (ids: string[], anchorId?: string | null) => void;
   setIdentifyLayer: (id: string | null) => void;
+  /** Set both Identify fields at once (see {@link resolveIdentifyTarget}). */
+  setIdentifyState: (state: IdentifyState) => void;
   setAttributeFilter: (filter: string) => void;
 }
 
@@ -87,6 +175,7 @@ export const createSessionSlice: SliceCreator<SessionSlice> = (set) => ({
   selectedFeatureId: null,
   selectedFeatureIds: [],
   identifyLayerId: null,
+  identifyLayerIds: null,
   pointerCoords: null,
   pointerElevation: null,
   cameraAltitude: null,
@@ -118,6 +207,8 @@ export const createSessionSlice: SliceCreator<SessionSlice> = (set) => ({
       selectedFeatureId:
         anchorId != null && ids.includes(anchorId) ? anchorId : (ids.at(-1) ?? null),
     }),
-  setIdentifyLayer: (id) => set({ identifyLayerId: id }),
+  setIdentifyLayer: (id) => set({ identifyLayerId: id, identifyLayerIds: null }),
+  setIdentifyState: ({ identifyLayerId, identifyLayerIds }) =>
+    set({ identifyLayerId, identifyLayerIds }),
   setAttributeFilter: (filter) => set({ attributeFilter: filter }),
 });

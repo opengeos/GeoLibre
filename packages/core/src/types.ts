@@ -2364,7 +2364,32 @@ export interface GeoLibreProject {
   styleLibrary?: StyleLibraryEntry[];
   /** Anchored review comments on map points or features (issue #1518). */
   comments?: ProjectComment[];
+  /**
+   * Interaction state applied when the project opens: the Identify target and
+   * which map controls and toolbar panels start shown (issue #2688). Written by
+   * the Python `geolibre` package from `set_identify` / `show_control`, so a
+   * saved or HTML-exported notebook map opens the way it was set up. Omitted
+   * by default; the app keeps what it loaded and writes it back unchanged.
+   */
+  interaction?: ProjectInteraction;
   metadata: Record<string, unknown>;
+}
+
+/**
+ * Startup interaction state carried by a project (see
+ * {@link GeoLibreProject.interaction}).
+ */
+export interface ProjectInteraction {
+  /**
+   * Identify target on open: a layer id, `"all"` for every visible queryable
+   * layer, a list of layer ids to identify only those, or `null` for off.
+   */
+  identify?: string | string[] | null;
+  /**
+   * Map control or toolbar panel name (`"search"`, `"bookmark"`, `"globe"`,
+   * ...) to whether it starts shown. Unknown names are ignored on open.
+   */
+  controls?: Record<string, boolean>;
 }
 
 export type CommentAnchor =

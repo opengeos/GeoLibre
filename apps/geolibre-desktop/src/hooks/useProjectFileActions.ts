@@ -1007,6 +1007,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       primaryRenderer: state.primaryRenderer,
       styleLibrary: state.projectStyleLibrary,
       comments: state.comments,
+      interaction: state.projectInteraction,
       metadata: state.metadata,
     });
     // The serialized text is deliberately not returned: every caller

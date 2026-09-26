@@ -56,6 +56,7 @@ import {
   type CommentAuthor,
   type CommentReply,
   type ProjectComment,
+  type ProjectInteraction,
 } from "./types";
 import { DEFAULT_LAYER_GROUP_OPACITY, normalizeGroupContiguity } from "./layer-groups";
 import { normalizeStyleLibraryEntries } from "./style-library";
@@ -370,6 +371,7 @@ export function parseProject(json: string): GeoLibreProject {
   );
   const styleLibrary = normalizeStyleLibraryEntries(data.styleLibrary);
   const parsedComments = normalizeProjectComments(data.comments);
+  const parsedInteraction = normalizeProjectInteraction(data.interaction);
   return {
     version: data.version,
     name: data.name,
@@ -411,6 +413,7 @@ export function parseProject(json: string): GeoLibreProject {
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     ...(parsedComments.length > 0 ? { comments: parsedComments } : {}),
+    ...(parsedInteraction ? { interaction: parsedInteraction } : {}),
     metadata: data.metadata ?? {},
   };
 }
@@ -1263,6 +1266,41 @@ export function normalizeDashboardColumns(value: unknown): number {
   return Math.max(MIN_DASHBOARD_COLUMNS, Math.min(MAX_DASHBOARD_COLUMNS, Math.trunc(value)));
 }
 
+/**
+ * Coerce an untrusted `interaction` block into a {@link ProjectInteraction}.
+ *
+ * Layer ids are kept even when no such layer exists: the block is replayed
+ * against whatever layers the project has when it opens, and the loader drops
+ * the ones it cannot find. Control names are kept as written for the same
+ * reason; the app ignores names it does not know.
+ *
+ * @param value - Raw `interaction` value from the project JSON or the store.
+ * @returns The normalized block, or null when it carries nothing to apply.
+ */
+export function normalizeProjectInteraction(value: unknown): ProjectInteraction | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as { identify?: unknown; controls?: unknown };
+  const result: ProjectInteraction = {};
+  if (raw.identify === null) {
+    result.identify = null;
+  } else if (typeof raw.identify === "string" && raw.identify) {
+    result.identify = raw.identify;
+  } else if (Array.isArray(raw.identify)) {
+    const ids = [
+      ...new Set(raw.identify.filter((id): id is string => typeof id === "string" && !!id)),
+    ];
+    if (ids.length > 0) result.identify = ids;
+  }
+  if (raw.controls && typeof raw.controls === "object" && !Array.isArray(raw.controls)) {
+    const controls: Record<string, boolean> = {};
+    for (const [name, shown] of Object.entries(raw.controls)) {
+      if (name && typeof shown === "boolean") controls[name] = shown;
+    }
+    if (Object.keys(controls).length > 0) result.controls = controls;
+  }
+  return "identify" in result || result.controls ? result : null;
+}
+
 function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
   if (!preferences || typeof preferences !== "object") {
     return DEFAULT_PROJECT_PREFERENCES;
@@ -1718,6 +1756,8 @@ export function projectFromStore(state: {
   /** Project-scoped Style Manager entries (the store's `projectStyleLibrary`). */
   styleLibrary?: StyleLibraryEntry[] | null;
   comments?: ProjectComment[] | null;
+  /** Startup interaction state loaded with the project, written back as-is. */
+  interaction?: ProjectInteraction | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -1734,6 +1774,7 @@ export function projectFromStore(state: {
   const processingHistory = normalizeProcessingHistory(state.processingHistory);
   const widgets = normalizeWidgets(state.widgets);
   const comments = normalizeProjectComments(state.comments);
+  const interaction = normalizeProjectInteraction(state.interaction);
   // Persist a non-default column count only; a default-layout dashboard (or a
   // widget-less project) stays free of the key for legacy readers.
   const dashboardColumns =
@@ -1799,6 +1840,7 @@ export function projectFromStore(state: {
       : {}),
     ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     ...(comments.length > 0 ? { comments } : {}),
+    ...(interaction ? { interaction } : {}),
     metadata: state.metadata,
   };
 }
@@ -1982,6 +2024,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   primaryRenderer: MapRendererKind;
   projectStyleLibrary: StyleLibraryEntry[];
   comments: ProjectComment[];
+  projectInteraction: ProjectInteraction | null;
   metadata: Record<string, unknown>;
 } {
   // Legacy and externally-authored projects can carry a partial top-level
@@ -2088,6 +2131,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     primaryRenderer: normalizePrimaryRenderer(project.primaryRenderer) ?? DEFAULT_PRIMARY_RENDERER,
     projectStyleLibrary: normalizeStyleLibraryEntries(project.styleLibrary),
     comments: scrubbedComments,
+    projectInteraction: normalizeProjectInteraction(project.interaction),
     metadata: project.metadata,
   };
 }

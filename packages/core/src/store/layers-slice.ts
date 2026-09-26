@@ -21,6 +21,7 @@ import {
 } from "../layer-style-clipboard";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh } from "../joins";
 import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
+import { identifyStateWithoutLayers } from "./session-slice";
 import {
   DEFAULT_LAYER_STYLE,
   type AddTileLayerOptions,
@@ -250,7 +251,7 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
           : s.selectedLayerId,
       selectedFeatureId: s.selectedLayerId === id ? null : s.selectedFeatureId,
       selectedFeatureIds: s.selectedLayerId === id ? [] : s.selectedFeatureIds,
-      identifyLayerId: s.identifyLayerId === id ? null : s.identifyLayerId,
+      ...identifyStateWithoutLayers(s, new Set([id])),
       ui: {
         ...s.ui,
         selectByExpressionLayerId:

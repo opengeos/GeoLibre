@@ -17,6 +17,7 @@ import {
   scrubWidgetsForRemovedLayers,
 } from "../layer-ref-scrub";
 import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
+import { identifyStateWithoutLayers } from "./session-slice";
 import type { LayerGroup } from "../types";
 import {
   cascadeJoinRefreshForRemoved,
@@ -149,10 +150,7 @@ export const createLayerGroupsSlice: SliceCreator<LayerGroupsSlice> = (set, get)
           : s.selectedLayerId,
         selectedFeatureId: selectionRemoved ? null : s.selectedFeatureId,
         selectedFeatureIds: selectionRemoved ? [] : s.selectedFeatureIds,
-        identifyLayerId:
-          s.identifyLayerId !== null && removedIds.has(s.identifyLayerId)
-            ? null
-            : s.identifyLayerId,
+        ...identifyStateWithoutLayers(s, removedIds),
         ui: removeChildren
           ? {
               ...s.ui,

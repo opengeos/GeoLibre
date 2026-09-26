@@ -9,6 +9,7 @@ import {
   effectiveLayerRenderState,
   getActiveEllipsoid,
   IDENTIFY_ALL_LAYERS_ID,
+  identifyAllIncludes,
   isDuckDBQueryLayer,
   isPopupClickEnabled,
   isPopupHoverEnabled,
@@ -613,8 +614,12 @@ export const MapCanvas = memo(function MapCanvas({
         // when handed the array form, so fold every candidate against one map
         // built once per click instead of one per layer.
         const groupById = new Map(layerGroupsRef.current.map((group) => [group.id, group]));
+        // Read at click time: a restriction set by a script or project names
+        // the layers this mode is limited to (issue #2688).
+        const { identifyLayerIds } = useAppStore.getState();
         const eligibleLayers = layers.filter(
           (candidate) =>
+            identifyAllIncludes(candidate.id, identifyLayerIds) &&
             effectiveLayerRenderState(candidate, groupById).visible &&
             resolveLayerCapabilities(candidate).query &&
             isPopupClickEnabled(candidate.popup),

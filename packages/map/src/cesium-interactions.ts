@@ -1,6 +1,7 @@
 import {
   effectiveLayerRenderState,
   IDENTIFY_ALL_LAYERS_ID,
+  identifyAllIncludes,
   isPopupClickEnabled,
   isPopupHoverEnabled,
   resolvePopupMaxWidth,
@@ -196,6 +197,11 @@ export function installCesiumInteractions(
     for (const hit of hits) {
       const layer = state.layers.find((item) => item.id === hit.layerId);
       if (!layer || !isPopupClickEnabled(layer.popup)) continue;
+      if (
+        target === IDENTIFY_ALL_LAYERS_ID &&
+        !identifyAllIncludes(layer.id, state.identifyLayerIds)
+      )
+        continue;
       const configured = resolvePopupMaxWidth(layer.popup);
       if (configured !== undefined) widest = Math.max(widest ?? configured, configured);
       popupLayerIds.push(layer.id);

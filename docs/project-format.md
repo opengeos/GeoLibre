@@ -42,6 +42,7 @@ file contents do not change.
 | `dashboardColumns`| number  | Optional Dashboard widget-grid column count (1-6, default 2); omitted when default                          |
 | `styleLibrary`    | array   | Optional project-scoped Style Manager entries (name, tags, kind, `LayerStyle` subset); omitted when empty    |
 | `primaryRenderer` | string  | Optional engine for the primary map area: `"maplibre"` (2D, the default), `"mapbox"` (Mapbox GL JS), `"arcgis"` (ArcGIS Maps SDK for JavaScript) or `"cesium"` (3D globe); omitted when default |
+| `interaction`     | object  | Optional startup Identify target and control visibility (see below); omitted by default                      |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
 ## Plugin state
@@ -205,6 +206,29 @@ Unused keys are ignored. The Dashboard panel (Tools → Dashboard, or the
 widget-grid column count (1-6, default 2), at the top level of the project.
 Charts read from GeoJSON-backed vector layers and DuckDB query layers; widgets
 bound to a missing or non-attribute layer are shown as empty.
+
+## Interaction
+
+```json
+{
+  "interaction": {
+    "identify": ["layer-a", "layer-b"],
+    "controls": { "search": true, "globe": false }
+  }
+}
+```
+
+Applied when the project opens, so a map shared from a notebook starts the way
+it was set up there. The Python package writes it from `Map.set_identify` and
+`Map.show_control` / `Map.hide_control` in `save_project`, `to_project` and
+`to_html`. `identify` is a layer id, `"all"` for every visible queryable layer,
+a list of layer ids to identify only those, or `null` for off; ids that name no
+layer are skipped. `controls` maps a toolbar panel (`bookmark`, `search`,
+`measure`, `minimap`, `print`) or built-in map control (`navigation`,
+`fullscreen`, `compass`, `geolocate`, `globe`, `scale`, `attribution`, `logo`)
+to whether it starts shown; other names are ignored. The app writes the block
+back unchanged when it saves the project; turning Identify or a control on or
+off in the app does not edit it.
 
 ## Layer object
 

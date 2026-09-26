@@ -6,6 +6,7 @@ import {
   effectiveLayerRenderState,
   getActiveEllipsoid,
   IDENTIFY_ALL_LAYERS_ID,
+  identifyAllIncludes,
   isDuckDBQueryLayer,
   isPopupClickEnabled,
   isPopupHoverEnabled,
@@ -654,6 +655,7 @@ export function MapboxCanvas({
           const groupById = new Map(next.layerGroups.map((group) => [group.id, group]));
           const eligibleLayers = next.layers.filter(
             (candidate) =>
+              identifyAllIncludes(candidate.id, next.identifyLayerIds) &&
               effectiveLayerRenderState(candidate, groupById).visible &&
               resolveLayerCapabilities(candidate).query &&
               isPopupClickEnabled(candidate.popup),

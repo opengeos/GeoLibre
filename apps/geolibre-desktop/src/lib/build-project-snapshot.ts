@@ -62,6 +62,7 @@ export function buildProjectSnapshot(
     primaryRenderer: state.primaryRenderer,
     styleLibrary: state.projectStyleLibrary,
     comments: state.comments,
+    interaction: state.projectInteraction,
     metadata: state.metadata,
   });
 }

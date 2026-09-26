@@ -1,6 +1,7 @@
 import {
   effectiveLayerRenderState,
   IDENTIFY_ALL_LAYERS_ID,
+  identifyAllIncludes,
   isDuckDBQueryLayer,
   isPopupClickEnabled,
   NETCDF_IMAGE_SOURCE_KIND,
@@ -120,6 +121,7 @@ export function createArcgisIdentify(host: ArcgisIdentifyHost): {
     const groupById = new Map(next.layerGroups.map((group) => [group.id, group]));
     const eligibleLayers = next.layers.filter(
       (candidate) =>
+        identifyAllIncludes(candidate.id, next.identifyLayerIds) &&
         effectiveLayerRenderState(candidate, groupById).visible &&
         resolveLayerCapabilities(candidate).query &&
         isPopupClickEnabled(candidate.popup),

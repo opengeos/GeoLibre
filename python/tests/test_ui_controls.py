@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 
@@ -135,6 +136,104 @@ def test_remove_layer_disarms_identify_before_the_project_sync(m):
     m.set_identify("Cities")
     m.remove_layer("Cities")
     assert m._ui["identify"] is None
+
+
+def test_set_identify_accepts_a_list_of_layers(m):
+    """A list limits Identify to those layers, resolved and de-duplicated."""
+    a = m.add_marker(-100, 40, name="A")
+    m.add_marker(-95, 38, name="B")
+    c = m.add_marker(-90, 35, name="C")
+    m.set_identify(["A", m.get_layer(c), a])
+    assert m._ui["identify"] == [a, c]
+
+
+def test_set_identify_list_of_one_is_a_single_layer(m):
+    a = m.add_marker(-100, 40, name="A")
+    m.set_identify(["A"])
+    assert m._ui["identify"] == a
+
+
+def test_set_identify_list_rejects_unknown_or_empty(m):
+    m.add_marker(-100, 40, name="A")
+    with pytest.raises(ValueError):
+        m.set_identify(["A", "missing"])
+    with pytest.raises(ValueError, match="empty"):
+        m.set_identify([])
+    assert "identify" not in m._ui
+
+
+def test_removing_a_listed_layer_narrows_the_list(m):
+    a = m.add_marker(-100, 40, name="A")
+    b = m.add_marker(-95, 38, name="B")
+    c = m.add_marker(-90, 35, name="C")
+    m.set_identify([a, b, c])
+    m.remove_layer(b)
+    assert m._ui["identify"] == [a, c]
+    m.remove_layer(c)
+    assert m._ui["identify"] == a
+    m.clear_layers()
+    assert m._ui["identify"] is None
+
+
+def test_to_project_and_save_project_carry_interaction(m, tmp_path):
+    """Identify and controls are written as the project's interaction block."""
+    a = m.add_marker(-100, 40, name="A")
+    b = m.add_marker(-95, 38, name="B")
+    assert "interaction" not in m.to_project()
+    m.set_identify([a, b])
+    m.show_control("search")
+    m.hide_control("globe")
+    expected = {"identify": [a, b], "controls": {"search": True, "globe": False}}
+    assert m.to_project()["interaction"] == expected
+    assert m.to_project(keep_credentials=True)["interaction"] == expected
+    # The live project stays free of it, so a project push never re-applies it.
+    assert "interaction" not in m.project
+    out = tmp_path / "map.geolibre.json"
+    m.save_project(str(out))
+    assert json.loads(out.read_text())["interaction"] == expected
+
+
+def test_to_html_carries_interaction(m):
+    m.add_marker(-100, 40, name="A")
+    m.set_identify("all")
+    m.show_control("bookmark")
+    html = m.to_html()
+    match = re.search(r'id="geolibre-project">(.*?)</script>', html, re.DOTALL)
+    assert match
+    project = json.loads(match.group(1))
+    assert project["interaction"] == {"identify": "all", "controls": {"bookmark": True}}
+
+
+def test_load_project_restores_interaction(m, tmp_path):
+    """A saved interaction block round-trips into _ui and out of the project."""
+    a = m.add_marker(-100, 40, name="A")
+    b = m.add_marker(-95, 38, name="B")
+    m.set_identify([a, b])
+    m.show_control("search")
+    out = tmp_path / "map.geolibre.json"
+    m.save_project(str(out))
+
+    other = Map()
+    other.load_project(str(out))
+    assert other._ui == {"identify": [a, b], "controls": {"search": True}}
+    assert "interaction" not in other.project
+    assert other.to_project()["interaction"] == m.to_project()["interaction"]
+
+
+def test_load_project_filters_interaction_entries(m):
+    """Unknown layers and controls in a hand-edited block are skipped."""
+    project = {
+        "version": m.project["version"],
+        "name": "Hand edited",
+        "mapView": {},
+        "layers": [{"id": "keep"}],
+        "interaction": {
+            "identify": ["keep", "gone"],
+            "controls": {"search": True, "terrain": True, "globe": "no"},
+        },
+    }
+    m.load_project(project)
+    assert m._ui == {"identify": "keep", "controls": {"search": True}}
 
 
 def _ts_string_set(source: str, name: str) -> set[str]:

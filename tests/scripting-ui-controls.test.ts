@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { IDENTIFY_ALL_LAYERS_ID, useAppStore } from "@geolibre/core";
+import {
+  IDENTIFY_ALL_LAYERS_ID,
+  identifyAllIncludes,
+  parseProject,
+  projectFromStore,
+  serializeProject,
+  useAppStore,
+} from "@geolibre/core";
 import {
   clearScriptMapControls,
   forgetScriptMapControl,
@@ -45,6 +52,112 @@ describe("scripted Identify", () => {
   it("rejects an unknown layer or a non-string", () => {
     assert.throws(() => setScriptIdentify("missing"), /No layer with id "missing"/);
     assert.throws(() => setScriptIdentify(42), /layerId must be/);
+    assert.equal(useAppStore.getState().identifyLayerId, null);
+  });
+});
+
+describe("Identify on a list of layers (issue #2688)", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject();
+  });
+
+  it("limits the all-layers mode to the listed layers", () => {
+    const store = useAppStore.getState();
+    const a = store.addGeoJsonLayer("A", POINTS);
+    const b = store.addGeoJsonLayer("B", POINTS);
+    const c = store.addGeoJsonLayer("C", POINTS);
+    assert.deepEqual(setScriptIdentify([a, c]), [a, c]);
+    const state = useAppStore.getState();
+    assert.equal(state.identifyLayerId, IDENTIFY_ALL_LAYERS_ID);
+    assert.deepEqual(state.identifyLayerIds, [a, c]);
+    assert.ok(identifyAllIncludes(a, state.identifyLayerIds));
+    assert.ok(!identifyAllIncludes(b, state.identifyLayerIds));
+    assert.deepEqual(getScriptIdentify(), [a, c]);
+  });
+
+  it("treats a one-layer list as that layer, and rejects unknown ids", () => {
+    const a = useAppStore.getState().addGeoJsonLayer("A", POINTS);
+    assert.equal(setScriptIdentify([a]), a);
+    assert.equal(useAppStore.getState().identifyLayerIds, null);
+    assert.throws(() => setScriptIdentify([a, "missing"]), /No layer with id "missing"/);
+    assert.throws(() => setScriptIdentify([]), /layerId must be/);
+  });
+
+  it("narrows the list as listed layers are removed", () => {
+    const store = useAppStore.getState();
+    const a = store.addGeoJsonLayer("A", POINTS);
+    const b = store.addGeoJsonLayer("B", POINTS);
+    const c = store.addGeoJsonLayer("C", POINTS);
+    setScriptIdentify([a, b, c]);
+    useAppStore.getState().removeLayer(b);
+    assert.deepEqual(useAppStore.getState().identifyLayerIds, [a, c]);
+    useAppStore.getState().removeLayer(c);
+    assert.equal(useAppStore.getState().identifyLayerId, a);
+    assert.equal(useAppStore.getState().identifyLayerIds, null);
+  });
+
+  it("is cleared by the in-app Identify buttons", () => {
+    const store = useAppStore.getState();
+    const a = store.addGeoJsonLayer("A", POINTS);
+    const b = store.addGeoJsonLayer("B", POINTS);
+    setScriptIdentify([a, b]);
+    useAppStore.getState().setIdentifyLayer(IDENTIFY_ALL_LAYERS_ID);
+    assert.equal(useAppStore.getState().identifyLayerIds, null);
+  });
+});
+
+/** Snapshot the store the way the app's save path maps its fields. */
+function savedProject() {
+  const state = useAppStore.getState();
+  return projectFromStore({ ...state, interaction: state.projectInteraction });
+}
+
+describe("project interaction block (issue #2688)", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject();
+  });
+
+  it("arms the saved Identify target on load and writes the block back", () => {
+    const store = useAppStore.getState();
+    const a = store.addGeoJsonLayer("A", POINTS);
+    store.addGeoJsonLayer("B", POINTS);
+    const c = store.addGeoJsonLayer("C", POINTS);
+    const saved = projectFromStore(useAppStore.getState());
+    const project = parseProject(
+      serializeProject({
+        ...saved,
+        interaction: {
+          identify: [a, c, "gone"],
+          controls: { search: true, globe: false },
+        },
+      }),
+    );
+    useAppStore.getState().loadProject(project);
+    const state = useAppStore.getState();
+    assert.equal(state.identifyLayerId, IDENTIFY_ALL_LAYERS_ID);
+    assert.deepEqual(state.identifyLayerIds, [a, c]);
+    assert.deepEqual(savedProject().interaction, {
+      identify: [a, c, "gone"],
+      controls: { search: true, globe: false },
+    });
+  });
+
+  it("drops malformed entries and omits an empty block", () => {
+    const base = projectFromStore(useAppStore.getState());
+    const project = parseProject(
+      JSON.stringify({ ...base, interaction: { identify: 7, controls: { search: "yes" } } }),
+    );
+    assert.equal(project.interaction, undefined);
+    useAppStore.getState().loadProject(project);
+    assert.equal(useAppStore.getState().identifyLayerId, null);
+    assert.equal(savedProject().interaction, undefined);
+  });
+
+  it("arms 'all' and disarms on a project without the block", () => {
+    const base = projectFromStore(useAppStore.getState());
+    useAppStore.getState().loadProject({ ...base, interaction: { identify: "all" } });
+    assert.equal(useAppStore.getState().identifyLayerId, IDENTIFY_ALL_LAYERS_ID);
+    useAppStore.getState().loadProject(base);
     assert.equal(useAppStore.getState().identifyLayerId, null);
   });
 });

@@ -37,7 +37,14 @@ export type {
   StatisticsToolKind,
   VectorToolKind,
 } from "./store/ui-slice";
-export { type GpsStatusFix, IDENTIFY_ALL_LAYERS_ID } from "./store/session-slice";
+export {
+  type GpsStatusFix,
+  IDENTIFY_ALL_LAYERS_ID,
+  type IdentifyState,
+  identifyAllIncludes,
+  identifyStateWithoutLayers,
+  resolveIdentifyTarget,
+} from "./store/session-slice";
 export { DEFAULT_COLLABORATION_STATE } from "./store/collaboration-slice";
 export { projectPathLabel } from "./store/project-slice";
 export {

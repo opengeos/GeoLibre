@@ -356,9 +356,11 @@ class Map(anywidget.AnyWidget):
     _seq = traitlets.Int(0).tag(sync=True)
     # Last error reported by the app (e.g. an invalid project).
     error = traitlets.Unicode("").tag(sync=True)
-    # UI state the project does not carry, replayed into the app whenever it
-    # loads: ``identify`` (a layer id, "all", or None) and ``controls`` (a
-    # control or panel name -> shown). Set through set_identify/show_control.
+    # UI state replayed into the app whenever it loads: ``identify`` (a layer
+    # id, a list of layer ids, "all", or None) and ``controls`` (a control or
+    # panel name -> shown). Set through set_identify/show_control. The live
+    # project does not carry it; exports write it as the project's
+    # ``interaction`` block (see _project_with_ui).
     _ui = traitlets.Dict().tag(sync=True)
 
     def __init__(
@@ -1045,7 +1047,7 @@ class Map(anywidget.AnyWidget):
             URLs or tile sources for a fully self-contained export.
         """
         html = render_project_html(
-            self.project,
+            self._project_with_ui(copy.deepcopy(self.project)),
             title=title,
             width=width,
             height=height or self.height,
@@ -2831,15 +2833,13 @@ class Map(anywidget.AnyWidget):
         # Disarm before the project sync, not after: the two traits sync
         # independently, so clearing second leaves a window where the front end
         # replays `identify` for a layer the project push just deleted.
-        if self._ui.get("identify") == resolved_id:
-            self._set_ui(identify=None)
+        self._drop_identify_layers(lambda layer_id: layer_id == resolved_id)
         self._update_project(lambda p: _authoring.remove_layer(p, resolved_id))
 
     def clear_layers(self) -> None:
         """Remove all layers from the map."""
         # Disarm first, for the reason given in `remove_layer`.
-        if self._ui.get("identify") not in (None, "all"):
-            self._set_ui(identify=None)
+        self._drop_identify_layers(lambda _layer_id: True)
         self._update_project(lambda p: p.update({"layers": []}))
 
     # -- view / basemap API ---------------------------------------------
@@ -2976,7 +2976,55 @@ class Map(anywidget.AnyWidget):
         """
         self._ui = {**self._ui, **changes}
 
-    def set_identify(self, layer: str | Layer | None = "all") -> None:
+    def _drop_identify_layers(self, removed: Callable[[str], bool]) -> None:
+        """Drop removed layers from the Identify target in ``_ui``.
+
+        A list that keeps one layer narrows to that layer, and one that keeps
+        none turns Identify off, matching what the app does when those layers
+        are deleted there. ``"all"`` and ``None`` are left alone.
+
+        Args:
+            removed: Returns ``True`` for the id of a layer being removed.
+        """
+        identify = self._ui.get("identify")
+        if identify is None or identify == "all":
+            return
+        if isinstance(identify, str):
+            if removed(identify):
+                self._set_ui(identify=None)
+            return
+        kept = [layer_id for layer_id in identify if not removed(layer_id)]
+        if len(kept) == len(identify):
+            return
+        self._set_ui(identify=kept[0] if len(kept) == 1 else (kept or None))
+
+    def _project_with_ui(self, project: dict[str, Any]) -> dict[str, Any]:
+        """Write the Identify and control state into ``project`` for export.
+
+        :meth:`set_identify` and :meth:`show_control` keep their state out of
+        the live project so a project push never reopens a panel the user
+        closed. A saved or exported project has no kernel to replay it, so it
+        carries the state as its ``interaction`` block, which the app applies
+        when the project opens.
+
+        Args:
+            project: A detached project dict, modified in place.
+
+        Returns:
+            ``project``, for chaining.
+        """
+        interaction: dict[str, Any] = {}
+        identify = self._ui.get("identify")
+        if identify is not None:
+            interaction["identify"] = list(identify) if isinstance(identify, list) else identify
+        controls = self._ui.get("controls")
+        if controls:
+            interaction["controls"] = dict(controls)
+        if interaction:
+            project["interaction"] = interaction
+        return project
+
+    def set_identify(self, layer: str | Layer | Sequence[str | Layer] | None = "all") -> None:
         """Arm the Identify tool so clicking a feature opens its popup.
 
         Popups (including those configured with :meth:`set_popup` or the
@@ -2986,24 +3034,35 @@ class Map(anywidget.AnyWidget):
         in the app. The choice is applied when the map loads, so it can be
         made before the map is displayed.
 
-        Identify is armed on one layer or on every visible layer at a time,
-        and hover tooltips pause while it is armed, as they do in the app.
+        Identify is armed on one layer, on a list of layers, or on every
+        visible layer, and hover tooltips pause while it is armed, as they do
+        in the app. The choice is saved by :meth:`save_project`,
+        :meth:`to_project` and :meth:`to_html`, so a shared map opens with
+        Identify armed the same way.
 
         Args:
             layer: A layer id, display name, or :class:`Layer` handle to
-                identify on that layer; ``"all"`` (the default) to identify
-                every visible queryable layer; or ``None`` to turn Identify off.
-                ``"all"`` is matched before the lookup, so a layer whose id or
-                display name is literally ``"all"`` cannot be targeted on its
-                own.
+                identify on that layer; a list of them to identify only those
+                layers (clicking opens popups for them and not for the rest);
+                ``"all"`` (the default) to identify every visible queryable
+                layer; or ``None`` to turn Identify off. ``"all"`` is matched
+                before the lookup, so a layer whose id or display name is
+                literally ``"all"`` cannot be targeted on its own.
 
         Raises:
-            ValueError: If ``layer`` matches no layer.
+            ValueError: If ``layer`` (or any entry of a list) matches no layer,
+                or a list is empty.
         """
-        if layer is None or layer == "all":
+        if layer is None or (isinstance(layer, str) and layer == "all"):
             self._set_ui(identify=layer)
             return
-        self._set_ui(identify=self._resolve_layer(layer).id)
+        if isinstance(layer, (str, Layer)):
+            self._set_ui(identify=self._resolve_layer(layer).id)
+            return
+        ids = list(dict.fromkeys(self._resolve_layer(item).id for item in layer))
+        if not ids:
+            raise ValueError("set_identify: the list of layers is empty")
+        self._set_ui(identify=ids[0] if len(ids) == 1 else ids)
 
     def show_control(self, name: str, visible: bool = True) -> None:
         """Show (or hide) a map control or toolbar panel.
@@ -3013,8 +3072,9 @@ class Map(anywidget.AnyWidget):
         built-in map controls (``"navigation"``, ``"fullscreen"``,
         ``"compass"``, ``"geolocate"``, ``"globe"``, ``"scale"``,
         ``"attribution"``, ``"logo"``). The choice is applied when the map
-        loads, so it can be made before the map is displayed. It is not saved
-        in the project.
+        loads, so it can be made before the map is displayed. It is saved by
+        :meth:`save_project`, :meth:`to_project` and :meth:`to_html`, so a
+        shared map opens with the same controls.
 
         Hiding ``"globe"`` removes the globe/flat toggle button only; use
         :meth:`set_projection` to change how the map is drawn.
@@ -3288,10 +3348,14 @@ class Map(anywidget.AnyWidget):
         Credentials are removed by default so a returned project is safe to
         serialize or commit. Pass ``keep_credentials=True`` only for a trusted
         local workflow that must preserve authenticated layer configuration.
+
+        The Identify target and control visibility set with
+        :meth:`set_identify` and :meth:`show_control` are included as the
+        project's ``interaction`` block.
         """
         if keep_credentials:
-            return copy.deepcopy(self.project)
-        return _project.redact_credentials(self.project)
+            return self._project_with_ui(copy.deepcopy(self.project))
+        return self._project_with_ui(_project.redact_credentials(self.project))
 
     def load_project(self, source: Any) -> None:
         """Replace the current project.
@@ -3350,22 +3414,65 @@ class Map(anywidget.AnyWidget):
             project["layers"] = []
         elif not isinstance(layers, list):
             raise ValueError("Invalid project: 'layers' must be a list")
+        layer_ids = {layer.get("id") for layer in project["layers"] if isinstance(layer, dict)}
+        # A saved project carries its Identify target and controls as an
+        # `interaction` block. Move it into `_ui`, which is what the widget
+        # replays, so the live project never carries a second copy that a
+        # project push would re-apply.
+        interaction = project.pop("interaction", None)
         # A pinned Identify target belongs to the project being replaced, so
         # drop it unless the incoming project still has that layer. Leaving it
         # would replay `setIdentify` for a missing layer on the next sync, which
         # the front end rejects into a reply nobody reads -- Identify would end
         # up disarmed anyway, just via a stray error. "all" and None survive any
         # project, as in `clear_layers`.
-        identify = self._ui.get("identify")
-        if identify not in (None, "all") and not any(
-            isinstance(layer, dict) and layer.get("id") == identify for layer in project["layers"]
-        ):
-            self._set_ui(identify=None)
+        self._drop_identify_layers(lambda layer_id: layer_id not in layer_ids)
         self._seq += 1
         self.project = project
+        if isinstance(interaction, dict):
+            self._apply_interaction(interaction, layer_ids)
+
+    def _apply_interaction(self, interaction: dict[str, Any], layer_ids: set[Any]) -> None:
+        """Load a saved project's ``interaction`` block into ``_ui``.
+
+        Entries the app would ignore are skipped rather than raised on: the
+        block may come from a hand-edited file or a newer app version.
+
+        Args:
+            interaction: The project's ``interaction`` block.
+            layer_ids: Ids of the layers in the loaded project.
+        """
+        changes: dict[str, Any] = {}
+        if "identify" in interaction:
+            identify = interaction["identify"]
+            if identify is None or identify == "all":
+                changes["identify"] = identify
+            else:
+                raw = [identify] if isinstance(identify, str) else identify
+                ids = (
+                    list(dict.fromkeys(i for i in raw if i in layer_ids))
+                    if isinstance(raw, list)
+                    else []
+                )
+                changes["identify"] = ids[0] if len(ids) == 1 else (ids or None)
+        controls = interaction.get("controls")
+        if isinstance(controls, dict):
+            changes["controls"] = {
+                **self._ui.get("controls", {}),
+                **{
+                    name: shown
+                    for name, shown in controls.items()
+                    if (name in MAP_PANELS or name in MAP_CONTROLS) and isinstance(shown, bool)
+                },
+            }
+        if changes:
+            self._set_ui(**changes)
 
     def save_project(self, path: str, *, keep_credentials: bool = False) -> None:
         """Write the current project to a ``.geolibre.json`` file.
+
+        Like :meth:`to_project`, the file carries the Identify target and
+        control visibility as its ``interaction`` block.
 
         Args:
             path: Destination file path. Parent directories are created if
@@ -3375,11 +3482,7 @@ class Map(anywidget.AnyWidget):
         """
         out = pathlib.Path(path).expanduser()
         out.parent.mkdir(parents=True, exist_ok=True)
-        project = (
-            copy.deepcopy(self.project)
-            if keep_credentials
-            else _project.redact_credentials(self.project)
-        )
+        project = self.to_project(keep_credentials=keep_credentials)
         out.write_text(json.dumps(project, indent=2), encoding="utf-8")
 
 
