@@ -570,14 +570,28 @@ export {
 } from "./plugins/ign-lidar-hd-api";
 export {
   ARCGIS_HUB_PLUGIN_ID,
+  createArcGisHubPlugin,
   DEFAULT_ARCGIS_HUB_LABELS,
   maplibreArcGisHubPlugin,
   setArcGisHubLabels,
   type ArcGisHubLabels,
+  type ArcGisHubPluginConfig,
+  type ArcGisHubPluginInstance,
 } from "./plugins/maplibre-arcgis-hub";
+export {
+  DEFAULT_TENNESSEE_GIS_LABELS,
+  maplibreTennesseeGisPlugin,
+  setTennesseeGisLabels,
+  TENNESSEE_GIS_CATALOG_GROUPS,
+  TENNESSEE_GIS_PLUGIN_ID,
+  TENNESSEE_GIS_PORTAL_URL,
+  TENNESSEE_GIS_SITE_ID,
+} from "./plugins/maplibre-tennessee-gis";
 export {
   ARCGIS_HUB_PAGE_URL,
   ARCGIS_HUB_PORTAL_URL,
+  ARCGIS_HUB_SEARCH_TYPES,
+  fetchArcGisHubSiteGroups,
   arcGisHubItemDataUrl,
   arcGisHubItemPageUrl,
   arcGisHubItemThumbnailUrl,
@@ -587,6 +601,7 @@ export {
   sanitizeArcGisHubSearchText,
   searchArcGisHub,
   type ArcGisHubItem,
+  type ArcGisHubSearchOptions,
   type ArcGisHubSearchResult,
 } from "./plugins/arcgis-hub-api";
 export {

@@ -4082,6 +4082,12 @@
     "downloadError": "לא ניתן להוריד מערך נתונים זה.",
     "details": "פרטים"
   },
+  "tennesseeGis": {
+    "hint": "עיון וחיפוש בנתוני GIS ציבוריים של מדינת טנסי (geodata.tn.gov). הוספת שכבות למפה או הורדת נתונים.",
+    "searchPlaceholder": "חיפוש בנתוני GIS של טנסי",
+    "noResults": "לא נמצאו מערכי נתונים תואמים של טנסי.",
+    "searchError": "לא ניתן לחפש בפורטל ה-GIS של טנסי."
+  },
   "openDataCatalogs": {
     "socrataHint": "חיפוש בקטלוגים ציבוריים של נתונים פתוחים ב-Socrata והוספת מערכי נתוני GeoJSON.",
     "ckanHint": "חיפוש בקטלוג ה-CKAN של Humanitarian Data Exchange והוספת משאבי GeoJSON זמינים.",

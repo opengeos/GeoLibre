@@ -3959,6 +3959,12 @@
     "downloadError": "دانلود این مجموعه‌داده ممکن نشد.",
     "details": "جزئیات"
   },
+  "tennesseeGis": {
+    "hint": "داده‌های عمومی GIS ایالت تنسی (geodata.tn.gov) را مرور و جست‌وجو کنید. لایه‌ها را به نقشه اضافه کنید یا داده‌ها را دانلود کنید.",
+    "searchPlaceholder": "جست‌وجوی داده‌های GIS تنسی",
+    "noResults": "هیچ مجموعه‌داده منطبقی از تنسی یافت نشد.",
+    "searchError": "جست‌وجو در درگاه GIS تنسی ممکن نشد."
+  },
   "openDataCatalogs": {
     "socrataHint": "فهرست‌های دادهٔ باز عمومی Socrata را جستجو کنید و مجموعه‌داده‌های GeoJSON را بیفزایید.",
     "ckanHint": "فهرست CKAN مربوط به Humanitarian Data Exchange را جستجو کنید و منابع GeoJSON در دسترس را بیفزایید.",

@@ -28,6 +28,7 @@ import { maplibreNasaEarthdataPlugin } from "../packages/plugins/src/plugins/map
 import { maplibreEnviroAtlasPlugin } from "../packages/plugins/src/plugins/maplibre-enviroatlas";
 import { maplibreNationalMapPlugin } from "../packages/plugins/src/plugins/maplibre-national-map";
 import { maplibreArcGisHubPlugin } from "../packages/plugins/src/plugins/maplibre-arcgis-hub";
+import { maplibreTennesseeGisPlugin } from "../packages/plugins/src/plugins/maplibre-tennessee-gis";
 import {
   maplibreNaturalEarthPlugin,
   maplibreSourceCoopPlugin,
@@ -329,6 +330,7 @@ describe("Web Services and service browsers on the Mapbox renderer", () => {
       maplibreEarthdataGisPlugin,
       maplibreOpenAerialMapPlugin,
       maplibreArcGisHubPlugin,
+      maplibreTennesseeGisPlugin,
       maplibreSourceCoopPlugin,
       maplibreNaturalEarthPlugin,
       maplibreHuggingFacePlugin,
@@ -341,7 +343,11 @@ describe("Web Services and service browsers on the Mapbox renderer", () => {
       assert.equal(isPluginEngineSupported(plugin, "maplibre"), true, `${plugin.id} on maplibre`);
     }
     // Engine-neutral catalogs keep the globe they already had.
-    for (const plugin of [maplibreArcGisHubPlugin, maplibreSourceCoopPlugin]) {
+    for (const plugin of [
+      maplibreArcGisHubPlugin,
+      maplibreTennesseeGisPlugin,
+      maplibreSourceCoopPlugin,
+    ]) {
       assert.equal(isPluginEngineSupported(plugin, "cesium"), true, `${plugin.id} on cesium`);
     }
   });

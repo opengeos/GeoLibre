@@ -3959,6 +3959,12 @@
     "downloadError": "Impossibile scaricare questo dataset.",
     "details": "Dettagli"
   },
+  "tennesseeGis": {
+    "hint": "Sfoglia e cerca i dati GIS pubblici dello Stato del Tennessee (geodata.tn.gov). Aggiungi layer alla mappa o scarica i dati.",
+    "searchPlaceholder": "Cerca dati GIS del Tennessee",
+    "noResults": "Nessun dataset del Tennessee corrispondente.",
+    "searchError": "Impossibile cercare nel portale GIS del Tennessee."
+  },
   "openDataCatalogs": {
     "socrataHint": "Cerca nei cataloghi pubblici di open data Socrata e aggiungi dataset GeoJSON.",
     "ckanHint": "Cerca nel catalogo CKAN dell'Humanitarian Data Exchange e aggiungi le risorse GeoJSON disponibili.",

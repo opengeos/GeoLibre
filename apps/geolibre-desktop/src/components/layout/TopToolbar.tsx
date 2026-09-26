@@ -56,6 +56,8 @@ import {
   setEarthdataGisLabels,
   setOpenAerialMapLabels,
   setArcGisHubLabels,
+  setTennesseeGisLabels,
+  type ArcGisHubLabels,
   setOpenDataCatalogLabels,
   setHuggingFaceLabels,
   setSourceCoopLabels,
@@ -381,7 +383,7 @@ export function TopToolbar({
       metaSource: t("openAerialMap.metaSource"),
       metaRaw: t("openAerialMap.metaRaw"),
     });
-    setArcGisHubLabels({
+    const arcGisHubLabels: ArcGisHubLabels = {
       hint: t("arcgisHub.hint"),
       searchPlaceholder: t("arcgisHub.searchPlaceholder"),
       search: t("arcgisHub.search"),
@@ -409,6 +411,16 @@ export function TopToolbar({
         t("arcgisHub.downloadFirstLayer", { title, layerCount }),
       downloadError: t("arcgisHub.downloadError"),
       details: t("arcgisHub.details"),
+    };
+    setArcGisHubLabels(arcGisHubLabels);
+    // The Tennessee portal is an ArcGIS Hub site, so it shares the panel's
+    // strings and overrides only the ones that name the catalog.
+    setTennesseeGisLabels({
+      ...arcGisHubLabels,
+      hint: t("tennesseeGis.hint"),
+      searchPlaceholder: t("tennesseeGis.searchPlaceholder"),
+      noResults: t("tennesseeGis.noResults"),
+      searchError: t("tennesseeGis.searchError"),
     });
     setOpenDataCatalogLabels({
       socrataHint: t("openDataCatalogs.socrataHint"),

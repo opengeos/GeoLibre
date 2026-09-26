@@ -3900,6 +3900,12 @@
     "downloading": "Đang tải xuống {{title}}: {{completed}} trong số {{total}} tính năng…",
     "downloadStarted": "Đã bắt đầu tải xuống cho {{title}}."
   },
+  "tennesseeGis": {
+    "hint": "Duyệt và tìm kiếm dữ liệu GIS công khai của Tiểu bang Tennessee (geodata.tn.gov). Thêm lớp vào bản đồ hoặc tải dữ liệu xuống.",
+    "searchPlaceholder": "Tìm dữ liệu GIS Tennessee",
+    "noResults": "Không tìm thấy bộ dữ liệu Tennessee phù hợp.",
+    "searchError": "Không thể tìm kiếm trên cổng GIS Tennessee."
+  },
   "openDataCatalogs": {
     "socrataHint": "Tìm kiếm các danh mục dữ liệu mở Socrata công khai và thêm bộ dữ liệu GeoJSON.",
     "ckanHint": "Tìm kiếm danh mục CKAN của Sàn giao dịch dữ liệu nhân đạo và thêm các tài nguyên GeoJSON có sẵn.",

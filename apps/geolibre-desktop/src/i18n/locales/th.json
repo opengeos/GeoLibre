@@ -3900,6 +3900,12 @@
     "downloadError": "ไม่สามารถดาวน์โหลดชุดข้อมูลนี้ได้",
     "details": "รายละเอียด"
   },
+  "tennesseeGis": {
+    "hint": "เรียกดูและค้นหาข้อมูล GIS สาธารณะของรัฐเทนเนสซี (geodata.tn.gov) เพิ่มชั้นข้อมูลลงในแผนที่หรือดาวน์โหลดข้อมูล",
+    "searchPlaceholder": "ค้นหาข้อมูล GIS ของเทนเนสซี",
+    "noResults": "ไม่พบชุดข้อมูลของเทนเนสซีที่ตรงกัน",
+    "searchError": "ไม่สามารถค้นหาในพอร์ทัล GIS ของเทนเนสซีได้"
+  },
   "openDataCatalogs": {
     "socrataHint": "ค้นหาแคตตาล็อกข้อมูลเปิดสาธารณะของ Socrata แล้วเพิ่มชุดข้อมูล GeoJSON",
     "ckanHint": "ค้นหาแคตตาล็อก CKAN ของ Humanitarian Data Exchange แล้วเพิ่มทรัพยากร GeoJSON ที่มีอยู่",

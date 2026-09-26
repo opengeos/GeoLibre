@@ -3959,6 +3959,12 @@
     "downloadError": "Impossible de télécharger ce jeu de données.",
     "details": "Détails"
   },
+  "tennesseeGis": {
+    "hint": "Parcourez et recherchez les données SIG publiques de l’État du Tennessee (geodata.tn.gov). Ajoutez des couches à la carte ou téléchargez les données.",
+    "searchPlaceholder": "Rechercher des données SIG du Tennessee",
+    "noResults": "Aucun jeu de données du Tennessee correspondant.",
+    "searchError": "Impossible d’interroger le portail SIG du Tennessee."
+  },
   "openDataCatalogs": {
     "socrataHint": "Recherchez dans les catalogues publics de données ouvertes Socrata et ajoutez des jeux de données GeoJSON.",
     "ckanHint": "Recherchez dans le catalogue CKAN de l'Humanitarian Data Exchange et ajoutez les ressources GeoJSON disponibles.",

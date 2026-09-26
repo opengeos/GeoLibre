@@ -3900,6 +3900,12 @@
     "downloadError": "このデータセットをダウンロードできませんでした。",
     "details": "詳細"
   },
+  "tennesseeGis": {
+    "hint": "テネシー州の公開 GIS データ（geodata.tn.gov）を閲覧・検索します。レイヤーを地図に追加するか、データをダウンロードできます。",
+    "searchPlaceholder": "テネシー州の GIS データを検索",
+    "noResults": "一致するテネシー州のデータセットが見つかりません。",
+    "searchError": "テネシー州 GIS ポータルを検索できませんでした。"
+  },
   "openDataCatalogs": {
     "socrataHint": "公開されている Socrata オープンデータカタログを検索し、GeoJSON データセットを追加します。",
     "ckanHint": "Humanitarian Data Exchange の CKAN カタログを検索し、利用可能な GeoJSON リソースを追加します。",

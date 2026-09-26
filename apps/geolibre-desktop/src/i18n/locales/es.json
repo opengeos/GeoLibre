@@ -3959,6 +3959,12 @@
     "downloadError": "No se pudo descargar este conjunto de datos.",
     "details": "Detalles"
   },
+  "tennesseeGis": {
+    "hint": "Explore y busque datos SIG públicos del estado de Tennessee (geodata.tn.gov). Añada capas al mapa o descargue datos.",
+    "searchPlaceholder": "Buscar datos SIG de Tennessee",
+    "noResults": "No se encontraron conjuntos de datos de Tennessee coincidentes.",
+    "searchError": "No se pudo buscar en el portal SIG de Tennessee."
+  },
   "openDataCatalogs": {
     "socrataHint": "Busque en catálogos públicos de datos abiertos Socrata y añada conjuntos de datos GeoJSON.",
     "ckanHint": "Busque en el catálogo CKAN del Humanitarian Data Exchange y añada los recursos GeoJSON disponibles.",

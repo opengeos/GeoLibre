@@ -4194,6 +4194,12 @@
     "downloadError": "تعذّر تنزيل مجموعة البيانات هذه.",
     "details": "التفاصيل"
   },
+  "tennesseeGis": {
+    "hint": "تصفّح بيانات نظم المعلومات الجغرافية العامة لولاية تينيسي وابحث فيها (geodata.tn.gov). أضف الطبقات إلى الخريطة أو نزّل البيانات.",
+    "searchPlaceholder": "ابحث في بيانات GIS لولاية تينيسي",
+    "noResults": "لم يُعثر على مجموعات بيانات مطابقة لولاية تينيسي.",
+    "searchError": "تعذّر البحث في بوابة GIS لولاية تينيسي."
+  },
   "openDataCatalogs": {
     "socrataHint": "ابحث في فهارس البيانات المفتوحة العامة من Socrata وأضف مجموعات بيانات GeoJSON.",
     "ckanHint": "ابحث في فهرس CKAN التابع لـ Humanitarian Data Exchange وأضف موارد GeoJSON المتاحة.",

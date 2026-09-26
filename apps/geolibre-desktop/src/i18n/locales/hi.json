@@ -3959,6 +3959,12 @@
     "downloadError": "यह डेटासेट डाउनलोड नहीं किया जा सका।",
     "details": "विवरण"
   },
+  "tennesseeGis": {
+    "hint": "टेनेसी राज्य (geodata.tn.gov) के सार्वजनिक GIS डेटा को ब्राउज़ करें और खोजें। मानचित्र में परतें जोड़ें या डेटा डाउनलोड करें।",
+    "searchPlaceholder": "टेनेसी GIS डेटा खोजें",
+    "noResults": "कोई मेल खाने वाला टेनेसी डेटासेट नहीं मिला।",
+    "searchError": "टेनेसी GIS पोर्टल में खोज नहीं की जा सकी।"
+  },
   "openDataCatalogs": {
     "socrataHint": "सार्वजनिक Socrata ओपन-डेटा कैटलॉग खोजें और GeoJSON डेटासेट जोड़ें।",
     "ckanHint": "Humanitarian Data Exchange के CKAN कैटलॉग में खोजें और उपलब्ध GeoJSON संसाधन जोड़ें।",

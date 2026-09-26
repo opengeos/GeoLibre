@@ -3959,6 +3959,12 @@
     "downloadError": "Dieser Datensatz konnte nicht heruntergeladen werden.",
     "details": "Details"
   },
+  "tennesseeGis": {
+    "hint": "Öffentliche GIS-Daten des Bundesstaats Tennessee (geodata.tn.gov) durchsuchen. Layer zur Karte hinzufügen oder Daten herunterladen.",
+    "searchPlaceholder": "Tennessee-GIS-Daten durchsuchen",
+    "noResults": "Keine passenden Tennessee-Datensätze gefunden.",
+    "searchError": "Das GIS-Portal von Tennessee konnte nicht durchsucht werden."
+  },
   "openDataCatalogs": {
     "socrataHint": "Öffentliche Socrata-Open-Data-Kataloge durchsuchen und GeoJSON-Datensätze hinzufügen.",
     "ckanHint": "Den CKAN-Katalog des Humanitarian Data Exchange durchsuchen und verfügbare GeoJSON-Ressourcen hinzufügen.",

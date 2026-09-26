@@ -3900,6 +3900,12 @@
     "downloadError": "无法下载此数据集。",
     "details": "详情"
   },
+  "tennesseeGis": {
+    "hint": "浏览和搜索田纳西州的公开 GIS 数据（geodata.tn.gov）。可将图层添加到地图，或下载数据。",
+    "searchPlaceholder": "搜索田纳西州 GIS 数据",
+    "noResults": "未找到匹配的田纳西州数据集。",
+    "searchError": "无法搜索田纳西州 GIS 门户。"
+  },
   "openDataCatalogs": {
     "socrataHint": "搜索公开的 Socrata 开放数据目录并添加 GeoJSON 数据集。",
     "ckanHint": "搜索 Humanitarian Data Exchange 的 CKAN 目录并添加可用的 GeoJSON 资源。",

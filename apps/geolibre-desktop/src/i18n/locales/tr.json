@@ -3959,6 +3959,12 @@
     "downloadError": "Bu veri kümesi indirilemedi.",
     "details": "Ayrıntılar"
   },
+  "tennesseeGis": {
+    "hint": "Tennessee Eyaleti'nin (geodata.tn.gov) herkese açık CBS verilerine göz atın ve arayın. Katmanları haritaya ekleyin veya verileri indirin.",
+    "searchPlaceholder": "Tennessee CBS verilerinde ara",
+    "noResults": "Eşleşen Tennessee veri kümesi bulunamadı.",
+    "searchError": "Tennessee CBS portalında arama yapılamadı."
+  },
   "openDataCatalogs": {
     "socrataHint": "Herkese açık Socrata açık veri kataloglarında arama yapın ve GeoJSON veri kümeleri ekleyin.",
     "ckanHint": "Humanitarian Data Exchange CKAN kataloğunda arama yapın ve mevcut GeoJSON kaynaklarını ekleyin.",

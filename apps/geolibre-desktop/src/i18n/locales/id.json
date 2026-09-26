@@ -3900,6 +3900,12 @@
     "downloadError": "Tidak dapat mengunduh kumpulan data ini.",
     "details": "Detail"
   },
+  "tennesseeGis": {
+    "hint": "Jelajahi dan cari data GIS publik dari Negara Bagian Tennessee (geodata.tn.gov). Tambahkan layer ke peta atau unduh data.",
+    "searchPlaceholder": "Cari data GIS Tennessee",
+    "noResults": "Tidak ditemukan dataset Tennessee yang cocok.",
+    "searchError": "Tidak dapat mencari di portal GIS Tennessee."
+  },
   "openDataCatalogs": {
     "socrataHint": "Cari di katalog data terbuka Socrata publik dan tambahkan kumpulan data GeoJSON.",
     "ckanHint": "Cari di katalog CKAN Humanitarian Data Exchange dan tambahkan sumber daya GeoJSON yang tersedia.",

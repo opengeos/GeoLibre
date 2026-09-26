@@ -3900,6 +3900,12 @@
     "downloadError": "이 데이터셋을 내려받을 수 없습니다.",
     "details": "세부 정보"
   },
+  "tennesseeGis": {
+    "hint": "테네시주 공개 GIS 데이터(geodata.tn.gov)를 탐색하고 검색합니다. 레이어를 지도에 추가하거나 데이터를 다운로드하세요.",
+    "searchPlaceholder": "테네시 GIS 데이터 검색",
+    "noResults": "일치하는 테네시 데이터셋이 없습니다.",
+    "searchError": "테네시 GIS 포털을 검색할 수 없습니다."
+  },
   "openDataCatalogs": {
     "socrataHint": "공개 Socrata 오픈 데이터 카탈로그를 검색하고 GeoJSON 데이터셋을 추가합니다.",
     "ckanHint": "Humanitarian Data Exchange의 CKAN 카탈로그를 검색하고 사용 가능한 GeoJSON 리소스를 추가합니다.",
