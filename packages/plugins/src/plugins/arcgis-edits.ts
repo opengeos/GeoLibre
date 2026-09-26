@@ -12,6 +12,11 @@ export interface ArcGISEditInfo {
   hasM?: boolean;
   isDataVersioned?: boolean;
   datesInUnknownTimezone?: boolean;
+  /**
+   * The features were loaded generalized for a zoomed-out view, so their
+   * geometry is a simplified copy that must not replace the service's.
+   */
+  geometryGeneralized?: boolean;
   fields?: Array<{
     name: string;
     type: string;
@@ -322,6 +327,10 @@ export function planArcGISEdits(
     const geometryChanged = !same(feature.geometry, prior.geometry);
     if (geometryChanged && info.allowGeometryUpdates === false)
       throw new Error("This ArcGIS layer does not allow geometry updates.");
+    if (geometryChanged && info.geometryGeneralized)
+      throw new Error(
+        "This layer's shapes are simplified at the current zoom. Zoom in to edit their geometry.",
+      );
     plan.updates.push({
       feature,
       objectId: id,

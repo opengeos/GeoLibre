@@ -14,6 +14,11 @@ import {
   sameArcGISFeatures,
   type ArcGISEditInfo,
 } from "./arcgis-edits";
+import {
+  arcgisQuantizationParams,
+  decodeArcGISQuantizedFeatures,
+  isArcGISQuantizedFeatureSet,
+} from "./arcgis-quantized";
 import { getGeometryEditTargetLayerId } from "./maplibre-geo-editor";
 
 let arcGISFetchOverride: typeof globalThis.fetch | null = null;
@@ -188,6 +193,8 @@ interface ArcGISFeatureLayerInfo extends ArcGISEditInfo {
   maxRecordCount?: number;
   name?: string;
   objectIdField?: string;
+  /** Whether `/query` honors `quantizationParameters` (hosted services do). */
+  supportsCoordinatesQuantization?: boolean;
 }
 
 interface ArcGISFeatureServiceInfo {
@@ -655,6 +662,9 @@ function startArcGISViewportLoader(
     // one the layer took the complete paged download above instead, so a null
     // `getMap()` is a documented branch here, not a silent no-op.
     const envelopes = arcgisViewportEnvelopes(map.getBounds());
+    // Zoomed out, a pixel hides detail the full geometry would spend megabytes
+    // on, so ask the service to generalize to the pixel grid instead.
+    const generalization = arcgisQuantizationParams(map.getZoom(), layerInfo);
     // One bucket per envelope, so a viewport split across the antimeridian
     // publishes both halves together instead of each replacing the other.
     const pages: Feature[][] = envelopes.map(() => []);
@@ -683,7 +693,8 @@ function startArcGISViewportLoader(
         metadata: {
           ...current.metadata,
           arcgisEditBaseline: structuredClone(data),
-          arcgisEditInfo: layerInfo,
+          // Generalized shapes must never be written back over the originals.
+          arcgisEditInfo: generalization ? { ...layerInfo, geometryGeneralized: true } : layerInfo,
         },
       });
       // Clear as soon as the service answers at all, not when the whole walk
@@ -702,6 +713,7 @@ function startArcGISViewportLoader(
             geometryType: "esriGeometryEnvelope",
             inSR: "4326",
             spatialRel: "esriSpatialRelIntersects",
+            ...generalization,
           },
           signal: controller.signal,
           onPage: (features) => {
@@ -1932,6 +1944,9 @@ async function fetchArcGISGeoJson(
       code: typeof json.error.code === "number" ? json.error.code : null,
     });
   }
+  // A generalized viewport query asks for quantized Esri JSON, the only format
+  // hosted services generalize (see arcgis-quantized.ts).
+  if (isArcGISQuantizedFeatureSet(json)) return decodeArcGISQuantizedFeatures(json);
   if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
   }
