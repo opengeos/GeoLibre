@@ -354,6 +354,7 @@ export function DesktopShell({
   usePluginDeepLink({
     mapControllerRef,
     enforceViewerPlugins,
+    viewer: layoutOptions.viewer,
     externalPluginsReady,
     mapReadyGeneration,
     projectUrlSettled:
