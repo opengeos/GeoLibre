@@ -566,6 +566,8 @@ export class ArcgisEngine implements MapEngine {
   private storyCameraToken = 0;
   /** Whether the camera move in progress is a story chapter's or preview's. */
   private storyMove = false;
+  /** Open `suspendNavigation` holds; Ctrl-drag steering waits for none. */
+  private navigationSuspensions = 0;
   private storyMoveLapse: ReturnType<typeof setTimeout> | undefined;
   /** Integer zoom the zoom-dependent plans were compiled at. */
   private compiledZoom: number;
@@ -796,20 +798,38 @@ export class ArcgisEngine implements MapEngine {
    * @returns The handle that removes the listener.
    */
   private bindCtrlDragRotate(view: ArcgisView): ArcgisHandle {
-    let last: { x: number; y: number } | null = null;
+    // The camera the drag steers to, accumulated from the drag's start: an
+    // unanimated goTo may not have landed before the next update, so reading
+    // the live camera each time would drop part of the movement.
+    let drag: { x: number; y: number; bearing: number; pitch: number } | null = null;
     return view.on("drag", (event) => {
       if (event.action === "start") {
         const native = event.native as MouseEvent | undefined;
-        last = native?.ctrlKey && (event.button ?? 0) === 0 ? { x: event.x, y: event.y } : null;
+        drag =
+          native?.ctrlKey && (event.button ?? 0) === 0 && this.navigationSuspensions === 0
+            ? {
+                x: event.x,
+                y: event.y,
+                bearing: this.bearing(),
+                pitch: this.sceneView()?.camera?.tilt ?? 0,
+              }
+            : null;
       }
-      if (!last) return;
+      if (!drag) return;
       event.stopPropagation();
-      const dx = event.x - last.x;
-      const dy = event.y - last.y;
-      last = event.action === "end" ? null : { x: event.x, y: event.y };
-      if (dx === 0 && dy === 0) return;
-      const pitch = this.sceneView()?.camera?.tilt ?? 0;
-      const target = this.orientation(this.bearing() + dx * 0.8, pitch - dy * 0.5);
+      const dx = event.x - drag.x;
+      const dy = event.y - drag.y;
+      const steer = drag;
+      if (event.action === "end") drag = null;
+      // Suspended mid-drag: keep the gesture from reaching the SDK, but hold
+      // the camera.
+      if ((dx === 0 && dy === 0) || this.navigationSuspensions > 0) return;
+      steer.x = event.x;
+      steer.y = event.y;
+      steer.bearing += dx * 0.8;
+      // Clamped as it accumulates, so reversing from the limit responds at once.
+      steer.pitch = this.clampPitch(steer.pitch - dy * 0.5);
+      const target = this.orientation(steer.bearing, steer.pitch);
       void this.view?.goTo(target, { animate: false }).catch(reportGoToFailure);
     });
   }
@@ -2612,7 +2632,13 @@ export class ArcgisEngine implements MapEngine {
       view.on("key-down", swallow),
       view.on("mouse-wheel", swallow),
     ];
+    this.navigationSuspensions++;
+    let released = false;
     return () => {
+      if (!released) {
+        released = true;
+        this.navigationSuspensions--;
+      }
       for (const handle of handles) handle.remove();
       if (this.view) {
         this.view.navigation.mouseWheelZoomEnabled = wheel;

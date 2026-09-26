@@ -559,8 +559,34 @@ describe("ArcgisEngine camera moves", () => {
       target: { heading: 38, tilt: 55 },
       options: { animate: false },
     });
-    drag("end", 110, 80, true);
-    assert.equal(stopped, 3);
+    // The next update builds on that target even though the fake camera
+    // never moved: an unanimated goTo may not have landed yet.
+    drag("update", 120, 60, true);
+    assert.deepEqual((goTo.at(-1) as { target: unknown }).target, { heading: 46, tilt: 65 });
+    drag("end", 120, 60, true);
+    assert.equal(stopped, 4);
+  });
+  it("does not steer the camera on a Ctrl drag while navigation is suspended", () => {
+    const { engine, goTo, fireViewEvent } = makeSceneEngine();
+    const drag = (action: string, x: number, y: number) =>
+      fireViewEvent("drag", {
+        action,
+        x,
+        y,
+        button: 0,
+        native: { ctrlKey: true },
+        stopPropagation: () => {},
+      });
+    const resume = engine.suspendNavigation();
+    drag("start", 100, 100);
+    drag("update", 110, 80);
+    drag("end", 110, 80);
+    assert.equal(goTo.length, 0);
+    resume();
+    resume();
+    drag("start", 100, 100);
+    drag("update", 110, 80);
+    assert.equal(goTo.length, 1);
   });
   it("resets both heading and pitch from the compass, as MapLibre's does", () => {
     const { goTo, widgets } = makeSceneEngine();
