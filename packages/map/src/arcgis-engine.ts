@@ -134,14 +134,17 @@ const HOSTED_CONTROLS: ReadonlySet<BuiltInMapControl> = new Set<BuiltInMapContro
   "attribution",
 ]);
 
-/** Mount order within a corner, matching `MapController.init`. */
+/**
+ * Order within a corner, matching MapLibre: `MapController.init` adds the
+ * built-ins in this order and the layer control mounts after them.
+ */
 const HOSTED_CONTROL_ORDER: readonly BuiltInMapControl[] = [
-  "layer-control",
   "fullscreen",
   "compass",
   "navigation",
   "geolocate",
   "globe",
+  "layer-control",
   "scale",
 ];
 
@@ -300,10 +303,38 @@ function mapRendererSymbols(
       };
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** A 16px outline globe, the size of the SDK's own widget icons. */
+function createGlobeGlyph(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("aria-hidden", "true");
+  const circle = document.createElementNS(SVG_NS, "circle");
+  circle.setAttribute("cx", "8");
+  circle.setAttribute("cy", "8");
+  circle.setAttribute("r", "6.5");
+  const meridians = document.createElementNS(SVG_NS, "ellipse");
+  meridians.setAttribute("cx", "8");
+  meridians.setAttribute("cy", "8");
+  meridians.setAttribute("rx", "2.75");
+  meridians.setAttribute("ry", "6.5");
+  const parallels = document.createElementNS(SVG_NS, "path");
+  parallels.setAttribute("d", "M1.5 8h13M2.6 4.75h10.8M2.6 11.25h10.8");
+  svg.append(circle, meridians, parallels);
+  return svg;
+}
+
 /**
  * The on-map globe/Mercator toggle. The SDK has no such widget, so this is a
- * plain button carrying MapLibre's `GlobeControl` classes, as the Mapbox
- * engine's toggle does, so the same glyph and "enabled" styling apply.
+ * plain button carrying MapLibre's `GlobeControl` state classes, as the Mapbox
+ * engine's toggle does. It wears Esri's widget classes and draws its glyph in
+ * `currentColor`, so the SDK theme sizes and colours it like the widgets
+ * beside it in both light and dark mode.
  * Toggling rebuilds the view (a `MapView` cannot become a globe), which is the
  * canvas's job; the button only reports the click.
  */
@@ -312,16 +343,13 @@ function createGlobeToggle(
   onToggle: (projection: MapProjection) => void,
 ): ArcgisWidget {
   const container = document.createElement("div");
-  container.className = "maplibregl-ctrl maplibregl-ctrl-group geolibre-arcgis-globe";
+  container.className = "esri-widget geolibre-arcgis-globe";
   const button = document.createElement("button");
   button.type = "button";
-  const icon = document.createElement("span");
-  icon.className = "maplibregl-ctrl-icon";
-  icon.setAttribute("aria-hidden", "true");
-  button.append(icon);
+  button.append(createGlobeGlyph());
   let globe = projection === "globe";
   const paint = () => {
-    button.className = globe ? "maplibregl-ctrl-globe-enabled" : "maplibregl-ctrl-globe";
+    button.className = `esri-widget--button ${globe ? "maplibregl-ctrl-globe-enabled" : "maplibregl-ctrl-globe"}`;
     const label = globe ? "Disable globe" : "Enable globe";
     button.title = label;
     button.setAttribute("aria-label", label);
@@ -2624,7 +2652,19 @@ export class ArcgisEngine implements MapEngine {
     if (!this.view || this.builtInControls.has(id)) return;
     const widget = this.createBuiltInControl(id);
     if (!widget) return;
-    this.view.ui.add(widget.uiComponent ?? widget, this.controlPositions[id]);
+    // The SDK appends by default, so a control mounted after its neighbours
+    // (shown again from the Controls menu, or a toggle that lands after the
+    // view is built) would drift out of order. Slot it after the built-ins
+    // that precede it in the same corner.
+    const position = this.controlPositions[id];
+    const rank = HOSTED_CONTROL_ORDER.indexOf(id);
+    let index = 0;
+    for (const other of this.builtInControls.keys()) {
+      const otherRank = HOSTED_CONTROL_ORDER.indexOf(other);
+      if (otherRank !== -1 && otherRank < rank && this.controlPositions[other] === position)
+        index++;
+    }
+    this.view.ui.add(widget.uiComponent ?? widget, { position, index });
     this.builtInControls.set(id, widget);
   }
   private unmountBuiltInControl(id: BuiltInMapControl): void {

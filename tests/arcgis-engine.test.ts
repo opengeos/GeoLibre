@@ -145,7 +145,7 @@ function makeSdk() {
     },
     destroy: () => {},
   };
-  const uiAdds: { component: unknown; position: unknown }[] = [];
+  const uiAdds: { component: unknown; position: unknown; index?: number }[] = [];
   const view = {
     type: "2d" as "2d" | "3d",
     viewingMode: "global" as "global" | "local",
@@ -170,7 +170,12 @@ function makeSdk() {
     height: 600,
     ui: {
       components: ["attribution", "zoom"],
-      add: (component: unknown, position: unknown) => uiAdds.push({ component, position }),
+      add: (component: unknown, position: unknown) =>
+        uiAdds.push(
+          typeof position === "object" && position
+            ? { component, ...(position as { position: string; index?: number }) }
+            : { component, position },
+        ),
       remove: (component: unknown) => {
         const i = uiAdds.findIndex((entry) => entry.component === component);
         if (i >= 0) uiAdds.splice(i, 1);
@@ -850,6 +855,33 @@ describe("ArcgisEngine controls", () => {
     // Missing controls are rejected before consulting the plugin control host.
     assert.equal(engine.addControl(), false);
     assert.equal(engine.capabilities.domControls, true);
+  });
+  it("keeps MapLibre's corner order when a control mounts after its neighbours", () => {
+    const { document } = parseHTML("<html><body></body></html>");
+    const previous = globalThis.document;
+    (globalThis as { document: unknown }).document = document;
+    try {
+      const { engine, uiAdds } = makeSceneEngine("global", {
+        onProjectionToggle: () => {},
+        onLayerVisibilityChange: () => {},
+      });
+      const topRight = () =>
+        uiAdds.filter((entry) => entry.position === "top-right").map((entry) => entry.index);
+      // Fullscreen, compass, globe, then the layer list, as on MapLibre.
+      assert.deepEqual(topRight(), [0, 1, 2, 3]);
+      // Shown again from the Controls menu, the globe slots back in before
+      // the layer list instead of being appended after it.
+      engine.setBuiltInControlVisible("globe", false);
+      engine.setBuiltInControlVisible("globe", true);
+      assert.equal(uiAdds.at(-1)?.index, 2);
+      // A control in another corner does not count towards the index.
+      engine.setBuiltInControlPosition("compass", "bottom-left");
+      engine.setBuiltInControlVisible("globe", false);
+      engine.setBuiltInControlVisible("globe", true);
+      assert.equal(uiAdds.at(-1)?.index, 1);
+    } finally {
+      (globalThis as { document: unknown }).document = previous;
+    }
   });
   it("mounts moved controls in the corners an earlier view reported", () => {
     using _document = withDocument();

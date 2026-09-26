@@ -2246,6 +2246,13 @@ body,
   outline: none;
 }
 
+/* The ArcGIS globe toggle takes its size and colours from the SDK theme's
+ * `.esri-widget--button`; only the "on" state needs a colour of its own, the
+ * theme's brand blue, as MapLibre tints its enabled globe. */
+.geolibre-arcgis-globe .esri-widget--button.maplibregl-ctrl-globe-enabled {
+  color: var(--calcite-color-brand, #007ac2);
+}
+
 /* MapLibre's native globe and fullscreen glyphs are CSS background images.
  * Chromium otherwise drops them when an embedded map is printed to PDF, even
  * though controls backed by inline SVG remain visible. */
