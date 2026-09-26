@@ -3381,6 +3381,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS של מדינות ארה״ב",
       "geolibre-us-local-gis": "GIS מקומי בארה״ב",
+      "geolibre-us-federal-gis": "GIS פדרלי בארה״ב",
       "geolibre-osm-downloader": "מוריד OSM",
       "geolibre-ign-lidar-hd": "מוריד IGN LiDAR HD",
       "geolibre-stac-catalogs": "קטלוגי STAC",
@@ -4112,6 +4113,16 @@
     "chooseState": "בחירת מדינה",
     "portal": "עיר או מחוז",
     "chooseStateHint": "בחרו מדינה ולאחר מכן עיר או מחוז כדי להציג את נתוני ה-GIS שלהם.",
+    "openPortal": "פתיחת הפורטל"
+  },
+  "usFederalGis": {
+    "hint": "בחרו משרד ולאחר מכן סוכנות כדי לעיין ולחפש בנתוני ה-GIS הציבוריים שלה. הוסיפו שכבות למפה או הורידו נתונים.",
+    "searchPlaceholder": "חיפוש בנתוני ה-GIS של הסוכנות",
+    "noResults": "לא נמצאו מערכי נתונים תואמים לסוכנות זו.",
+    "searchError": "לא ניתן היה לחפש בפורטל ה-GIS הפדרלי הזה.",
+    "chooseDepartment": "בחירת משרד",
+    "agency": "סוכנות",
+    "chooseDepartmentHint": "בחרו משרד ולאחר מכן סוכנות כדי להציג את נתוני ה-GIS שלה.",
     "openPortal": "פתיחת הפורטל"
   },
   "openDataCatalogs": {

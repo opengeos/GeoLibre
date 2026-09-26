@@ -3330,6 +3330,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS ایالت‌های آمریکا",
       "geolibre-us-local-gis": "GIS محلی آمریکا",
+      "geolibre-us-federal-gis": "GIS فدرال آمریکا",
       "geolibre-osm-downloader": "بارگیر OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "فهرست‌های STAC",
@@ -3989,6 +3990,16 @@
     "chooseState": "انتخاب ایالت",
     "portal": "شهر یا شهرستان",
     "chooseStateHint": "یک ایالت و سپس یک شهر یا شهرستان را انتخاب کنید تا داده‌های GIS آن فهرست شود.",
+    "openPortal": "باز کردن درگاه"
+  },
+  "usFederalGis": {
+    "hint": "یک وزارتخانه و سپس یک سازمان را انتخاب کنید تا داده‌های عمومی GIS آن را مرور و جست‌وجو کنید. لایه‌ها را به نقشه اضافه کنید یا داده‌ها را دانلود کنید.",
+    "searchPlaceholder": "جست‌وجو در داده‌های GIS سازمان",
+    "noResults": "هیچ مجموعه‌داده منطبقی برای این سازمان یافت نشد.",
+    "searchError": "جست‌وجو در این درگاه GIS فدرال ممکن نشد.",
+    "chooseDepartment": "انتخاب وزارتخانه",
+    "agency": "سازمان",
+    "chooseDepartmentHint": "یک وزارتخانه و سپس یک سازمان را انتخاب کنید تا داده‌های GIS آن فهرست شود.",
     "openPortal": "باز کردن درگاه"
   },
   "openDataCatalogs": {

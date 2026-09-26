@@ -3432,6 +3432,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "ГИС штатов США",
       "geolibre-us-local-gis": "Местные ГИС США",
+      "geolibre-us-federal-gis": "Федеральные ГИС США",
       "geolibre-osm-downloader": "Загрузчик OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Каталоги STAC",
@@ -4107,6 +4108,16 @@
     "chooseState": "Выберите штат",
     "portal": "Город или округ",
     "chooseStateHint": "Выберите штат, а затем город или округ, чтобы увидеть список его ГИС-данных.",
+    "openPortal": "Открыть портал"
+  },
+  "usFederalGis": {
+    "hint": "Выберите министерство, а затем ведомство, чтобы просматривать его открытые ГИС-данные и искать в них. Добавляйте слои на карту или скачивайте данные.",
+    "searchPlaceholder": "Поиск ГИС-данных ведомства",
+    "noResults": "Для этого ведомства не найдено подходящих наборов данных.",
+    "searchError": "Не удалось выполнить поиск в этом федеральном ГИС-портале.",
+    "chooseDepartment": "Выберите министерство",
+    "agency": "Ведомство",
+    "chooseDepartmentHint": "Выберите министерство, а затем ведомство, чтобы увидеть список его ГИС-данных.",
     "openPortal": "Открыть портал"
   },
   "openDataCatalogs": {

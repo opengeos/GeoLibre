@@ -3330,6 +3330,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS van Amerikaanse staten",
       "geolibre-us-local-gis": "Lokale GIS in de VS",
+      "geolibre-us-federal-gis": "Federale GIS in de VS",
       "geolibre-osm-downloader": "OSM-downloader",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC-catalogi",
@@ -3989,6 +3990,16 @@
     "chooseState": "Kies een staat",
     "portal": "Stad of county",
     "chooseStateHint": "Kies een staat en vervolgens een stad of county om de GIS-gegevens te tonen.",
+    "openPortal": "Portaal openen"
+  },
+  "usFederalGis": {
+    "hint": "Kies een ministerie en vervolgens een agentschap om de openbare GIS-gegevens te doorzoeken. Voeg lagen toe aan de kaart of download gegevens.",
+    "searchPlaceholder": "GIS-gegevens van het agentschap doorzoeken",
+    "noResults": "Geen overeenkomende datasets gevonden voor dit agentschap.",
+    "searchError": "Kan dit federale GIS-portaal niet doorzoeken.",
+    "chooseDepartment": "Kies een ministerie",
+    "agency": "Agentschap",
+    "chooseDepartmentHint": "Kies een ministerie en vervolgens een agentschap om de GIS-gegevens te tonen.",
     "openPortal": "Portaal openen"
   },
   "openDataCatalogs": {

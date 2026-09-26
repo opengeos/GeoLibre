@@ -3330,6 +3330,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "ABD Eyalet CBS",
       "geolibre-us-local-gis": "ABD Yerel CBS",
+      "geolibre-us-federal-gis": "ABD Federal CBS",
       "geolibre-osm-downloader": "OSM İndirici",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC Katalogları",
@@ -3989,6 +3990,16 @@
     "chooseState": "Eyalet seçin",
     "portal": "Şehir veya ilçe",
     "chooseStateHint": "CBS verilerini listelemek için bir eyalet, ardından bir şehir veya ilçe seçin.",
+    "openPortal": "Portalı aç"
+  },
+  "usFederalGis": {
+    "hint": "Herkese açık CBS verilerine göz atmak ve aramak için bir bakanlık, ardından bir kurum seçin. Haritaya katman ekleyin veya veri indirin.",
+    "searchPlaceholder": "Kurumun CBS verilerinde ara",
+    "noResults": "Bu kurum için eşleşen veri kümesi bulunamadı.",
+    "searchError": "Bu federal CBS portalında arama yapılamadı.",
+    "chooseDepartment": "Bakanlık seçin",
+    "agency": "Kurum",
+    "chooseDepartmentHint": "CBS verilerini listelemek için bir bakanlık, ardından bir kurum seçin.",
     "openPortal": "Portalı aç"
   },
   "openDataCatalogs": {

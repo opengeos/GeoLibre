@@ -3330,6 +3330,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "აშშ-ის შტატების GIS",
       "geolibre-us-local-gis": "აშშ-ის ადგილობრივი GIS",
+      "geolibre-us-federal-gis": "აშშ-ის ფედერალური GIS",
       "geolibre-osm-downloader": "OSM ჩამომტვირთველი",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC კატალოგები",
@@ -3989,6 +3990,16 @@
     "chooseState": "აირჩიეთ შტატი",
     "portal": "ქალაქი ან ოლქი",
     "chooseStateHint": "აირჩიეთ შტატი, შემდეგ ქალაქი ან ოლქი, რათა ნახოთ მისი GIS მონაცემები.",
+    "openPortal": "პორტალის გახსნა"
+  },
+  "usFederalGis": {
+    "hint": "აირჩიეთ დეპარტამენტი, შემდეგ უწყება, რათა დაათვალიეროთ და მოძებნოთ მისი საჯარო GIS მონაცემები. დაამატეთ ფენები რუკაზე ან ჩამოტვირთეთ მონაცემები.",
+    "searchPlaceholder": "უწყების GIS მონაცემების ძიება",
+    "noResults": "ამ უწყებისთვის შესაბამისი მონაცემთა ნაკრები ვერ მოიძებნა.",
+    "searchError": "ამ ფედერალურ GIS პორტალში ძიება ვერ მოხერხდა.",
+    "chooseDepartment": "აირჩიეთ დეპარტამენტი",
+    "agency": "უწყება",
+    "chooseDepartmentHint": "აირჩიეთ დეპარტამენტი, შემდეგ უწყება, რათა ნახოთ მისი GIS მონაცემები.",
     "openPortal": "პორტალის გახსნა"
   },
   "openDataCatalogs": {

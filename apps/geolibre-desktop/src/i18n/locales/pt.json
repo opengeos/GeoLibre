@@ -3330,6 +3330,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "SIG dos estados dos EUA",
       "geolibre-us-local-gis": "SIG locais dos EUA",
+      "geolibre-us-federal-gis": "SIG federais dos EUA",
       "geolibre-osm-downloader": "Baixador de OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Catálogos STAC",
@@ -3989,6 +3990,16 @@
     "chooseState": "Escolha um estado",
     "portal": "Cidade ou condado",
     "chooseStateHint": "Escolha um estado e depois uma cidade ou condado para listar seus dados SIG.",
+    "openPortal": "Abrir portal"
+  },
+  "usFederalGis": {
+    "hint": "Escolha um departamento e depois uma agência para navegar e pesquisar seus dados SIG públicos. Adicione camadas ao mapa ou baixe dados.",
+    "searchPlaceholder": "Pesquisar dados SIG da agência",
+    "noResults": "Nenhum conjunto de dados correspondente encontrado para esta agência.",
+    "searchError": "Não foi possível pesquisar neste portal SIG federal.",
+    "chooseDepartment": "Escolha um departamento",
+    "agency": "Agência",
+    "chooseDepartmentHint": "Escolha um departamento e depois uma agência para listar seus dados SIG.",
     "openPortal": "Abrir portal"
   },
   "openDataCatalogs": {

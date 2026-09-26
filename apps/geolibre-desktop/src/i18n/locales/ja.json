@@ -3279,6 +3279,7 @@
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "米国州 GIS",
       "geolibre-us-local-gis": "米国地方自治体 GIS",
+      "geolibre-us-federal-gis": "米国連邦政府 GIS",
       "geolibre-osm-downloader": "OSM ダウンローダー",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC カタログ",
@@ -3930,6 +3931,16 @@
     "chooseState": "州を選択",
     "portal": "市または郡",
     "chooseStateHint": "州を選び、続いて市または郡を選ぶと、その GIS データが一覧表示されます。",
+    "openPortal": "ポータルを開く"
+  },
+  "usFederalGis": {
+    "hint": "省庁を選び、続いて機関を選ぶと、その公開 GIS データを閲覧・検索できます。レイヤーを地図に追加したり、データをダウンロードしたりできます。",
+    "searchPlaceholder": "機関の GIS データを検索",
+    "noResults": "この機関に一致するデータセットは見つかりませんでした。",
+    "searchError": "この連邦政府の GIS ポータルを検索できませんでした。",
+    "chooseDepartment": "省庁を選択",
+    "agency": "機関",
+    "chooseDepartmentHint": "省庁を選び、続いて機関を選ぶと、その GIS データが一覧表示されます。",
     "openPortal": "ポータルを開く"
   },
   "openDataCatalogs": {
