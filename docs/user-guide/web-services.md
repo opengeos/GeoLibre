@@ -157,6 +157,7 @@ Browses the State of Tennessee's [downloadable GIS data portal](https://geodata.
 - **Add to map** loads feature services as editable vector layers and map or image services (such as statewide imagery) as raster layers. **Zoom**, **Download**, and **Details** work as in ArcGIS Hub; Details opens the dataset's page on geodata.tn.gov.
 - The portal is an ArcGIS Hub site, so the panel searches the groups that make up its catalog. It reads that list from the site when it opens, so datasets the state adds show up without a GeoLibre update.
 
+## Socrata
 
 Searches public [Socrata](https://dev.socrata.com/) open-data catalogs — the platform behind many city, county, and state data portals — and adds their GeoJSON datasets to the map. Keyword search, paged results, and **Load more**, the same as ArcGIS Hub.
 
