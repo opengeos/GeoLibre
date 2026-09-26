@@ -2047,15 +2047,6 @@ export class ArcgisEngine implements MapEngine {
     return features;
   }
   /**
-   * Features under `lngLat`, answered synchronously. The SDK's own hit test is
-   * asynchronous, so the click flow goes through {@link identifyFeaturesAt} and
-   * its result is served here for the same location; any other location (the
-   * scripting, notebook and command bridges) is answered by testing the
-   * store's GeoJSON geometry directly, with a few pixels of tolerance for
-   * points and lines. Service layers, whose features live on the server, are
-   * only reachable through the asynchronous path.
-   */
-  /**
    * Hits on the store layers that mirror a plugin control's native layer, by
    * the ids the control registered (`nativeLayerIds`) or the source it reads.
    * The control's own layer is only recorded on this renderer (its facade's
@@ -2096,6 +2087,15 @@ export class ArcgisEngine implements MapEngine {
       toGeometry: geojsonToArcgisGeometry,
     };
   }
+  /**
+   * Features under `lngLat`, answered synchronously. The SDK's own hit test is
+   * asynchronous, so the click flow goes through {@link identifyFeaturesAt} and
+   * its result is served here for the same location; any other location (the
+   * scripting, notebook and command bridges) is answered by testing the
+   * store's GeoJSON geometry directly, with a few pixels of tolerance for
+   * points and lines. Service layers, whose features live on the server, are
+   * only reachable through the asynchronous path.
+   */
   identifyFeatures(lngLat: [number, number], layerId?: string): IdentifiedFeature[] {
     const hit = this.lastHit;
     if (

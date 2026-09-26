@@ -54,13 +54,16 @@ export function getStyleMap(
 /**
  * The map a plugin control talks to on any 2D renderer: {@link getStyleMap},
  * or on ArcGIS the host's control facade, whose style calls succeed and read
- * back but are never drawn.
+ * back without reaching the SDK.
  *
- * Use it only where every visible result of those style calls also reaches the
- * GeoLibre store, which the ArcGIS engine draws: a Web Services catalog whose
- * raster layers the store sync mirrors, or a camera/bounds/event read. A plugin
- * that draws a highlight, grid or overlay through the style would show nothing
- * on ArcGIS through this - that needs a rendering bridge, not this door.
+ * On ArcGIS the host draws what that style holds in two ways: a layer the
+ * plugin mirrors into the GeoLibre store (a Web Services raster, registered
+ * footprints) is drawn from the store record, and any other GeoJSON fill,
+ * line, circle or text layer (a grid, a highlight, a draw preview) is drawn as
+ * the host's own graphics. Use it where that covers what the plugin shows:
+ * raster or vector-tile sources it does not mirror, icons, custom layers,
+ * `Marker`/`Popup` and MapLibre-only APIs still need an ArcGIS path of their
+ * own. See "Plugin controls" in docs/arcgis-renderer.md.
  *
  * @param app - The plugin host API, or nothing while a plugin is inactive.
  * @returns The MapLibre or Mapbox map, the ArcGIS control facade, or `null`

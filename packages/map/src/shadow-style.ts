@@ -120,7 +120,8 @@ export function createShadowStyle(host: ShadowStyleHost): ShadowStyleMethods & {
       ...spec,
       id,
       type: String(spec.type),
-      serialize: () => structuredClone(spec) as unknown as SourceSpecification,
+      // The live entry, as a held MapLibre source reflects later edits.
+      serialize: () => structuredClone(sources.get(id) ?? spec) as unknown as SourceSpecification,
       setData: (data) => update({ data }),
       setTiles: (tiles) => update({ tiles: [...tiles] }),
       setUrl: (url) => update({ url }),

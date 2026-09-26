@@ -235,10 +235,6 @@ export class ArcgisControlHost {
     }
   }
   /**
-   * The MapLibre-shaped facade controls receive, for a control mounted outside
-   * the view's UI (a docked panel) that still needs a map to talk to.
-   */
-  /**
    * Redraw the controls' own GeoJSON overlays (the shadow style's layers no
    * store layer mirrors). The engine calls it after a layer sync, since a
    * store record registered or dropped changes which layers are mirrored.
@@ -277,6 +273,10 @@ export class ArcgisControlHost {
     this.overlay.graphics?.removeAll();
     this.overlay.graphics?.addMany(drawn);
   }
+  /**
+   * The MapLibre-shaped facade controls receive, for a control mounted outside
+   * the view's UI (a docked panel) that still needs a map to talk to.
+   */
   getControlMap(): MapLibreMap {
     return this.facade as unknown as MapLibreMap;
   }
