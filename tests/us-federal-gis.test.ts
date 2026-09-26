@@ -6,7 +6,7 @@ import {
   maplibreUsFederalGisPlugin,
   US_FEDERAL_GIS_PLUGIN_ID,
 } from "../packages/plugins/src/plugins/maplibre-us-federal-gis";
-import { US_LOCAL_GIS_PLUGIN_ID } from "../packages/plugins/src/plugins/maplibre-us-local-gis";
+import { US_STATE_GIS_PLUGIN_ID } from "../packages/plugins/src/plugins/maplibre-us-state-gis";
 import { US_FEDERAL_GIS_CATALOGS } from "../packages/plugins/src/plugins/us-federal-gis-catalogs";
 import { WEB_SERVICE_PLUGIN_IDS } from "../packages/plugins/src/plugins/web-service-sync";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
@@ -62,12 +62,12 @@ describe("US Federal GIS catalog", () => {
     }
   });
 
-  it("is a Web Services plugin next to US Local GIS", () => {
+  it("is a Web Services plugin just above US State GIS", () => {
     assert.equal(maplibreUsFederalGisPlugin.id, US_FEDERAL_GIS_PLUGIN_ID);
     assert.equal(maplibreUsFederalGisPlugin.name, "US Federal GIS");
     assert.equal(
       WEB_SERVICE_PLUGIN_IDS.indexOf(US_FEDERAL_GIS_PLUGIN_ID),
-      WEB_SERVICE_PLUGIN_IDS.indexOf(US_LOCAL_GIS_PLUGIN_ID) + 1,
+      WEB_SERVICE_PLUGIN_IDS.indexOf(US_STATE_GIS_PLUGIN_ID) - 1,
     );
   });
 });
