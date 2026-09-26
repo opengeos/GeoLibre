@@ -3059,6 +3059,11 @@ class Map(anywidget.AnyWidget):
         if isinstance(layer, (str, Layer)):
             self._set_ui(identify=self._resolve_layer(layer).id)
             return
+        if not isinstance(layer, Sequence):
+            raise ValueError(
+                "set_identify: layer must be a layer id, name, handle, a list of them, "
+                f'"all", or None, got {type(layer).__name__}'
+            )
         ids = list(dict.fromkeys(self._resolve_layer(item).id for item in layer))
         if not ids:
             raise ValueError("set_identify: the list of layers is empty")

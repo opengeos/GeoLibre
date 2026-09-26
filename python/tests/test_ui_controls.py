@@ -159,6 +159,8 @@ def test_set_identify_list_rejects_unknown_or_empty(m):
         m.set_identify(["A", "missing"])
     with pytest.raises(ValueError, match="empty"):
         m.set_identify([])
+    with pytest.raises(ValueError, match="got int"):
+        m.set_identify(7)
     assert "identify" not in m._ui
 
 
