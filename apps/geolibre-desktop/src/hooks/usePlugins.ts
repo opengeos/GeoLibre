@@ -35,6 +35,7 @@ import {
   setEarthdataCogSaver,
   setSatelliteEmbeddingsFileSaver,
   setFieldsOfTheWorldFileSaver,
+  setOceanDataPlatformFileSaver,
   maplibreEnviroAtlasPlugin,
   maplibreEsriWaybackPlugin,
   maplibreFemaWmsPlugin,
@@ -56,6 +57,7 @@ import {
   maplibreHuggingFacePlugin,
   maplibreSatelliteEmbeddingsPlugin,
   maplibreFieldsOfTheWorldPlugin,
+  maplibreOceanDataPlatformPlugin,
   maplibreGeoLensPlugin,
   setGeoLensDefaultServerUrl,
   maplibreVantorPlugin,
@@ -238,6 +240,7 @@ manager.registerAll([
   maplibreHuggingFacePlugin,
   maplibreSatelliteEmbeddingsPlugin,
   maplibreFieldsOfTheWorldPlugin,
+  maplibreOceanDataPlatformPlugin,
   maplibreGeoLensPlugin,
   maplibreEsriWaybackPlugin,
   maplibreTimeSliderPlugin,
@@ -331,6 +334,16 @@ setSatelliteEmbeddingsFileSaver((blob, { defaultName, extension, mimeType, descr
 // The Fields of the World plugin saves tile GeoParquet and GeoJSON files the
 // same way.
 setFieldsOfTheWorldFileSaver((blob, { defaultName, extension, mimeType, description }) =>
+  saveBinaryFileWithFallback(blob, {
+    defaultName,
+    filters: [{ name: description, extensions: [extension] }],
+    browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
+    mimeType,
+  }),
+);
+
+// The Ocean Data Platform plugin saves GeoJSON files the same way.
+setOceanDataPlatformFileSaver((blob, { defaultName, extension, mimeType, description }) =>
   saveBinaryFileWithFallback(blob, {
     defaultName,
     filters: [{ name: description, extensions: [extension] }],

@@ -37,6 +37,7 @@ They are grouped together because they behave the same way, not because they sha
 | [Hugging Face](#hugging-face) | Hugging Face | Geospatial files in dataset repos — and uploads |
 | [Satellite Embeddings](#satellite-embeddings) | Source.coop, Tessera | Pre-computed foundation-model embeddings (AlphaEarth, Tessera, Earth Index, …) |
 | [Fields of the World](#fields-of-the-world) | Source.coop | Global agricultural field boundaries (2024, 2025) |
+| [Ocean Data Platform](#ocean-data-platform) | HUB Ocean | Public ocean datasets: habitats, protected areas, fisheries, observations |
 | [GeoLens](#geolens) | your server | A self-hosted spatial catalog |
 
 ---
@@ -232,6 +233,18 @@ Browses [Fields of the World](https://fieldsofthe.world) (FTW), the global agric
 
 !!! note "Running the FTW model"
     The plugin shows and downloads the published global predictions. To run the FTW model on your own area and Sentinel-2 scenes, use the [FTW inference app](https://fieldsofthe.world/ftw-inference-app) or the [ftw-baselines](https://github.com/fieldsoftheworld/ftw-baselines) command-line tools, then add the result to GeoLibre. The data is licensed CC-BY-4.0.
+
+## Ocean Data Platform
+
+Browses the public datasets on HUB Ocean's [Ocean Data Platform](https://app.hubocean.earth/catalog) (ODP), which shares ocean data from research institutions, governments, and industry: benthic habitats, coral reefs, protected areas, fisheries, seafloor features, observations, and more.
+
+- The panel loads the whole public catalog (a few hundred datasets, grouped into collections) when it opens. Type in **Search** to match every word against the title, description, collection, and keywords; titles that match rank first. Pick a **Collection** to narrow the list, or check **Only datasets in the map view** to keep those whose extent overlaps the view (the list follows the map as you pan). Datasets the catalog gives no extent for only appear with that box unchecked.
+- **Add to map** streams the whole dataset as a vector tile layer with every attribute, and zooms to its extent. It is saved with the project. Tiles can take a few seconds the first time a dataset is viewed.
+- **Features in view** reads the features in the current map view through OGC API Features and adds them as an editable GeoJSON layer; **GeoJSON** saves the same features to a file. Both read at most 10,000 features, and say so when the view held more: zoom in, or use Add to map for the whole dataset.
+- **Zoom** fits the map to the dataset's extent, and **Details** opens its page in the ODP catalog, with its full description, provenance, and download options.
+
+!!! note "Public datasets only"
+    The panel lists and reads only datasets shared publicly on ODP; it does not sign in or take an API key. ODP's tile and features endpoints do not allow other websites to read them directly, so GeoLibre reads them through its own tile proxy (`tiles.geolibre.app`). Each dataset keeps its provider's license, shown in the result list; check it before reuse.
 
 ## GeoLens
 

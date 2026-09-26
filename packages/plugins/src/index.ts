@@ -531,6 +531,12 @@ export {
   type FieldsOfTheWorldFileSaver,
 } from "./plugins/maplibre-fields-of-the-world";
 export {
+  OCEAN_DATA_PLATFORM_PLUGIN_ID,
+  maplibreOceanDataPlatformPlugin,
+  setOceanDataPlatformFileSaver,
+  type OceanDataPlatformFileSaver,
+} from "./plugins/maplibre-ocean-data-platform";
+export {
   maplibreSatelliteEmbeddingsPlugin,
   SATELLITE_EMBEDDINGS_PLUGIN_ID,
   setSatelliteEmbeddingsFileSaver,

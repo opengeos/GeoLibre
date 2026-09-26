@@ -5,12 +5,12 @@ import {
   MAX_ALL_QUERY_AREA_SQUARE_DEGREES,
   MAX_QUERY_AREA_SQUARE_DEGREES,
 } from "../packages/plugins/src/plugins/osm-downloader-api";
+import { tilesWorker } from "../workers/tiles/src/index";
 import {
   isAllowedOverpassQuery,
   OVERPASS_MAX_ALL_QUERY_AREA_SQUARE_DEGREES,
   OVERPASS_MAX_QUERY_AREA_SQUARE_DEGREES,
-  tilesWorker,
-} from "../workers/tiles/src/index";
+} from "../workers/tiles/src/overpass-query";
 
 const originalFetch = globalThis.fetch;
 
