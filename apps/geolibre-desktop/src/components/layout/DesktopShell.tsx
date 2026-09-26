@@ -34,6 +34,7 @@ import {
 } from "../../hooks/usePlugins";
 import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { wikipediaLang } from "../../lib/knowledge";
+import { projectUrlFromLocation } from "../../lib/project-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
 import { useGlobalRasterIdentify } from "../../hooks/useGlobalRasterIdentify";
@@ -138,6 +139,7 @@ import { useMapFullscreenAttribute } from "../../hooks/desktop-shell/useMapFulls
 import { useNativeProjectOpenListener } from "../../hooks/desktop-shell/useNativeProjectOpenListener";
 import { usePanelResize } from "../../hooks/desktop-shell/usePanelResize";
 import { usePluginStateRestore } from "../../hooks/desktop-shell/usePluginStateRestore";
+import { usePluginDeepLink } from "../../hooks/desktop-shell/usePluginDeepLink";
 import { useRasterFileHandlers } from "../../hooks/desktop-shell/useRasterFileHandlers";
 import { useRasterSubsetLayer } from "../../hooks/desktop-shell/useRasterSubsetLayer";
 import { useRendererHandoff } from "../../hooks/desktop-shell/useRendererHandoff";
@@ -166,6 +168,8 @@ export function DesktopShell({
   onMapReady,
 }: DesktopShellProps) {
   const { t } = useTranslation();
+  // Read once: whether the page opened with a `?url=` project to wait for.
+  const hasProjectUrl = useMemo(() => projectUrlFromLocation() !== null, []);
   const identifyRasterLayerAt = useGlobalRasterIdentify();
   const identifyAllLabels = useMemo(
     () => ({
@@ -344,6 +348,18 @@ export function DesktopShell({
     externalPluginsReady,
     mapReadyGeneration,
     projectGeneration,
+  });
+  // After the restore above, so a `?url=` project's plugin state cannot close
+  // what the link opened.
+  usePluginDeepLink({
+    mapControllerRef,
+    enforceViewerPlugins,
+    externalPluginsReady,
+    mapReadyGeneration,
+    projectUrlSettled:
+      !hasProjectUrl ||
+      projectUrlLoadState?.status === "loaded" ||
+      projectUrlLoadState?.status === "error",
   });
 
   const handleMapControllerReady = useCallback(() => {

@@ -36,6 +36,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `theme`      | `theme=dark`                                               | Sets the initial color theme, overriding the OS preference. Accepts `dark` or `light`; the in-app toggle still works afterward.       |
 | `settingsUrl` | `settingsUrl=https://example.com/desktop-settings.json`   | Loads shared presentation settings before the first render. Supports `language`, `layout`, accent `theme`, and `uiProfile`. The override lasts for this page only and does not replace locally saved settings. `settingUrl` is accepted as an alias. |
 | `tool`       | `tool=adaptive_filter`                                     | Opens the Processing (Whitebox toolbox) dialog on a specific tool by its id. Unknown ids open the dialog without preselecting a tool. |
+| `plugin`     | `plugin=swipe`                                             | Activates one or more built-in plugins, as if picked from the Plugins menu. See [Activate a plugin](#deep-linking-a-plugin). |
 
 !!! note "Private projects and data"
     `url=` and `data=` are fetched by the browser with same-origin credentials,
@@ -85,6 +86,37 @@ preselecting a tool or applying any parameters. A known id the current engine
 doesn't expose (WASM in the browser, the Python sidecar on desktop) likewise
 isn't preselected. Tool ids match the Processing menu — the same ids used across
 the [Whitebox toolbox](processing.md).
+
+### Deep-linking a plugin
+
+Use `plugin` to open the app with a built-in plugin already active, as if you
+had picked it from the **Plugins** menu:
+
+```text
+https://web.geolibre.app/?plugin=swipe
+```
+
+Name a plugin by its id (`maplibre-gl-time-slider`) or by its short name, the id
+without a `maplibre-gl-`, `maplibre-`, or `geolibre-` prefix (`time-slider`).
+Short names are case-insensitive. The
+[Plugins page](plugins.md#open-a-plugin-from-a-link) lists every link name. List
+several plugins with commas, or repeat the parameter:
+
+```text
+https://web.geolibre.app/?plugin=graticule,h3-grid
+```
+
+It combines with `url`: the plugin opens once the shared project has loaded, on
+top of the plugins the project itself turns on.
+
+```text
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&plugin=swipe
+```
+
+Unknown names are ignored. A plugin that does not support the current renderer
+does not activate. Directions and reverse geocoding send what you click to a
+public server, so they only open from the menu, after their one-time notice. The
+drawing and editing plugins stay off in `layout=viewer`.
 
 ## Waiting for a screenshot
 

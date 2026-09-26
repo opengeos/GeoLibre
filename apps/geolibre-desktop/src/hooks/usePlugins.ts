@@ -86,6 +86,8 @@ import {
   godsEyeViewPlugin,
   maplibreSwipePlugin,
   SWIPE_PLUGIN_ID,
+  DIRECTIONS_PLUGIN_ID,
+  REVERSE_GEOCODE_PLUGIN_ID,
   maplibreTimelapsePlugin,
   maplibreTimeSliderPlugin,
   setTimelapseVideoSaver,
@@ -115,6 +117,7 @@ import { readDeploymentEnvValue } from "../lib/deployment-env";
 import { CesiumEngine, getPrimaryCesiumControlHost, type MapEngine } from "@geolibre/map";
 import type {
   GeoLibreCogLayerOptions,
+  GeoLibrePlugin,
   GeoLibreCogRenderEngine,
   GeoLibreDeckGL,
   GeoLibreExternalNativeLayerRegistration,
@@ -209,7 +212,7 @@ interface TauriRuntimeWindow extends Window {
 
 const manager = new PluginManager();
 setGeoLensDefaultServerUrl(readDeploymentEnvValue("VITE_GEOLENS_DEFAULT_URL"));
-manager.registerAll([
+const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreLayerControlPlugin,
   maplibreGeoEditorPlugin,
   maplibreAnnotationsPlugin,
@@ -277,7 +280,23 @@ manager.registerAll([
   maplibreReverseGeocodePlugin,
   maplibreDeckGlVizPlugin,
   maplibreComponentsPlugin,
+];
+manager.registerAll(BUILT_IN_PLUGINS);
+
+/**
+ * Built-in plugins a `?plugin=` deep link may not activate: they send what the
+ * user clicks to a public third-party server, so they stay behind the one-time
+ * consent notice the toolbar shows (see `useConsentGatedActions`).
+ */
+const CONSENT_GATED_PLUGIN_IDS: ReadonlySet<string> = new Set([
+  DIRECTIONS_PLUGIN_ID,
+  REVERSE_GEOCODE_PLUGIN_ID,
 ]);
+
+/** Ids of the built-in plugins a `?plugin=` deep link may activate. */
+export const DEEP_LINKABLE_PLUGIN_IDS: readonly string[] = BUILT_IN_PLUGINS.map(
+  (plugin) => plugin.id,
+).filter((id) => !CONSENT_GATED_PLUGIN_IDS.has(id));
 
 // The Timelapse plugin records the map to a video blob but cannot depend on
 // the app's Tauri I/O helpers, so the save step (native dialog under Tauri,
@@ -1638,6 +1657,29 @@ function projectPluginStateSnapshot() {
     ...manager.getProjectState(),
     manifestUrls: useAppStore.getState().projectPlugins?.manifestUrls ?? EMPTY_PLUGIN_MANIFEST_URLS,
   };
+}
+
+/**
+ * Activates a plugin named by a `?plugin=` deep link and records it in the
+ * project's plugin state, so a later map re-init (a basemap or renderer swap)
+ * restores it instead of closing it. The write does not mark the project dirty:
+ * opening a link is not an edit.
+ *
+ * @param pluginId - The id of a registered plugin.
+ * @param mapControllerRef - The primary map engine.
+ * @returns Whether the plugin is active afterwards.
+ */
+export async function activateDeepLinkedPlugin(
+  pluginId: string,
+  mapControllerRef: RefObject<MapEngine | null>,
+): Promise<boolean> {
+  const activated = await manager.activate(pluginId, createAppAPI(mapControllerRef));
+  if (!activated || !manager.isActive(pluginId)) return false;
+  const nextState = projectPluginStateSnapshot();
+  if (JSON.stringify(nextState) !== JSON.stringify(useAppStore.getState().projectPlugins)) {
+    useAppStore.getState().setProjectPlugins(nextState, false);
+  }
+  return true;
 }
 
 function persistProjectPluginState(previousJson: string): void {
