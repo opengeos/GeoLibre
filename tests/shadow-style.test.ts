@@ -115,4 +115,35 @@ describe("shadow style", () => {
       ["s"],
     );
   });
+
+  it("reports an unknown beforeId instead of appending", () => {
+    const { style, events } = setup();
+    style.addSource("s", { type: "raster", tiles: [] });
+    style.addLayer(raster("a", "s"));
+    style.addLayer(raster("b", "s"), "missing");
+    style.addLayer(
+      { id: "inline", type: "circle", source: { type: "geojson", data: "x" } },
+      "missing",
+    );
+    style.moveLayer("a", "missing");
+    assert.deepEqual(style.getLayersOrder(), ["a"]);
+    assert.equal(style.getSource("inline"), undefined, "a refused inline source is not kept");
+    assert.equal(events.filter((event) => event.type === "error").length, 3);
+  });
+
+  it("merges a kept source view's edits and ignores one after removal", () => {
+    const { style } = setup();
+    style.addSource("t", { type: "raster", tiles: ["a"] });
+    const view = style.getSource("t")!;
+    view.setTiles(["b"]);
+    view.setUrl("https://u");
+    assert.deepEqual(style.getSource("t")?.serialize(), {
+      type: "raster",
+      tiles: ["b"],
+      url: "https://u",
+    });
+    style.removeSource("t");
+    view.setTiles(["c"]);
+    assert.equal(style.getSource("t"), undefined);
+  });
 });

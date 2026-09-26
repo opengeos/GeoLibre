@@ -8405,7 +8405,7 @@
       "foundTruncated": "Showing the first {{count}} of {{matched}} tiles. Narrow the search area to see the rest.",
       "addedToMap": "Added {{name}} to the map.",
       "alreadyOnMap": "{{name}} is already on the map.",
-      "unsupportedRenderer": "Point clouds require the MapLibre or Mapbox renderer.",
+      "unsupportedRenderer": "Point clouds require the MapLibre, Mapbox or ArcGIS renderer.",
       "addError": "Could not add {{name}} to the map: {{message}}",
       "error": "Could not search IGN LiDAR HD tiles: {{message}}",
       "selectAll": "Select all",

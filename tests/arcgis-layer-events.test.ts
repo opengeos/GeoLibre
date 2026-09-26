@@ -117,4 +117,53 @@ describe("ArcGIS control facade layer events", () => {
     );
     assert.deepEqual(query(), [], "a whole-viewport query answers empty");
   });
+
+  it("returns a Subscription from a layer-scoped on", () => {
+    const { facade, pointer } = setup();
+    let count = 0;
+    const subscription = facade.on(
+      "click",
+      "fp-fill" as never,
+      (() => count++) as never,
+    ) as unknown as {
+      unsubscribe: () => void;
+    };
+    subscription.unsubscribe();
+    pointer("click");
+    assert.equal(count, 0);
+  });
+
+  it("resolves a listener-less once with the next hit, and off removes a once", async () => {
+    const { facade, pointer } = setup();
+    const next = facade.once("click", "fp-fill" as never) as unknown as Promise<{
+      features: unknown[];
+    }>;
+    let count = 0;
+    const listener = (() => count++) as never;
+    facade.once("click", "fp-fill" as never, listener);
+    facade.off("click", "fp-fill" as never, listener);
+    pointer("click");
+    assert.equal((await next).features.length, 1);
+    assert.equal(count, 0);
+  });
+
+  it("dispatches layer-scoped mousedown and mouseup", () => {
+    const { facade } = setup();
+    const seen: string[] = [];
+    for (const type of ["mousedown", "mouseup"])
+      facade.on(
+        type,
+        "fp-fill" as never,
+        ((event: { type: string }) => seen.push(event.type)) as never,
+      );
+    for (const type of ["mousedown", "mouseup"])
+      facade.fire(type, { point: { x: 1, y: 1 }, lngLat: { lng: 1, lat: 2 } });
+    assert.deepEqual(seen, ["mousedown", "mouseup"]);
+  });
+
+  it("keeps a negative numeric feature id a number", () => {
+    const { facade } = setup(() => [{ ...FEATURE, featureId: "-5" }]);
+    const query = facade.queryRenderedFeatures as (point: unknown) => { id: unknown }[];
+    assert.equal(query([1, 1])[0].id, -5);
+  });
 });

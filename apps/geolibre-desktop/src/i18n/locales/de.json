@@ -8405,7 +8405,7 @@
       "foundTruncated": "Die ersten {{count}} von {{matched}} Kacheln werden angezeigt. Grenzen Sie den Suchbereich ein, um den Rest zu sehen.",
       "addedToMap": "{{name}} zur Karte hinzugefügt.",
       "alreadyOnMap": "{{name}} befindet sich bereits auf der Karte.",
-      "unsupportedRenderer": "Punktwolken erfordern den MapLibre- oder Mapbox-Renderer.",
+      "unsupportedRenderer": "Punktwolken erfordern den MapLibre-, Mapbox- oder ArcGIS-Renderer.",
       "addError": "{{name}} konnte nicht zur Karte hinzugefügt werden: {{message}}",
       "error": "IGN LiDAR HD-Kacheln konnten nicht durchsucht werden: {{message}}",
       "selectAll": "Alle auswählen",

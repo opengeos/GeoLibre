@@ -8318,7 +8318,7 @@
       "foundTruncated": "{{matched}}件中最初の{{count}}件のタイルを表示しています。残りを表示するには検索エリアを狭めてください。",
       "addedToMap": "{{name}}を地図に追加しました。",
       "alreadyOnMap": "{{name}}はすでに地図上にあります。",
-      "unsupportedRenderer": "ポイントクラウドにはMapLibreまたはMapboxレンダラーが必要です。",
+      "unsupportedRenderer": "ポイントクラウドにはMapLibre、MapboxまたはArcGISレンダラーが必要です。",
       "addError": "{{name}}を地図に追加できませんでした: {{message}}",
       "error": "IGN LiDAR HDタイルを検索できませんでした: {{message}}",
       "selectAll": "すべて選択",

@@ -8405,7 +8405,7 @@
       "foundTruncated": "Mostrando las primeras {{count}} de {{matched}} teselas. Reduce el área de búsqueda para ver el resto.",
       "addedToMap": "Se añadió {{name}} al mapa.",
       "alreadyOnMap": "{{name}} ya está en el mapa.",
-      "unsupportedRenderer": "Las nubes de puntos requieren el motor de renderizado MapLibre o Mapbox.",
+      "unsupportedRenderer": "Las nubes de puntos requieren el motor de renderizado MapLibre, Mapbox o ArcGIS.",
       "addError": "No se pudo añadir {{name}} al mapa: {{message}}",
       "error": "No se pudieron buscar teselas IGN LiDAR HD: {{message}}",
       "selectAll": "Seleccionar todo",

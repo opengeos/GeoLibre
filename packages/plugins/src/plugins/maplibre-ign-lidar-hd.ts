@@ -204,7 +204,9 @@ async function addTileToMap(
   tile: IgnLidarHdTile,
 ): Promise<AddTileToMapResult> {
   const renderer = app.getMapRenderer?.();
-  // The globe cannot host the point-cloud overlay; ArcGIS draws it through its deck overlay.
+  // The globe cannot host the point-cloud overlay; ArcGIS draws it through its
+  // deck overlay. A denylist, unlike `engines`: keep the two in step when a
+  // renderer is added, or it will be treated as able to draw point clouds here.
   if (renderer === "cesium") return "unsupported-renderer";
   if (!tile.downloadUrl) return "no-download";
   const store = useAppStore.getState();
@@ -626,7 +628,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       status.textContent = tr(
         app,
         "unsupportedRenderer",
-        "Point clouds require the MapLibre or Mapbox renderer.",
+        "Point clouds require the MapLibre, Mapbox or ArcGIS renderer.",
       );
       return;
     }
@@ -741,7 +743,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
             status.textContent = tr(
               app,
               "unsupportedRenderer",
-              "Point clouds require the MapLibre or Mapbox renderer.",
+              "Point clouds require the MapLibre, Mapbox or ArcGIS renderer.",
             );
           }
         } catch (error) {

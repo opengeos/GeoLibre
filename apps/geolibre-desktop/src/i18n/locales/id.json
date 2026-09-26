@@ -8318,7 +8318,7 @@
       "foundTruncated": "Menampilkan {{count}} tile pertama dari {{matched}}. Persempit area pencarian untuk melihat sisanya.",
       "addedToMap": "{{name}} ditambahkan ke peta.",
       "alreadyOnMap": "{{name}} sudah ada di peta.",
-      "unsupportedRenderer": "Point cloud memerlukan renderer MapLibre atau Mapbox.",
+      "unsupportedRenderer": "Point cloud memerlukan renderer MapLibre, Mapbox, atau ArcGIS.",
       "addError": "Tidak dapat menambahkan {{name}} ke peta: {{message}}",
       "error": "Tidak dapat mencari tile IGN LiDAR HD: {{message}}",
       "selectAll": "Pilih semua",

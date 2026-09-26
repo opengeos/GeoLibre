@@ -8752,7 +8752,7 @@
       "foundTruncated": "عرض أول {{count}} من أصل {{matched}} بلاطة. ضيّق منطقة البحث لرؤية الباقي.",
       "addedToMap": "تمت إضافة {{name}} إلى الخريطة.",
       "alreadyOnMap": "{{name}} موجودة بالفعل على الخريطة.",
-      "unsupportedRenderer": "تتطلب سحابات النقاط محرك العرض MapLibre أو Mapbox.",
+      "unsupportedRenderer": "تتطلب سحابات النقاط محرك العرض MapLibre أو Mapbox أو ArcGIS.",
       "addError": "تعذّرت إضافة {{name}} إلى الخريطة: {{message}}",
       "error": "تعذّر البحث عن بلاطات IGN LiDAR HD: {{message}}",
       "selectAll": "تحديد الكل",

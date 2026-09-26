@@ -8318,7 +8318,7 @@
       "foundTruncated": "กำลังแสดง {{count}} ไทล์แรกจากทั้งหมด {{matched}} ไทล์ ลดพื้นที่ค้นหาเพื่อดูที่เหลือ",
       "addedToMap": "เพิ่ม {{name}} ลงในแผนที่แล้ว",
       "alreadyOnMap": "{{name}} อยู่บนแผนที่แล้ว",
-      "unsupportedRenderer": "พอยต์คลาวด์ต้องใช้ตัวเรนเดอร์ MapLibre หรือ Mapbox",
+      "unsupportedRenderer": "พอยต์คลาวด์ต้องใช้ตัวเรนเดอร์ MapLibre, Mapbox หรือ ArcGIS",
       "addError": "ไม่สามารถเพิ่ม {{name}} ลงในแผนที่ได้: {{message}}",
       "error": "ไม่สามารถค้นหาไทล์ IGN LiDAR HD ได้: {{message}}",
       "selectAll": "เลือกทั้งหมด",

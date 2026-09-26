@@ -8405,7 +8405,7 @@
       "foundTruncated": "{{matched}} karodan ilk {{count}} tanesi gösteriliyor. Kalanını görmek için arama alanını daraltın.",
       "addedToMap": "{{name}} haritaya eklendi.",
       "alreadyOnMap": "{{name}} zaten haritada.",
-      "unsupportedRenderer": "Nokta bulutları MapLibre veya Mapbox render motorunu gerektirir.",
+      "unsupportedRenderer": "Nokta bulutları MapLibre, Mapbox veya ArcGIS render motorunu gerektirir.",
       "addError": "{{name}} haritaya eklenemedi: {{message}}",
       "error": "IGN LiDAR HD karoları aranamadı: {{message}}",
       "selectAll": "Tümünü seç",

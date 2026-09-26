@@ -8318,7 +8318,7 @@
       "foundTruncated": "正在显示 {{matched}} 个瓦片中的前 {{count}} 个。缩小搜索区域以查看其余瓦片。",
       "addedToMap": "已将 {{name}} 添加到地图。",
       "alreadyOnMap": "{{name}} 已在地图上。",
-      "unsupportedRenderer": "点云需要 MapLibre 或 Mapbox 渲染引擎。",
+      "unsupportedRenderer": "点云需要 MapLibre、Mapbox 或 ArcGIS 渲染引擎。",
       "addError": "无法将 {{name}} 添加到地图：{{message}}",
       "error": "无法搜索 IGN LiDAR HD 瓦片：{{message}}",
       "selectAll": "全选",

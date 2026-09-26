@@ -99,14 +99,20 @@ export function createShadowStyle(host: ShadowStyleHost): ShadowStyleMethods & {
     return host.self();
   };
   const layerIndex = (id: string) => layers.findIndex((layer) => layer.id === id);
-  const insertAt = (beforeId?: string) => {
-    const index = beforeId === undefined ? -1 : layerIndex(beforeId);
-    return index < 0 ? layers.length : index;
+  /** Where a layer goes: before `beforeId`, at the top without one, or null when it is unknown. */
+  const insertAt = (beforeId?: string): number | null => {
+    if (beforeId === undefined) return layers.length;
+    const index = layerIndex(beforeId);
+    return index < 0 ? null : index;
   };
 
   const sourceView = (id: string, spec: Record<string, unknown>): ShadowSource => {
     const update = (patch: Record<string, unknown>) => {
-      sources.set(id, { ...spec, ...patch });
+      // Merge into the recorded spec, not the one this view was built from; a
+      // view of a removed source is detached, as a removed MapLibre source is.
+      const current = sources.get(id);
+      if (!current) return sourceView(id, spec);
+      sources.set(id, { ...current, ...patch });
       changed(id);
       return sourceView(id, sources.get(id)!);
     };
@@ -185,7 +191,12 @@ export function createShadowStyle(host: ShadowStyleHost): ShadowStyleMethods & {
       } else if (typeof source === "string" && !sources.has(source)) {
         return fail(`Source "${source}" not found.`);
       }
-      layers.splice(insertAt(beforeId), 0, structuredClone(recorded));
+      const at = insertAt(beforeId);
+      if (at === null) {
+        if (recorded !== layer) sources.delete(layer.id);
+        return fail(`Cannot add layer "${layer.id}" before non-existing layer "${beforeId}".`);
+      }
+      layers.splice(at, 0, structuredClone(recorded));
       changed();
       return host.self();
     },
@@ -204,8 +215,10 @@ export function createShadowStyle(host: ShadowStyleHost): ShadowStyleMethods & {
       const index = layerIndex(id);
       if (index < 0) return fail(`The layer "${id}" does not exist in the map's style.`);
       if (id === beforeId) return host.self();
+      if (beforeId !== undefined && layerIndex(beforeId) < 0)
+        return fail(`Layer "${beforeId}" does not exist in the map's style.`);
       const [layer] = layers.splice(index, 1);
-      layers.splice(insertAt(beforeId), 0, layer);
+      layers.splice(insertAt(beforeId)!, 0, layer);
       changed();
       return host.self();
     },

@@ -8405,7 +8405,7 @@
       "foundTruncated": "{{matched}} में से पहली {{count}} टाइलें दिखाई जा रही हैं। शेष देखने के लिए खोज क्षेत्र सीमित करें।",
       "addedToMap": "{{name}} मैप में जोड़ी गई।",
       "alreadyOnMap": "{{name}} पहले से ही मैप पर है।",
-      "unsupportedRenderer": "पॉइंट क्लाउड के लिए MapLibre या Mapbox रेंडरर आवश्यक है।",
+      "unsupportedRenderer": "पॉइंट क्लाउड के लिए MapLibre, Mapbox या ArcGIS रेंडरर आवश्यक है।",
       "addError": "{{name}} को मैप में नहीं जोड़ा जा सका: {{message}}",
       "error": "IGN LiDAR HD टाइलें खोजी नहीं जा सकीं: {{message}}",
       "selectAll": "सभी चुनें",

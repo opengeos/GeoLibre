@@ -8405,7 +8405,7 @@
       "foundTruncated": "De eerste {{count}} van {{matched}} tegels worden getoond. Verklein het zoekgebied om de rest te zien.",
       "addedToMap": "{{name}} toegevoegd aan de kaart.",
       "alreadyOnMap": "{{name}} staat al op de kaart.",
-      "unsupportedRenderer": "Puntenwolken vereisen de MapLibre- of Mapbox-renderer.",
+      "unsupportedRenderer": "Puntenwolken vereisen de MapLibre-, Mapbox- of ArcGIS-renderer.",
       "addError": "Kon {{name}} niet aan de kaart toevoegen: {{message}}",
       "error": "Kon niet zoeken naar IGN LiDAR HD-tegels: {{message}}",
       "selectAll": "Alles selecteren",

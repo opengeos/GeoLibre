@@ -34,6 +34,7 @@ export class ArcgisControlHost {
   private overlay: ArcgisLayer | null = null;
   private overlayGraphics: OverlayGraphic[] = [];
   private overlayQueued = false;
+  private destroyed = false;
   private adapted = new Map<IControl, () => void>();
   private cleanup: (() => void)[] = [];
   private facade: Evented & Record<string, unknown>;
@@ -243,11 +244,13 @@ export class ArcgisControlHost {
    * store record registered or dropped changes which layers are mirrored.
    */
   refreshOverlay(): void {
-    if (this.overlayQueued) return;
+    // A control torn down with the view edits its style on the way out; the
+    // redraw that queues must not add a layer to the dying map.
+    if (this.destroyed || this.overlayQueued) return;
     this.overlayQueued = true;
     queueMicrotask(() => {
       this.overlayQueued = false;
-      this.drawOverlay();
+      if (!this.destroyed) this.drawOverlay();
     });
   }
   private drawOverlay(): void {
@@ -331,6 +334,7 @@ export class ArcgisControlHost {
     }
   }
   destroy(): void {
+    this.destroyed = true;
     this.facade.fire("remove");
     if (this.overlay) {
       this.view.map?.remove(this.overlay);

@@ -8318,7 +8318,7 @@
       "foundTruncated": "Đang hiển thị {{count}} ô đầu tiên trong tổng số {{matched}} ô. Thu hẹp khu vực tìm kiếm để xem phần còn lại.",
       "addedToMap": "Đã thêm {{name}} vào bản đồ.",
       "alreadyOnMap": "{{name}} đã có trên bản đồ.",
-      "unsupportedRenderer": "Đám mây điểm yêu cầu công cụ kết xuất MapLibre hoặc Mapbox.",
+      "unsupportedRenderer": "Đám mây điểm yêu cầu công cụ kết xuất MapLibre, Mapbox hoặc ArcGIS.",
       "addError": "Không thể thêm {{name}} vào bản đồ: {{message}}",
       "error": "Không thể tìm kiếm các ô IGN LiDAR HD: {{message}}",
       "selectAll": "Chọn tất cả",

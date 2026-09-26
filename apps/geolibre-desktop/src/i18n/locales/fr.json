@@ -8405,7 +8405,7 @@
       "foundTruncated": "Affichage des {{count}} premières dalles sur {{matched}}. Réduisez la zone de recherche pour voir le reste.",
       "addedToMap": "{{name}} a été ajoutée à la carte.",
       "alreadyOnMap": "{{name}} est déjà sur la carte.",
-      "unsupportedRenderer": "Les nuages de points nécessitent le moteur de rendu MapLibre ou Mapbox.",
+      "unsupportedRenderer": "Les nuages de points nécessitent le moteur de rendu MapLibre, Mapbox ou ArcGIS.",
       "addError": "Impossible d'ajouter {{name}} à la carte : {{message}}",
       "error": "Impossible de rechercher les dalles IGN LiDAR HD : {{message}}",
       "selectAll": "Tout sélectionner",

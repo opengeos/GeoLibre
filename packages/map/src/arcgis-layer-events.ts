@@ -36,6 +36,8 @@ interface Registration {
   type: string;
   layerIds: string[];
   listener: Listener;
+  /** The caller's own listener, which `off` names; differs from `listener` for a `once`. */
+  original: Listener;
   inside: boolean;
 }
 
@@ -49,9 +51,16 @@ interface LayerEventHost {
   unproject: (point: { x: number; y: number }) => [number, number] | null;
 }
 
-/** Which facade event feeds each layer-scoped event MapLibre supports. */
-const POINTER_SOURCE: Record<string, "click" | "mousemove"> = {
+type PointerSource = "click" | "mousemove" | "mousedown" | "mouseup";
+
+/**
+ * Which facade event feeds each layer-scoped event. Types the facade never
+ * fires (`dblclick`, `contextmenu`, touch events) are accepted but never fire.
+ */
+const POINTER_SOURCE: Record<string, PointerSource> = {
   click: "click",
+  mousedown: "mousedown",
+  mouseup: "mouseup",
   mousemove: "mousemove",
   mouseenter: "mousemove",
   mouseleave: "mousemove",
@@ -90,7 +99,7 @@ export function installArcgisLayerEvents(host: LayerEventHost): void {
         const key = `${hit.layerId}\u0000${hit.featureId}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const numeric = hit.featureId !== null && /^\d+$/.test(hit.featureId);
+        const numeric = hit.featureId !== null && /^-?\d+$/.test(hit.featureId);
         features.push({
           type: "Feature",
           id: hit.featureId === null ? undefined : numeric ? Number(hit.featureId) : hit.featureId,
@@ -105,7 +114,7 @@ export function installArcgisLayerEvents(host: LayerEventHost): void {
     return features;
   };
 
-  const dispatch = (sourceType: "click" | "mousemove") => (event: PointerEvent) => {
+  const dispatch = (sourceType: PointerSource) => (event: PointerEvent) => {
     const active = registrations.filter((entry) => POINTER_SOURCE[entry.type] === sourceType);
     if (!active.length) return;
     const lngLat: [number, number] = [event.lngLat.lng, event.lngLat.lat];
@@ -113,7 +122,7 @@ export function installArcgisLayerEvents(host: LayerEventHost): void {
       const features = pickAt(lngLat, entry.layerIds);
       const hit = features.length > 0;
       const payload = { ...event, target: facade, features };
-      if (entry.type === "click" || entry.type === "mousemove") {
+      if (entry.type === sourceType) {
         if (hit) entry.listener({ ...payload, type: entry.type });
       } else if (entry.type === "mouseenter" || entry.type === "mouseover") {
         if (hit && !entry.inside) entry.listener({ ...payload, type: entry.type });
@@ -123,18 +132,33 @@ export function installArcgisLayerEvents(host: LayerEventHost): void {
       entry.inside = hit;
     }
   };
-  baseOn("click", dispatch("click") as never);
-  baseOn("mousemove", dispatch("mousemove") as never);
+  for (const type of ["click", "mousemove", "mousedown", "mouseup"] as const)
+    baseOn(type, dispatch(type) as never);
 
   const layerIdsOf = (value: unknown): string[] | null =>
     typeof value === "string" ? [value] : Array.isArray(value) ? value.map(String) : null;
 
+  const register = (entry: Registration) => {
+    registrations.push(entry);
+    // MapLibre 6's `on` returns a Subscription.
+    return {
+      unsubscribe: () => {
+        const index = registrations.indexOf(entry);
+        if (index >= 0) registrations.splice(index, 1);
+      },
+    };
+  };
   const on = (type: string, layerOrListener: unknown, maybeListener?: Listener) => {
     const layerIds = layerIdsOf(layerOrListener);
     if (!layerIds) return baseOn(type, layerOrListener as never);
-    if (typeof maybeListener === "function")
-      registrations.push({ type, layerIds, listener: maybeListener, inside: false });
-    return facade;
+    if (typeof maybeListener !== "function") return { unsubscribe: () => {} };
+    return register({
+      type,
+      layerIds,
+      listener: maybeListener,
+      original: maybeListener,
+      inside: false,
+    });
   };
   const off = (type: string, layerOrListener: unknown, maybeListener?: Listener) => {
     const layerIds = layerIdsOf(layerOrListener);
@@ -143,7 +167,7 @@ export function installArcgisLayerEvents(host: LayerEventHost): void {
     const index = registrations.findIndex(
       (entry) =>
         entry.type === type &&
-        entry.listener === maybeListener &&
+        entry.original === maybeListener &&
         entry.layerIds.join("\u0000") === key,
     );
     if (index >= 0) registrations.splice(index, 1);
@@ -154,12 +178,23 @@ export function installArcgisLayerEvents(host: LayerEventHost): void {
   facade.once = ((type: string, layerOrListener: unknown, maybeListener?: Listener) => {
     const layerIds = layerIdsOf(layerOrListener);
     if (!layerIds) return baseOnce(type, layerOrListener as never);
-    const wrapped = (event: Record<string, unknown>) => {
-      off(type, layerIds, wrapped);
-      maybeListener?.(event);
+    // Without a listener MapLibre returns a promise for the next event.
+    let resolve: Listener = () => {};
+    const next = maybeListener ? null : new Promise<Record<string, unknown>>((r) => (resolve = r));
+    const original = maybeListener ?? resolve;
+    const entry: Registration = {
+      type,
+      layerIds,
+      original,
+      inside: false,
+      listener: (event) => {
+        const index = registrations.indexOf(entry);
+        if (index >= 0) registrations.splice(index, 1);
+        original(event);
+      },
     };
-    if (maybeListener) on(type, layerIds, wrapped);
-    return maybeListener ? facade : Promise.resolve(undefined);
+    registrations.push(entry);
+    return next ?? facade;
   }) as never;
 
   facade.queryRenderedFeatures = (geometryOrOptions?: unknown, maybeOptions?: unknown) => {

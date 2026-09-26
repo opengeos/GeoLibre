@@ -8405,7 +8405,7 @@
       "foundTruncated": "Mostrando os primeiros {{count}} de {{matched}} blocos. Reduza a área de pesquisa para ver o restante.",
       "addedToMap": "{{name}} foi adicionado ao mapa.",
       "alreadyOnMap": "{{name}} já está no mapa.",
-      "unsupportedRenderer": "Nuvens de pontos exigem o renderizador MapLibre ou Mapbox.",
+      "unsupportedRenderer": "Nuvens de pontos exigem o renderizador MapLibre, Mapbox ou ArcGIS.",
       "addError": "Não foi possível adicionar {{name}} ao mapa: {{message}}",
       "error": "Não foi possível pesquisar blocos IGN LiDAR HD: {{message}}",
       "selectAll": "Selecionar tudo",

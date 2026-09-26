@@ -8405,7 +8405,7 @@
       "foundTruncated": "ნაჩვენებია პირველი {{count}} ფილი {{matched}}-დან. დანარჩენის სანახავად შეავიწროვეთ საძიებო არეალი.",
       "addedToMap": "{{name}} დაემატა რუკას.",
       "alreadyOnMap": "{{name}} უკვე არის რუკაზე.",
-      "unsupportedRenderer": "წერტილოვან ღრუბლებს სჭირდება MapLibre ან Mapbox რენდერერი.",
+      "unsupportedRenderer": "წერტილოვან ღრუბლებს სჭირდება MapLibre, Mapbox ან ArcGIS რენდერერი.",
       "addError": "{{name}}-ის რუკაზე დამატება ვერ მოხერხდა: {{message}}",
       "error": "IGN LiDAR HD ფილების ძებნა ვერ მოხერხდა: {{message}}",
       "selectAll": "ყველას მონიშვნა",

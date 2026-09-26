@@ -8492,7 +8492,7 @@
       "foundTruncated": "מוצגים {{count}} הראשונים מתוך {{matched}} אריחים. יש לצמצם את אזור החיפוש כדי לראות את השאר.",
       "addedToMap": "{{name}} נוסף למפה.",
       "alreadyOnMap": "{{name}} כבר נמצא במפה.",
-      "unsupportedRenderer": "ענני נקודות דורשים את מנוע הרינדור MapLibre או Mapbox.",
+      "unsupportedRenderer": "ענני נקודות דורשים את מנוע הרינדור MapLibre, Mapbox או ArcGIS.",
       "addError": "לא ניתן להוסיף את {{name}} למפה: {{message}}",
       "error": "לא ניתן לחפש אריחי IGN LiDAR HD: {{message}}",
       "selectAll": "בחר הכול",

@@ -8579,7 +8579,7 @@
       "foundTruncated": "Показаны первые {{count}} из {{matched}} плиток. Сузьте область поиска, чтобы увидеть остальные.",
       "addedToMap": "{{name}} добавлен(а) на карту.",
       "alreadyOnMap": "{{name}} уже на карте.",
-      "unsupportedRenderer": "Облакам точек требуется движок рендеринга MapLibre или Mapbox.",
+      "unsupportedRenderer": "Облакам точек требуется движок рендеринга MapLibre, Mapbox или ArcGIS.",
       "addError": "Не удалось добавить {{name}} на карту: {{message}}",
       "error": "Не удалось выполнить поиск плиток IGN LiDAR HD: {{message}}",
       "selectAll": "Выбрать все",

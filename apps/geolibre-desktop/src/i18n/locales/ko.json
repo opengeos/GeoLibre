@@ -8318,7 +8318,7 @@
       "foundTruncated": "{{matched}}개 중 처음 {{count}}개의 타일을 표시하고 있습니다. 나머지를 보려면 검색 영역을 좁히세요.",
       "addedToMap": "{{name}}을(를) 지도에 추가했습니다.",
       "alreadyOnMap": "{{name}}은(는) 이미 지도에 있습니다.",
-      "unsupportedRenderer": "포인트 클라우드에는 MapLibre 또는 Mapbox 렌더러가 필요합니다.",
+      "unsupportedRenderer": "포인트 클라우드에는 MapLibre, Mapbox 또는 ArcGIS 렌더러가 필요합니다.",
       "addError": "{{name}}을(를) 지도에 추가할 수 없습니다: {{message}}",
       "error": "IGN LiDAR HD 타일을 검색할 수 없습니다: {{message}}",
       "selectAll": "모두 선택",

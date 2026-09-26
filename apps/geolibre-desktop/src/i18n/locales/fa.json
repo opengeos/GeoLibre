@@ -8405,7 +8405,7 @@
       "foundTruncated": "نمایش {{count}} کاشی نخست از {{matched}} کاشی. برای دیدن بقیه، محدوده جستجو را کوچک‌تر کنید.",
       "addedToMap": "{{name}} به نقشه افزوده شد.",
       "alreadyOnMap": "{{name}} از قبل روی نقشه است.",
-      "unsupportedRenderer": "ابرهای نقطه به موتور رندر MapLibre یا Mapbox نیاز دارند.",
+      "unsupportedRenderer": "ابرهای نقطه به موتور رندر MapLibre، Mapbox یا ArcGIS نیاز دارند.",
       "addError": "افزودن {{name}} به نقشه ممکن نشد: {{message}}",
       "error": "جستجوی کاشی‌های IGN LiDAR HD ممکن نشد: {{message}}",
       "selectAll": "انتخاب همه",
