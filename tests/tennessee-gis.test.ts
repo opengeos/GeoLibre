@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { parseHTML } from "linkedom";
 import {
   arcGisHubItemPageUrl,
   buildArcGisHubSearchUrl,
@@ -8,7 +9,10 @@ import {
 import {
   maplibreArcGisHubPlugin,
   ARCGIS_HUB_PLUGIN_ID,
+  createArcGisHubPlugin,
+  DEFAULT_ARCGIS_HUB_LABELS,
 } from "../packages/plugins/src/plugins/maplibre-arcgis-hub";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   maplibreTennesseeGisPlugin,
   TENNESSEE_GIS_CATALOG_GROUPS,
@@ -118,5 +122,134 @@ describe("Tennessee GIS plugin", () => {
   it("ships a well-formed fallback catalog", () => {
     assert.ok(TENNESSEE_GIS_CATALOG_GROUPS.length > 0);
     for (const group of TENNESSEE_GIS_CATALOG_GROUPS) assert.match(group, /^[0-9a-f]{32}$/);
+  });
+});
+
+describe("Hub panel infinite scroll", () => {
+  const TOTAL = 45;
+  const PAGE = 20;
+
+  /**
+   * Open a browse-on-open Hub panel against a fake 45-item catalog.
+   *
+   * Args:
+   *   metrics: Height of one result card and of the visible list; the
+   *     list's scroll height grows with its cards like a real one.
+   *
+   * Returns:
+   *   The results list, the search requests made so far, and a teardown.
+   */
+  const openPanel = (metrics: { rowHeight: number; clientHeight: number }) => {
+    const { document, window } = parseHTML("<html><body></body></html>");
+    Object.assign(globalThis, { document, window });
+    const requests: URL[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      requests.push(url);
+      const start = Number(url.searchParams.get("start"));
+      const count = Math.max(0, Math.min(PAGE, TOTAL - start + 1));
+      const results = Array.from({ length: count }, (_, index) => ({
+        id: `item${start + index}`,
+        title: `Dataset ${start + index}`,
+        owner: "tester",
+        type: "Feature Service",
+      }));
+      const nextStart = start + count > TOTAL ? -1 : start + count;
+      return Response.json({ results, total: TOTAL, nextStart });
+    }) as typeof fetch;
+    const container = document.createElement("div");
+    document.body.append(container);
+    const { plugin } = createArcGisHubPlugin({
+      id: "test-hub",
+      name: "Test Hub",
+      defaultLabels: DEFAULT_ARCGIS_HUB_LABELS,
+      resolveGroups: async () => [GROUP_A],
+      browseWithoutKeyword: true,
+      viewOnlyByDefault: false,
+    });
+    const app = {
+      registerRightPanel: (panel: { render: (el: HTMLElement) => void }) => {
+        panel.render(container);
+        return () => {};
+      },
+      openRightPanel: () => {},
+      closeRightPanel: () => {},
+    } as unknown as GeoLibreAppAPI;
+    // The panel renders synchronously and starts its first search right away,
+    // so the scroll geometry has to be in place before activate returns.
+    const originalAppend = container.append.bind(container);
+    container.append = (...nodes: Parameters<HTMLElement["append"]>) => {
+      originalAppend(...nodes);
+      const results = container.querySelector("button[type=button]")?.previousElementSibling;
+      if (results) {
+        Object.defineProperty(results, "scrollHeight", {
+          get: () => results.querySelectorAll("article").length * metrics.rowHeight,
+        });
+        Object.defineProperty(results, "clientHeight", { get: () => metrics.clientHeight });
+        Object.defineProperty(results, "scrollTop", { value: 0, writable: true });
+      }
+    };
+    plugin.activate(app);
+    const results = container.querySelector("button[type=button]")
+      ?.previousElementSibling as HTMLElement;
+    return {
+      results,
+      requests,
+      cards: () => results.querySelectorAll("article").length,
+      // linkedom only dispatches its own Event class, not Node's global one.
+      scroll: () => results.dispatchEvent(new window.Event("scroll")),
+      close: () => {
+        plugin.deactivate?.(app);
+        globalThis.fetch = originalFetch;
+      },
+    };
+  };
+
+  const settle = async () => {
+    for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  it("loads the next page when the list is scrolled near its end", async () => {
+    const panel = openPanel({ rowHeight: 100, clientHeight: 400 });
+    try {
+      await settle();
+      assert.equal(panel.requests.length, 1);
+      assert.equal(panel.cards(), 20);
+
+      // Still far from the bottom: nothing more is fetched.
+      panel.results.scrollTop = 500;
+      panel.scroll();
+      await settle();
+      assert.equal(panel.requests.length, 1);
+
+      panel.results.scrollTop = 1450;
+      panel.scroll();
+      // A second scroll event while the page is in flight must not double-fetch.
+      panel.scroll();
+      await settle();
+      assert.equal(panel.requests.length, 2);
+      assert.equal(panel.requests[1].searchParams.get("start"), "21");
+      assert.equal(panel.cards(), 40);
+    } finally {
+      panel.close();
+    }
+  });
+
+  it("keeps loading while the results do not fill the list, then stops at the end", async () => {
+    const panel = openPanel({ rowHeight: 5, clientHeight: 400 });
+    try {
+      await settle();
+      assert.equal(panel.cards(), TOTAL);
+      assert.deepEqual(
+        panel.requests.map((url) => url.searchParams.get("start")),
+        ["1", "21", "41"],
+      );
+      panel.scroll();
+      await settle();
+      assert.equal(panel.requests.length, 3);
+    } finally {
+      panel.close();
+    }
   });
 });

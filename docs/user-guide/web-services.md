@@ -145,7 +145,7 @@ Searches public datasets published to [ArcGIS Hub](https://hub.arcgis.com/).
 - Search by keyword, or tick **Search the current map area** to restrict results to the view.
 - Each card shows the description and links out to the dataset's Hub page.
 - **Add to map** loads supported layers, **Zoom** frames them, and **Download** saves the data. A dataset with several layers downloads only the first, and the panel tells you so.
-- Results are paged: the panel shows how many of the total you are looking at, with **Load more** to continue.
+- Results are paged: the panel shows how many of the total you are looking at, and the next page loads as you scroll to the end of the list (**Load more** does the same by hand).
 
 ![The ArcGIS Hub panel showing search results for national park boundaries, with the NPS feature service added to the map](https://assets.geolibre.app/images/web-services-arcgis-hub.webp)
 

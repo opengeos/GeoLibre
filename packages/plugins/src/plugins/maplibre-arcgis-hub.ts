@@ -13,6 +13,9 @@ import type { ArcGISLayerType } from "./arcgis-layer";
 
 export const ARCGIS_HUB_PLUGIN_ID = "maplibre-gl-arcgis-hub";
 const PAGE_SIZE = 20;
+// Start fetching the next page this far before the list's bottom edge, so the
+// new cards are usually in place by the time the user scrolls to them.
+const AUTO_LOAD_THRESHOLD_PX = 200;
 
 export interface ArcGisHubLabels {
   hint: string;
@@ -340,10 +343,12 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
       thumbnailPreview.style.top = `${top}px`;
     };
 
-    const setBusy = (busy: boolean) => {
-      submit.disabled = busy;
-      more.disabled = busy;
-      submit.textContent = busy ? labels.searching : labels.search;
+    let busy = false;
+    const setBusy = (next: boolean) => {
+      busy = next;
+      submit.disabled = next;
+      more.disabled = next;
+      submit.textContent = next ? labels.searching : labels.search;
     };
 
     const renderItem = (item: ArcGisHubItem) => {
@@ -493,6 +498,7 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
         removeThumbnailPreview();
         results.replaceChildren();
       }
+      let succeeded = false;
       setBusy(true);
       status.textContent = append ? labels.loadingMore : labels.searching;
       try {
@@ -518,6 +524,9 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
         start = page.nextStart;
         status.textContent = shown === 0 ? labels.noResults : labels.showing(shown, total);
         more.hidden = page.nextStart < 1 || shown >= total;
+        // Only after a successful page: a failing request must not retry
+        // itself in a loop. The button stays as the manual retry.
+        succeeded = true;
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           console.error(`Could not search ${config.name}.`, error);
@@ -526,6 +535,17 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
       } finally {
         if (token === generation) setBusy(false);
       }
+      // A page that does not fill the list leaves nothing to scroll, so the
+      // scroll handler would never fire; keep loading until it overflows.
+      if (succeeded && token === generation) loadMoreIfNearBottom();
+    };
+
+    // Fetch the next page once the user scrolls near the end of the list. The
+    // Load more button stays for keyboard users and as a retry after an error.
+    const loadMoreIfNearBottom = () => {
+      if (busy || more.hidden) return;
+      const remaining = results.scrollHeight - results.scrollTop - results.clientHeight;
+      if (remaining <= AUTO_LOAD_THRESHOLD_PX) void runSearch(true);
     };
 
     const onSubmit = (event: SubmitEvent) => {
@@ -534,6 +554,7 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
     };
     form.addEventListener("submit", onSubmit);
     more.addEventListener("click", () => void runSearch(true));
+    results.addEventListener("scroll", loadMoreIfNearBottom, { passive: true });
     input.focus();
     if (config.browseWithoutKeyword) void runSearch(false);
 
@@ -544,6 +565,7 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
       downloadControllers.clear();
       removeThumbnailPreview();
       form.removeEventListener("submit", onSubmit);
+      results.removeEventListener("scroll", loadMoreIfNearBottom);
       container.replaceChildren();
     };
   }
