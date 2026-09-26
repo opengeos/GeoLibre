@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "US-Bundesstaaten-GIS",
+      "geolibre-us-local-gis": "US-Kommunal-GIS",
       "geolibre-osm-downloader": "OSM-Downloader",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC-Kataloge",
@@ -3947,6 +3948,7 @@
     "noResults": "Keine öffentlichen Datensätze gefunden.",
     "searchError": "ArcGIS Hub konnte nicht durchsucht werden.",
     "showing": "{{shown}} von {{total}} Datensätzen werden angezeigt.",
+    "showingSome": "Angezeigte Datensätze: {{shown}}.",
     "noDescription": "Keine Beschreibung vorhanden.",
     "add": "Zur Karte hinzufügen",
     "adding": "{{title}} wird hinzugefügt…",
@@ -3975,6 +3977,16 @@
     "chooseState": "Bundesstaat wählen",
     "portal": "Portal",
     "chooseStateHint": "Einen Bundesstaat wählen, um seine GIS-Daten aufzulisten.",
+    "openPortal": "Portal öffnen"
+  },
+  "usLocalGis": {
+    "hint": "Einen Bundesstaat und dann eine Stadt oder ein County wählen, um dessen öffentliches GIS-Datenportal zu durchsuchen. Layer zur Karte hinzufügen oder Daten herunterladen.",
+    "searchPlaceholder": "GIS-Daten des Portals durchsuchen",
+    "noResults": "Keine passenden Datensätze in diesem Portal gefunden.",
+    "searchError": "Dieses kommunale GIS-Portal konnte nicht durchsucht werden.",
+    "chooseState": "Bundesstaat wählen",
+    "portal": "Stadt oder County",
+    "chooseStateHint": "Einen Bundesstaat und dann eine Stadt oder ein County wählen, um die GIS-Daten aufzulisten.",
     "openPortal": "Portal öffnen"
   },
   "openDataCatalogs": {

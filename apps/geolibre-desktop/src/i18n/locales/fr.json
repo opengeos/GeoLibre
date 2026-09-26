@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "SIG des États américains",
+      "geolibre-us-local-gis": "SIG locaux américains",
       "geolibre-osm-downloader": "Téléchargeur OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Catalogues STAC",
@@ -3947,6 +3948,7 @@
     "noResults": "Aucun jeu de données public trouvé.",
     "searchError": "Impossible d'effectuer la recherche sur ArcGIS Hub.",
     "showing": "Jeux de données affichés : {{shown}} / {{total}}.",
+    "showingSome": "Jeux de données affichés : {{shown}}.",
     "noDescription": "Aucune description fournie.",
     "add": "Ajouter à la carte",
     "adding": "Ajout de {{title}}…",
@@ -3975,6 +3977,16 @@
     "chooseState": "Choisir un État",
     "portal": "Portail",
     "chooseStateHint": "Choisissez un État pour lister ses données SIG.",
+    "openPortal": "Ouvrir le portail"
+  },
+  "usLocalGis": {
+    "hint": "Choisissez un État, puis une ville ou un comté, pour parcourir et rechercher son portail public de données SIG. Ajoutez des couches à la carte ou téléchargez des données.",
+    "searchPlaceholder": "Rechercher dans les données SIG du portail",
+    "noResults": "Aucun jeu de données correspondant trouvé dans ce portail.",
+    "searchError": "Impossible de rechercher dans ce portail SIG local.",
+    "chooseState": "Choisir un État",
+    "portal": "Ville ou comté",
+    "chooseStateHint": "Choisissez un État, puis une ville ou un comté, pour lister ses données SIG.",
     "openPortal": "Ouvrir le portail"
   },
   "openDataCatalogs": {

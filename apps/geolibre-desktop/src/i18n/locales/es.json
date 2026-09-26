@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "SIG de estados de EE. UU.",
+      "geolibre-us-local-gis": "SIG locales de EE. UU.",
       "geolibre-osm-downloader": "Descargador de OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Catálogos STAC",
@@ -3947,6 +3948,7 @@
     "noResults": "No se encontraron conjuntos de datos públicos.",
     "searchError": "No se pudo buscar en ArcGIS Hub.",
     "showing": "Mostrando {{shown}} de {{total}} conjuntos de datos.",
+    "showingSome": "Conjuntos de datos mostrados: {{shown}}.",
     "noDescription": "No se proporcionó ninguna descripción.",
     "add": "Añadir al mapa",
     "adding": "Añadiendo {{title}}…",
@@ -3975,6 +3977,16 @@
     "chooseState": "Elige un estado",
     "portal": "Portal",
     "chooseStateHint": "Elige un estado para listar sus datos SIG.",
+    "openPortal": "Abrir portal"
+  },
+  "usLocalGis": {
+    "hint": "Elige un estado y luego una ciudad o condado para explorar y buscar en su portal público de datos SIG. Añade capas al mapa o descarga datos.",
+    "searchPlaceholder": "Buscar datos SIG del portal",
+    "noResults": "No se encontraron conjuntos de datos coincidentes en este portal.",
+    "searchError": "No se pudo buscar en este portal SIG local.",
+    "chooseState": "Elige un estado",
+    "portal": "Ciudad o condado",
+    "chooseStateHint": "Elige un estado y luego una ciudad o condado para listar sus datos SIG.",
     "openPortal": "Abrir portal"
   },
   "openDataCatalogs": {

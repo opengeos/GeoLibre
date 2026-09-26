@@ -58,6 +58,7 @@ import {
   setArcGisHubLabels,
   setTennesseeGisLabels,
   setUsStateGisLabels,
+  setUsLocalGisLabels,
   type ArcGisHubLabels,
   setOpenDataCatalogLabels,
   setHuggingFaceLabels,
@@ -397,6 +398,7 @@ export function TopToolbar({
       noResults: t("arcgisHub.noResults"),
       searchError: t("arcgisHub.searchError"),
       showing: (shown, total) => t("arcgisHub.showing", { shown, total }),
+      showingSome: (shown) => t("arcgisHub.showingSome", { shown }),
       noDescription: t("arcgisHub.noDescription"),
       add: t("arcgisHub.add"),
       adding: (title) => t("arcgisHub.adding", { title }),
@@ -433,6 +435,17 @@ export function TopToolbar({
       catalog: t("usStateGis.portal"),
       chooseCatalogSet: t("usStateGis.chooseStateHint"),
       openPortal: t("usStateGis.openPortal"),
+    });
+    setUsLocalGisLabels({
+      ...arcGisHubLabels,
+      hint: t("usLocalGis.hint"),
+      searchPlaceholder: t("usLocalGis.searchPlaceholder"),
+      noResults: t("usLocalGis.noResults"),
+      searchError: t("usLocalGis.searchError"),
+      catalogSet: t("usLocalGis.chooseState"),
+      catalog: t("usLocalGis.portal"),
+      chooseCatalogSet: t("usLocalGis.chooseStateHint"),
+      openPortal: t("usLocalGis.openPortal"),
     });
     setOpenDataCatalogLabels({
       socrataHint: t("openDataCatalogs.socrataHint"),

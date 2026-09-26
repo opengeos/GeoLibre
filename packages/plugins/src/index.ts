@@ -603,6 +603,18 @@ export {
 } from "./plugins/maplibre-us-state-gis";
 export { US_STATE_GIS_CATALOGS } from "./plugins/us-state-gis-catalogs";
 export {
+  DEFAULT_US_LOCAL_GIS_LABELS,
+  maplibreUsLocalGisPlugin,
+  setUsLocalGisLabels,
+  US_LOCAL_GIS_PLUGIN_ID,
+} from "./plugins/maplibre-us-local-gis";
+export { US_LOCAL_GIS_CATALOGS } from "./plugins/us-local-gis-catalogs";
+export {
+  buildSocrataCatalogUrl,
+  searchSocrataCatalog,
+  SOCRATA_CATALOG_API_URL,
+} from "./plugins/socrata-api";
+export {
   ARCGIS_HUB_PAGE_URL,
   ARCGIS_HUB_PORTAL_URL,
   ARCGIS_HUB_SEARCH_TYPES,

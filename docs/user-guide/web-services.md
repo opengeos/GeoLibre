@@ -30,6 +30,7 @@ They are grouped together because they behave the same way, not because they sha
 | [ArcGIS Hub](#arcgis-hub) | Esri | Public datasets published to ArcGIS Hub |
 | [Tennessee GIS](#tennessee-gis) | State of Tennessee | The geodata.tn.gov open GIS data portal |
 | [US State GIS](#us-state-gis) | US state GIS offices | The public GIS data portals of all 50 states and DC |
+| [US Local GIS](#us-local-gis) | US cities and counties | The GIS and open-data portals of about 150 large US cities, counties, and regional agencies |
 | [Socrata](#socrata) | Socrata | Government open-data portals |
 | [CKAN](#ckan) | HDX | Humanitarian Data Exchange resources |
 | [STAC Catalogs](#stac-catalogs) | any STAC | Any STAC API or static catalog, via STAC Index |
@@ -165,6 +166,15 @@ Browses the public GIS data portal of any US state or the District of Columbia â
 - Choose a state and the panel lists its catalog alphabetically; type a keyword to narrow it. Where a state has more than one portal (for example a statewide geoportal plus its transportation or natural-resources agency), a second menu picks between them. **Open portal** opens the portal's own website.
 - **Add to map**, **Zoom**, **Download**, and **Details** work as in [Tennessee GIS](#tennessee-gis): feature services add as vector layers, map and image services (such as statewide imagery) as raster layers, and Download saves feature services as GeoJSON.
 - Every portal listed is an ArcGIS Hub site or ArcGIS Online organization, which is what lets one panel search them all. A Hub site's catalog is read from the site when you pick it, so datasets the state adds show up without a GeoLibre update. A few states (Louisiana, Montana, Nevada, Ohio, Oklahoma, South Dakota, among others) have no Hub catalog to read, so the panel searches everything the state's ArcGIS organization publishes; expect some non-GIS items such as dashboards' source tables there. States whose main clearinghouse is not built on ArcGIS (such as PASDA or TNRIS) are represented by the agency portals that are.
+
+## US Local GIS
+
+Browses the public GIS and open-data portals of large US cities and counties, plus a few regional agencies (such as the Atlanta Regional Commission and Oregon Metro), for the local data a statewide portal rarely holds: parcels, zoning, building footprints, address points, street trees, bike lanes, and incident logs.
+
+- Choose a state, then a city or county from the second menu; the panel lists that portal's catalog alphabetically, and a keyword narrows it. **Open portal** opens the portal's own website. Some large places have two portals, such as a city's open-data site next to its GIS hub (Los Angeles Open Data and Los Angeles GeoHub, Seattle Open Data and Seattle GeoData); both are listed.
+- About three quarters of the portals are ArcGIS Hub sites, which behave as in [US State GIS](#us-state-gis): feature services add as vector layers, map and image services as raster layers, and Download saves feature services as GeoJSON.
+- The rest are [Socrata](#socrata) portals, which many of the largest cities use (New York, Chicago, San Francisco, Seattle, Austin, Dallas). There the panel lists only datasets with a geometry column and adds each one as GeoJSON, zooming to what was loaded. A Socrata export is capped at 50,000 features, so a city-wide incident log arrives as its first 50,000 rows; filter it on the portal first for a complete subset. Socrata cannot search by extent, so **Search the current map area** is unavailable for those portals, and the result count is the number found so far rather than a total.
+- Portals on other platforms (CKAN, OpenDataSoft, or custom sites such as Boston's or Pittsburgh's main portals) cannot be searched and are not listed, though their ArcGIS Hub sites are where one exists. Every listed portal was checked to return datasets in September 2026; `npm run check:gis-portals` repeats the check.
 
 ## Socrata
 

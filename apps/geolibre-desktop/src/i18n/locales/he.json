@@ -3380,6 +3380,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS של מדינות ארה״ב",
+      "geolibre-us-local-gis": "GIS מקומי בארה״ב",
       "geolibre-osm-downloader": "מוריד OSM",
       "geolibre-ign-lidar-hd": "מוריד IGN LiDAR HD",
       "geolibre-stac-catalogs": "קטלוגי STAC",
@@ -4070,6 +4071,7 @@
     "noResults": "לא נמצאו מערכי נתונים ציבוריים.",
     "searchError": "לא ניתן לחפש ב-ArcGIS Hub.",
     "showing": "מוצגים {{shown}} מתוך {{total}} מערכי נתונים.",
+    "showingSome": "מערכי נתונים מוצגים: {{shown}}.",
     "noDescription": "לא סופק תיאור.",
     "add": "הוסף למפה",
     "adding": "מוסיף את {{title}}…",
@@ -4098,6 +4100,16 @@
     "chooseState": "בחירת מדינה",
     "portal": "פורטל",
     "chooseStateHint": "בחרו מדינה כדי להציג את נתוני ה-GIS שלה.",
+    "openPortal": "פתיחת הפורטל"
+  },
+  "usLocalGis": {
+    "hint": "בחרו מדינה ולאחר מכן עיר או מחוז כדי לעיין ולחפש בפורטל נתוני ה-GIS הציבורי שלהם. הוסיפו שכבות למפה או הורידו נתונים.",
+    "searchPlaceholder": "חיפוש בנתוני ה-GIS של הפורטל",
+    "noResults": "לא נמצאו מערכי נתונים תואמים בפורטל זה.",
+    "searchError": "לא ניתן היה לחפש בפורטל ה-GIS המקומי הזה.",
+    "chooseState": "בחירת מדינה",
+    "portal": "עיר או מחוז",
+    "chooseStateHint": "בחרו מדינה ולאחר מכן עיר או מחוז כדי להציג את נתוני ה-GIS שלהם.",
     "openPortal": "פתיחת הפורטל"
   },
   "openDataCatalogs": {

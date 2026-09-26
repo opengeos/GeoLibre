@@ -3431,6 +3431,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "ГИС штатов США",
+      "geolibre-us-local-gis": "Местные ГИС США",
       "geolibre-osm-downloader": "Загрузчик OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Каталоги STAC",
@@ -4065,6 +4066,7 @@
     "noResults": "Общедоступные наборы данных не найдены.",
     "searchError": "Не удалось выполнить поиск в ArcGIS Hub.",
     "showing": "Показано наборов данных: {{shown}} из {{total}}.",
+    "showingSome": "Показано наборов данных: {{shown}}.",
     "noDescription": "Описание не указано.",
     "add": "Добавить на карту",
     "adding": "Добавление {{title}}…",
@@ -4093,6 +4095,16 @@
     "chooseState": "Выберите штат",
     "portal": "Портал",
     "chooseStateHint": "Выберите штат, чтобы увидеть список его ГИС-данных.",
+    "openPortal": "Открыть портал"
+  },
+  "usLocalGis": {
+    "hint": "Выберите штат, а затем город или округ, чтобы просматривать открытый портал ГИС-данных и искать в нём. Добавляйте слои на карту или скачивайте данные.",
+    "searchPlaceholder": "Поиск ГИС-данных портала",
+    "noResults": "В этом портале не найдено подходящих наборов данных.",
+    "searchError": "Не удалось выполнить поиск в этом местном ГИС-портале.",
+    "chooseState": "Выберите штат",
+    "portal": "Город или округ",
+    "chooseStateHint": "Выберите штат, а затем город или округ, чтобы увидеть список его ГИС-данных.",
     "openPortal": "Открыть портал"
   },
   "openDataCatalogs": {

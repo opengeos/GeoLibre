@@ -3285,6 +3285,7 @@
       "maplibre-gl-arcgis-hub": "Trung tâm ArcGIS",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS các bang Hoa Kỳ",
+      "geolibre-us-local-gis": "GIS địa phương Hoa Kỳ",
       "geolibre-osm-downloader": "Trình tải xuống OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Sơ đồ cơ sở OpenStreetMap",
@@ -3888,6 +3889,7 @@
     "noResults": "Không tìm thấy tập dữ liệu công khai nào.",
     "searchError": "Không thể tìm kiếm ArcGIS Hub.",
     "showing": "Đang hiển thị {{shown}} trong số {{total}} bộ dữ liệu.",
+    "showingSome": "Số bộ dữ liệu hiển thị: {{shown}}.",
     "downloadFirstLayer": "{{title}} có {{layerCount}} lớp; chỉ có cái đầu tiên được tải xuống.",
     "downloadError": "Không thể tải xuống tập dữ liệu này.",
     "details": "Chi tiết",
@@ -3916,6 +3918,16 @@
     "chooseState": "Chọn một bang",
     "portal": "Cổng dữ liệu",
     "chooseStateHint": "Chọn một bang để liệt kê dữ liệu GIS của bang đó.",
+    "openPortal": "Mở cổng dữ liệu"
+  },
+  "usLocalGis": {
+    "hint": "Chọn một bang, rồi chọn một thành phố hoặc quận, để duyệt và tìm kiếm cổng dữ liệu GIS công khai của nơi đó. Thêm lớp vào bản đồ hoặc tải dữ liệu xuống.",
+    "searchPlaceholder": "Tìm kiếm dữ liệu GIS của cổng",
+    "noResults": "Không tìm thấy bộ dữ liệu phù hợp trong cổng này.",
+    "searchError": "Không thể tìm kiếm cổng GIS địa phương này.",
+    "chooseState": "Chọn một bang",
+    "portal": "Thành phố hoặc quận",
+    "chooseStateHint": "Chọn một bang, rồi chọn một thành phố hoặc quận, để liệt kê dữ liệu GIS của nơi đó.",
     "openPortal": "Mở cổng dữ liệu"
   },
   "openDataCatalogs": {

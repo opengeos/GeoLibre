@@ -2161,6 +2161,11 @@ async function resolvePortalFeatureLayerUrl(
       cause,
     });
   }
+  // City and county ArcGIS Server sites often register a map service layer as
+  // a "Feature Service" item. Such a layer answers the same `/query` requests
+  // as a FeatureServer layer; the caller's geometry-type check still rejects
+  // one that is not a feature layer.
+  if (/\/MapServer\/\d+\/?$/i.test(itemInfo.url)) return trimTrailingSlash(itemInfo.url);
   return resolveFeatureLayerUrl(itemInfo.url, options, cause);
 }
 

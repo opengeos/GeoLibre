@@ -3278,6 +3278,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS รัฐในสหรัฐฯ",
+      "geolibre-us-local-gis": "GIS ท้องถิ่นในสหรัฐฯ",
       "geolibre-osm-downloader": "ตัวดาวน์โหลด OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "แคตตาล็อก STAC",
@@ -3888,6 +3889,7 @@
     "noResults": "ไม่พบชุดข้อมูลสาธารณะ",
     "searchError": "ไม่สามารถค้นหาใน ArcGIS Hub ได้",
     "showing": "กำลังแสดง {{shown}} จาก {{total}} ชุดข้อมูล",
+    "showingSome": "ชุดข้อมูลที่แสดง: {{shown}}",
     "noDescription": "ไม่มีคำอธิบาย",
     "add": "เพิ่มลงแผนที่",
     "adding": "กำลังเพิ่ม {{title}}…",
@@ -3916,6 +3918,16 @@
     "chooseState": "เลือกรัฐ",
     "portal": "พอร์ทัล",
     "chooseStateHint": "เลือกรัฐเพื่อแสดงรายการข้อมูล GIS",
+    "openPortal": "เปิดพอร์ทัล"
+  },
+  "usLocalGis": {
+    "hint": "เลือกรัฐ แล้วเลือกเมืองหรือเคาน์ตี เพื่อเรียกดูและค้นหาพอร์ทัลข้อมูล GIS สาธารณะ เพิ่มชั้นข้อมูลลงในแผนที่หรือดาวน์โหลดข้อมูล",
+    "searchPlaceholder": "ค้นหาข้อมูล GIS ของพอร์ทัล",
+    "noResults": "ไม่พบชุดข้อมูลที่ตรงกันในพอร์ทัลนี้",
+    "searchError": "ไม่สามารถค้นหาพอร์ทัล GIS ท้องถิ่นนี้ได้",
+    "chooseState": "เลือกรัฐ",
+    "portal": "เมืองหรือเคาน์ตี",
+    "chooseStateHint": "เลือกรัฐ แล้วเลือกเมืองหรือเคาน์ตี เพื่อแสดงรายการข้อมูล GIS",
     "openPortal": "เปิดพอร์ทัล"
   },
   "openDataCatalogs": {

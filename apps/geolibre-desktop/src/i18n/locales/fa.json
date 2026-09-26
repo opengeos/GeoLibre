@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS ایالت‌های آمریکا",
+      "geolibre-us-local-gis": "GIS محلی آمریکا",
       "geolibre-osm-downloader": "بارگیر OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "فهرست‌های STAC",
@@ -3947,6 +3948,7 @@
     "noResults": "هیچ مجموعه‌دادهٔ عمومی یافت نشد.",
     "searchError": "جستجوی ArcGIS Hub ممکن نشد.",
     "showing": "نمایش {{shown}} از {{total}} مجموعه‌داده.",
+    "showingSome": "مجموعه‌داده‌های نمایش‌داده‌شده: {{shown}}.",
     "noDescription": "توضیحی داده نشده است.",
     "add": "افزودن به نقشه",
     "adding": "در حال افزودن {{title}}…",
@@ -3975,6 +3977,16 @@
     "chooseState": "انتخاب ایالت",
     "portal": "درگاه",
     "chooseStateHint": "برای فهرست کردن داده‌های GIS یک ایالت را انتخاب کنید.",
+    "openPortal": "باز کردن درگاه"
+  },
+  "usLocalGis": {
+    "hint": "یک ایالت و سپس یک شهر یا شهرستان را انتخاب کنید تا درگاه عمومی داده‌های GIS آن را مرور و جست‌وجو کنید. لایه‌ها را به نقشه اضافه کنید یا داده‌ها را دانلود کنید.",
+    "searchPlaceholder": "جست‌وجو در داده‌های GIS درگاه",
+    "noResults": "هیچ مجموعه‌داده منطبقی در این درگاه یافت نشد.",
+    "searchError": "جست‌وجو در این درگاه GIS محلی ممکن نشد.",
+    "chooseState": "انتخاب ایالت",
+    "portal": "شهر یا شهرستان",
+    "chooseStateHint": "یک ایالت و سپس یک شهر یا شهرستان را انتخاب کنید تا داده‌های GIS آن فهرست شود.",
     "openPortal": "باز کردن درگاه"
   },
   "openDataCatalogs": {

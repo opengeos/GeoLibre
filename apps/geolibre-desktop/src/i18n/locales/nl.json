@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS van Amerikaanse staten",
+      "geolibre-us-local-gis": "Lokale GIS in de VS",
       "geolibre-osm-downloader": "OSM-downloader",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC-catalogi",
@@ -3947,6 +3948,7 @@
     "noResults": "Geen openbare datasets gevonden.",
     "searchError": "Kon niet zoeken in ArcGIS Hub.",
     "showing": "{{shown}} van {{total}} datasets worden getoond.",
+    "showingSome": "Getoonde datasets: {{shown}}.",
     "noDescription": "Geen beschrijving opgegeven.",
     "add": "Toevoegen aan kaart",
     "adding": "{{title}} toevoegen…",
@@ -3975,6 +3977,16 @@
     "chooseState": "Kies een staat",
     "portal": "Portaal",
     "chooseStateHint": "Kies een staat om de GIS-gegevens ervan te tonen.",
+    "openPortal": "Portaal openen"
+  },
+  "usLocalGis": {
+    "hint": "Kies een staat en vervolgens een stad of county om het openbare GIS-dataportaal te doorzoeken. Voeg lagen toe aan de kaart of download gegevens.",
+    "searchPlaceholder": "GIS-gegevens van het portaal doorzoeken",
+    "noResults": "Geen overeenkomende datasets gevonden in dit portaal.",
+    "searchError": "Kan dit lokale GIS-portaal niet doorzoeken.",
+    "chooseState": "Kies een staat",
+    "portal": "Stad of county",
+    "chooseStateHint": "Kies een staat en vervolgens een stad of county om de GIS-gegevens te tonen.",
     "openPortal": "Portaal openen"
   },
   "openDataCatalogs": {

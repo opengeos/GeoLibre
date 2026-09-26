@@ -3278,6 +3278,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "美国州级 GIS",
+      "geolibre-us-local-gis": "美国地方 GIS",
       "geolibre-osm-downloader": "OSM 下载器",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC 目录",
@@ -3888,6 +3889,7 @@
     "noResults": "未找到公开数据集。",
     "searchError": "无法搜索 ArcGIS Hub。",
     "showing": "正在显示 {{total}} 个数据集中的 {{shown}} 个。",
+    "showingSome": "已显示的数据集：{{shown}}。",
     "noDescription": "未提供描述。",
     "add": "添加到地图",
     "adding": "正在添加 {{title}}…",
@@ -3916,6 +3918,16 @@
     "chooseState": "选择州",
     "portal": "门户",
     "chooseStateHint": "选择一个州以列出其 GIS 数据。",
+    "openPortal": "打开门户"
+  },
+  "usLocalGis": {
+    "hint": "选择一个州，再选择一个城市或县，即可浏览和搜索其公共 GIS 数据门户。可将图层添加到地图或下载数据。",
+    "searchPlaceholder": "搜索该门户的 GIS 数据",
+    "noResults": "在此门户中未找到匹配的数据集。",
+    "searchError": "无法搜索此地方 GIS 门户。",
+    "chooseState": "选择州",
+    "portal": "城市或县",
+    "chooseStateHint": "选择一个州，再选择一个城市或县，以列出其 GIS 数据。",
     "openPortal": "打开门户"
   },
   "openDataCatalogs": {

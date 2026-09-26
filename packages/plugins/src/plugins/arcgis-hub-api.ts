@@ -13,6 +13,13 @@ export interface ArcGisHubItem {
   url?: string;
   extent?: [[number, number], [number, number]];
   thumbnail?: string;
+  /**
+   * Where the item's data downloads from, for a card that is not an ArcGIS
+   * portal item (such as a Socrata dataset). Portal items derive it from `id`.
+   */
+  dataUrl?: string;
+  /** The item's page, for a card that is not an ArcGIS portal item. */
+  pageUrl?: string;
 }
 
 export interface ArcGisHubSearchResult {
@@ -307,7 +314,9 @@ async function resolveFeatureLayerUrl(
   service.hash = "";
   service.search = "";
   service.pathname = service.pathname.replace(/\/+$/, "");
-  if (/\/FeatureServer\/\d+$/i.test(service.pathname)) {
+  // A "Feature Service" item may point at one layer of a map service, which
+  // answers the same queries (see resolvePortalFeatureLayerUrl in arcgis-layer).
+  if (/\/(?:FeatureServer|MapServer)\/\d+$/i.test(service.pathname)) {
     return { url: service.href, layerCount: 1 };
   }
   const metadataUrl = new URL(service);

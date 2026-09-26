@@ -3278,6 +3278,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS Negara Bagian AS",
+      "geolibre-us-local-gis": "GIS Lokal AS",
       "geolibre-osm-downloader": "Pengunduh OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Katalog STAC",
@@ -3888,6 +3889,7 @@
     "noResults": "Tidak ditemukan kumpulan data publik.",
     "searchError": "Tidak dapat mencari di ArcGIS Hub.",
     "showing": "Menampilkan {{shown}} dari {{total}} kumpulan data.",
+    "showingSome": "Dataset ditampilkan: {{shown}}.",
     "noDescription": "Tidak ada deskripsi.",
     "add": "Tambahkan ke peta",
     "adding": "Menambahkan {{title}}…",
@@ -3916,6 +3918,16 @@
     "chooseState": "Pilih negara bagian",
     "portal": "Portal",
     "chooseStateHint": "Pilih negara bagian untuk menampilkan data GIS-nya.",
+    "openPortal": "Buka portal"
+  },
+  "usLocalGis": {
+    "hint": "Pilih negara bagian, lalu kota atau county, untuk menelusuri dan mencari portal data GIS publiknya. Tambahkan layer ke peta atau unduh data.",
+    "searchPlaceholder": "Cari data GIS portal",
+    "noResults": "Tidak ada dataset yang cocok di portal ini.",
+    "searchError": "Tidak dapat mencari portal GIS lokal ini.",
+    "chooseState": "Pilih negara bagian",
+    "portal": "Kota atau county",
+    "chooseStateHint": "Pilih negara bagian, lalu kota atau county, untuk menampilkan data GIS-nya.",
     "openPortal": "Buka portal"
   },
   "openDataCatalogs": {

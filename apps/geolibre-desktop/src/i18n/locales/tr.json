@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "ABD Eyalet CBS",
+      "geolibre-us-local-gis": "ABD Yerel CBS",
       "geolibre-osm-downloader": "OSM İndirici",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC Katalogları",
@@ -3947,6 +3948,7 @@
     "noResults": "Herkese açık veri kümesi bulunamadı.",
     "searchError": "ArcGIS Hub'da arama yapılamadı.",
     "showing": "{{total}} veri kümesinden {{shown}} tanesi gösteriliyor.",
+    "showingSome": "Gösterilen veri kümeleri: {{shown}}.",
     "noDescription": "Açıklama sağlanmadı.",
     "add": "Haritaya ekle",
     "adding": "{{title}} ekleniyor…",
@@ -3975,6 +3977,16 @@
     "chooseState": "Eyalet seçin",
     "portal": "Portal",
     "chooseStateHint": "CBS verilerini listelemek için bir eyalet seçin.",
+    "openPortal": "Portalı aç"
+  },
+  "usLocalGis": {
+    "hint": "Herkese açık CBS veri portalına göz atmak ve aramak için bir eyalet, ardından bir şehir veya ilçe seçin. Haritaya katman ekleyin veya veri indirin.",
+    "searchPlaceholder": "Portalın CBS verilerinde ara",
+    "noResults": "Bu portalda eşleşen veri kümesi bulunamadı.",
+    "searchError": "Bu yerel CBS portalında arama yapılamadı.",
+    "chooseState": "Eyalet seçin",
+    "portal": "Şehir veya ilçe",
+    "chooseStateHint": "CBS verilerini listelemek için bir eyalet, ardından bir şehir veya ilçe seçin.",
     "openPortal": "Portalı aç"
   },
   "openDataCatalogs": {

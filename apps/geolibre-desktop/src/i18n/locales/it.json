@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "GIS degli Stati USA",
+      "geolibre-us-local-gis": "GIS locali USA",
       "geolibre-osm-downloader": "Downloader OSM",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "Cataloghi STAC",
@@ -3947,6 +3948,7 @@
     "noResults": "Nessun dataset pubblico trovato.",
     "searchError": "Impossibile effettuare la ricerca su ArcGIS Hub.",
     "showing": "Dataset visualizzati: {{shown}} di {{total}}.",
+    "showingSome": "Dataset mostrati: {{shown}}.",
     "noDescription": "Nessuna descrizione fornita.",
     "add": "Aggiungi alla mappa",
     "adding": "Aggiunta di {{title}}…",
@@ -3975,6 +3977,16 @@
     "chooseState": "Scegli uno Stato",
     "portal": "Portale",
     "chooseStateHint": "Scegli uno Stato per elencarne i dati GIS.",
+    "openPortal": "Apri portale"
+  },
+  "usLocalGis": {
+    "hint": "Scegli uno Stato, poi una città o una contea, per sfogliare e cercare nel suo portale pubblico di dati GIS. Aggiungi layer alla mappa o scarica i dati.",
+    "searchPlaceholder": "Cerca nei dati GIS del portale",
+    "noResults": "Nessun dataset corrispondente trovato in questo portale.",
+    "searchError": "Impossibile cercare in questo portale GIS locale.",
+    "chooseState": "Scegli uno Stato",
+    "portal": "Città o contea",
+    "chooseStateHint": "Scegli uno Stato, poi una città o una contea, per elencarne i dati GIS.",
     "openPortal": "Apri portale"
   },
   "openDataCatalogs": {

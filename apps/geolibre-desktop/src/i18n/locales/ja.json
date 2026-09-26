@@ -3278,6 +3278,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "米国州 GIS",
+      "geolibre-us-local-gis": "米国地方自治体 GIS",
       "geolibre-osm-downloader": "OSM ダウンローダー",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC カタログ",
@@ -3888,6 +3889,7 @@
     "noResults": "公開データセットが見つかりませんでした。",
     "searchError": "ArcGIS Hub を検索できませんでした。",
     "showing": "{{total}} 件中 {{shown}} 件のデータセットを表示しています。",
+    "showingSome": "表示中のデータセット: {{shown}}",
     "noDescription": "説明はありません。",
     "add": "地図に追加",
     "adding": "{{title}} を追加しています…",
@@ -3916,6 +3918,16 @@
     "chooseState": "州を選択",
     "portal": "ポータル",
     "chooseStateHint": "州を選ぶと GIS データが一覧表示されます。",
+    "openPortal": "ポータルを開く"
+  },
+  "usLocalGis": {
+    "hint": "州を選び、続いて市または郡を選ぶと、その公開 GIS データポータルを閲覧・検索できます。レイヤーを地図に追加したり、データをダウンロードしたりできます。",
+    "searchPlaceholder": "ポータルの GIS データを検索",
+    "noResults": "このポータルに一致するデータセットは見つかりませんでした。",
+    "searchError": "この地方自治体の GIS ポータルを検索できませんでした。",
+    "chooseState": "州を選択",
+    "portal": "市または郡",
+    "chooseStateHint": "州を選び、続いて市または郡を選ぶと、その GIS データが一覧表示されます。",
     "openPortal": "ポータルを開く"
   },
   "openDataCatalogs": {

@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "अमेरिकी राज्य GIS",
+      "geolibre-us-local-gis": "अमेरिकी स्थानीय GIS",
       "geolibre-osm-downloader": "OSM डाउनलोडर",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC कैटलॉग",
@@ -3947,6 +3948,7 @@
     "noResults": "कोई सार्वजनिक डेटासेट नहीं मिला।",
     "searchError": "ArcGIS Hub में खोज नहीं की जा सकी।",
     "showing": "{{total}} में से {{shown}} डेटासेट दिखाए जा रहे हैं।",
+    "showingSome": "दिखाए गए डेटासेट: {{shown}}।",
     "noDescription": "कोई विवरण नहीं दिया गया।",
     "add": "मैप में जोड़ें",
     "adding": "{{title}} जोड़ा जा रहा है…",
@@ -3975,6 +3977,16 @@
     "chooseState": "राज्य चुनें",
     "portal": "पोर्टल",
     "chooseStateHint": "GIS डेटा सूचीबद्ध करने के लिए राज्य चुनें।",
+    "openPortal": "पोर्टल खोलें"
+  },
+  "usLocalGis": {
+    "hint": "किसी राज्य और फिर किसी शहर या काउंटी को चुनें ताकि उसके सार्वजनिक GIS डेटा पोर्टल को ब्राउज़ और खोजा जा सके। मानचित्र में परतें जोड़ें या डेटा डाउनलोड करें।",
+    "searchPlaceholder": "पोर्टल का GIS डेटा खोजें",
+    "noResults": "इस पोर्टल में कोई मेल खाता डेटासेट नहीं मिला।",
+    "searchError": "इस स्थानीय GIS पोर्टल में खोज नहीं की जा सकी।",
+    "chooseState": "राज्य चुनें",
+    "portal": "शहर या काउंटी",
+    "chooseStateHint": "उसका GIS डेटा सूचीबद्ध करने के लिए कोई राज्य और फिर कोई शहर या काउंटी चुनें।",
     "openPortal": "पोर्टल खोलें"
   },
   "openDataCatalogs": {

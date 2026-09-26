@@ -3329,6 +3329,7 @@
       "maplibre-gl-arcgis-hub": "ArcGIS Hub",
       "geolibre-tennessee-gis": "Tennessee GIS",
       "geolibre-us-state-gis": "აშშ-ის შტატების GIS",
+      "geolibre-us-local-gis": "აშშ-ის ადგილობრივი GIS",
       "geolibre-osm-downloader": "OSM ჩამომტვირთველი",
       "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
       "geolibre-stac-catalogs": "STAC კატალოგები",
@@ -3947,6 +3948,7 @@
     "noResults": "საჯარო მონაცემთა ნაკრებები ვერ მოიძებნა.",
     "searchError": "ArcGIS Hub-ში ძებნა ვერ მოხერხდა.",
     "showing": "ნაჩვენებია {{shown}} {{total}}-დან.",
+    "showingSome": "ნაჩვენები მონაცემთა ნაკრებები: {{shown}}.",
     "noDescription": "აღწერა მითითებული არ არის.",
     "add": "რუკაზე დამატება",
     "adding": "მიმდინარეობს {{title}}-ის დამატება…",
@@ -3975,6 +3977,16 @@
     "chooseState": "აირჩიეთ შტატი",
     "portal": "პორტალი",
     "chooseStateHint": "აირჩიეთ შტატი მისი GIS მონაცემების ჩამოსათვლელად.",
+    "openPortal": "პორტალის გახსნა"
+  },
+  "usLocalGis": {
+    "hint": "აირჩიეთ შტატი, შემდეგ ქალაქი ან ოლქი, რათა დაათვალიეროთ და მოძებნოთ მისი საჯარო GIS მონაცემთა პორტალი. დაამატეთ ფენები რუკაზე ან ჩამოტვირთეთ მონაცემები.",
+    "searchPlaceholder": "პორტალის GIS მონაცემების ძიება",
+    "noResults": "ამ პორტალში შესაბამისი მონაცემთა ნაკრები ვერ მოიძებნა.",
+    "searchError": "ამ ადგილობრივ GIS პორტალში ძიება ვერ მოხერხდა.",
+    "chooseState": "აირჩიეთ შტატი",
+    "portal": "ქალაქი ან ოლქი",
+    "chooseStateHint": "აირჩიეთ შტატი, შემდეგ ქალაქი ან ოლქი, რათა ნახოთ მისი GIS მონაცემები.",
     "openPortal": "პორტალის გახსნა"
   },
   "openDataCatalogs": {
