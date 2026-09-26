@@ -879,6 +879,10 @@ describe("ArcgisEngine controls", () => {
       engine.setBuiltInControlVisible("globe", false);
       engine.setBuiltInControlVisible("globe", true);
       assert.equal(uiAdds.at(-1)?.index, 1);
+      // Moved into the same corner, the scale bar goes before the layer list,
+      // which MapLibre mounts only once the style loads.
+      engine.setBuiltInControlPosition("scale", "top-right");
+      assert.equal(uiAdds.at(-1)?.index, 2);
     } finally {
       (globalThis as { document: unknown }).document = previous;
     }

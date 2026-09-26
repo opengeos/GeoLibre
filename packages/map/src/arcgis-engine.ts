@@ -136,7 +136,8 @@ const HOSTED_CONTROLS: ReadonlySet<BuiltInMapControl> = new Set<BuiltInMapContro
 
 /**
  * Order within a corner, matching MapLibre: `MapController.init` adds the
- * built-ins in this order and the layer control mounts after them.
+ * built-ins in this order, and the layer control mounts after them once the
+ * style loads.
  */
 const HOSTED_CONTROL_ORDER: readonly BuiltInMapControl[] = [
   "fullscreen",
@@ -144,8 +145,8 @@ const HOSTED_CONTROL_ORDER: readonly BuiltInMapControl[] = [
   "navigation",
   "geolocate",
   "globe",
-  "layer-control",
   "scale",
+  "layer-control",
 ];
 
 /**
