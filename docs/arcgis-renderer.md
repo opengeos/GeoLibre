@@ -186,11 +186,22 @@ override draws Esri World Imagery instead.
   Temporary search and selection highlights are omitted. Split panes keep the
   control hidden by default and retain their independent layer visibility.
 - Plugins that only add store layers: **ArcGIS Hub**, **Socrata** and **CKAN**
-  search, the **OSM Downloader**, and the **Weather** overlays (Clouds and
-  Precipitation). **Controls** menu entries whose plugin needs a MapLibre,
-  Mapbox or Cesium map (Atmospheric Effects, Sun, Route Animation, Flight
-  Simulator, Graticule, Directions, Reverse Geocode) are greyed out with the
-  reason while ArcGIS is the primary renderer.
+  search, the **OSM Downloader**, **Source Cooperative**, **Hugging Face**,
+  **Earthdata GIS**, and the **Weather** overlays (Clouds and Precipitation).
+- Plugins built on a MapLibre control, through the map the host hands its
+  controls (see [Plugin controls](#plugin-controls)): the **Web Services**
+  catalogs (FEMA NFHL, NASA Earthdata, US EPA EnviroAtlas, USGS National Map),
+  **Historical Imagery** (Esri Wayback), the **DGGS** grids (H3, S2, A5,
+  DGGRID, DGGAL, OLC, Geohash, Tilecode) and the **Graticule**, and the
+  imagery catalogs with footprints (STAC, OpenAerialMap, Vantor, Fields of the
+  World, Satellite Embeddings, IGN LiDAR HD, GeoLens). Footprint clicks and
+  hover, selection outlines and box drawing work; a GeoLens raster that needs
+  an API key still requires MapLibre.
+- **Controls** menu entries and plugins whose plugin needs a MapLibre, Mapbox
+  or Cesium map (Atmospheric Effects, Sun, Route Animation, Flight Simulator,
+  Directions, Reverse Geocode, the Geo Editor, Annotations, Swipe, Street View,
+  Timelapse and others) are greyed out with the reason while ArcGIS is the
+  primary renderer.
 - If the SDK cannot be loaded from the CDN, the map's banner offers **Retry**,
   which reloads the page: the browser keeps a failed module import for the life
   of the page, so only a reload can fetch it again.
@@ -320,6 +331,34 @@ Reference manifests are preserved in the layer source for project restoration.
 Registered local Zarr stores remain session-local. Reads return bounded windows
 and retain at most 32 MiB of compressed data per layer; coarse views of large
 untiled arrays can still require many chunk requests.
+
+## Plugin controls
+
+A plugin control mounted on the ArcGIS map receives a MapLibre-shaped map.
+Camera, projection, pointer events and the DOM go through the view. Its style
+calls (`addSource`, `addLayer`, `setPaintProperty`, `getStyle`, ...) record
+into a style that is never drawn by the SDK directly; instead:
+
+- A layer the plugin mirrors into the GeoLibre store (a Web Services WMS
+  layer, footprints registered with `registerExternalNativeLayer`) is drawn by
+  the engine from that store record, like any other layer.
+- Any other GeoJSON layer (a grid, a selection outline, a draw preview) is
+  drawn as graphics in one overlay above the project layers. Fill, line,
+  circle and text layers are drawn, with filters, zoom ranges and data-driven
+  or zoom expressions evaluated per feature as MapLibre evaluates them.
+  Icons, fill patterns, extrusions and text along lines are not drawn, and
+  labels have no collision handling.
+- Layer-scoped events (`map.on("click", layerId, ...)`, `mouseenter`,
+  `mouseleave`) and a point `queryRenderedFeatures` answer from whichever of
+  those two draws the layer. A box query answers empty.
+- `dragPan.disable()` stops the view panning, so a control's own box or line
+  drawing receives the drag. Feature state, images and the other interaction
+  handlers are inert.
+
+A plugin that draws through custom layers, canvas sources, `Marker`/`Popup`,
+raster or vector-tile sources it does not mirror, or MapLibre-only APIs still
+declares no ArcGIS support. Plugins read this map through `getControlMap` in
+`packages/plugins/src/plugins/style-map.ts`.
 
 ## Adapted plugin panels
 

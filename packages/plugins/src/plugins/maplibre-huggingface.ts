@@ -2182,7 +2182,7 @@ export const maplibreHuggingFacePlugin: GeoLibrePlugin = (() => {
     version: "0.1.0",
     // Store-only: the browser adds ordinary GeoLibre layers and never touches
     // the map itself.
-    engines: ["maplibre", "mapbox"],
+    engines: ["maplibre", "mapbox", "arcgis"],
     activate: (app: GeoLibreAppAPI) => {
       appRef = app;
       mountedPanels.add(remount);

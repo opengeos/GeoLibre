@@ -7,7 +7,7 @@ import {
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -118,10 +118,12 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
   version: "0.1.2",
   // Docks its panel and adds raster tile layers through the Style Spec API
   // both 2D engines share; the engine adopts the layers under the control's
-  // own native ids on Mapbox as MapLibre's layer-sync does.
-  engines: ["maplibre", "mapbox"],
+  // own native ids on Mapbox as MapLibre's layer-sync does. On ArcGIS the
+  // control's style is only recorded and the engine draws the mirrored store
+  // layers from their tile URLs.
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app: GeoLibreAppAPI) => {
-    if (!getStyleMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!femaWmsControl) {
       femaWmsControl = new FemaWmsControl(getFemaWmsControlOptions());
     }

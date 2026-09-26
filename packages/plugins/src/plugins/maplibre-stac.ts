@@ -16,6 +16,7 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 import { addPMTilesAsset } from "./stac-layers";
+import { getControlMap } from "./style-map";
 import {
   assetDisplayFormat,
   assetFormat,
@@ -85,9 +86,13 @@ type StacMap = Omit<MapLibreMap | MapboxMap, "getSource" | "on" | "off"> & {
   off(type: "click" | "mousemove", listener: (event: StacPointerEvent) => void): unknown;
 };
 
-/** STAC uses the native GeoJSON, picking and pointer APIs shared by both engines. */
+/**
+ * STAC uses the native GeoJSON, picking and pointer APIs shared by both 2D
+ * engines; on ArcGIS the host's control map records them, draws the GeoJSON
+ * itself and answers picks from it.
+ */
 function getStacMap(app: GeoLibreAppAPI | null): StacMap | null {
-  return app?.getMap?.() ?? app?.getMapboxMap?.() ?? null;
+  return getControlMap(app) as StacMap | null;
 }
 
 const FOOTPRINT_SOURCE_KIND = "stac-footprints";
@@ -1733,8 +1738,9 @@ function createStacPlugin(
     id,
     name,
     version: "0.1.0",
-    // Footprints and interaction use the shared native GeoJSON APIs.
-    engines: ["maplibre", "mapbox"],
+    // Footprints and interaction use the shared native GeoJSON APIs, which the
+    // host's control map answers on ArcGIS.
+    engines: ["maplibre", "mapbox", "arcgis"],
     exclusiveGroup: "stac-catalog-browser",
     activate(app) {
       // The `?stac=` request is for the STAC Catalogs browser, never a sibling preset.

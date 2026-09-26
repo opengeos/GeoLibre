@@ -50,3 +50,24 @@ export function getStyleMap(
   const mapbox = app.getMapboxMap?.();
   return mapbox ? (mapbox as unknown as MapLibreMap) : null;
 }
+
+/**
+ * The map a plugin control talks to on any 2D renderer: {@link getStyleMap},
+ * or on ArcGIS the host's control facade, whose style calls succeed and read
+ * back but are never drawn.
+ *
+ * Use it only where every visible result of those style calls also reaches the
+ * GeoLibre store, which the ArcGIS engine draws: a Web Services catalog whose
+ * raster layers the store sync mirrors, or a camera/bounds/event read. A plugin
+ * that draws a highlight, grid or overlay through the style would show nothing
+ * on ArcGIS through this - that needs a rendering bridge, not this door.
+ *
+ * @param app - The plugin host API, or nothing while a plugin is inactive.
+ * @returns The MapLibre or Mapbox map, the ArcGIS control facade, or `null`
+ *   when none is mounted (a Cesium primary, or a map mid-swap).
+ */
+export function getControlMap(
+  app: Pick<GeoLibreAppAPI, "getMap" | "getMapboxMap" | "getArcgisControlMap"> | null | undefined,
+): MapLibreMap | null {
+  return getStyleMap(app) ?? app?.getArcgisControlMap?.() ?? null;
+}

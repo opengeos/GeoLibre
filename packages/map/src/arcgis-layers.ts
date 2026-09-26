@@ -2149,9 +2149,12 @@ export function compileArcgisLayer(
   // A GetMap template naming its layers is a WMS service the SDK can draw
   // natively. Other bounding-box templates typed `wms` (an ArcGIS
   // `/exportImage`, say) are plain image requests, drawn tile by tile below.
-  // WMS tiles go through the dev server's proxy, as on MapLibre.
+  // WMS tiles go through the dev server's proxy, as on MapLibre. The SDK's
+  // WMSLayer builds its own requests from the service URL and cannot be pointed
+  // through that proxy (it wraps the whole template in `?url=`), so a proxied
+  // service is drawn tile by tile below instead.
   const proxied = proxyWmsTiles(layer.type, tiles);
-  if (layer.type === "wms" && tiles.length && isWmsGetMap(tiles[0]))
+  if (layer.type === "wms" && tiles.length && isWmsGetMap(tiles[0]) && proxied[0] === tiles[0])
     return { ...base, kind: "wms", ...wmsLayerFromTemplate(proxied[0]) };
   if (classifyLayer(layer) === "raster-tiles" && (tiles.length || url)) {
     const templates = proxied.length ? proxied : [url!];

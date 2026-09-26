@@ -390,6 +390,8 @@ function revealRasterLayer(
   bbox: [number, number, number, number],
   minVisibleZoom: number | null,
 ): boolean {
+  // Null on ArcGIS, which then fits the extent without the zoom-in to data.
+  // engine-audit-allow: arcgis-null-map
   const map = getStyleMap(appRef);
   if (!map || minVisibleZoom === null) {
     appRef?.fitBounds?.(bbox);
@@ -990,13 +992,12 @@ function formatBbox(bbox: [number, number, number, number]): string {
 
 /** Reads the current map view as a valid [w, s, e, n] bbox. */
 function currentBbox(): [number, number, number, number] | null {
-  const map = getStyleMap(appRef);
-  if (!map) return null;
-  const bounds = map.getBounds();
+  // The renderer-neutral extent, so the filter holds on ArcGIS too.
+  const bounds = appRef?.getViewBounds?.();
+  if (!bounds) return null;
   const clampLat = (n: number): number => Math.max(-90, Math.min(90, n));
   const normalizeLon = (lon: number): number => ((((lon + 180) % 360) + 360) % 360) - 180;
-  const rawWest = bounds.getWest();
-  const rawEast = bounds.getEast();
+  const [rawWest, rawSouth, rawEast, rawNorth] = bounds;
   let west = normalizeLon(rawWest);
   let east = normalizeLon(rawEast);
   // A view that wraps the globe or crosses the antimeridian cannot be expressed
@@ -1006,7 +1007,7 @@ function currentBbox(): [number, number, number, number] | null {
     west = -180;
     east = 180;
   }
-  return [west, clampLat(bounds.getSouth()), east, clampLat(bounds.getNorth())];
+  return [west, clampLat(rawSouth), east, clampLat(rawNorth)];
 }
 
 // ---------------------------------------------------------------------------
@@ -1540,8 +1541,8 @@ export const maplibreEarthdataGisPlugin: GeoLibrePlugin = {
   name: "Earthdata GIS",
   version: "0.1.0",
   // Store-only adds (tile layers and ArcGIS feature layers) plus camera reads
-  // through the shared map surface.
-  engines: ["maplibre", "mapbox"],
+  // through the shared map surface, or the host's extent and fit on ArcGIS.
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app: GeoLibreAppAPI) => {
     appRef = app;
     unregisterPanel =

@@ -1,5 +1,5 @@
 import { disposeArcgisControlAdapters, identifyArcgisControls } from "./arcgis-control-adapters";
-import { ArcgisControlHost } from "./arcgis-control-host";
+import { ArcgisControlHost, type ArcgisControlHostHooks } from "./arcgis-control-host";
 import { createArcgisZarrLayer } from "./arcgis-zarr";
 import { createArcgisArchiveLayer } from "./arcgis-tile-archives";
 import { createArcgisTemplateTileLayer } from "./arcgis-template-tiles";
@@ -1350,9 +1350,11 @@ export class ArcgisEngine implements MapEngine {
     for (const id of [...this.natives.keys()]) if (!ids.has(id)) this.removeLayer(id);
     for (const key of [...this.errors.keys()])
       if (key.startsWith("layer:") && !ids.has(key.slice(6))) this.errors.delete(key);
-    // Store order is topmost first; the SDK draws index 0 at the bottom.
+    // Store order is bottom to top (the last layer is the topmost, as the
+    // Layers panel lists it and MapLibre's sync stacks it), which is also the
+    // SDK's: it draws index 0 at the bottom.
     const ordered: ArcgisLayer[] = [];
-    for (const original of [...layers].reverse()) {
+    for (const original of layers) {
       const opacity = this.storyOpacities.get(original.id);
       const layer = opacity === undefined ? original : { ...original, opacity };
       if (isArcgisPluginLayer(original)) {
@@ -1456,6 +1458,9 @@ export class ArcgisEngine implements MapEngine {
     });
     if (this.highlight && map.layers.indexOf(this.highlight) !== map.layers.length - 1)
       map.layers.reorder(this.highlight, map.layers.length - 1);
+    // A record registered or dropped changes which control layers the store
+    // mirrors, and so what the controls' own overlay has to draw.
+    this.controlHost?.refreshOverlay();
   }
   /** Build the SDK layers for a plan, recording blob URLs to revoke on removal. */
   private instantiate(
@@ -2050,6 +2055,47 @@ export class ArcgisEngine implements MapEngine {
    * points and lines. Service layers, whose features live on the server, are
    * only reachable through the asynchronous path.
    */
+  /**
+   * Hits on the store layers that mirror a plugin control's native layer, by
+   * the ids the control registered (`nativeLayerIds`) or the source it reads.
+   * The control's own layer is only recorded on this renderer (its facade's
+   * shadow style), so its mirror is what the user sees and clicks.
+   */
+  private pickNativeLayer(
+    lngLat: [number, number],
+    nativeLayerId: string,
+    sourceId: string | undefined,
+  ): IdentifiedFeature[] {
+    return this.mirrorsOf(nativeLayerId, sourceId).flatMap((layer) =>
+      this.identifyFeatures(lngLat, layer.id),
+    );
+  }
+  /** The store layers that mirror a control's native layer or source. */
+  private mirrorsOf(nativeLayerId: string, sourceId: string | undefined): GeoLibreLayer[] {
+    return this.layers.filter((layer) => {
+      const { nativeLayerIds, sourceIds } = layer.metadata as {
+        nativeLayerIds?: unknown;
+        sourceIds?: unknown;
+      };
+      return (
+        layer.id === nativeLayerId ||
+        (Array.isArray(nativeLayerIds) && nativeLayerIds.includes(nativeLayerId)) ||
+        (sourceId !== undefined &&
+          (layer.metadata.sourceId === sourceId ||
+            (Array.isArray(sourceIds) && sourceIds.includes(sourceId))))
+      );
+    });
+  }
+  /** What the control host borrows from the engine to pick and draw. */
+  private controlHostHooks(): ArcgisControlHostHooks {
+    return {
+      pick: (lngLat, nativeLayerId, sourceId) =>
+        this.pickNativeLayer(lngLat, nativeLayerId, sourceId),
+      isMirrored: (nativeLayerId, sourceId) => this.mirrorsOf(nativeLayerId, sourceId).length > 0,
+      tolerance: (lngLat) => this.degreesPerPixel(lngLat[1]) * HIT_TOLERANCE_PX,
+      toGeometry: geojsonToArcgisGeometry,
+    };
+  }
   identifyFeatures(lngLat: [number, number], layerId?: string): IdentifiedFeature[] {
     const hit = this.lastHit;
     if (
@@ -2061,8 +2107,8 @@ export class ArcgisEngine implements MapEngine {
     const tolerance = this.degreesPerPixel(lngLat[1]) * HIT_TOLERANCE_PX;
     const zoom = this.compiledZoom;
     const features: IdentifiedFeature[] = [];
-    // Store order is topmost first, which is the order a click should report.
-    for (const layer of this.layers) {
+    // A click reports the topmost layer first; store order is bottom to top.
+    for (const layer of [...this.layers].reverse()) {
       if (layerId && layer.id !== layerId) continue;
       if (!layer.visible || !layer.geojson || !this.natives.has(layer.id)) continue;
       // The pick runs per pointer frame for hover tips, so only the features
@@ -2652,11 +2698,21 @@ export class ArcgisEngine implements MapEngine {
 
   addControl(control: maplibregl.IControl, position?: maplibregl.ControlPosition): boolean {
     if (!control || !this.view || this.options.domControls === false) return false;
-    this.controlHost ??= new ArcgisControlHost(this, this.view, this.sdk);
+    this.controlHost ??= new ArcgisControlHost(this, this.view, this.sdk, this.controlHostHooks());
     return this.controlHost.addControl(control, position);
   }
   removeControl(control: maplibregl.IControl): void {
     this.controlHost?.removeControl(control);
+  }
+  /**
+   * The MapLibre-shaped map controls on this view receive: camera, events and
+   * DOM through the view, and a style that is recorded but never drawn. Null
+   * before the view exists or when DOM controls are disabled.
+   */
+  getControlMap(): maplibregl.Map | null {
+    if (!this.view || this.options.domControls === false) return null;
+    this.controlHost ??= new ArcgisControlHost(this, this.view, this.sdk, this.controlHostHooks());
+    return this.controlHost.getControlMap();
   }
   private createBuiltInControl(id: BuiltInMapControl): ArcgisWidget | null {
     const view = this.view;

@@ -52,7 +52,7 @@ import {
   tesseraTileUrls,
 } from "./satellite-embeddings-grids";
 import { getRasterRenderEngine } from "./maplibre-raster";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 
 export const SATELLITE_EMBEDDINGS_PLUGIN_ID = "geolibre-satellite-embeddings";
 const PANEL_ID = SATELLITE_EMBEDDINGS_PLUGIN_ID;
@@ -294,7 +294,7 @@ function normalizeLon(lon: number): number {
 
 /** The current map view as a [w, s, e, n] box (whole longitude range if it wraps). */
 function viewBbox(): LonLatBbox | null {
-  const map = getStyleMap(appRef);
+  const map = getControlMap(appRef);
   if (!map) return null;
   const bounds = map.getBounds();
   const clampLat = (value: number): number => Math.max(-90, Math.min(90, value));
@@ -1100,7 +1100,7 @@ function buildPanel(container: HTMLElement): () => void {
       state.results = rows;
       state.total = total;
       state.selectedIds = [];
-      const map = getStyleMap(appRef);
+      const map = getControlMap(appRef);
       if (map) {
         setFootprints(map, rows);
         setOutline(map, []);
@@ -1196,7 +1196,7 @@ function buildPanel(container: HTMLElement): () => void {
   const selectedRings = (): [number, number][][] =>
     state.results.filter((row) => state.selectedIds.includes(row.id)).map((row) => row.ring);
   const showSelection = (): void => {
-    const map = getStyleMap(appRef);
+    const map = getControlMap(appRef);
     if (map) setOutline(map, selectedRings());
   };
 
@@ -1233,7 +1233,7 @@ function buildPanel(container: HTMLElement): () => void {
       state.total = 0;
       state.status = null;
       state.selectedIds = [];
-      const map = getStyleMap(appRef);
+      const map = getControlMap(appRef);
       if (map) {
         removeFootprints(map);
         setOutline(map, []);
@@ -1278,7 +1278,7 @@ function buildPanel(container: HTMLElement): () => void {
         cancelDraw ? tr("drawCancel", "Cancel drawing") : tr("drawStart", "Draw box on map"),
         CSS.secondary,
         () => {
-          const map = getStyleMap(appRef);
+          const map = getControlMap(appRef);
           if (!map) return;
           if (cancelDraw) {
             stopDrawing();
@@ -1405,7 +1405,7 @@ function buildPanel(container: HTMLElement): () => void {
         actions.append(...rowActions(row));
         rowElement.append(actions);
         rowElement.addEventListener("mouseenter", () => {
-          const map = getStyleMap(appRef);
+          const map = getControlMap(appRef);
           if (map) setOutline(map, [row.ring]);
         });
         rowElement.addEventListener("mouseleave", showSelection);
@@ -1431,7 +1431,7 @@ function buildPanel(container: HTMLElement): () => void {
       !store.layers.some((layer) => layer.id === FOOTPRINT_STORE_LAYER_ID)
     ) {
       footprintsRegistered = false;
-      removeFootprints(getStyleMap(appRef));
+      removeFootprints(getControlMap(appRef));
     }
   });
 
@@ -1456,7 +1456,7 @@ function mountPanel(container: HTMLElement): void {
 
 /** Clears every map overlay the plugin owns. */
 function clearOverlays(app: GeoLibreAppAPI): void {
-  const map = getStyleMap(app);
+  const map = getControlMap(app);
   removeFootprints(map);
   removeChrome(map);
 }
@@ -1473,8 +1473,9 @@ export const maplibreSatelliteEmbeddingsPlugin: GeoLibrePlugin = {
   name: "Satellite Embeddings",
   version: "0.1.0",
   // Footprints, the image composites and the point layers are Style Spec
-  // sources and layers, so both 2D engines host them.
-  engines: ["maplibre", "mapbox"],
+  // sources and layers, so both 2D engines host them, and the host's control
+  // map draws them on ArcGIS.
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app) => {
     appRef = app;
     unregisterPanel =

@@ -8,7 +8,7 @@ import type {
 } from "maplibre-gl";
 import proj4, { type Converter } from "proj4";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 
 /**
  * Coordinate graticule plugin.
@@ -1282,10 +1282,11 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
   version: "0.1.0",
   // Draws the graticule through the Style Spec surface both 2D engines share
   // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
-  // through getStyleMap so the Mapbox renderer hosts it as well.
-  engines: ["maplibre", "mapbox"],
+  // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
+  // the host draws the same GeoJSON layers as its own graphics.
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app: GeoLibreAppAPI) => {
-    const activeMap = getStyleMap(app);
+    const activeMap = getControlMap(app);
     if (!activeMap) return false;
     map = activeMap;
     appRef = app;

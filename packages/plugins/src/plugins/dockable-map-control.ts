@@ -1,6 +1,6 @@
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 
 const mountedControlCleanup = new WeakMap<IControl, () => void>();
 
@@ -17,9 +17,11 @@ export function unmountMapControlFromPanel(control: IControl): void {
  * Layout, resizing, and close/collapse chrome belong exclusively to GeoLibre.
  *
  * The bridge binds to whichever 2D engine is drawing the primary map
- * ({@link getStyleMap}): the docked controls only use the style API both
+ * ({@link getControlMap}): the docked controls only use the style API both
  * engines share, so a plugin that declares Mapbox support docks here on the
- * Mapbox renderer without a second mount path.
+ * Mapbox renderer without a second mount path. On ArcGIS the control gets the
+ * host's facade, whose style is recorded but not drawn: a plugin docked there
+ * must mirror what it draws into the store, as the Web Services catalogs do.
  */
 export function mountMapControlInPanel(
   app: GeoLibreAppAPI,
@@ -27,7 +29,7 @@ export function mountMapControlInPanel(
   container: HTMLElement,
   onMountFailure?: () => void,
 ): (() => void) | null {
-  const map = getStyleMap(app);
+  const map = getControlMap(app);
   if (!map) {
     console.warn("Could not mount docked map control: the map is not ready.");
     onMountFailure?.();

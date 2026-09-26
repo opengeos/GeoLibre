@@ -1030,10 +1030,10 @@ describe("ArcgisEngine layer sync", () => {
         ],
       },
     });
-    // Store order is topmost first: A above B.
+    // Store order is bottom to top: B above A.
     engine.syncLayers([SQUARE, other]);
     const kinds = layers.items.map((l) => `${l.kind}:${l.title}`);
-    assert.deepEqual(kinds, ["geojson:Layer B", "geojson:Layer A", "geojson:Layer A"]);
+    assert.deepEqual(kinds, ["geojson:Layer A", "geojson:Layer A", "geojson:Layer B"]);
     const square = created.filter((l) => l.title === "Layer A");
     assert.deepEqual(
       square.map((l) => l.props.geometryType),
@@ -1045,7 +1045,7 @@ describe("ArcgisEngine layer sync", () => {
     engine.syncLayers([other, SQUARE]);
     assert.deepEqual(
       layers.items.map((l) => l.title),
-      ["Layer A", "Layer A", "Layer B"],
+      ["Layer B", "Layer A", "Layer A"],
     );
     assert.equal(created.length, 3);
   });
@@ -1109,10 +1109,10 @@ describe("ArcgisEngine layer sync", () => {
     ]);
     assert.deepEqual(
       layers.items.map((l) => l.kind),
-      ["feature", "web-tile"],
+      ["web-tile", "feature"],
     );
-    assert.equal(layers.items[1].props.urlTemplate, "https://t/{level}/{col}/{row}.png");
-    assert.equal(layers.items[1].props.copyright, "© T");
+    assert.equal(layers.items[0].props.urlTemplate, "https://t/{level}/{col}/{row}.png");
+    assert.equal(layers.items[0].props.copyright, "© T");
     // Story exports rebuild the layer in MapLibre, so they get the store template.
     assert.deepEqual(engine.getLayerRasterSource("xyz"), {
       type: "raster",

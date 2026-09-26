@@ -1126,7 +1126,8 @@ function createSourceCoopPlugin(config: SourceCoopPluginConfig): GeoLibrePlugin 
     id: config.id,
     name: config.name,
     version: "0.1.0",
-    engines: ["maplibre", "cesium", "mapbox"],
+    // Store-only: every asset goes through the host's layer helpers.
+    engines: ["maplibre", "cesium", "mapbox", "arcgis"],
     activate: (app: GeoLibreAppAPI) => {
       appRef = app;
       mountedPanels.add(remount);

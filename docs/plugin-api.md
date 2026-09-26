@@ -198,6 +198,12 @@ export interface GeoLibreAppAPI {
   // The primary ArcGIS MapView or SceneView, or null on another renderer.
   // The shared deck overlay hosts flat maps and local scenes only.
   getArcgisView?: () => ReturnType<import("@geolibre/map").ArcgisEngine["getView"]>;
+  // The MapLibre-shaped map controls receive on ArcGIS, or null on another
+  // renderer. Its style calls are recorded, not drawn by the SDK: the host
+  // draws the store layers they mirror and GeoJSON overlays itself (see
+  // docs/arcgis-renderer.md, "Plugin controls"). Built-in plugins read it
+  // through getControlMap(app) in style-map.ts.
+  getArcgisControlMap?: () => import("maplibre-gl").Map | null;
   // The primary Cesium globe's scene (namespace, widget, scene, camera, clock,
   // canvas, readView), or null when the primary map is not a globe. The globe's
   // counterpart to getMap for plugins that declare engines: ["maplibre", "cesium"].

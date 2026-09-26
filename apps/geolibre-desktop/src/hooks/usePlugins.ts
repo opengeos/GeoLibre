@@ -1147,6 +1147,14 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
         ? engine.getView()
         : null;
     },
+    getArcgisControlMap: () => {
+      const engine = mapControllerRef?.current;
+      return engine?.kind === "arcgis" &&
+        "getControlMap" in engine &&
+        typeof engine.getControlMap === "function"
+        ? engine.getControlMap()
+        : null;
+    },
     getMapboxMap: () => {
       const engine = mapControllerRef?.current;
       return engine?.kind === "mapbox" &&

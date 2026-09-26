@@ -37,7 +37,7 @@ import {
   thresholdFromFilter,
 } from "./fields-of-the-world-data";
 import { type LonLatBbox, bboxRing, polygonFeature } from "./satellite-embeddings-grids";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 
 export const FIELDS_OF_THE_WORLD_PLUGIN_ID = "geolibre-fields-of-the-world";
 const PANEL_ID = FIELDS_OF_THE_WORLD_PLUGIN_ID;
@@ -293,7 +293,7 @@ function normalizeLon(lon: number): number {
  * than the world becomes the whole longitude range.
  */
 function viewBbox(): LonLatBbox | null {
-  const map = getStyleMap(appRef);
+  const map = getControlMap(appRef);
   if (!map) return null;
   const bounds = map.getBounds();
   const clampLat = (value: number): number => Math.max(-90, Math.min(90, value));
@@ -439,7 +439,7 @@ function addFieldBoundaries(setStatus: (text: string, error?: boolean) => void):
     },
   };
   useAppStore.getState().addLayer(layer);
-  const zoom = getStyleMap(appRef)?.getZoom() ?? 0;
+  const zoom = getControlMap(appRef)?.getZoom() ?? 0;
   setStatus(
     zoom < archive.minZoom
       ? tr(
@@ -1071,7 +1071,7 @@ function buildPanel(container: HTMLElement): () => void {
       state.results = tiles;
       state.total = total;
       state.selectedIds = [];
-      const map = getStyleMap(appRef);
+      const map = getControlMap(appRef);
       if (map) {
         setFootprints(map, tiles, year);
         setOutline(map, []);
@@ -1108,7 +1108,7 @@ function buildPanel(container: HTMLElement): () => void {
 
   // The map outline follows the selection; a hovered row previews its own.
   const showSelection = (): void => {
-    const map = getStyleMap(appRef);
+    const map = getControlMap(appRef);
     if (!map) return;
     setOutline(
       map,
@@ -1230,7 +1230,7 @@ function buildPanel(container: HTMLElement): () => void {
         cancelDraw ? tr("drawCancel", "Cancel drawing") : tr("drawStart", "Draw box on map"),
         CSS.secondary,
         () => {
-          const map = getStyleMap(appRef);
+          const map = getControlMap(appRef);
           if (!map) return;
           if (cancelDraw) {
             stopDrawing();
@@ -1322,7 +1322,7 @@ function buildPanel(container: HTMLElement): () => void {
         );
         rowElement.append(actions);
         rowElement.addEventListener("mouseenter", () => {
-          const map = getStyleMap(appRef);
+          const map = getControlMap(appRef);
           if (map) setOutline(map, [tile.bbox]);
         });
         rowElement.addEventListener("mouseleave", showSelection);
@@ -1348,7 +1348,7 @@ function buildPanel(container: HTMLElement): () => void {
       !store.layers.some((layer) => layer.id === FOOTPRINT_STORE_LAYER_ID)
     ) {
       footprintsRegistered = false;
-      removeFootprints(getStyleMap(appRef));
+      removeFootprints(getControlMap(appRef));
     }
   });
 
@@ -1378,7 +1378,7 @@ function mountPanel(container: HTMLElement): void {
 
 /** Clears every map overlay the plugin owns (not the layers it added). */
 function clearOverlays(app: GeoLibreAppAPI): void {
-  const map = getStyleMap(app);
+  const map = getControlMap(app);
   removeFootprints(map);
   removeChrome(map);
 }
@@ -1395,8 +1395,9 @@ export const maplibreFieldsOfTheWorldPlugin: GeoLibrePlugin = {
   name: "Fields of the World",
   version: "0.1.0",
   // The field layers are PMTiles and GeoJSON store layers and the footprints
-  // are Style Spec sources and layers, so both 2D engines host them.
-  engines: ["maplibre", "mapbox"],
+  // are Style Spec sources and layers, so both 2D engines host them, and the
+  // host's control map draws them on ArcGIS.
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app) => {
     appRef = app;
     unregisterPanel =

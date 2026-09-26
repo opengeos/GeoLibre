@@ -1,7 +1,7 @@
 import type { Feature, FeatureCollection, Polygon } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 
 export const TILECODE_PLUGIN_ID = "maplibre-tilecode";
 
@@ -903,10 +903,11 @@ export const maplibreTilecodePlugin: GeoLibrePlugin = {
   version: "1.0.0",
   // Draws the grid through the Style Spec surface both 2D engines share
   // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
-  // through getStyleMap so the Mapbox renderer hosts it as well.
-  engines: ["maplibre", "mapbox"],
+  // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
+  // the host draws the same GeoJSON layers as its own graphics.
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app) => {
-    const activeMap = getStyleMap(app);
+    const activeMap = getControlMap(app);
     if (!activeMap) return false;
     map = activeMap;
     appRef = app;

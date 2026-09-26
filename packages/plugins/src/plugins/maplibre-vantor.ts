@@ -1,7 +1,7 @@
 import { VantorControl } from "./vantor/control";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 
 export const VANTOR_PLUGIN_ID = "maplibre-gl-vantor";
 
@@ -41,10 +41,11 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
   version: "0.2.1",
   // The browser, footprints and bbox drawing use the shared Style Spec API;
   // imagery goes through the host's COG path, which the raster control
-  // already draws on Mapbox.
-  engines: ["maplibre", "mapbox"],
+  // already draws on Mapbox and ArcGIS. The host's control map draws the
+  // footprints and bbox on ArcGIS.
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app: GeoLibreAppAPI) => {
-    if (!getStyleMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     control ??= createControl(app);
     const activeControl = control;
     unregisterPanel = app.registerRightPanel({

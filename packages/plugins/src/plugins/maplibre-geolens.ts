@@ -31,7 +31,7 @@ import type { Map as MapLibreMap, RequestParameters, ResourceType } from "maplib
 import { createLayerId } from "../layer-ids";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isTauriRuntime } from "./earth-engine-auth";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 import {
   applyFeatureEdits,
   captureFeatureBaseline,
@@ -501,7 +501,7 @@ function originOf(baseUrl: string): string | null {
  * filtering to it would only add a pointless query parameter.
  */
 function currentViewBbox(app: GeoLibreAppAPI | null): GeoLensBbox | null {
-  const bounds = getStyleMap(app)?.getBounds();
+  const bounds = getControlMap(app)?.getBounds();
   if (!bounds) return null;
   const west = bounds.getWest();
   const east = bounds.getEast();
@@ -585,7 +585,8 @@ function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string
   // engine-audit-allow: getMap-mapbox
   const map = app.getMap?.();
   if (!map) {
-    if (app.getMapboxMap?.()) throw new Error(labels.privateRasterNeedsMapLibre);
+    if (app.getMapboxMap?.() || app.getMapRenderer?.() === "arcgis")
+      throw new Error(labels.privateRasterNeedsMapLibre);
     return;
   }
   if (installedOnMap === map) return;
@@ -2277,7 +2278,7 @@ function createGeoLensPlugin(config: GeoLensPluginConfig): GeoLibrePlugin {
     version: "0.1.0",
     // Public rasters and vector data are store layers; only a keyed raster
     // needs MapLibre's request transform (see registerRasterApiKey).
-    engines: ["maplibre", "mapbox"],
+    engines: ["maplibre", "mapbox", "arcgis"],
     activate: (app: GeoLibreAppAPI) => {
       appRef = app;
       mountedPanels.add(remount);

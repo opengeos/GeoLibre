@@ -881,6 +881,8 @@ async function readLocalRasterFiles(control: RasterControl): Promise<Map<string,
 async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl | null> {
   const RasterControlClass = await getRasterControlClass();
 
+  // A Mapbox check: null on the other engines, ArcGIS included (whose COGs
+  // take addArcgisRaster and never mount this control). engine-audit-allow: arcgis-null-map
   rasterControl ??= createRasterControl(RasterControlClass, !!app.getMapboxMap?.());
 
   if (!rasterControlMounted) {
@@ -911,6 +913,7 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     wireRasterCloseButton(rasterControl);
     wireRasterBrowseButton(rasterControl);
     applyRasterPanelClass(rasterControl);
+    // engine-audit-allow: arcgis-null-map (a Mapbox check, as above)
     if (app.getMapboxMap?.()) {
       const panel = (rasterControl as unknown as RasterControlInternals)._panel;
       panel?.querySelector('option[value="cog-tiler-wasm"]')?.remove();

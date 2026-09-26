@@ -311,6 +311,7 @@ interface ArcgisViewBase {
       | "pointer-move"
       | "pointer-leave"
       | "pointer-down"
+      | "pointer-up"
       | "mouse-wheel"
       | "key-down"
       | "layerview-create-error"

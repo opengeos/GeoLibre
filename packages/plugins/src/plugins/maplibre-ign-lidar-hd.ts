@@ -13,7 +13,7 @@ import {
   restoreLidarLayers,
   withLidarAutoZoomSuppressed,
 } from "./maplibre-components";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 
 export const IGN_LIDAR_HD_PLUGIN_ID = "geolibre-ign-lidar-hd";
 const PANEL_ID = IGN_LIDAR_HD_PLUGIN_ID;
@@ -204,7 +204,8 @@ async function addTileToMap(
   tile: IgnLidarHdTile,
 ): Promise<AddTileToMapResult> {
   const renderer = app.getMapRenderer?.();
-  if (renderer && renderer !== "maplibre" && renderer !== "mapbox") return "unsupported-renderer";
+  // The globe cannot host the point-cloud overlay; ArcGIS draws it through its deck overlay.
+  if (renderer === "cesium") return "unsupported-renderer";
   if (!tile.downloadUrl) return "no-download";
   const store = useAppStore.getState();
   const alreadyAdded = store.layers.some(
@@ -384,7 +385,7 @@ function setFootprints(
   tiles: IgnLidarHdTile[],
   selectedIds: ReadonlySet<string>,
 ): void {
-  const map = getStyleMap(app);
+  const map = getControlMap(app);
   if (!map) return;
   ensureFootprintLayers(map);
   const source = map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource | undefined;
@@ -437,7 +438,7 @@ function ensureHoverLayer(map: MapLibreMap): void {
 
 /** Highlights one tile's footprint on the map, or clears the highlight when `tile` is null. */
 function setHoveredTile(app: GeoLibreAppAPI, tile: IgnLidarHdTile | null): void {
-  const map = getStyleMap(app);
+  const map = getControlMap(app);
   if (!map) return;
   ensureHoverLayer(map);
   const source = map.getSource(HOVER_SOURCE_ID) as GeoJSONSource | undefined;
@@ -621,7 +622,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const tiles = currentTiles.filter((tile) => selectedTileIds.has(tile.id) && tile.downloadUrl);
     if (tiles.length === 0) return;
     const renderer = app.getMapRenderer?.();
-    if (renderer && renderer !== "maplibre" && renderer !== "mapbox") {
+    if (renderer === "cesium") {
       status.textContent = tr(
         app,
         "unsupportedRenderer",
@@ -842,7 +843,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     if (refreshPanelLabels === refreshLabels) refreshPanelLabels = null;
     if (onFootprintSelect) onFootprintSelect = null;
     if (onFootprintHover) onFootprintHover = null;
-    const map = getStyleMap(app);
+    const map = getControlMap(app);
     if (map) {
       removeHoverLayer(map);
       removeFootprintLayers(app, map);
@@ -864,7 +865,9 @@ export const maplibreIgnLidarHdPlugin: GeoLibrePlugin = {
   id: IGN_LIDAR_HD_PLUGIN_ID,
   name: "IGN LiDAR HD Downloader",
   version: "0.1.0",
-  engines: ["maplibre", "mapbox", "cesium"],
+  // Tiles are `lidar-url` store layers, which ArcGIS draws through its deck
+  // overlay; the footprints go through the host's control map there.
+  engines: ["maplibre", "mapbox", "cesium", "arcgis"],
   activate: (app) => {
     unregisterPanel =
       app.registerRightPanel?.({
@@ -902,7 +905,7 @@ export const maplibreIgnLidarHdPlugin: GeoLibrePlugin = {
     // rendered).
     if (onFootprintSelect) onFootprintSelect = null;
     if (onFootprintHover) onFootprintHover = null;
-    const map = getStyleMap(app);
+    const map = getControlMap(app);
     if (map) {
       removeHoverLayer(map);
       removeFootprintLayers(app, map);

@@ -9,7 +9,7 @@ import {
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
-import { getStyleMap } from "./style-map";
+import { getControlMap } from "./style-map";
 import {
   createWebServiceStoreSync,
   layerTypeForTiles,
@@ -157,9 +157,11 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-nasa-earthdata",
   name: "NASA Earthdata",
   version: "0.1.4",
-  engines: ["maplibre", "mapbox"],
+  // The control's raster layers are mirrored into store layers; on ArcGIS its
+  // style is only recorded and the engine draws those store layers.
+  engines: ["maplibre", "mapbox", "arcgis"],
   activate: (app: GeoLibreAppAPI) => {
-    if (!getStyleMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!nasaEarthdataControl) {
       nasaEarthdataControl = new NasaEarthdataControl(getNasaEarthdataControlOptions());
     }

@@ -681,6 +681,16 @@ export interface GeoLibreAppAPI {
   getMapRenderer?: () => MapRendererKind;
   /** Native ArcGIS view; null while another engine is active. */
   getArcgisView?: () => ReturnType<import("@geolibre/map").ArcgisEngine["getView"]>;
+  /**
+   * The MapLibre-shaped map controls receive on the ArcGIS renderer (null
+   * while another engine is active): camera, events, projection and DOM go
+   * through the view, but its style is recorded and never drawn. Only for a
+   * control whose visible output reaches the GeoLibre store, which the ArcGIS
+   * engine draws, such as a Web Services catalog whose raster layers are
+   * mirrored into store layers. Read it through `getControlMap` in
+   * `style-map.ts` rather than directly.
+   */
+  getArcgisControlMap?: () => MapLibreMap | null;
   /** Native Mapbox map, available only while Mapbox is the primary renderer. */
   getMapboxMap?: () => ReturnType<import("@geolibre/map").MapboxEngine["getMapboxMap"]>;
   /**
