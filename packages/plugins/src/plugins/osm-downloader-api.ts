@@ -19,7 +19,7 @@ export const OVERPASS_DEFAULT_ENDPOINT = "https://tiles.geolibre.app/overpass";
 export const OVERPASS_DEV_ENDPOINT = "/overpass";
 export const OVERPASS_REQUEST_TIMEOUT_MS = 75_000;
 export const OSM_CUSTOM_TAG_MAX_LENGTH = 255;
-// Keep these mirrored limits aligned with isAllowedOverpassQuery in workers/tiles/src/index.ts.
+// Keep these mirrored limits aligned with isAllowedOverpassQuery in workers/tiles/src/overpass-query.ts.
 export const MAX_ALL_QUERY_AREA_SQUARE_DEGREES = 0.25;
 export const MAX_QUERY_AREA_SQUARE_DEGREES = 4;
 
