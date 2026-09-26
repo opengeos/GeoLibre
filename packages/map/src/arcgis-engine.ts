@@ -821,11 +821,12 @@ export class ArcgisEngine implements MapEngine {
       const dy = event.y - drag.y;
       const steer = drag;
       if (event.action === "end") drag = null;
-      // Suspended mid-drag: keep the gesture from reaching the SDK, but hold
-      // the camera.
-      if ((dx === 0 && dy === 0) || this.navigationSuspensions > 0) return;
+      if (dx === 0 && dy === 0) return;
       steer.x = event.x;
       steer.y = event.y;
+      // Suspended mid-drag: keep the gesture from reaching the SDK and hold
+      // the camera, discarding the movement so resuming does not jump.
+      if (this.navigationSuspensions > 0) return;
       steer.bearing += dx * 0.8;
       // Clamped as it accumulates, so reversing from the limit responds at once.
       steer.pitch = this.clampPitch(steer.pitch - dy * 0.5);

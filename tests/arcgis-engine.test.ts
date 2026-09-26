@@ -535,7 +535,7 @@ describe("ArcgisEngine camera moves", () => {
     assert.deepEqual(seen, [false, true, false, false]);
   });
   it("rotates and tilts on a Ctrl drag at MapLibre's rates, and leaves plain drags alone", () => {
-    const { goTo, fireViewEvent } = makeSceneEngine();
+    const { engine, goTo, fireViewEvent, rawView } = makeSceneEngine();
     let stopped = 0;
     const drag = (action: string, x: number, y: number, ctrlKey: boolean) =>
       fireViewEvent("drag", {
@@ -559,12 +559,24 @@ describe("ArcgisEngine camera moves", () => {
       target: { heading: 38, tilt: 55 },
       options: { animate: false },
     });
-    // The next update builds on that target even though the fake camera
-    // never moved: an unanimated goTo may not have landed yet.
+    // The next update builds on that target even when the camera has not
+    // landed there yet (an unanimated goTo may still be pending).
+    rawView.camera = { heading: 30, tilt: 45, position: { z: 1500 } };
     drag("update", 120, 60, true);
     assert.deepEqual((goTo.at(-1) as { target: unknown }).target, { heading: 46, tilt: 65 });
-    drag("end", 120, 60, true);
-    assert.equal(stopped, 4);
+    // Movement made while navigation is suspended is discarded, so resuming
+    // does not jump the camera by it.
+    const resume = engine.suspendNavigation();
+    drag("update", 170, 10, true);
+    resume();
+    const moves = goTo.length;
+    drag("update", 180, 0, true);
+    assert.equal(goTo.length, moves + 1);
+    assert.deepEqual((goTo.at(-1) as { target: unknown }).target, { heading: 54, tilt: 70 });
+    drag("end", 180, 0, true);
+    // Every Ctrl-drag event is swallowed, the suspended one twice (the
+    // suspension swallows drags too).
+    assert.equal(stopped, 7);
   });
   it("does not steer the camera on a Ctrl drag while navigation is suspended", () => {
     const { engine, goTo, fireViewEvent } = makeSceneEngine();
