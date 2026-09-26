@@ -127,6 +127,7 @@ async function load(
     }
     if (requestUrl.pathname.endsWith("/query")) {
       const ids = requestUrl.searchParams.get("objectIds");
+      if (ids) refreshGeometry.push(requestUrl.searchParams.get("returnGeometry"));
       return Response.json(
         ids ? fc(...ids.split(",").map((id) => feature(Number(id), "server"))) : initial,
       );
@@ -169,6 +170,55 @@ it("reconciles partial results and server IDs; retry does not repeat successful 
   assert.equal(arcGISLayerHasPendingEdits(connection.id), false);
   await saveArcGISLayerEdits(connection.id);
   assert.equal(connection.posts(), 2);
+});
+
+const refreshGeometry: Array<string | null> = [];
+it("never writes back geometry that was loaded generalized", async () => {
+  const { id, posts } = await load(
+    (body) => {
+      assert.equal(body.has("adds"), false);
+      const [update] = JSON.parse(body.get("updates")!);
+      assert.equal(update.geometry, undefined, "an attribute edit leaves geometry out");
+      return { updateResults: [{ success: true, objectId: 1 }] };
+    },
+    fc(feature(1)),
+  );
+  // As the viewport loader leaves a layer whose shapes it loaded simplified.
+  const markGeneralized = () =>
+    useAppStore.getState().updateLayer(id, {
+      metadata: {
+        ...layer(id).metadata,
+        arcgisEditInfo: { ...info, geometryGeneralized: true },
+      },
+    });
+  markGeneralized();
+  const moved = feature(1);
+  moved.geometry = { type: "Point", coordinates: [-83, 36] };
+  useAppStore.getState().updateLayer(id, { geojson: fc(moved) });
+  await assert.rejects(saveArcGISLayerEdits(id), /Zoom in to edit/);
+  assert.equal(posts(), 0);
+
+  // The loaded (simplified) shape differs from the service's full one.
+  const simplified = (name: string): Feature => ({
+    ...feature(1, name),
+    geometry: { type: "Point", coordinates: [-84.5, 35.5] },
+  });
+  useAppStore.getState().updateLayer(id, {
+    geojson: fc(simplified("after")),
+    metadata: { ...layer(id).metadata, arcgisEditBaseline: fc(simplified("before")) },
+  });
+  assert.equal((await saveArcGISLayerEdits(id)).updated, 1);
+  assert.equal(posts(), 1);
+  assert.equal(
+    (layer(id).metadata.arcgisEditInfo as ArcGISEditInfo).geometryGeneralized,
+    true,
+    "the save keeps the marker for the shapes still loaded",
+  );
+  // The post-save refresh reads attributes only and keeps the loaded shape,
+  // rather than mixing a full-resolution copy into a generalized layer.
+  assert.equal(refreshGeometry.at(-1), "false");
+  assert.deepEqual(layer(id).geojson!.features[0].geometry, simplified("x").geometry);
+  assert.equal(layer(id).geojson!.features[0].properties!.name, "server");
 });
 
 it("supports deleting the last feature", async () => {

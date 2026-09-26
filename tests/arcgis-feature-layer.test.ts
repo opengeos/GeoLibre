@@ -93,6 +93,8 @@ function fakeViewportMap(initial: [number, number, number, number]) {
       getEast: () => east,
       getNorth: () => north,
     }),
+    // Zoomed in far enough that viewport queries load full-resolution GeoJSON.
+    getZoom: () => 14,
     isMoving: () => false,
     on: (event: string, listener: () => void) => listeners.set(event, listener),
     off: (event: string, listener: () => void) => {

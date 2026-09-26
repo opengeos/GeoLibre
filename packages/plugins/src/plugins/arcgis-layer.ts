@@ -14,6 +14,12 @@ import {
   sameArcGISFeatures,
   type ArcGISEditInfo,
 } from "./arcgis-edits";
+import {
+  arcgisQuantizationParams,
+  decodeArcGISQuantizedFeatures,
+  isArcGISQuantizedFeatureSet,
+  type ArcGISRecordIdentity,
+} from "./arcgis-quantized";
 import { getGeometryEditTargetLayerId } from "./maplibre-geo-editor";
 
 let arcGISFetchOverride: typeof globalThis.fetch | null = null;
@@ -188,6 +194,8 @@ interface ArcGISFeatureLayerInfo extends ArcGISEditInfo {
   maxRecordCount?: number;
   name?: string;
   objectIdField?: string;
+  /** Whether `/query` honors `quantizationParameters` (hosted services do). */
+  supportsCoordinatesQuantization?: boolean;
 }
 
 interface ArcGISFeatureServiceInfo {
@@ -655,6 +663,9 @@ function startArcGISViewportLoader(
     // one the layer took the complete paged download above instead, so a null
     // `getMap()` is a documented branch here, not a silent no-op.
     const envelopes = arcgisViewportEnvelopes(map.getBounds());
+    // Zoomed out, a pixel hides detail the full geometry would spend megabytes
+    // on, so ask the service to generalize to the pixel grid instead.
+    const generalization = arcgisQuantizationParams(map.getZoom(), layerInfo);
     // One bucket per envelope, so a viewport split across the antimeridian
     // publishes both halves together instead of each replacing the other.
     const pages: Feature[][] = envelopes.map(() => []);
@@ -683,7 +694,8 @@ function startArcGISViewportLoader(
         metadata: {
           ...current.metadata,
           arcgisEditBaseline: structuredClone(data),
-          arcgisEditInfo: layerInfo,
+          // Generalized shapes must never be written back over the originals.
+          arcgisEditInfo: generalization ? { ...layerInfo, geometryGeneralized: true } : layerInfo,
         },
       });
       // Clear as soon as the service answers at all, not when the whole walk
@@ -702,6 +714,7 @@ function startArcGISViewportLoader(
             geometryType: "esriGeometryEnvelope",
             inSR: "4326",
             spatialRel: "esriSpatialRelIntersects",
+            ...generalization,
           },
           signal: controller.signal,
           onPage: (features) => {
@@ -1647,6 +1660,10 @@ async function fetchArcGISPagesByOffset(
   const orderByFields = plan.supportsOrderBy && plan.objectIdField ? plan.objectIdField : undefined;
   let previousSignature: string | null = null;
   let pageSize = plan.pageSize;
+  // Records the server has returned so far. Offsets and the short-page test
+  // count these, not the features kept: a generalized page drops the shapes
+  // that collapsed below the grid, so it can hold fewer features than records.
+  let records = 0;
 
   for (let page = 0; ; page += 1) {
     if (page >= MAX_ARCGIS_PAGES) return { features, truncated: true };
@@ -1658,14 +1675,15 @@ async function fetchArcGISPagesByOffset(
       appendArcGISParams(plan.queryUrl, {
         ...plan.params,
         orderByFields,
-        resultOffset: String(features.length),
+        resultOffset: String(records),
         resultRecordCount: String(wanted),
       }),
       plan.signal,
     );
-    if (chunk.features.length === 0) break;
+    if (chunk.recordCount === 0) break;
+    records += chunk.recordCount;
 
-    const signature = arcgisPageSignature(chunk.features[0]);
+    const signature = chunk.firstRecordSignature;
     if (page > 0 && signature !== null && signature === previousSignature) {
       // The same first row came back for a different offset: the service is
       // ignoring `resultOffset`, so every further page would be this one again.
@@ -1677,13 +1695,13 @@ async function fetchArcGISPagesByOffset(
     plan.onPage?.(features);
     plan.onProgress?.(features.length, plan.total);
 
-    if (plan.total !== null && features.length >= plan.total) break;
-    if (chunk.features.length >= wanted) continue;
+    if (plan.total !== null && records >= plan.total) break;
+    if (chunk.recordCount >= wanted) continue;
     // A short page normally means the last one — unless the service flagged the
     // transfer limit, which means it capped the page below what was asked for.
     // Adopt its cap and keep going rather than stopping on a partial dataset.
     if (!chunk.exceededTransferLimit) break;
-    pageSize = chunk.features.length;
+    pageSize = chunk.recordCount;
   }
 
   return { features, truncated: false };
@@ -1736,9 +1754,9 @@ async function fetchArcGISPagesByObjectId(
     // exceeds the service's real cap, which is what happens when the layer
     // metadata omits `maxRecordCount`. Adopt the cap and redo this range at the
     // smaller size rather than advancing over the ids that were not returned.
-    if (chunk.exceededTransferLimit && chunk.features.length > 0) {
-      if (chunk.features.length < end - start) {
-        pageSize = chunk.features.length;
+    if (chunk.exceededTransferLimit && chunk.recordCount > 0) {
+      if (chunk.recordCount < end - start) {
+        pageSize = chunk.recordCount;
         continue;
       }
     }
@@ -1798,11 +1816,19 @@ function remainingArcGISFeatures(plan: ArcGISPagingPlan, loaded: number, pageSiz
  */
 function arcgisPageSignature(feature: Feature | undefined): string | null {
   if (!feature) return null;
-  if (feature.id !== undefined && feature.id !== null) return `id:${String(feature.id)}`;
-  if (feature.properties && Object.keys(feature.properties).length > 0) {
-    return `p:${JSON.stringify(feature.properties)}`;
-  }
-  return feature.geometry ? `g:${JSON.stringify(feature.geometry)}` : null;
+  return (
+    arcgisRecordSignature({ id: feature.id ?? undefined, properties: feature.properties ?? {} }) ??
+    (feature.geometry ? `g:${JSON.stringify(feature.geometry)}` : null)
+  );
+}
+
+/** A record's signature from its id or attributes alone (see arcgisPageSignature). */
+function arcgisRecordSignature(record: ArcGISRecordIdentity | undefined): string | null {
+  if (!record) return null;
+  if (record.id !== undefined) return `id:${String(record.id)}`;
+  return Object.keys(record.properties).length > 0
+    ? `p:${JSON.stringify(record.properties)}`
+    : null;
 }
 
 /**
@@ -1893,14 +1919,25 @@ function arcgisErrorMessage(error: ArcGISErrorEnvelope | undefined, fallback: st
  * ArcGIS can answer a `f=geojson` request with a JSON error envelope rather than
  * GeoJSON, so both the transport status and the payload shape are checked.
  *
- * @param url - The fully-built `/query?f=geojson` request URL.
+ * @param url - The fully-built `/query` request URL: `f=geojson`, or `f=json`
+ *   with `quantizationParameters` for a generalized viewport query.
  * @returns The parsed FeatureCollection, with the service's
- *   `exceededTransferLimit` flag normalized onto it for the paging loop.
+ *   `exceededTransferLimit` flag normalized onto it for the paging loop, and
+ *   `recordCount`, the number of records the server returned. That can exceed
+ *   `features.length` for a generalized query, whose collapsed shapes are
+ *   dropped; paging advances by records, not by the features kept.
  */
 async function fetchArcGISGeoJson(
   url: string,
   signal?: AbortSignal,
-): Promise<FeatureCollection & { exceededTransferLimit: boolean }> {
+): Promise<
+  FeatureCollection & {
+    exceededTransferLimit: boolean;
+    recordCount: number;
+    /** Identifies the page's first record, for spotting a repeated page. */
+    firstRecordSignature: string | null;
+  }
+> {
   const response = await arcGISFetch(url, { signal });
   if (!response.ok) {
     throw new ArcGISQueryError(`ArcGIS feature query failed with ${response.status}.`, {
@@ -1932,6 +1969,12 @@ async function fetchArcGISGeoJson(
       code: typeof json.error.code === "number" ? json.error.code : null,
     });
   }
+  // A generalized viewport query asks for quantized Esri JSON, the only format
+  // hosted services generalize (see arcgis-quantized.ts).
+  if (isArcGISQuantizedFeatureSet(json)) {
+    const decoded = decodeArcGISQuantizedFeatures(json);
+    return { ...decoded, firstRecordSignature: arcgisRecordSignature(decoded.firstRecord) };
+  }
   if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
   }
@@ -1948,6 +1991,8 @@ async function fetchArcGISGeoJson(
     exceededTransferLimit: Boolean(
       json.exceededTransferLimit || json.properties?.exceededTransferLimit,
     ),
+    recordCount: features.length,
+    firstRecordSignature: arcgisPageSignature(features[0]),
   };
 }
 
@@ -2476,9 +2521,18 @@ export async function saveArcGISLayerEdits(
   // Abort a page walk started before the save; late pages also check the lock.
   arcgisFeatureLoaders.get(layerId)?.abort?.abort();
   try {
-    const info = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
+    const fetched = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
     const current = useAppStore.getState().layers.find((l) => l.id === layerId);
     if (!current?.geojson) throw new Error("ArcGIS layer was removed.");
+    // The service's metadata knows nothing of how the features were loaded, so
+    // carry the generalized marker over from the layer: planning must refuse a
+    // reshaped simplified geometry, and the metadata written after the save
+    // must keep saying the loaded shapes are simplified.
+    const generalized =
+      (current.metadata.arcgisEditInfo as ArcGISEditInfo | undefined)?.geometryGeneralized === true;
+    const info: ArcGISFeatureLayerInfo = generalized
+      ? { ...fetched, geometryGeneralized: true }
+      : fetched;
     const baseline = arcGISBaseline(current)!;
     const submitted: FeatureCollection = {
       ...current.geojson,
@@ -2627,8 +2681,23 @@ export async function saveArcGISLayerEdits(
           queryUrl,
           { ...options, maxFeatures: undefined },
           info,
-          { params: { objectIds: [...saved.keys()].join(",") } },
+          {
+            params: {
+              objectIds: [...saved.keys()].join(","),
+              // A generalized layer keeps the shapes it holds: full-resolution
+              // copies of just the saved features would leave the layer mixed
+              // until the next pan, so only the attributes are refreshed.
+              ...(info.geometryGeneralized ? { returnGeometry: "false" } : {}),
+            },
+          },
         );
+        if (info.geometryGeneralized) {
+          fresh.features = fresh.features.map((f) => {
+            const id = arcGISObjectId(f, field);
+            const submitted = id === undefined ? undefined : saved.get(id);
+            return submitted ? { ...f, geometry: submitted.geometry } : f;
+          });
+        }
         const now = useAppStore.getState().layers.find((l) => l.id === layerId);
         if (now?.geojson) {
           const refreshed = new Map(
