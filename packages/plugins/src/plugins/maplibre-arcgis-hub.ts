@@ -711,9 +711,7 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
         // set if the user panned, silently skipping or repeating datasets.
         activeBbox = viewBounds ? [...viewBounds] : undefined;
         activeCatalog = catalog;
-        // A site catalog's datasets have pages on that site; an organization
-        // scope may reach items the site does not list, so use the global Hub.
-        detailsPageUrl = catalog?.siteId ? catalog.url : undefined;
+        detailsPageUrl = undefined;
         start = 1;
         shown = 0;
         removeThumbnailPreview();
@@ -727,7 +725,9 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
         if (catalog) {
           const cached = catalogScopes.get(catalog.id);
           scope = cached ?? (await resolveCatalogScope(catalog, controller.signal));
-          if (!cached) catalogScopes.set(catalog.id, scope);
+          // An organization fallback for a site catalog is not cached, so the
+          // next search retries the site lookup.
+          if (!cached && (scope.groups || !catalog.siteId)) catalogScopes.set(catalog.id, scope);
         } else {
           if (config.resolveGroups && !groups) {
             const resolved = await config.resolveGroups(controller.signal);
@@ -748,6 +748,9 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
           signal: controller.signal,
         });
         if (token !== generation) return;
+        // A site catalog's datasets have pages on that site; an organization
+        // scope may reach items the site does not list, so use the global Hub.
+        if (catalog && !append) detailsPageUrl = scope.groups ? catalog.url : undefined;
         page.results.forEach(renderItem);
         total = page.total;
         shown += page.results.length;

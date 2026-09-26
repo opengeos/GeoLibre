@@ -229,6 +229,7 @@ describe("Hub catalog picker", () => {
       searches,
       opened,
       button,
+      submit: () => container.querySelector("form")?.dispatchEvent(new window.Event("submit")),
       close: () => {
         plugin.deactivate?.(app);
         globalThis.fetch = originalFetch;
@@ -297,6 +298,15 @@ describe("Hub catalog picker", () => {
       const q = panel.searches().at(-1)?.searchParams.get("q") ?? "";
       assert.match(q, new RegExp(`orgid:${ORG_ID}`));
       assert.doesNotMatch(q, /group:/);
+      // The org-wide results may not be on the site: Details uses the global Hub.
+      panel.button("Details").click();
+      assert.equal(panel.opened.at(-1), "https://hub.arcgis.com/datasets/item1/about");
+      // The fallback is not cached: the next search retries the site lookup.
+      const lookups = () => panel.requests.filter((url) => url.pathname.endsWith("/data")).length;
+      const before = lookups();
+      panel.submit();
+      await settle();
+      assert.equal(lookups(), before + 1);
     } finally {
       console.warn = warn;
       panel.close();
