@@ -171,6 +171,41 @@ it("reconciles partial results and server IDs; retry does not repeat successful 
   assert.equal(connection.posts(), 2);
 });
 
+it("never writes back geometry that was loaded generalized", async () => {
+  const { id, posts } = await load(
+    (body) => {
+      assert.equal(body.has("adds"), false);
+      const [update] = JSON.parse(body.get("updates")!);
+      assert.equal(update.geometry, undefined, "an attribute edit leaves geometry out");
+      return { updateResults: [{ success: true, objectId: 1 }] };
+    },
+    fc(feature(1)),
+  );
+  // As the viewport loader leaves a layer whose shapes it loaded simplified.
+  const markGeneralized = () =>
+    useAppStore.getState().updateLayer(id, {
+      metadata: {
+        ...layer(id).metadata,
+        arcgisEditInfo: { ...info, geometryGeneralized: true },
+      },
+    });
+  markGeneralized();
+  const moved = feature(1);
+  moved.geometry = { type: "Point", coordinates: [-83, 36] };
+  useAppStore.getState().updateLayer(id, { geojson: fc(moved) });
+  await assert.rejects(saveArcGISLayerEdits(id), /Zoom in to edit/);
+  assert.equal(posts(), 0);
+
+  useAppStore.getState().updateLayer(id, { geojson: fc(feature(1, "after")) });
+  assert.equal((await saveArcGISLayerEdits(id)).updated, 1);
+  assert.equal(posts(), 1);
+  assert.equal(
+    (layer(id).metadata.arcgisEditInfo as ArcGISEditInfo).geometryGeneralized,
+    true,
+    "the save keeps the marker for the shapes still loaded",
+  );
+});
+
 it("supports deleting the last feature", async () => {
   const { id } = await load(
     (body) => {

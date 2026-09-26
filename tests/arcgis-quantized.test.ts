@@ -339,6 +339,74 @@ describe("generalized viewport loading", () => {
     );
   });
 
+  it("pages by records, so shapes that collapsed do not end the walk early", async () => {
+    const shell = (x: number) => [
+      [x, 0],
+      [10, 0],
+      [0, 10],
+      [-10, 0],
+      [0, -10],
+    ];
+    const collapsed = [
+      [0, 0],
+      [0, 0],
+      [0, 0],
+    ];
+    const record = (oid: number, ring: number[][]) => ({
+      attributes: { OBJECTID: oid },
+      geometry: { rings: [ring] },
+    });
+    // Three records per page; the first page's middle record collapses.
+    const pages = [
+      [record(1, shell(0)), record(2, collapsed), record(3, shell(20))],
+      [record(4, shell(40)), record(5, shell(60))],
+    ];
+    const offsets: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      const body = !url.pathname.endsWith("/query")
+        ? { ...LAYER_INFO, maxRecordCount: 3 }
+        : (() => {
+            const offset = url.searchParams.get("resultOffset") ?? "0";
+            offsets.push(offset);
+            return { ...featureSet(pages[Number(offset) / 3] ?? []), exceededTransferLimit: false };
+          })();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+      } as Response;
+    }) as typeof fetch;
+    const map = {
+      getBounds: () => ({
+        getWest: () => -100,
+        getSouth: () => 30,
+        getEast: () => -90,
+        getNorth: () => 40,
+      }),
+      getZoom: () => 4,
+      isMoving: () => false,
+      on: () => {},
+      off: () => {},
+    };
+    const id = await addArcGISLayer(
+      { getMap: () => map, fitBounds: () => {} } as unknown as GeoLibreAppAPI,
+      {
+        layerType: "feature",
+        sourceType: "url",
+        url: "https://example.com/arcgis/rest/services/Districts/FeatureServer/0",
+      },
+    );
+    for (let tick = 0; tick < 10; tick += 1) await new Promise((r) => setTimeout(r, 0));
+    assert.deepEqual(offsets, ["0", "3"], "the second page starts after all three records");
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.deepEqual(
+      layer?.geojson?.features.map((feature) => feature.properties?.OBJECTID),
+      [1, 3, 4, 5],
+    );
+  });
+
   it("loads full-resolution GeoJSON zoomed in", async () => {
     const { layer, queries } = await load(ARCGIS_GENERALIZE_MAX_ZOOM);
     assert.equal(queries[0].searchParams.get("f"), "geojson");

@@ -121,11 +121,14 @@ export function isArcGISQuantizedFeatureSet(value: unknown): value is ArcGISQuan
  *   featureSet: The parsed `f=json` response of a quantized query.
  *
  * Returns:
- *   The features as a FeatureCollection, ids taken from the ObjectID field.
+ *   The features as a FeatureCollection, ids taken from the ObjectID field,
+ *   plus `recordCount`: how many records the server returned, which exceeds
+ *   the feature count when shapes collapsed below the grid. Paging must count
+ *   records, or a page thinned by collapsed shapes would read as the last one.
  */
 export function decodeArcGISQuantizedFeatures(
   featureSet: ArcGISQuantizedFeatureSet,
-): FeatureCollection & { exceededTransferLimit: boolean } {
+): FeatureCollection & { exceededTransferLimit: boolean; recordCount: number } {
   const grid = featureSet.transform;
   const [scaleX, scaleY] = grid.scale;
   const [translateX, translateY] = grid.translate;
@@ -165,6 +168,7 @@ export function decodeArcGISQuantizedFeatures(
     type: "FeatureCollection",
     features,
     exceededTransferLimit: featureSet.exceededTransferLimit === true,
+    recordCount: featureSet.features.length,
   };
 }
 

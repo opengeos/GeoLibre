@@ -1659,6 +1659,10 @@ async function fetchArcGISPagesByOffset(
   const orderByFields = plan.supportsOrderBy && plan.objectIdField ? plan.objectIdField : undefined;
   let previousSignature: string | null = null;
   let pageSize = plan.pageSize;
+  // Records the server has returned so far. Offsets and the short-page test
+  // count these, not the features kept: a generalized page drops the shapes
+  // that collapsed below the grid, so it can hold fewer features than records.
+  let records = 0;
 
   for (let page = 0; ; page += 1) {
     if (page >= MAX_ARCGIS_PAGES) return { features, truncated: true };
@@ -1670,32 +1674,33 @@ async function fetchArcGISPagesByOffset(
       appendArcGISParams(plan.queryUrl, {
         ...plan.params,
         orderByFields,
-        resultOffset: String(features.length),
+        resultOffset: String(records),
         resultRecordCount: String(wanted),
       }),
       plan.signal,
     );
-    if (chunk.features.length === 0) break;
+    if (chunk.recordCount === 0) break;
+    records += chunk.recordCount;
 
-    const signature = arcgisPageSignature(chunk.features[0]);
+    const signature = chunk.features.length ? arcgisPageSignature(chunk.features[0]) : null;
     if (page > 0 && signature !== null && signature === previousSignature) {
       // The same first row came back for a different offset: the service is
       // ignoring `resultOffset`, so every further page would be this one again.
       return { features: features.slice(0, plan.pageSize), truncated: true };
     }
-    previousSignature = signature;
+    if (signature !== null) previousSignature = signature;
 
     features.push(...chunk.features);
     plan.onPage?.(features);
     plan.onProgress?.(features.length, plan.total);
 
-    if (plan.total !== null && features.length >= plan.total) break;
-    if (chunk.features.length >= wanted) continue;
+    if (plan.total !== null && records >= plan.total) break;
+    if (chunk.recordCount >= wanted) continue;
     // A short page normally means the last one — unless the service flagged the
     // transfer limit, which means it capped the page below what was asked for.
     // Adopt its cap and keep going rather than stopping on a partial dataset.
     if (!chunk.exceededTransferLimit) break;
-    pageSize = chunk.features.length;
+    pageSize = chunk.recordCount;
   }
 
   return { features, truncated: false };
@@ -1748,9 +1753,9 @@ async function fetchArcGISPagesByObjectId(
     // exceeds the service's real cap, which is what happens when the layer
     // metadata omits `maxRecordCount`. Adopt the cap and redo this range at the
     // smaller size rather than advancing over the ids that were not returned.
-    if (chunk.exceededTransferLimit && chunk.features.length > 0) {
-      if (chunk.features.length < end - start) {
-        pageSize = chunk.features.length;
+    if (chunk.exceededTransferLimit && chunk.recordCount > 0) {
+      if (chunk.recordCount < end - start) {
+        pageSize = chunk.recordCount;
         continue;
       }
     }
@@ -1907,12 +1912,15 @@ function arcgisErrorMessage(error: ArcGISErrorEnvelope | undefined, fallback: st
  *
  * @param url - The fully-built `/query?f=geojson` request URL.
  * @returns The parsed FeatureCollection, with the service's
- *   `exceededTransferLimit` flag normalized onto it for the paging loop.
+ *   `exceededTransferLimit` flag normalized onto it for the paging loop, and
+ *   `recordCount`, the number of records the server returned. That can exceed
+ *   `features.length` for a generalized query, whose collapsed shapes are
+ *   dropped; paging advances by records, not by the features kept.
  */
 async function fetchArcGISGeoJson(
   url: string,
   signal?: AbortSignal,
-): Promise<FeatureCollection & { exceededTransferLimit: boolean }> {
+): Promise<FeatureCollection & { exceededTransferLimit: boolean; recordCount: number }> {
   const response = await arcGISFetch(url, { signal });
   if (!response.ok) {
     throw new ArcGISQueryError(`ArcGIS feature query failed with ${response.status}.`, {
@@ -1963,6 +1971,7 @@ async function fetchArcGISGeoJson(
     exceededTransferLimit: Boolean(
       json.exceededTransferLimit || json.properties?.exceededTransferLimit,
     ),
+    recordCount: features.length,
   };
 }
 
@@ -2491,9 +2500,18 @@ export async function saveArcGISLayerEdits(
   // Abort a page walk started before the save; late pages also check the lock.
   arcgisFeatureLoaders.get(layerId)?.abort?.abort();
   try {
-    const info = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
+    const fetched = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
     const current = useAppStore.getState().layers.find((l) => l.id === layerId);
     if (!current?.geojson) throw new Error("ArcGIS layer was removed.");
+    // The service's metadata knows nothing of how the features were loaded, so
+    // carry the generalized marker over from the layer: planning must refuse a
+    // reshaped simplified geometry, and the metadata written after the save
+    // must keep saying the loaded shapes are simplified.
+    const generalized =
+      (current.metadata.arcgisEditInfo as ArcGISEditInfo | undefined)?.geometryGeneralized === true;
+    const info: ArcGISFeatureLayerInfo = generalized
+      ? { ...fetched, geometryGeneralized: true }
+      : fetched;
     const baseline = arcGISBaseline(current)!;
     const submitted: FeatureCollection = {
       ...current.geojson,
