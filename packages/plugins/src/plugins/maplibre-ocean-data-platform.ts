@@ -272,15 +272,23 @@ async function fetchFeatures(
   limit: number,
   signal?: AbortSignal,
 ): Promise<FeatureCollection> {
-  let text: string;
+  let text: string | null = null;
   const fetchArrayBuffer = appRef?.fetchArrayBuffer;
   if (isTauriRuntime() && fetchArrayBuffer) {
-    const bytes = await fetchArrayBuffer(
-      odpFeaturesUrl(dataset.id, { bbox, limit, via: "direct" }),
-    );
+    try {
+      const bytes = await fetchArrayBuffer(
+        odpFeaturesUrl(dataset.id, { bbox, limit, via: "direct" }),
+      );
+      text = new TextDecoder().decode(bytes);
+    } catch {
+      // The host retries a failed native read with a webview fetch, which ODP
+      // refuses by CORS, so the error says nothing about the real cause (a
+      // private dataset's 401, a 5xx). Read through the Worker instead, which
+      // relays the upstream status.
+    }
     signal?.throwIfAborted();
-    text = new TextDecoder().decode(bytes);
-  } else {
+  }
+  if (text === null) {
     const url = odpFeaturesUrl(dataset.id, { bbox, limit, via: "proxy" });
     const response = await fetch(url, { signal, headers: { accept: "application/geo+json" } });
     if (!response.ok) {

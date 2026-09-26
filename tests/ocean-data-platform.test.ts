@@ -325,6 +325,18 @@ describe("tiles Worker /odp route", () => {
     });
   });
 
+  it("accepts the Windows desktop origin", async () => {
+    globalThis.fetch = (async () => new Response(new Uint8Array([1]))) as typeof fetch;
+    const response = await tilesWorker.fetch(
+      new Request(`https://tiles.geolibre.app/odp/tiles/${SEAMOUNT_DATASET}/0/0/0.pbf`, {
+        headers: { origin: "http://tauri.localhost" },
+      }),
+      {},
+      {} as ExecutionContext,
+    );
+    assert.equal(response.status, 200);
+  });
+
   it("relays a private dataset's 401 uncached", async () => {
     globalThis.fetch = (async () =>
       new Response('{"message":"Not authorized"}', {

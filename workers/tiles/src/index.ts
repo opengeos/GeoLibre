@@ -434,6 +434,11 @@ function isAllowedProxyOrigin(origin: string | null): boolean {
     return false;
   }
   if (protocol === "tauri:" && hostname === "localhost") return true;
+  // The desktop webview's origin on Windows, where Tauri serves the app over
+  // http(s)://tauri.localhost rather than a custom scheme.
+  if ((protocol === "http:" || protocol === "https:") && hostname === "tauri.localhost") {
+    return true;
+  }
   if (protocol === "https:") {
     if (hostname === "geolibre.app" || hostname.endsWith(".geolibre.app")) {
       return true;
