@@ -54,6 +54,7 @@ import {
   TRANSIT_UPSTREAMS,
   FIRMS_UPSTREAMS,
 } from "./allowlisted-fetch";
+import { odpUpstream } from "./odp";
 import { isAllowedOverpassQuery } from "./overpass-query";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
 
@@ -516,6 +517,44 @@ async function handleSourceCoop(request: Request, pathname: string): Promise<Res
     status: originResponse.status,
     headers,
   });
+}
+
+/**
+ * Proxies one Ocean Data Platform tile or feature page with CORS added.
+ *
+ * Origin-gated like `/source-coop/`, and anonymous: the Worker never forwards
+ * an `Authorization` header, so only publicly shared datasets pass through
+ * (ODP answers a private or unknown one with 401, which is relayed as is).
+ * The response streams through without being buffered.
+ */
+async function handleOdp(request: Request, url: URL): Promise<Response> {
+  if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const route = odpUpstream(url);
+  if (!route) {
+    return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+  }
+  let originResponse: Response;
+  try {
+    originResponse = await fetchAllowlistedUpstream(route.upstream, {
+      headers: { "user-agent": "GeoLibre tiles proxy (+https://geolibre.app)" },
+      cf: {
+        cacheEverything: true,
+        cacheTtlByStatus: { "200-299": route.cacheSeconds, "300-599": -1 },
+      },
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  const contentType = originResponse.headers.get("content-type");
+  if (contentType) headers.set("content-type", contentType);
+  headers.set(
+    "cache-control",
+    originResponse.ok ? `public, max-age=${route.cacheSeconds}` : "no-store",
+  );
+  return new Response(originResponse.body, { status: originResponse.status, headers });
 }
 
 /** Relay one bounded form-encoded Overpass query with browser-readable CORS. */
@@ -1136,6 +1175,7 @@ export const tilesWorker = {
           "  OpenStreetMap download: POST /overpass\n" +
           "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  GitHub repository file: /github-raw?url=https://github.com/.../raw/...\n" +
+          "  Ocean Data Platform: /odp/tiles/<uuid>/<z>/<x>/<y>.pbf , /odp/features/<uuid>/items\n" +
           "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
         {
           status: 200,
@@ -1440,6 +1480,12 @@ export const tilesWorker = {
     // web build reads it through here (see SOURCE_COOP_PREFIX above).
     if (url.pathname.startsWith(SOURCE_COOP_PREFIX)) {
       return handleSourceCoop(request, url.pathname);
+    }
+
+    // Ocean Data Platform tiles and features: CORS-restricted upstream (see
+    // workers/tiles/src/odp.ts).
+    if (url.pathname.startsWith("/odp/")) {
+      return handleOdp(request, url);
     }
 
     if (url.pathname === GITHUB_RAW_PATH) {

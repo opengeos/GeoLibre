@@ -44,6 +44,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "maplibre-gl-huggingface",
   "geolibre-satellite-embeddings",
   "geolibre-fields-of-the-world",
+  "geolibre-ocean-data-platform",
   "maplibre-gl-geolens",
 ] as const;
 
