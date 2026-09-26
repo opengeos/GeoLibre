@@ -139,7 +139,7 @@ describe("Socrata catalog search", () => {
           entry("efgh-5678", ["Text", "Number"]),
           entry("ijkl-9012", ["Location"], { domain: "evil.example.com" }),
           entry("../../x", ["Point"]),
-          entry("mnop-3456", ["Calendar date", "Point"]),
+          entry("MNOP-3456", ["Calendar date", "Point"]),
         ],
       }),
     );
@@ -342,6 +342,19 @@ describe("Socrata portal in the catalog picker", () => {
       assert.equal(added[0][0], "Dataset abcd-1234");
       assert.equal(added[0][2], `https://${DOMAIN}/resource/abcd-1234.geojson?$limit=50000`);
       assert.deepEqual(fitted, [[-87.7, 41.8, -87.6, 41.9]]);
+      assert.match(container.textContent ?? "", /Added Dataset abcd-1234\./);
+
+      // An export that fills the cap is partial, and the status says so.
+      geojson.features = Array.from({ length: 50000 }, () => geojson.features[0]);
+      button("Add to map").click();
+      await settle();
+      assert.match(container.textContent ?? "", /only its first 50,000 features were loaded/);
+
+      // A download is opened, not read, so it always names the cap.
+      button("Download").click();
+      await settle();
+      assert.equal(opened.at(-1), `https://${DOMAIN}/resource/abcd-1234.geojson?$limit=50000`);
+      assert.match(container.textContent ?? "", /the export holds at most 50,000 features/);
     } finally {
       plugin.deactivate?.(app);
       stub.restore();

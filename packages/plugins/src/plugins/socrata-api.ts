@@ -92,7 +92,8 @@ export function buildSocrataCatalogUrl(
  */
 function toItem(entry: SocrataCatalogEntry, domain: string): ArcGisHubItem | null {
   const resource = entry.resource;
-  const id = resource?.id;
+  // Ids are lowercase in practice; normalize rather than drop a mixed-case one.
+  const id = resource?.id?.toLowerCase();
   if (!resource || !id || !DATASET_ID_RE.test(id)) return null;
   // Federated entries belong to another portal; the catalog lists its own.
   if (entry.metadata?.domain !== domain) return null;
@@ -109,6 +110,7 @@ function toItem(entry: SocrataCatalogEntry, domain: string): ArcGisHubItem | nul
     snippet: resource.description || undefined,
     dataUrl: `https://${domain}/resource/${id}.geojson?$limit=${SOCRATA_GEOJSON_LIMIT}`,
     pageUrl: `https://${domain}/d/${id}`,
+    featureLimit: SOCRATA_GEOJSON_LIMIT,
   };
 }
 

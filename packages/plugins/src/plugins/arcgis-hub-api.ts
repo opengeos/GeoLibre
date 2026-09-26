@@ -20,6 +20,8 @@ export interface ArcGisHubItem {
   dataUrl?: string;
   /** The item's page, for a card that is not an ArcGIS portal item. */
   pageUrl?: string;
+  /** The most features `dataUrl` returns, when the export is capped. */
+  featureLimit?: number;
 }
 
 export interface ArcGisHubSearchResult {

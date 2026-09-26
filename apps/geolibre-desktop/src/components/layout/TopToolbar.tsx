@@ -403,6 +403,8 @@ export function TopToolbar({
       add: t("arcgisHub.add"),
       adding: (title) => t("arcgisHub.adding", { title }),
       added: (title) => t("arcgisHub.added", { title }),
+      addedCapped: (title, limit) =>
+        t("arcgisHub.addedCapped", { title, limit: limit.toLocaleString(i18n.language) }),
       addError: t("arcgisHub.addError"),
       zoom: t("arcgisHub.zoom"),
       download: t("arcgisHub.download"),
@@ -410,6 +412,8 @@ export function TopToolbar({
       downloading: (completed, total, title) =>
         t("arcgisHub.downloading", { completed, total, title }),
       downloadStarted: (title) => t("arcgisHub.downloadStarted", { title }),
+      downloadCapped: (title, limit) =>
+        t("arcgisHub.downloadCapped", { title, limit: limit.toLocaleString(i18n.language) }),
       downloadFirstLayer: (title, layerCount) =>
         t("arcgisHub.downloadFirstLayer", { title, layerCount }),
       downloadError: t("arcgisHub.downloadError"),

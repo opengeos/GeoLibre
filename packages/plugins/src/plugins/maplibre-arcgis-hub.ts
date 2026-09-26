@@ -43,12 +43,16 @@ export interface ArcGisHubLabels {
   add: string;
   adding: (title: string) => string;
   added: (title: string) => string;
+  /** Shown instead of `added` when a capped export returned its full limit. */
+  addedCapped: (title: string, limit: number) => string;
   addError: string;
   zoom: string;
   download: string;
   preparing: (title: string) => string;
   downloading: (completed: number, total: number, title: string) => string;
   downloadStarted: (title: string) => string;
+  /** Shown instead of `downloadStarted` for an export with a feature cap. */
+  downloadCapped: (title: string, limit: number) => string;
   downloadFirstLayer: (title: string, layerCount: number) => string;
   downloadError: string;
   details: string;
@@ -80,6 +84,8 @@ export const DEFAULT_ARCGIS_HUB_LABELS: ArcGisHubLabels = {
   add: "Add to map",
   adding: (title) => `Adding ${title}…`,
   added: (title) => `Added ${title}.`,
+  addedCapped: (title, limit) =>
+    `Added ${title}, but only its first ${limit.toLocaleString("en-US")} features were loaded.`,
   addError: "Could not add this dataset.",
   zoom: "Zoom",
   download: "Download",
@@ -87,6 +93,8 @@ export const DEFAULT_ARCGIS_HUB_LABELS: ArcGisHubLabels = {
   downloading: (completed, total, title) =>
     `Downloading ${title}: ${completed} of ${total} features…`,
   downloadStarted: (title) => `Download started for ${title}.`,
+  downloadCapped: (title, limit) =>
+    `Download started for ${title}; the export holds at most ${limit.toLocaleString("en-US")} features.`,
   downloadFirstLayer: (title, layerCount) =>
     `${title} has ${layerCount} layers; only the first was downloaded.`,
   downloadError: "Could not download this dataset.",
@@ -356,9 +364,10 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
     return set.catalogs.find((catalog) => catalog.id === catalogId) ?? set.catalogs[0] ?? null;
   }
 
-  async function visualize(item: ArcGisHubItem): Promise<void> {
+  /** Add the item to the map, resolving to true when a capped export filled its cap. */
+  async function visualize(item: ArcGisHubItem): Promise<boolean> {
     const app = appRef;
-    if (!app) return;
+    if (!app) return false;
     // Own keys only: `type` comes from the portal, and a value such as
     // "constructor" must not resolve to an Object.prototype member.
     const serviceLayerType = Object.hasOwn(SERVICE_LAYER_TYPES, item.type)
@@ -390,14 +399,16 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
       }
       // deactivate() nulls appRef, which can happen while the fetch above is in
       // flight; bail explicitly instead of adding a layer to a torn-down host.
-      if (!appRef) return;
+      if (!appRef) return false;
       app.addGeoJsonLayer(item.title, data, dataUrl);
       // A Socrata dataset has no catalog extent, so frame what was loaded.
       const bounds = itemBounds(item) ?? featureCollectionBounds(data);
       if (bounds) app.fitBounds?.(bounds);
+      return item.featureLimit !== undefined && data.features.length >= item.featureLimit;
     } else {
       throw new Error("This item cannot be visualized directly.");
     }
+    return false;
   }
 
   /**
@@ -632,8 +643,11 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
           add.disabled = true;
           status.textContent = labels.adding(item.title);
           try {
-            await visualize(item);
-            status.textContent = labels.added(item.title);
+            const capped = await visualize(item);
+            status.textContent =
+              capped && item.featureLimit !== undefined
+                ? labels.addedCapped(item.title, item.featureLimit)
+                : labels.added(item.title);
           } catch (error) {
             console.error(`Could not add the ${config.name} dataset.`, error);
             status.textContent = labels.addError;
@@ -664,10 +678,14 @@ export function createArcGisHubPlugin(config: ArcGisHubPluginConfig): ArcGisHubP
           const layerCount = await download(item, downloadController.signal, (completed, total) => {
             status.textContent = labels.downloading(completed, total, item.title);
           });
+          // A capped export is opened, not read, so whether it hit the cap is
+          // unknown; say where the cap is instead.
           status.textContent =
             layerCount > 1
               ? labels.downloadFirstLayer(item.title, layerCount)
-              : labels.downloadStarted(item.title);
+              : item.featureLimit !== undefined
+                ? labels.downloadCapped(item.title, item.featureLimit)
+                : labels.downloadStarted(item.title);
         } catch (error) {
           if ((error as Error).name !== "AbortError") {
             console.error(`Could not download the ${config.name} dataset.`, error);

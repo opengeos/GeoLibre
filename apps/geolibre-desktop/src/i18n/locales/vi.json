@@ -3897,12 +3897,14 @@
     "add": "Thêm vào bản đồ",
     "adding": "Đang thêm {{title}}…",
     "added": "Đã thêm {{title}}.",
+    "addedCapped": "Đã thêm {{title}}, nhưng chỉ tải {{limit}} đối tượng đầu tiên.",
     "addError": "Không thể thêm tập dữ liệu này.",
     "zoom": "Phóng",
     "download": "Tải xuống",
     "preparing": "Đang chuẩn bị {{title}}…",
     "downloading": "Đang tải xuống {{title}}: {{completed}} trong số {{total}} tính năng…",
-    "downloadStarted": "Đã bắt đầu tải xuống cho {{title}}."
+    "downloadStarted": "Đã bắt đầu tải xuống cho {{title}}.",
+    "downloadCapped": "Đã bắt đầu tải xuống {{title}}; bản xuất chứa tối đa {{limit}} đối tượng."
   },
   "tennesseeGis": {
     "hint": "Duyệt và tìm kiếm dữ liệu GIS công khai của Tiểu bang Tennessee (geodata.tn.gov). Thêm lớp vào bản đồ hoặc tải dữ liệu xuống.",
