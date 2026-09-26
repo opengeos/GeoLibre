@@ -150,7 +150,11 @@ export const createLayerGroupsSlice: SliceCreator<LayerGroupsSlice> = (set, get)
           : s.selectedLayerId,
         selectedFeatureId: selectionRemoved ? null : s.selectedFeatureId,
         selectedFeatureIds: selectionRemoved ? [] : s.selectedFeatureIds,
-        ...identifyStateWithoutLayers(s, removedIds),
+        // Children kept at the top level are still in the project, so they
+        // keep their place in the Identify target.
+        ...(removeChildren
+          ? identifyStateWithoutLayers(s, removedIds)
+          : { identifyLayerId: s.identifyLayerId, identifyLayerIds: s.identifyLayerIds }),
         ui: removeChildren
           ? {
               ...s.ui,

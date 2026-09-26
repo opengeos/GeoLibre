@@ -96,6 +96,17 @@ describe("Identify on a list of layers (issue #2688)", () => {
     assert.equal(useAppStore.getState().identifyLayerIds, null);
   });
 
+  it("keeps listed layers when their group is deleted without them", () => {
+    const store = useAppStore.getState();
+    const a = store.addGeoJsonLayer("A", POINTS);
+    const b = store.addGeoJsonLayer("B", POINTS);
+    const groupId = useAppStore.getState().addLayerGroup("G");
+    useAppStore.getState().moveLayerToGroup(a, groupId);
+    setScriptIdentify([a, b]);
+    useAppStore.getState().removeLayerGroup(groupId, { removeChildren: false });
+    assert.deepEqual(useAppStore.getState().identifyLayerIds, [a, b]);
+  });
+
   it("is cleared by the in-app Identify buttons", () => {
     const store = useAppStore.getState();
     const a = store.addGeoJsonLayer("A", POINTS);

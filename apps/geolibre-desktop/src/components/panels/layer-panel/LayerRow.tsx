@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   IDENTIFY_ALL_LAYERS_ID,
   effectiveLayerRenderState,
+  identifyAllIncludes,
   hasActiveLayerFilter,
   isCesiumOnlyLayer,
   isDuckDBQueryLayer,
@@ -181,8 +182,12 @@ export function LayerRow({
   const identifyActive = identifyLayerId === layer.id;
   // A gesture that takes over map clicks has to turn Identify off, or
   // its toolbar button stays lit over a handler that no longer
-  // answers. All-layer Identify counts the same as this layer's own.
-  const identifyOwnsClicks = identifyActive || identifyLayerId === IDENTIFY_ALL_LAYERS_ID;
+  // answers. All-layer Identify counts the same as this layer's own, unless a
+  // script or project limited it to a list that leaves this layer out.
+  const identifyLayerIds = useAppStore((s) => s.identifyLayerIds);
+  const identifyOwnsClicks =
+    identifyActive ||
+    (identifyLayerId === IDENTIFY_ALL_LAYERS_ID && identifyAllIncludes(layer.id, identifyLayerIds));
   // COGs inspect raw pixel/band values rather than vector features, so
   // the icon's tooltip reflects that distinct action. Time Slider COG
   // and mosaic sources read the same way, at the current timeline
