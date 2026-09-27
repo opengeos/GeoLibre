@@ -131,6 +131,21 @@ export function isAbsoluteLocalPath(path: string): boolean {
   return isAbsoluteFilesystemPath(path);
 }
 
+/**
+ * Whether a layer's source path is a GeoJSON file that Save edits to source
+ * file rewrites directly (`write_local_geojson_file`) rather than through the
+ * sidecar: an absolute local `.geojson`/`.json` path that is not a
+ * `.geolibre.json` project file. Mirrors `is_allowed_geojson_write_path` in the
+ * Tauri crate, which re-checks it.
+ *
+ * @param path - The layer's `sourcePath`.
+ * @returns `true` for a directly writable GeoJSON source.
+ */
+export function isGeojsonSourcePath(path: string): boolean {
+  if (!isAbsoluteLocalPath(path) || isGeoLibreProjectFileName(path)) return false;
+  return /\.(geo)?json$/i.test(path);
+}
+
 export function fileBaseName(path: string): string {
   return localFileName(path) || path;
 }

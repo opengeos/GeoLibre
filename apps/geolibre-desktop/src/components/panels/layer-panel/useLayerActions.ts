@@ -55,7 +55,14 @@ import {
   shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../../lib/vector-export";
-import { openLocalDataFileWithFallback, saveTextFileWithFallback } from "../../../lib/tauri-io";
+import {
+  isGeojsonSourcePath,
+  isTauri,
+  openLocalDataFileWithFallback,
+  saveTextFileWithFallback,
+  writeLocalGeojsonFile,
+} from "../../../lib/tauri-io";
+import { startGeoLibreSidecar } from "../../../lib/sidecar";
 import { importedStyleErrorMessage, importedStyleNote } from "../../../lib/style-import-note";
 import {
   postgisBaselineKeys,
@@ -636,8 +643,9 @@ export function useLayerActions({
   );
 
   // Commit the layer's current (edited) features back to the source they were
-  // loaded from, via the sidecar: either overwriting the local file in place,
-  // or diffing against the PostGIS table by primary key. Unlike Export, there
+  // loaded from: overwriting a local GeoJSON file directly (desktop), a
+  // GeoPackage through the sidecar, or diffing against the PostGIS table by
+  // primary key. Unlike Export, there
   // is no save dialog: write-back targets the known source.
   const handleSaveEditsToSource = useCallback(
     async (clickedLayer: GeoLibreLayer) => {
@@ -774,7 +782,17 @@ export function useLayerActions({
               fields: result.skipped_fields.join(", "),
             })}`;
           }
+        } else if (isTauri() && isGeojsonSourcePath(path)) {
+          // A GeoJSON rewrite needs no GeoPandas, so the desktop app writes it
+          // itself instead of depending on a sidecar that may not be running
+          // (#2439: the save failed and the file kept its old values).
+          await writeLocalGeojsonFile(path, geojson);
+          message = t("layers.saveEditsSuccess", { count: geojson.features.length });
         } else {
+          // GeoPackage write-back needs GeoPandas in the sidecar. The desktop
+          // app starts it on demand, as the other sidecar-backed actions do;
+          // the web build reaches its own through the /sidecar proxy.
+          if (isTauri()) await startGeoLibreSidecar();
           const result = await writeVectorToSource({ path, geojson });
           message = t("layers.saveEditsSuccess", {
             count: result.feature_count,

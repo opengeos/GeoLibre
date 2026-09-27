@@ -8,6 +8,7 @@ import {
   fileBaseName,
   fileExtension,
   isAbsoluteLocalPath,
+  isGeojsonSourcePath,
   isHttpUrl,
   isLoadableFilePath,
   isRasterFileName,
@@ -102,5 +103,21 @@ describe("file-io path predicates", () => {
   it("joins UNC paths with a backslash", () => {
     assert.equal(joinLocalPath("\\\\host\\share", "a.tif"), "\\\\host\\share\\a.tif");
     assert.equal(joinLocalPath("\\\\host\\share\\", "a.tif"), "\\\\host\\share\\a.tif");
+  });
+});
+
+describe("isGeojsonSourcePath", () => {
+  it("accepts absolute local GeoJSON and JSON files, any case", () => {
+    assert.equal(isGeojsonSourcePath("/home/user/parks.geojson"), true);
+    assert.equal(isGeojsonSourcePath("/home/user/parks.JSON"), true);
+    assert.equal(isGeojsonSourcePath("C:\\gis\\parks.GeoJSON"), true);
+  });
+
+  it("rejects other formats, project files, relative paths, and URLs", () => {
+    // A GeoPackage is written through the sidecar instead.
+    assert.equal(isGeojsonSourcePath("/home/user/parks.gpkg"), false);
+    assert.equal(isGeojsonSourcePath("/home/user/map.geolibre.json"), false);
+    assert.equal(isGeojsonSourcePath("parks.geojson"), false);
+    assert.equal(isGeojsonSourcePath("https://example.com/parks.geojson"), false);
   });
 });
