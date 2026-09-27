@@ -8,6 +8,7 @@ import {
   extrusionColorValue,
   extrusionHeightValue,
   generatorCircleRadiusValue,
+  isAdoptedVectorAwaitingFeatures,
   geojsonHasZCoordinates,
   heatmapRampColors,
   labelFieldTextField,
@@ -1868,6 +1869,9 @@ function bounds(layer: GeoLibreLayer): [number, number, number, number] | undefi
  * reported as an error.
  */
 export function isArcgisPluginLayer(layer: GeoLibreLayer): boolean {
+  // Its `source.url` may be GeoParquet or GeoPackage; the vector control fills
+  // `geojson` shortly (see isAdoptedVectorAwaitingFeatures).
+  if (isAdoptedVectorAwaitingFeatures(layer)) return true;
   if (layer.metadata.externalNativeLayer !== true) return false;
   if (layer.geojson || (layer.type === "cog" && cogSourceUrl(layer))) return false;
   const { url, urls, tiles, data } = layer.source as {

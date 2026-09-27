@@ -318,10 +318,13 @@ export async function adoptVectorControlLayers(
         if (!layer) return;
         runQuietly(() => {
           runWithVectorStoreSyncSuspended(() => {
+            // Drop the control's copy first: if its cleanup throws, the record
+            // stays control-drawn instead of being marked adopted beside a
+            // control copy that no sync would ever remove.
+            control.removeLayer(info.id);
             useAppStore
               .getState()
               .updateLayer(info.id, adoptedVectorLayerPatch(layer, current, geojson));
-            control.removeLayer(info.id);
           });
         });
         controlRenderState.delete(info.id);
@@ -492,6 +495,11 @@ export function syncVectorLayersToStore(
   // prevents a future layer that reuses the id from inheriting stale state.
   for (const id of controlRenderState.keys()) {
     if (!infoIds.has(id)) controlRenderState.delete(id);
+  }
+  // Likewise a declined adoption: a later layer reusing the id (a restore
+  // replaying a saved layer) must get a fresh look.
+  for (const id of declinedAdoptions.keys()) {
+    if (!infoIds.has(id)) declinedAdoptions.delete(id);
   }
 
   syncingLayersToStore = true;

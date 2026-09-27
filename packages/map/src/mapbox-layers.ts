@@ -2,6 +2,7 @@ import {
   compileLayerFilters,
   documentLocale,
   generatorCircleRadiusValue,
+  isAdoptedVectorAwaitingFeatures,
   labelFieldTextField,
   ruleBasedVisibilityFilter,
   DEFAULT_LAYER_STYLE,
@@ -124,6 +125,11 @@ export function isMapboxSupportedLayer(layer: GeoLibreLayer): boolean {
 /** These plugins own their Mapbox overlays and synchronize the layer store themselves. */
 export function isMapboxPluginLayer(layer: GeoLibreLayer): boolean {
   if (isMapboxKindPluginLayer(layer)) return true;
+  // An adopted Add Vector layer reopened from a project saved by URL or path
+  // has no features until the vector control reads them again. Its `source.url`
+  // can name GeoParquet or GeoPackage, so wait for the features rather than
+  // compile a GeoJSON source without data.
+  if (isAdoptedVectorAwaitingFeatures(layer)) return true;
   if (layer.metadata.externalNativeLayer === true) {
     // On a renderer switch the Add Vector control first mirrors its persisted
     // source, then asynchronously materializes it as GeoJSON for Mapbox. Until

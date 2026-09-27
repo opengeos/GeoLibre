@@ -7,6 +7,8 @@ import {
   type GeoLibreLayer,
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
+import { isArcgisPluginLayer } from "../packages/map/src/arcgis-layers";
+import { isMapboxPluginLayer } from "../packages/map/src/mapbox-layers";
 import { getHistoryCoalesceMs, setHistoryCoalesceMs } from "../packages/core/src/history";
 import type { VectorLayerInfo, VectorLayerStyle } from "maplibre-gl-vector";
 import { isControlPaintedVectorLayer } from "../apps/geolibre-desktop/src/components/panels/style-panel/layer-capabilities";
@@ -230,6 +232,37 @@ describe("adoptVectorControlLayers", () => {
     assert.deepEqual(removed, []);
   });
 
+  it("reads a declined layer again once its id comes back", async () => {
+    const { control, layers, reads } = fakeControl([vectorInfo()], {
+      "vector-1": points(2, { __geolibre_kml_icon_url: "icon.png" }),
+    });
+    syncVectorLayersToStore(control as never);
+    await adoptVectorControlLayers(control);
+    // The layer is removed, then a restore replays a layer under the same id.
+    layers.splice(0, 1);
+    syncVectorLayersToStore(control as never);
+    layers.push(vectorInfo());
+    syncVectorLayersToStore(control as never);
+    await adoptVectorControlLayers(control);
+    assert.deepEqual(reads, ["vector-1", "vector-1"]);
+  });
+
+  it("leaves the record control-drawn when the control cannot drop its copy", async () => {
+    const { control } = fakeControl([vectorInfo()], { "vector-1": points() });
+    syncVectorLayersToStore(control as never);
+    control.removeLayer = () => {
+      throw new Error("cleanup failed");
+    };
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      assert.deepEqual(await adoptVectorControlLayers(control), []);
+    } finally {
+      console.error = originalError;
+    }
+    assert.equal(isVectorControlStoreLayer(storeLayer("vector-1")), true);
+  });
+
   it("skips layers the caller marks as still loading", async () => {
     const { control, reads } = fakeControl([vectorInfo()], { "vector-1": points() });
     syncVectorLayersToStore(control as never);
@@ -345,6 +378,30 @@ describe("saving adopted layers", () => {
     const layer = savedLayer(adopted());
     assert.equal(layer.geojson?.features.length, 2);
     assert.equal(needsAdoptedVectorReplay(layer), false);
+  });
+});
+
+describe("adopted layers awaiting their features", () => {
+  const awaiting: GeoLibreLayer = {
+    id: "adopted",
+    name: "countries",
+    type: "geojson",
+    source: { type: "geojson", url: "https://example.com/countries.parquet" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: { sourceKind: ADOPTED_VECTOR_SOURCE_KIND },
+  };
+
+  it("are not compiled from their URL on the Mapbox or ArcGIS engine", () => {
+    assert.equal(isMapboxPluginLayer(awaiting), true);
+    assert.equal(isArcgisPluginLayer(awaiting), true);
+  });
+
+  it("are drawn by the engines once the features arrive", () => {
+    const filled = { ...awaiting, geojson: points() };
+    assert.equal(isMapboxPluginLayer(filled), false);
+    assert.equal(isArcgisPluginLayer(filled), false);
   });
 });
 
