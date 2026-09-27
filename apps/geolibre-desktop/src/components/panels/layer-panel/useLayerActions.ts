@@ -645,8 +645,8 @@ export function useLayerActions({
   // Commit the layer's current (edited) features back to the source they were
   // loaded from: overwriting a local GeoJSON file directly (desktop), a
   // GeoPackage through the sidecar, or diffing against the PostGIS table by
-  // primary key. Unlike Export, there
-  // is no save dialog: write-back targets the known source.
+  // primary key. Unlike Export, there is no save dialog: write-back targets
+  // the known source.
   const handleSaveEditsToSource = useCallback(
     async (clickedLayer: GeoLibreLayer) => {
       if (!canEditLayer(clickedLayer.id)) return;

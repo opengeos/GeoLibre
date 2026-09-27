@@ -785,6 +785,23 @@ fn is_allowed_geojson_write_path(path: &str) -> bool {
     (lower.ends_with(".geojson") || lower.ends_with(".json")) && !lower.ends_with(".geolibre.json")
 }
 
+/// Whether `bytes` parse as a JSON object whose `type` is `FeatureCollection`
+/// (a leading UTF-8 byte-order mark is allowed).
+fn is_geojson_feature_collection(bytes: &[u8]) -> bool {
+    let bytes = bytes
+        .strip_prefix(b"\xEF\xBB\xBF".as_slice())
+        .unwrap_or(bytes);
+    serde_json::from_slice::<serde_json::Value>(bytes)
+        .ok()
+        .is_some_and(|value| {
+            value.get("type").and_then(|t| t.as_str()) == Some("FeatureCollection")
+        })
+}
+
+/// Distinguishes concurrent writes to the same file (a double-clicked save), so
+/// they never share a temporary file.
+static GEOJSON_WRITE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 /// Overwrite an existing local GeoJSON file with edited contents, for Layer
 /// actions > Save edits to source file (GeoLibre#2439).
 ///
@@ -795,9 +812,12 @@ fn is_allowed_geojson_write_path(path: &str) -> bool {
 /// does not cover a path dropped onto the map or restored with a project. The
 /// guard is narrower than a read's: the file must already exist (write-back
 /// replaces a layer's own source, never creates a file), and the canonical
-/// path is re-checked so a symlink cannot redirect the write. The contents go to
-/// a temporary file beside the target and are renamed over it, so a failed write
-/// never leaves the source half-written.
+/// path is re-checked so a symlink cannot redirect the write. Because `.json` is
+/// a common GeoJSON extension but also a common config format, both the file
+/// being replaced and the new contents must be GeoJSON FeatureCollections, so
+/// the command cannot clobber arbitrary JSON. The contents go to a temporary
+/// file beside the target, which takes the target's permissions and is renamed
+/// over it, so a failed write never leaves the source half-written.
 #[tauri::command]
 fn write_local_geojson_file(path: String, contents: String) -> Result<(), String> {
     if !is_allowed_geojson_write_path(&path) {
@@ -820,14 +840,37 @@ fn write_local_geojson_file(path: String, contents: String) -> Result<(), String
     if !canonical.is_file() {
         return Err(format!("Refusing to write \"{path}\": not a file"));
     }
+    if !is_geojson_feature_collection(contents.as_bytes()) {
+        return Err(
+            "Refusing to write: the edited layer is not a GeoJSON FeatureCollection".into(),
+        );
+    }
+    let existing =
+        fs::read(&canonical).map_err(|error| format!("Could not save to source file: {error}"))?;
+    if !is_geojson_feature_collection(&existing) {
+        return Err(format!(
+            "Refusing to write \"{path}\": the file is not a GeoJSON FeatureCollection"
+        ));
+    }
+    let permissions = fs::metadata(&canonical)
+        .map_err(|error| format!("Could not save to source file: {error}"))?
+        .permissions();
     let file_name = canonical
         .file_name()
         .ok_or_else(|| format!("Refusing to write \"{path}\": no file name"))?;
     let mut temp_name = std::ffi::OsString::from(".");
     temp_name.push(file_name);
-    temp_name.push(format!(".geolibre-{}.tmp", std::process::id()));
+    temp_name.push(format!(
+        ".geolibre-{}-{}.tmp",
+        std::process::id(),
+        GEOJSON_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
     let temp = canonical.with_file_name(temp_name);
-    let write = fs::write(&temp, contents.as_bytes()).and_then(|()| fs::rename(&temp, &canonical));
+    // The temporary file is created with default permissions; give it the
+    // target's first, or the rename would loosen a restrictive (e.g. 0600) file.
+    let write = fs::write(&temp, contents.as_bytes())
+        .and_then(|()| fs::set_permissions(&temp, permissions))
+        .and_then(|()| fs::rename(&temp, &canonical));
     if let Err(error) = write {
         let _ = fs::remove_file(&temp);
         return Err(format!("Could not save to source file: {error}"));
@@ -5208,19 +5251,55 @@ mod tests {
     fn write_local_geojson_file_replaces_an_existing_file_only() {
         let dir = std::env::temp_dir().join(format!("geolibre-write-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
+        let old = r#"{"type":"FeatureCollection","features":[]}"#;
+        let new = r#"{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"area":99},"geometry":null}]}"#;
         let target = dir.join("parks.geojson");
-        fs::write(&target, "{\"old\":true}").unwrap();
+        fs::write(&target, old).unwrap();
         let path = target.to_string_lossy().into_owned();
 
-        write_local_geojson_file(path.clone(), "{\"new\":true}".into()).unwrap();
-        assert_eq!(fs::read_to_string(&target).unwrap(), "{\"new\":true}");
+        write_local_geojson_file(path.clone(), new.into()).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), new);
         // Only the target remains: the temporary file was renamed over it.
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
 
+        // Contents that are not a FeatureCollection are refused.
+        assert!(write_local_geojson_file(path.clone(), r#"{"a":1}"#.into()).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), new);
+
         // A missing file is not created.
         let missing = dir.join("missing.geojson").to_string_lossy().into_owned();
-        assert!(write_local_geojson_file(missing, "{}".into()).is_err());
+        assert!(write_local_geojson_file(missing, new.into()).is_err());
         assert!(!dir.join("missing.geojson").exists());
+
+        // An existing `.json` file that is not GeoJSON (a config file, say) is
+        // never overwritten.
+        let config = dir.join("settings.json");
+        fs::write(&config, r#"{"theme":"dark"}"#).unwrap();
+        let config_path = config.to_string_lossy().into_owned();
+        assert!(write_local_geojson_file(config_path, new.into()).is_err());
+        assert_eq!(fs::read_to_string(&config).unwrap(), r#"{"theme":"dark"}"#);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_local_geojson_file_keeps_the_target_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("geolibre-perm-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("private.geojson");
+        fs::write(&target, r#"{"type":"FeatureCollection","features":[]}"#).unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+
+        write_local_geojson_file(
+            target.to_string_lossy().into_owned(),
+            r#"{"type":"FeatureCollection","features":[]}"#.into(),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
