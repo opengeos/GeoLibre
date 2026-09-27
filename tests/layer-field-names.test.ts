@@ -37,6 +37,12 @@ describe("fieldNamesByLayer", () => {
     assert.deepEqual(map.get("a"), ["first"]);
   });
 
+  it("scans any layer holding in-memory GeoJSON, whatever its type", () => {
+    // The Model Builder reads such a layer as a vector input, so its picker must too.
+    const layer = { ...geojsonLayer("v", [{ zone: "A" }]), type: "vector" } as GeoLibreLayer;
+    assert.deepEqual(fieldNamesByLayer([layer]).get("v"), ["zone"]);
+  });
+
   it("skips layers whose features are not held in the store", () => {
     const raster = { id: "r", name: "r", type: "raster" } as unknown as GeoLibreLayer;
     const map = fieldNamesByLayer([raster, geojsonLayer("a", [{ id: 1 }])]);

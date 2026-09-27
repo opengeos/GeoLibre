@@ -4,11 +4,13 @@ import type { GeoLibreLayer } from "@geolibre/core";
 export const FIELD_SCAN_SAMPLE = 1000;
 
 /**
- * Attribute-column names per in-memory GeoJSON layer, for field pickers.
+ * Attribute-column names per layer holding in-memory GeoJSON, for field pickers.
  *
- * Only `geojson` layers carry their features in the store; any other layer is
- * absent from the map, so a picker reading it offers nothing rather than a
- * wrong list.
+ * Keyed on `layer.geojson` rather than `layer.type`, matching how the Model
+ * Builder reads a layer as a vector input: the store keeps `type` and
+ * `geojson` independently, so a layer of another type can still carry
+ * features. A layer without them is absent from the map, so a picker reading
+ * it offers nothing rather than a wrong list.
  *
  * @param layers The project layers.
  * @param sample How many features to scan per layer.
@@ -20,7 +22,7 @@ export function fieldNamesByLayer(
 ): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const layer of layers) {
-    if (layer.type !== "geojson" || !layer.geojson) continue;
+    if (!layer.geojson) continue;
     const keys = new Set<string>();
     for (const feature of layer.geojson.features.slice(0, sample)) {
       for (const key of Object.keys(feature.properties ?? {})) keys.add(key);

@@ -147,7 +147,7 @@ export function ParameterField({
         {label}
         {fieldOptions?.length ? (
           <Select
-            aria-label={t("processing.parameterField.selectField")}
+            aria-label={`${param.label}: ${t("processing.parameterField.selectField")}`}
             value={fieldOptions.includes(text) ? text : ""}
             onChange={(e) => onChange(e.target.value)}
           >
