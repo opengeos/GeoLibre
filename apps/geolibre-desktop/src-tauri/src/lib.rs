@@ -786,7 +786,8 @@ fn is_allowed_geojson_write_path(path: &str) -> bool {
 }
 
 /// Whether `bytes` parse as a JSON object whose `type` is `FeatureCollection`
-/// (a leading UTF-8 byte-order mark is allowed).
+/// and whose `features` is an array (a leading UTF-8 byte-order mark is
+/// allowed).
 fn is_geojson_feature_collection(bytes: &[u8]) -> bool {
     let bytes = bytes
         .strip_prefix(b"\xEF\xBB\xBF".as_slice())
@@ -795,6 +796,7 @@ fn is_geojson_feature_collection(bytes: &[u8]) -> bool {
         .ok()
         .is_some_and(|value| {
             value.get("type").and_then(|t| t.as_str()) == Some("FeatureCollection")
+                && value.get("features").is_some_and(|f| f.is_array())
         })
 }
 
@@ -866,9 +868,21 @@ fn write_local_geojson_file(path: String, contents: String) -> Result<(), String
         GEOJSON_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let temp = canonical.with_file_name(temp_name);
-    // The temporary file is created with default permissions; give it the
-    // target's first, or the rename would loosen a restrictive (e.g. 0600) file.
-    let write = fs::write(&temp, contents.as_bytes())
+    // `create_new` refuses a path that already exists, so a symlink planted at
+    // the temporary name cannot redirect the write. The file starts owner-only
+    // (Unix) so the contents are never readable more widely than intended, and
+    // takes the target's permissions before the rename so a restrictive (e.g.
+    // 0600) source is not loosened.
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let write = options
+        .open(&temp)
+        .and_then(|mut file| {
+            std::io::Write::write_all(&mut file, contents.as_bytes())?;
+            file.sync_all()
+        })
         .and_then(|()| fs::set_permissions(&temp, permissions))
         .and_then(|()| fs::rename(&temp, &canonical));
     if let Err(error) = write {
@@ -5262,8 +5276,18 @@ mod tests {
         // Only the target remains: the temporary file was renamed over it.
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
 
-        // Contents that are not a FeatureCollection are refused.
+        // Contents that are not a FeatureCollection are refused, including a
+        // FeatureCollection without a `features` array.
         assert!(write_local_geojson_file(path.clone(), r#"{"a":1}"#.into()).is_err());
+        assert!(write_local_geojson_file(
+            path.clone(),
+            r#"{"type":"FeatureCollection","features":"x"}"#.into()
+        )
+        .is_err());
+        assert!(
+            write_local_geojson_file(path.clone(), r#"{"type":"FeatureCollection"}"#.into())
+                .is_err()
+        );
         assert_eq!(fs::read_to_string(&target).unwrap(), new);
 
         // A missing file is not created.
