@@ -8,6 +8,7 @@ import { Button, ColorField, Label, Select } from "@geolibre/ui";
 import { SquareFunction, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { LABEL_OVERRIDE_PROPERTIES, labelOverrideInvalid } from "./label-overrides";
+import { isControlPaintedVectorLayer } from "./layer-capabilities";
 import type { ExpressionBuilderTarget } from "./StyleExpressionBuilder";
 import { NumericStyleInput } from "./style-inputs";
 
@@ -35,6 +36,9 @@ export function LabelsSection({
   setExpressionBuilderTarget,
 }: LabelsSectionProps) {
   const { t, i18n } = useTranslation();
+  // The vector control draws labels from the field, size, colors, placement,
+  // overlap and number format alone; the rest would be ignored on its layers.
+  const controlPainted = isControlPaintedVectorLayer(layer);
   // The label expression must be a JSON array (a MapLibre expression). Flag a
   // non-empty value that does not round-trip as an array so the user sees that
   // it is ignored (layer-sync falls back to the field / no label) instead of
@@ -207,26 +211,28 @@ export function LabelsSection({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <NumericStyleInput
-              id="labelMinZoom"
-              label={t("style.labels.minZoom")}
-              min={0}
-              max={labels.maxZoom}
-              step={1}
-              value={labels.minZoom}
-              onChange={(minZoom) => updateLabels({ minZoom: Math.min(minZoom, labels.maxZoom) })}
-            />
-            <NumericStyleInput
-              id="labelMaxZoom"
-              label={t("style.labels.maxZoom")}
-              min={labels.minZoom}
-              max={24}
-              step={1}
-              value={labels.maxZoom}
-              onChange={(maxZoom) => updateLabels({ maxZoom: Math.max(maxZoom, labels.minZoom) })}
-            />
-          </div>
+          {controlPainted ? null : (
+            <div className="grid grid-cols-2 gap-3">
+              <NumericStyleInput
+                id="labelMinZoom"
+                label={t("style.labels.minZoom")}
+                min={0}
+                max={labels.maxZoom}
+                step={1}
+                value={labels.minZoom}
+                onChange={(minZoom) => updateLabels({ minZoom: Math.min(minZoom, labels.maxZoom) })}
+              />
+              <NumericStyleInput
+                id="labelMaxZoom"
+                label={t("style.labels.maxZoom")}
+                min={labels.minZoom}
+                max={24}
+                step={1}
+                value={labels.maxZoom}
+                onChange={(maxZoom) => updateLabels({ maxZoom: Math.max(maxZoom, labels.minZoom) })}
+              />
+            </div>
+          )}
           <label
             htmlFor="labelAllowOverlap"
             className="flex items-center gap-2 text-sm font-medium"
@@ -239,201 +245,207 @@ export function LabelsSection({
             />
             {t("style.labels.allowOverlap")}
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="labelAnchor">{t("style.labels.anchor")}</Label>
-              <Select
-                id="labelAnchor"
-                value={labels.anchor}
-                onChange={(event) =>
-                  updateLabels({
-                    anchor: event.target.value as LabelStyle["anchor"],
-                  })
-                }
-              >
-                <option value="center">{t("style.labels.anchorCenter")}</option>
-                <option value="left">{t("style.labels.anchorLeft")}</option>
-                <option value="right">{t("style.labels.anchorRight")}</option>
-                <option value="top">{t("style.labels.anchorTop")}</option>
-                <option value="bottom">{t("style.labels.anchorBottom")}</option>
-                <option value="top-left">{t("style.labels.anchorTopLeft")}</option>
-                <option value="top-right">{t("style.labels.anchorTopRight")}</option>
-                <option value="bottom-left">{t("style.labels.anchorBottomLeft")}</option>
-                <option value="bottom-right">{t("style.labels.anchorBottomRight")}</option>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="labelTransform">{t("style.labels.transform")}</Label>
-              <Select
-                id="labelTransform"
-                value={labels.transform}
-                onChange={(event) =>
-                  updateLabels({
-                    transform: event.target.value as LabelStyle["transform"],
-                  })
-                }
-              >
-                <option value="none">{t("style.labels.transformNone")}</option>
-                <option value="uppercase">{t("style.labels.transformUppercase")}</option>
-                <option value="lowercase">{t("style.labels.transformLowercase")}</option>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <NumericStyleInput
-              id="labelOffsetX"
-              label={t("style.labels.offsetX")}
-              min={-10}
-              max={10}
-              step={0.25}
-              value={labels.offsetX}
-              onChange={(offsetX) => updateLabels({ offsetX })}
-            />
-            <NumericStyleInput
-              id="labelOffsetY"
-              label={t("style.labels.offsetY")}
-              min={-10}
-              max={10}
-              step={0.25}
-              value={labels.offsetY}
-              onChange={(offsetY) => updateLabels({ offsetY })}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <NumericStyleInput
-              id="labelRotation"
-              label={t("style.labels.rotation")}
-              min={-180}
-              max={180}
-              step={5}
-              value={labels.rotation}
-              onChange={(rotation) => updateLabels({ rotation })}
-            />
-            <NumericStyleInput
-              id="labelMaxWidth"
-              label={t("style.labels.maxWidth")}
-              min={1}
-              max={40}
-              step={1}
-              value={labels.maxWidth}
-              onChange={(maxWidth) => updateLabels({ maxWidth })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="labelDedupe">{t("style.labels.dedupe")}</Label>
-            <Select
-              id="labelDedupe"
-              value={labels.dedupe}
-              onChange={(event) =>
-                updateLabels({
-                  dedupe: event.target.value as LabelStyle["dedupe"],
-                })
-              }
-            >
-              <option value="off">{t("style.labels.dedupeOff")}</option>
-              <option value="unique">{t("style.labels.dedupeUnique")}</option>
-              <option value="concatenate">{t("style.labels.dedupeConcatenate")}</option>
-            </Select>
-            {labels.dedupe !== "off" ? (
-              <p className="text-xs text-muted-foreground">{t("style.labels.dedupeHint")}</p>
-            ) : null}
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="labelExpression">{t("style.labels.expression")}</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-7 w-7"
-                title={t("style.expressionBuilder.openBuilder")}
-                aria-label={t("style.expressionBuilder.openBuilder")}
-                onClick={() => setExpressionBuilderTarget({ kind: "label", layerId: layer.id })}
-              >
-                <SquareFunction className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <textarea
-              id="labelExpression"
-              aria-invalid={labelExpressionInvalid}
-              className={[
-                "min-h-16 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0",
-                labelExpressionInvalid ? "border-destructive" : "border-input",
-              ].join(" ")}
-              placeholder={'["concat", ["get", "name"], " (", ["get", "pop"], ")"]'}
-              value={labels.expression}
-              onChange={(event) => updateLabels({ expression: event.target.value })}
-            />
-            <p
-              className={[
-                "text-xs",
-                labelExpressionInvalid ? "text-destructive" : "text-muted-foreground",
-              ].join(" ")}
-            >
-              {labelExpressionInvalid
-                ? t("style.labels.expressionInvalid")
-                : t("style.labels.expressionHint")}
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label>{t("style.labels.dataDefined.heading")}</Label>
-            {labelOverrideStates.map(({ property, value, invalid }) => {
-              return (
-                <div key={property.key} className="flex items-center gap-2">
-                  <span className="w-20 shrink-0 text-xs">
-                    {t(`style.labels.dataDefined.${property.key}`)}
-                  </span>
-                  <code
-                    className={[
-                      "min-w-0 flex-1 truncate font-mono text-xs",
-                      invalid ? "text-destructive" : "text-muted-foreground",
-                    ].join(" ")}
-                    title={invalid ? t("style.labels.expressionInvalid") : value || undefined}
-                  >
-                    {value || t("style.labels.dataDefined.notSet")}
-                  </code>
-                  <Button
-                    type="button"
-                    variant={value ? "secondary" : "outline"}
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    title={t(`style.labels.dataDefined.${property.key}Target`)}
-                    aria-label={t(`style.labels.dataDefined.${property.key}Target`)}
-                    onClick={() =>
-                      setExpressionBuilderTarget({
-                        kind: "labelOverride",
-                        property,
-                        layerId: layer.id,
+          {controlPainted ? null : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="labelAnchor">{t("style.labels.anchor")}</Label>
+                  <Select
+                    id="labelAnchor"
+                    value={labels.anchor}
+                    onChange={(event) =>
+                      updateLabels({
+                        anchor: event.target.value as LabelStyle["anchor"],
                       })
                     }
                   >
+                    <option value="center">{t("style.labels.anchorCenter")}</option>
+                    <option value="left">{t("style.labels.anchorLeft")}</option>
+                    <option value="right">{t("style.labels.anchorRight")}</option>
+                    <option value="top">{t("style.labels.anchorTop")}</option>
+                    <option value="bottom">{t("style.labels.anchorBottom")}</option>
+                    <option value="top-left">{t("style.labels.anchorTopLeft")}</option>
+                    <option value="top-right">{t("style.labels.anchorTopRight")}</option>
+                    <option value="bottom-left">{t("style.labels.anchorBottomLeft")}</option>
+                    <option value="bottom-right">{t("style.labels.anchorBottomRight")}</option>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="labelTransform">{t("style.labels.transform")}</Label>
+                  <Select
+                    id="labelTransform"
+                    value={labels.transform}
+                    onChange={(event) =>
+                      updateLabels({
+                        transform: event.target.value as LabelStyle["transform"],
+                      })
+                    }
+                  >
+                    <option value="none">{t("style.labels.transformNone")}</option>
+                    <option value="uppercase">{t("style.labels.transformUppercase")}</option>
+                    <option value="lowercase">{t("style.labels.transformLowercase")}</option>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <NumericStyleInput
+                  id="labelOffsetX"
+                  label={t("style.labels.offsetX")}
+                  min={-10}
+                  max={10}
+                  step={0.25}
+                  value={labels.offsetX}
+                  onChange={(offsetX) => updateLabels({ offsetX })}
+                />
+                <NumericStyleInput
+                  id="labelOffsetY"
+                  label={t("style.labels.offsetY")}
+                  min={-10}
+                  max={10}
+                  step={0.25}
+                  value={labels.offsetY}
+                  onChange={(offsetY) => updateLabels({ offsetY })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <NumericStyleInput
+                  id="labelRotation"
+                  label={t("style.labels.rotation")}
+                  min={-180}
+                  max={180}
+                  step={5}
+                  value={labels.rotation}
+                  onChange={(rotation) => updateLabels({ rotation })}
+                />
+                <NumericStyleInput
+                  id="labelMaxWidth"
+                  label={t("style.labels.maxWidth")}
+                  min={1}
+                  max={40}
+                  step={1}
+                  value={labels.maxWidth}
+                  onChange={(maxWidth) => updateLabels({ maxWidth })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="labelDedupe">{t("style.labels.dedupe")}</Label>
+                <Select
+                  id="labelDedupe"
+                  value={labels.dedupe}
+                  onChange={(event) =>
+                    updateLabels({
+                      dedupe: event.target.value as LabelStyle["dedupe"],
+                    })
+                  }
+                >
+                  <option value="off">{t("style.labels.dedupeOff")}</option>
+                  <option value="unique">{t("style.labels.dedupeUnique")}</option>
+                  <option value="concatenate">{t("style.labels.dedupeConcatenate")}</option>
+                </Select>
+                {labels.dedupe !== "off" ? (
+                  <p className="text-xs text-muted-foreground">{t("style.labels.dedupeHint")}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="labelExpression">{t("style.labels.expression")}</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7"
+                    title={t("style.expressionBuilder.openBuilder")}
+                    aria-label={t("style.expressionBuilder.openBuilder")}
+                    onClick={() => setExpressionBuilderTarget({ kind: "label", layerId: layer.id })}
+                  >
                     <SquareFunction className="h-3.5 w-3.5" />
                   </Button>
-                  {value ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      title={t("style.labels.dataDefined.clear")}
-                      aria-label={t("style.labels.dataDefined.clear")}
-                      onClick={() =>
-                        updateLabels({
-                          [property.field]: "",
-                        } as Partial<LabelStyle>)
-                      }
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  ) : null}
                 </div>
-              );
-            })}
-            {labelOverrideStates.some((state) => state.invalid) ? (
-              <p className="text-xs text-destructive">{t("style.labels.expressionInvalid")}</p>
-            ) : null}
-            <p className="text-xs text-muted-foreground">{t("style.labels.dataDefined.hint")}</p>
-          </div>
+                <textarea
+                  id="labelExpression"
+                  aria-invalid={labelExpressionInvalid}
+                  className={[
+                    "min-h-16 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0",
+                    labelExpressionInvalid ? "border-destructive" : "border-input",
+                  ].join(" ")}
+                  placeholder={'["concat", ["get", "name"], " (", ["get", "pop"], ")"]'}
+                  value={labels.expression}
+                  onChange={(event) => updateLabels({ expression: event.target.value })}
+                />
+                <p
+                  className={[
+                    "text-xs",
+                    labelExpressionInvalid ? "text-destructive" : "text-muted-foreground",
+                  ].join(" ")}
+                >
+                  {labelExpressionInvalid
+                    ? t("style.labels.expressionInvalid")
+                    : t("style.labels.expressionHint")}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>{t("style.labels.dataDefined.heading")}</Label>
+                {labelOverrideStates.map(({ property, value, invalid }) => {
+                  return (
+                    <div key={property.key} className="flex items-center gap-2">
+                      <span className="w-20 shrink-0 text-xs">
+                        {t(`style.labels.dataDefined.${property.key}`)}
+                      </span>
+                      <code
+                        className={[
+                          "min-w-0 flex-1 truncate font-mono text-xs",
+                          invalid ? "text-destructive" : "text-muted-foreground",
+                        ].join(" ")}
+                        title={invalid ? t("style.labels.expressionInvalid") : value || undefined}
+                      >
+                        {value || t("style.labels.dataDefined.notSet")}
+                      </code>
+                      <Button
+                        type="button"
+                        variant={value ? "secondary" : "outline"}
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        title={t(`style.labels.dataDefined.${property.key}Target`)}
+                        aria-label={t(`style.labels.dataDefined.${property.key}Target`)}
+                        onClick={() =>
+                          setExpressionBuilderTarget({
+                            kind: "labelOverride",
+                            property,
+                            layerId: layer.id,
+                          })
+                        }
+                      >
+                        <SquareFunction className="h-3.5 w-3.5" />
+                      </Button>
+                      {value ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          title={t("style.labels.dataDefined.clear")}
+                          aria-label={t("style.labels.dataDefined.clear")}
+                          onClick={() =>
+                            updateLabels({
+                              [property.field]: "",
+                            } as Partial<LabelStyle>)
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {labelOverrideStates.some((state) => state.invalid) ? (
+                  <p className="text-xs text-destructive">{t("style.labels.expressionInvalid")}</p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  {t("style.labels.dataDefined.hint")}
+                </p>
+              </div>
+            </>
+          )}
         </>
       ) : null}
     </div>

@@ -1924,6 +1924,20 @@ function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {
     layer = rest;
   }
 
+  // An Add Vector Layer layer GeoLibre adopted (`maplibre-gl-vector-adopted`,
+  // ADOPTED_VECTOR_SOURCE_KIND in @geolibre/plugins) holds its features in
+  // `geojson`, but a URL-backed one saves the URL and is re-read through the
+  // control on reopen, like the control layer it was. A browser-picked file has
+  // no URL and keeps its features, like a drag-and-drop layer.
+  if (
+    layer.geojson &&
+    layer.metadata.sourceKind === "maplibre-gl-vector-adopted" &&
+    hasRestorableSourceUrl(layer)
+  ) {
+    const { geojson: _geojson, ...rest } = layer;
+    layer = rest;
+  }
+
   // A local-file layer the desktop host can re-read from its absolute path on
   // reopen (a drag-dropped or Add Data vector file) does not embed its features
   // either: the path is saved and the data is reloaded from disk. The flag is

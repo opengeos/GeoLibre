@@ -25,8 +25,11 @@ import type {
   GeoLibrePickedVectorFile,
 } from "../types";
 import {
+  adoptVectorControlLayers,
+  isAdoptedVectorLayer,
   isEmbeddableLocalVectorLayer,
   isVectorControlStoreLayer,
+  needsAdoptedVectorReplay,
   rememberControlVectorRenderState,
   resetVectorStoreSyncSuspension,
   resumeVectorStoreSync,
@@ -279,7 +282,9 @@ export async function getVectorLayerPropertyValues(
  * @param app - The GeoLibre app API.
  */
 export function restoreVectorLayers(app: GeoLibreAppAPI): void {
-  const hasVectorLayers = useAppStore.getState().layers.some(isVectorControlStoreLayer);
+  // Adopted layers ride along: one saved by URL or path has no features until
+  // the control reads them again, and adoption then hands them back.
+  const hasVectorLayers = useAppStore.getState().layers.some(needsVectorControlReplay);
   if (!hasVectorLayers && !vectorControl) return;
 
   void (async () => {
@@ -291,7 +296,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
     const storeLayerIds = new Set(
       useAppStore
         .getState()
-        .layers.filter(isVectorControlStoreLayer)
+        .layers.filter(needsVectorControlReplay)
         .map((layer) => layer.id),
     );
 
@@ -329,7 +334,7 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
         useAppStore.getState().layerGroups.map((group) => [group.id, group] as const),
       );
       for (const layer of useAppStore.getState().layers) {
-        if (!isVectorControlStoreLayer(layer)) continue;
+        if (!needsVectorControlReplay(layer)) continue;
         // Project loading can invoke this restore pass more than once before
         // the first pass finishes. addData does not expose the layer through
         // getLayer until its async ingest completes, so getLayer alone lets the
@@ -473,6 +478,17 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
 }
 
 /**
+ * Whether a store layer's data has to come from the vector control: a
+ * control-drawn layer, or an adopted one saved without its features.
+ *
+ * @param layer - A store layer.
+ * @returns True when restore or refresh must replay it through the control.
+ */
+function needsVectorControlReplay(layer: GeoLibreLayer): boolean {
+  return isVectorControlStoreLayer(layer) || needsAdoptedVectorReplay(layer);
+}
+
+/**
  * Replays one saved Add Vector Layer layer into the control, preserving its
  * id, name, visibility, opacity, and persisted render/style state. The source
  * is a URL (URL-backed layers), a File re-read from disk (desktop local-file
@@ -545,6 +561,7 @@ export function replayVectorLayer(
  * record of it, which is why {@link reloadVectorControlLayer} returns undefined
  * for it. The layer panel's refresh (the button and the auto-refresh tick)
  * falls through to this, so the next successful fetch brings the layer back.
+ * The same path refreshes an adopted layer, which the control never holds.
  *
  * URL-backed only. A local-file layer needs the host's filesystem reader, which
  * lives with the restore path rather than in this module, and an embedded-source
@@ -573,7 +590,11 @@ export async function replayVectorControlLayerById(
 
   const state = useAppStore.getState();
   const layer = state.layers.find((candidate) => candidate.id === id);
-  if (!layer || !isVectorControlStoreLayer(layer)) return undefined;
+  // An adopted layer is never in the control, so refreshing one always lands
+  // here: the replay re-fetches the URL and adoption swaps the new features in.
+  if (!layer || !(isVectorControlStoreLayer(layer) || isAdoptedVectorLayer(layer))) {
+    return undefined;
+  }
 
   const url = typeof layer.source.url === "string" && layer.source.url ? layer.source.url : null;
   if (!url) return undefined;
@@ -941,10 +962,65 @@ function createVectorControl(
     applyVectorContainerColors(ids, style);
     useAppStore.getState().addLayerGroup(name, ids);
   });
+  // After the container grouping above, so its addData wrapper runs inside this
+  // one and a container's tables are grouped before they are adopted.
+  wireVectorAdoption(control);
   wireVectorStoreSync(control);
   patchVectorControlOnRemove(control, panelStateSyncHandler);
 
   return control;
+}
+
+/**
+ * Adopts the control's small GeoJSON-mode layers into GeoLibre once they have
+ * loaded, so a layer added through Add Vector Layer gets the same Style panel
+ * as a drag-and-drop one (opengeos/GeoLibre#2715). See
+ * {@link adoptVectorControlLayers} for what stays with the control.
+ *
+ * Every load goes through `addData` (the panel's own inputs, a dropped
+ * container, a URL add, a project restore), so wrapping it catches them all.
+ * Adoption waits for the load to settle, and runs a task later, for two
+ * reasons: a container import groups its tables when its `addData` resolves,
+ * and callers such as {@link addVectorFileToMap} count the new layers in the
+ * control right after awaiting it. The layer events cover the remaining ways a
+ * layer becomes adoptable, such as a render-mode switch in the panel.
+ *
+ * @param control - The vector control to wire.
+ */
+function wireVectorAdoption(control: VectorControl): void {
+  // Ids of loads still in flight. A container's tables are `${id}-<table>`, so
+  // they are held back by prefix until their own load settles.
+  const loading = new Set<string>();
+  const isLoading = (id: string) => {
+    for (const prefix of loading) {
+      if (id === prefix || id.startsWith(`${prefix}-`)) return true;
+    }
+    return false;
+  };
+  let timer: number | null = null;
+  const schedule = () => {
+    if (timer !== null) return;
+    timer = window.setTimeout(() => {
+      timer = null;
+      // A control torn down since (a renderer switch) has no layers to hand over.
+      if (control !== vectorControl) return;
+      void adoptVectorControlLayers(control, { skip: isLoading });
+    }, 0);
+  };
+
+  const addData = control.addData.bind(control);
+  control.addData = async (source, options: VectorLayerOptions = {}) => {
+    const id = options.id ?? crypto.randomUUID();
+    loading.add(id);
+    try {
+      return await addData(source, { ...options, id });
+    } finally {
+      loading.delete(id);
+      schedule();
+    }
+  };
+  control.on("layeradded", schedule);
+  control.on("layerupdated", schedule);
 }
 
 function patchVectorControlOnRemove(

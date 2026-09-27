@@ -52,6 +52,10 @@ const REFRESHABLE_GEOJSON_SOURCE_KINDS = new Set([
 // canonical value ever changes, update this copy and the literal in
 // AttributeTable.tsx — there is no compile-time link between them.
 const VECTOR_CONTROL_SOURCE_KIND = "maplibre-gl-vector";
+// An Add Vector Layer layer GeoLibre adopted into the store (canonical source:
+// ADOPTED_VECTOR_SOURCE_KIND next to VECTOR_SOURCE_KIND). It refreshes through
+// the control too, which re-reads the URL and hands the new features back.
+const ADOPTED_VECTOR_SOURCE_KIND = "maplibre-gl-vector-adopted";
 
 export interface LayerRefreshConfig {
   enabled: boolean;
@@ -394,15 +398,19 @@ async function refreshGeoRssLayer(
  * True when the layer is an Add Vector Layer (maplibre-gl-vector) layer
  * backed by an HTTP(S) URL. These render through the external control's own
  * native sources, so they refresh via VectorControl.reloadLayer rather than
- * the store-GeoJSON path. Covers both GeoJSON and tile render modes.
+ * the store-GeoJSON path. Covers both GeoJSON and tile render modes, and the
+ * layers GeoLibre adopted from the control: the control reads any format the
+ * panel loads (GeoParquet, FlatGeobuf, ...), which the plain GeoJSON fetch
+ * cannot.
  *
  * @param layer - The store layer to test.
  * @returns Whether the layer refreshes through the vector control.
  */
 export function isVectorControlRefreshLayer(layer: GeoLibreLayer): boolean {
+  const kind = layer.metadata.sourceKind;
   return (
-    layer.metadata.sourceKind === VECTOR_CONTROL_SOURCE_KIND &&
-    layer.metadata.externalNativeLayer === true &&
+    ((kind === VECTOR_CONTROL_SOURCE_KIND && layer.metadata.externalNativeLayer === true) ||
+      kind === ADOPTED_VECTOR_SOURCE_KIND) &&
     layerHttpUrl(layer) !== null
   );
 }
@@ -419,7 +427,10 @@ export function isVectorControlRefreshLayer(layer: GeoLibreLayer): boolean {
  * @returns Whether a failure policy other than "keep-last" takes effect.
  */
 export function supportsRefreshFailurePolicy(layer: GeoLibreLayer): boolean {
-  return !isVectorControlRefreshLayer(layer);
+  // An adopted layer holds its features in `geojson`, so clearing works there.
+  return (
+    !isVectorControlRefreshLayer(layer) || layer.metadata.sourceKind === ADOPTED_VECTOR_SOURCE_KIND
+  );
 }
 
 export function isRefreshableLayer(layer: GeoLibreLayer): boolean {

@@ -330,8 +330,13 @@ export {
 // tests import the sync helpers from the module paths directly. These two are
 // the exception — the Layer Library (issue #1520) has to recognize a
 // control-painted vector layer to read its features before saving it, and to
-// route a re-add back to restoreVectorLayers.
-export { isEmbeddableLocalVectorLayer, VECTOR_SOURCE_KIND } from "./plugins/vector-layer-sync";
+// route a re-add back to restoreVectorLayers. The adopted kind routes there too,
+// since an adopted layer saved by path is replayed through the control.
+export {
+  ADOPTED_VECTOR_SOURCE_KIND,
+  isEmbeddableLocalVectorLayer,
+  VECTOR_SOURCE_KIND,
+} from "./plugins/vector-layer-sync";
 export {
   clearDirectionsWaypoints,
   type DirectionsRouteLegMetric,

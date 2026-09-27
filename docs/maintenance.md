@@ -260,6 +260,16 @@ format/reader/size rules those panels share — a per-panel copy would miss this
 check, so add new browse panels against that module rather than duplicating it
 (`source-coop-api.ts` re-exports it under its own names for compatibility).
 
+Adoption (`adoptVectorControlLayers` in `vector-layer-sync.ts`, #2715) hands the
+control's small GeoJSON-mode layers to GeoLibre, and leans on three things the
+package does not promise. `getLayerGeoJSON` must return the whole collection for
+a `renderMode: "geojson"`, `ingestMode: "table"` layer. `removeLayer` must drop
+the layer's DuckDB table as well as its map source, or adoption keeps two copies
+of the data. And `KML_ICON_PROPERTY` mirrors the feature property the control's
+KML/KMZ icon layer filters on (`__geolibre_kml_icon_url`); a layer carrying it
+stays with the control, so a rename upstream would adopt KML layers and drop
+their icons. Re-check all three on a bump.
+
 ### `maplibre-gl-lidar` (`packages/plugins/package.json`) — half checked by the compiler
 
 The space-effects engine raises the MapLibre canvas to `z-index: 4` so its

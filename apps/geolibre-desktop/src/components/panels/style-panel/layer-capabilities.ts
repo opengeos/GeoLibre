@@ -8,6 +8,22 @@ export function hasExternalNativeLayers(layer: { metadata: Record<string, unknow
   return Array.isArray(layer.metadata.nativeLayerIds) && layer.metadata.nativeLayerIds.length > 0;
 }
 
+/**
+ * True when the Add Vector Layer control still paints the layer (a tiled,
+ * streamed or oversize layer it did not hand over to GeoLibre). The control
+ * only receives the style fields `layerStyleToVectorStyle` maps: colors, width,
+ * opacity, radius, extrusion, the point renderer and basic labels. GeoLibre adds
+ * markers and proportional radius on its points (`syncVectorControlPointSymbology`).
+ * Anything else the Style panel offers would be a silent no-op, so the panel
+ * hides it for these layers.
+ *
+ * @param layer - A store layer (metadata only).
+ * @returns True when the vector control owns the layer's paint.
+ */
+export function isControlPaintedVectorLayer(layer: { metadata: Record<string, unknown> }): boolean {
+  return layer.metadata.controlOwnsPaint === true;
+}
+
 export function hasExternalDeckLayer(layer: { metadata: Record<string, unknown> }) {
   return layer.metadata.externalDeckLayer === true;
 }

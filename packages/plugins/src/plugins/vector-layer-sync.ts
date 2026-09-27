@@ -1,6 +1,7 @@
 import {
   applyGroupEffects,
   DEFAULT_LAYER_STYLE,
+  DUCKDB_VECTOR_FEATURE_WARN_COUNT,
   extrusionColorValue,
   extrusionHeightValue,
   isVectorColorExpression,
@@ -20,6 +21,34 @@ import type { VectorLayerInfo, VectorLayerOptions, VectorLayerStyle } from "mapl
 import { stacAssetAccessFromLayer, STAC_ASSET_ACCESS_METADATA_KEY } from "./stac-signing";
 
 export const VECTOR_SOURCE_KIND = "maplibre-gl-vector";
+
+/**
+ * `metadata.sourceKind` of an Add Vector Layer layer GeoLibre has adopted: its
+ * features were read out of the control into `layer.geojson` and the control's
+ * copy was dropped, so GeoLibre renders and styles it like a drag-and-drop
+ * layer (opengeos/GeoLibre#2715). The record keeps the control's load state
+ * (`source.url`, `sourcePath`, `metadata.vectorState`), so a saved project
+ * replays it through the control, which then adopts it again.
+ *
+ * A distinct kind rather than a flag on {@link VECTOR_SOURCE_KIND}, because
+ * code across the app keys DuckDB-backed behavior on that kind (the attribute
+ * table, exports, classification value loading), and an adopted layer must take
+ * the ordinary GeoJSON path in every one of them.
+ */
+export const ADOPTED_VECTOR_SOURCE_KIND = "maplibre-gl-vector-adopted";
+
+/**
+ * Largest layer GeoLibre adopts. Matches the feature count at which a
+ * drag-and-drop load switches to DuckDB, so both import paths hold the same
+ * data in the store. Larger layers, tiled layers and streamed GeoParquet stay
+ * with the control, which is where it earns its keep.
+ */
+export const VECTOR_ADOPTION_MAX_FEATURES = DUCKDB_VECTOR_FEATURE_WARN_COUNT;
+
+// The control draws KML/KMZ placemark icons from sprites it registers itself,
+// keyed by this property. GeoLibre has no equivalent, so a layer carrying them
+// stays with the control rather than losing its icons on adoption.
+const KML_ICON_PROPERTY = "__geolibre_kml_icon_url";
 
 // Upper bound on a restored color expression's serialized size. Generous for a
 // real categorized/graduated style (hundreds of stops are well under this) but
@@ -137,6 +166,220 @@ function hasRestorableVectorUrl(layer: GeoLibreLayer): boolean {
  */
 export function isEmbeddableLocalVectorLayer(layer: GeoLibreLayer): boolean {
   return isVectorControlStoreLayer(layer) && !hasRestorableVectorUrl(layer);
+}
+
+/**
+ * Detects an Add Vector Layer layer that GeoLibre has adopted (see
+ * {@link ADOPTED_VECTOR_SOURCE_KIND}).
+ *
+ * @param layer - A store layer.
+ * @returns True when the layer was adopted from the vector control.
+ */
+export function isAdoptedVectorLayer(layer: GeoLibreLayer): boolean {
+  return layer.metadata.sourceKind === ADOPTED_VECTOR_SOURCE_KIND;
+}
+
+/**
+ * Detects an adopted layer whose features are not in the store yet, as after
+ * reopening a project that saved it by URL or file path. Only the control can
+ * read it back, so project restore replays it and the control adopts it again.
+ *
+ * @param layer - A store layer.
+ * @returns True when the adopted layer must be replayed through the control.
+ */
+export function needsAdoptedVectorReplay(layer: GeoLibreLayer): boolean {
+  return isAdoptedVectorLayer(layer) && !layer.geojson;
+}
+
+/**
+ * Whether the control's copy of a layer is small and simple enough for GeoLibre
+ * to take over. Only GeoJSON-mode layers read into a DuckDB table qualify: a
+ * tiled layer or a streamed GeoParquet has no whole collection to hand over.
+ *
+ * @param info - The control's snapshot of the layer.
+ * @returns True when the layer may be adopted.
+ */
+export function isAdoptableVectorInfo(
+  info: Pick<VectorLayerInfo, "renderMode" | "ingestMode" | "featureCount">,
+): boolean {
+  return (
+    info.renderMode === "geojson" &&
+    info.ingestMode !== "stream" &&
+    (info.featureCount ?? 0) <= VECTOR_ADOPTION_MAX_FEATURES
+  );
+}
+
+/** The slice of VectorControl that adoption needs (eases testing). */
+export type VectorAdoptionControl = Pick<VectorSyncableControl, "getLayers" | "removeLayer"> & {
+  getLayerGeoJSON: (id: string) => Promise<FeatureCollection | null>;
+};
+
+// Metadata that only describes the control's rendering. Dropped on adoption so
+// no consumer mistakes the adopted record for a control-drawn layer.
+const CONTROL_RENDER_METADATA_KEYS = [
+  "controlOwnsPaint",
+  "customLayerType",
+  "embeddedGeoJSON",
+  "externalNativeLayer",
+  "nativeLayerIds",
+  "panelCollapsed",
+  "sourceIds",
+] as const;
+
+/**
+ * Builds the patch that turns a control-drawn record into an adopted one: the
+ * features move into `geojson`, the control's render metadata goes, and the
+ * load state (URL, file path, `vectorState`) stays so the layer can be replayed
+ * from a saved project. The name, style, visibility, joins and every other
+ * user edit are untouched because they are not in the patch.
+ *
+ * @param layer - The current store layer (control-drawn, or adopted and being
+ *   replayed).
+ * @param info - The control's snapshot of the layer.
+ * @param geojson - The features read out of the control.
+ * @returns The store patch for {@link GeoLibreLayer}.
+ */
+export function adoptedVectorLayerPatch(
+  layer: GeoLibreLayer,
+  info: VectorLayerInfo,
+  geojson: FeatureCollection,
+): Partial<GeoLibreLayer> {
+  const metadata: Record<string, unknown> = { ...layer.metadata };
+  for (const key of CONTROL_RENDER_METADATA_KEYS) delete metadata[key];
+  metadata.sourceKind = ADOPTED_VECTOR_SOURCE_KIND;
+  metadata.featureCount = geojson.features.length;
+  metadata.vectorState = serializableVectorState(info);
+  return {
+    type: "geojson",
+    source: { ...layer.source, type: "geojson" },
+    geojson,
+    metadata,
+  };
+}
+
+// Ids with an adoption in flight, so overlapping triggers (a layer event and an
+// addData completion) cannot read the same layer out of the control twice.
+const adoptingLayerIds = new Set<string>();
+// Layers whose features were read and turned out not adoptable (KML icons, or
+// more features than the snapshot claimed), keyed to the source revision read.
+// Every style edit fires a layer event, and re-reading a large layer on each
+// one would be pure waste; a new source revision (a reload, a render-mode
+// switch) gets a fresh look.
+const declinedAdoptions = new Map<string, string>();
+
+/**
+ * Hands every eligible control layer over to GeoLibre: reads its features into
+ * the store record, marks it adopted, and removes the control's copy (its map
+ * source and its DuckDB table) in the same step, so the data is held once in
+ * the store and once by MapLibre, the same as a drag-and-drop layer.
+ *
+ * A layer stays with the control when it is tiled, streamed, over
+ * {@link VECTOR_ADOPTION_MAX_FEATURES}, carries KML icons, or its data cannot
+ * be read back. The swap does not join the undo history, since it changes who
+ * draws the layer rather than the layer itself, and it leaves the dirty flag
+ * alone, since a restore adopts too.
+ *
+ * @param control - The vector control holding the layers.
+ * @param options - `skip` excludes ids whose load is still in flight, so a
+ *   container import can group its tables before they leave the control.
+ * @returns The ids that were adopted.
+ */
+export async function adoptVectorControlLayers(
+  control: VectorAdoptionControl,
+  options: { skip?: (id: string) => boolean } = {},
+): Promise<string[]> {
+  const candidates = control
+    .getLayers()
+    .filter(
+      (info) =>
+        isAdoptableVectorInfo(info) &&
+        !adoptingLayerIds.has(info.id) &&
+        declinedAdoptions.get(info.id) !== info.sourceId &&
+        !options.skip?.(info.id),
+    );
+  const adopted: string[] = [];
+  await Promise.all(
+    candidates.map(async (info) => {
+      if (!findAdoptionTarget(info.id)) return;
+      adoptingLayerIds.add(info.id);
+      try {
+        const geojson = await control.getLayerGeoJSON(info.id);
+        if (!isAdoptableCollection(geojson)) {
+          declinedAdoptions.set(info.id, info.sourceId);
+          return;
+        }
+        // The await can span a reload, a render-mode switch or a removal. Only
+        // swap in data read from the source the control still shows.
+        const current = control.getLayers().find((candidate) => candidate.id === info.id);
+        if (!current || current.sourceId !== info.sourceId || !isAdoptableVectorInfo(current)) {
+          return;
+        }
+        const layer = findAdoptionTarget(info.id);
+        if (!layer) return;
+        runQuietly(() => {
+          runWithVectorStoreSyncSuspended(() => {
+            useAppStore
+              .getState()
+              .updateLayer(info.id, adoptedVectorLayerPatch(layer, current, geojson));
+            control.removeLayer(info.id);
+          });
+        });
+        controlRenderState.delete(info.id);
+        declinedAdoptions.delete(info.id);
+        adopted.push(info.id);
+      } catch (error) {
+        console.error(`[GeoLibre] Could not adopt vector layer "${info.name}"`, error);
+      } finally {
+        adoptingLayerIds.delete(info.id);
+      }
+    }),
+  );
+  return adopted;
+}
+
+/**
+ * The store record adoption may write to: the control's own record, or an
+ * adopted record the control is replaying.
+ *
+ * @param id - The layer id.
+ * @returns The store layer, or undefined when there is nothing to adopt into.
+ */
+function findAdoptionTarget(id: string): GeoLibreLayer | undefined {
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === id);
+  if (!layer) return undefined;
+  return isVectorControlStoreLayer(layer) || isAdoptedVectorLayer(layer) ? layer : undefined;
+}
+
+/**
+ * Whether features read out of the control can be adopted: a FeatureCollection
+ * within the size limit and without control-drawn KML icons.
+ *
+ * @param value - The control's getLayerGeoJSON result.
+ * @returns True when the collection can live in the store.
+ */
+function isAdoptableCollection(value: FeatureCollection | null): value is FeatureCollection {
+  if (!value || value.type !== "FeatureCollection" || !Array.isArray(value.features)) {
+    return false;
+  }
+  if (value.features.length > VECTOR_ADOPTION_MAX_FEATURES) return false;
+  return !value.features.some((feature) => feature?.properties?.[KML_ICON_PROPERTY] != null);
+}
+
+/**
+ * Runs a store write with the undo history paused and the dirty flag kept.
+ *
+ * @param callback - The store write.
+ */
+function runQuietly(callback: () => void): void {
+  const history = useAppStore.temporal.getState();
+  const wasDirty = useAppStore.getState().isDirty;
+  history.pause();
+  try {
+    callback();
+  } finally {
+    history.resume();
+  }
+  if (!wasDirty) useAppStore.setState({ isDirty: false });
 }
 
 /**
@@ -279,6 +522,14 @@ export function syncVectorLayersToStore(
         continue;
       }
 
+      // The control is replaying an adopted layer (project restore, refresh).
+      // Leave the record to adoptVectorControlLayers, which refills it; turning
+      // it back into a control record in between would only flicker. A replay
+      // that is no longer adoptable (the source grew past the limit) falls
+      // through and becomes a control-drawn layer again.
+      const adoptedReplay = isAdoptedVectorLayer(existing);
+      if (adoptedReplay && isAdoptableVectorInfo(info)) continue;
+
       // A group fold pushed through the control API is reported back in the
       // next full control snapshot. Keep the child's own values for such echoes
       // so showing or unfading the group restores them. A different value came
@@ -312,6 +563,7 @@ export function syncVectorLayersToStore(
       }
 
       if (
+        adoptedReplay ||
         existing.type !== layer.type ||
         (geometryReader &&
           (existing.geojson !== layer.geojson ||
@@ -332,9 +584,11 @@ export function syncVectorLayersToStore(
           // control (getLayerGeoJSON), so it intentionally is not preserved.
           metadata,
           ...(geometryReader ? { style } : {}),
+          // An adopted layer handed back to the control drops its store copy:
+          // the control's own data is what renders from here on.
           ...(geometryReader
             ? { geojson: layer.geojson }
-            : sourceChanged
+            : sourceChanged || adoptedReplay
               ? { geojson: undefined }
               : {}),
           opacity,
@@ -481,6 +735,7 @@ export function unwireVectorStoreSync(): void {
   storeUnsubscribe = null;
   syncedControl = null;
   controlRenderState.clear();
+  declinedAdoptions.clear();
 }
 
 /**

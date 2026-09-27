@@ -11,6 +11,7 @@ import {
 } from "@geolibre/core";
 import { ColorField, ColorRampSelect, Label, Select, Separator } from "@geolibre/ui";
 import { useTranslation } from "react-i18next";
+import { isControlPaintedVectorLayer } from "./layer-capabilities";
 import { NumericFieldSelect, NumericStyleInput } from "./style-inputs";
 
 interface VectorPaintControlsProps {
@@ -183,7 +184,8 @@ export function VectorPaintControls({
             value={style.strokeWidth}
             onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
           />
-          {supportsPointRenderer ? null : (
+          {/* The vector control draws widths in pixels only. */}
+          {supportsPointRenderer || isControlPaintedVectorLayer(layer) ? null : (
             <div className="space-y-2">
               <Label htmlFor="strokeWidthUnit">{t("style.symbology.strokeWidthUnit")}</Label>
               <Select

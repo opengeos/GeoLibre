@@ -18,6 +18,7 @@ import {
   type GeoLibreLayer,
 } from "@geolibre/core";
 import {
+  ADOPTED_VECTOR_SOURCE_KIND,
   LIDAR_SOURCE_KIND,
   PLANETARY_COMPUTER_SOURCE_KIND,
   RASTER_SOURCE_KIND,
@@ -44,6 +45,9 @@ import {
  */
 const RESTORE_BY_SOURCE_KIND: Record<string, (app: GeoLibreAppAPI) => void | Promise<void>> = {
   [VECTOR_SOURCE_KIND]: restoreVectorLayers,
+  // GeoLibre renders an adopted layer, but one re-added from a path-only entry
+  // has no features until the vector control reads the file again.
+  [ADOPTED_VECTOR_SOURCE_KIND]: restoreVectorLayers,
   [RASTER_SOURCE_KIND]: restoreRasterLayers,
   [PLANETARY_COMPUTER_SOURCE_KIND]: restorePlanetaryComputerLayers,
   [THREE_D_TILES_SOURCE_KIND]: restoreThreeDTilesLayers,
@@ -121,7 +125,11 @@ export async function restoreLibraryLayer(
   layer: GeoLibreLayer,
   app: GeoLibreAppAPI,
 ): Promise<void> {
-  if (!isExternalNativeLayerRecord(layer)) return;
+  // An adopted vector entry saved by path alone carries no features, so it
+  // needs its pass even though GeoLibre, not a control, renders it.
+  const adoptedWithoutFeatures =
+    layer.metadata.sourceKind === ADOPTED_VECTOR_SOURCE_KIND && !layer.geojson;
+  if (!isExternalNativeLayerRecord(layer) && !adoptedWithoutFeatures) return;
   const restore = restorePassFor(layer);
   if (!restore) return;
   try {

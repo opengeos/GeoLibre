@@ -33,6 +33,7 @@ import { LabelsSection } from "./LabelsSection";
 import {
   hasExternalDeckLayer,
   hasExternalNativeLayers,
+  isControlPaintedVectorLayer,
   type GeometryFlags,
 } from "./layer-capabilities";
 import { ProportionalSizeSection } from "./ProportionalSizeSection";
@@ -157,17 +158,24 @@ export function VectorStylePanel({
 
   // --- Geometry-gated sections (proportional size, fill pattern, markers) ---
   // geometryFlags is memoized in the parent (useLayerFeatureScans).
+  const controlPainted = isControlPaintedVectorLayer(layer);
   const showProportionalControls =
     hasVectorPaintControls &&
     pointRenderer !== "heatmap" &&
-    // Proportional sizing drives circle-radius, marker icon-size (the
-    // interpolate scales the baked sprite, see markerIconSizeValue in
-    // @geolibre/map), and line-width, so it applies to any single-renderer
-    // point layer (with or without a marker icon) and to layers that carry
-    // lines.
-    ((geometryFlags.hasPoint && pointRenderer === "single") || geometryFlags.hasLine);
+    (controlPainted
+      ? // GeoLibre sizes a control-painted layer's points itself
+        // (syncVectorControlPointSymbology in @geolibre/map), but the control
+        // draws its lines with a flat width.
+        supportsPointRenderer && pointRenderer === "single"
+      : // Proportional sizing drives circle-radius, marker icon-size (the
+        // interpolate scales the baked sprite, see markerIconSizeValue in
+        // @geolibre/map), and line-width, so it applies to any single-renderer
+        // point layer (with or without a marker icon) and to layers that carry
+        // lines.
+        (geometryFlags.hasPoint && pointRenderer === "single") || geometryFlags.hasLine);
+  // The vector control has no fill-pattern paint.
   const showFillPatternControls =
-    hasVectorPaintControls && !extrusionEnabled && geometryFlags.hasPolygon;
+    hasVectorPaintControls && !extrusionEnabled && !controlPainted && geometryFlags.hasPolygon;
   const showMarkerControls =
     hasVectorPaintControls && supportsPointRenderer && pointRenderer === "single";
   // The symbology-pack renders (inverted mask, line decorations, geometry
