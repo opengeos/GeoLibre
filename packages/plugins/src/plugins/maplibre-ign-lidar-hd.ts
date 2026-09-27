@@ -871,7 +871,7 @@ function mountPanel(container: HTMLElement, app: GeoLibreAppAPI): void {
  * the map as point clouds, or download their COPC LAZ files directly from IGN. */
 export const maplibreIgnLidarHdPlugin: GeoLibrePlugin = {
   id: IGN_LIDAR_HD_PLUGIN_ID,
-  name: "IGN LiDAR HD Downloader",
+  name: "IGN LiDAR HD",
   version: "0.1.0",
   // Tiles are `lidar-url` store layers, which ArcGIS draws through its deck
   // overlay; the footprints go through the host's control map there.

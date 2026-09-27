@@ -94,7 +94,7 @@ with a shared project and the read-only viewer.
 | Earthdata GIS | `earthdata-gis` |
 | OpenAerialMap | `openaerialmap` |
 | OSM Downloader | `osm-downloader` |
-| IGN LiDAR HD Downloader | `ign-lidar-hd` |
+| IGN LiDAR HD | `ign-lidar-hd` |
 | ArcGIS Hub | `arcgis-hub` |
 | Tennessee GIS | `tennessee-gis` |
 | US Federal GIS | `us-federal-gis` |

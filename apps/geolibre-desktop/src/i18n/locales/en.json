@@ -3332,7 +3332,7 @@
       "geolibre-us-local-gis": "US Local GIS",
       "geolibre-us-federal-gis": "US Federal GIS",
       "geolibre-osm-downloader": "OSM Downloader",
-      "geolibre-ign-lidar-hd": "IGN LiDAR HD Downloader",
+      "geolibre-ign-lidar-hd": "IGN LiDAR HD",
       "geolibre-stac-catalogs": "STAC Catalogs",
       "geolibre-planet-open-data": "Planet Open Data",
       "maplibre-gl-source-coop": "Source Cooperative",
