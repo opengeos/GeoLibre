@@ -122,6 +122,60 @@ describe("whitebox tool descriptors", () => {
     assert.equal(descriptor?.outputs[0].kind, "vector");
   });
 
+  it("types a *_field string as a field read from the matching vector input", () => {
+    // join_tables, as the WASM manifest declares it (GeoLibre#2710).
+    const descriptor = whiteboxToolDescriptor({
+      id: "join_tables",
+      display_name: "Join Tables",
+      params: [
+        { name: "primary_vector", kind: "vector_in", required: true },
+        { name: "primary_key_field", kind: "string", required: true },
+        { name: "foreign_vector", kind: "vector_in", required: true },
+        { name: "foreign_key_field", kind: "string", required: true },
+        { name: "import_field", kind: "string" },
+        { name: "output", kind: "vector_out" },
+      ],
+    });
+    const byId = new Map(descriptor?.parameters.map((param) => [param.id, param]));
+    assert.equal(byId.get("primary_key_field")?.type, "field");
+    assert.equal(byId.get("primary_key_field")?.fieldSource, "primary_vector");
+    assert.equal(byId.get("foreign_key_field")?.fieldSource, "foreign_vector");
+    // No input lines up by name: left unset, so the panel offers both inputs' columns.
+    assert.equal(byId.get("import_field")?.type, "field");
+    assert.equal(byId.get("import_field")?.fieldSource, undefined);
+  });
+
+  it("reads a single-input tool's field parameters from that input", () => {
+    const descriptor = whiteboxToolDescriptor({
+      id: "field_calculator",
+      params: [
+        { name: "input", kind: "vector_in", required: true },
+        { name: "field", kind: "string", required: true },
+        { name: "expression", kind: "string", required: true },
+        { name: "output", kind: "vector_out" },
+      ],
+    });
+    const byId = new Map(descriptor?.parameters.map((param) => [param.id, param]));
+    assert.equal(byId.get("field")?.type, "field");
+    assert.equal(byId.get("field")?.fieldSource, "input");
+    assert.equal(byId.get("expression")?.type, "string");
+  });
+
+  it("leaves a *_field string plain when the tool has no vector input", () => {
+    const descriptor = whiteboxToolDescriptor({
+      id: "raster_tool",
+      params: [
+        { name: "input", kind: "raster_in", required: true },
+        { name: "class_field", kind: "string" },
+        { name: "output", kind: "raster_out" },
+      ],
+    });
+    assert.equal(
+      descriptor?.parameters.find((param) => param.id === "class_field")?.type,
+      "string",
+    );
+  });
+
   it("carries the manifest through as `native` for the WASM runner", () => {
     // The runner builds its CLI arguments by walking `tool.params`; a descriptor
     // that drops the manifest makes every Whitebox node run with no arguments

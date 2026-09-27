@@ -7,6 +7,7 @@ import type {
   WhiteboxToolParameter,
 } from "@geolibre/processing";
 import { humanizeParameterName } from "./processing-tool-i18n";
+import { fieldSourceInputName, isFieldParameterName } from "./whitebox-field-params";
 import { parameterKind } from "./whitebox-param-kind";
 
 /** Palette group for Whitebox tools that arrive without a category. */
@@ -65,10 +66,18 @@ export function vectorToolDescriptor(algorithm: ProcessingAlgorithm): ModelToolD
   };
 }
 
-/** Map a Whitebox scalar parameter onto the field type the properties panel renders. */
+/**
+ * Map a Whitebox scalar parameter onto the field type the properties panel renders.
+ *
+ * @param param The manifest parameter.
+ * @param kind Its normalized kind (see `parameterKind`).
+ * @param vectorInputNames The tool's vector-input parameter names, in order.
+ * @returns The panel parameter, or `null` to leave it out.
+ */
 function whiteboxScalarParameter(
   param: WhiteboxToolParameter,
   kind: string,
+  vectorInputNames: string[],
 ): AlgorithmParameter | null {
   const base = {
     id: param.name,
@@ -85,6 +94,17 @@ function whiteboxScalarParameter(
       type: "select",
       options: (param.options ?? []).map((option) => ({ value: option, label: option })),
     };
+  }
+  // A `*_field` string names a column of one of the tool's vector inputs
+  // (GeoLibre#1459), so the panel can offer that input's columns. `fieldSource`
+  // names the input when it can be told apart; left unset, the panel offers
+  // every vector input's columns rather than guessing one.
+  if (kind === "string" && isFieldParameterName(param.name) && vectorInputNames.length > 0) {
+    const fieldSource =
+      vectorInputNames.length === 1
+        ? vectorInputNames[0]
+        : fieldSourceInputName(param.name, vectorInputNames);
+    return { ...base, type: "field", ...(fieldSource ? { fieldSource } : {}) };
   }
   if (kind === "string") return { ...base, type: "string" };
   // lidar_in / file_in / file_out and anything unrecognized: a path the user
@@ -111,6 +131,9 @@ export function whiteboxToolDescriptor(tool: WhiteboxTool): ModelToolDescriptor 
   const inputs: ModelToolPort[] = [];
   const outputs: ModelToolPort[] = [];
   const parameters: AlgorithmParameter[] = [];
+  const vectorInputNames = (tool.params ?? [])
+    .filter((param) => parameterKind(param) === "vector_in")
+    .map((param) => param.name);
   for (const param of tool.params ?? []) {
     const kind = parameterKind(param);
     if (kind === "raster_in" || kind === "vector_in") {
@@ -130,7 +153,7 @@ export function whiteboxToolDescriptor(tool: WhiteboxTool): ModelToolDescriptor 
       });
       continue;
     }
-    const mapped = whiteboxScalarParameter(param, kind);
+    const mapped = whiteboxScalarParameter(param, kind, vectorInputNames);
     if (mapped) parameters.push(mapped);
   }
   if (outputs.length === 0) return null;

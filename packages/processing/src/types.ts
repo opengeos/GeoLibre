@@ -63,7 +63,9 @@ export interface AlgorithmParameter {
   geometryFilter?: GeometryFamily[];
   /**
    * For `type: "field"`: the id of the `type: "layer"` parameter whose selected
-   * layer supplies the attribute-field options. Defaults to `"layer"`.
+   * layer supplies the attribute-field options. Defaults to `"layer"`. In a
+   * Model Builder descriptor built from a Whitebox tool it names the vector
+   * input port instead, and is left unset when the port cannot be told apart.
    */
   fieldSource?: string;
   /**

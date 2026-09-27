@@ -49,6 +49,14 @@ describe("fieldSourceInputName", () => {
     assert.equal(fieldSourceInputName("origin_id_field", ["origins", "destinations"]), "origins");
   });
 
+  it("tolerates a _vector input suffix", () => {
+    // join_tables names its inputs `primary_vector` / `foreign_vector`.
+    const inputs = ["primary_vector", "foreign_vector"];
+    assert.equal(fieldSourceInputName("primary_key_field", inputs), "primary_vector");
+    assert.equal(fieldSourceInputName("foreign_key_field", inputs), "foreign_vector");
+    assert.equal(fieldSourceInputName("import_field", inputs), undefined);
+  });
+
   it("returns undefined when no input name lines up", () => {
     // detect_feature_changes: `compare_fields` names neither `update` nor
     // `base`, so the caller offers both layers' columns instead of guessing.

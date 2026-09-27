@@ -102,6 +102,8 @@ import {
   settleNode,
 } from "../../../lib/model-graph-edit";
 import { fetchLayerBytes } from "../../../lib/whitebox-layer-inputs";
+import { fieldNamesByLayer } from "../../../lib/layer-field-names";
+import { modelFieldOptions } from "../../../lib/model-field-options";
 import { ParameterField } from "../ParameterField";
 
 /** MIME type carrying a palette tool key through an HTML5 drag. */
@@ -277,6 +279,9 @@ export function ModelBuilderPanel({
   // Layers are only read while the panel is open (it stays mounted closed to
   // keep the model on the canvas).
   const layers = useLayersWhen(open);
+  // Column names per layer for the inspector's field pickers (GeoLibre#2710),
+  // recomputed only when the layer set changes rather than on every graph edit.
+  const fieldsByLayer = useMemo(() => fieldNamesByLayer(layers), [layers]);
   const savedModels = useAppStore((s) => s.models);
   const saveModel = useAppStore((s) => s.saveModel);
   const deleteModel = useAppStore((s) => s.deleteModel);
@@ -1709,6 +1714,8 @@ export function ModelBuilderPanel({
                       : undefined
                   }
                   layers={layers}
+                  graph={graph}
+                  fieldsByLayer={fieldsByLayer}
                   issues={selectedNode ? (issuesByNode.get(selectedNode.id) ?? []) : []}
                   keptPorts={
                     selectedNode
@@ -2213,6 +2220,8 @@ function NodeInspector({
   node,
   descriptor,
   layers,
+  graph,
+  fieldsByLayer,
   issues,
   keptPorts,
   onFieldChange,
@@ -2223,6 +2232,9 @@ function NodeInspector({
   node: ModelGraphNode | null;
   descriptor: ModelToolDescriptor | undefined;
   layers: GeoLibreLayer[];
+  graph: ProcessingModelGraph;
+  /** Column names per project layer id, for `type: "field"` parameters. */
+  fieldsByLayer: ReadonlyMap<string, string[]>;
   issues: ModelGraphIssue[];
   /** Output ports of this node that already feed an `output` node. */
   keptPorts: Set<string>;
@@ -2330,6 +2342,12 @@ function NodeInspector({
                 )}
                 value={node.parameters?.[param.id]}
                 layerOptions={layers.map((layer) => ({ id: layer.id, name: layer.name }))}
+                fieldOptions={
+                  param.type === "field"
+                    ? modelFieldOptions(graph, node, descriptor, param, fieldsByLayer)
+                    : undefined
+                }
+                freeText
                 onChange={(value) => onParamChange(param.id, value)}
               />
             ))

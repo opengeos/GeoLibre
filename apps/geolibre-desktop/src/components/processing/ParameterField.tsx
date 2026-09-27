@@ -10,6 +10,12 @@ export interface ParameterFieldProps {
   layerOptions: { id: string; name: string }[];
   /** Attribute-field names for a `type: "field"` or `"field-weights"` parameter. */
   fieldOptions?: string[];
+  /**
+   * Keep a `type: "field"` parameter typeable as well as pickable. The Model
+   * Builder sets this: a column can come from an upstream tool that has not run
+   * yet, or be a new column the tool creates, so a closed list would block it.
+   */
+  freeText?: boolean;
   onChange: (value: unknown) => void;
 }
 
@@ -26,6 +32,7 @@ export function ParameterField({
   value,
   layerOptions,
   fieldOptions,
+  freeText,
   onChange,
 }: ParameterFieldProps): ReactElement {
   const { t } = useTranslation();
@@ -130,6 +137,39 @@ export function ParameterField({
         fieldOptions={fieldOptions ?? []}
         onChange={(rows: FieldWeight[]) => onChange(rows)}
       />
+    );
+  }
+
+  if (param.type === "field" && freeText) {
+    const text = typeof value === "string" ? value : "";
+    return (
+      <div className="flex flex-col gap-1">
+        {label}
+        {fieldOptions?.length ? (
+          <Select
+            aria-label={t("processing.parameterField.selectField")}
+            value={fieldOptions.includes(text) ? text : ""}
+            onChange={(e) => onChange(e.target.value)}
+          >
+            <option value="">{t("processing.parameterField.selectField")}</option>
+            {fieldOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+        <Input
+          id={param.id}
+          type="text"
+          value={text}
+          placeholder={t("processing.whitebox.fieldName")}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {param.description ? (
+          <p className="text-xs text-muted-foreground">{param.description}</p>
+        ) : null}
+      </div>
     );
   }
 

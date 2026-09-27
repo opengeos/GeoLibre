@@ -34,8 +34,9 @@ export function isFieldParameterName(name: string): boolean {
 /**
  * The vector input whose layer supplies a field parameter's column names, for a
  * tool that has more than one. Matched on the longest leading name segment, so
- * `target_match_field` resolves to `target` rather than to the first input, and
- * a plural input name is tolerated (`origin_id_field` → `origins`).
+ * `target_match_field` resolves to `target` rather than to the first input, a
+ * plural input name is tolerated (`origin_id_field` → `origins`), and so is a
+ * `_vector` suffix (`primary_key_field` → `primary_vector` in `join_tables`).
  *
  * Returns `undefined` when nothing matches (`compare_fields` against
  * `update`/`base`); the caller then offers every selected input's columns
@@ -52,7 +53,9 @@ export function fieldSourceInputName(
   const tokens = fieldParamName.replace(FIELD_PARAM_SUFFIX, "").split("_").filter(Boolean);
   for (let count = tokens.length; count > 0; count -= 1) {
     const prefix = tokens.slice(0, count).join("_");
-    const match = vectorInputNames.find((name) => name === prefix || name === `${prefix}s`);
+    const match = vectorInputNames.find(
+      (name) => name === prefix || name === `${prefix}s` || name === `${prefix}_vector`,
+    );
     if (match) return match;
   }
   return undefined;
