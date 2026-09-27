@@ -97,6 +97,9 @@ with a shared project and the read-only viewer.
 | IGN LiDAR HD Downloader | `ign-lidar-hd` |
 | ArcGIS Hub | `arcgis-hub` |
 | Tennessee GIS | `tennessee-gis` |
+| US Federal GIS | `us-federal-gis` |
+| US State GIS | `us-state-gis` |
+| US Local GIS | `us-local-gis` |
 | Socrata | `socrata` |
 | CKAN | `ckan` |
 | STAC Catalogs | `stac-catalogs` |
