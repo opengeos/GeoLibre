@@ -786,8 +786,8 @@ fn is_allowed_geojson_write_path(path: &str) -> bool {
 }
 
 /// Whether `bytes` parse as a JSON object whose `type` is `FeatureCollection`
-/// and whose `features` is an array (a leading UTF-8 byte-order mark is
-/// allowed).
+/// and whose `features` is an array of `Feature` objects (a leading UTF-8
+/// byte-order mark is allowed).
 fn is_geojson_feature_collection(bytes: &[u8]) -> bool {
     let bytes = bytes
         .strip_prefix(b"\xEF\xBB\xBF".as_slice())
@@ -796,8 +796,29 @@ fn is_geojson_feature_collection(bytes: &[u8]) -> bool {
         .ok()
         .is_some_and(|value| {
             value.get("type").and_then(|t| t.as_str()) == Some("FeatureCollection")
-                && value.get("features").is_some_and(|f| f.is_array())
+                && value
+                    .get("features")
+                    .and_then(|f| f.as_array())
+                    .is_some_and(|features| {
+                        features.iter().all(|feature| {
+                            feature.get("type").and_then(|t| t.as_str()) == Some("Feature")
+                        })
+                    })
         })
+}
+
+/// Whether a canonicalized path points at a network share. `canonicalize` on
+/// Windows returns a verbatim path, `\\?\C:\…` for a local drive but
+/// `\\?\UNC\host\share\…` for a share; a symlink or junction can resolve to
+/// one even when the path the caller passed was local.
+fn is_unc_resolved_path(resolved: &str) -> bool {
+    let rest = resolved
+        .strip_prefix(r"\\?\")
+        .or_else(|| resolved.strip_prefix(r"\\.\"));
+    match rest {
+        Some(rest) => rest.to_ascii_lowercase().starts_with(r"unc\"),
+        None => resolved.starts_with(r"\\") || resolved.starts_with("//"),
+    }
 }
 
 /// Distinguishes concurrent writes to the same file (a double-clicked save), so
@@ -829,9 +850,16 @@ fn write_local_geojson_file(path: String, contents: String) -> Result<(), String
     }
     let canonical = fs::canonicalize(&path)
         .map_err(|error| format!("Could not save to source file: {error}"))?;
-    // Only the extension is re-checked on the resolved path: `canonicalize`
-    // yields a `\\?\C:\…` verbatim path on Windows, which the UNC check rejects.
+    // The full `is_safe_absolute_path` guard can't be re-run on the resolved
+    // path, because `canonicalize` yields a `\\?\C:\…` verbatim path on
+    // Windows that it would reject. Re-check the parts a symlink or junction
+    // could change: the extension, and that it stays off network shares.
     let resolved = canonical.to_string_lossy().to_ascii_lowercase();
+    if is_unc_resolved_path(&resolved) {
+        return Err(format!(
+            "Refusing to write \"{path}\": resolves to a network path"
+        ));
+    }
     if !((resolved.ends_with(".geojson") || resolved.ends_with(".json"))
         && !resolved.ends_with(".geolibre.json"))
     {
@@ -4698,9 +4726,9 @@ mod tests {
         client_cert_is_pkcs12, client_cert_password_without_path, ensure_fetchable_url,
         is_allowed_geojson_write_path, is_allowed_local_vector_path, is_allowed_project_path,
         is_disallowed_ip, is_image_picker_path, is_persisted_image_file, is_safe_absolute_path,
-        is_ssrf_guard_error, path_is_under, project_path_string, project_paths_from_args,
-        read_mbtiles_zoom_range, resolve_fetch_timeout_secs, tcp_table_port,
-        write_local_geojson_file, MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS,
+        is_ssrf_guard_error, is_unc_resolved_path, path_is_under, project_path_string,
+        project_paths_from_args, read_mbtiles_zoom_range, resolve_fetch_timeout_secs,
+        tcp_table_port, write_local_geojson_file, MAX_FETCH_TIMEOUT_SECS, REMOTE_TILE_TIMEOUT_SECS,
         SSRF_BLOCKED_MESSAGE,
     };
     #[cfg(target_os = "linux")]
@@ -5262,6 +5290,16 @@ mod tests {
     }
 
     #[test]
+    fn unc_resolved_paths_are_detected() {
+        assert!(is_unc_resolved_path(r"\\?\unc\host\share\parks.geojson"));
+        assert!(is_unc_resolved_path(r"\\?\UNC\host\share\parks.geojson"));
+        assert!(is_unc_resolved_path(r"\\host\share\parks.geojson"));
+        assert!(is_unc_resolved_path("//host/share/parks.geojson"));
+        assert!(!is_unc_resolved_path(r"\\?\c:\gis\parks.geojson"));
+        assert!(!is_unc_resolved_path("/home/user/parks.geojson"));
+    }
+
+    #[test]
     fn write_local_geojson_file_replaces_an_existing_file_only() {
         let dir = std::env::temp_dir().join(format!("geolibre-write-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -5288,6 +5326,13 @@ mod tests {
             write_local_geojson_file(path.clone(), r#"{"type":"FeatureCollection"}"#.into())
                 .is_err()
         );
+        // ...or one whose features are not all Feature objects.
+        assert!(write_local_geojson_file(
+            path.clone(),
+            r#"{"type":"FeatureCollection","features":[null]}"#.into()
+        )
+        .is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), new);
         assert_eq!(fs::read_to_string(&target).unwrap(), new);
 
         // A missing file is not created.
