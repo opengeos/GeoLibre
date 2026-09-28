@@ -16,6 +16,8 @@ export class PluginManager {
   private renderer: MapRendererKind | null = null;
   private deferredState: ProjectPluginState | null = null;
   private deferredActive = new Set<string>();
+  /** Bumped by every restoreProjectState so a superseded restore's scopes go stale. */
+  private restorePass = 0;
 
   private supportsEngine(id: string, app: GeoLibreAppAPI): boolean {
     return isPluginEngineSupported(this.plugins.get(id), app.getMapRenderer?.() ?? "maplibre");
@@ -25,10 +27,15 @@ export class PluginManager {
     app: GeoLibreAppAPI,
     id: string,
     options: ScopeAppOptions = {},
+    restorePass?: number,
   ): GeoLibreAppAPI {
     const generation = this.activationGenerations.get(id);
     // Settings and restore callbacks may register UI synchronously before
-    // activation. Retained callbacks need a live activation after this turn.
+    // activation. Retained callbacks need a live activation after this turn,
+    // except a project restore's: an inactive plugin may still mount the
+    // panels its saved state describes once a dynamic import resolves (the
+    // Components legend, colorbar, and HTML panels), until the next restore
+    // (another project load or a renderer swap) supersedes this one.
     let synchronous = true;
     queueMicrotask(() => {
       synchronous = false;
@@ -40,7 +47,8 @@ export class PluginManager {
         this.activationGenerations.get(id) === generation &&
         (this.activating.has(id) ||
           this.active.has(id) ||
-          (!options.assistantTools && synchronous)),
+          (!options.assistantTools &&
+            (synchronous || (restorePass !== undefined && restorePass === this.restorePass)))),
     });
   }
 
@@ -521,6 +529,7 @@ export class PluginManager {
     app: GeoLibreAppAPI,
     options: { resetMissingSettings?: boolean; mapReplaced?: boolean } = {},
   ): void {
+    const restorePass = ++this.restorePass;
     const renderer = app.getMapRenderer?.() ?? "maplibre";
     // A new map took down every live control with the old one, so reactivate
     // from scratch. A swap and back (MapLibre to Mapbox to MapLibre) before
@@ -579,12 +588,17 @@ export class PluginManager {
     // write the collapsed state back on the next save.
     const scopeForRestore = (id: string, assistantTools = false): GeoLibreAppAPI =>
       this.plugins.get(id)?.restoresPanelCollapseState
-        ? this.scopeAppToPlugin(app, id, { assistantTools })
-        : this.scopeAppToPlugin(app, id, {
-            assistantTools,
-            onControlAdded: collapseRestoredPanel,
-            onRightPanelOpened: collapseRestoredRightPanel,
-          });
+        ? this.scopeAppToPlugin(app, id, { assistantTools }, restorePass)
+        : this.scopeAppToPlugin(
+            app,
+            id,
+            {
+              assistantTools,
+              onControlAdded: collapseRestoredPanel,
+              onRightPanelOpened: collapseRestoredRightPanel,
+            },
+            restorePass,
+          );
 
     // Deactivate first so plugins that should be inactive tear down their live
     // controls before we touch positions or settings. This keeps the order of

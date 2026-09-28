@@ -1153,6 +1153,15 @@ def test_add_legend_from_dict(m):
     ]
 
 
+def test_set_map_legend(m):
+    m.set_map_legend("Cases per 100k", position="bottom-right", collapsed=True)
+    legend = m.project["legend"]
+    assert legend["title"] == "Cases per 100k"
+    assert legend["panelPosition"] == "bottom-right"
+    assert legend["panelVisible"] is True
+    assert legend["panelCollapsed"] is True
+
+
 def test_add_legend_from_labels_and_colors(m):
     m.add_legend(labels=["a", "b"], colors=["#111", "#222"], shape="circle")
     items = _components(m)["legend"]["legends"][0]["items"]

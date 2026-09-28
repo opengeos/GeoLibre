@@ -142,6 +142,9 @@ m.add_choropleth(
 Add a legend, a colorbar, and a swipe (split-map) comparison:
 
 ```python
+# The app's legend panel (Controls > Legend), built from each layer's style.
+m.set_map_legend("Population", position="bottom-right")
+
 # A built-in land-cover legend, or your own {label: color} dict.
 m.add_legend(builtin="nlcd")
 m.add_legend(legend_dict={"Water": "#0000ff", "Land": "#00ff00"})
@@ -308,6 +311,7 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_video(urls, coordinates, name=, **style)` | Add a georeferenced video (four `[lng, lat]` corners). |
 | `add_basemap(basemap)` | Set the background basemap. |
 | `split_map(left_layers=None, right_layers=None, orientation=, position=, control_position=)` | Add a swipe (split-map) comparison slider between two layer sets. |
+| `set_map_legend(title=None, position=, group_by_layer=, visible=, collapsed=)` | Show the map legend (Controls → Legend), whose rows come from each visible layer's symbology. One per map; calling it again updates it. |
 | `add_legend(title=None, legend_dict=, labels=, colors=, builtin=, position=, shape=)` | Add a legend from a `{label: color}` dict, parallel `labels`/`colors`, or a `builtin` preset (`"nlcd"`, `"esa_worldcover"`). |
 | `add_colorbar(colormap=, vmin=, vmax=, label=, units=, colors=, orientation=, position=)` | Add a colorbar for a continuous raster, from a named colormap or custom `colors`. |
 | `add_colormap(colormap, vmin=, vmax=, label=, **kwargs)` | Add a colorbar from a named colormap (leafmap-style alias of `add_colorbar`). |

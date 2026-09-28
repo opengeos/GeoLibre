@@ -57,7 +57,9 @@ Six steps. Most maps use four of them.
 3. **Frame it** — `set_view` with a `center`+`zoom`, or a `bbox` to fit an area.
 4. **Style it** — `style_layer` to merge style keys, or `classify_layer` to
    build a graduated choropleth from a numeric column.
-5. **Decorate** — `add_legend`, `add_colorbar`, `add_swipe` for before/after.
+5. **Decorate** — `set_map_legend` for a legend built from the layers' own
+   styles, `add_legend` for hand-written entries, `add_colorbar`, `add_swipe`
+   for before/after.
 6. **`export_html`** — a single self-contained page the recipient opens with no
    install.
 
@@ -76,8 +78,7 @@ add_geojson_layer(path=..., name="Counties",
 list_layer_properties(path=..., layer="Counties")     # find the real column name
 classify_layer(path=..., layer="Counties", column="pop_2020",
                class_count=5, colormap="blues", scheme="quantile")
-add_legend(path=..., title="Population",
-           legend_dict={"Low": "#eff6ff", "High": "#1e3a8a"})
+set_map_legend(path=..., title="Population")         # lists the classes above
 export_html(path=..., out_path="counties.html", title="Population by county")
 ```
 

@@ -236,6 +236,7 @@ A `Layer` object mirrors the same operations as attributes:
 ## Map controls
 
 ```python
+m.set_map_legend("Population", position="bottom-right")  # built from layer styles
 m.add_legend(title="Land cover", builtin="nlcd")
 m.add_legend(title="Population", legend_dict={"Low": "#eff6ff", "High": "#1e3a8a"})
 m.add_colorbar(colormap="terrain", vmin=0, vmax=3000, label="Elevation", units="m")

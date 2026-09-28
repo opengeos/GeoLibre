@@ -657,6 +657,19 @@ def test_add_legend_rejects_mismatched_labels_and_colors(server, project_path):
     )
 
 
+def test_set_map_legend_shows_the_symbology_legend(server, project_path):
+    result = call(server, "set_map_legend", path=project_path, title="Cases", position="top-right")
+    assert result["mapLegend"]["title"] == "Cases"
+    assert result["mapLegend"]["panelVisible"] is True
+    assert "map-legend" in call(server, "describe_project", path=project_path)["mapControls"]
+
+
+def test_set_map_legend_rejects_a_bad_position(server, project_path):
+    assert "position must be one of" in call_error(
+        server, "set_map_legend", path=project_path, position="middle"
+    )
+
+
 def test_add_colorbar_writes_its_range(server, project_path):
     result = call(
         server,

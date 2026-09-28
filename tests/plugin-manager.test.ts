@@ -1457,6 +1457,73 @@ describe("PluginManager renderer compatibility", () => {
     scoped!.registerRightPanel?.({ id: "stale-panel", title: "Stale", render: () => undefined });
     assert.equal(registered, 1);
   });
+  it("lets an inactive plugin mount restored panels after an async import", async () => {
+    // The Components legend/colorbar/HTML panels restore from saved settings
+    // without activating the plugin, and mount only once a dynamic import
+    // resolves, so the restore scope must outlive the synchronous turn.
+    const manager = new PluginManager();
+    let scoped: GeoLibreAppAPI | undefined;
+    let mounted = 0;
+    manager.register(
+      testPlugin({
+        restoresPanelCollapseState: true,
+        applyProjectState: (value) => {
+          scoped = value;
+        },
+      }),
+    );
+    const api = {
+      getMapRenderer: () => "maplibre",
+      addMapControl: () => {
+        mounted++;
+        return true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: [],
+      mapControlPositions: {},
+      settings: { "url-loader": { legend: {} } },
+    };
+    manager.restoreProjectState(state, api);
+    await Promise.resolve();
+    await Promise.resolve();
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    assert.equal(scoped!.addMapControl(control), true);
+    assert.equal(mounted, 1);
+  });
+  it("rejects restored panels once a later restore supersedes the scope", async () => {
+    const manager = new PluginManager();
+    const scopes: GeoLibreAppAPI[] = [];
+    let mounted = 0;
+    manager.register(
+      testPlugin({
+        applyProjectState: (value) => {
+          scopes.push(value);
+        },
+      }),
+    );
+    const api = {
+      getMapRenderer: () => "maplibre",
+      addMapControl: () => {
+        mounted++;
+        return true;
+      },
+    } as unknown as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: [],
+      mapControlPositions: {},
+      settings: { "url-loader": { legend: {} } },
+    };
+    manager.restoreProjectState(state, api);
+    manager.restoreProjectState(state, api);
+    await Promise.resolve();
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    assert.equal(scopes[0].addMapControl(control), false);
+    assert.equal(scopes[1].addMapControl(control), true);
+    assert.equal(mounted, 1);
+  });
   it("rejects controls from an activation replaced by a renderer switch", () => {
     const manager = new PluginManager();
     let renderer: "maplibre" | "cesium" = "maplibre";

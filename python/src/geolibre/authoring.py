@@ -303,6 +303,9 @@ def describe_project(project: dict[str, Any]) -> dict[str, Any]:
             components = settings.get(_project.COMPONENTS_PLUGIN_ID)
             if isinstance(components, dict):
                 controls.extend(key for key in ("legend", "colorbar") if key in components)
+    map_legend = project.get("legend")
+    if isinstance(map_legend, dict) and map_legend.get("panelVisible") is True:
+        controls.append("map-legend")
     basemap_url = project.get("basemapStyleUrl")
     return {
         "name": project.get("name"),
@@ -1117,6 +1120,65 @@ def add_legend(
         lambda existing: _project.legend_gui_state(entry, existing=existing),
     )
     return entry
+
+
+def set_map_legend(
+    project: dict[str, Any],
+    title: str | None = None,
+    *,
+    position: str | None = None,
+    group_by_layer: bool | None = None,
+    visible: bool = True,
+    collapsed: bool = False,
+) -> dict[str, Any]:
+    """Show the map legend, the panel behind the app's Controls -> Legend.
+
+    Unlike :func:`add_legend`, which draws hand-written entries, the map legend
+    derives its rows from each visible layer's symbology (graduated classes,
+    categories, heatmap ramps, ...), so it stays in step with the layers
+    without restating their colors. A project has one; calling this again
+    updates it and keeps any item order, label overrides, and custom entries
+    already saved on it.
+
+    Args:
+        project: The project dict (mutated in place).
+        title: Heading drawn above the entries. Keeps the current one (the
+            app default is ``"Legend"``) when omitted.
+        position: Map corner, one of :data:`CONTROL_POSITIONS`. Keeps the
+            current one (the app default is ``"top-left"``) when omitted.
+        group_by_layer: Group each layer's classes under a layer heading. Keeps
+            the current setting (the app default groups) when omitted.
+        visible: Whether the on-map panel is open.
+        collapsed: Whether the open panel is collapsed to its header bar.
+
+    Returns:
+        The project's legend config.
+
+    Raises:
+        ValueError: If ``position`` is not a map corner.
+    """
+    if position is not None and position not in CONTROL_POSITIONS:
+        raise ValueError(f"position must be one of {sorted(CONTROL_POSITIONS)}, got {position!r}")
+    existing = project.get("legend")
+    legend: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
+    legend.setdefault("title", "Legend")
+    legend.setdefault("groupByLayer", True)
+    legend.setdefault("order", [])
+    legend.setdefault("overrides", {})
+    if title is not None:
+        legend["title"] = str(title)
+    if group_by_layer is not None:
+        legend["groupByLayer"] = bool(group_by_layer)
+    if position is not None:
+        legend["panelPosition"] = position
+    # The app persists these two flags only when set (normalizeLegendConfig).
+    for key, flag in (("panelVisible", visible), ("panelCollapsed", collapsed)):
+        if flag:
+            legend[key] = True
+        else:
+            legend.pop(key, None)
+    project["legend"] = legend
+    return legend
 
 
 def add_colorbar(

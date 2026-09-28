@@ -418,6 +418,45 @@ def test_add_legend_rejects_a_bad_shape(proj):
         authoring.add_legend(proj, legend_dict={"a": "#111"}, shape="hexagon")
 
 
+def test_set_map_legend_writes_the_project_legend(proj):
+    legend = authoring.set_map_legend(proj, "Cases per 100k", position="bottom-right")
+    assert proj["legend"] is legend
+    assert legend == {
+        "title": "Cases per 100k",
+        "groupByLayer": True,
+        "order": [],
+        "overrides": {},
+        "panelPosition": "bottom-right",
+        "panelVisible": True,
+    }
+    # It is the app's own legend panel, not a Components plugin control.
+    assert project.COMPONENTS_PLUGIN_ID not in proj.get("plugins", {}).get("settings", {})
+    assert "map-legend" in authoring.describe_project(proj)["mapControls"]
+
+
+def test_set_map_legend_keeps_saved_customizations(proj):
+    proj["legend"] = {
+        "title": "Old",
+        "groupByLayer": True,
+        "order": ["a"],
+        "overrides": {"a:0": {"label": "Renamed"}},
+        "panelVisible": True,
+        "panelPosition": "top-right",
+    }
+    legend = authoring.set_map_legend(proj, group_by_layer=False, visible=False)
+    assert legend["title"] == "Old"
+    assert legend["groupByLayer"] is False
+    assert legend["order"] == ["a"]
+    assert legend["overrides"] == {"a:0": {"label": "Renamed"}}
+    assert legend["panelPosition"] == "top-right"
+    assert "panelVisible" not in legend
+
+
+def test_set_map_legend_rejects_a_bad_position(proj):
+    with pytest.raises(ValueError, match="position must be one of"):
+        authoring.set_map_legend(proj, position="middle")
+
+
 def test_adding_a_colorbar_keeps_an_existing_legend(proj):
     """Both features share one settings blob, so neither may clobber the other."""
     authoring.add_legend(proj, legend_dict={"a": "#111"})

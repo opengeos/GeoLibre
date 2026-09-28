@@ -3273,6 +3273,46 @@ class Map(anywidget.AnyWidget):
             )
         )
 
+    def set_map_legend(
+        self,
+        title: str | None = None,
+        *,
+        position: str | None = None,
+        group_by_layer: bool | None = None,
+        visible: bool = True,
+        collapsed: bool = False,
+    ) -> None:
+        """Show the map legend, the panel behind the app's Controls -> Legend.
+
+        Its rows come from each visible layer's symbology, so a classified or
+        categorized layer gets a matching legend without restating its colors
+        (use :meth:`add_legend` for hand-written entries). A map has one;
+        calling this again updates it.
+
+        Args:
+            title: Heading drawn above the entries; keeps the current one when
+                omitted.
+            position: ``"top-left"``, ``"top-right"``, ``"bottom-left"``, or
+                ``"bottom-right"``; keeps the current corner when omitted.
+            group_by_layer: Group each layer's classes under a layer heading;
+                keeps the current setting when omitted.
+            visible: Whether the on-map panel is open.
+            collapsed: Whether the open panel is collapsed to its header bar.
+
+        Raises:
+            ValueError: If ``position`` is not a map corner.
+        """
+        self._update_project(
+            lambda p: _authoring.set_map_legend(
+                p,
+                title,
+                position=position,
+                group_by_layer=group_by_layer,
+                visible=visible,
+                collapsed=collapsed,
+            )
+        )
+
     def add_colorbar(
         self,
         *,
