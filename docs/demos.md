@@ -86,9 +86,10 @@ single `.geolibre.json` file authored with the [Python package](python.md):
 choropleths, heatmaps, clusters, great-circle flows, 3D extrusions,
 before-and-after swipes, and time sliders, with click popups, hover tooltips,
 and a legend derived from each layer's symbology. **Click any map to open the
-live project.** On share.geolibre.app every project is tagged with its theme
-and features (`time-slider`, `swipe`, `3d`, `heatmap`, `clusters`, `imagery`),
-so you can filter the gallery by tag.
+live project.** On share.geolibre.app every project is tagged with its theme,
+its features (`time-slider`, `swipe`, `3d`, `heatmap`, `clusters`, `imagery`),
+and [`open-data`](https://share.geolibre.app/explore?tag=open-data), so you can
+filter the gallery by tag.
 
 [Browse the Official Demos collection](https://share.geolibre.app/giswqs/collections/official-demos){ .md-button .md-button--primary }
 
