@@ -73,6 +73,7 @@ import {
   syncLayerBlendModes,
 } from "./layer-blend-modes";
 import { ensureGeneratedImageHandler } from "./generated-images";
+import { installSelectionDragGuard } from "./selection-drag-guard";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { isMapboxStyleUrl, loadMapboxStyle, redactMapboxStyleUrl } from "./mapbox-style";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
@@ -534,6 +535,10 @@ export class MapController implements MapEngine {
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     ensureGeneratedImageHandler(this.map);
+    // A leftover text selection would otherwise turn a map drag into a native
+    // drag of the selection in WebKit; see selection-drag-guard.ts.
+    this.selectionDragGuardDispose?.();
+    this.selectionDragGuardDispose = installSelectionDragGuard(this.map.getCanvasContainer());
     installGlobePopupOcclusion(maplibregl);
     // Per-layer blend modes wrap MapLibre's render loop, so they have to be in
     // place before the first frame. Feature-detected: an unsupported build
@@ -995,6 +1000,8 @@ export class MapController implements MapEngine {
     this.abortPendingMapboxStyle();
     this.removeClusterZoomListener();
     this.removePendingNativeFilterListener();
+    this.selectionDragGuardDispose?.();
+    this.selectionDragGuardDispose = null;
     this.map?.remove();
     this.map = null;
     this.styleReady = false;
@@ -1640,6 +1647,7 @@ export class MapController implements MapEngine {
   private searchDisposers = new Set<() => void>();
 
   private extentDrawingDispose: (() => void) | null = null;
+  private selectionDragGuardDispose: (() => void) | null = null;
 
   getRenderSurface() {
     return this.map;

@@ -50,6 +50,7 @@ import {
 } from "./layer-labels";
 import { mapboxSourceId } from "./style-layer-ids";
 import { ensureGeneratedImageHandler } from "./generated-images";
+import { installSelectionDragGuard } from "./selection-drag-guard";
 import { hasZoomDependentClusterFilter } from "./cluster-input";
 import { resolveTextFontFromStyleLayers } from "./text-font";
 import { getLayerBounds } from "./geojson-loader";
@@ -298,6 +299,9 @@ export class MapboxEngine implements MapEngine {
     // Marker icons, fill patterns and line decorations are generated sprites
     // the map asks for through `styleimagemissing`, as on MapLibre.
     ensureGeneratedImageHandler(map as unknown as maplibregl.Map);
+    // Same guard as the MapLibre controller: keep a leftover text selection
+    // from turning a pan into a native drag. Removed with the other disposers.
+    this.disposers.add(installSelectionDragGuard(map.getCanvasContainer()));
     map.on("style.load", this.styleLoaded);
     map.on("error", this.onError);
     map.on("sourcedata", this.onSourceData);

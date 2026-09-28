@@ -32,8 +32,10 @@ function makeMap() {
   let bearing = 0;
   let pitch = 0;
   let queried: Record<string, unknown>[] = [];
+  const canvasContainer = new EventTarget();
   const map = {
     // Test hooks.
+    canvasContainer,
     sources,
     layers,
     calls,
@@ -69,6 +71,7 @@ function makeMap() {
     getStyle: () => ({ layers: [{ id: "background", type: "background" }] }),
     getCanvas: () => ({}) as HTMLCanvasElement,
     getContainer: () => ({ querySelector: () => null }) as unknown as HTMLElement,
+    getCanvasContainer: () => canvasContainer as unknown as HTMLElement,
     project: (p: [number, number]) => ({ x: p[0], y: p[1] }),
     unproject: (p: [number, number]) => ({ lng: p[0], lat: p[1] }),
     triggerRepaint: () => {},
@@ -452,6 +455,17 @@ describe("MapboxEngine construction", () => {
     // A late style.load must not reach a destroyed engine.
     map.fire("style.load");
     assert.equal(engine.getRenderSurface(), null);
+  });
+  it("cancels a native selection drag from the canvas until destroyed", () => {
+    const { engine, map } = makeEngine();
+    const drag = () => {
+      const event = new Event("dragstart", { cancelable: true });
+      map.canvasContainer.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    assert.equal(drag(), true);
+    engine.destroy();
+    assert.equal(drag(), false);
   });
 });
 
