@@ -120,4 +120,43 @@ describe("groupKmlLayersBySourceFile", () => {
     assert.equal(created.size, 0);
     assert.equal(layer(x)?.groupId, undefined);
   });
+
+  it("leaves a file ungrouped when wrapping would reorder its layers", () => {
+    const path = "/data/overlays.kmz";
+    const below = addLayer("Static below", path);
+    const frame1 = addLayer("Frame 1", path);
+    const frame2 = addLayer("Frame 2", path);
+    const above = addLayer("Static above", path);
+    const frames = useAppStore.getState().addLayerGroup("Time overlay animation", [frame1, frame2]);
+    const orderBefore = useAppStore.getState().layers.map((l) => l.id);
+
+    const created = groupKmlLayersBySourceFile(new Map([[path, [below, frame1, frame2, above]]]));
+
+    assert.equal(created.size, 0);
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      orderBefore,
+    );
+    assert.equal(group(frames)?.parentId, undefined);
+  });
+
+  it("keeps draw order when the loose layers form one run", () => {
+    const path = "/data/overlays.kmz";
+    const frame1 = addLayer("Frame 1", path);
+    const frame2 = addLayer("Frame 2", path);
+    const staticA = addLayer("Static A", path);
+    const staticB = addLayer("Static B", path);
+    useAppStore.getState().addLayerGroup("Time overlay animation", [frame1, frame2]);
+    const orderBefore = useAppStore.getState().layers.map((l) => l.id);
+
+    const created = groupKmlLayersBySourceFile(
+      new Map([[path, [frame1, frame2, staticA, staticB]]]),
+    );
+
+    assert.equal(created.size, 1);
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      orderBefore,
+    );
+  });
 });

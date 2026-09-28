@@ -22,10 +22,15 @@ export function isKmlSourcePath(path: string): boolean {
  * single layer or a single group is left alone, since wrapping it would only
  * add a level. Other formats are left alone too.
  *
+ * A group keeps its own layers in one contiguous block, so a file whose loose
+ * layers sit on both sides of one of its groups (e.g. static overlays above and
+ * below a time-animation sequence) cannot be wrapped without changing which
+ * layer draws on top. Such a file is left ungrouped rather than reordered.
+ *
  * Call it after every layer and group of the import has been created.
  *
  * @param layerIdsBySource - Ids of every layer each source file added, keyed by
- *   the source path, in the order they were added.
+ *   the source path.
  * @returns The ids of the file groups created, keyed by source path.
  */
 export function groupKmlLayersBySourceFile(
@@ -35,17 +40,20 @@ export function groupKmlLayersBySourceFile(
   for (const [path, layerIds] of layerIdsBySource) {
     if (!isKmlSourcePath(path)) continue;
     const { layers, layerGroups } = useAppStore.getState();
-    const layerById = new Map(layers.map((layer) => [layer.id, layer]));
+    const sourceIds = new Set(layerIds);
     const groupById = new Map(layerGroups.map((group) => [group.id, group]));
 
     const topLayerIds: string[] = [];
     const topGroupIds: string[] = [];
-    for (const layerId of layerIds) {
-      const layer = layerById.get(layerId);
-      if (!layer) continue;
+    // Kind of each top-level item in store (draw) order, to check the loose
+    // layers form one run that a group can hold without reordering them.
+    const unitKinds: ("layer" | "group")[] = [];
+    for (const layer of layers) {
+      if (!sourceIds.has(layer.id)) continue;
       let groupId = layer.groupId && groupById.has(layer.groupId) ? layer.groupId : undefined;
       if (!groupId) {
-        topLayerIds.push(layerId);
+        topLayerIds.push(layer.id);
+        unitKinds.push("layer");
         continue;
       }
       // Walk to the outermost group; `visited` stops a malformed parent cycle.
@@ -56,10 +64,16 @@ export function groupKmlLayersBySourceFile(
         if (!parentId || !groupById.has(parentId)) break;
         groupId = parentId;
       }
-      if (!topGroupIds.includes(groupId)) topGroupIds.push(groupId);
+      if (!topGroupIds.includes(groupId)) {
+        topGroupIds.push(groupId);
+        unitKinds.push("group");
+      }
     }
 
     if (topLayerIds.length + topGroupIds.length < 2) continue;
+    const firstLoose = unitKinds.indexOf("layer");
+    const lastLoose = unitKinds.lastIndexOf("layer");
+    if (firstLoose >= 0 && lastLoose - firstLoose + 1 !== topLayerIds.length) continue;
     const store = useAppStore.getState();
     const fileGroupId = store.addLayerGroup(localFileName(path), topLayerIds);
     for (const groupId of topGroupIds) store.moveLayerGroupToGroup(groupId, fileGroupId);
