@@ -81,13 +81,13 @@ The deep-space starfield behind each globe comes from the
 
 ## Open data showcase
 
-Twenty projects built from public open data, spanning environmental health,
-human mobility, environmental change, natural hazards, and energy. Each is a
-single `.geolibre.json` file authored with the [Python package](python.md):
-choropleths, heatmaps, great-circle flows, 3D extrusions, before-and-after
-swipes, and a time slider, with click popups, hover tooltips, and a legend
-derived from each layer's symbology. **Click any map to open the live
-project.**
+Thirty projects built from public open data, spanning environmental health,
+human mobility, environmental change, natural hazards, energy, and the
+economy. Each is a single `.geolibre.json` file authored with the
+[Python package](python.md): choropleths, heatmaps, great-circle flows, 3D
+extrusions, before-and-after swipes, and time sliders, with click popups,
+hover tooltips, and a legend derived from each layer's symbology. **Click any
+map to open the live project.**
 
 <table>
   <tr>
@@ -169,6 +169,46 @@ project.**
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/world-cities-in-3d">World cities in 3D</a></b><br>Human footprint · Every metro of 1M+ people raised as a 3D spike in proportion to population<br><small>Data: Natural Earth</small></td>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/global-land-cover-2024">Global land cover 2024</a></b><br>Land use · 10 m land use / land cover streamed from an ArcGIS ImageServer<br><small>Data: Esri, Impact Observatory</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/submarine-internet-cables"><img src="https://assets.geolibre.app/images/submarine-internet-cables.webp" alt="GeoLibre map: Submarine internet cables"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-wind-turbines"><img src="https://assets.geolibre.app/images/us-wind-turbines.webp" alt="GeoLibre map: US wind turbines"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/submarine-internet-cables">Submarine internet cables</a></b><br>Connectivity · 730 cables in their own colors, with 1,900+ landing stations<br><small>Data: TeleGeography</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-wind-turbines">US wind turbines</a></b><br>Energy · 76,000 turbines colored by year online and sized by capacity<br><small>Data: US Wind Turbine Database (USGS, LBNL, ACP)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-tornado-tracks-1950-2024"><img src="https://assets.geolibre.app/images/us-tornado-tracks-1950-2024.webp" alt="GeoLibre map: US tornado tracks, 1950–2024"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/access-to-electricity"><img src="https://assets.geolibre.app/images/access-to-electricity.webp" alt="GeoLibre map: Access to electricity"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-tornado-tracks-1950-2024">US tornado tracks, 1950–2024</a></b><br>Natural hazards · (E)F1+ tracks by rating on a time slider that accumulates year by year<br><small>Data: NOAA Storm Prediction Center</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/access-to-electricity">Access to electricity</a></b><br>Development · Share of each country's population with electricity, latest year<br><small>Data: World Bank WDI</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/unesco-world-heritage-sites"><img src="https://assets.geolibre.app/images/unesco-world-heritage-sites.webp" alt="GeoLibre map: UNESCO World Heritage sites"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/seasonal-greenness-of-the-earth"><img src="https://assets.geolibre.app/images/seasonal-greenness-of-the-earth.webp" alt="GeoLibre map: Seasonal greenness of the Earth"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/unesco-world-heritage-sites">UNESCO World Heritage sites</a></b><br>Culture · All inscribed properties by category, with photos in the popups<br><small>Data: UNESCO World Heritage Centre</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/seasonal-greenness-of-the-earth">Seasonal greenness of the Earth</a></b><br>Ecology · Swipe between January and July vegetation index<br><small>Data: NASA GIBS (MODIS NDVI)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/global-population-density-2020"><img src="https://assets.geolibre.app/images/global-population-density-2020.webp" alt="GeoLibre map: Global population density 2020"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/nyc-traffic-crashes-2025"><img src="https://assets.geolibre.app/images/nyc-traffic-crashes-2025.webp" alt="GeoLibre map: NYC traffic crashes 2025"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/global-population-density-2020">Global population density 2020</a></b><br>Human footprint · People per km² on a gridded raster<br><small>Data: NASA SEDAC GPW v4</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/nyc-traffic-crashes-2025">NYC traffic crashes 2025</a></b><br>Road safety · Severity-weighted heatmap of injury crashes that resolves into points<br><small>Data: NYC Open Data</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/volcanoes-of-the-world"><img src="https://assets.geolibre.app/images/volcanoes-of-the-world.webp" alt="GeoLibre map: Volcanoes of the world"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/eu-regional-gdp-per-person"><img src="https://assets.geolibre.app/images/eu-regional-gdp-per-person.webp" alt="GeoLibre map: EU regional GDP per person"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/volcanoes-of-the-world">Volcanoes of the world</a></b><br>Natural hazards · Holocene volcanoes colored by last known eruption, labeled from zoom 5<br><small>Data: NOAA NCEI</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/eu-regional-gdp-per-person">EU regional GDP per person</a></b><br>Economy · GDP per inhabitant in PPS for 272 NUTS 2 regions, 2022<br><small>Data: Eurostat, GISCO</small></td>
   </tr>
 </table>
 
