@@ -81,13 +81,14 @@ The deep-space starfield behind each globe comes from the
 
 ## Open data showcase
 
-Sixty projects built from public open data, spanning environmental health,
-natural hazards, climate, mobility, cities, culture, energy, development, and
-the economy. Each is a single `.geolibre.json` file authored with the
-[Python package](python.md): choropleths, heatmaps, clusters, great-circle
-flows, 3D extrusions, before-and-after swipes, and time sliders, with click
-popups, hover tooltips, and a legend derived from each layer's symbology.
-**Click any map to open the live project.**
+One hundred projects built from public open data, spanning environmental
+health, natural hazards, climate, oceans and water, biodiversity, mobility,
+infrastructure, space, history, culture, food, energy, and the economy. Each is
+a single `.geolibre.json` file authored with the [Python package](python.md):
+choropleths, heatmaps, clusters, great-circle flows, 3D extrusions,
+before-and-after swipes, and time sliders, with click popups, hover tooltips,
+and a legend derived from each layer's symbology. **Click any map to open the
+live project.**
 
 [Browse the Official Demos collection](https://share.geolibre.app/giswqs/collections/official-demos){ .md-button .md-button--primary }
 
@@ -331,6 +332,166 @@ popups, hover tooltips, and a legend derived from each layer's symbology.
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/cereal-yield-by-country">Cereal yield by country</a></b><br>Agriculture · Cereal yield in tonnes per hectare, each country labeled<br><small>Data: World Bank (FAO)</small></td>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/solar-power-growth-2000-2024">Solar power growth, 2000–2024</a></b><br>Energy · Solar generation by country on a time slider: watch the circles grow<br><small>Data: Our World in Data</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/orca-sightings-on-inaturalist"><img src="https://assets.geolibre.app/images/orca-sightings-on-inaturalist.webp" alt="GeoLibre map: Orca sightings on iNaturalist"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/humpback-whales-by-month-2025"><img src="https://assets.geolibre.app/images/humpback-whales-by-month-2025.webp" alt="GeoLibre map: Humpback whales by month"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/orca-sightings-on-inaturalist">Orca sightings on iNaturalist</a></b><br>Biodiversity · 8,527 research-grade orca sightings; click any dot for its photo<br><small>Data: iNaturalist</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/humpback-whales-by-month-2025">Humpback whales by month</a></b><br>Biodiversity · Humpback records month by month, from feeding grounds to breeding grounds<br><small>Data: GBIF.org</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/noaa-ocean-buoys-and-stations"><img src="https://assets.geolibre.app/images/noaa-ocean-buoys-and-stations.webp" alt="GeoLibre map: NOAA ocean buoys and stations"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-streamflow-right-now"><img src="https://assets.geolibre.app/images/us-streamflow-right-now.webp" alt="GeoLibre map: US streamflow right now"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/noaa-ocean-buoys-and-stations">NOAA ocean buoys and stations</a></b><br>Oceans · 1,354 active buoys and stations by platform type<br><small>Data: NOAA NDBC</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-streamflow-right-now">US streamflow right now</a></b><br>Water · Latest discharge at about 8,600 USGS streamgages, clustered<br><small>Data: USGS Water Data</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/rivers-and-lakes-of-the-world"><img src="https://assets.geolibre.app/images/rivers-and-lakes-of-the-world.webp" alt="GeoLibre map: Rivers and lakes of the world"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/sea-surface-temperature-march-vs-september"><img src="https://assets.geolibre.app/images/sea-surface-temperature-march-vs-september.webp" alt="GeoLibre map: Sea surface temperature, March vs September"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/rivers-and-lakes-of-the-world">Rivers and lakes of the world</a></b><br>Water · Rivers sized by rank, with lakes and reservoirs, labeled as you zoom<br><small>Data: Natural Earth</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/sea-surface-temperature-march-vs-september">Sea surface temperature, March vs September</a></b><br>Oceans · Swipe between ocean temperatures in March and September<br><small>Data: NASA GIBS (GHRSST MUR)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/biodiversity-records-by-country"><img src="https://assets.geolibre.app/images/biodiversity-records-by-country.webp" alt="GeoLibre map: Biodiversity records by country"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/water-stress-by-country-3d"><img src="https://assets.geolibre.app/images/water-stress-by-country-3d.webp" alt="GeoLibre map: Water stress by country in 3D"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/biodiversity-records-by-country">Biodiversity records by country</a></b><br>Biodiversity · Four billion records: circle area is records, color is records per km²<br><small>Data: GBIF, World Bank</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/water-stress-by-country-3d">Water stress by country in 3D</a></b><br>Water · Freshwater withdrawals as a share of renewable supply, in 3D<br><small>Data: World Bank (FAO AQUASTAT)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/drinking-water-access-2000-2024"><img src="https://assets.geolibre.app/images/drinking-water-access-2000-2024.webp" alt="GeoLibre map: Drinking water access, 2000–2024"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/ocean-salinity-from-space"><img src="https://assets.geolibre.app/images/ocean-salinity-from-space.webp" alt="GeoLibre map: Ocean salinity from space"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/drinking-water-access-2000-2024">Drinking water access, 2000–2024</a></b><br>Water · Share of people with basic drinking water on a time slider<br><small>Data: World Bank (WHO/UNICEF JMP)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/ocean-salinity-from-space">Ocean salinity from space</a></b><br>Oceans · Sea surface salinity measured from orbit, on the globe<br><small>Data: NASA GIBS (SMAP)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/railways-of-the-world"><img src="https://assets.geolibre.app/images/railways-of-the-world.webp" alt="GeoLibre map: Railways of the world"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/london-underground-lines-and-stations"><img src="https://assets.geolibre.app/images/london-underground-lines-and-stations.webp" alt="GeoLibre map: London Underground lines and stations"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/railways-of-the-world">Railways of the world</a></b><br>Transport · About 925,000 km of railways, colored by continent<br><small>Data: Natural Earth</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/london-underground-lines-and-stations">London Underground lines and stations</a></b><br>Transport · 11 tube lines in their official colors and 272 stations with fare zones<br><small>Data: TfL Unified API</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-interstate-highways"><img src="https://assets.geolibre.app/images/us-interstate-highways.webp" alt="GeoLibre map: US Interstate highways"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/tallest-buildings-of-the-world-in-3d"><img src="https://assets.geolibre.app/images/tallest-buildings-of-the-world-in-3d.webp" alt="GeoLibre map: Tallest buildings of the world in 3D"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-interstate-highways">US Interstate highways</a></b><br>Transport · Interstates labeled along the line, colored by the numbering rule<br><small>Data: Natural Earth</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/tallest-buildings-of-the-world-in-3d">Tallest buildings of the world in 3D</a></b><br>Infrastructure · 733 towers of 150 m or more at true height, rising year by year<br><small>Data: Wikidata</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/orbital-launch-sites-1957-2025"><img src="https://assets.geolibre.app/images/orbital-launch-sites-1957-2025.webp" alt="GeoLibre map: Orbital launch sites, 1957–2025"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/airports-of-the-world"><img src="https://assets.geolibre.app/images/airports-of-the-world.webp" alt="GeoLibre map: Airports of the world"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/orbital-launch-sites-1957-2025">Orbital launch sites, 1957–2025</a></b><br>Space · Orbital launches per site and year from Sputnik to 2025<br><small>Data: GCAT (J. McDowell)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/airports-of-the-world">Airports of the world</a></b><br>Transport · 48,027 airports and airfields in clusters, colored by size<br><small>Data: OurAirports</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/longest-bridges-of-the-world"><img src="https://assets.geolibre.app/images/longest-bridges-of-the-world.webp" alt="GeoLibre map: Longest bridges of the world"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/road-traffic-deaths-2000-vs-2019"><img src="https://assets.geolibre.app/images/road-traffic-deaths-2000-vs-2019.webp" alt="GeoLibre map: Road traffic deaths, 2000 vs 2019"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/longest-bridges-of-the-world">Longest bridges of the world</a></b><br>Infrastructure · 224 bridges over 3 km sized by length, with photos<br><small>Data: Wikidata, Wikimedia Commons</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/road-traffic-deaths-2000-vs-2019">Road traffic deaths, 2000 vs 2019</a></b><br>Road safety · Road deaths per 100,000: swipe 2000 against 2019<br><small>Data: World Bank (WHO)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/astronomical-observatories"><img src="https://assets.geolibre.app/images/astronomical-observatories.webp" alt="GeoLibre map: Astronomical observatories"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/aurora-forecast"><img src="https://assets.geolibre.app/images/aurora-forecast.webp" alt="GeoLibre map: Aurora forecast"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/astronomical-observatories">Astronomical observatories</a></b><br>Space · 2,693 observatories as a heatmap that resolves into sites by elevation<br><small>Data: IAU Minor Planet Center</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/aurora-forecast">Aurora forecast</a></b><br>Space weather · The chance of seeing an aurora, a snapshot of the OVATION model<br><small>Data: NOAA SWPC</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/languages-of-the-world"><img src="https://assets.geolibre.app/images/languages-of-the-world.webp" alt="GeoLibre map: Languages of the world"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/castles-of-europe"><img src="https://assets.geolibre.app/images/castles-of-europe.webp" alt="GeoLibre map: Castles of Europe"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/languages-of-the-world">Languages of the world</a></b><br>Culture · 7,896 languages colored by family<br><small>Data: Glottolog</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/castles-of-europe">Castles of Europe</a></b><br>History · 22,033 castles in clusters; click one for its photo<br><small>Data: Wikidata, Wikimedia Commons</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/places-of-the-ancient-world"><img src="https://assets.geolibre.app/images/places-of-the-ancient-world.webp" alt="GeoLibre map: Places of the ancient world"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/roads-of-the-roman-empire"><img src="https://assets.geolibre.app/images/roads-of-the-roman-empire.webp" alt="GeoLibre map: Roads of the Roman Empire"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/places-of-the-ancient-world">Places of the ancient world</a></b><br>History · 31,314 ancient places colored by the period they are first attested<br><small>Data: Pleiades (ISAW, NYU)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/roads-of-the-roman-empire">Roads of the Roman Empire</a></b><br>History · About 300,000 km of Roman roads by how certain the route is<br><small>Data: Itiner-e</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/universities-by-founding-year"><img src="https://assets.geolibre.app/images/universities-by-founding-year.webp" alt="GeoLibre map: Universities by founding year"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/most-visited-museums"><img src="https://assets.geolibre.app/images/most-visited-museums.webp" alt="GeoLibre map: Most visited museums"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/universities-by-founding-year">Universities by founding year</a></b><br>Education · 8,674 universities build up from the Middle Ages to today<br><small>Data: Wikidata</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/most-visited-museums">Most visited museums</a></b><br>Culture · 116 museums with at least 1 million visitors a year, with photos<br><small>Data: Wikidata</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/great-cities-1000-1900"><img src="https://assets.geolibre.app/images/great-cities-1000-1900.webp" alt="GeoLibre map: Great cities, 1000–1900"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/shipwrecks-of-us-waters"><img src="https://assets.geolibre.app/images/shipwrecks-of-us-waters.webp" alt="GeoLibre map: Shipwrecks of US waters"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/great-cities-1000-1900">Great cities, 1000–1900</a></b><br>History · City populations century by century on a time slider<br><small>Data: Chandler via Reba et al. 2016</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/shipwrecks-of-us-waters">Shipwrecks of US waters</a></b><br>History · 11,234 charted wrecks as a heatmap that resolves into points<br><small>Data: NOAA ENC Direct</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/historical-battles-since-1000"><img src="https://assets.geolibre.app/images/historical-battles-since-1000.webp" alt="GeoLibre map: Historical battles since 1000"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/women-in-parliament-2000-vs-2025"><img src="https://assets.geolibre.app/images/women-in-parliament-2000-vs-2025.webp" alt="GeoLibre map: Women in parliament, 2000 vs 2025"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/historical-battles-since-1000">Historical battles since 1000</a></b><br>History · 7,254 battles, one quarter-century at a time<br><small>Data: Wikidata</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/women-in-parliament-2000-vs-2025">Women in parliament, 2000 vs 2025</a></b><br>Society · Share of parliament seats held by women: swipe 2000 against 2025<br><small>Data: World Bank (IPU)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/coffee-production-by-country"><img src="https://assets.geolibre.app/images/coffee-production-by-country.webp" alt="GeoLibre map: Coffee production by country"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/prevalence-of-undernourishment"><img src="https://assets.geolibre.app/images/prevalence-of-undernourishment.webp" alt="GeoLibre map: Prevalence of undernourishment"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/coffee-production-by-country">Coffee production by country</a></b><br>Food · Green coffee output in 2024 and its change since 2000<br><small>Data: FAO via Our World in Data</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/prevalence-of-undernourishment">Prevalence of undernourishment</a></b><br>Food security · Share of people who cannot meet their dietary energy needs<br><small>Data: World Bank (FAO)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/international-tourist-arrivals-3d"><img src="https://assets.geolibre.app/images/international-tourist-arrivals-3d.webp" alt="GeoLibre map: International tourist arrivals in 3D"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/international-migrant-corridors-2024"><img src="https://assets.geolibre.app/images/international-migrant-corridors-2024.webp" alt="GeoLibre map: International migrant corridors 2024"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/international-tourist-arrivals-3d">International tourist arrivals in 3D</a></b><br>Economy · 2019 tourist arrivals extruded by total and colored per resident<br><small>Data: World Bank (UN Tourism)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/international-migrant-corridors-2024">International migrant corridors 2024</a></b><br>Migration · The 250 largest country-to-country migrant corridors as great circles<br><small>Data: UN DESA</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/carbon-monoxide-from-fires-september-2024"><img src="https://assets.geolibre.app/images/carbon-monoxide-from-fires-september-2024.webp" alt="GeoLibre map: Carbon monoxide from fires"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/glacier-mass-balance-since-2015"><img src="https://assets.geolibre.app/images/glacier-mass-balance-since-2015.webp" alt="GeoLibre map: Glacier mass balance since 2015"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/carbon-monoxide-from-fires-september-2024">Carbon monoxide from fires</a></b><br>Air quality · Smoke plumes from Amazon and African fires, September 2024<br><small>Data: NASA GIBS (Terra MOPITT)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/glacier-mass-balance-since-2015">Glacier mass balance since 2015</a></b><br>Climate change · 186 measured glaciers and their average yearly ice loss<br><small>Data: WGMS</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/rice-production-1961-2024"><img src="https://assets.geolibre.app/images/rice-production-1961-2024.webp" alt="GeoLibre map: Rice production, 1961–2024"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/inflation-2000-2025"><img src="https://assets.geolibre.app/images/inflation-2000-2025.webp" alt="GeoLibre map: Inflation, 2000–2025"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/rice-production-1961-2024">Rice production, 1961–2024</a></b><br>Food · Rice harvests by country on a time slider<br><small>Data: FAO via Our World in Data</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/inflation-2000-2025">Inflation, 2000–2025</a></b><br>Economy · Consumer price inflation by country on a time slider<br><small>Data: World Bank (IMF)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/largest-source-of-fossil-co2"><img src="https://assets.geolibre.app/images/largest-source-of-fossil-co2.webp" alt="GeoLibre map: Largest source of fossil CO2"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-hail-reports-2025"><img src="https://assets.geolibre.app/images/us-hail-reports-2025.webp" alt="GeoLibre map: US hail reports 2025"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/largest-source-of-fossil-co2">Largest source of fossil CO2</a></b><br>Climate · The fuel behind most of each country's fossil CO2 emissions<br><small>Data: Global Carbon Budget via Our World in Data</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-hail-reports-2025">US hail reports 2025</a></b><br>Weather · 9,205 hail reports weighted by hailstone size<br><small>Data: NOAA NCEI Storm Events</small></td>
   </tr>
 </table>
 
