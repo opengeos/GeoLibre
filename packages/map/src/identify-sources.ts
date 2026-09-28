@@ -164,13 +164,38 @@ function isViteDevServer(): boolean {
   );
 }
 
-// Only the Vite dev server proxies GetFeatureInfo requests (to dodge CORS in
-// the browser). Production builds target the Tauri webview, which does not
-// enforce same-origin restrictions, so the raw URL is used directly. A WMS
-// server lacking CORS headers would fail if this app were ever hosted as a
-// plain web page; such a deployment would need its own proxy.
+/**
+ * Fetches one GetFeatureInfo URL outside the webview. The desktop app installs
+ * one backed by its native HTTP client, which ignores CORS and follows
+ * cross-scheme redirects the way tile requests already do.
+ */
+export type WmsIdentifyFetcher = (url: string, signal: AbortSignal) => Promise<Response>;
+
+let wmsIdentifyFetcher: WmsIdentifyFetcher | null = null;
+
+/**
+ * Routes WMS GetFeatureInfo requests through `fetcher` instead of the webview's
+ * `fetch`. Desktop webviews do enforce CORS (WebView2 serves the app from
+ * `http://tauri.localhost`), so a server without `Access-Control-Allow-Origin`,
+ * or one that redirects without it, fails there (#2712).
+ *
+ * @param fetcher The fetcher to use, or null to restore the webview `fetch`.
+ */
+export function setWmsIdentifyFetcher(fetcher: WmsIdentifyFetcher | null): void {
+  wmsIdentifyFetcher = fetcher;
+}
+
+// Without an installed fetcher, only the Vite dev server proxies GetFeatureInfo
+// requests (to dodge CORS in the browser). A hosted web build uses the raw URL,
+// so a WMS server lacking CORS headers needs the deployment's own proxy.
 function proxyWmsRequestUrl(url: string): string {
   return isViteDevServer() ? `${WMS_PROXY_PATH}?url=${encodeURIComponent(url)}` : url;
+}
+
+function fetchWmsIdentifyResponse(url: string, signal: AbortSignal): Promise<Response> {
+  return wmsIdentifyFetcher
+    ? wmsIdentifyFetcher(url, signal)
+    : fetch(proxyWmsRequestUrl(url), { signal });
 }
 
 function createWmsGetFeatureInfoUrl(
@@ -314,7 +339,7 @@ export async function fetchWmsIdentifyProperties(
     const targetUrl = createWmsGetFeatureInfoUrl(layer, lngLat, zoom, infoFormat);
     if (!targetUrl) return null;
 
-    const response = await fetch(proxyWmsRequestUrl(targetUrl), { signal });
+    const response = await fetchWmsIdentifyResponse(targetUrl, signal);
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? infoFormat;
     // Response.text() cannot take a signal, so bail out as soon as the read
     // resolves if the request was aborted meanwhile, skipping parsing.

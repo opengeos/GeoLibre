@@ -118,6 +118,13 @@ if (isTauri()) {
         console.error("[GeoLibre] Failed to install native sidecar fetch", error);
       });
   }
+  void import("./lib/wms-identify-fetch")
+    .then(({ installNativeWmsIdentifyFetch }) => installNativeWmsIdentifyFetch())
+    .catch((error: unknown) => {
+      // Identify would stay on the webview fetch, which fails on WMS servers
+      // without CORS headers (#2712), so surface the install failure.
+      console.error("[GeoLibre] Failed to install native WMS identify fetch", error);
+    });
   void import("./lib/geocoding-fetch")
     .then(({ installNativeGeocodingFetch }) => installNativeGeocodingFetch())
     .catch((error: unknown) => {
