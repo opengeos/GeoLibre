@@ -89,6 +89,8 @@ extrusions, before-and-after swipes, and time sliders, with click popups,
 hover tooltips, and a legend derived from each layer's symbology. **Click any
 map to open the live project.**
 
+[Browse the Official Demos collection](https://share.geolibre.app/giswqs/collections/official-demos){ .md-button .md-button--primary }
+
 <table>
   <tr>
     <td width="50%"><a href="https://share.geolibre.app/giswqs/us-adult-asthma-copd-by-county"><img src="https://assets.geolibre.app/images/us-adult-asthma-copd-by-county.webp" alt="GeoLibre map: US adult asthma &amp; COPD"></a></td>
@@ -211,8 +213,6 @@ map to open the live project.**
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/eu-regional-gdp-per-person">EU regional GDP per person</a></b><br>Economy · GDP per inhabitant in PPS for 272 NUTS 2 regions, 2022<br><small>Data: Eurostat, GISCO</small></td>
   </tr>
 </table>
-
-[Browse the Official Demos collection](https://share.geolibre.app/giswqs/collections/official-demos){ .md-button .md-button--primary }
 
 ## SQL Workspace
 
