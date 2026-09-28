@@ -45,8 +45,9 @@ export function groupKmlLayersBySourceFile(
 
     const topLayerIds: string[] = [];
     const topGroupIds: string[] = [];
-    // Kind of each top-level item in store (draw) order, to check the loose
-    // layers form one run that a group can hold without reordering them.
+    // Whether each layer, in store (draw) order, is loose or inside a group,
+    // to check the loose layers form one run a group can hold without
+    // reordering them.
     const unitKinds: ("layer" | "group")[] = [];
     for (const layer of layers) {
       if (!sourceIds.has(layer.id)) continue;
@@ -64,10 +65,10 @@ export function groupKmlLayersBySourceFile(
         if (!parentId || !groupById.has(parentId)) break;
         groupId = parentId;
       }
-      if (!topGroupIds.includes(groupId)) {
-        topGroupIds.push(groupId);
-        unitKinds.push("group");
-      }
+      if (!topGroupIds.includes(groupId)) topGroupIds.push(groupId);
+      // Recorded per layer, not once per group: a Folder's subtree can occur
+      // in more than one stretch, and each one would split the loose run.
+      unitKinds.push("group");
     }
 
     if (topLayerIds.length + topGroupIds.length < 2) continue;

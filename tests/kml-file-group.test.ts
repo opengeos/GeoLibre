@@ -159,4 +159,27 @@ describe("groupKmlLayersBySourceFile", () => {
       orderBefore,
     );
   });
+
+  it("counts every stretch of a Folder subtree when checking the loose run", () => {
+    const path = "/data/nested.kmz";
+    const outerLayer = addLayer("Outer layer", path);
+    const looseA = addLayer("Loose A", path);
+    const nestedLayer = addLayer("Nested layer", path);
+    const looseB = addLayer("Loose B", path);
+    const store = useAppStore.getState();
+    const outer = store.addLayerGroup("Outer", [outerLayer]);
+    const nested = store.addLayerGroup("Nested", [nestedLayer]);
+    store.moveLayerGroupToGroup(nested, outer);
+    const orderBefore = useAppStore.getState().layers.map((l) => l.id);
+
+    const created = groupKmlLayersBySourceFile(
+      new Map([[path, [outerLayer, looseA, nestedLayer, looseB]]]),
+    );
+
+    assert.equal(created.size, 0);
+    assert.deepEqual(
+      useAppStore.getState().layers.map((l) => l.id),
+      orderBefore,
+    );
+  });
 });
