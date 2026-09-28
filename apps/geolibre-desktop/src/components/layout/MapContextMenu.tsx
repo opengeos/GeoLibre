@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { ContextMenuGestureTracker, type ContextMenuRequest } from "../../lib/context-menu-gesture";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
 import { openExternalLink } from "../../lib/open-external";
 import {
@@ -127,10 +128,9 @@ export function MapContextMenu({
     if (!surface) return;
     const canvas = surface.getCanvas();
 
-    const handleContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
+    const openAt = ({ clientX, clientY }: ContextMenuRequest) => {
       const rect = canvas.getBoundingClientRect();
-      const coordinate = surface.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+      const coordinate = surface.unproject([clientX - rect.left, clientY - rect.top]);
       // Globe renderers can return no coordinate when the pointer is over
       // empty space beyond the planet. In that case there is no point for the
       // menu actions to operate on.
@@ -140,14 +140,43 @@ export function MapContextMenu({
         id: seqRef.current,
         lng: coordinate.lng,
         lat: coordinate.lat,
-        x: event.clientX,
-        y: event.clientY,
+        x: clientX,
+        y: clientY,
       });
       setOpen(true);
     };
+    // A right-button drag turns the camera, so it must not also open the menu
+    // (issue #2721). The tracker defers the menu to the button release and
+    // drops it when the pointer moved. Touch is left alone so a long-press
+    // still opens the menu while the finger is down.
+    const tracker = new ContextMenuGestureTracker(openAt);
 
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      tracker.pointerDown(event);
+    };
+    const handlePointerMove = (event: PointerEvent) => tracker.pointerMove(event);
+    const handlePointerUp = (event: PointerEvent) => tracker.pointerUp(event);
+    const handleCancel = () => tracker.cancel();
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      tracker.contextMenu(event);
+    };
+
+    // Move/up listen on the window in the capture phase: the drag leaves the
+    // canvas, and map engines may capture the pointer or stop propagation.
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointermove", handlePointerMove, true);
+    window.addEventListener("pointerup", handlePointerUp, true);
+    window.addEventListener("pointercancel", handleCancel, true);
+    window.addEventListener("blur", handleCancel);
     canvas.addEventListener("contextmenu", handleContextMenu);
     return () => {
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove, true);
+      window.removeEventListener("pointerup", handlePointerUp, true);
+      window.removeEventListener("pointercancel", handleCancel, true);
+      window.removeEventListener("blur", handleCancel);
       canvas.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [mapControllerRef, mapReadyGeneration]);
