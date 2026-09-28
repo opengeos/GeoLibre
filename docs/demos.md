@@ -81,13 +81,13 @@ The deep-space starfield behind each globe comes from the
 
 ## Open data showcase
 
-Thirty projects built from public open data, spanning environmental health,
-human mobility, environmental change, natural hazards, energy, and the
-economy. Each is a single `.geolibre.json` file authored with the
-[Python package](python.md): choropleths, heatmaps, great-circle flows, 3D
-extrusions, before-and-after swipes, and time sliders, with click popups,
-hover tooltips, and a legend derived from each layer's symbology. **Click any
-map to open the live project.**
+Sixty projects built from public open data, spanning environmental health,
+natural hazards, climate, mobility, cities, culture, energy, development, and
+the economy. Each is a single `.geolibre.json` file authored with the
+[Python package](python.md): choropleths, heatmaps, clusters, great-circle
+flows, 3D extrusions, before-and-after swipes, and time sliders, with click
+popups, hover tooltips, and a legend derived from each layer's symbology.
+**Click any map to open the live project.**
 
 [Browse the Official Demos collection](https://share.geolibre.app/giswqs/collections/official-demos){ .md-button .md-button--primary }
 
@@ -211,6 +211,126 @@ map to open the live project.**
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/volcanoes-of-the-world">Volcanoes of the world</a></b><br>Natural hazards · Holocene volcanoes colored by last known eruption, labeled from zoom 5<br><small>Data: NOAA NCEI</small></td>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/eu-regional-gdp-per-person">EU regional GDP per person</a></b><br>Economy · GDP per inhabitant in PPS for 272 NUTS 2 regions, 2022<br><small>Data: Eurostat, GISCO</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/global-tsunami-events"><img src="https://assets.geolibre.app/images/global-tsunami-events.webp" alt="GeoLibre map: Global tsunami events"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/nasa-global-landslide-catalog"><img src="https://assets.geolibre.app/images/nasa-global-landslide-catalog.webp" alt="GeoLibre map: NASA Global Landslide Catalog"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/global-tsunami-events">Global tsunami events</a></b><br>Natural hazards · 1,582 historical tsunamis sized by wave height and colored by deaths<br><small>Data: NOAA NCEI</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/nasa-global-landslide-catalog">NASA Global Landslide Catalog</a></b><br>Natural hazards · 11,033 landslides from 2007 to 2016, colored by trigger and sized by fatalities<br><small>Data: NASA</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-wildfire-perimeters-2025"><img src="https://assets.geolibre.app/images/us-wildfire-perimeters-2025.webp" alt="GeoLibre map: US wildfire perimeters 2025"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/sea-level-trends-at-tide-gauges"><img src="https://assets.geolibre.app/images/sea-level-trends-at-tide-gauges.webp" alt="GeoLibre map: Sea level trends at tide gauges"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-wildfire-perimeters-2025">US wildfire perimeters 2025</a></b><br>Wildfire · Fires of 1,000+ acres as circles by cause that become perimeters at zoom 6<br><small>Data: NIFC WFIGS</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/sea-level-trends-at-tide-gauges">Sea level trends at tide gauges</a></b><br>Climate change · Sea level rising or falling at 509 tide gauges, in mm per year<br><small>Data: NOAA CO-OPS</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/temperature-anomaly-by-country-1940-2025"><img src="https://assets.geolibre.app/images/temperature-anomaly-by-country-1940-2025.webp" alt="GeoLibre map: Temperature anomaly by country, 1940–2025"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/ocean-chlorophyll-from-space"><img src="https://assets.geolibre.app/images/ocean-chlorophyll-from-space.webp" alt="GeoLibre map: Ocean chlorophyll from space"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/temperature-anomaly-by-country-1940-2025">Temperature anomaly by country, 1940–2025</a></b><br>Climate change · Each country's yearly temperature anomaly on a time slider<br><small>Data: Our World in Data, ERA5</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/ocean-chlorophyll-from-space">Ocean chlorophyll from space</a></b><br>Oceans · Phytoplankton from a three-day NOAA-20/21 chlorophyll composite<br><small>Data: NASA GIBS (VIIRS)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/earth-from-space-in-one-day"><img src="https://assets.geolibre.app/images/earth-from-space-in-one-day.webp" alt="GeoLibre map: Earth from space in one day"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/northern-snow-cover-summer-vs-winter"><img src="https://assets.geolibre.app/images/northern-snow-cover-summer-vs-winter.webp" alt="GeoLibre map: Northern snow cover, summer vs winter"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/earth-from-space-in-one-day">Earth from space in one day</a></b><br>Earth observation · The whole planet in true color from one day of NOAA-20 orbits<br><small>Data: NASA GIBS (VIIRS)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/northern-snow-cover-summer-vs-winter">Northern snow cover, summer vs winter</a></b><br>Climate · Swipe between August and February snow cover across the Northern Hemisphere<br><small>Data: NASA GIBS (MODIS)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/meteorite-landings"><img src="https://assets.geolibre.app/images/meteorite-landings.webp" alt="GeoLibre map: Meteorite landings"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/major-earthquakes-since-1900"><img src="https://assets.geolibre.app/images/major-earthquakes-since-1900.webp" alt="GeoLibre map: Major earthquakes since 1900"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/meteorite-landings">Meteorite landings</a></b><br>Space · 32,047 meteorites sized by mass and split into observed falls and finds<br><small>Data: NASA, Meteoritical Society</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/major-earthquakes-since-1900">Major earthquakes since 1900</a></b><br>Natural hazards · Every M6+ quake since 1900 as a heatmap that resolves into points<br><small>Data: USGS ComCat</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/amtrak-routes-and-stations"><img src="https://assets.geolibre.app/images/amtrak-routes-and-stations.webp" alt="GeoLibre map: Amtrak routes and stations"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/nyc-subway-ridership-2025"><img src="https://assets.geolibre.app/images/nyc-subway-ridership-2025.webp" alt="GeoLibre map: NYC subway ridership 2025"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/amtrak-routes-and-stations">Amtrak routes and stations</a></b><br>Mobility · 49 Amtrak routes in their own colors, with stations and Thruway stops<br><small>Data: US DOT BTS NTAD</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/nyc-subway-ridership-2025">NYC subway ridership 2025</a></b><br>Mobility · 2025 entries at 426 subway stations as 3D columns<br><small>Data: MTA via data.ny.gov</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-ev-charging-stations"><img src="https://assets.geolibre.app/images/us-ev-charging-stations.webp" alt="GeoLibre map: US EV charging stations"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/manhattan-street-trees"><img src="https://assets.geolibre.app/images/manhattan-street-trees.webp" alt="GeoLibre map: Manhattan street trees"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-ev-charging-stations">US EV charging stations</a></b><br>Mobility · 87,644 EV chargers as a heatmap that resolves into stations by level<br><small>Data: DOE AFDC</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/manhattan-street-trees">Manhattan street trees</a></b><br>Cities · 62,427 street trees by species and trunk size, aligned to the street grid<br><small>Data: NYC Street Tree Census</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-presidential-election-2024-by-county"><img src="https://assets.geolibre.app/images/us-presidential-election-2024-by-county.webp" alt="GeoLibre map: US presidential election 2024 by county"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-drug-overdose-deaths-by-state"><img src="https://assets.geolibre.app/images/us-drug-overdose-deaths-by-state.webp" alt="GeoLibre map: US drug overdose deaths by state"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-presidential-election-2024-by-county">US presidential election 2024 by county</a></b><br>Society · Vote margin in 3,116 counties, in percentage points<br><small>Data: tonmcg county results, US Census</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-drug-overdose-deaths-by-state">US drug overdose deaths by state</a></b><br>Health · Overdose deaths per 100,000 by state, 2015–2025, on a time slider<br><small>Data: CDC VSRR</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/lighthouses-of-the-world"><img src="https://assets.geolibre.app/images/lighthouses-of-the-world.webp" alt="GeoLibre map: Lighthouses of the world"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/nobel-laureates-birthplaces"><img src="https://assets.geolibre.app/images/nobel-laureates-birthplaces.webp" alt="GeoLibre map: Nobel laureates birthplaces"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/lighthouses-of-the-world">Lighthouses of the world</a></b><br>Culture · 9,567 lighthouses in clusters that split into towers colored by year built<br><small>Data: Wikidata</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/nobel-laureates-birthplaces">Nobel laureates birthplaces</a></b><br>Culture · Birthplaces of 990 Nobel laureates, colored by prize<br><small>Data: Wikidata</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/world-ports"><img src="https://assets.geolibre.app/images/world-ports.webp" alt="GeoLibre map: World ports"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/sister-cities-of-major-world-cities"><img src="https://assets.geolibre.app/images/sister-cities-of-major-world-cities.webp" alt="GeoLibre map: Sister cities of major world cities"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/world-ports">World ports</a></b><br>Mobility · 2,945 world ports colored by harbor size<br><small>Data: NGA World Port Index</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/sister-cities-of-major-world-cities">Sister cities of major world cities</a></b><br>Society · 1,108 sister-city links as great circles, colored by distance<br><small>Data: Wikidata</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/malaria-incidence"><img src="https://assets.geolibre.app/images/malaria-incidence.webp" alt="GeoLibre map: Malaria incidence"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/human-development-index-1990-2023"><img src="https://assets.geolibre.app/images/human-development-index-1990-2023.webp" alt="GeoLibre map: Human Development Index, 1990–2023"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/malaria-incidence">Malaria incidence</a></b><br>Health · Malaria cases per 1,000 people at risk in 102 countries<br><small>Data: WHO Global Health Observatory</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/human-development-index-1990-2023">Human Development Index, 1990–2023</a></b><br>Development · Three decades of human development on a yearly time slider<br><small>Data: UNDP via Our World in Data</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/renewable-electricity-2000-vs-2024"><img src="https://assets.geolibre.app/images/renewable-electricity-2000-vs-2024.webp" alt="GeoLibre map: Renewable electricity, 2000 vs 2024"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/internet-users-3d"><img src="https://assets.geolibre.app/images/internet-users-3d.webp" alt="GeoLibre map: Internet users in 3D"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/renewable-electricity-2000-vs-2024">Renewable electricity, 2000 vs 2024</a></b><br>Energy · Share of power from renewables: swipe 2000 against 2024<br><small>Data: Our World in Data (Ember, EI)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/internet-users-3d">Internet users in 3D</a></b><br>Connectivity · Share of people online, extruded in 3D by country<br><small>Data: World Bank (ITU)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/fertility-rate-vs-replacement-level"><img src="https://assets.geolibre.app/images/fertility-rate-vs-replacement-level.webp" alt="GeoLibre map: Fertility rate vs replacement level"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/urban-population-of-the-world"><img src="https://assets.geolibre.app/images/urban-population-of-the-world.webp" alt="GeoLibre map: Urban population of the world"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/fertility-rate-vs-replacement-level">Fertility rate vs replacement level</a></b><br>Population · Births per woman, blue below and red above the replacement level of 2.1<br><small>Data: World Bank</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/urban-population-of-the-world">Urban population of the world</a></b><br>Development · Circle area is urban population, color is the share of people in cities<br><small>Data: World Bank</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/eu-regional-unemployment"><img src="https://assets.geolibre.app/images/eu-regional-unemployment.webp" alt="GeoLibre map: EU regional unemployment"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/military-expenditure"><img src="https://assets.geolibre.app/images/military-expenditure.webp" alt="GeoLibre map: Military expenditure"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/eu-regional-unemployment">EU regional unemployment</a></b><br>Economy · Unemployment in 286 European regions, 2025<br><small>Data: Eurostat, GISCO</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/military-expenditure">Military expenditure</a></b><br>Economy · Circle area is spending in US dollars, color is the share of GDP<br><small>Data: World Bank (SIPRI)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/cereal-yield-by-country"><img src="https://assets.geolibre.app/images/cereal-yield-by-country.webp" alt="GeoLibre map: Cereal yield by country"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/solar-power-growth-2000-2024"><img src="https://assets.geolibre.app/images/solar-power-growth-2000-2024.webp" alt="GeoLibre map: Solar power growth, 2000–2024"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/cereal-yield-by-country">Cereal yield by country</a></b><br>Agriculture · Cereal yield in tonnes per hectare, each country labeled<br><small>Data: World Bank (FAO)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/solar-power-growth-2000-2024">Solar power growth, 2000–2024</a></b><br>Energy · Solar generation by country on a time slider: watch the circles grow<br><small>Data: Our World in Data</small></td>
   </tr>
 </table>
 
