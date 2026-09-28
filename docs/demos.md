@@ -30,7 +30,7 @@ full-quality video.
 
 [![Animation of Manhattan buildings appearing by construction year as the Time Slider advances from 1850 to 2025](https://assets.geolibre.app/demos/nyc-buildings-gif.gif)](https://assets.geolibre.app/demos/nyc-buildings.webm)
 
-[Open the live project](https://share.geolibre.app/giswqs/nyc-buildings-and-subways){ .md-button .md-button--primary }
+[Open the live project](https://share.geolibre.app/giswqs/manhattan-buildings-through-time){ .md-button .md-button--primary }
 
 ## Planetary basemaps
 
@@ -81,7 +81,7 @@ The deep-space starfield behind each globe comes from the
 
 ## Open data showcase
 
-Eleven projects built from public open data, spanning environmental health,
+Twelve projects built from public open data, spanning environmental health,
 human mobility, and environmental change. Each is a single `.geolibre.json`
 file authored with the [Python package](python.md): choropleths, heatmaps,
 great-circle flows, 3D extrusions, before-and-after swipes, and a time slider,
@@ -131,11 +131,11 @@ symbology. **Click any map to open the live project.**
   </tr>
   <tr>
     <td width="50%"><a href="https://share.geolibre.app/giswqs/dengue-incidence-1990-2024"><img src="https://assets.geolibre.app/images/dengue-incidence-1990-2024.webp" alt="GeoLibre map: Dengue incidence, 1990–2024"></a></td>
-    <td width="50%"></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/manhattan-buildings-through-time"><img src="https://assets.geolibre.app/images/manhattan-buildings-through-time.webp" alt="GeoLibre map: Manhattan buildings through time"></a></td>
   </tr>
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/dengue-incidence-1990-2024">Dengue incidence, 1990–2024</a></b><br>Environmental health · Time-slider 3D choropleth of reported dengue per 100k people<br><small>Data: OpenDengue</small></td>
-    <td></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/manhattan-buildings-through-time">Manhattan buildings through time</a></b><br>Urban growth · Buildings extruded at true height and replayed by construction year, 1850–2025, under the subway<br><small>Data: NYC Open Data, MTA</small></td>
   </tr>
 </table>
 
