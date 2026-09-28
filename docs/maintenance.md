@@ -890,6 +890,15 @@ output when a build actually runs. Rebuild, or delete the stale directory.
 
 ## Generated files and cross-file sync
 
+- **The open data gallery.** [`gallery.md`](gallery.md) and the "Open data
+  showcase" teaser on [`demos.md`](demos.md) (between the
+  `<!-- demo-gallery-teaser -->` markers) are generated from
+  `scripts/demo-gallery.json`: the themes, the featured demos, and one entry per
+  demo (slug, title, theme tag, caption, data credit). Edit the JSON, run
+  `npm run gallery`, and commit both files; `npm run gallery:check` (part of
+  `npm run ci`) fails on drift. Each entry's screenshot must already be at
+  `https://assets.geolibre.app/images/<slug>.webp` (opengeos/geolibre-assets),
+  and its `theme` should match the tag on its share.geolibre.app project.
 - **Processing tool metadata.** Names, descriptions, group labels, parameter
   labels/help and select options live in registries with no i18n access, so the
   dialogs resolve them through

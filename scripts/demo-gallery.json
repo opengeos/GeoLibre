@@ -1,0 +1,965 @@
+{
+  "$comment": "Source of truth for docs/gallery.md. Edit here, then run: node scripts/gen-demo-gallery.mjs",
+  "owner": "giswqs",
+  "collection": "https://share.geolibre.app/giswqs/collections/official-demos",
+  "themes": [
+    {
+      "tag": "health",
+      "title": "Health"
+    },
+    {
+      "tag": "natural-hazards",
+      "title": "Natural hazards"
+    },
+    {
+      "tag": "climate",
+      "title": "Climate"
+    },
+    {
+      "tag": "oceans-water",
+      "title": "Oceans and water"
+    },
+    {
+      "tag": "nature-land",
+      "title": "Nature and land"
+    },
+    {
+      "tag": "transport",
+      "title": "Transport and mobility"
+    },
+    {
+      "tag": "cities-infrastructure",
+      "title": "Cities and infrastructure"
+    },
+    {
+      "tag": "energy",
+      "title": "Energy"
+    },
+    {
+      "tag": "space",
+      "title": "Space and Earth observation"
+    },
+    {
+      "tag": "history-culture",
+      "title": "History and culture"
+    },
+    {
+      "tag": "society-economy",
+      "title": "Society and economy"
+    },
+    {
+      "tag": "food-agriculture",
+      "title": "Food and agriculture"
+    }
+  ],
+  "featured": [
+    "manhattan-buildings-through-time",
+    "the-global-flight-network",
+    "us-tornado-tracks-1950-2024",
+    "the-vanishing-aral-sea",
+    "roads-of-the-roman-empire",
+    "aurora-forecast"
+  ],
+  "demos": [
+    {
+      "number": 1,
+      "slug": "us-adult-asthma-copd-by-county",
+      "title": "US adult asthma & COPD",
+      "theme": "health",
+      "topic": "Environmental health",
+      "caption": "County choropleth of age-adjusted adult asthma, with COPD one toggle away",
+      "source": "CDC PLACES"
+    },
+    {
+      "number": 2,
+      "slug": "ground-level-no2-1997-vs-2011",
+      "title": "Ground-level NO₂, 1997 vs 2011",
+      "theme": "health",
+      "topic": "Air pollution",
+      "caption": "Swipe between two periods of satellite-derived surface NO₂",
+      "source": "NASA SEDAC via GIBS"
+    },
+    {
+      "number": 3,
+      "slug": "global-wildfires-last-7-days",
+      "title": "Global wildfires, last 7 days",
+      "theme": "natural-hazards",
+      "topic": "Wildfires",
+      "caption": "Fire-radiative-power heatmap that resolves into 0.1° fire cells",
+      "source": "NASA FIRMS (VIIRS)"
+    },
+    {
+      "number": 4,
+      "slug": "the-global-flight-network",
+      "title": "The global flight network",
+      "theme": "transport",
+      "topic": "Human mobility",
+      "caption": "The 4,000 busiest air corridors as great circles, hubs sized by routes",
+      "source": "OpenFlights"
+    },
+    {
+      "number": 5,
+      "slug": "nyc-citi-bike-live-availability",
+      "title": "NYC Citi Bike availability",
+      "theme": "transport",
+      "topic": "Human mobility",
+      "caption": "Every station colored by fill level and sized by capacity",
+      "source": "Citi Bike GBFS feed"
+    },
+    {
+      "number": 6,
+      "slug": "earth-at-night-2012-vs-2016",
+      "title": "Earth at night, 2012 vs 2016",
+      "theme": "cities-infrastructure",
+      "topic": "Human footprint",
+      "caption": "Swipe between two years of night lights",
+      "source": "NASA Black Marble"
+    },
+    {
+      "number": 7,
+      "slug": "amazon-deforestation-frontier-rondonia",
+      "title": "Amazon deforestation frontier",
+      "theme": "nature-land",
+      "topic": "Environmental change",
+      "caption": "Tree-cover loss by year, 2001–2024, over Rondônia",
+      "source": "Hansen / UMD Global Forest Change"
+    },
+    {
+      "number": 8,
+      "slug": "the-vanishing-aral-sea",
+      "title": "The vanishing Aral Sea",
+      "theme": "oceans-water",
+      "topic": "Environmental change",
+      "caption": "Swipe between water occurrence and 1984–2021 transitions",
+      "source": "EC JRC Global Surface Water"
+    },
+    {
+      "number": 9,
+      "slug": "co2-emissions-per-person-3d",
+      "title": "CO₂ emissions per person",
+      "theme": "climate",
+      "topic": "Climate",
+      "caption": "Countries colored and extruded in 3D by per-capita emissions",
+      "source": "Our World in Data"
+    },
+    {
+      "number": 10,
+      "slug": "tropical-cyclones-ocean-heat",
+      "title": "Tropical cyclones & ocean heat",
+      "theme": "natural-hazards",
+      "topic": "Climate hazards",
+      "caption": "Three seasons of storm tracks by category over SST anomalies",
+      "source": "NOAA IBTrACS, NASA GHRSST"
+    },
+    {
+      "number": 11,
+      "slug": "dengue-incidence-1990-2024",
+      "title": "Dengue incidence, 1990–2024",
+      "theme": "health",
+      "topic": "Environmental health",
+      "caption": "Time-slider 3D choropleth of reported dengue per 100k people",
+      "source": "OpenDengue"
+    },
+    {
+      "number": 12,
+      "slug": "manhattan-buildings-through-time",
+      "title": "Manhattan buildings through time",
+      "theme": "cities-infrastructure",
+      "topic": "Urban growth",
+      "caption": "Buildings extruded at true height and replayed by construction year, 1850–2025, under the subway",
+      "source": "NYC Open Data, MTA"
+    },
+    {
+      "number": 13,
+      "slug": "earthquakes-last-30-days",
+      "title": "Earthquakes, last 30 days",
+      "theme": "natural-hazards",
+      "topic": "Natural hazards",
+      "caption": "Every M2.5+ quake sized by magnitude and colored by depth, over plate boundaries",
+      "source": "USGS, PB2002"
+    },
+    {
+      "number": 14,
+      "slug": "global-power-plants-by-fuel",
+      "title": "Global power plants by fuel",
+      "theme": "energy",
+      "topic": "Energy",
+      "caption": "35,000 plants colored by primary fuel and sized by capacity",
+      "source": "WRI Global Power Plant Database"
+    },
+    {
+      "number": 15,
+      "slug": "us-drought-conditions",
+      "title": "US drought conditions",
+      "theme": "natural-hazards",
+      "topic": "Environmental change",
+      "caption": "This week's drought categories, from abnormally dry to exceptional",
+      "source": "U.S. Drought Monitor"
+    },
+    {
+      "number": 16,
+      "slug": "refugee-flows-2024",
+      "title": "Refugee flows 2024",
+      "theme": "society-economy",
+      "topic": "Human mobility",
+      "caption": "The 400 largest origin-to-asylum flows as great circles, hosts sized by people hosted",
+      "source": "UNHCR Refugee Data Finder"
+    },
+    {
+      "number": 17,
+      "slug": "life-expectancy-1953-2023",
+      "title": "Life expectancy, 1953–2023",
+      "theme": "health",
+      "topic": "Health",
+      "caption": "Time-slider choropleth of life expectancy at birth in five-year steps",
+      "source": "Our World in Data"
+    },
+    {
+      "number": 18,
+      "slug": "arctic-sea-ice-march-vs-september",
+      "title": "Arctic sea ice, March vs September",
+      "theme": "climate",
+      "topic": "Climate change",
+      "caption": "Swipe between the winter peak and the summer low of sea ice concentration",
+      "source": "NASA GIBS (AMSR2)"
+    },
+    {
+      "number": 19,
+      "slug": "world-cities-in-3d",
+      "title": "World cities in 3D",
+      "theme": "cities-infrastructure",
+      "topic": "Human footprint",
+      "caption": "Every metro of 1M+ people raised as a 3D spike in proportion to population",
+      "source": "Natural Earth"
+    },
+    {
+      "number": 20,
+      "slug": "global-land-cover-2024",
+      "title": "Global land cover 2024",
+      "theme": "nature-land",
+      "topic": "Land use",
+      "caption": "10 m land use / land cover streamed from an ArcGIS ImageServer",
+      "source": "Esri, Impact Observatory"
+    },
+    {
+      "number": 21,
+      "slug": "submarine-internet-cables",
+      "title": "Submarine internet cables",
+      "theme": "cities-infrastructure",
+      "topic": "Connectivity",
+      "caption": "730 cables in their own colors, with 1,900+ landing stations",
+      "source": "TeleGeography"
+    },
+    {
+      "number": 22,
+      "slug": "us-wind-turbines",
+      "title": "US wind turbines",
+      "theme": "energy",
+      "topic": "Energy",
+      "caption": "76,000 turbines colored by year online and sized by capacity",
+      "source": "US Wind Turbine Database (USGS, LBNL, ACP)"
+    },
+    {
+      "number": 23,
+      "slug": "us-tornado-tracks-1950-2024",
+      "title": "US tornado tracks, 1950–2024",
+      "theme": "natural-hazards",
+      "topic": "Natural hazards",
+      "caption": "(E)F1+ tracks by rating on a time slider that accumulates year by year",
+      "source": "NOAA Storm Prediction Center"
+    },
+    {
+      "number": 24,
+      "slug": "access-to-electricity",
+      "title": "Access to electricity",
+      "theme": "energy",
+      "topic": "Development",
+      "caption": "Share of each country's population with electricity, latest year",
+      "source": "World Bank WDI"
+    },
+    {
+      "number": 25,
+      "slug": "unesco-world-heritage-sites",
+      "title": "UNESCO World Heritage sites",
+      "theme": "history-culture",
+      "topic": "Culture",
+      "caption": "All inscribed properties by category, with photos in the popups",
+      "source": "UNESCO World Heritage Centre"
+    },
+    {
+      "number": 26,
+      "slug": "seasonal-greenness-of-the-earth",
+      "title": "Seasonal greenness of the Earth",
+      "theme": "nature-land",
+      "topic": "Ecology",
+      "caption": "Swipe between January and July vegetation index",
+      "source": "NASA GIBS (MODIS NDVI)"
+    },
+    {
+      "number": 27,
+      "slug": "global-population-density-2020",
+      "title": "Global population density 2020",
+      "theme": "cities-infrastructure",
+      "topic": "Human footprint",
+      "caption": "People per km² on a gridded raster",
+      "source": "NASA SEDAC GPW v4"
+    },
+    {
+      "number": 28,
+      "slug": "nyc-traffic-crashes-2025",
+      "title": "NYC traffic crashes 2025",
+      "theme": "transport",
+      "topic": "Road safety",
+      "caption": "Severity-weighted heatmap of injury crashes that resolves into points",
+      "source": "NYC Open Data"
+    },
+    {
+      "number": 29,
+      "slug": "volcanoes-of-the-world",
+      "title": "Volcanoes of the world",
+      "theme": "natural-hazards",
+      "topic": "Natural hazards",
+      "caption": "Holocene volcanoes colored by last known eruption, labeled from zoom 5",
+      "source": "NOAA NCEI"
+    },
+    {
+      "number": 30,
+      "slug": "eu-regional-gdp-per-person",
+      "title": "EU regional GDP per person",
+      "theme": "society-economy",
+      "topic": "Economy",
+      "caption": "GDP per inhabitant in PPS for 272 NUTS 2 regions, 2022",
+      "source": "Eurostat, GISCO"
+    },
+    {
+      "number": 31,
+      "slug": "global-tsunami-events",
+      "title": "Global tsunami events",
+      "theme": "natural-hazards",
+      "topic": "Natural hazards",
+      "caption": "1,582 historical tsunamis sized by wave height and colored by deaths",
+      "source": "NOAA NCEI"
+    },
+    {
+      "number": 32,
+      "slug": "nasa-global-landslide-catalog",
+      "title": "NASA Global Landslide Catalog",
+      "theme": "natural-hazards",
+      "topic": "Natural hazards",
+      "caption": "11,033 landslides from 2007 to 2016, colored by trigger and sized by fatalities",
+      "source": "NASA"
+    },
+    {
+      "number": 33,
+      "slug": "us-wildfire-perimeters-2025",
+      "title": "US wildfire perimeters 2025",
+      "theme": "natural-hazards",
+      "topic": "Wildfire",
+      "caption": "Fires of 1,000+ acres as circles by cause that become perimeters at zoom 6",
+      "source": "NIFC WFIGS"
+    },
+    {
+      "number": 34,
+      "slug": "sea-level-trends-at-tide-gauges",
+      "title": "Sea level trends at tide gauges",
+      "theme": "climate",
+      "topic": "Climate change",
+      "caption": "Sea level rising or falling at 509 tide gauges, in mm per year",
+      "source": "NOAA CO-OPS"
+    },
+    {
+      "number": 35,
+      "slug": "temperature-anomaly-by-country-1940-2025",
+      "title": "Temperature anomaly by country, 1940–2025",
+      "theme": "climate",
+      "topic": "Climate change",
+      "caption": "Each country's yearly temperature anomaly on a time slider",
+      "source": "Our World in Data, ERA5"
+    },
+    {
+      "number": 36,
+      "slug": "ocean-chlorophyll-from-space",
+      "title": "Ocean chlorophyll from space",
+      "theme": "oceans-water",
+      "topic": "Oceans",
+      "caption": "Phytoplankton from a three-day NOAA-20/21 chlorophyll composite",
+      "source": "NASA GIBS (VIIRS)"
+    },
+    {
+      "number": 37,
+      "slug": "earth-from-space-in-one-day",
+      "title": "Earth from space in one day",
+      "theme": "space",
+      "topic": "Earth observation",
+      "caption": "The whole planet in true color from one day of NOAA-20 orbits",
+      "source": "NASA GIBS (VIIRS)"
+    },
+    {
+      "number": 38,
+      "slug": "northern-snow-cover-summer-vs-winter",
+      "title": "Northern snow cover, summer vs winter",
+      "theme": "climate",
+      "topic": "Climate",
+      "caption": "Swipe between August and February snow cover across the Northern Hemisphere",
+      "source": "NASA GIBS (MODIS)"
+    },
+    {
+      "number": 39,
+      "slug": "meteorite-landings",
+      "title": "Meteorite landings",
+      "theme": "space",
+      "topic": "Space",
+      "caption": "32,047 meteorites sized by mass and split into observed falls and finds",
+      "source": "NASA, Meteoritical Society"
+    },
+    {
+      "number": 40,
+      "slug": "major-earthquakes-since-1900",
+      "title": "Major earthquakes since 1900",
+      "theme": "natural-hazards",
+      "topic": "Natural hazards",
+      "caption": "Every M6+ quake since 1900 as a heatmap that resolves into points",
+      "source": "USGS ComCat"
+    },
+    {
+      "number": 41,
+      "slug": "amtrak-routes-and-stations",
+      "title": "Amtrak routes and stations",
+      "theme": "transport",
+      "topic": "Mobility",
+      "caption": "49 Amtrak routes in their own colors, with stations and Thruway stops",
+      "source": "US DOT BTS NTAD"
+    },
+    {
+      "number": 42,
+      "slug": "nyc-subway-ridership-2025",
+      "title": "NYC subway ridership 2025",
+      "theme": "transport",
+      "topic": "Mobility",
+      "caption": "2025 entries at 426 subway stations as 3D columns",
+      "source": "MTA via data.ny.gov"
+    },
+    {
+      "number": 43,
+      "slug": "us-ev-charging-stations",
+      "title": "US EV charging stations",
+      "theme": "transport",
+      "topic": "Mobility",
+      "caption": "87,644 EV chargers as a heatmap that resolves into stations by level",
+      "source": "DOE AFDC"
+    },
+    {
+      "number": 44,
+      "slug": "manhattan-street-trees",
+      "title": "Manhattan street trees",
+      "theme": "nature-land",
+      "topic": "Cities",
+      "caption": "62,427 street trees by species and trunk size, aligned to the street grid",
+      "source": "NYC Street Tree Census"
+    },
+    {
+      "number": 45,
+      "slug": "us-presidential-election-2024-by-county",
+      "title": "US presidential election 2024 by county",
+      "theme": "society-economy",
+      "topic": "Society",
+      "caption": "Vote margin in 3,116 counties, in percentage points",
+      "source": "tonmcg county results, US Census"
+    },
+    {
+      "number": 46,
+      "slug": "us-drug-overdose-deaths-by-state",
+      "title": "US drug overdose deaths by state",
+      "theme": "health",
+      "topic": "Health",
+      "caption": "Overdose deaths per 100,000 by state, 2015–2025, on a time slider",
+      "source": "CDC VSRR"
+    },
+    {
+      "number": 47,
+      "slug": "lighthouses-of-the-world",
+      "title": "Lighthouses of the world",
+      "theme": "history-culture",
+      "topic": "Culture",
+      "caption": "9,567 lighthouses in clusters that split into towers colored by year built",
+      "source": "Wikidata"
+    },
+    {
+      "number": 48,
+      "slug": "nobel-laureates-birthplaces",
+      "title": "Nobel laureates birthplaces",
+      "theme": "history-culture",
+      "topic": "Culture",
+      "caption": "Birthplaces of 990 Nobel laureates, colored by prize",
+      "source": "Wikidata"
+    },
+    {
+      "number": 49,
+      "slug": "world-ports",
+      "title": "World ports",
+      "theme": "transport",
+      "topic": "Mobility",
+      "caption": "2,945 world ports colored by harbor size",
+      "source": "NGA World Port Index"
+    },
+    {
+      "number": 50,
+      "slug": "sister-cities-of-major-world-cities",
+      "title": "Sister cities of major world cities",
+      "theme": "society-economy",
+      "topic": "Society",
+      "caption": "1,108 sister-city links as great circles, colored by distance",
+      "source": "Wikidata"
+    },
+    {
+      "number": 51,
+      "slug": "malaria-incidence",
+      "title": "Malaria incidence",
+      "theme": "health",
+      "topic": "Health",
+      "caption": "Malaria cases per 1,000 people at risk in 102 countries",
+      "source": "WHO Global Health Observatory"
+    },
+    {
+      "number": 52,
+      "slug": "human-development-index-1990-2023",
+      "title": "Human Development Index, 1990–2023",
+      "theme": "society-economy",
+      "topic": "Development",
+      "caption": "Three decades of human development on a yearly time slider",
+      "source": "UNDP via Our World in Data"
+    },
+    {
+      "number": 53,
+      "slug": "renewable-electricity-2000-vs-2024",
+      "title": "Renewable electricity, 2000 vs 2024",
+      "theme": "energy",
+      "topic": "Energy",
+      "caption": "Share of power from renewables: swipe 2000 against 2024",
+      "source": "Our World in Data (Ember, EI)"
+    },
+    {
+      "number": 54,
+      "slug": "internet-users-3d",
+      "title": "Internet users in 3D",
+      "theme": "society-economy",
+      "topic": "Connectivity",
+      "caption": "Share of people online, extruded in 3D by country",
+      "source": "World Bank (ITU)"
+    },
+    {
+      "number": 55,
+      "slug": "fertility-rate-vs-replacement-level",
+      "title": "Fertility rate vs replacement level",
+      "theme": "society-economy",
+      "topic": "Population",
+      "caption": "Births per woman, blue below and red above the replacement level of 2.1",
+      "source": "World Bank"
+    },
+    {
+      "number": 56,
+      "slug": "urban-population-of-the-world",
+      "title": "Urban population of the world",
+      "theme": "cities-infrastructure",
+      "topic": "Development",
+      "caption": "Circle area is urban population, color is the share of people in cities",
+      "source": "World Bank"
+    },
+    {
+      "number": 57,
+      "slug": "eu-regional-unemployment",
+      "title": "EU regional unemployment",
+      "theme": "society-economy",
+      "topic": "Economy",
+      "caption": "Unemployment in 286 European regions, 2025",
+      "source": "Eurostat, GISCO"
+    },
+    {
+      "number": 58,
+      "slug": "military-expenditure",
+      "title": "Military expenditure",
+      "theme": "society-economy",
+      "topic": "Economy",
+      "caption": "Circle area is spending in US dollars, color is the share of GDP",
+      "source": "World Bank (SIPRI)"
+    },
+    {
+      "number": 59,
+      "slug": "cereal-yield-by-country",
+      "title": "Cereal yield by country",
+      "theme": "food-agriculture",
+      "topic": "Agriculture",
+      "caption": "Cereal yield in tonnes per hectare, each country labeled",
+      "source": "World Bank (FAO)"
+    },
+    {
+      "number": 60,
+      "slug": "solar-power-growth-2000-2024",
+      "title": "Solar power growth, 2000–2024",
+      "theme": "energy",
+      "topic": "Energy",
+      "caption": "Solar generation by country on a time slider: watch the circles grow",
+      "source": "Our World in Data"
+    },
+    {
+      "number": 61,
+      "slug": "orca-sightings-on-inaturalist",
+      "title": "Orca sightings on iNaturalist",
+      "theme": "nature-land",
+      "topic": "Biodiversity",
+      "caption": "8,527 research-grade orca sightings; click any dot for its photo",
+      "source": "iNaturalist"
+    },
+    {
+      "number": 62,
+      "slug": "humpback-whales-by-month-2025",
+      "title": "Humpback whales by month",
+      "theme": "nature-land",
+      "topic": "Biodiversity",
+      "caption": "Humpback records month by month, from feeding grounds to breeding grounds",
+      "source": "GBIF.org"
+    },
+    {
+      "number": 63,
+      "slug": "noaa-ocean-buoys-and-stations",
+      "title": "NOAA ocean buoys and stations",
+      "theme": "oceans-water",
+      "topic": "Oceans",
+      "caption": "1,354 active buoys and stations by platform type",
+      "source": "NOAA NDBC"
+    },
+    {
+      "number": 64,
+      "slug": "us-streamflow-right-now",
+      "title": "US streamflow right now",
+      "theme": "oceans-water",
+      "topic": "Water",
+      "caption": "Latest discharge at about 8,600 USGS streamgages, clustered",
+      "source": "USGS Water Data"
+    },
+    {
+      "number": 65,
+      "slug": "rivers-and-lakes-of-the-world",
+      "title": "Rivers and lakes of the world",
+      "theme": "oceans-water",
+      "topic": "Water",
+      "caption": "Rivers sized by rank, with lakes and reservoirs, labeled as you zoom",
+      "source": "Natural Earth"
+    },
+    {
+      "number": 66,
+      "slug": "sea-surface-temperature-march-vs-september",
+      "title": "Sea surface temperature, March vs September",
+      "theme": "oceans-water",
+      "topic": "Oceans",
+      "caption": "Swipe between ocean temperatures in March and September",
+      "source": "NASA GIBS (GHRSST MUR)"
+    },
+    {
+      "number": 67,
+      "slug": "biodiversity-records-by-country",
+      "title": "Biodiversity records by country",
+      "theme": "nature-land",
+      "topic": "Biodiversity",
+      "caption": "Four billion records: circle area is records, color is records per km²",
+      "source": "GBIF, World Bank"
+    },
+    {
+      "number": 68,
+      "slug": "water-stress-by-country-3d",
+      "title": "Water stress by country in 3D",
+      "theme": "oceans-water",
+      "topic": "Water",
+      "caption": "Freshwater withdrawals as a share of renewable supply, in 3D",
+      "source": "World Bank (FAO AQUASTAT)"
+    },
+    {
+      "number": 69,
+      "slug": "drinking-water-access-2000-2024",
+      "title": "Drinking water access, 2000–2024",
+      "theme": "oceans-water",
+      "topic": "Water",
+      "caption": "Share of people with basic drinking water on a time slider",
+      "source": "World Bank (WHO/UNICEF JMP)"
+    },
+    {
+      "number": 70,
+      "slug": "ocean-salinity-from-space",
+      "title": "Ocean salinity from space",
+      "theme": "oceans-water",
+      "topic": "Oceans",
+      "caption": "Sea surface salinity measured from orbit, on the globe",
+      "source": "NASA GIBS (SMAP)"
+    },
+    {
+      "number": 71,
+      "slug": "railways-of-the-world",
+      "title": "Railways of the world",
+      "theme": "transport",
+      "topic": "Transport",
+      "caption": "About 925,000 km of railways, colored by continent",
+      "source": "Natural Earth"
+    },
+    {
+      "number": 72,
+      "slug": "london-underground-lines-and-stations",
+      "title": "London Underground lines and stations",
+      "theme": "transport",
+      "topic": "Transport",
+      "caption": "11 tube lines in their official colors and 272 stations with fare zones",
+      "source": "TfL Unified API"
+    },
+    {
+      "number": 73,
+      "slug": "us-interstate-highways",
+      "title": "US Interstate highways",
+      "theme": "transport",
+      "topic": "Transport",
+      "caption": "Interstates labeled along the line, colored by the numbering rule",
+      "source": "Natural Earth"
+    },
+    {
+      "number": 74,
+      "slug": "tallest-buildings-of-the-world-in-3d",
+      "title": "Tallest buildings of the world in 3D",
+      "theme": "cities-infrastructure",
+      "topic": "Infrastructure",
+      "caption": "733 towers of 150 m or more at true height, rising year by year",
+      "source": "Wikidata"
+    },
+    {
+      "number": 75,
+      "slug": "orbital-launch-sites-1957-2025",
+      "title": "Orbital launch sites, 1957–2025",
+      "theme": "space",
+      "topic": "Space",
+      "caption": "Orbital launches per site and year from Sputnik to 2025",
+      "source": "GCAT (J. McDowell)"
+    },
+    {
+      "number": 76,
+      "slug": "airports-of-the-world",
+      "title": "Airports of the world",
+      "theme": "transport",
+      "topic": "Transport",
+      "caption": "48,027 airports and airfields in clusters, colored by size",
+      "source": "OurAirports"
+    },
+    {
+      "number": 77,
+      "slug": "longest-bridges-of-the-world",
+      "title": "Longest bridges of the world",
+      "theme": "cities-infrastructure",
+      "topic": "Infrastructure",
+      "caption": "224 bridges over 3 km sized by length, with photos",
+      "source": "Wikidata, Wikimedia Commons"
+    },
+    {
+      "number": 78,
+      "slug": "road-traffic-deaths-2000-vs-2019",
+      "title": "Road traffic deaths, 2000 vs 2019",
+      "theme": "health",
+      "topic": "Road safety",
+      "caption": "Road deaths per 100,000: swipe 2000 against 2019",
+      "source": "World Bank (WHO)"
+    },
+    {
+      "number": 79,
+      "slug": "astronomical-observatories",
+      "title": "Astronomical observatories",
+      "theme": "space",
+      "topic": "Space",
+      "caption": "2,693 observatories as a heatmap that resolves into sites by elevation",
+      "source": "IAU Minor Planet Center"
+    },
+    {
+      "number": 80,
+      "slug": "aurora-forecast",
+      "title": "Aurora forecast",
+      "theme": "space",
+      "topic": "Space weather",
+      "caption": "The chance of seeing an aurora, a snapshot of the OVATION model",
+      "source": "NOAA SWPC"
+    },
+    {
+      "number": 81,
+      "slug": "languages-of-the-world",
+      "title": "Languages of the world",
+      "theme": "history-culture",
+      "topic": "Culture",
+      "caption": "7,896 languages colored by family",
+      "source": "Glottolog"
+    },
+    {
+      "number": 82,
+      "slug": "castles-of-europe",
+      "title": "Castles of Europe",
+      "theme": "history-culture",
+      "topic": "History",
+      "caption": "22,033 castles in clusters; click one for its photo",
+      "source": "Wikidata, Wikimedia Commons"
+    },
+    {
+      "number": 83,
+      "slug": "places-of-the-ancient-world",
+      "title": "Places of the ancient world",
+      "theme": "history-culture",
+      "topic": "History",
+      "caption": "31,314 ancient places colored by the period they are first attested",
+      "source": "Pleiades (ISAW, NYU)"
+    },
+    {
+      "number": 84,
+      "slug": "roads-of-the-roman-empire",
+      "title": "Roads of the Roman Empire",
+      "theme": "history-culture",
+      "topic": "History",
+      "caption": "About 300,000 km of Roman roads by how certain the route is",
+      "source": "Itiner-e"
+    },
+    {
+      "number": 85,
+      "slug": "universities-by-founding-year",
+      "title": "Universities by founding year",
+      "theme": "history-culture",
+      "topic": "Education",
+      "caption": "8,674 universities build up from the Middle Ages to today",
+      "source": "Wikidata"
+    },
+    {
+      "number": 86,
+      "slug": "most-visited-museums",
+      "title": "Most visited museums",
+      "theme": "history-culture",
+      "topic": "Culture",
+      "caption": "116 museums with at least 1 million visitors a year, with photos",
+      "source": "Wikidata"
+    },
+    {
+      "number": 87,
+      "slug": "great-cities-1000-1900",
+      "title": "Great cities, 1000–1900",
+      "theme": "history-culture",
+      "topic": "History",
+      "caption": "City populations century by century on a time slider",
+      "source": "Chandler via Reba et al. 2016"
+    },
+    {
+      "number": 88,
+      "slug": "shipwrecks-of-us-waters",
+      "title": "Shipwrecks of US waters",
+      "theme": "history-culture",
+      "topic": "History",
+      "caption": "11,234 charted wrecks as a heatmap that resolves into points",
+      "source": "NOAA ENC Direct"
+    },
+    {
+      "number": 89,
+      "slug": "historical-battles-since-1000",
+      "title": "Historical battles since 1000",
+      "theme": "history-culture",
+      "topic": "History",
+      "caption": "7,254 battles, one quarter-century at a time",
+      "source": "Wikidata"
+    },
+    {
+      "number": 90,
+      "slug": "women-in-parliament-2000-vs-2025",
+      "title": "Women in parliament, 2000 vs 2025",
+      "theme": "society-economy",
+      "topic": "Society",
+      "caption": "Share of parliament seats held by women: swipe 2000 against 2025",
+      "source": "World Bank (IPU)"
+    },
+    {
+      "number": 91,
+      "slug": "coffee-production-by-country",
+      "title": "Coffee production by country",
+      "theme": "food-agriculture",
+      "topic": "Food",
+      "caption": "Green coffee output in 2024 and its change since 2000",
+      "source": "FAO via Our World in Data"
+    },
+    {
+      "number": 92,
+      "slug": "prevalence-of-undernourishment",
+      "title": "Prevalence of undernourishment",
+      "theme": "food-agriculture",
+      "topic": "Food security",
+      "caption": "Share of people who cannot meet their dietary energy needs",
+      "source": "World Bank (FAO)"
+    },
+    {
+      "number": 93,
+      "slug": "international-tourist-arrivals-3d",
+      "title": "International tourist arrivals in 3D",
+      "theme": "society-economy",
+      "topic": "Economy",
+      "caption": "2019 tourist arrivals extruded by total and colored per resident",
+      "source": "World Bank (UN Tourism)"
+    },
+    {
+      "number": 94,
+      "slug": "international-migrant-corridors-2024",
+      "title": "International migrant corridors 2024",
+      "theme": "society-economy",
+      "topic": "Migration",
+      "caption": "The 250 largest country-to-country migrant corridors as great circles",
+      "source": "UN DESA"
+    },
+    {
+      "number": 95,
+      "slug": "carbon-monoxide-from-fires-september-2024",
+      "title": "Carbon monoxide from fires",
+      "theme": "climate",
+      "topic": "Air quality",
+      "caption": "Smoke plumes from Amazon and African fires, September 2024",
+      "source": "NASA GIBS (Terra MOPITT)"
+    },
+    {
+      "number": 96,
+      "slug": "glacier-mass-balance-since-2015",
+      "title": "Glacier mass balance since 2015",
+      "theme": "climate",
+      "topic": "Climate change",
+      "caption": "186 measured glaciers and their average yearly ice loss",
+      "source": "WGMS"
+    },
+    {
+      "number": 97,
+      "slug": "rice-production-1961-2024",
+      "title": "Rice production, 1961–2024",
+      "theme": "food-agriculture",
+      "topic": "Food",
+      "caption": "Rice harvests by country on a time slider",
+      "source": "FAO via Our World in Data"
+    },
+    {
+      "number": 98,
+      "slug": "inflation-2000-2025",
+      "title": "Inflation, 2000–2025",
+      "theme": "society-economy",
+      "topic": "Economy",
+      "caption": "Consumer price inflation by country on a time slider",
+      "source": "World Bank (IMF)"
+    },
+    {
+      "number": 99,
+      "slug": "largest-source-of-fossil-co2",
+      "title": "Largest source of fossil CO2",
+      "theme": "climate",
+      "topic": "Climate",
+      "caption": "The fuel behind most of each country's fossil CO2 emissions",
+      "source": "Global Carbon Budget via Our World in Data"
+    },
+    {
+      "number": 100,
+      "slug": "us-hail-reports-2025",
+      "title": "US hail reports 2025",
+      "theme": "natural-hazards",
+      "topic": "Weather",
+      "caption": "9,205 hail reports weighted by hailstone size",
+      "source": "NOAA NCEI Storm Events"
+    }
+  ]
+}

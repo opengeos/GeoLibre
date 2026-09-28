@@ -43,6 +43,7 @@ nav:
   - Features: features.md
   - Comparison: comparison.md
   - Demos: demos.md
+  - Gallery: gallery.md
   - Downloads: downloads.md
   - Sponsor: sponsor.md
   # Keep this deployment-relative: production serves at /, while PR previews
