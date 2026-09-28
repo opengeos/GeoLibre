@@ -159,6 +159,12 @@ export function MapContextMenu({
     const handlePointerUp = (event: PointerEvent) => tracker.pointerUp(event);
     const handlePointerCancel = (event: PointerEvent) => tracker.cancel(event.pointerId);
     const handleBlur = () => tracker.cancel();
+    // The menu key and Shift+F10 open the menu from the keyboard; forget any
+    // just-released right-drag so it cannot swallow that request. Other keys
+    // are ignored so holding Shift during a drag keeps the gesture.
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) tracker.cancel();
+    };
     const handleContextMenu = (event: MouseEvent) => {
       event.preventDefault();
       tracker.contextMenu(event);
@@ -171,6 +177,7 @@ export function MapContextMenu({
     window.addEventListener("pointerup", handlePointerUp, true);
     window.addEventListener("pointercancel", handlePointerCancel, true);
     window.addEventListener("blur", handleBlur);
+    window.addEventListener("keydown", handleKeyDown, true);
     canvas.addEventListener("contextmenu", handleContextMenu);
     return () => {
       canvas.removeEventListener("pointerdown", handlePointerDown);
@@ -178,6 +185,7 @@ export function MapContextMenu({
       window.removeEventListener("pointerup", handlePointerUp, true);
       window.removeEventListener("pointercancel", handlePointerCancel, true);
       window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("keydown", handleKeyDown, true);
       canvas.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [mapControllerRef, mapReadyGeneration]);
