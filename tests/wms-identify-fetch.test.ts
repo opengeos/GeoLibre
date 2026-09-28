@@ -69,26 +69,28 @@ describe("native WMS identify fetcher", () => {
     assert.deepEqual(result?.properties, { v: 3 });
   });
 
-  it("reads an HTML body as HTML even when plain text was requested", async () => {
-    setWmsIdentifyFetcher(
-      createNativeWmsIdentifyFetcher(async () =>
-        bytes("<!DOCTYPE html><html><body><p>Pixel  12</p></body></html>"),
-      ),
-    );
-    const original = globalThis.DOMParser;
-    globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
-    try {
-      const result = await fetchWmsIdentifyProperties(
-        wmsLayer({ infoFormat: "text/plain" }),
-        [0, 0],
-        5,
-        new AbortController().signal,
+  for (const infoFormat of ["text/plain", "application/json"]) {
+    it(`reads an HTML body as HTML when ${infoFormat} was requested`, async () => {
+      setWmsIdentifyFetcher(
+        createNativeWmsIdentifyFetcher(async () =>
+          bytes("<!DOCTYPE html><html><body><p>Pixel  12</p></body></html>"),
+        ),
       );
-      assert.deepEqual(result, { properties: { result: "Pixel 12" } });
-    } finally {
-      globalThis.DOMParser = original;
-    }
-  });
+      const original = globalThis.DOMParser;
+      globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
+      try {
+        const result = await fetchWmsIdentifyProperties(
+          wmsLayer({ infoFormat }),
+          [0, 0],
+          5,
+          new AbortController().signal,
+        );
+        assert.deepEqual(result, { properties: { result: "Pixel 12" } });
+      } finally {
+        globalThis.DOMParser = original;
+      }
+    });
+  }
 
   it("turns a native status error into a response and keeps probing formats", async () => {
     const formats: string[] = [];

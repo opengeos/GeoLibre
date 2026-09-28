@@ -24,9 +24,10 @@ function abortError(): DOMException {
  */
 export function createNativeWmsIdentifyFetcher(fetchBytes: FetchBytes): WmsIdentifyFetcher {
   return (url, signal) => {
-    if (signal.aborted) return Promise.reject(abortError());
+    // Reject with the signal's own reason, as the native ArcGIS fetch does.
+    if (signal.aborted) return Promise.reject(signal.reason ?? abortError());
     return new Promise<Response>((resolve, reject) => {
-      const onAbort = () => reject(abortError());
+      const onAbort = () => reject(signal.reason ?? abortError());
       signal.addEventListener("abort", onAbort, { once: true });
       fetchBytes(url)
         .then(

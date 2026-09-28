@@ -354,11 +354,16 @@ export async function fetchWmsIdentifyProperties(
     }
 
     const trimmed = text.trim();
+    // The desktop's native fetcher returns no headers, so contentType is just
+    // the format we asked for; tell an HTML body apart by its markup, or it
+    // would be misparsed as JSON or reach the popup with its tags.
+    const headerlessHtml = !contentTypeHeader && /^<(!doctype\s+html|html|body)\b/i.test(trimmed);
     const looksLikeJson =
-      contentType.includes("json") ||
-      infoFormat.includes("json") ||
-      trimmed.startsWith("{") ||
-      trimmed.startsWith("[");
+      !headerlessHtml &&
+      (contentType.includes("json") ||
+        infoFormat.includes("json") ||
+        trimmed.startsWith("{") ||
+        trimmed.startsWith("["));
 
     // Only run the XML exception check on bodies that are not JSON, so a JSON
     // response that merely mentions "ServiceException" is not misread as one.
@@ -380,13 +385,7 @@ export async function fetchWmsIdentifyProperties(
       continue;
     }
 
-    // The desktop's native fetcher returns no headers, so contentType is just
-    // the format we asked for; tell an HTML body apart from plain text by its
-    // markup, or it would reach the popup with its tags.
-    const looksLikeHtml =
-      contentType.includes("html") ||
-      (!contentTypeHeader && /^<(!doctype\s+html|html|body)\b/i.test(trimmed));
-    if (looksLikeHtml) {
+    if (headerlessHtml || contentType.includes("html")) {
       const resultText = textFromHtml(text);
       if (resultText) return { properties: { result: resultText } };
       continue;
