@@ -92,6 +92,33 @@ describe("native WMS identify fetcher", () => {
     });
   }
 
+  it("keeps probing after an unexpected HTML page", async () => {
+    setWmsIdentifyFetcher(
+      createNativeWmsIdentifyFetcher(async (url) => {
+        const format = new URL(url).searchParams.get("INFO_FORMAT");
+        if (format === "application/json") return bytes("<html><body>Server error</body></html>");
+        return bytes(
+          format === "text/plain"
+            ? "value 7"
+            : "<ServiceExceptionReport>no html</ServiceExceptionReport>",
+        );
+      }),
+    );
+    const original = globalThis.DOMParser;
+    globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
+    try {
+      const result = await fetchWmsIdentifyProperties(
+        wmsLayer(),
+        [0, 0],
+        5,
+        new AbortController().signal,
+      );
+      assert.deepEqual(result, { properties: { result: "value 7" } });
+    } finally {
+      globalThis.DOMParser = original;
+    }
+  });
+
   it("turns a native status error into a response and keeps probing formats", async () => {
     const formats: string[] = [];
     setWmsIdentifyFetcher(

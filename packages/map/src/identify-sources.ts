@@ -387,7 +387,13 @@ export async function fetchWmsIdentifyProperties(
 
     if (headerlessHtml || contentType.includes("html")) {
       const resultText = textFromHtml(text);
-      if (resultText) return { properties: { result: resultText } };
+      if (!resultText) continue;
+      // HTML we did not ask for (often a server error page) is kept as a
+      // fallback so the remaining info formats are still tried.
+      if (!headerlessHtml || infoFormat.includes("html")) {
+        return { properties: { result: resultText } };
+      }
+      fallbackText = fallbackText || resultText;
       continue;
     }
 
