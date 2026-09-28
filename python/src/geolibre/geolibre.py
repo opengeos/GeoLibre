@@ -3279,8 +3279,8 @@ class Map(anywidget.AnyWidget):
         *,
         position: str | None = None,
         group_by_layer: bool | None = None,
-        visible: bool = True,
-        collapsed: bool = False,
+        visible: bool | None = None,
+        collapsed: bool | None = None,
     ) -> None:
         """Show the map legend, the panel behind the app's Controls -> Legend.
 
@@ -3296,8 +3296,10 @@ class Map(anywidget.AnyWidget):
                 ``"bottom-right"``; keeps the current corner when omitted.
             group_by_layer: Group each layer's classes under a layer heading;
                 keeps the current setting when omitted.
-            visible: Whether the on-map panel is open.
-            collapsed: Whether the open panel is collapsed to its header bar.
+            visible: Whether the on-map panel is open; keeps the current state
+                when omitted, and opens it when the map has no legend yet.
+            collapsed: Whether the open panel is collapsed to its header bar;
+                keeps the current state when omitted.
 
         Raises:
             ValueError: If ``position`` is not a map corner.

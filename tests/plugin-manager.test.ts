@@ -1492,6 +1492,39 @@ describe("PluginManager renderer compatibility", () => {
     assert.equal(scoped!.addMapControl(control), true);
     assert.equal(mounted, 1);
   });
+  it("rejects restored panels after a renderer handoff or re-registration", async () => {
+    const manager = new PluginManager();
+    const scopes: GeoLibreAppAPI[] = [];
+    let renderer: "maplibre" | "cesium" = "maplibre";
+    manager.register(
+      testPlugin({
+        engines: ["maplibre", "cesium"],
+        applyProjectState: (value) => {
+          scopes.push(value);
+        },
+      }),
+    );
+    const api = {
+      getMapRenderer: () => renderer,
+      addMapControl: () => true,
+    } as unknown as GeoLibreAppAPI;
+    const state = {
+      manifestUrls: [],
+      activePluginIds: [],
+      mapControlPositions: {},
+      settings: { "url-loader": { legend: {} } },
+    };
+    const control = { onAdd: () => null as never, onRemove: () => {} };
+    manager.restoreProjectState(state, api);
+    await Promise.resolve();
+    renderer = "cesium";
+    assert.equal(scopes[0].addMapControl(control), false);
+    renderer = "maplibre";
+    manager.restoreProjectState(state, api);
+    await Promise.resolve();
+    manager.register(testPlugin({ engines: ["maplibre", "cesium"] }));
+    assert.equal(scopes[1].addMapControl(control), false);
+  });
   it("rejects restored panels once a later restore supersedes the scope", async () => {
     const manager = new PluginManager();
     const scopes: GeoLibreAppAPI[] = [];

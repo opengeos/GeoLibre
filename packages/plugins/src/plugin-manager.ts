@@ -30,6 +30,10 @@ export class PluginManager {
     restorePass?: number,
   ): GeoLibreAppAPI {
     const generation = this.activationGenerations.get(id);
+    // A later renderer handoff or re-registration invalidates the scope even
+    // before the next restore bumps the pass.
+    const plugin = this.plugins.get(id);
+    const renderer = app.getMapRenderer?.() ?? "maplibre";
     // Settings and restore callbacks may register UI synchronously before
     // activation. Retained callbacks need a live activation after this turn,
     // except a project restore's: an inactive plugin may still mount the
@@ -43,6 +47,8 @@ export class PluginManager {
     return scopeAppToPlugin(app, id, {
       ...options,
       canAddControl: () =>
+        this.plugins.get(id) === plugin &&
+        (app.getMapRenderer?.() ?? "maplibre") === renderer &&
         this.supportsEngine(id, app) &&
         this.activationGenerations.get(id) === generation &&
         (this.activating.has(id) ||

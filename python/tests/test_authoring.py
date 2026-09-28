@@ -452,6 +452,15 @@ def test_set_map_legend_keeps_saved_customizations(proj):
     assert "panelVisible" not in legend
 
 
+def test_set_map_legend_keeps_the_panel_state_when_omitted(proj):
+    authoring.set_map_legend(proj, collapsed=True)
+    authoring.set_map_legend(proj, visible=False)
+    legend = authoring.set_map_legend(proj, "Renamed")
+    assert legend["title"] == "Renamed"
+    assert "panelVisible" not in legend
+    assert legend["panelCollapsed"] is True
+
+
 def test_set_map_legend_rejects_a_bad_position(proj):
     with pytest.raises(ValueError, match="position must be one of"):
         authoring.set_map_legend(proj, position="middle")

@@ -1128,8 +1128,8 @@ def set_map_legend(
     *,
     position: str | None = None,
     group_by_layer: bool | None = None,
-    visible: bool = True,
-    collapsed: bool = False,
+    visible: bool | None = None,
+    collapsed: bool | None = None,
 ) -> dict[str, Any]:
     """Show the map legend, the panel behind the app's Controls -> Legend.
 
@@ -1148,8 +1148,10 @@ def set_map_legend(
             current one (the app default is ``"top-left"``) when omitted.
         group_by_layer: Group each layer's classes under a layer heading. Keeps
             the current setting (the app default groups) when omitted.
-        visible: Whether the on-map panel is open.
+        visible: Whether the on-map panel is open. Keeps the current state
+            when omitted, and opens it when the project has no legend yet.
         collapsed: Whether the open panel is collapsed to its header bar.
+            Keeps the current state when omitted.
 
     Returns:
         The project's legend config.
@@ -1160,6 +1162,8 @@ def set_map_legend(
     if position is not None and position not in CONTROL_POSITIONS:
         raise ValueError(f"position must be one of {sorted(CONTROL_POSITIONS)}, got {position!r}")
     existing = project.get("legend")
+    if visible is None and not isinstance(existing, dict):
+        visible = True
     legend: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
     legend.setdefault("title", "Legend")
     legend.setdefault("groupByLayer", True)
@@ -1173,6 +1177,8 @@ def set_map_legend(
         legend["panelPosition"] = position
     # The app persists these two flags only when set (normalizeLegendConfig).
     for key, flag in (("panelVisible", visible), ("panelCollapsed", collapsed)):
+        if flag is None:
+            continue
         if flag:
             legend[key] = True
         else:

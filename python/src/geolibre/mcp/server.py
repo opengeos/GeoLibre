@@ -1110,8 +1110,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         title: str | None = None,
         position: str | None = None,
         group_by_layer: bool | None = None,
-        visible: bool = True,
-        collapsed: bool = False,
+        visible: bool | None = None,
+        collapsed: bool | None = None,
     ) -> dict[str, Any]:
         """Show the map legend, built from the layers' own symbology.
 
@@ -1128,8 +1128,10 @@ def build_server(workspace: Workspace) -> MCPServer:
                 `bottom-right`. Keeps the current corner when omitted.
             group_by_layer: Group each layer's classes under a layer heading.
                 Keeps the current setting when omitted.
-            visible: Whether the on-map panel is open.
+            visible: Whether the on-map panel is open. Keeps the current
+                state when omitted; a new legend opens.
             collapsed: Whether the open panel is collapsed to its header.
+                Keeps the current state when omitted.
 
         Returns:
             The project's map legend config.

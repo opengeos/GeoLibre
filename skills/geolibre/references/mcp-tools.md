@@ -147,7 +147,7 @@ set_map_layout(path, rows, cols, view_kinds=None, sync_view=True)
 set_view(path, center=None, zoom=None, bearing=None, pitch=None, bbox=None)
 set_basemap(path, basemap)
 set_map_legend(path, title=None, position=None, group_by_layer=None,
-               visible=True, collapsed=False)
+               visible=None, collapsed=None)
 add_legend(path, title=None, legend_dict=None, labels=None, colors=None,
            builtin=None, position="bottom-left", shape="square")
 add_colorbar(path, colormap="viridis", vmin=0.0, vmax=1.0, label="", units="",
