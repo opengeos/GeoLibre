@@ -127,8 +127,13 @@ export class ContextMenuGestureTracker {
   /**
    * Drops the held gesture without opening anything, e.g. on `pointercancel`
    * or when the window loses focus mid-press.
+   *
+   * @param pointerId - Only cancel when the tracked gesture belongs to this
+   *   pointer, so a cancelled unrelated pointer leaves it alone. Omit it (window
+   *   blur) to cancel unconditionally.
    */
-  cancel(): void {
+  cancel(pointerId?: number): void {
+    if (pointerId !== undefined && this.gesture?.pointerId !== pointerId) return;
     this.gesture = null;
   }
 

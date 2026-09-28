@@ -157,7 +157,8 @@ export function MapContextMenu({
     };
     const handlePointerMove = (event: PointerEvent) => tracker.pointerMove(event);
     const handlePointerUp = (event: PointerEvent) => tracker.pointerUp(event);
-    const handleCancel = () => tracker.cancel();
+    const handlePointerCancel = (event: PointerEvent) => tracker.cancel(event.pointerId);
+    const handleBlur = () => tracker.cancel();
     const handleContextMenu = (event: MouseEvent) => {
       event.preventDefault();
       tracker.contextMenu(event);
@@ -168,15 +169,15 @@ export function MapContextMenu({
     canvas.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("pointermove", handlePointerMove, true);
     window.addEventListener("pointerup", handlePointerUp, true);
-    window.addEventListener("pointercancel", handleCancel, true);
-    window.addEventListener("blur", handleCancel);
+    window.addEventListener("pointercancel", handlePointerCancel, true);
+    window.addEventListener("blur", handleBlur);
     canvas.addEventListener("contextmenu", handleContextMenu);
     return () => {
       canvas.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointermove", handlePointerMove, true);
       window.removeEventListener("pointerup", handlePointerUp, true);
-      window.removeEventListener("pointercancel", handleCancel, true);
-      window.removeEventListener("blur", handleCancel);
+      window.removeEventListener("pointercancel", handlePointerCancel, true);
+      window.removeEventListener("blur", handleBlur);
       canvas.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [mapControllerRef, mapReadyGeneration]);

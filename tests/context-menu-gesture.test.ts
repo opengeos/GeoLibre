@@ -112,4 +112,13 @@ describe("ContextMenuGestureTracker", () => {
     tracker.pointerUp(pointer(RIGHT, 100, 100));
     assert.equal(opened.length, 0);
   });
+
+  it("ignores a pointercancel from another pointer", () => {
+    tracker.pointerDown(pointer(RIGHT, 100, 100, 1));
+    tracker.pointerMove(pointer(RIGHT, 200, 100, 1));
+    tracker.pointerUp(pointer(RIGHT, 200, 100, 1));
+    tracker.cancel(2);
+    tracker.contextMenu({ clientX: 200, clientY: 100 });
+    assert.equal(opened.length, 0, "the drag is still suppressed");
+  });
 });
