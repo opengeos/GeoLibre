@@ -47,7 +47,8 @@ export function installSelectionDragGuard(
     for (const node of [event.target, ...(event.composedPath?.() ?? [])]) {
       if (node === container) break;
       const element = node as { getAttribute?: (name: string) => string | null } | null;
-      if (element?.getAttribute?.("draggable") === "true") return;
+      // `draggable` is an enumerated attribute, matched ASCII case-insensitively.
+      if (element?.getAttribute?.("draggable")?.toLowerCase() === "true") return;
     }
     event.preventDefault();
   };

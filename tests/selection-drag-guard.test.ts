@@ -65,6 +65,11 @@ describe("installSelectionDragGuard", () => {
     const optedIn = dragStartFrom("true");
     container.dispatchEvent(optedIn);
     assert.equal(optedIn.defaultPrevented, false);
+
+    // Enumerated attribute values are ASCII case-insensitive.
+    const upperCase = dragStartFrom("TRUE");
+    container.dispatchEvent(upperCase);
+    assert.equal(upperCase.defaultPrevented, false);
   });
 
   it("honours a draggable=true element inside a shadow root", () => {
