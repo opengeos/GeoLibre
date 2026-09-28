@@ -96,6 +96,7 @@ const nativeProjectOpenReady = initializeNativeProjectOpen();
 let nativeShareFetchReady: Promise<void> = Promise.resolve();
 let nativeArcGISFetchReady: Promise<void> = Promise.resolve();
 let nativeSidecarFetchReady: Promise<void> = Promise.resolve();
+let nativeWmsIdentifyFetchReady: Promise<void> = Promise.resolve();
 // Install desktop-only transports before requests can be issued. ArcGIS uses
 // a dedicated guarded Rust command; the other adapters use scoped HTTP hosts.
 if (isTauri()) {
@@ -118,7 +119,7 @@ if (isTauri()) {
         console.error("[GeoLibre] Failed to install native sidecar fetch", error);
       });
   }
-  void import("./lib/wms-identify-fetch")
+  nativeWmsIdentifyFetchReady = import("./lib/wms-identify-fetch")
     .then(({ installNativeWmsIdentifyFetch }) => installNativeWmsIdentifyFetch())
     .catch((error: unknown) => {
       // Identify would stay on the webview fetch, which fails on WMS servers
@@ -341,6 +342,8 @@ void Promise.all([
   nativeSidecarFetchReady,
   // Restored ArcGIS layers can query immediately when App mounts.
   nativeArcGISFetchReady,
+  // An Identify click on a restored WMS layer must not beat the native fetcher.
+  nativeWmsIdentifyFetchReady,
   // Capture a file-association or command-line project path before App decides
   // whether to restore a configured startup project or the default workspace.
   nativeProjectOpenReady,

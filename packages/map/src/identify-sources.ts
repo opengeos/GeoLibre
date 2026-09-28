@@ -340,7 +340,8 @@ export async function fetchWmsIdentifyProperties(
     if (!targetUrl) return null;
 
     const response = await fetchWmsIdentifyResponse(targetUrl, signal);
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? infoFormat;
+    const contentTypeHeader = response.headers.get("content-type")?.toLowerCase();
+    const contentType = contentTypeHeader ?? infoFormat;
     // Response.text() cannot take a signal, so bail out as soon as the read
     // resolves if the request was aborted meanwhile, skipping parsing.
     const text = await response.text();
@@ -379,7 +380,13 @@ export async function fetchWmsIdentifyProperties(
       continue;
     }
 
-    if (contentType.includes("html")) {
+    // The desktop's native fetcher returns no headers, so contentType is just
+    // the format we asked for; tell an HTML body apart from plain text by its
+    // markup, or it would reach the popup with its tags.
+    const looksLikeHtml =
+      contentType.includes("html") ||
+      (!contentTypeHeader && /^<(!doctype\s+html|html|body)\b/i.test(trimmed));
+    if (looksLikeHtml) {
       const resultText = textFromHtml(text);
       if (resultText) return { properties: { result: resultText } };
       continue;

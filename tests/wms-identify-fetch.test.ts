@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { DOMParser } from "linkedom";
 import { createNativeWmsIdentifyFetcher } from "../apps/geolibre-desktop/src/lib/wms-identify-fetch";
 import {
   fetchWmsIdentifyProperties,
@@ -66,6 +67,27 @@ describe("native WMS identify fetcher", () => {
       new AbortController().signal,
     );
     assert.deepEqual(result?.properties, { v: 3 });
+  });
+
+  it("reads an HTML body as HTML even when plain text was requested", async () => {
+    setWmsIdentifyFetcher(
+      createNativeWmsIdentifyFetcher(async () =>
+        bytes("<!DOCTYPE html><html><body><p>Pixel  12</p></body></html>"),
+      ),
+    );
+    const original = globalThis.DOMParser;
+    globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
+    try {
+      const result = await fetchWmsIdentifyProperties(
+        wmsLayer({ infoFormat: "text/plain" }),
+        [0, 0],
+        5,
+        new AbortController().signal,
+      );
+      assert.deepEqual(result, { properties: { result: "Pixel 12" } });
+    } finally {
+      globalThis.DOMParser = original;
+    }
   });
 
   it("turns a native status error into a response and keeps probing formats", async () => {
