@@ -42,16 +42,23 @@ export function installSelectionDragGuard(
   const onDragStart = (event: Event) => {
     // Honour an element that explicitly opted into HTML5 drag and drop (for
     // example a custom marker); cancel the implicit canvas/image/selection drag.
-    const target = event.target as { getAttribute?: (name: string) => string | null } | null;
-    if (target?.getAttribute?.("draggable") === "true") return;
+    // The composed path reaches a draggable element inside an open shadow root,
+    // where `event.target` is retargeted to the shadow host.
+    for (const node of [event.target, ...(event.composedPath?.() ?? [])]) {
+      if (node === container) break;
+      const element = node as { getAttribute?: (name: string) => string | null } | null;
+      if (element?.getAttribute?.("draggable") === "true") return;
+    }
     event.preventDefault();
   };
   // Capture phase, so the selection is gone before the webview decides the
-  // press is the start of a drag and before MapLibre's own handlers run.
+  // press is the start of a drag and before MapLibre's own handlers run, and so
+  // a descendant's `dragstart` listener calling stopPropagation() can't bypass
+  // the cancel.
   container.addEventListener("mousedown", onMouseDown, { capture: true });
-  container.addEventListener("dragstart", onDragStart);
+  container.addEventListener("dragstart", onDragStart, { capture: true });
   return () => {
     container.removeEventListener("mousedown", onMouseDown, { capture: true });
-    container.removeEventListener("dragstart", onDragStart);
+    container.removeEventListener("dragstart", onDragStart, { capture: true });
   };
 }

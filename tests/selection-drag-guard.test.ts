@@ -67,6 +67,38 @@ describe("installSelectionDragGuard", () => {
     assert.equal(optedIn.defaultPrevented, false);
   });
 
+  it("honours a draggable=true element inside a shadow root", () => {
+    const container = new EventTarget();
+    installSelectionDragGuard(container, () => null);
+    const draggableInShadow = {
+      getAttribute: (name: string) => (name === "draggable" ? "true" : null),
+    };
+    const shadowHost = { getAttribute: () => null };
+    const event = new Event("dragstart", { cancelable: true });
+    // Retargeted: the target is the shadow host, the source only shows up in the composed path.
+    Object.defineProperty(event, "target", { value: shadowHost });
+    Object.defineProperty(event, "composedPath", {
+      value: () => [draggableInShadow, shadowHost, container],
+    });
+
+    container.dispatchEvent(event);
+
+    assert.equal(event.defaultPrevented, false);
+  });
+
+  it("still cancels when nothing on the composed path opted in", () => {
+    const container = new EventTarget();
+    installSelectionDragGuard(container, () => null);
+    const canvas = { getAttribute: () => null };
+    const event = new Event("dragstart", { cancelable: true });
+    Object.defineProperty(event, "target", { value: canvas });
+    Object.defineProperty(event, "composedPath", { value: () => [canvas, container] });
+
+    container.dispatchEvent(event);
+
+    assert.equal(event.defaultPrevented, true);
+  });
+
   it("removes its listeners on dispose", () => {
     const container = new EventTarget();
     const selection = fakeSelection(false);
