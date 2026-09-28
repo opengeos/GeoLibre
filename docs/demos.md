@@ -82,11 +82,12 @@ The deep-space starfield behind each globe comes from the
 ## Open data showcase
 
 Twenty projects built from public open data, spanning environmental health,
-human mobility, environmental change, natural hazards, and energy. Each is a single `.geolibre.json`
-file authored with the [Python package](python.md): choropleths, heatmaps,
-great-circle flows, 3D extrusions, before-and-after swipes, and a time slider,
-with click popups, hover tooltips, and a legend derived from each layer's
-symbology. **Click any map to open the live project.**
+human mobility, environmental change, natural hazards, and energy. Each is a
+single `.geolibre.json` file authored with the [Python package](python.md):
+choropleths, heatmaps, great-circle flows, 3D extrusions, before-and-after
+swipes, and a time slider, with click popups, hover tooltips, and a legend
+derived from each layer's symbology. **Click any map to open the live
+project.**
 
 <table>
   <tr>
