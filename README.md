@@ -44,7 +44,7 @@ capabilities, credentials, and current compatibility.
 - **[Get started](https://geolibre.app/getting-started/)** — install, run from source, and configure
 - **[Features](https://geolibre.app/features/)** — the complete feature list
 - **[Rendering engines](https://geolibre.app/user-guide/rendering-engines/)** — compare MapLibre, Mapbox, Cesium, and ArcGIS and learn how to switch or combine them.
-- **[Open data demos](https://geolibre.app/demos/#open-data-showcase)** — live projects built from public open data on environmental health, human mobility, and environmental change.
+- **[Open data demos](https://geolibre.app/demos/#open-data-showcase)** — 20 live projects built from public open data on environmental health, human mobility, environmental change, natural hazards, and energy.
 
 ## Demos
 

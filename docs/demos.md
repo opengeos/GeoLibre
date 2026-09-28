@@ -81,8 +81,8 @@ The deep-space starfield behind each globe comes from the
 
 ## Open data showcase
 
-Twelve projects built from public open data, spanning environmental health,
-human mobility, and environmental change. Each is a single `.geolibre.json`
+Twenty projects built from public open data, spanning environmental health,
+human mobility, environmental change, natural hazards, and energy. Each is a single `.geolibre.json`
 file authored with the [Python package](python.md): choropleths, heatmaps,
 great-circle flows, 3D extrusions, before-and-after swipes, and a time slider,
 with click popups, hover tooltips, and a legend derived from each layer's
@@ -136,6 +136,38 @@ symbology. **Click any map to open the live project.**
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/dengue-incidence-1990-2024">Dengue incidence, 1990–2024</a></b><br>Environmental health · Time-slider 3D choropleth of reported dengue per 100k people<br><small>Data: OpenDengue</small></td>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/manhattan-buildings-through-time">Manhattan buildings through time</a></b><br>Urban growth · Buildings extruded at true height and replayed by construction year, 1850–2025, under the subway<br><small>Data: NYC Open Data, MTA</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/earthquakes-last-30-days"><img src="https://assets.geolibre.app/images/earthquakes-last-30-days.webp" alt="GeoLibre map: Earthquakes, last 30 days"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/global-power-plants-by-fuel"><img src="https://assets.geolibre.app/images/global-power-plants-by-fuel.webp" alt="GeoLibre map: Global power plants by fuel"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/earthquakes-last-30-days">Earthquakes, last 30 days</a></b><br>Natural hazards · Every M2.5+ quake sized by magnitude and colored by depth, over plate boundaries<br><small>Data: USGS, PB2002</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/global-power-plants-by-fuel">Global power plants by fuel</a></b><br>Energy · 35,000 plants colored by primary fuel and sized by capacity<br><small>Data: WRI Global Power Plant Database</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-drought-conditions"><img src="https://assets.geolibre.app/images/us-drought-conditions.webp" alt="GeoLibre map: US drought conditions"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/refugee-flows-2024"><img src="https://assets.geolibre.app/images/refugee-flows-2024.webp" alt="GeoLibre map: Refugee flows 2024"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-drought-conditions">US drought conditions</a></b><br>Environmental change · This week's drought categories, from abnormally dry to exceptional<br><small>Data: U.S. Drought Monitor</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/refugee-flows-2024">Refugee flows 2024</a></b><br>Human mobility · The 400 largest origin-to-asylum flows as great circles, hosts sized by people hosted<br><small>Data: UNHCR Refugee Data Finder</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/life-expectancy-1953-2023"><img src="https://assets.geolibre.app/images/life-expectancy-1953-2023.webp" alt="GeoLibre map: Life expectancy, 1953–2023"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/arctic-sea-ice-march-vs-september"><img src="https://assets.geolibre.app/images/arctic-sea-ice-march-vs-september.webp" alt="GeoLibre map: Arctic sea ice, March vs September"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/life-expectancy-1953-2023">Life expectancy, 1953–2023</a></b><br>Health · Time-slider choropleth of life expectancy at birth in five-year steps<br><small>Data: Our World in Data</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/arctic-sea-ice-march-vs-september">Arctic sea ice, March vs September</a></b><br>Climate change · Swipe between the winter peak and the summer low of sea ice concentration<br><small>Data: NASA GIBS (AMSR2)</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/world-cities-in-3d"><img src="https://assets.geolibre.app/images/world-cities-in-3d.webp" alt="GeoLibre map: World cities in 3D"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/global-land-cover-2024"><img src="https://assets.geolibre.app/images/global-land-cover-2024.webp" alt="GeoLibre map: Global land cover 2024"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/world-cities-in-3d">World cities in 3D</a></b><br>Human footprint · Every metro of 1M+ people raised as a 3D spike in proportion to population<br><small>Data: Natural Earth</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/global-land-cover-2024">Global land cover 2024</a></b><br>Land use · 10 m land use / land cover streamed from an ArcGIS ImageServer<br><small>Data: Esri, Impact Observatory</small></td>
   </tr>
 </table>
 
