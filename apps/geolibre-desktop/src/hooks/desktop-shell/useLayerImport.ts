@@ -5,6 +5,7 @@ import { addRasterToMap, setKmlFileImportHandler, TIME_SLIDER_PLUGIN_ID } from "
 import type { TFunction } from "i18next";
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect } from "react";
 import type { GeotaggedPhotoResult } from "../../lib/geotagged-photos";
+import { groupKmlLayersBySourceFile } from "../../lib/kml-file-group";
 import { buildKmlModelLayer } from "../../lib/kml-model-layer";
 import {
   isLoadedImageOverlay,
@@ -73,6 +74,16 @@ export function useLayerImport({
       // splits into one layer per placemark, so the final fit needs every id
       // from that file to frame the whole import rather than one placemark.
       const layerIdsBySource = new Map<string, string[]>();
+      // Every layer id each source added, of every kind (overlays, models and
+      // Super-Overlays too), so a KML/KMZ file's contents can be gathered into
+      // one group named after the file (#2722).
+      const allLayerIdsBySource = new Map<string, string[]>();
+      const recordSourceLayer = (path: string | undefined, layerId: string) => {
+        if (!path) return;
+        const ids = allLayerIdsBySource.get(path) ?? [];
+        ids.push(layerId);
+        allLayerIdsBySource.set(path, ids);
+      };
       // Tracked across every record kind (not just the GeoJSON ones) so a file
       // whose placemarks are followed by an overlay or model is still
       // recognized as the last source imported.
@@ -95,6 +106,7 @@ export function useLayerImport({
               bounds: layer.bounds,
             },
           });
+          recordSourceLayer(layer.path, lastLayerId);
           continue;
         }
         // A KML/KMZ ground overlay becomes an image layer, not a vector one.
@@ -112,6 +124,7 @@ export function useLayerImport({
               ...(layer.visible === false ? { visible: false } : {}),
             },
           );
+          recordSourceLayer(layer.path, lastLayerId);
           if (layer.groupId) {
             const ids = frameGroups.get(layer.groupId) ?? [];
             ids.push(lastLayerId);
@@ -124,6 +137,7 @@ export function useLayerImport({
           const modelLayer = buildKmlModelLayer(layer);
           addLayer(modelLayer);
           lastLayerId = modelLayer.id;
+          recordSourceLayer(layer.path, lastLayerId);
           continue;
         }
         // `||` (not `??`) so an empty-string name falls back to the path, and
@@ -146,6 +160,7 @@ export function useLayerImport({
           );
         }
         lastLayerId = addGeoJsonLayer(layerName, layer.data, layer.path);
+        recordSourceLayer(layer.path, lastLayerId);
         // Time-tagged KML placemarks are Time Slider frames, animated through
         // the same `metadata.timeSpan` visibility toggling as ground overlays.
         if (layer.timeSpan) {
@@ -214,6 +229,9 @@ export function useLayerImport({
       for (const { name, ids } of placemarkFrameGroups.values()) {
         if (ids.length > 1) addLayerGroup(name, ids);
       }
+      // Runs after every Folder and time-animation group exists, so those
+      // groups nest under the file group rather than beside it.
+      groupKmlLayersBySourceFile(allLayerIdsBySource);
       const hasTimeAnimation = sequences.length > 0 || hasVectorTimeFrames;
       // Auto-open the Time Slider so a time-animated overlay sequence can be
       // stepped through immediately, without the user hunting for the plugin.
