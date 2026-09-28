@@ -79,6 +79,68 @@ The deep-space starfield behind each globe comes from the
   </tr>
 </table>
 
+## Open data showcase
+
+Eleven projects built from public open data, spanning environmental health,
+human mobility, and environmental change. Each is a single `.geolibre.json`
+file authored with the [Python package](python.md): choropleths, heatmaps,
+great-circle flows, 3D extrusions, before-and-after swipes, and a time slider,
+with click popups, hover tooltips, and a legend derived from each layer's
+symbology. **Click any map to open the live project.**
+
+<table>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/us-adult-asthma-copd-by-county"><img src="https://assets.geolibre.app/images/us-adult-asthma-copd-by-county.webp" alt="GeoLibre map: US adult asthma &amp; COPD"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/ground-level-no2-1997-vs-2011"><img src="https://assets.geolibre.app/images/ground-level-no2-1997-vs-2011.webp" alt="GeoLibre map: Ground-level NO₂, 1997 vs 2011"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-adult-asthma-copd-by-county">US adult asthma &amp; COPD</a></b><br>Environmental health · County choropleth of age-adjusted adult asthma, with COPD one toggle away<br><small>Data: CDC PLACES</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/ground-level-no2-1997-vs-2011">Ground-level NO₂, 1997 vs 2011</a></b><br>Air pollution · Swipe between two periods of satellite-derived surface NO₂<br><small>Data: NASA SEDAC via GIBS</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/global-wildfires-last-7-days"><img src="https://assets.geolibre.app/images/global-wildfires-last-7-days.webp" alt="GeoLibre map: Global wildfires, last 7 days"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/the-global-flight-network"><img src="https://assets.geolibre.app/images/the-global-flight-network.webp" alt="GeoLibre map: The global flight network"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/global-wildfires-last-7-days">Global wildfires, last 7 days</a></b><br>Wildfires · Fire-radiative-power heatmap that resolves into 0.1° fire cells<br><small>Data: NASA FIRMS (VIIRS)</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/the-global-flight-network">The global flight network</a></b><br>Human mobility · The 4,000 busiest air corridors as great circles, hubs sized by routes<br><small>Data: OpenFlights</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/nyc-citi-bike-live-availability"><img src="https://assets.geolibre.app/images/nyc-citi-bike-live-availability.webp" alt="GeoLibre map: NYC Citi Bike availability"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/earth-at-night-2012-vs-2016"><img src="https://assets.geolibre.app/images/earth-at-night-2012-vs-2016.webp" alt="GeoLibre map: Earth at night, 2012 vs 2016"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/nyc-citi-bike-live-availability">NYC Citi Bike availability</a></b><br>Human mobility · Every station colored by fill level and sized by capacity<br><small>Data: Citi Bike GBFS feed</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/earth-at-night-2012-vs-2016">Earth at night, 2012 vs 2016</a></b><br>Human footprint · Swipe between two years of night lights<br><small>Data: NASA Black Marble</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/amazon-deforestation-frontier-rondonia"><img src="https://assets.geolibre.app/images/amazon-deforestation-frontier-rondonia.webp" alt="GeoLibre map: Amazon deforestation frontier"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/the-vanishing-aral-sea"><img src="https://assets.geolibre.app/images/the-vanishing-aral-sea.webp" alt="GeoLibre map: The vanishing Aral Sea"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/amazon-deforestation-frontier-rondonia">Amazon deforestation frontier</a></b><br>Environmental change · Tree-cover loss by year, 2001–2024, over Rondônia<br><small>Data: Hansen / UMD Global Forest Change</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/the-vanishing-aral-sea">The vanishing Aral Sea</a></b><br>Environmental change · Swipe between water occurrence and 1984–2021 transitions<br><small>Data: EC JRC Global Surface Water</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/co2-emissions-per-person-3d"><img src="https://assets.geolibre.app/images/co2-emissions-per-person-3d.webp" alt="GeoLibre map: CO₂ emissions per person"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/tropical-cyclones-ocean-heat"><img src="https://assets.geolibre.app/images/tropical-cyclones-ocean-heat.webp" alt="GeoLibre map: Tropical cyclones &amp; ocean heat"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/co2-emissions-per-person-3d">CO₂ emissions per person</a></b><br>Climate · Countries colored and extruded in 3D by per-capita emissions<br><small>Data: Our World in Data</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/tropical-cyclones-ocean-heat">Tropical cyclones &amp; ocean heat</a></b><br>Climate hazards · Three seasons of storm tracks by category over SST anomalies<br><small>Data: NOAA IBTrACS, NASA GHRSST</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/dengue-incidence-1990-2024"><img src="https://assets.geolibre.app/images/dengue-incidence-1990-2024.webp" alt="GeoLibre map: Dengue incidence, 1990–2024"></a></td>
+    <td width="50%"></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/dengue-incidence-1990-2024">Dengue incidence, 1990–2024</a></b><br>Environmental health · Time-slider 3D choropleth of reported dengue per 100k people<br><small>Data: OpenDengue</small></td>
+    <td></td>
+  </tr>
+</table>
+
+[Browse the Official Demos collection](https://share.geolibre.app/giswqs/collections/official-demos){ .md-button .md-button--primary }
+
 ## SQL Workspace
 
 Run DuckDB Spatial SQL against loaded layers, local files, and remote URLs
