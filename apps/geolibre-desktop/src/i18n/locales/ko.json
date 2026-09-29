@@ -281,7 +281,7 @@
       },
       "wfs": {
         "label": "WFS 레이어 추가",
-        "description": "GetFeature 서비스에서 GeoJSON을 요청하여 WFS 피처를 추가합니다."
+        "description": "GetFeature 서비스에서 GeoJSON 또는 GML을 요청하여 WFS 피처를 추가합니다."
       },
       "wmts": {
         "label": "WMTS 레이어 추가",

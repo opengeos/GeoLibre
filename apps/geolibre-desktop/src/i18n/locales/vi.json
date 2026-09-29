@@ -281,7 +281,7 @@
       },
       "wfs": {
         "label": "Thêm lớp WFS",
-        "description": "Thêm các tính năng WFS bằng cách yêu cầu GeoJSON từ dịch vụ GetFeature."
+        "description": "Thêm các tính năng WFS bằng cách yêu cầu GeoJSON hoặc GML từ dịch vụ GetFeature."
       },
       "wmts": {
         "label": "Thêm lớp WMTS",

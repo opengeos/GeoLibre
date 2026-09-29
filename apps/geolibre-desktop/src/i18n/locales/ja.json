@@ -281,7 +281,7 @@
       },
       "wfs": {
         "label": "WFSレイヤーを追加",
-        "description": "GetFeatureサービスからGeoJSONを要求してWFSフィーチャを追加します。"
+        "description": "GetFeatureサービスからGeoJSONまたはGMLを要求してWFSフィーチャを追加します。"
       },
       "wmts": {
         "label": "WMTSレイヤーを追加",

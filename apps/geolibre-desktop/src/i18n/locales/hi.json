@@ -283,7 +283,7 @@
       },
       "wfs": {
         "label": "WFS लेयर जोड़ें",
-        "description": "GetFeature सेवा से GeoJSON का अनुरोध करके WFS फ़ीचर जोड़ें।"
+        "description": "GetFeature सेवा से GeoJSON या GML का अनुरोध करके WFS फ़ीचर जोड़ें।"
       },
       "wmts": {
         "label": "WMTS लेयर जोड़ें",

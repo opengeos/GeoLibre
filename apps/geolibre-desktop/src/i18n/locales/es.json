@@ -283,7 +283,7 @@
       },
       "wfs": {
         "label": "Añadir capa WFS",
-        "description": "Añade entidades WFS solicitando GeoJSON a un servicio GetFeature."
+        "description": "Añade entidades WFS solicitando GeoJSON o GML a un servicio GetFeature."
       },
       "wmts": {
         "label": "Añadir capa WMTS",

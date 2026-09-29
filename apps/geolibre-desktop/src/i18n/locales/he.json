@@ -285,7 +285,7 @@
       },
       "wfs": {
         "label": "הוסף שכבת WFS",
-        "description": "הוסף ישויות WFS על ידי בקשת GeoJSON משירות GetFeature."
+        "description": "הוסף ישויות WFS על ידי בקשת GeoJSON או GML משירות GetFeature."
       },
       "wmts": {
         "label": "הוסף שכבת WMTS",

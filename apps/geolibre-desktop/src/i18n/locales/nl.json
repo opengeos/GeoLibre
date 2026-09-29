@@ -283,7 +283,7 @@
       },
       "wfs": {
         "label": "WFS-laag toevoegen",
-        "description": "Voeg WFS-features toe door GeoJSON op te vragen bij een GetFeature-service."
+        "description": "Voeg WFS-features toe door GeoJSON of GML op te vragen bij een GetFeature-service."
       },
       "wmts": {
         "label": "WMTS-laag toevoegen",

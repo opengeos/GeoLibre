@@ -283,7 +283,7 @@
       },
       "wfs": {
         "label": "Aggiungi layer WFS",
-        "description": "Aggiungi elementi WFS richiedendo GeoJSON da un servizio GetFeature."
+        "description": "Aggiungi elementi WFS richiedendo GeoJSON o GML da un servizio GetFeature."
       },
       "wmts": {
         "label": "Aggiungi layer WMTS",

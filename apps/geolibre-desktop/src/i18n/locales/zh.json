@@ -281,7 +281,7 @@
       },
       "wfs": {
         "label": "添加 WFS 图层",
-        "description": "通过向 GetFeature 服务请求 GeoJSON 来添加 WFS 要素。"
+        "description": "通过向 GetFeature 服务请求 GeoJSON 或 GML 来添加 WFS 要素。"
       },
       "wmts": {
         "label": "添加 WMTS 图层",

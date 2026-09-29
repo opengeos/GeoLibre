@@ -281,7 +281,7 @@
       },
       "wfs": {
         "label": "Tambahkan Layer WFS",
-        "description": "Tambahkan fitur WFS dengan meminta GeoJSON dari layanan GetFeature."
+        "description": "Tambahkan fitur WFS dengan meminta GeoJSON atau GML dari layanan GetFeature."
       },
       "wmts": {
         "label": "Tambahkan Layer WMTS",

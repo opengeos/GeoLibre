@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
+import type { Point } from "geojson";
+import { DOMParser } from "linkedom";
 import {
+  fetchGeoJsonFeatureCollection,
   fetchWfsGeoJson,
   isRefreshableLayer,
   isVectorControlRefreshLayer,
   supportsRefreshFailurePolicy,
   WFS_XML_RESPONSE_ERROR,
 } from "../apps/geolibre-desktop/src/lib/layer-refresh";
+
+// The GML fallback parses XML with the browser's DOMParser.
+globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
 
 function makeLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
   return {
@@ -361,5 +367,106 @@ describe("fetchWfsGeoJson output-format fallback", () => {
     assert.equal(requestedFormats[0], "application/json");
     assert.ok(!requestedFormats.includes(""), "no empty outputFormat request");
     assert.equal(result.data.features.length, 1);
+  });
+});
+
+describe("fetchWfsGeoJson GML fallback (issue #2746)", () => {
+  const originalFetch = globalThis.fetch;
+  const baseParams = {
+    endpoint: "https://geo.example.com/wfs",
+    typeName: "ms:W10_Reda",
+    version: "2.0.0",
+    outputFormat: "application/json",
+    srsName: "EPSG:4326",
+    maxFeatures: "1000",
+  };
+  // What a MapServer without OGR output answers: GML 3.2, lat/lon under a URN.
+  const GML = `<?xml version="1.0"?>
+<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:ms="urn:ms">
+  <wfs:member><ms:W10_Reda>
+    <ms:msGeometry><gml:Point srsName="urn:ogc:def:crs:EPSG::4326"><gml:pos>54.44 14.11</gml:pos></gml:Point></ms:msGeometry>
+    <ms:SHORT_NAME>Reda</ms:SHORT_NAME>
+  </ms:W10_Reda></wfs:member>
+</wfs:FeatureCollection>`;
+  const EXCEPTION = `<?xml version="1.0"?><ows:ExceptionReport xmlns:ows="http://www.opengis.net/ows/1.1"/>`;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function formatOf(input: RequestInfo | URL): string | null {
+    return new URL(typeof input === "string" ? input : input.toString()).searchParams.get(
+      "outputFormat",
+    );
+  }
+
+  it("loads a GML-only server through the version's default GML format", async () => {
+    const requested: Array<string | null> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const format = formatOf(input);
+      requested.push(format);
+      return new Response(format?.includes("gml") ? GML : EXCEPTION, { status: 200 });
+    }) as typeof fetch;
+
+    const result = await fetchWfsGeoJson(baseParams);
+    assert.equal(result.outputFormat, "application/gml+xml; version=3.2");
+    // Every GeoJSON alias first, then GML.
+    assert.equal(requested.at(-1), "application/gml+xml; version=3.2");
+    assert.equal(requested.length, 6);
+    const [feature] = result.data.features;
+    assert.deepEqual((feature.geometry as Point).coordinates, [14.11, 54.44]);
+    assert.equal(feature.properties?.SHORT_NAME, "Reda");
+  });
+
+  it("omits outputFormat as a last resort when the GML token is rejected too", async () => {
+    const requested: Array<string | null> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const format = formatOf(input);
+      requested.push(format);
+      return new Response(format === null ? GML : EXCEPTION, { status: 200 });
+    }) as typeof fetch;
+
+    const result = await fetchWfsGeoJson({ ...baseParams, version: "1.1.0" });
+    assert.equal(requested.at(-2), "text/xml; subtype=gml/3.1.1");
+    assert.equal(requested.at(-1), null, "the final request carries no outputFormat");
+    assert.equal(result.outputFormat, "");
+    assert.doesNotMatch(result.url, /outputFormat/);
+    assert.equal(result.data.features.length, 1);
+  });
+
+  it("accepts GML returned for a GeoJSON request without retrying", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response(GML, { status: 200 });
+    }) as typeof fetch;
+
+    const result = await fetchWfsGeoJson(baseParams);
+    assert.equal(calls, 1);
+    assert.equal(result.outputFormat, "application/json");
+    assert.equal(result.data.features.length, 1);
+  });
+
+  it("does not retry when the GML names a CRS it cannot convert", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response(GML.replace("EPSG::4326", "EPSG::2180"), { status: 200 });
+    }) as typeof fetch;
+
+    await assert.rejects(fetchWfsGeoJson(baseParams), /EPSG::2180/);
+    assert.equal(calls, 1);
+  });
+
+  it("re-reads a saved GML URL on refresh, using its srsName for bare geometries", async () => {
+    globalThis.fetch = (async () =>
+      new Response(GML.replace(' srsName="urn:ogc:def:crs:EPSG::4326"', ""), {
+        status: 200,
+      })) as typeof fetch;
+
+    const data = await fetchGeoJsonFeatureCollection(
+      "https://geo.example.com/wfs?service=WFS&request=GetFeature&SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A4326",
+    );
+    assert.deepEqual((data.features[0].geometry as Point).coordinates, [14.11, 54.44]);
   });
 });

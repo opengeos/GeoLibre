@@ -291,7 +291,7 @@
       },
       "wfs": {
         "label": "إضافة طبقة WFS",
-        "description": "إضافة معالم WFS عبر طلب GeoJSON من خدمة GetFeature."
+        "description": "إضافة معالم WFS عبر طلب GeoJSON أو GML من خدمة GetFeature."
       },
       "wmts": {
         "label": "إضافة طبقة WMTS",

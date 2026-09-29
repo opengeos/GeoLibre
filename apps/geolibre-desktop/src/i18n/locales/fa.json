@@ -283,7 +283,7 @@
       },
       "wfs": {
         "label": "افزودن لایهٔ WFS",
-        "description": "عوارض WFS را با درخواست GeoJSON از یک سرویس GetFeature بیفزایید."
+        "description": "عوارض WFS را با درخواست GeoJSON یا GML از یک سرویس GetFeature بیفزایید."
       },
       "wmts": {
         "label": "افزودن لایهٔ WMTS",

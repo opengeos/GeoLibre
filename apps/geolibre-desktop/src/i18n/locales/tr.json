@@ -283,7 +283,7 @@
       },
       "wfs": {
         "label": "WFS Katmanı Ekle",
-        "description": "Bir GetFeature servisinden GeoJSON isteyerek WFS öğelerini ekleyin."
+        "description": "Bir GetFeature servisinden GeoJSON veya GML isteyerek WFS öğelerini ekleyin."
       },
       "wmts": {
         "label": "WMTS Katmanı Ekle",

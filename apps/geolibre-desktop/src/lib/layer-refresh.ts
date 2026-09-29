@@ -1,6 +1,7 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { parseGeoRssLayer } from "./georss";
+import { looksLikeGmlFeatureCollection, parseGmlFeatureCollection } from "./gml";
 // Light import (types and metadata checks only); the DuckDB engine behind a
 // query-layer refresh is loaded dynamically inside sql-query-layer.ts, so this
 // module stays importable under the node test runner.
@@ -62,14 +63,16 @@ export interface LayerRefreshConfig {
   intervalMs: number;
 }
 
-// Raised when a GetFeature response is XML rather than the requested GeoJSON.
+// Raised when a GetFeature response is XML but neither GeoJSON nor a GML feature
+// collection (typically an OWS ExceptionReport rejecting the outputFormat).
 // Exported so the output-format fallback (fetchWfsGeoJson) can recognize this
 // specific failure and retry with a different outputFormat token.
 export const WFS_XML_RESPONSE_ERROR =
-  "The service returned XML instead of GeoJSON. Check the layer name and output format.";
+  "The service returned an XML error instead of features. Check the layer name and output format.";
 
 /**
- * Error thrown when a GetFeature response body is XML instead of GeoJSON.
+ * Error thrown when a GetFeature response body is XML that is not a GML feature
+ * collection.
  * Carries `isHtml` so the output-format fallback can tell a genuine WFS/OWS/GML
  * response (a real format rejection worth retrying with another outputFormat)
  * apart from an HTML error page — a corporate proxy block, a WAF challenge, an
@@ -114,6 +117,23 @@ const WFS_GEOJSON_OUTPUT_FORMATS = [
   "application/geo+json",
 ];
 
+// The GML format each WFS version names as its GetFeature default, tried after
+// every GeoJSON alias so a GML-only server (MapServer without OGR output, most
+// INSPIRE services) still loads (issue #2746). Naming it, rather than only
+// omitting outputFormat, gives the caller a token to persist and reuse.
+const WFS_DEFAULT_GML_OUTPUT_FORMATS: Record<string, string> = {
+  "2": "application/gml+xml; version=3.2",
+  "1.1": "text/xml; subtype=gml/3.1.1",
+  "1.0": "GML2",
+};
+
+function defaultGmlOutputFormat(version: string): string {
+  const key = Object.keys(WFS_DEFAULT_GML_OUTPUT_FORMATS).find((prefix) =>
+    version.startsWith(prefix),
+  );
+  return key ? WFS_DEFAULT_GML_OUTPUT_FORMATS[key] : "";
+}
+
 export function createWfsGetFeatureUrl(options: {
   endpoint: string;
   typeName: string;
@@ -128,8 +148,10 @@ export function createWfsGetFeatureUrl(options: {
     ["request", "GetFeature"],
     ["version", options.version],
     [isWfs2 ? "typeNames" : "typeName", options.typeName],
-    ["outputFormat", options.outputFormat],
   ];
+
+  // An empty format is omitted, which asks the server for its default (GML).
+  if (options.outputFormat) params.push(["outputFormat", options.outputFormat]);
 
   if (options.srsName) params.push(["srsName", options.srsName]);
   if (options.maxFeatures) {
@@ -166,26 +188,42 @@ export async function fetchGeoJsonFeatureCollection(
   if (!response.ok && !/^\s*</.test(text)) {
     throw new Error(`Request failed with status ${response.status}`);
   }
-  try {
-    return parseGeoJsonFeatureCollection(JSON.parse(text));
-  } catch (error) {
-    if (/^\s*</.test(text)) {
-      throw new WfsXmlResponseError(
-        looksLikeHtmlResponse(text, response.headers.get("content-type")),
-      );
+  if (/^\s*</.test(text)) {
+    const isHtml = looksLikeHtmlResponse(text, response.headers.get("content-type"));
+    // A GML feature collection is features, whatever outputFormat was asked
+    // for (some servers ignore it). Its CRS comes from the document, falling
+    // back to the srsName the request asked for.
+    if (!isHtml && looksLikeGmlFeatureCollection(text)) {
+      return parseGmlFeatureCollection(text, { defaultSrsName: requestSrsName(url) });
     }
-    throw error;
+    throw new WfsXmlResponseError(isHtml);
   }
+  return parseGeoJsonFeatureCollection(JSON.parse(text));
+}
+
+// The srsName query parameter of a GetFeature URL, matched case-insensitively.
+function requestSrsName(url: string): string | undefined {
+  try {
+    for (const [key, value] of new URL(url, "http://localhost").searchParams) {
+      if (key.toLowerCase() === "srsname" && value) return value;
+    }
+  } catch {
+    // Not a parseable URL; the document's own srsName still applies.
+  }
+  return undefined;
 }
 
 /**
  * Fetches a WFS GetFeature response as GeoJSON, retrying with alternate
- * GeoJSON output-format tokens when the server answers the requested format
- * with XML (a GML `ExceptionReport` or a GML feature dump). ArcGIS Server, for
- * example, does not honor the usual `application/json` and instead advertises
- * its GeoJSON output as `GEOJSON`; a plain fetch of `application/json` returns
- * XML and the layer fails to load. Retrying the known GeoJSON aliases makes
- * such services load transparently.
+ * output-format tokens when the server answers the requested format with an
+ * XML exception. ArcGIS Server, for example, does not honor the usual
+ * `application/json` and instead advertises its GeoJSON output as `GEOJSON`;
+ * a plain fetch of `application/json` returns XML and the layer fails to load.
+ * Retrying the known GeoJSON aliases makes such services load transparently.
+ * When no GeoJSON alias works, the version's default GML format is requested
+ * and then no outputFormat at all, and the GML is converted in the browser, so
+ * a GML-only server loads too. A GML feature collection returned for any
+ * request is accepted as-is.
  *
  * Only a genuine WFS/OWS/GML XML response triggers a retry. A network error,
  * timeout, or malformed JSON body is re-thrown immediately (a different
@@ -202,8 +240,9 @@ export async function fetchGeoJsonFeatureCollection(
  * GeoJSON download is not penalized relative to today.
  *
  * @param params - The GetFeature parameters. The requested outputFormat is
- *   tried first, then the remaining GeoJSON aliases; an empty requested format
- *   is skipped so no `outputFormat=` request is issued.
+ *   tried first, then the remaining GeoJSON aliases, then GML; an empty
+ *   requested format is skipped so no `outputFormat=` request is issued ahead
+ *   of the aliases.
  * @param options - WFS proxy routing and an optional abort signal.
  * @returns The parsed FeatureCollection plus the URL and outputFormat that worked.
  */
@@ -223,22 +262,41 @@ export async function fetchWfsGeoJson(
   // GeoJSON aliases (case-insensitively deduped so a token is not requested
   // twice). An empty requested format is dropped rather than sent as
   // `outputFormat=`.
-  const candidates = [
+  const geoJsonPhase = [
     ...(requested ? [requested] : []),
     ...WFS_GEOJSON_OUTPUT_FORMATS.filter(
       (format) => format.toLowerCase() !== requested.toLowerCase(),
     ),
   ];
+  // The GML fallbacks come last: the version's default GML token, then no
+  // outputFormat at all (the server's default, which is GML).
+  const gmlFormat = defaultGmlOutputFormat(params.version);
+  const gmlPhase = [
+    ...(gmlFormat && gmlFormat.toLowerCase() !== requested.toLowerCase() ? [gmlFormat] : []),
+    "",
+  ];
 
-  // One deadline shared across every attempt, so N slow rejections cannot stack
-  // N separate timeouts. Combined with the caller's signal (if any) and passed
-  // down; fetchGeoJsonFeatureCollection ANDs its own per-call timeout on top,
-  // but this budget is what bounds the total wall time.
-  const budget = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([options.signal, budget]) : budget;
+  // One deadline shared across every attempt of a phase, so N slow rejections
+  // cannot stack N separate timeouts. The GML phase gets a fresh one: GML is
+  // several times larger than GeoJSON (the Polish PRG voivodeships are 8.5 MB
+  // and take ~27 s), so it must not inherit a budget the rejected GeoJSON
+  // attempts already spent. Combined with the caller's signal (if any) and
+  // passed down; fetchGeoJsonFeatureCollection ANDs its own per-call timeout on
+  // top, but these budgets are what bound the total wall time.
+  const phaseSignal = () => {
+    const budget = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+    return options.signal ? AbortSignal.any([options.signal, budget]) : budget;
+  };
+  const geoJsonSignal = phaseSignal();
+  let gmlSignal: AbortSignal | undefined;
+  const candidates = [
+    ...geoJsonPhase.map((outputFormat) => ({ outputFormat, gml: false })),
+    ...gmlPhase.map((outputFormat) => ({ outputFormat, gml: true })),
+  ];
 
   let lastError: unknown;
-  for (const outputFormat of candidates) {
+  for (const { outputFormat, gml } of candidates) {
+    const signal = gml ? (gmlSignal ??= phaseSignal()) : geoJsonSignal;
     const url = createWfsGetFeatureUrl({ ...params, outputFormat });
     try {
       const data = await fetchGeoJsonFeatureCollection(url, {

@@ -50,7 +50,7 @@ see [vector import details](user-guide/adding-data.md#files).
 | XYZ tiles | XYZ Layer | Raster or vector tiles from a `{z}/{x}/{y}` URL template. |
 | WMS | WMS Layer | Rendered map images; discover layers and query GetFeatureInfo where supported. |
 | [WCS 1.0.0](#wcs-raster-subsets) | WCS Layer | Numerical GeoTIFF subsets with chosen extent, pixel dimensions, and an EPSG:4326 or EPSG:3857 request CRS. |
-| WFS | WFS Layer | Vector features with feature-type discovery and optional refresh. |
+| WFS | WFS Layer | Vector features with feature-type discovery and optional refresh. Loads GeoJSON, or GML (2, 3.1, 3.2) from servers that offer no GeoJSON output; GML must be in EPSG:4326, ETRS89, NAD83, or Web Mercator. |
 | WMTS | WMTS Layer | Map tiles from a Web Map Tile Service. |
 | OGC API - Features | OGC API - Features | Browse collections and load their features. |
 | OGC API - Tiles | OGC Vector Tiles | Vector tile services. |

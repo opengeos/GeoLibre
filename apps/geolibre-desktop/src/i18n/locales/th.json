@@ -281,7 +281,7 @@
       },
       "wfs": {
         "label": "เพิ่มเลเยอร์ WFS",
-        "description": "เพิ่มฟีเจอร์จาก WFS โดยร้องขอ GeoJSON จากบริการ GetFeature"
+        "description": "เพิ่มฟีเจอร์จาก WFS โดยร้องขอ GeoJSON หรือ GML จากบริการ GetFeature"
       },
       "wmts": {
         "label": "เพิ่มเลเยอร์ WMTS",

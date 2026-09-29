@@ -283,7 +283,7 @@
       },
       "wfs": {
         "label": "WFS შრის დამატება",
-        "description": "დაამატეთ WFS ობიექტები GetFeature სერვისიდან GeoJSON-ის მოთხოვნით."
+        "description": "დაამატეთ WFS ობიექტები GetFeature სერვისიდან GeoJSON-ის ან GML-ის მოთხოვნით."
       },
       "wmts": {
         "label": "WMTS შრის დამატება",

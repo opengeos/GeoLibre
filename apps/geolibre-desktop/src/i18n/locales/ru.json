@@ -287,7 +287,7 @@
       },
       "wfs": {
         "label": "Добавить слой WFS",
-        "description": "Добавить объекты WFS, запросив GeoJSON у сервиса GetFeature."
+        "description": "Добавить объекты WFS, запросив GeoJSON или GML у сервиса GetFeature."
       },
       "wmts": {
         "label": "Добавить слой WMTS",

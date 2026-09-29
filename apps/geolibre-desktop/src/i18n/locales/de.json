@@ -283,7 +283,7 @@
       },
       "wfs": {
         "label": "WFS-Ebene hinzufügen",
-        "description": "Fügt WFS-Objekte hinzu, indem GeoJSON von einem GetFeature-Dienst angefordert wird."
+        "description": "Fügt WFS-Objekte hinzu, indem GeoJSON oder GML von einem GetFeature-Dienst angefordert wird."
       },
       "wmts": {
         "label": "WMTS-Ebene hinzufügen",
