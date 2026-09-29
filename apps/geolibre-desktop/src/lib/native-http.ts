@@ -15,7 +15,7 @@ import { appendDiagnostic, formatUnknown, type DiagnosticInput } from "./diagnos
 import { classifyFetchFailure } from "./fetch-error";
 
 /** The native HTTP commands exposed by the Tauri backend. */
-export type NativeHttpCommand = "fetch_url_bytes" | "resolve_url_redirect";
+export type NativeHttpCommand = "fetch_url_bytes" | "fetch_url_response" | "resolve_url_redirect";
 
 interface NativeHttpOptions {
   /** Short feature label (e.g. "WFS GetCapabilities") added to the record. */
@@ -145,6 +145,40 @@ export function fetchUrlBytes(
   options?: FetchUrlBytesOptions,
 ): Promise<number[] | Uint8Array> {
   return invokeNativeHttp<number[] | Uint8Array>("fetch_url_bytes", url, options);
+}
+
+/** A native response that keeps the status and body of a non-2xx answer. */
+export interface NativeHttpResponse {
+  status: number;
+  contentType: string | null;
+  body: Uint8Array;
+}
+
+/**
+ * Fetches a URL through the native `fetch_url_response` command (not subject to
+ * browser CORS), keeping the status, content type and body even when the
+ * status is not a success. Use it where an error answer carries a body the
+ * caller must read, such as an OGC `ExceptionReport` on a 400; plain downloads
+ * should keep using {@link fetchUrlBytes}.
+ *
+ * @param url - The absolute HTTP(S) URL to fetch.
+ * @param options - Diagnostics context, request budget and body limit.
+ * @returns The status, content type and body bytes.
+ */
+export async function fetchUrlResponse(
+  url: string,
+  options?: FetchUrlBytesOptions,
+): Promise<NativeHttpResponse> {
+  const raw = await invokeNativeHttp<{
+    status: number;
+    content_type: string | null;
+    body: number[] | Uint8Array;
+  }>("fetch_url_response", url, options);
+  return {
+    status: raw.status,
+    contentType: raw.content_type,
+    body: raw.body instanceof Uint8Array ? raw.body : new Uint8Array(raw.body),
+  };
 }
 
 /**

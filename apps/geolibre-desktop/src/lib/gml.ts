@@ -9,10 +9,12 @@
 // polygons, their multi forms, curves and surfaces made of linear segments).
 // Elements are matched by local name so every GML and WFS namespace version
 // works. Coordinates are normalized to WGS84 lon/lat: EPSG axis order is
-// honored for URN / URL CRS names (so `urn:ogc:def:crs:EPSG::4326` is read as
-// lat/lon), Web Mercator is unprojected, and any other CRS is rejected with a
-// message naming it, because drawing projected metres as degrees would put the
-// features in the wrong place without any error.
+// honored for GML 3 positions under URN / URL CRS names (so
+// `urn:ogc:def:crs:EPSG::4326` is read as lat/lon), Web Mercator is
+// unprojected, and other CRSs go through a caller-supplied resolver
+// (gml-projection.ts reprojects any EPSG code). A CRS nothing resolves is
+// rejected with a message naming it, because drawing projected metres as
+// degrees would put the features in the wrong place without any error.
 //
 // Uses the global DOMParser (a browser API; tests install linkedom's).
 
@@ -23,11 +25,21 @@ export class GmlUnsupportedCrsError extends Error {
   readonly srsName: string;
   constructor(srsName: string) {
     super(
-      `The service returned features in ${srsName}, which cannot be shown without reprojection. Request them in EPSG:4326 instead (set the SRS name).`,
+      `The service returned features in ${srsName}, which GeoLibre cannot reproject. Request them in EPSG:4326 instead (set the SRS name).`,
     );
     this.name = "GmlUnsupportedCrsError";
     this.srsName = srsName;
   }
+}
+
+/**
+ * How to read positions in one CRS: whether GML 3 positions are written
+ * north-first (EPSG axis order under a URN / URL name) and how to turn an
+ * east, north pair into lon/lat. Extra ordinates (height) pass through.
+ */
+export interface GmlCrs {
+  swapAxes: boolean;
+  toLonLat: (position: Position) => Position;
 }
 
 /** Options for {@link parseGmlFeatureCollection}. */
@@ -38,9 +50,14 @@ export interface GmlParseOptions {
    * for. Unset (and absent from the document) means lon/lat.
    */
   defaultSrsName?: string;
+  /**
+   * CRSs resolved beyond the built-in WGS84-like and Web Mercator ones, keyed
+   * by the exact `srsName` the document uses.
+   */
+  extraCrs?: ReadonlyMap<string, GmlCrs>;
 }
 
-type CoordinateTransform = (position: Position) => Position;
+type CrsResolver = (srsName: string | undefined) => GmlCrs;
 
 const EARTH_RADIUS = 6378137;
 // Geographic CRSs close enough to WGS84 for display (sub-metre to ~1 m apart):
@@ -98,7 +115,7 @@ export function looksLikeGmlFeatureCollection(text: string): boolean {
 export function parseGmlFeatureCollection(
   text: string,
   options: GmlParseOptions = {},
-): FeatureCollection {
+): FeatureCollection<Geometry | null> {
   const document = new DOMParser().parseFromString(text, "application/xml");
   const root = document.documentElement;
   if (!root || document.getElementsByTagName("parsererror").length > 0) {
@@ -108,9 +125,11 @@ export function parseGmlFeatureCollection(
     throw new Error("The GML response is not a feature collection.");
   }
 
-  const features: Feature[] = [];
+  const resolve: CrsResolver = (srsName) =>
+    (srsName && options.extraCrs?.get(srsName.trim())) || resolveGmlCrs(srsName);
+  const features: Feature<Geometry | null>[] = [];
   for (const featureElement of featureElements(root)) {
-    features.push(parseFeature(featureElement, options.defaultSrsName));
+    features.push(parseFeature(featureElement, options.defaultSrsName, resolve));
   }
   typeAttributeColumns(features);
   return { type: "FeatureCollection", features };
@@ -120,7 +139,7 @@ export function parseGmlFeatureCollection(
 // numbers (or booleans) only when every non-null value in it qualifies, so a
 // zero-padded code column ("08", "32") stays uniformly text instead of mixing
 // strings and numbers, which would break filters, sorting and styling.
-function typeAttributeColumns(features: Feature[]): void {
+function typeAttributeColumns(features: Feature<Geometry | null>[]): void {
   const numeric = new Map<string, boolean>();
   const boolean = new Map<string, boolean>();
   for (const feature of features) {
@@ -163,7 +182,11 @@ function featureElements(root: Element): Element[] {
   return result;
 }
 
-function parseFeature(element: Element, defaultSrsName: string | undefined): Feature {
+function parseFeature(
+  element: Element,
+  defaultSrsName: string | undefined,
+  resolve: CrsResolver,
+): Feature<Geometry | null> {
   const properties: Record<string, unknown> = {};
   let geometry: Geometry | null = null;
 
@@ -175,18 +198,20 @@ function parseFeature(element: Element, defaultSrsName: string | undefined): Fea
     if (geometryElement) {
       // The first geometry property is the feature's geometry; later ones
       // (a label point next to a polygon, say) have no GeoJSON slot.
-      if (!geometry) geometry = parseGeometry(geometryElement, defaultSrsName);
+      if (!geometry) geometry = parseGeometry(geometryElement, defaultSrsName, resolve);
       continue;
     }
     properties[name] = propertyValue(child);
   }
 
+  // A feature with no (or an empty) geometry keeps a null geometry, as GeoJSON
+  // allows: a WFS may publish attribute-only feature types.
   const id = featureId(element);
   return {
     type: "Feature",
     ...(id === undefined ? {} : { id }),
     properties,
-    geometry: geometry as Geometry,
+    geometry,
   };
 }
 
@@ -208,62 +233,79 @@ function propertyValue(element: Element): unknown {
 
 // --- Geometry --------------------------------------------------------------
 
-function parseGeometry(element: Element, inheritedSrsName: string | undefined): Geometry | null {
+function parseGeometry(
+  element: Element,
+  inheritedSrsName: string | undefined,
+  resolve: CrsResolver,
+): Geometry | null {
   const srsName = element.getAttribute("srsName") || inheritedSrsName;
-  const transform = coordinateTransform(srsName);
-  const dimension = srsDimension(element);
-  return readGeometry(element, transform, dimension, srsName);
+  const geometry = readGeometry(
+    element,
+    { crs: resolve(srsName), srsName, resolve },
+    srsDimension(element),
+  );
+  return geometry && !isEmptyGeometry(geometry) ? geometry : null;
+}
+
+function isEmptyGeometry(geometry: Geometry): boolean {
+  if (geometry.type === "GeometryCollection") return geometry.geometries.every(isEmptyGeometry);
+  return geometry.coordinates.length === 0;
+}
+
+/** The CRS in force while reading one geometry and its members. */
+interface GeometryContext {
+  crs: GmlCrs;
+  srsName: string | undefined;
+  resolve: CrsResolver;
 }
 
 function readGeometry(
   element: Element,
-  transform: CoordinateTransform,
+  context: GeometryContext,
   dimension: number,
-  srsName: string | undefined,
 ): Geometry | null {
   // A nested geometry can restate its own CRS; honor it.
   const ownSrs = element.getAttribute("srsName");
-  if (ownSrs && ownSrs !== srsName) {
+  if (ownSrs && ownSrs !== context.srsName) {
     return readGeometry(
       element,
-      coordinateTransform(ownSrs),
+      { ...context, crs: context.resolve(ownSrs), srsName: ownSrs },
       srsDimension(element, dimension),
-      ownSrs,
     );
   }
+  const { crs } = context;
   const dim = srsDimension(element, dimension);
-  const line = (el: Element) => readPositions(el, dim).map(transform);
 
   switch (localName(element)) {
     case "Point": {
-      const position = readPositions(element, dim)[0];
-      return position ? { type: "Point", coordinates: transform(position) } : null;
+      const position = readPositions(element, dim, crs)[0];
+      return position ? { type: "Point", coordinates: position } : null;
     }
     case "LineString":
-      return { type: "LineString", coordinates: line(element) };
+      return { type: "LineString", coordinates: readPositions(element, dim, crs) };
     case "Curve":
-      return { type: "LineString", coordinates: curvePositions(element, dim).map(transform) };
+      return { type: "LineString", coordinates: curvePositions(element, dim, crs) };
     case "LinearRing":
-      return { type: "Polygon", coordinates: [line(element)] };
+      return { type: "Polygon", coordinates: [readPositions(element, dim, crs)] };
     case "Polygon":
-      return { type: "Polygon", coordinates: polygonRings(element, dim, transform) };
+      return { type: "Polygon", coordinates: polygonRings(element, dim, crs) };
     case "Surface": {
-      const polygons = surfacePolygons(element, dim, transform);
+      const polygons = surfacePolygons(element, dim, crs);
       if (polygons.length === 1) return { type: "Polygon", coordinates: polygons[0] };
       return { type: "MultiPolygon", coordinates: polygons };
     }
     case "Envelope":
     case "Box":
-      return envelopePolygon(element, dim, transform);
+      return envelopePolygon(element, dim, crs);
     case "MultiPoint": {
-      const points = memberGeometries(element, transform, dim, srsName).flatMap((geometry) =>
+      const points = memberGeometries(element, context, dim).flatMap((geometry) =>
         geometry.type === "Point" ? [geometry.coordinates] : [],
       );
       return { type: "MultiPoint", coordinates: points };
     }
     case "MultiLineString":
     case "MultiCurve": {
-      const lines = memberGeometries(element, transform, dim, srsName).flatMap((geometry) =>
+      const lines = memberGeometries(element, context, dim).flatMap((geometry) =>
         geometry.type === "LineString"
           ? [geometry.coordinates]
           : geometry.type === "MultiLineString"
@@ -274,7 +316,7 @@ function readGeometry(
     }
     case "MultiPolygon":
     case "MultiSurface": {
-      const polygons = memberGeometries(element, transform, dim, srsName).flatMap((geometry) =>
+      const polygons = memberGeometries(element, context, dim).flatMap((geometry) =>
         geometry.type === "Polygon"
           ? [geometry.coordinates]
           : geometry.type === "MultiPolygon"
@@ -284,10 +326,7 @@ function readGeometry(
       return { type: "MultiPolygon", coordinates: polygons };
     }
     case "MultiGeometry":
-      return {
-        type: "GeometryCollection",
-        geometries: memberGeometries(element, transform, dim, srsName),
-      };
+      return { type: "GeometryCollection", geometries: memberGeometries(element, context, dim) };
     default:
       return null;
   }
@@ -297,34 +336,29 @@ function readGeometry(
 // (several) wrappers, in document order.
 function memberGeometries(
   element: Element,
-  transform: CoordinateTransform,
+  context: GeometryContext,
   dimension: number,
-  srsName: string | undefined,
 ): Geometry[] {
   const geometries: Geometry[] = [];
   for (const wrapper of childElements(element)) {
     if (!/Members?$/.test(localName(wrapper))) continue;
     for (const child of childElements(wrapper)) {
       if (!isGeometryElement(child)) continue;
-      const geometry = readGeometry(child, transform, dimension, srsName);
+      const geometry = readGeometry(child, context, dimension);
       if (geometry) geometries.push(geometry);
     }
   }
   return geometries;
 }
 
-function polygonRings(
-  element: Element,
-  dimension: number,
-  transform: CoordinateTransform,
-): Position[][] {
+function polygonRings(element: Element, dimension: number, crs: GmlCrs): Position[][] {
   const rings: Position[][] = [];
   for (const boundary of childElements(element)) {
     const name = localName(boundary);
     if (!["exterior", "interior", "outerBoundaryIs", "innerBoundaryIs"].includes(name)) continue;
     const ring = childElements(boundary)[0];
     if (!ring) continue;
-    const positions = ringPositions(ring, dimension).map(transform);
+    const positions = ringPositions(ring, dimension, crs);
     if (positions.length === 0) continue;
     if (name === "exterior" || name === "outerBoundaryIs") rings.unshift(positions);
     else rings.push(positions);
@@ -333,16 +367,16 @@ function polygonRings(
 }
 
 // A LinearRing, or a gml:Ring made of curveMember curves.
-function ringPositions(ring: Element, dimension: number): Position[] {
-  if (localName(ring) !== "Ring") return readPositions(ring, dimension);
+function ringPositions(ring: Element, dimension: number, crs: GmlCrs): Position[] {
+  if (localName(ring) !== "Ring") return readPositions(ring, dimension, crs);
   const positions: Position[] = [];
   for (const member of childElements(ring)) {
     for (const curve of childElements(member)) {
       appendPath(
         positions,
         localName(curve) === "Curve"
-          ? curvePositions(curve, dimension)
-          : readPositions(curve, dimension),
+          ? curvePositions(curve, dimension, crs)
+          : readPositions(curve, dimension, crs),
       );
     }
   }
@@ -351,46 +385,40 @@ function ringPositions(ring: Element, dimension: number): Position[] {
 
 // gml:Curve → segments → LineStringSegment / Arc / ...: the control points in
 // order. Arcs are drawn through their control points, not densified.
-function curvePositions(curve: Element, dimension: number): Position[] {
+function curvePositions(curve: Element, dimension: number, crs: GmlCrs): Position[] {
   const positions: Position[] = [];
   const segments = childElements(curve).find((child) => localName(child) === "segments");
   for (const segment of segments ? childElements(segments) : []) {
-    appendPath(positions, readPositions(segment, srsDimension(segment, dimension)));
+    appendPath(positions, readPositions(segment, srsDimension(segment, dimension), crs));
   }
   return positions;
 }
 
-function surfacePolygons(
-  surface: Element,
-  dimension: number,
-  transform: CoordinateTransform,
-): Position[][][] {
+function surfacePolygons(surface: Element, dimension: number, crs: GmlCrs): Position[][][] {
   const patches = childElements(surface).find((child) =>
     /^(patches|polygonPatches)$/.test(localName(child)),
   );
   return (patches ? childElements(patches) : [])
-    .map((patch) => polygonRings(patch, srsDimension(patch, dimension), transform))
+    .map((patch) => polygonRings(patch, srsDimension(patch, dimension), crs))
     .filter((rings) => rings.length > 0);
 }
 
-function envelopePolygon(
-  element: Element,
-  dimension: number,
-  transform: CoordinateTransform,
-): Geometry | null {
+function envelopePolygon(element: Element, dimension: number, crs: GmlCrs): Geometry | null {
   let corners: Position[];
   if (localName(element) === "Box") {
-    corners = readPositions(element, dimension);
+    corners = readPositions(element, dimension, crs);
   } else {
+    // lowerCorner / upperCorner are GML 3 positions, in the CRS's axis order.
     const lower = childElements(element).find((child) => localName(child) === "lowerCorner");
     const upper = childElements(element).find((child) => localName(child) === "upperCorner");
     corners = [lower, upper]
       .map((corner) => parseNumbers(corner?.textContent))
-      .filter((position) => position.length >= 2);
+      .filter((position) => position.length >= 2)
+      .map((position) => fromGml3(position, crs));
   }
   if (corners.length < 2) return null;
-  const [minX, minY] = transform(corners[0]);
-  const [maxX, maxY] = transform(corners[1]);
+  const [minX, minY] = corners[0];
+  const [maxX, maxY] = corners[1];
   return {
     type: "Polygon",
     coordinates: [
@@ -416,32 +444,50 @@ function appendPath(target: Position[], positions: Position[]): void {
 
 // --- Coordinates -----------------------------------------------------------
 
-// The positions directly under a geometry element, in whichever encoding it
-// uses: posList, a run of pos / pointProperty, GML 2 coordinates, or coord.
-function readPositions(element: Element, dimension: number): Position[] {
+// A GML 3 position (pos, posList, a corner) is written in the CRS's axis order.
+function fromGml3(position: Position, crs: GmlCrs): Position {
+  if (!crs.swapAxes) return crs.toLonLat(position);
+  const [first, second, ...rest] = position;
+  return crs.toLonLat([second, first, ...rest]);
+}
+
+// A GML 2 tuple (coordinates, coord) is always x, y: easting then northing,
+// longitude then latitude, whatever the srsName says. MapServer's WFS 1.0.0
+// output labels EPSG:2180 with a URN (north-first) yet writes east, north.
+function fromGml2(position: Position, crs: GmlCrs): Position {
+  return crs.toLonLat(position);
+}
+
+// The positions directly under a geometry element, in lon/lat, from whichever
+// encoding it uses: posList, a run of pos / pointProperty, GML 2 coordinates,
+// or coord.
+function readPositions(element: Element, dimension: number, crs: GmlCrs): Position[] {
   const children = childElements(element);
   const posList = children.find((child) => localName(child) === "posList");
   if (posList) {
-    return chunk(parseNumbers(posList.textContent), srsDimension(posList, dimension));
+    return chunk(parseNumbers(posList.textContent), srsDimension(posList, dimension)).map(
+      (position) => fromGml3(position, crs),
+    );
   }
   const coordinates = children.find((child) => localName(child) === "coordinates");
-  if (coordinates) return parseGml2Coordinates(coordinates);
+  if (coordinates)
+    return parseGml2Coordinates(coordinates).map((position) => fromGml2(position, crs));
 
   const positions: Position[] = [];
   for (const child of children) {
     const name = localName(child);
     if (name === "pos") {
       const values = parseNumbers(child.textContent);
-      if (values.length >= 2) positions.push(values);
+      if (values.length >= 2) positions.push(fromGml3(values, crs));
     } else if (name === "coord") {
       const values = ["X", "Y", "Z"]
         .map((axis) => childElements(child).find((c) => localName(c) === axis)?.textContent)
         .filter((value): value is string => value != null)
         .map(Number);
-      if (values.length >= 2) positions.push(values);
+      if (values.length >= 2) positions.push(fromGml2(values, crs));
     } else if (name === "pointProperty" || name === "pointRep") {
       const point = childElements(child).find((c) => localName(c) === "Point");
-      if (point) positions.push(...readPositions(point, dimension));
+      if (point) positions.push(...readPositions(point, dimension, crs));
     }
   }
   return positions;
@@ -484,42 +530,65 @@ function srsDimension(element: Element, fallback = 2): number {
 
 // --- CRS -------------------------------------------------------------------
 
+/** An EPSG code named by a GML `srsName`, and how it was named. */
+export interface GmlEpsgName {
+  code: number;
+  /**
+   * True for URN / `opengis.net/def/crs` names, whose GML 3 positions follow
+   * the EPSG axis order; false for the legacy `EPSG:n` and `…/epsg.xml#n`
+   * forms, which are x, y (east, north) by convention.
+   */
+  authorityAxisOrder: boolean;
+}
+
 /**
- * Build the transform from a GML `srsName` to GeoJSON lon/lat.
- *
- * URN and `opengis.net/def/crs` names follow the EPSG axis order (lat/lon for
- * geographic CRSs); the legacy `EPSG:4326` and `…/epsg.xml#4326` forms are
- * lon/lat by convention, and so is an absent srsName.
+ * The EPSG code an `srsName` names, or null for a name in another form.
  *
  * @param srsName - The CRS name from the document or the request.
- * @returns A function mapping one position to lon/lat (extra ordinates kept).
- * @throws {GmlUnsupportedCrsError} For a CRS other than WGS84-like geographic
- *   or Web Mercator.
+ * @returns The code and whether EPSG axis order applies.
  */
-export function coordinateTransform(srsName: string | undefined): CoordinateTransform {
-  const identity: CoordinateTransform = (position) => position;
-  if (!srsName) return identity;
+export function parseEpsgSrsName(srsName: string): GmlEpsgName | null {
   const name = srsName.trim();
-  if (/CRS:?84$/i.test(name)) return identity;
-
   const authority =
     /^urn:(?:x-)?ogc:def:crs:EPSG:[^:]*:(\d+)$/i.exec(name) ??
     /^https?:\/\/www\.opengis\.net\/def\/crs\/EPSG\/[^/]+\/(\d+)$/i.exec(name);
+  if (authority) return { code: Number(authority[1]), authorityAxisOrder: true };
   const legacy =
     /^EPSG:(\d+)$/i.exec(name) ??
     /^https?:\/\/www\.opengis\.net\/gml\/srs\/epsg\.xml#(\d+)$/i.exec(name);
-  const code = (authority ?? legacy)?.[1];
-  if (!code) throw new GmlUnsupportedCrsError(name);
+  return legacy ? { code: Number(legacy[1]), authorityAxisOrder: false } : null;
+}
 
+const LON_LAT: GmlCrs = { swapAxes: false, toLonLat: (position) => position };
+
+/**
+ * Resolve an `srsName` this module handles on its own: none (lon/lat), CRS84,
+ * WGS84-like geographic codes, and Web Mercator.
+ *
+ * @param srsName - The CRS name from the document or the request.
+ * @returns How to read positions in that CRS.
+ * @throws {GmlUnsupportedCrsError} For any other CRS; a caller that can
+ *   reproject resolves it and passes it back through `extraCrs`.
+ */
+export function resolveGmlCrs(srsName: string | undefined): GmlCrs {
+  if (!srsName) return LON_LAT;
+  const name = srsName.trim();
+  if (/CRS:?84$/i.test(name)) return LON_LAT;
+  const epsg = parseEpsgSrsName(name);
+  const code = epsg ? String(epsg.code) : "";
   if (GEOGRAPHIC_EPSG_CODES.has(code)) {
-    return authority ? ([lat, lon, ...rest]) => [lon, lat, ...rest] : identity;
+    // Geographic CRSs are latitude-first in the EPSG registry.
+    return { swapAxes: epsg!.authorityAxisOrder, toLonLat: (position) => position };
   }
   if (WEB_MERCATOR_EPSG_CODES.has(code)) {
-    return ([x, y, ...rest]) => [
-      (x / EARTH_RADIUS) * (180 / Math.PI),
-      (2 * Math.atan(Math.exp(y / EARTH_RADIUS)) - Math.PI / 2) * (180 / Math.PI),
-      ...rest,
-    ];
+    return {
+      swapAxes: false,
+      toLonLat: ([x, y, ...rest]) => [
+        (x / EARTH_RADIUS) * (180 / Math.PI),
+        (2 * Math.atan(Math.exp(y / EARTH_RADIUS)) - Math.PI / 2) * (180 / Math.PI),
+        ...rest,
+      ],
+    };
   }
   throw new GmlUnsupportedCrsError(name);
 }

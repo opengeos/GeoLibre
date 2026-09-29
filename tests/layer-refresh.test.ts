@@ -447,14 +447,30 @@ describe("fetchWfsGeoJson GML fallback (issue #2746)", () => {
     assert.equal(result.data.features.length, 1);
   });
 
+  it("reprojects GML a server returned in its native national grid", async () => {
+    // MapServer's WFS 1.0.0 ignores srsName and answers in EPSG:2180, writing
+    // GML 2 coordinates east, north under a north-first URN label.
+    const gml2180 = `<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs" xmlns:gml="http://www.opengis.net/gml" xmlns:ms="urn:ms">
+      <gml:featureMember><ms:W10_Reda><ms:msGeometry>
+        <gml:Point srsName="urn:ogc:def:crs:EPSG::2180"><gml:coordinates>179194.1117,683828.4757</gml:coordinates></gml:Point>
+      </ms:msGeometry></ms:W10_Reda></gml:featureMember>
+    </wfs:FeatureCollection>`;
+    globalThis.fetch = (async () => new Response(gml2180, { status: 200 })) as typeof fetch;
+
+    const result = await fetchWfsGeoJson({ ...baseParams, version: "1.0.0" });
+    const [lon, lat] = (result.data.features[0].geometry as Point).coordinates;
+    // The Świnoujście roadstead.
+    assert.ok(Math.abs(lon - 14.112) < 0.001 && Math.abs(lat - 53.919) < 0.001, `${lon},${lat}`);
+  });
+
   it("does not retry when the GML names a CRS it cannot convert", async () => {
     let calls = 0;
     globalThis.fetch = (async () => {
       calls += 1;
-      return new Response(GML.replace("EPSG::4326", "EPSG::2180"), { status: 200 });
+      return new Response(GML.replace("EPSG::4326", "EPSG::999999"), { status: 200 });
     }) as typeof fetch;
 
-    await assert.rejects(fetchWfsGeoJson(baseParams), /EPSG::2180/);
+    await assert.rejects(fetchWfsGeoJson(baseParams), /EPSG::999999/);
     assert.equal(calls, 1);
   });
 

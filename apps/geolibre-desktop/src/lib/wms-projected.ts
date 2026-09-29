@@ -7,6 +7,7 @@
 // path in wms-geographic.ts; any other geographic EPSG code (e.g. EPSG:4269) is
 // warped here, in degrees.
 
+import { resolveEpsgProjection } from "./epsg-proj4";
 import {
   describeWmsFailure,
   GEOGRAPHIC_WMS_CRS,
@@ -51,8 +52,8 @@ export interface ProjectedWmsRequest {
 const projections = new Map<string, Promise<Projection | null>>();
 
 /**
- * The projection for an `EPSG:n` CRS, resolved offline from the EPSG tables in
- * geotiff-geokeys-to-proj4, or null when the code is unknown.
+ * The projection for an `EPSG:n` CRS, resolved offline from the bundled EPSG
+ * tables (epsg-proj4.ts), or null when the code is unknown.
  */
 function resolveProjection(code: string): Promise<Projection | null> {
   let projection = projections.get(code);
@@ -60,29 +61,14 @@ function resolveProjection(code: string): Promise<Projection | null> {
     projection = (async () => {
       const epsg = /^EPSG:(\d{4,6})$/.exec(code);
       if (!epsg) return null;
-      // Both loaded on first use, so a session without such a layer never pays for them.
-      const [{ toProj4 }, { default: proj4 }] = await Promise.all([
-        import("geotiff-geokeys-to-proj4"),
-        import("proj4"),
-      ]);
-      // geotiff-geokeys-to-proj4 resolves geographic codes through
-      // ProjectedCSTypeGeoKey too (EPSG:4269 gives +proj=longlat).
-      // tests/wms-projected.test.ts covers both kinds, so a dependency bump
-      // that changes this fails there.
-      const resolved = toProj4({ ProjectedCSTypeGeoKey: Number(epsg[1]) });
-      const definition = resolved.proj4 ?? "";
-      if (!definition || resolved.errors?.CRSNotSupported) return null;
-      const converter = proj4("EPSG:4326", definition.replace(/\+axis=\w+\s*/g, "").trim());
+      const resolved = await resolveEpsgProjection(Number(epsg[1]));
+      if (!resolved) return null;
+      const converter = resolved.proj4("EPSG:4326", resolved.definition);
       return {
         forward: (lonLat: Point) => converter.forward(lonLat) as Point,
-        northFirst: /\+axis=ne/.test(definition),
+        northFirst: resolved.northFirst,
       };
-    })().catch((error) => {
-      console.warn(`Could not resolve WMS CRS ${code} to a projection`, error);
-      return null;
-    });
-    // A failure is cached like an unknown code: both packages are bundled, so
-    // an import error is not transient.
+    })();
     projections.set(code, projection);
   }
   return projection;

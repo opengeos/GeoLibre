@@ -4,9 +4,9 @@ import { DOMParser } from "linkedom";
 import type { LineString, MultiPolygon, Point, Polygon } from "geojson";
 import {
   GmlUnsupportedCrsError,
-  coordinateTransform,
   looksLikeGmlFeatureCollection,
   parseGmlFeatureCollection,
+  resolveGmlCrs,
 } from "../apps/geolibre-desktop/src/lib/gml";
 
 globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
@@ -262,16 +262,43 @@ describe("parseGmlFeatureCollection", () => {
     assert.throws(() => parseGmlFeatureCollection("<ows:ExceptionReport xmlns:ows='urn:o'/>"));
   });
 
+  it("keeps attribute-only and empty-geometry features with a null geometry", () => {
+    const gml = `<FeatureCollection xmlns:gml="http://www.opengis.net/gml">
+      <featureMember><f><name>no geometry</name></f></featureMember>
+      <featureMember><f><g><gml:LineString><gml:posList></gml:posList></gml:LineString></g><name>empty</name></f></featureMember>
+    </FeatureCollection>`;
+    const features = parseGmlFeatureCollection(gml).features;
+    assert.deepEqual(
+      features.map((feature) => [feature.geometry, feature.properties?.name]),
+      [
+        [null, "no geometry"],
+        [null, "empty"],
+      ],
+    );
+  });
+
   it("returns an empty collection for zero members", () => {
     const gml = `<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberReturned="0"/>`;
     assert.deepEqual(parseGmlFeatureCollection(gml).features, []);
   });
 });
 
-describe("coordinateTransform", () => {
-  it("treats CRS84 and a missing name as lon/lat", () => {
-    assert.deepEqual(coordinateTransform(undefined)([1, 2]), [1, 2]);
-    assert.deepEqual(coordinateTransform("urn:ogc:def:crs:OGC:1.3:CRS84")([1, 2]), [1, 2]);
-    assert.deepEqual(coordinateTransform("urn:x-ogc:def:crs:EPSG:6.9:4326")([2, 1]), [1, 2]);
+describe("resolveGmlCrs", () => {
+  it("treats CRS84 and a missing name as lon/lat, and swaps only URN 4326", () => {
+    assert.deepEqual(resolveGmlCrs(undefined), {
+      swapAxes: false,
+      toLonLat: resolveGmlCrs(undefined).toLonLat,
+    });
+    assert.equal(resolveGmlCrs("urn:ogc:def:crs:OGC:1.3:CRS84").swapAxes, false);
+    assert.equal(resolveGmlCrs("urn:x-ogc:def:crs:EPSG:6.9:4326").swapAxes, true);
+    assert.equal(resolveGmlCrs("EPSG:4326").swapAxes, false);
+  });
+
+  it("reads GML 2 coordinates x, y even under a north-first URN name", () => {
+    const gml = `<FeatureCollection xmlns:gml="http://www.opengis.net/gml">
+      <featureMember><f><g><gml:Point srsName="urn:ogc:def:crs:EPSG::4326"><gml:coordinates>14.1,54.4</gml:coordinates></gml:Point></g></f></featureMember>
+    </FeatureCollection>`;
+    const [feature] = parseGmlFeatureCollection(gml).features;
+    assert.deepEqual((feature.geometry as Point).coordinates, [14.1, 54.4]);
   });
 });

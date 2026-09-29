@@ -469,6 +469,7 @@ pub fn run() {
             native_duckdb::count_native_vector_file_features,
             ensure_martin_binary,
             fetch_url_bytes,
+            fetch_url_response,
             arcgis_http::fetch_arcgis_response,
             arcgis_http::cancel_arcgis_request,
             install_external_plugin_archive,
@@ -1626,6 +1627,69 @@ async fn fetch_url_bytes(
     })
     .await
     .map_err(|error| format!("Tile fetch task failed: {error}"))?
+}
+
+/// A native response that keeps the status and body even when the status is
+/// not a success, for protocols whose error answers carry a machine-readable
+/// body (an OGC `ExceptionReport` on a 400, say).
+#[derive(Serialize)]
+struct NativeHttpResponse {
+    status: u16,
+    content_type: Option<String>,
+    body: Vec<u8>,
+}
+
+/// Fetches a URL, bypassing browser CORS, and returns the status, content type
+/// and body whatever the status. Same guards, timeout clamp and optional body
+/// limit as [`fetch_url_bytes`], which instead rejects any non-success status.
+#[tauri::command]
+async fn fetch_url_response(
+    url: String,
+    timeout_secs: Option<u64>,
+    max_bytes: Option<u64>,
+) -> Result<NativeHttpResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fetch_url_response_blocking(url, timeout_secs, max_bytes)
+    })
+    .await
+    .map_err(|error| format!("Fetch task failed: {error}"))?
+}
+
+fn fetch_url_response_blocking(
+    url: String,
+    timeout_secs: Option<u64>,
+    max_bytes: Option<u64>,
+) -> Result<NativeHttpResponse, String> {
+    ensure_fetchable_url(&url)?;
+
+    let client = guarded_http_client()?;
+    let timeout = resolve_fetch_timeout_secs(timeout_secs);
+
+    let response = client
+        .get(&url)
+        .timeout(Duration::from_secs(timeout))
+        .send()
+        .map_err(|error| request_error_message(&error))?;
+    let status = response.status().as_u16();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let body = if let Some(limit) = max_bytes {
+        let content_length = response.content_length();
+        http_body::read_limited_body(response, content_length, limit)?
+    } else {
+        response
+            .bytes()
+            .map(|bytes| bytes.to_vec())
+            .map_err(|error| format!("Could not read response body: {error}"))?
+    };
+    Ok(NativeHttpResponse {
+        status,
+        content_type,
+        body,
+    })
 }
 
 /// Resolves the request budget for a fetch, defaulting to the tile timeout and
