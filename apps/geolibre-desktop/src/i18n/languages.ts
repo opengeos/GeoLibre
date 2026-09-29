@@ -16,6 +16,7 @@ export const DEFAULT_LANGUAGE = "en";
  */
 export const LANGUAGE_NAMES: Record<string, { nativeName: string; englishName: string }> = {
   en: { nativeName: "English", englishName: "English" },
+  az: { nativeName: "Azərbaycanca", englishName: "Azerbaijani" },
   he: { nativeName: "עברית", englishName: "Hebrew" },
   zh: { nativeName: "中文", englishName: "Chinese" },
   es: { nativeName: "Español", englishName: "Spanish" },
