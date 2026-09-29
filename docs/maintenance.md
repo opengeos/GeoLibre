@@ -18,12 +18,18 @@ suite.
 ### Patched packages (`patches/`)
 
 `postinstall` applies the `patch-package` patches in `patches/`, and each patch
-file names the exact version it was made against. `@carbonplan/zarr-layer` is
-declared with an exact version (no `^`) in both `apps/geolibre-desktop` and
-`packages/plugins` so a routine install can never move it past the patched
-version. To bump it, regenerate the patch against the new version (or drop it if
-upstream fixed the bug), rename the patch file, and update both declarations and
-`package-lock.json` in the same PR.
+file names the exact version it was made against. A bump that moves a patched
+package past that version fails `npm install` in CI. Regenerate the patch
+against the new version (or drop it if upstream fixed the bug), rename the patch
+file, and update `package-lock.json` in the same PR.
+
+`@carbonplan/zarr-layer` is declared with an exact version (no `^`) in both
+`apps/geolibre-desktop` and `packages/plugins`. It carried a patch until 0.10.0,
+which shipped the same non-throwing uniform lookups upstream (the layer vanished
+at zoom >= 12 on Mesa GPUs without them). Before bumping it, confirm
+`createShaderProgram` in its `dist/index.js` still looks up `shift_x`,
+`shift_y` and `u_worldXOffset` with `gl.getUniformLocation`, not
+`mustGetUniformLocation`.
 
 ### `geolibre-wasm` (`packages/processing/package.json`)
 
