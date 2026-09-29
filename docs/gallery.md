@@ -16,6 +16,7 @@ Every project is tagged with its theme, its features (`time-slider`, `swipe`,
 so you can filter the gallery on share.geolibre.app by tag.
 
 [Browse the Official Demos collection](https://share.geolibre.app/giswqs/collections/official-demos){ .md-button .md-button--primary }
+[Watch the video tutorial](https://youtu.be/2r5OhvEa3AA){ .md-button }
 
 Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Climate](#climate) · [Oceans and water](#oceans-and-water) · [Nature and land](#nature-and-land) · [Transport and mobility](#transport-and-mobility) · [Cities and infrastructure](#cities-and-infrastructure) · [Energy](#energy) · [Space and Earth observation](#space-and-earth-observation) · [History and culture](#history-and-culture) · [Society and economy](#society-and-economy) · [Food and agriculture](#food-and-agriculture)
 

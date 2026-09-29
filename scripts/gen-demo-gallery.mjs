@@ -99,6 +99,7 @@ Every project is tagged with its theme, its features (\`time-slider\`, \`swipe\`
 so you can filter the gallery on share.geolibre.app by tag.
 
 [Browse the Official Demos collection](${data.collection}){ .md-button .md-button--primary }
+[Watch the video tutorial](https://youtu.be/2r5OhvEa3AA){ .md-button }
 
 Jump to a theme: ${jump}
 

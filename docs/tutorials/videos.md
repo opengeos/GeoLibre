@@ -335,6 +335,25 @@ Related: [Processing Tools](../user-guide/processing.md) ·
     - 14:42 Sharing the georeferenced map
     - 15:29 Conclusion
 
+## 100 Interactive Maps from Open Data: Explore, Fork, and Build Your Own with GeoLibre
+
+<div class="video-embed">
+  <iframe src="https://www.youtube-nocookie.com/embed/2r5OhvEa3AA" title="100 Interactive Maps from Open Data: Explore, Fork, and Build Your Own with GeoLibre" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+</div>
+
+**24:37 · September 2026 · [Watch on YouTube](https://youtu.be/2r5OhvEa3AA)**
+
+Tours the open data gallery: 100 interactive maps built entirely from free
+public data and open live in the browser. Shows how to explore and fork any of
+them, and how they were made, so you can build the same kind of map from your
+own data. The maps span 12 themes, from health and natural hazards to history
+and culture, with data from NASA, NOAA, USGS, CDC, the World Bank, Our World in
+Data, Eurostat, Wikidata, and more.
+
+Related: [Gallery](../gallery.md) ·
+[Official Demos collection](https://share.geolibre.app/giswqs/collections/official-demos) ·
+[Python package](../python.md)
+
 ## More videos
 
 The channel also covers GeoAI, DuckDB, and geospatial Python more broadly:
