@@ -79,6 +79,7 @@ import {
   sharedSettingsLanguage,
 } from "./lib/desktop-settings-url";
 import { parseDeploymentCapabilities, useAppStore } from "@geolibre/core";
+import { readConfiguredAppName } from "./lib/app-name";
 import { readDeploymentEnvValue } from "./lib/deployment-env";
 import { initializeNativeProjectOpen } from "./lib/native-project-open";
 
@@ -161,6 +162,11 @@ if (isDesktopRuntime()) {
 // Recover from chunks orphaned by a web redeploy (stale lazy import → 404). A
 // no-op in the desktop build, whose chunks are bundled locally.
 installStaleChunkReload();
+
+// A deployment-configured app name also titles the browser tab; index.html's
+// static <title> stays the fallback when none is set.
+const configuredAppName = readConfiguredAppName();
+if (configuredAppName) document.title = configuredAppName;
 
 // What this deployment is allowed to do (issue #1673). Read once, before the
 // app renders, so no surface ever paints with the full grant and then retracts

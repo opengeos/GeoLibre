@@ -456,6 +456,22 @@ drag-and-drop, embed commands — but does **not** restrict the server, so keep
 the protections above in place too. See
 [Deployment Capabilities](deployment-capabilities.md).
 
+#### Custom app name
+
+Replace "GeoLibre" at the start of the toolbar and in the browser tab title with
+your own name:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_APP_NAME="Acme Maps" \
+  ghcr.io/opengeos/geolibre:latest
+```
+
+The name is read at container startup, so a prebuilt image can be rebranded
+without a rebuild. Runs of whitespace collapse to one space and the name is
+capped at 60 characters. For a non-Docker web build, set
+`VITE_GEOLIBRE_APP_NAME` when running `npm run build` instead.
+
 #### Driving an embedded map from a host page
 
 To let a page that frames the app talk to the live map over `postMessage` (fly to

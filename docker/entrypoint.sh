@@ -441,6 +441,13 @@ if share_url:
             "GEOLIBRE_SHARE_URL", share_url, ("https",), ("http",), ("localhost", "127.0.0.1")
         )
 
+# Display name for the app chrome (toolbar label, browser tab). Unset keeps
+# "GeoLibre". It is rendered as text, never markup, and json.dump below escapes
+# it for the generated script, so no further validation is needed here.
+app_name = os.environ.get("GEOLIBRE_APP_NAME", "").strip()
+if app_name:
+    deployment["VITE_GEOLIBRE_APP_NAME"] = app_name
+
 # Live collaboration relay. Unset leaves collaboration dark.
 collab_url = os.environ.get("GEOLIBRE_COLLAB_URL", "").strip()
 if collab_url:

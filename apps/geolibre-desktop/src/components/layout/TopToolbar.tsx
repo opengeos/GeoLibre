@@ -124,6 +124,7 @@ import type { ProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useToolbarPanels } from "../../hooks/useToolbarPanels";
 import { useVectorTileGeometryBackfill } from "../../hooks/useVectorTileGeometryBackfill";
 import type { ThemeMode } from "../../hooks/useThemeMode";
+import { resolveAppName } from "../../lib/app-name";
 import { isMobile } from "../../lib/is-mobile";
 import { isTauri } from "../../lib/tauri-io";
 import { isMaptoolkitBasemapActive } from "../../lib/maptoolkit-basemap";
@@ -2243,7 +2244,8 @@ export function TopToolbar({
   // on iOS and Android too — where the app is named plain "GeoLibre" (the bundle
   // name from tauri.ios.conf.json, the home-screen icon, and the store listing),
   // so titling it "GeoLibre Desktop" there contradicts every other surface.
-  const appTitle = isTauri() && !isMobile() ? "GeoLibre Desktop" : "GeoLibre";
+  // A deployment can replace either with its own name (GEOLIBRE_APP_NAME).
+  const appTitle = resolveAppName(isTauri() && !isMobile() ? "GeoLibre Desktop" : "GeoLibre");
   const renderToolbarLabel = (label: string) =>
     showLabels ? <span className="hidden sm:inline">{label}</span> : null;
   const chrome: ToolbarChrome = {
