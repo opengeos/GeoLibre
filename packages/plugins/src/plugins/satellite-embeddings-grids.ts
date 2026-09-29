@@ -1,4 +1,3 @@
-/// <reference path="../mgrs.d.ts" />
 /**
  * Tile grids the satellite embedding datasets are published on, and the UTM
  * helpers they share. Pure functions (no DOM, no map) so they are unit tested.
@@ -11,8 +10,16 @@
  */
 
 import type { Feature, Polygon } from "geojson";
-import { forward as mgrsForward, inverse as mgrsInverse } from "mgrs";
+import * as mgrsModule from "mgrs";
 import proj4 from "proj4";
+
+// mgrs 2.x publishes an ESM `module` build with named exports only, and a
+// minified UMD `main` whose named exports Node cannot detect (under Node the
+// namespace holds just `default`). Bundlers take the first, Node and the test
+// runner the second, so read the functions from whichever carries them.
+// `Reflect.get` keeps bundlers from flagging the absent ESM default export.
+const mgrs: typeof mgrsModule =
+  "forward" in mgrsModule ? mgrsModule : (Reflect.get(mgrsModule, "default") as typeof mgrsModule);
 
 /** A `[west, south, east, north]` box in degrees. */
 export type LonLatBbox = [number, number, number, number];
@@ -190,7 +197,7 @@ export function mgrsTileId(lon: number, lat: number): string | null {
   const wrappedLon = ((((lon + 180) % 360) + 360) % 360) - 180;
   let reference: string;
   try {
-    reference = mgrsForward([wrappedLon, lat], 1);
+    reference = mgrs.forward([wrappedLon, lat], 1);
   } catch {
     return null;
   }
@@ -241,7 +248,7 @@ export function sentinel2TileRing(tileId: string): [number, number][] | null {
   let corner: number[];
   try {
     // `inverse` of a bare square reference is the square's south-west corner.
-    corner = mgrsInverse(`${zone}${match[2]}${match[3]}`);
+    corner = mgrs.inverse(`${zone}${match[2]}${match[3]}`);
   } catch {
     return null;
   }
