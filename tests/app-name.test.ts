@@ -37,6 +37,15 @@ describe("readConfiguredAppName", () => {
     assert.equal(Array.from(name ?? "").length, APP_NAME_MAX_LENGTH);
     assert.equal(name, "🗺".repeat(APP_NAME_MAX_LENGTH));
   });
+
+  it("counts a ZWJ emoji sequence as one character when capping", () => {
+    const family = "👨‍👩‍👧";
+    const long = "a".repeat(APP_NAME_MAX_LENGTH - 1) + family + "tail";
+    assert.equal(
+      readConfiguredAppName({ [APP_NAME_ENV_KEY]: long }, {}),
+      "a".repeat(APP_NAME_MAX_LENGTH - 1) + family,
+    );
+  });
 });
 
 describe("resolveAppName", () => {

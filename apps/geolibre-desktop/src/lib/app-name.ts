@@ -20,7 +20,7 @@ export const APP_NAME_MAX_LENGTH = 60;
  * The operator-configured app name, or undefined when none is set.
  *
  * Runs of whitespace (including newlines) collapse to one space, and the result
- * is capped at {@link APP_NAME_MAX_LENGTH} characters.
+ * is capped at {@link APP_NAME_MAX_LENGTH} user-perceived characters.
  *
  * @param deploymentEnv - Runtime env; defaults to the value on `window`.
  * @param buildEnv - Build-time env; defaults to the allowlisted build env.
@@ -34,8 +34,21 @@ export function readConfiguredAppName(
   const raw = readDeploymentEnvValue(APP_NAME_ENV_KEY, deploymentEnv, buildEnv);
   const name = raw?.replace(/\s+/g, " ").trim();
   if (!name) return undefined;
-  // Slice by code point so a cap never splits a surrogate pair (emoji, CJK ext).
-  return Array.from(name).slice(0, APP_NAME_MAX_LENGTH).join("").trim();
+  return graphemes(name).slice(0, APP_NAME_MAX_LENGTH).join("").trim();
+}
+
+/**
+ * Split text into user-perceived characters, so a length cap never cuts a ZWJ
+ * emoji sequence, a flag, or a base letter from its combining marks. Falls back
+ * to code points (which still keeps surrogate pairs whole) without Segmenter.
+ *
+ * @param text - The text to split.
+ * @returns The grapheme clusters of `text`, in order.
+ */
+function graphemes(text: string): string[] {
+  if (typeof Intl.Segmenter !== "function") return Array.from(text);
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  return Array.from(segmenter.segment(text), (part) => part.segment);
 }
 
 /**
