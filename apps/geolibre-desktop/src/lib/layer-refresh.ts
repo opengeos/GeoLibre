@@ -3,6 +3,7 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import { parseGeoRssLayer } from "./georss";
 import { looksLikeGmlFeatureCollection } from "./gml";
 import { parseGmlWithReprojection } from "./gml-projection";
+import { classifyFetchFailure } from "./fetch-error";
 import { isTauri } from "./is-tauri";
 import {
   arcGisAxisCheckRequest,
@@ -35,6 +36,11 @@ const CSW_PROXY_PATH = "/__geolibre_csw_proxy";
 // reason as the WFS/GPX proxy paths above.
 const CSW_SOURCE_KIND = "csw";
 const FETCH_TIMEOUT_MS = 30_000;
+// Largest WFS response the desktop's native client reads. GML runs several
+// times larger than GeoJSON (8.5 MB for 16 Polish voivodeships), but the body
+// also crosses the Tauri IPC boundary as a JSON number array, so an unbounded
+// one could exhaust the app's memory. Same ceiling as a WCS coverage.
+const WFS_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
 // Feature cap for refreshing an OGC API - Features layer whose stored request
 // carries no `maxFeatures` (added before it was persisted, or hand-edited).
 // Mirrors DEFAULT_OGC_FEATURES_MAX_FEATURES in lib/ogc-api-features.ts.
@@ -309,6 +315,7 @@ async function fetchNativeText(url: string, signal: AbortSignal): Promise<Fetche
   const pending = fetchUrlResponse(url, {
     context: "WFS GetFeature",
     timeoutSecs: Math.ceil(FETCH_TIMEOUT_MS / 1000),
+    maxBytes: WFS_MAX_RESPONSE_BYTES,
   });
   // If the abort wins the race, the native call is left unobserved; swallow
   // its later rejection (the wrapper still logs it to diagnostics).
@@ -468,16 +475,18 @@ export async function fetchWfsGeoJson(
 
 /**
  * Whether a request failed at the connection level, where the same request may
- * well succeed a moment later: the native client could not send it (reqwest's
- * "error sending request", which covers a reset connection), the browser fetch
- * rejected without a response, or a gateway (the dev proxy included) answered
- * 502 / 503 / 504. Timeouts are excluded: they have already spent the budget.
+ * well succeed a moment later: a network failure as `classifyFetchFailure`
+ * defines it (the browser's opaque fetch rejection, a native connection reset),
+ * reqwest's generic "error sending request" (its message hides the reset
+ * behind it), or a gateway (the dev proxy included) answering 502 / 503 / 504.
+ * Timeouts are excluded, since they have already spent the budget, and so is
+ * any other TypeError, which is a bug rather than a flaky network.
  *
  * @param error - The failure from one GetFeature attempt.
  * @returns True when one retry is worthwhile.
  */
 export function isTransientTransportError(error: unknown): boolean {
-  if (error instanceof TypeError) return true;
+  if (classifyFetchFailure(error).kind === "network") return true;
   const message = error instanceof Error ? error.message : String(error);
   return (
     /error sending request/i.test(message) || /^Request failed with status 50[234]\b/.test(message)

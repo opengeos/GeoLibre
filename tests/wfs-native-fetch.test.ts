@@ -8,6 +8,7 @@ import { DOMParser } from "linkedom";
 interface NativeCall {
   cmd: string;
   url: string;
+  maxBytes?: number;
 }
 const calls: NativeCall[] = [];
 let answer: (url: string) => {
@@ -19,8 +20,8 @@ let answer: (url: string) => {
 (globalThis as { window?: unknown }).window = {
   localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
   __TAURI_INTERNALS__: {
-    invoke: async (cmd: string, args: { url: string }) => {
-      calls.push({ cmd, url: args.url });
+    invoke: async (cmd: string, args: { url: string; maxBytes?: number }) => {
+      calls.push({ cmd, url: args.url, maxBytes: args.maxBytes });
       const { status, content_type, body } = answer(args.url);
       // Tauri serializes Vec<u8> as a plain number array.
       return { status, content_type, body: Array.from(new TextEncoder().encode(body)) };
@@ -31,7 +32,8 @@ let answer: (url: string) => {
 };
 globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
 
-const { fetchWfsGeoJson } = await import("../apps/geolibre-desktop/src/lib/layer-refresh");
+const { fetchWfsGeoJson, isTransientTransportError } =
+  await import("../apps/geolibre-desktop/src/lib/layer-refresh");
 
 const GML = `<?xml version="1.0" encoding="UTF-8"?>
 <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:ms="urn:ms">
@@ -71,6 +73,8 @@ describe("WFS GetFeature on desktop", () => {
     );
 
     assert.ok(calls.every((call) => call.cmd === "fetch_url_response"));
+    // The native read is capped, since the body also crosses IPC.
+    assert.ok(calls.every((call) => call.maxBytes === 128 * 1024 * 1024));
     assert.equal(result.outputFormat, "application/gml+xml; version=3.2");
     const [feature] = result.data.features;
     assert.deepEqual((feature.geometry as Point).coordinates, [14.11, 54.44]);
@@ -121,5 +125,27 @@ describe("WFS GetFeature on desktop", () => {
     answer = () => ({ status: 503, content_type: "text/plain", body: "busy" });
     await assert.rejects(fetchWfsGeoJson(params, { useWfsProxy: true }), /status 503/);
     assert.equal(calls.length, 2);
+  });
+});
+
+describe("isTransientTransportError", () => {
+  it("retries network failures and gateway errors, not bugs or client errors", () => {
+    assert.equal(isTransientTransportError(new TypeError("Failed to fetch")), true);
+    assert.equal(isTransientTransportError(new TypeError("Load failed")), true);
+    assert.equal(
+      isTransientTransportError(
+        new Error("Request failed: error sending request for url (https://x/wfs)"),
+      ),
+      true,
+    );
+    assert.equal(isTransientTransportError(new Error("Request failed with status 502")), true);
+    // A defect in the parsing chain is a TypeError too, but not a network one.
+    assert.equal(
+      isTransientTransportError(
+        new TypeError("Cannot read properties of undefined (reading 'type')"),
+      ),
+      false,
+    );
+    assert.equal(isTransientTransportError(new Error("Request failed with status 404")), false);
   });
 });
