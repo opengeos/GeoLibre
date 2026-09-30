@@ -87,6 +87,11 @@ function withViewerFlags(
 // carries the exporting app's values so it opens looking the same (#2764).
 const CHROME_PARAMS = ["layout", "maponly", "toolbar", "panels", "hidePanels"] as const;
 const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
+const MAP_ONLY_VALUES = new Set(["", "true", "1", "yes", "on"]);
+
+function normalized(value: string | null): string {
+  return value?.trim().toLowerCase() ?? "";
+}
 
 export interface ViewerChromeState {
   /** The theme the exporting app is showing. */
@@ -115,17 +120,19 @@ export function viewerChromeParams(
   const out: Array<[string, string]> = [];
   for (const key of CHROME_PARAMS) {
     const value = params.get(key);
-    // The live collapse state replaces a launch-time `panels=collapsed`, which
-    // the user may have expanded since.
-    if (value === null || (key === "panels" && value.trim().toLowerCase() === "collapsed")) {
+    // Only a hidden `panels` value is forwarded: the live collapse state below
+    // replaces any other (e.g. a launch-time `panels=collapsed` the user has
+    // since expanded).
+    if (value === null || (key === "panels" && !HIDDEN_PANEL_VALUES.has(normalized(value)))) {
       continue;
     }
     out.push([key, value]);
   }
+  // Mirrors panelsHidden in useLayoutOptions.
   const panelsHidden =
-    params.has("maponly") ||
-    HIDDEN_PANEL_VALUES.has(params.get("panels")?.trim().toLowerCase() ?? "") ||
-    params.get("hidePanels")?.trim().toLowerCase() === "true";
+    (params.has("maponly") && MAP_ONLY_VALUES.has(normalized(params.get("maponly")))) ||
+    HIDDEN_PANEL_VALUES.has(normalized(params.get("panels"))) ||
+    normalized(params.get("hidePanels")) === "true";
   if (state.layersCollapsed && !panelsHidden) out.push(["panels", "collapsed"]);
   if (state.themeMode) out.push(["theme", state.themeMode]);
   return out;

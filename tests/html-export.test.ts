@@ -205,6 +205,19 @@ describe("viewerChromeParams (#2764)", () => {
     assert.deepEqual(viewerChromeParams("?panels=collapsed", { layersCollapsed: false }), []);
   });
 
+  it("lets a collapsed Layers panel replace a non-hidden panels value", () => {
+    assert.deepEqual(viewerChromeParams("?panels=visible", { layersCollapsed: true }), [
+      ["panels", "collapsed"],
+    ]);
+  });
+
+  it("treats a falsy maponly as panels shown", () => {
+    assert.deepEqual(viewerChromeParams("?maponly=false", { layersCollapsed: true }), [
+      ["maponly", "false"],
+      ["panels", "collapsed"],
+    ]);
+  });
+
   it("does not collapse panels that are hidden", () => {
     assert.deepEqual(viewerChromeParams("?maponly", { layersCollapsed: true }), [["maponly", ""]]);
     assert.deepEqual(viewerChromeParams("?panels=hidden", { layersCollapsed: true }), [
