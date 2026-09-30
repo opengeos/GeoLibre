@@ -14,6 +14,7 @@ import {
   rangeForIndex,
 } from "../packages/plugins/src/plugins/point-cloud-annotation/label-store";
 import { readFileSync } from "node:fs";
+import { deflateSync } from "fflate";
 import { createRequire } from "node:module";
 import {
   initSync,
@@ -254,6 +255,13 @@ describe("LAS export", () => {
     assert.equal(extractProjcsFromWkt(`COMPD_CS["x",${wkt},VERT_CS["v"]]`), wkt);
   });
 
+  it("rejects a VLR payload too long for its uint16 length field", () => {
+    assert.throws(
+      () => writeLas(cloud, { crs: { ...resolveExportCrs(undefined), wkt: "x".repeat(70000) } }),
+      /exceeds 65535/,
+    );
+  });
+
   it("falls back to WGS 84 for a missing or unparseable WKT", () => {
     assert.equal(resolveExportCrs(undefined).wkt, WGS84_WKT);
     assert.equal(resolveExportCrs("not a crs").wkt, WGS84_WKT);
@@ -331,6 +339,8 @@ describe("LAZ export", () => {
     const laz = writeLaz(cloud, { compress_points, laszip_vlr_data }, { now });
     assert.ok(laz.length < las.length / 2, `LAZ ${laz.length} vs LAS ${las.length}`);
     assert.equal(laz[104], 7 | 0x80);
+    // maplibre-gl-lidar <= 0.18.0 only recognises LAZ by this header field.
+    assert.match(new TextDecoder().decode(laz.subarray(58, 90)), /laszip/i);
 
     const require = createRequire(import.meta.url);
     const { createLazPerf } = require("laz-perf/lib/node");
@@ -454,6 +464,15 @@ describe("PointLabelStore", () => {
     assert.equal(rangeForIndex(ranges, 1)?.key, "a");
     assert.equal(rangeForIndex(ranges, 3), undefined);
     assert.equal(rangeForIndex(ranges, 6)?.key, "b");
+  });
+
+  it("drops a truncated node rather than mislabelling a point", () => {
+    // Deflate of a lone continuation byte: a varint that never ends.
+    const store = new PointLabelStore();
+    const truncated = Buffer.from(deflateSync(Uint8Array.from([0x80]))).toString("base64");
+    assert.throws(() => decodeNodeEdits(truncated), RangeError);
+    store.load({ version: 1, sources: [{ url: "https://x/a.laz", nodes: { a: truncated } }] });
+    assert.equal(store.isEmpty, true);
   });
 
   it("treats a malformed project state as empty", () => {

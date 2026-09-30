@@ -166,6 +166,11 @@ export function writeLas(cloud: LasExportCloud, options: WriteLasOptions = {}): 
     { userId: "LASF_Projection", recordId: 2112, description: "OGC WKT", data: wktBytes },
     ...(options.extraVlrs ?? []),
   ];
+  // A VLR's payload length is a uint16; a longer one (e.g. a huge WKT)
+  // would corrupt every offset after it.
+  for (const vlr of vlrs) {
+    if (vlr.data.length > 0xffff) throw new Error(`VLR "${vlr.userId}" exceeds 65535 bytes`);
+  }
   const pointOffset = vlrs.reduce(
     (offset, vlr) => offset + VLR_HEADER_SIZE + vlr.data.length,
     HEADER_SIZE,
@@ -381,7 +386,14 @@ export function writeLaz(
     data: encoder.laszip_vlr_data(format, 0),
   };
   const bytes = new Uint8Array(
-    writeLas(cloud, { ...options, extraVlrs: [laszip], pointFormatFlags: 0x80 }),
+    writeLas(cloud, {
+      // maplibre-gl-lidar <= 0.18.0 detects LAZ by "laszip" in this field
+      // (copc.js strips the 0x80 format bit), so name it to stay readable.
+      softwareName: "GeoLibre annotator (LASzip)",
+      ...options,
+      extraVlrs: [laszip],
+      pointFormatFlags: 0x80,
+    }),
   );
   const pointOffset = new DataView(bytes.buffer).getUint32(96, true);
   return encoder.compress_points(

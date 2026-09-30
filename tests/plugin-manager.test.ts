@@ -1238,6 +1238,38 @@ describe("PluginManager plugin coordination", () => {
     assert.equal(manager.applyPluginState("missing", app, {}), false);
   });
 
+  it("clears project-data state on a load that does not carry it, when opted in", () => {
+    const manager = new PluginManager();
+    const data: unknown[] = [];
+    const preference: unknown[] = [];
+    manager.register(
+      testPlugin({
+        id: "data",
+        clearsStateOnProjectLoad: true,
+        applyProjectState: (_app, state) => {
+          data.push(state);
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "preference",
+        applyProjectState: (_app, state) => {
+          preference.push(state);
+        },
+      }),
+    );
+    const empty = { manifestUrls: [], activePluginIds: [], mapControlPositions: {}, settings: {} };
+    manager.restoreProjectState(
+      { ...empty, settings: { data: { labels: 1 }, preference: { on: true } } },
+      app,
+    );
+    // A second project with neither setting: only the opted-in plugin is reset.
+    manager.restoreProjectState(empty, app);
+    assert.deepEqual(data, [{ labels: 1 }, undefined]);
+    assert.deepEqual(preference, [{ on: true }]);
+  });
+
   it("prevents recursive activation across coordinating plugins", async () => {
     const manager = new PluginManager();
     let firstCalls = 0;

@@ -308,5 +308,16 @@ test.describe("point cloud annotation", () => {
     await startSession(page, { restored: true });
     await expect.poll(() => countOf(6), { timeout: 30_000 }).toBe(buildings);
     expect(await countOf(9)).toBe(water);
+
+    // The exported LAZ opens in GeoLibre again (LAS 1.4, LASzip-compressed).
+    const lazPath = join(dir, "annotated.laz");
+    await writeFile(lazPath, laz!);
+    await page.getByRole("button", { name: "Add Data", exact: true }).click();
+    await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
+    await page.locator('input[type="file"][accept*=".laz"]').first().setInputFiles(lazPath);
+    await expect(
+      page.getByText(`${exported.toLocaleString("en-US")} points`, { exact: true }).first(),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Failed to load/)).toHaveCount(0);
   });
 });

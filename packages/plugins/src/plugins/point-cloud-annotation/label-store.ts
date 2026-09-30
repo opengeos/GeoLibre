@@ -105,13 +105,16 @@ export function decodeNodeEdits(text: string): Map<number, number> {
     let shift = 0;
     let byte: number;
     do {
+      // A truncated record throws, so load() drops the node instead of
+      // relabelling the wrong point.
+      if (at >= bytes.length) throw new RangeError("truncated point label record");
       byte = bytes[at++];
       delta += (byte & 0x7f) * 2 ** shift;
       shift += 7;
-    } while (byte & 0x80 && at < bytes.length);
+    } while (byte & 0x80);
     const index = previous + 1 + delta;
     previous = index;
-    if (at >= bytes.length) break;
+    if (at >= bytes.length) throw new RangeError("truncated point label record");
     edits.set(index, bytes[at++]);
   }
   return edits;

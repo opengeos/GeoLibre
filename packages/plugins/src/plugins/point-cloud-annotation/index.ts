@@ -1187,6 +1187,8 @@ export const pointCloudAnnotationPlugin: GeoLibrePlugin = {
   // Edits the maplibre-gl-lidar overlay, which only the MapLibre engine hosts
   // with the camera the selection projects through.
   engines: ["maplibre"],
+  // Labels are project data: opening a project without them must clear them.
+  clearsStateOnProjectLoad: true,
   activate: (app) => {
     unregisterPanel =
       app.registerRightPanel?.({

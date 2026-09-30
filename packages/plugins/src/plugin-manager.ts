@@ -636,9 +636,14 @@ export class PluginManager {
       }
 
       // Regular project loads apply only the settings present in the file. New
-      // project resets can opt into clearing cached state for every plugin.
+      // project resets can opt into clearing cached state for every plugin,
+      // and a plugin whose state is project data (not a preference) opts into
+      // being cleared by any load that does not carry it.
       const hasSetting = state?.settings && id in state.settings;
-      if (plugin.applyProjectState && (hasSetting || options.resetMissingSettings)) {
+      if (
+        plugin.applyProjectState &&
+        (hasSetting || options.resetMissingSettings || plugin.clearsStateOnProjectLoad)
+      ) {
         const updated = plugin.applyProjectState(
           scopedApp,
           hasSetting ? state.settings[id] : undefined,
