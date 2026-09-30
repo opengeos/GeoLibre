@@ -1090,6 +1090,12 @@ def test_point_cloud_annotations_read_box_status_and_attributes():
         }
     }
     boxes = p.point_cloud_annotations(project)["boxes"]
+    # Lengths are UTF-16 code units, like the app: 40 emoji are 80 units.
+    assert p._box_attributes({"\U0001f600" * 40: "\U0001f600" * 200}) == {
+        "\U0001f600" * 32: "\U0001f600" * 128
+    }
+    # A pair that would be split is dropped whole.
+    assert p._clip_utf16("a" + "\U0001f600", 2) == "a"
     assert [(b["status"], b["attributes"]) for b in boxes] == [
         ("reviewed", {"make": "Ford"}),
         ("new", {}),

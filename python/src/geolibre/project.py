@@ -2084,8 +2084,27 @@ def _box_attributes(value: Any) -> dict[str, str]:
         if len(out) >= _MAX_BOX_ATTRIBUTES:
             break
         if isinstance(key, str) and key.strip() and isinstance(item, str):
-            out[key.strip()[:64]] = item[:256]
+            out[_clip_utf16(key.strip(), 64)] = _clip_utf16(item, 256)
     return out
+
+
+def _clip_utf16(text: str, length: int) -> str:
+    """Cut text to at most ``length`` UTF-16 code units, as the app does.
+
+    JavaScript measures strings in UTF-16 code units, so an emoji counts as
+    two; a pair that would be split is dropped whole, matching the app.
+
+    Args:
+        text: The text.
+        length: Maximum UTF-16 code units.
+
+    Returns:
+        The prefix.
+    """
+    encoded = text.encode("utf-16-le", "surrogatepass")
+    if len(encoded) <= 2 * length:
+        return text
+    return encoded[: 2 * length].decode("utf-16-le", "ignore")
 
 
 def apply_point_labels(classification: Any, nodes: dict[str, dict[int, int]]) -> int:

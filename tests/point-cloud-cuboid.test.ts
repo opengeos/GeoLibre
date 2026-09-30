@@ -145,8 +145,14 @@ describe("object view editing", async () => {
 });
 
 describe("cuboid persistence and export", async () => {
-  const { cuboidsToGeoJson, cuboidsToSegments, encodeCuboids, loadCuboids, sanitizeAttributes } =
-    await import("../packages/plugins/src/plugins/point-cloud-annotation/cuboid-panel");
+  const {
+    clipText,
+    cuboidsToGeoJson,
+    cuboidsToSegments,
+    encodeCuboids,
+    loadCuboids,
+    sanitizeAttributes,
+  } = await import("../packages/plugins/src/plugins/point-cloud-annotation/cuboid-panel");
   const box: Cuboid = { center: [ORIGIN[0], ORIGIN[1], 100], size: [4, 2, 3], yaw: Math.PI / 6 };
 
   it("round-trips boxes through the project state and skips local-file sources", () => {
@@ -243,6 +249,10 @@ describe("cuboid persistence and export", async () => {
     assert.equal(key.length, 64);
     assert.equal(value.length, 256);
     assert.deepEqual(sanitizeAttributes(["a"]), {});
+    // UTF-16 code units, matching the Python reader: an emoji counts as two.
+    const emoji = sanitizeAttributes({ ["😀".repeat(40)]: "😀".repeat(200) });
+    assert.deepEqual(emoji, { ["😀".repeat(32)]: "😀".repeat(128) });
+    assert.equal(clipText("a😀", 2), "a");
   });
 
   it("writes Segments.ai cuboids in the source CRS (grid yaw, CRS units)", () => {

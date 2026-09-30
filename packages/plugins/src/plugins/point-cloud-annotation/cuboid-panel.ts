@@ -57,6 +57,21 @@ export interface EncodedCuboids {
 }
 
 /**
+ * Cuts text to at most `length` UTF-16 code units without splitting a
+ * surrogate pair (the Python reader truncates the same way).
+ *
+ * @param text - The text.
+ * @param length - Maximum UTF-16 code units.
+ * @returns The prefix.
+ */
+export function clipText(text: string, length: number): string {
+  if (text.length <= length) return text;
+  const cut = text.slice(0, length);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
+/**
  * Validates free-form attributes: string keys and values within the length
  * limits, at most {@link MAX_OBJECT_ATTRIBUTES} of them.
  *
@@ -68,9 +83,9 @@ export function sanitizeAttributes(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return out;
   for (const [rawKey, rawValue] of Object.entries(value)) {
     if (Object.keys(out).length >= MAX_OBJECT_ATTRIBUTES) break;
-    const key = rawKey.trim().slice(0, MAX_ATTRIBUTE_KEY);
+    const key = clipText(rawKey.trim(), MAX_ATTRIBUTE_KEY);
     if (!key || typeof rawValue !== "string" || key === "__proto__") continue;
-    out[key] = rawValue.slice(0, MAX_ATTRIBUTE_VALUE);
+    out[key] = clipText(rawValue, MAX_ATTRIBUTE_VALUE);
   }
   return out;
 }
@@ -581,7 +596,7 @@ export class CuboidSection {
       input.style.cssText = inputStyle;
       input.setAttribute("aria-label", key);
       input.addEventListener("change", () => {
-        object.attributes[key] = input.value.slice(0, MAX_ATTRIBUTE_VALUE);
+        object.attributes[key] = clipText(input.value, MAX_ATTRIBUTE_VALUE);
       });
       const remove = document.createElement("button");
       remove.type = "button";
@@ -616,9 +631,10 @@ export class CuboidSection {
     addButton.dataset.attributeAdd = String(object.id);
     addButton.style.cssText = small;
     addButton.addEventListener("click", () => {
-      const key = keyInput.value.trim().slice(0, MAX_ATTRIBUTE_KEY);
+      const key = clipText(keyInput.value.trim(), MAX_ATTRIBUTE_KEY);
+      // Own keys only: `key in` would also match Object.prototype names.
       const full =
-        !(key in object.attributes) &&
+        !Object.hasOwn(object.attributes, key) &&
         Object.keys(object.attributes).length >= MAX_OBJECT_ATTRIBUTES;
       if (!key || key === "__proto__" || full) {
         this.host.setStatus(
@@ -630,7 +646,7 @@ export class CuboidSection {
       }
       object.attributes = {
         ...object.attributes,
-        [key]: valueInput.value.slice(0, MAX_ATTRIBUTE_VALUE),
+        [key]: clipText(valueInput.value, MAX_ATTRIBUTE_VALUE),
       };
       this.renderList();
     });
