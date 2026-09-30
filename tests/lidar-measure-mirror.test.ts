@@ -29,25 +29,23 @@ function lineFeature(): GeoJSON.Feature {
   };
 }
 
-/** Records the overlay calls in order, so re-appending is assertable. */
+/** Records the overlay calls in order, and which layers were overlay layers. */
 function makeOverlay(): {
   overlay: MeasureMirrorOverlay;
   calls: string[];
-  /** Append a layer the way a streaming point-cloud chunk would. */
-  addForeign: (id: string) => void;
-  order: () => string[];
+  overlayIds: Set<string>;
 } {
   const layers = new Map<string, Layer>();
   const calls: string[] = [];
+  const overlayIds = new Set<string>();
   return {
     calls,
-    addForeign: (id) => layers.set(id, { id } as Layer),
-    order: () => [...layers.keys()],
+    overlayIds,
     overlay: {
       hasLayer: (id) => layers.has(id),
-      getLayers: () => [...layers.values()],
-      addLayer: (id, layer) => {
+      addLayer: (id, layer, options) => {
         layers.set(id, layer);
+        if (options?.overlay) overlayIds.add(id);
         calls.push(`add:${id}`);
       },
       removeLayer: (id) => {
@@ -168,36 +166,21 @@ describe("LiDAR measure mirror", () => {
     // ...and so does the source's own data event, which is all the rubber-band
     // preview fires as the cursor moves.
     emitSourceData(SOURCE_ID);
-    assert.equal(calls.filter((call) => call.startsWith("add:")).length, 3);
-    // Every redraw re-appends, so a point cloud loaded after the line was
-    // drawn cannot end up painting over it.
-    assert.deepEqual(calls.slice(1), [
-      "remove:geolibre-measure-above-points",
+    assert.deepEqual(calls, [
       "add:geolibre-measure-above-points",
-      "remove:geolibre-measure-above-points",
+      "add:geolibre-measure-above-points",
       "add:geolibre-measure-above-points",
     ]);
   });
 
-  it("puts itself back on top when a streamed chunk lands above it", () => {
-    const { overlay, calls, addForeign, order } = makeOverlay();
-    const { map, emit } = makeMap(collection([lineFeature()]));
+  it("is an overlay layer, so streamed chunks never cover it", () => {
+    // The LiDAR overlay draws overlay layers after every point cloud chunk,
+    // including ones added later; the mirror needs no per-frame re-append.
+    const { overlay, overlayIds } = makeOverlay();
+    const { map } = makeMap(collection([lineFeature()]));
     const { control } = makeControl();
-
     syncLidarMeasureMirror({ map, overlay, control });
-    // A frame with the mirror already last must not touch the overlay.
-    calls.length = 0;
-    emit("render");
-    assert.deepEqual(calls, []);
-
-    // Streaming appends a chunk layer, which would paint over the line.
-    addForeign("pointcloud-chunk1");
-    emit("render");
-    assert.deepEqual(order(), ["pointcloud-chunk1", "geolibre-measure-above-points"]);
-    assert.deepEqual(calls, [
-      "remove:geolibre-measure-above-points",
-      "add:geolibre-measure-above-points",
-    ]);
+    assert.deepEqual([...overlayIds], ["geolibre-measure-above-points"]);
   });
 
   for (const shape of Object.keys(SOURCE_SHAPES) as (keyof typeof SOURCE_SHAPES)[]) {
@@ -235,23 +218,6 @@ describe("LiDAR measure mirror", () => {
     }
 
     assert.deepEqual(warnings, []);
-    assert.deepEqual(calls, []);
-  });
-
-  it("gives up quietly when the overlay is torn down under a render", () => {
-    // keepOnTop runs from a map `render` listener, so it must not throw out of
-    // one when the LiDAR panel goes away mid-frame.
-    const { overlay, calls } = makeOverlay();
-    const { map, emit } = makeMap(collection([lineFeature()]));
-    const { control } = makeControl();
-
-    syncLidarMeasureMirror({ map, overlay, control });
-    overlay.getLayers = () => {
-      throw new Error("overlay destroyed");
-    };
-    calls.length = 0;
-
-    assert.doesNotThrow(() => emit("render"));
     assert.deepEqual(calls, []);
   });
 
@@ -307,7 +273,7 @@ describe("LiDAR measure mirror", () => {
     const { control, listenerCount: controlListeners } = makeControl();
 
     syncLidarMeasureMirror({ map, overlay, control });
-    assert.equal(mapListeners(), 2, "sourcedata for edits, render for ordering");
+    assert.equal(mapListeners(), 1, "sourcedata for edits");
     assert.ok(controlListeners() > 0);
 
     // The LiDAR panel closes: its overlay is gone, so the mirror must let go.

@@ -14,7 +14,9 @@
  *
  * What does work is drawing the geometry into the point cloud's *own* deck
  * overlay with `depthTest: false` — exactly how the plugin's own cross-section
- * line manages to sit above the points. The MapLibre measure layers are left
+ * line manages to sit above the points. It is added as an overlay layer
+ * (maplibre-gl-lidar 0.21+), which the overlay draws after every point cloud
+ * chunk, including chunks that stream in later. The MapLibre measure layers are left
  * alone: outside the cloud both copies draw the same geometry in the same
  * colour, and inside it the deck copy is the one that shows. If anything here
  * fails to find what it needs, the tool simply keeps its pre-#2533 behaviour.
@@ -39,9 +41,8 @@ export interface MeasureMirrorMap {
 /** The slice of maplibre-gl-lidar's `DeckOverlay` the mirror draws into. */
 export interface MeasureMirrorOverlay {
   hasLayer(id: string): boolean;
-  addLayer(id: string, layer: Layer): void;
+  addLayer(id: string, layer: Layer, options?: { overlay?: boolean }): void;
   removeLayer(id: string): void;
-  getLayers(): Layer[];
 }
 
 /** Id of the mirrored deck.gl layer inside the LiDAR overlay. */
@@ -74,7 +75,7 @@ interface Attachment {
   overlay: MeasureMirrorOverlay;
   control: MeasureControl;
   sourceId: string;
-  /** The layer currently in the overlay, kept so it can be re-appended. */
+  /** The layer currently in the overlay. */
   layer: Layer | null;
   /** Whether the unreadable-source warning has already been issued. */
   warnedShape: boolean;
@@ -138,57 +139,25 @@ function attach(
   const onSourceData = (event: { sourceId?: string }) => {
     if (event.sourceId === sourceId) redraw(self);
   };
-  // Deck paints its layers in array order and the mirror runs with the depth
-  // test off, so it only wins against the point-cloud layers that were added
-  // before it — and streaming adds a chunk layer whenever the viewport pulls
-  // in new nodes, which would leave the line buried again. Rather than
-  // enumerate every path that can add one (chunks, a second cloud, the
-  // plugin's cross-section), check on each frame that the mirror is still the
-  // last layer and put it back on top when it is not. Both sides are cheap:
-  // the check is one array read, and the re-append only runs when the order
-  // actually broke.
-  const onRender = () => keepOnTop(self);
-
   for (const event of MEASURE_GEOMETRY_EVENTS) control.on(event, onGeometry);
   map.on("sourcedata", onSourceData);
-  map.on("render", onRender);
 
   self.detach = () => {
     for (const event of MEASURE_GEOMETRY_EVENTS) control.off(event, onGeometry);
     map.off("sourcedata", onSourceData);
-    map.off("render", onRender);
     removeMirror(overlay);
     self.layer = null;
   };
   return self;
 }
 
-/** Re-append the mirror when something has been drawn on top of it. */
-function keepOnTop(current: Attachment): void {
-  const layer = current.layer;
-  if (!layer) return;
-  let layers: Layer[];
-  try {
-    layers = current.overlay.getLayers();
-  } catch {
-    // This runs from a map `render` listener, so a torn-down overlay must not
-    // throw out of it — give up on the mirror instead, like `place` does.
-    current.layer = null;
-    return;
-  }
-  if (layers[layers.length - 1]?.id === MIRROR_LAYER_ID) return;
-  place(current, layer);
-}
-
 /**
- * Put `layer` at the end of the overlay's layer list. `addLayer` on an id the
- * overlay already holds would keep its old position (it writes to a `Map`), so
- * this drops it first.
+ * Put `layer` in the overlay as an overlay layer, which is drawn after every
+ * point cloud chunk, streamed ones included, so the line stays on top.
  */
 function place(current: Attachment, layer: Layer): void {
   try {
-    removeMirror(current.overlay);
-    current.overlay.addLayer(MIRROR_LAYER_ID, layer);
+    current.overlay.addLayer(MIRROR_LAYER_ID, layer, { overlay: true });
     current.layer = layer;
   } catch {
     // A destroyed overlay (LiDAR panel torn down between the event and here)

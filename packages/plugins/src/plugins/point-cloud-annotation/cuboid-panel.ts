@@ -721,6 +721,7 @@ export class CuboidSection {
         // Like the selection highlight: stay visible through the points.
         parameters: { depthTest: false } as Record<string, unknown>,
       }),
+      { overlay: true },
     );
   }
 

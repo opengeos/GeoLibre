@@ -689,6 +689,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         parameters: { depthTest: false } as Record<string, unknown>,
         updateTriggers: { getPosition: [indices] },
       }),
+      { overlay: true },
     );
   };
 

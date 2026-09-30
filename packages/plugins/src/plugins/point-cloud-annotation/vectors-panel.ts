@@ -634,6 +634,7 @@ export class VectorSection {
           // Like the selection highlight: stay visible through the points.
           parameters: { depthTest: false } as Record<string, unknown>,
         }),
+        { overlay: true },
       );
     }
     if (vertices.length === 0) overlay.removeLayer(POINT_LAYER_ID);
@@ -652,6 +653,7 @@ export class VectorSection {
           lineWidthMinPixels: 1,
           parameters: { depthTest: false } as Record<string, unknown>,
         }),
+        { overlay: true },
       );
     }
   }

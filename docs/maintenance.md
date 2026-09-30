@@ -291,14 +291,14 @@ wrapper goes back to covering the Measure/Colorbar/Legend/HTML/Bookmark panels
 
 `lidar-measure-mirror.ts` draws the Measure tool's line/polygon into that same
 overlay (`LidarControl.getDeckOverlay()`) with `depthTest: false`, the trick the
-plugin's own cross-section line uses to sit above the points. Two things there
-are not compiler checked: deck paints its layers in insertion order, so the
-mirror re-appends itself on any frame where it is no longer the overlay's last
-layer (streaming adds a chunk layer whenever the viewport pulls in new nodes),
-and the geometry is read from the MapLibre/Mapbox `geojson` source's `_data`
-field, since neither library exposes a public reader. Losing either costs only
-the mirror — the measured line goes back to being hidden inside the cloud, which
-is what #2533 was.
+plugin's own cross-section line uses to sit above the points. It is added with
+`addLayer(id, layer, { overlay: true })` (0.21+), which draws it after every
+point cloud chunk, including chunks that stream in later; the point cloud
+annotator's highlight, box and vector layers use the same flag. One thing is not
+compiler checked: the geometry is read from the MapLibre/Mapbox `geojson`
+source's `_data` field, since neither library exposes a public reader. Losing it
+costs only the mirror — the measured line goes back to being hidden inside the
+cloud, which is what #2533 was.
 
 The **class** is a hand-kept copy of the package's `DECK_CANVAS_CLASS`, not an
 import: `maplibre-gl-lidar` builds into its own lazy chunk, and importing even
