@@ -2049,7 +2049,9 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
 
     Returns:
         ``{"labels": {url: {node_key: {index: class}}}, "instances": {url:
-        {node_key: {index: instance_id}}}, "boxes": [...], "classes": [...]}``.
+        {node_key: {index: instance_id}}}, "boxes": [...], "vectors": [...],
+        "classes": [...]}``. ``vectors`` are the 3D polylines, polygons and
+        keypoints (see :func:`_point_cloud_vectors`).
         ``classes`` is the project's custom class schema (see
         :func:`point_cloud_class_schema`), and each box is ``{"url", "id",
         "class_code", "center", "size", "yaw", "status", "attributes"}``:
@@ -2091,7 +2093,71 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
                 }
             )
     classes = point_cloud_class_schema(state.get("customClasses"), strict=False)
-    return {"labels": labels, "instances": instances, "boxes": boxes, "classes": classes}
+    vectors = _point_cloud_vectors(state.get("vectors"))
+    return {
+        "labels": labels,
+        "instances": instances,
+        "boxes": boxes,
+        "vectors": vectors,
+        "classes": classes,
+    }
+
+
+_VECTOR_KINDS = {"polyline": 2, "polygon": 3, "keypoint": 1}
+_MAX_VECTOR_VERTICES = 10_000
+
+
+def _point_cloud_vectors(entries: Any) -> list[dict[str, Any]]:
+    """Read the annotator's saved 3D vectors, skipping malformed ones.
+
+    Args:
+        entries: The saved ``[{"url", "items"}]`` list.
+
+    Returns:
+        ``[{"url", "id", "kind", "class_code", "points"}]`` with ``kind`` one of
+        ``"polyline"``, ``"polygon"`` or ``"keypoint"`` and ``points`` a list
+        of ``[lng, lat, elevation_m]``.
+    """
+
+    def is_vertex(value: Any) -> bool:
+        return (
+            isinstance(value, list)
+            and len(value) == 3
+            and all(
+                isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                for v in value
+            )
+        )
+
+    out: list[dict[str, Any]] = []
+    for entry in entries if isinstance(entries, list) else []:
+        url = entry.get("url") if isinstance(entry, dict) else None
+        items = entry.get("items") if isinstance(entry, dict) else None
+        if not isinstance(url, str) or not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            kind = item.get("kind")
+            points = item.get("points")
+            if kind not in _VECTOR_KINDS or not isinstance(points, list):
+                continue
+            if not _VECTOR_KINDS[kind] <= len(points) <= _MAX_VECTOR_VERTICES:
+                continue
+            if not all(is_vertex(point) for point in points):
+                continue
+            out.append(
+                {
+                    "url": url,
+                    "id": item.get("id"),
+                    "kind": kind,
+                    "class_code": item.get("classCode"),
+                    "points": [
+                        list(point) for point in points[: 1 if kind == "keypoint" else None]
+                    ],
+                }
+            )
+    return out
 
 
 _BOX_STATUSES = ("new", "reviewed", "flagged")

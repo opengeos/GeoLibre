@@ -944,6 +944,7 @@ def test_point_cloud_annotations_decode_labels_and_boxes():
         "labels": {},
         "instances": {},
         "boxes": [],
+        "vectors": [],
         "classes": [],
     }
 
@@ -1010,6 +1011,7 @@ def test_point_cloud_annotations_skip_malformed_entries():
         "labels": {},
         "instances": {},
         "boxes": [],
+        "vectors": [],
         "classes": [],
     }
     no_url = {
@@ -1026,6 +1028,7 @@ def test_point_cloud_annotations_skip_malformed_entries():
         "labels": {},
         "instances": {},
         "boxes": [],
+        "vectors": [],
         "classes": [],
     }
 
@@ -1141,6 +1144,58 @@ def test_point_cloud_annotations_decode_app_instance_ids():
     result = p.point_cloud_annotations(project)
     assert result["labels"]["https://x/a.laz"]["file"] == {0: 6, 1: 6, 2: 2}
     assert result["instances"]["https://x/a.laz"]["file"] == {0: 1, 5: 300, 70000: 4294967295}
+
+
+def test_point_cloud_annotations_read_vectors():
+    from geolibre import project as p
+
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "vectors": [
+                        {
+                            "url": "https://x/a.laz",
+                            "items": [
+                                {
+                                    "id": 1,
+                                    "kind": "polyline",
+                                    "classCode": 64,
+                                    "points": [[0, 0, 1], [1, 1, 2]],
+                                },
+                                {
+                                    "id": 2,
+                                    "kind": "keypoint",
+                                    "classCode": 15,
+                                    "points": [[0, 0, 30]],
+                                },
+                                {
+                                    "id": 3,
+                                    "kind": "polygon",
+                                    "classCode": 6,
+                                    "points": [[0, 0, 1], [1, 0, 1]],
+                                },
+                                {"id": 4, "kind": "curve", "points": [[0, 0, 1], [1, 0, 1]]},
+                                {"id": 5, "kind": "polyline", "points": [[0, 0], [1, 0, 1]]},
+                                {
+                                    "id": 6,
+                                    "kind": "polyline",
+                                    "points": [[0, 0, float("nan")], [1, 0, 1]],
+                                },
+                            ],
+                        },
+                        {"url": 3, "items": []},
+                    ]
+                }
+            }
+        }
+    }
+    vectors = p.point_cloud_annotations(project)["vectors"]
+    assert [(v["id"], v["kind"], v["class_code"]) for v in vectors] == [
+        (1, "polyline", 64),
+        (2, "keypoint", 15),
+    ]
+    assert vectors[1]["points"] == [[0, 0, 30]]
 
 
 def test_point_cloud_class_schema_validates_and_normalizes():

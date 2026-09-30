@@ -51,8 +51,8 @@ project even with `overwrite=True`, so a retry cannot destroy an unrelated
 
 `get_point_cloud_annotations` reports, per point cloud URL, how many points the
 app's annotator relabelled into each class and how many points each instance id
-holds, the custom classes, plus every saved 3D box (with its status and
-attributes).
+holds, the custom classes, the 3D vectors (polylines, polygons, keypoints),
+plus every saved 3D box (with its status and attributes).
 
 `set_point_cloud_classes` defines the annotator's custom classes (its label
 schema): `[{"code": 64, "name": "Car", "color": "#e11d48"}]`, codes 19-255.

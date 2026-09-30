@@ -633,4 +633,118 @@ test.describe("point cloud annotation", () => {
     const state = project.plugins.settings["geolibre-point-cloud-annotation"];
     expect(state.instances.map((entry: { url: string }) => entry.url)).toEqual([COPC_URL]);
   });
+  test("draws 3D vectors snapped to points, exports GeoJSON and saves them", async ({ page }) => {
+    test.setTimeout(120_000);
+    await captureSavedFiles(page);
+    await waitForMap(page);
+    await loadCopc(page);
+    const start = await startSession(page);
+    const vectors = page.getByTestId("pc-annotation-vectors");
+    // Click where points are actually drawn: opaque pixels of the LiDAR
+    // overlay canvas, in page coordinates, at least 30 px apart.
+    await expect(page.locator(".maplibre-gl-lidar-canvas canvas")).toHaveCount(1);
+    const scan = () =>
+      page.evaluate(() => {
+        const source = document.querySelector(
+          ".maplibre-gl-lidar-canvas canvas",
+        ) as HTMLCanvasElement;
+        const rect = source.getBoundingClientRect();
+        const scratch = document.createElement("canvas");
+        scratch.width = source.width;
+        scratch.height = source.height;
+        const ctx = scratch.getContext("2d")!;
+        ctx.drawImage(source, 0, 0);
+        const { data } = ctx.getImageData(0, 0, scratch.width, scratch.height);
+        const found: [number, number][] = [];
+        for (let y = 0; y < scratch.height; y += 3) {
+          for (let x = 0; x < scratch.width; x += 3) {
+            if (data[(y * scratch.width + x) * 4 + 3] > 200) {
+              const px = rect.left + (x * rect.width) / scratch.width;
+              const py = rect.top + (y * rect.height) / scratch.height;
+              if (found.every(([fx, fy]) => Math.hypot(fx - px, fy - py) > 30))
+                found.push([px, py]);
+            }
+          }
+        }
+        return found;
+      });
+    // The camera may still be settling after the session starts: wait until
+    // two scans a moment apart agree.
+    let points: [number, number][] = [];
+    await expect
+      .poll(async () => {
+        const first = await scan();
+        await page.waitForTimeout(300);
+        points = await scan();
+        return points.length >= 7 && JSON.stringify(first) === JSON.stringify(points);
+      })
+      .toBe(true);
+    expect(points.length).toBeGreaterThanOrEqual(7);
+
+    // Keypoint (K): one click.
+    await page.keyboard.press("k");
+    await page.mouse.click(...points[0]);
+    await expect(vectors.locator('[data-vector="1"]')).toContainText("Keypoint");
+
+    // Polyline (V): three clicks, Enter finishes.
+    await page.keyboard.press("v");
+    for (const point of points.slice(1, 4)) await page.mouse.click(...point);
+    await page.keyboard.press("Enter");
+    await expect(vectors.locator('[data-vector="2"]')).toContainText("Polyline");
+
+    // Polygon: three clicks and a double-click on the last one.
+    await page.locator('[data-vector-kind="polygon"]').click();
+    await page.mouse.click(...points[4]);
+    await page.mouse.click(...points[5]);
+    await page.mouse.dblclick(...points[6]);
+    await expect(vectors.locator('[data-vector="3"]')).toContainText("3D polygon");
+
+    await page.getByTestId("pc-annotation-export-vectors-geojson").click();
+    await expect.poll(() => savedFile(page, "1.2-with-color-vectors.geojson")).not.toBeNull();
+    const geojson = JSON.parse(
+      (await savedFile(page, "1.2-with-color-vectors.geojson"))!.toString("utf8"),
+    ) as GeoJSON.FeatureCollection;
+    expect(geojson.features.map((feature) => feature.geometry.type)).toEqual([
+      "Point",
+      "LineString",
+      "Polygon",
+    ]);
+    // Every vertex carries the elevation of the point it snapped to.
+    const line = geojson.features[1].geometry as GeoJSON.LineString;
+    expect(line.coordinates).toHaveLength(3);
+    for (const coordinate of line.coordinates) expect(Number.isFinite(coordinate[2])).toBe(true);
+    const ring = (geojson.features[2].geometry as GeoJSON.Polygon).coordinates[0];
+    expect(ring.length).toBeGreaterThanOrEqual(4);
+
+    // A double-click also closes a selection polygon (pointer events carry no
+    // click count, so this goes through the dblclick event).
+    await page.keyboard.press("g");
+    const map = (await page.locator(".maplibregl-canvas").boundingBox())!;
+    await page.mouse.click(map.x + 5, map.y + 5);
+    await page.mouse.click(map.x + map.width - 5, map.y + 5);
+    await page.mouse.click(map.x + map.width - 5, map.y + map.height - 5);
+    await page.mouse.dblclick(map.x + 5, map.y + map.height - 5);
+    await expect(page.getByTestId("pc-annotation-selected")).not.toHaveText("0 points selected");
+    await start.click();
+
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Save", exact: true }).click();
+    const strip = page.getByRole("button", { name: "Strip credentials", exact: true });
+    if (await strip.isVisible({ timeout: 3_000 }).catch(() => false)) await strip.click();
+    const findProject = () =>
+      page.evaluate(() =>
+        Object.keys(
+          (window as unknown as { __savedFiles: Record<string, number[]> }).__savedFiles,
+        ).find((name) => /\.geolibre(\.json)?$/.test(name)),
+      );
+    await expect.poll(findProject).toBeTruthy();
+    const project = JSON.parse((await savedFile(page, (await findProject())!))!.toString("utf8"));
+    const saved = project.plugins.settings["geolibre-point-cloud-annotation"].vectors;
+    expect(saved[0].url).toBe(COPC_URL);
+    expect(saved[0].items.map((item: { kind: string }) => item.kind)).toEqual([
+      "keypoint",
+      "polyline",
+      "polygon",
+    ]);
+  });
 });

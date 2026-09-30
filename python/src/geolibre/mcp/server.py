@@ -709,10 +709,12 @@ def build_server(workspace: Workspace) -> MCPServer:
 
         Returns:
             Per source URL, how many points were relabelled per class and how
-            many points each instance (object) id holds, the project's custom
-            classes, plus every saved 3D box (`class_code`, `center` [lng, lat, elevation m],
-            `size` [length, width, height] m, `yaw` radians from east,
-            `status` new/reviewed/flagged, and free-form `attributes`).
+            many points each instance (object) id holds; the project's custom
+            classes; the 3D vectors (`kind` polyline/polygon/keypoint with
+            `points` [lng, lat, elevation m]); and every saved 3D box
+            (`class_code`, `center` [lng, lat, elevation m], `size` [length,
+            width, height] m, `yaw` radians from east, `status`
+            new/reviewed/flagged, and free-form `attributes`).
         """
         file = workspace.resolve(path, must_exist=True)
         project = authoring.load_project(file)
@@ -739,6 +741,10 @@ def build_server(workspace: Workspace) -> MCPServer:
             "labels": labels,
             "instances": instances,
             "boxes": boxes,
+            "vectors": [
+                {**vector, "url": _project.redact_url(vector["url"])}
+                for vector in annotations["vectors"]
+            ],
             "classes": annotations["classes"],
         }
 

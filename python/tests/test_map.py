@@ -383,6 +383,7 @@ def test_point_cloud_annotations_empty_by_default(m):
         "labels": {},
         "instances": {},
         "boxes": [],
+        "vectors": [],
         "classes": [],
     }
 

@@ -122,6 +122,24 @@ attributes as properties) or **Boxes as Segments.ai JSON** (a
 the same CRS and units as the LAS export, with the heading measured from grid
 east, and the status and attributes in each annotation's `attributes`).
 
+## 3D vectors
+
+Trace linear and point features in 3D: kerbs, lane markings and power lines as
+**Polyline**s (**V**), roof outlines and footprints as **3D polygon**s, and
+poles or tree tops as **Keypoint**s (**K**). Click points on the cloud; each
+vertex snaps to the nearest drawn point within 12 pixels and takes its
+elevation, so the vector follows the surface. Double-click or press **Enter**
+to finish a polyline or polygon, **Backspace** removes the last vertex and
+**Esc** cancels. The map's zoom and rotation are held while a vector is being
+drawn. Vectors take the class chosen under **Assign class**; change it, or
+delete a vector, in the **3D vectors** list.
+
+Vectors on a cloud loaded from a URL are saved with the project. Export them
+as **Vectors as GeoJSON** (3D `Point`, `LineString` and `Polygon` features in
+WGS 84 with the class and 3D length) or **Vectors as Segments.ai JSON** (a
+`pointcloud-vector` label with `polyline`, `polygon` and `point` annotations in
+the same CRS and units as the LAS export).
+
 ## Saving labels with the project
 
 Labels on a cloud loaded from a URL are saved with the project. Each edit is

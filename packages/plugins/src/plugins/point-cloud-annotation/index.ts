@@ -22,6 +22,7 @@ import {
   toHexColor,
 } from "./classes";
 import { CuboidSection, encodeCuboids, loadCuboids } from "./cuboid-panel";
+import { VectorSection, encodeVectors, loadVectors } from "./vectors-panel";
 import { LabelHistory } from "./history";
 import { PointLabelStore, type LabelledCloud, type RangedCloud } from "./label-store";
 import {
@@ -98,7 +99,7 @@ export function setPointCloudAnnotationFileSaver(
   fileSaver = saver;
 }
 
-type Tool = "pan" | "box" | "lasso" | "polygon" | "brush" | "autobox";
+type Tool = "pan" | "box" | "lasso" | "polygon" | "brush" | "autobox" | "vector";
 
 let lazEncoder: Promise<LazEncoder> | null = null;
 
@@ -465,6 +466,41 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     },
     button,
   );
+  const vectors = new VectorSection(
+    {
+      app,
+      tr: (key, fallback, params) => tr(app, key, fallback, params),
+      control: () => control(),
+      session: () =>
+        session
+          ? {
+              cloudId: session.cloudId,
+              cloudName: session.cloudName,
+              source: session.source,
+              wkt: session.wkt,
+            }
+          : null,
+      data: () => activeData(),
+      classifications: () => (session ? liveClassifications(session.cloudId) : undefined),
+      targetClass: () => targetClass,
+      className: (code) => className(app, code),
+      protectedClasses: () =>
+        new Set([...(control()?.getHiddenClassifications() ?? []), ...lockedClasses]),
+      activateTool: () => setTool("vector"),
+      lockCamera: () => lockCamera(),
+      unlockCamera: () => unlockCamera(),
+      setStatus: (text) => setStatus(text),
+      exportText: (name, text) => {
+        if (app.exportTextFile)
+          app.exportTextFile(name, text, {
+            description: name.endsWith(".geojson") ? "GeoJSON" : "JSON",
+            extensions: [name.split(".").pop() ?? "json"],
+          });
+        else downloadBytes(new TextEncoder().encode(text), name, "application/json");
+      },
+    },
+    button,
+  );
   const sessionSections = [
     tools.root,
     filters.root,
@@ -473,6 +509,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     prelabel.root,
     summary.root,
     cuboids.root,
+    vectors.root,
     exportSection.root,
   ];
   container.append(hint, setup.root, ...sessionSections, status);
@@ -633,8 +670,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     applyClassStyles(control());
     startLabelSync();
     renderLabels();
-    // Boxes and their side views draw in their class colour.
+    // Boxes, their side views and vectors draw in their class colour.
     cuboids.render();
+    vectors.render();
   };
 
   const addCustomClass = () => {
@@ -808,19 +846,21 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       node.setAttribute("aria-pressed", String(node.dataset.tool === tool));
     }
     toolHint.textContent =
-      tool === "pan"
-        ? tr(app, "panHint", "Drag to move the map; right-drag to tilt and rotate.")
-        : tool === "polygon"
-          ? tr(
-              app,
-              "polygonHint",
-              "Click to add vertices; double-click, press Enter or click the first vertex to close. Esc cancels. Hold Shift or Alt on the last click to add or subtract.",
-            )
-          : tr(
-              app,
-              "drawHint",
-              "Drag on the map to select points. Hold Shift to add, Alt to subtract. Right-drag still tilts the map.",
-            );
+      tool === "vector"
+        ? tr(app, "vectorToolHint", "Drawing a 3D vector; see 3D vectors below.")
+        : tool === "pan"
+          ? tr(app, "panHint", "Drag to move the map; right-drag to tilt and rotate.")
+          : tool === "polygon"
+            ? tr(
+                app,
+                "polygonHint",
+                "Click to add vertices; double-click, press Enter or click the first vertex to close. Esc cancels. Hold Shift or Alt on the last click to add or subtract.",
+              )
+            : tr(
+                app,
+                "drawHint",
+                "Drag on the map to select points. Hold Shift to add, Alt to subtract. Right-drag still tilts the map.",
+              );
   };
 
   const renderCloudOptions = () => {
@@ -868,6 +908,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     autoBoxButton.textContent = tr(app, "toolAutoBox", "Auto box (A)");
     polygonButton.textContent = tr(app, "toolPolygon", "Polygon (G)");
     cuboids.renderLabels();
+    vectors.renderLabels();
     brushSizeText.textContent = tr(app, "brushSize", "Brush size (px, [ and ])");
     const modeValue = modeSelect.value || mode;
     modeSelect.replaceChildren(
@@ -1142,6 +1183,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       cuboids.autoBoxAt(x, y);
       return;
     }
+    if (tool === "vector") {
+      const [x, y] = localPoint(event);
+      vectors.handleClick(x, y);
+      return;
+    }
     const modifiers: SelectionMode | null = event.shiftKey
       ? "add"
       : event.altKey
@@ -1179,11 +1225,27 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     if (shape) runSelection(shape, finished.modifiers ?? mode);
   };
 
+  // Pointer events carry no click count (detail is 0), so a double-click is
+  // taken from the dblclick event: it closes a selection polygon or finishes
+  // a 3D vector.
+  const onDoubleClick = (event: MouseEvent) => {
+    if (!session) return;
+    if (tool === "vector" && vectors.handleDoubleClick()) {
+      event.preventDefault();
+      event.stopPropagation();
+    } else if (tool === "polygon" && polygon && polygon.points.length >= 3) {
+      event.preventDefault();
+      event.stopPropagation();
+      closePolygon(event.shiftKey ? "add" : event.altKey ? "subtract" : mode);
+    }
+  };
+
   const bindMapInteraction = () => {
     if (!map) return;
     ensureOverlay();
     const canvasContainer = map.getCanvasContainer();
     canvasContainer.addEventListener("pointerdown", onPointerDown, true);
+    canvasContainer.addEventListener("dblclick", onDoubleClick, true);
     canvasContainer.addEventListener("pointermove", onPointerMove);
     canvasContainer.addEventListener("pointerup", onPointerUp);
     canvasContainer.addEventListener("pointercancel", onPointerUp);
@@ -1193,6 +1255,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     if (!map) return;
     const canvasContainer = map.getCanvasContainer();
     canvasContainer.removeEventListener("pointerdown", onPointerDown, true);
+    canvasContainer.removeEventListener("dblclick", onDoubleClick, true);
     canvasContainer.removeEventListener("pointermove", onPointerMove);
     canvasContainer.removeEventListener("pointerup", onPointerUp);
     canvasContainer.removeEventListener("pointercancel", onPointerUp);
@@ -1243,6 +1306,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const setTool = (next: Tool) => {
     tool = next;
     if (next !== "polygon") cancelPolygon();
+    vectors.setActive(next === "vector");
     // A shortcut can switch tools while the previously clicked button still
     // has focus; its focus ring would then read as the active tool. Move focus
     // to the new tool's button, so keyboard users keep their place.
@@ -1456,6 +1520,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     session = null;
     removeHighlight();
     cuboids.clear();
+    vectors.clear();
     unbindMapInteraction();
     applyToolToMap();
     ended.resumeStreaming?.();
@@ -1500,6 +1565,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     renderLabels();
     renderSessionVisibility();
     cuboids.render();
+    vectors.render();
     hint.textContent = tr(
       app,
       "sessionHint",
@@ -1619,8 +1685,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   // --- Wiring.
   const onKeyDown = (event: KeyboardEvent) => {
     if (!session || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
-    // Nudges for the selected box take precedence over tool shortcuts.
-    if (cuboids.handleKey(event)) {
+    // Keys for a vector being drawn, then nudges for the selected box, take
+    // precedence over tool shortcuts.
+    if (vectors.handleKey(event) || cuboids.handleKey(event)) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -1644,6 +1711,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     else if (key === "l") setTool("lasso");
     else if (key === "p") setTool("brush");
     else if (key === "a") setTool("autobox");
+    else if (key === "v") vectors.start("polyline");
+    else if (key === "k") vectors.start("keypoint");
     else if (key === "[" || key === "]") setBrushRadius(brushRadius + (key === "]" ? 4 : -4));
     else if (key === "n") newObject();
     else if (key === "enter") applyClass();
@@ -1761,6 +1830,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     clearInterval(bindTimer);
     endSession();
     cuboids.destroy();
+    vectors.clear();
     document.removeEventListener("keydown", onKeyDown, true);
     boundControl?.off("load", onControlChange);
     boundControl?.off("unload", onControlChange);
@@ -1891,23 +1961,28 @@ export const pointCloudAnnotationPlugin: GeoLibrePlugin = {
   getProjectState: () => {
     const labels = labelStore.encode();
     const cuboids = encodeCuboids();
+    const vectorItems = encodeVectors();
     const customClasses = getCustomClasses().map((entry) => ({
       code: entry.code,
       name: entry.name,
       color: toHexColor(entry.color),
     }));
-    if (!labels && cuboids.length === 0 && customClasses.length === 0) return undefined;
+    if (!labels && cuboids.length === 0 && vectorItems.length === 0 && customClasses.length === 0) {
+      return undefined;
+    }
     return {
       version: 1,
       sources: labels?.sources ?? [],
       ...(labels?.instances ? { instances: labels.instances } : {}),
       cuboids,
+      ...(vectorItems.length > 0 ? { vectors: vectorItems } : {}),
       customClasses,
     };
   },
   applyProjectState: (_app, state) => {
     labelStore.load(state);
     loadCuboids((state as { cuboids?: unknown } | undefined)?.cuboids);
+    loadVectors((state as { vectors?: unknown } | undefined)?.vectors);
     const saved = (state as { customClasses?: unknown } | undefined)?.customClasses;
     setCustomClasses(
       (Array.isArray(saved) ? saved : []).flatMap((entry) => {

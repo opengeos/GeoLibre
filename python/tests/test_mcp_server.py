@@ -557,6 +557,7 @@ def test_set_point_cloud_classes_tool_saves_the_schema(server, project_path, tmp
     (tmp_path / project_path).write_text(json.dumps(saved))
     read = call(server, "get_point_cloud_annotations", path=project_path)
     assert read["instances"] == {"https://x/a.laz": {"7": 2, "9": 1}}
+    assert read["vectors"] == []
     assert read["classes"] == result["classes"]
     error = call_error(
         server,
