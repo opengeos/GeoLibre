@@ -88,11 +88,17 @@ def point_node_ranges(path: str | Path) -> list[tuple[str, int, int]]:
     else:
         root_offset, root_size = struct.unpack_from("<QQ", bytes(info.record_data), 40)
     nodes: list[tuple[int, str, int]] = []
+    file_size = Path(path).stat().st_size
+    # Every page lies inside the file, so the walk never reads more than it.
+    budget = [file_size]
     with open(path, "rb") as file:
 
         def read_page(offset: int, size: int, depth: int = 0) -> None:
             if depth > 64:
                 raise ValueError("COPC hierarchy is too deep")
+            if offset < 0 or size < 0 or offset + size > file_size or size > budget[0]:
+                raise ValueError("COPC hierarchy page lies outside the file")
+            budget[0] -= size
             file.seek(offset)
             page = file.read(size)
             for at in range(

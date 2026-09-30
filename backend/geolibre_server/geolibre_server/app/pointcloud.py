@@ -132,10 +132,16 @@ def node_ranges(path, header):
         root = struct.unpack_from("<QQ", bytes(info.record_data), 40)
     entry = struct.Struct("<4iQii")
     nodes = []
+    file_size = os.path.getsize(path)
+    # Every page lies inside the file, so the walk never reads more than it.
+    remaining = [file_size]
     with open(path, "rb") as f:
         def page(offset, size, depth=0):
             if depth > 64:
                 raise ValueError("COPC hierarchy too deep")
+            if offset < 0 or size < 0 or offset + size > file_size or size > remaining[0]:
+                raise ValueError("COPC hierarchy page lies outside the file")
+            remaining[0] -= size
             f.seek(offset)
             raw = f.read(size)
             for at in range(0, len(raw) - entry.size + 1, entry.size):

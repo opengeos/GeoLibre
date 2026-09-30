@@ -109,6 +109,19 @@ def test_copc_hierarchy_that_disagrees_with_the_header_is_refused(tmp_path):
         pc.point_node_ranges(path)
 
 
+def test_copc_page_outside_the_file_is_refused(tmp_path):
+    las, _ = _field()
+    path = tmp_path / "huge.copc.laz"
+    _write_fake_copc(path, las, [((0, 0, 0, 0), 1000, 3600)])
+    raw = bytearray(path.read_bytes())
+    # Point the root page far past the end of the file.
+    info = raw.index(struct.pack("<QQ", len(raw) - 32, 32))
+    struct.pack_into("<QQ", raw, info, len(raw) - 32, 2**40)
+    path.write_bytes(bytes(raw))
+    with pytest.raises(ValueError, match="outside the file"):
+        pc.point_node_ranges(path)
+
+
 def test_encoding_matches_the_app():
     # Produced by the app's encodeNodeEdits for instance ids.
     assert (
