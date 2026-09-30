@@ -102,6 +102,20 @@ describe("selectPointsInPolygons", () => {
   });
 });
 
+describe("selectPointsInPolygons at scale", () => {
+  it("handles more polygons than an argument spread allows", () => {
+    const cloud = grid();
+    const many = Array.from({ length: 200_000 }, (_, k) => [square(k % 10, 0, (k % 10) + 1, 1)]);
+    const result = selectPointsInPolygons(cloud, ORIGIN, many);
+    assert.equal(result.length, 200_000);
+    // Each of the first row's points belongs to the first polygon covering it.
+    assert.deepEqual(
+      result.slice(0, 10).map((indices) => [...indices]),
+      Array.from({ length: 10 }, (_, k) => [k]),
+    );
+  });
+});
+
 describe("LabelHistory.assignGroups", () => {
   it("gives each group a new instance and the class, as one undoable edit", () => {
     const classes = new Uint8Array(6).fill(1);

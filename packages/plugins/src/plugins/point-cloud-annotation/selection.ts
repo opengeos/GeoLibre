@@ -354,10 +354,18 @@ export function selectPointsInPolygons(
     }
     return [x0, y0, x1, y1];
   });
-  const gx0 = Math.min(...boxes.map((b) => b[0]));
-  const gy0 = Math.min(...boxes.map((b) => b[1]));
-  const gx1 = Math.max(...boxes.map((b) => b[2]));
-  const gy1 = Math.max(...boxes.map((b) => b[3]));
+  // A loop, not Math.min(...spread): a large footprint layer would exceed
+  // the engine's argument limit.
+  let gx0 = Infinity;
+  let gy0 = Infinity;
+  let gx1 = -Infinity;
+  let gy1 = -Infinity;
+  for (const [x0, y0, x1, y1] of boxes) {
+    if (x0 < gx0) gx0 = x0;
+    if (y0 < gy0) gy0 = y0;
+    if (x1 > gx1) gx1 = x1;
+    if (y1 > gy1) gy1 = y1;
+  }
   const cells = 64;
   const cw = (gx1 - gx0) / cells || 1;
   const ch = (gy1 - gy0) / cells || 1;
