@@ -1997,10 +1997,10 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
                 # failing, so charge the cap: bad nodes cannot bypass the budget.
                 budget -= cap
                 continue
-            if len(edits) > entries:
-                continue
             # Each edit is at least two inflated bytes (varint + class).
             budget -= 2 * len(edits)
+            if len(edits) > entries:
+                continue
             entries -= len(edits)
             decoded[key] = edits
         labels[url] = decoded
