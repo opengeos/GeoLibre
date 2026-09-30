@@ -192,6 +192,8 @@ describe("LAS export", () => {
     const bytes = writeLas(cloud, { now: new Date(Date.UTC(2026, 8, 29)) });
     const view = new DataView(bytes);
     assert.equal(String.fromCharCode(...new Uint8Array(bytes, 0, 4)), "LASF");
+    // WKT CRS (bit 4) plus standard GPS time (bit 0), required for formats 6-10.
+    assert.equal(view.getUint16(6, true), 0x11);
     assert.equal(view.getUint8(24), 1);
     assert.equal(view.getUint8(25), 4);
     assert.equal(view.getUint8(104), 7);

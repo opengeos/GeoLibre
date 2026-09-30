@@ -96,7 +96,13 @@ export function resolveExportCrs(wkt: string | undefined): ExportCrs {
       if (probe.every((value) => Number.isFinite(value))) {
         return {
           wkt,
-          geographic: /^\s*GEOG(CS|CRS)\[/i.test(extractProjcsFromWkt(wkt)),
+          // A compound WKT keeps its COMPD_CS/COMPOUNDCRS prefix after
+          // extraction, so ask the parsed projection, and fall back to "has a
+          // geographic CRS but no projected one".
+          geographic:
+            (converter as unknown as { oProj?: { projName?: string } }).oProj?.projName ===
+              "longlat" ||
+            (!/PROJ(CS|CRS)\[/i.test(wkt) && /GEOG(CS|CRS)\[|GEODCRS\[/i.test(wkt)),
           forward: (lng, lat) => converter.forward([lng, lat]) as [number, number],
           zFactor: verticalUnitFactor(wkt),
         };
@@ -171,7 +177,9 @@ export function writeLas(
   const buffer = new ArrayBuffer(pointOffset + count * recordLength);
   const view = new DataView(buffer);
   writeAscii(view, 0, "LASF", 4);
-  view.setUint16(6, 0x10, true); // Global encoding: CRS is WKT.
+  // Global encoding: WKT CRS (bit 4) and standard GPS time (bit 0), which
+  // LAS 1.4 requires for point formats 6-10.
+  view.setUint16(6, 0x11, true);
   view.setUint8(24, 1);
   view.setUint8(25, 4);
   writeAscii(view, 26, "GeoLibre", 32);

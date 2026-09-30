@@ -23,7 +23,6 @@ The built-in plugins are:
 | **Overture Maps** | Browse and add Overture Maps themes. |
 | **GeoAgent** | An in-map AI agent panel. |
 | **USGS LiDAR** | Clip a USGS point cloud to an area of interest and download the result as COPC. |
-| **Point Cloud Annotation** | Select LiDAR points with a box or lasso, assign ASPRS classes, and export the edited cloud as LAS 1.4 or a Segments.ai label. See [Point cloud annotation](point-cloud-annotation.md). |
 | **Street View** | Google Street View panoramas at a clicked point. |
 | **Mapillary** | Mapillary street-level imagery. |
 | **Elevation Profile** | A terrain profile along a drawn line, or along the line features currently selected on a layer. |
@@ -32,8 +31,9 @@ The built-in plugins are:
 | **Flight Simulator** | Fly over terrain and 3D layers with keyboard controls. |
 | **God's Eye View** | Explore live earthquakes, satellite orbits, flights, transit, public cameras, bike share, radio stations, infrastructure, and more on the Cesium globe. Feed toggles and clock speed are saved with the project. |
 | **SamGeo** | Segment imagery into vector features. See [AI Segmentation](segmentation.md). |
+| **Point Cloud Annotation** | Select LiDAR points with a box or lasso, assign ASPRS classes, and export the edited cloud as LAS 1.4 or a Segments.ai label. See [Point cloud annotation](point-cloud-annotation.md). |
 
-Most entries open a submenu that **activates** the plugin and **positions** its on-map control in any corner: top left, top right, bottom left, or bottom right. A few behave differently: **Flight Simulator** and **SamGeo** toggle directly with no submenu, and **Web Services** and **DGGS** open a list of their sub-plugins instead.
+Most entries open a submenu that **activates** the plugin and **positions** its on-map control in any corner: top left, top right, bottom left, or bottom right. A few behave differently: **Flight Simulator**, **SamGeo**, and **Point Cloud Annotation** toggle directly with no submenu, and **Web Services** and **DGGS** open a list of their sub-plugins instead.
 
 God's Eye View is inspired by the MIT-licensed
 [bilawalsidhu/gods-eye-view](https://github.com/bilawalsidhu/gods-eye-view),

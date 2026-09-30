@@ -264,7 +264,6 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreOvertureMapsPlugin,
   maplibreGeoAgentPlugin,
   maplibreUsgsLidarPlugin,
-  pointCloudAnnotationPlugin,
   maplibreStreetViewPlugin,
   maplibreMapillaryPlugin,
   maplibreElevationProfilePlugin,
@@ -287,9 +286,10 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreRouteAnimationPlugin,
   flightSimulatorPlugin,
   godsEyeViewPlugin,
+  maplibreSamGeoPlugin,
   // Last visible entry of the Plugins menu; the ids below are skipped by
   // PluginsMenu and surface elsewhere.
-  maplibreSamGeoPlugin,
+  pointCloudAnnotationPlugin,
   maplibreDirectionsPlugin,
   maplibreReverseGeocodePlugin,
   maplibreDeckGlVizPlugin,

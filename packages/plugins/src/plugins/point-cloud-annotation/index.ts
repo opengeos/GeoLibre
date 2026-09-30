@@ -281,8 +281,14 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const ctl = control();
     const data = ctl ? getCloudData(ctl, cloudId) : null;
     if (!data) return undefined;
-    if (!data.classifications) {
-      data.classifications = new Uint8Array(data.pointCount).fill(1);
+    // A cloud loaded without classifications gets a shadow array, grown when
+    // late streamed nodes raise pointCount so their points stay editable.
+    // (A streamed cloud's own array is a view that already tracks pointCount.)
+    const existing = data.classifications;
+    if (!existing || existing.length < data.pointCount) {
+      const grown = new Uint8Array(data.pointCount).fill(1);
+      if (existing) grown.set(existing);
+      data.classifications = grown;
     }
     return data.classifications;
   };
@@ -372,6 +378,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       summaryList.append(entry);
     }
     const presentCodes = [...counts.keys()];
+    // Relabelling every point of the filtered class removes it from the list;
+    // drop the filter too, or later selections would silently match nothing.
+    if (onlyClass !== null && !counts.has(onlyClass)) onlyClass = null;
     fillClassOptions(onlyClassSelect, presentCodes, onlyClass, tr(app, "anyClass", "Any class"));
   };
 
@@ -783,7 +792,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       positions: data.positions.subarray(0, count * 3),
       coordinateOrigin: data.coordinateOrigin,
       pointCount: count,
-      classifications: data.classifications,
+      classifications: liveClassifications(session.cloudId),
       intensities: data.intensities,
       colors: data.colors,
       hasRGB: data.hasRGB,
