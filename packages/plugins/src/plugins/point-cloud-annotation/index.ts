@@ -1982,6 +1982,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     fullDetailLoading = true;
     const view = map.getBounds();
     fullDetailButton.disabled = true;
+    // Hidden at once, not on the next re-render: a release mid-load would be
+    // undone when the load re-pins.
+    releaseDetailButton.hidden = true;
     setStatus(tr(app, "fullDetailLoading", "Loading the view at full detail…"));
     try {
       const result = await loadFullDetail(
