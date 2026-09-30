@@ -14,6 +14,7 @@ import {
   geomanUsesRightClick,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
+  removeMultiLineStringVertex,
   tagFeatureKeys,
 } from "../packages/plugins/src/plugins/geo-editor-geometry";
 
@@ -781,5 +782,126 @@ describe("geomanUsesRightClick", () => {
 
   it("is true while drawing (right-click finishes the shape)", () => {
     assert.equal(geomanUsesRightClick(modes(["line"], [])), true);
+  });
+});
+
+describe("removeMultiLineStringVertex", () => {
+  const multi = (coordinates: number[][][]) => ({ type: "MultiLineString" as const, coordinates });
+
+  it("removes the vertex from the part that holds it", () => {
+    const geometry = multi([
+      [
+        [0, 0],
+        [1, 1],
+        [2, 0],
+      ],
+      [
+        [5, 5],
+        [6, 6],
+      ],
+    ]);
+    assert.deepEqual(removeMultiLineStringVertex(geometry, [1, 1]), {
+      type: "MultiLineString",
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+        ],
+        [
+          [5, 5],
+          [6, 6],
+        ],
+      ],
+    });
+    // The input is left alone.
+    assert.equal(geometry.coordinates[0].length, 3);
+  });
+
+  it("drops a part left with fewer than two vertices", () => {
+    const geometry = multi([
+      [
+        [0, 0],
+        [1, 1],
+        [2, 0],
+      ],
+      [
+        [5, 5],
+        [6, 6],
+      ],
+    ]);
+    assert.deepEqual(removeMultiLineStringVertex(geometry, [6, 6])?.coordinates, [
+      [
+        [0, 0],
+        [1, 1],
+        [2, 0],
+      ],
+    ]);
+  });
+
+  it("returns null once no part is left", () => {
+    const geometry = multi([
+      [
+        [0, 0],
+        [1, 1],
+      ],
+    ]);
+    assert.equal(removeMultiLineStringVertex(geometry, [0, 0]), null);
+  });
+
+  it("uses the marker path to pick between repeated coordinates", () => {
+    const geometry = multi([
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      [
+        [1, 1],
+        [2, 2],
+        [3, 3],
+      ],
+    ]);
+    const path = ["geometry", "coordinates", 1, 0];
+    assert.deepEqual(removeMultiLineStringVertex(geometry, [1, 1], path)?.coordinates, [
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      [
+        [2, 2],
+        [3, 3],
+      ],
+    ]);
+  });
+
+  it("ignores a stale path and matches on the coordinate", () => {
+    const geometry = multi([
+      [
+        [0, 0],
+        [1, 1],
+        [2, 2],
+      ],
+    ]);
+    const path = ["geometry", "coordinates", 0, 0];
+    assert.deepEqual(removeMultiLineStringVertex(geometry, [2, 2], path)?.coordinates, [
+      [
+        [0, 0],
+        [1, 1],
+      ],
+    ]);
+  });
+
+  it("returns undefined for a vertex that isn't there", () => {
+    assert.equal(
+      removeMultiLineStringVertex(
+        multi([
+          [
+            [0, 0],
+            [1, 1],
+          ],
+        ]),
+        [9, 9],
+      ),
+      undefined,
+    );
   });
 });

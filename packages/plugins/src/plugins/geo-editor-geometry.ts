@@ -6,7 +6,7 @@ import {
   type EditorTrackingConfig,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import type { Feature, FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection, Geometry, MultiLineString, Position } from "geojson";
 
 /**
  * Pure helpers for in-place geometry editing of vector layers. Kept free of the
@@ -611,4 +611,45 @@ export interface GeomanModeReader {
 export function geomanUsesRightClick(geoman: GeomanModeReader | null): boolean {
   if (!geoman) return false;
   return geoman.getActiveDrawModes().length > 0 || geoman.getActiveEditModes().length > 0;
+}
+
+/**
+ * Removes one vertex from a MultiLineString, which Geoman's own right-click
+ * vertex removal doesn't support (it handles LineString, Polygon and
+ * MultiPolygon only). A part left with fewer than two vertices is dropped.
+ *
+ * @param geometry - The MultiLineString to edit. It isn't mutated.
+ * @param vertex - The vertex to remove, matched on longitude and latitude.
+ * @param path - Geoman's marker path (`[..., partIndex, vertexIndex]`). Used
+ *   when it points at `vertex`, so a repeated coordinate removes the right one.
+ * @returns The new geometry, `null` when no part is left (the caller deletes
+ *   the feature), or `undefined` when `vertex` isn't in `geometry`.
+ */
+export function removeMultiLineStringVertex(
+  geometry: MultiLineString,
+  vertex: Position,
+  path?: readonly (string | number)[],
+): MultiLineString | null | undefined {
+  const same = (a: Position | undefined) => !!a && a[0] === vertex[0] && a[1] === vertex[1];
+  let partIndex = -1;
+  let vertexIndex = -1;
+  const pathPart = path?.[path.length - 2];
+  const pathVertex = path?.[path.length - 1];
+  if (
+    typeof pathPart === "number" &&
+    typeof pathVertex === "number" &&
+    same(geometry.coordinates[pathPart]?.[pathVertex])
+  ) {
+    partIndex = pathPart;
+    vertexIndex = pathVertex;
+  } else {
+    partIndex = geometry.coordinates.findIndex((part) => part.some(same));
+    if (partIndex === -1) return undefined;
+    vertexIndex = geometry.coordinates[partIndex].findIndex(same);
+  }
+
+  const coordinates = geometry.coordinates
+    .map((part, index) => (index === partIndex ? part.filter((_, i) => i !== vertexIndex) : part))
+    .filter((part) => part.length >= 2);
+  return coordinates.length > 0 ? { ...geometry, coordinates } : null;
 }

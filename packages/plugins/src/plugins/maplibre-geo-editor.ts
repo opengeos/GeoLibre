@@ -12,7 +12,7 @@ import {
   mapboxLineLayerId,
   mapboxSourceId,
 } from "@geolibre/map/style-layer-ids";
-import type { Feature, FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, MultiLineString, Position } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import type { GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
@@ -25,6 +25,7 @@ import {
   captureEditedGeometries,
   captureEditedProperties,
   geomanUsesRightClick,
+  removeMultiLineStringVertex,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
@@ -352,6 +353,7 @@ function activateGeoEditor(app: GeoLibreAppAPI): false | undefined {
         mapbox.adaptGeomanToMapbox(geomanInstance, mapboxGl, mapboxMap);
       }
       geoEditorControl.setGeoman(geomanInstance);
+      installMultiLineVertexRemoval(geomanInstance);
       bindGeomanEditSync(map);
     }
   }
@@ -441,6 +443,81 @@ function unbindGeomanEditSync(): void {
     (geomanEditSyncMap as unknown as ThirdPartyEventTarget).off(eventName, handleGeomanEditSync);
   }
   geomanEditSyncMap = null;
+}
+
+/** The parts of Geoman's change-mode `cutVertex` payload this module reads. */
+interface GeomanCutVertexEvent {
+  featureData: {
+    getGeoJson(): Feature;
+    updateGeometry(geometry: MultiLineString): Promise<void>;
+    delete(): Promise<void>;
+  };
+  markerData: {
+    type: string;
+    position?: { coordinate: Position; path: (string | number)[] };
+  };
+}
+
+/** Geoman's change-mode action instance, as far as vertex removal goes. */
+interface GeomanChangeAction {
+  cutVertex(event: GeomanCutVertexEvent): Promise<void>;
+  fireFeatureUpdatedEvent(event: {
+    sourceFeatures: unknown[];
+    targetFeatures: unknown[];
+    markerData: unknown;
+  }): Promise<void>;
+}
+
+const MULTILINE_CUT_PATCHED = Symbol("geolibre.multiLineCut");
+
+/**
+ * Lets right-click remove a vertex from a MultiLineString. Geoman's change mode
+ * only implements removal for LineString, Polygon and MultiPolygon, so on a
+ * MultiLineString it logs "EditChange.cutVertex: feature not updated" and
+ * leaves the vertex (discussion #2750). The change-mode action is created each
+ * time Edit is turned on, so this hooks `actionInstances` and wraps that
+ * instance's `cutVertex`; every other geometry still goes to Geoman.
+ *
+ * @param geoman - The Geoman instance the editor drives.
+ */
+function installMultiLineVertexRemoval(geoman: Geoman): void {
+  const instances = geoman.actionInstances as Record<string, unknown>;
+  geoman.actionInstances = new Proxy(instances, {
+    set(target, key, value) {
+      if (key === "edit__change") patchChangeAction(value);
+      return Reflect.set(target, key, value);
+    },
+  }) as Geoman["actionInstances"];
+}
+
+function patchChangeAction(value: unknown): void {
+  const action = value as (GeomanChangeAction & { [MULTILINE_CUT_PATCHED]?: true }) | null;
+  if (!action || typeof action.cutVertex !== "function" || action[MULTILINE_CUT_PATCHED]) return;
+  action[MULTILINE_CUT_PATCHED] = true;
+  const original = action.cutVertex.bind(action);
+  action.cutVertex = async (event) => {
+    const feature = event.featureData?.getGeoJson();
+    const position = event.markerData?.position;
+    if (
+      event.markerData?.type !== "vertex" ||
+      feature?.geometry?.type !== "MultiLineString" ||
+      !position
+    ) {
+      return original(event);
+    }
+    const next = removeMultiLineStringVertex(feature.geometry, position.coordinate, position.path);
+    if (next === undefined) return original(event);
+    if (next === null) {
+      await event.featureData.delete();
+      return;
+    }
+    await event.featureData.updateGeometry(next);
+    await action.fireFeatureUpdatedEvent({
+      sourceFeatures: [event.featureData],
+      targetFeatures: [event.featureData],
+      markerData: event.markerData,
+    });
+  };
 }
 
 function geomanLayerStylesForMap(map: maplibregl.Map, mapbox: boolean) {
