@@ -720,15 +720,12 @@ def build_server(workspace: Workspace) -> MCPServer:
         labels: dict[str, dict[str, int]] = {}
         for url, nodes in annotations["labels"].items():
             url = _project.redact_url(url)
-            counts: dict[str, int] = {}
+            # Two signed links to one cloud redact to the same URL: merge them.
+            counts = labels.setdefault(url, {})
             for edits in nodes.values():
                 for code in edits.values():
                     counts[str(code)] = counts.get(str(code), 0) + 1
-            labels[url] = counts
-        boxes = [
-            {**box, "url": _project.redact_url(box["url"]) if isinstance(box["url"], str) else None}
-            for box in annotations["boxes"]
-        ]
+        boxes = [{**box, "url": _project.redact_url(box["url"])} for box in annotations["boxes"]]
         return {"labels": labels, "boxes": boxes}
 
     @tool()

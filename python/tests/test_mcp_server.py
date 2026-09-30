@@ -523,6 +523,14 @@ def test_get_point_cloud_annotations_counts_labels_and_lists_boxes(server, proje
     assert all("zzz" not in url for url in result["labels"])
     assert "zzz" not in result["boxes"][0]["url"]
 
+    # Two signed links to the same cloud merge their counts.
+    settings["sources"].append(
+        {"url": signed.replace("abc", "def"), "nodes": {"file": base64.b64encode(node).decode()}}
+    )
+    (tmp_path / project_path).write_text(json.dumps(saved))
+    result = call(server, "get_point_cloud_annotations", path=project_path)
+    assert list(result["labels"].values()) == [{"6": 4, "2": 2}]
+
 
 def test_cesium_ion_tools_persist_the_asset_id(server, project_path, tmp_path):
     """The globe loads Ion assets from `source.ionAssetId`, so it must survive the save."""

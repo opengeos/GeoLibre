@@ -1002,6 +1002,16 @@ def test_point_cloud_annotations_skip_malformed_entries():
         }
     }
     assert p.point_cloud_annotations(project) == {"labels": {}, "boxes": []}
+    no_url = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "cuboids": [{"url": None, "boxes": [{"id": 1}]}],
+                }
+            }
+        }
+    }
+    assert p.point_cloud_annotations(no_url)["boxes"] == []
     assert p.point_cloud_annotations({"plugins": "bad"}) == {"labels": {}, "boxes": []}
 
 
@@ -1051,6 +1061,33 @@ def test_point_cloud_annotations_cap_the_decoded_entry_count(monkeypatch):
     labels = p.point_cloud_annotations(project)["labels"]["https://x/a.laz"]
     # The second node would pass the 3-entry cap, so it is left out.
     assert list(labels) == ["a"]
+
+
+def test_point_cloud_annotations_charge_rejected_nodes_to_the_budget(monkeypatch):
+    from geolibre import project as p
+
+    monkeypatch.setattr(p, "MAX_POINT_LABEL_BYTES", 10)
+    monkeypatch.setattr(p, "MAX_POINT_LABEL_NODE_BYTES", 6)
+    calls = []
+
+    def reject(text, limit):
+        calls.append(limit)
+        raise ValueError("too large")
+
+    monkeypatch.setattr(p, "decode_point_label_node", reject)
+    nodes = {str(i): "x" for i in range(50)}
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "sources": [{"url": "https://x/a.laz", "nodes": nodes}],
+                }
+            }
+        }
+    }
+    p.point_cloud_annotations(project)
+    # Each rejection costs its cap, so the work stops once the budget is spent.
+    assert calls == [6, 4]
 
 
 def test_apply_point_labels_rejects_a_negative_index():

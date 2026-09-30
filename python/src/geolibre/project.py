@@ -1989,9 +1989,13 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
         for key, text in nodes.items():
             if not isinstance(text, str) or budget <= 0 or entries <= 0:
                 continue
+            cap = min(MAX_POINT_LABEL_NODE_BYTES, budget)
             try:
-                edits = decode_point_label_node(text, min(MAX_POINT_LABEL_NODE_BYTES, budget))
+                edits = decode_point_label_node(text, cap)
             except ValueError:
+                # A rejected node may have inflated up to its cap before
+                # failing, so charge the cap: bad nodes cannot bypass the budget.
+                budget -= cap
                 continue
             if len(edits) > entries:
                 continue
@@ -2006,6 +2010,8 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(entry, dict):
             continue
         url = entry.get("url")
+        if not isinstance(url, str):
+            continue
         entry_boxes = entry.get("boxes")
         for box in entry_boxes if isinstance(entry_boxes, list) else []:
             if not isinstance(box, dict):
