@@ -39,6 +39,37 @@ Scroll to zoom and right-drag to tilt or rotate as usual.
   **Classes in session** makes it the class to assign.
 - **Undo** and **Redo** step through the class assignments of the session.
 
+## 3D boxes (cuboids)
+
+Label objects such as buildings, trees or vehicles with oriented 3D boxes:
+
+- **Auto box (A)**: click a point on an object. The annotator grows a cluster
+  from it through points within 0.75 m of each other, skipping ground, water,
+  noise and locked or hidden classes, and fits the tightest box around it: the
+  minimum-area rectangle of the cluster's footprint, rotated to the object, and
+  its full height.
+- **Box from selection**: fits a box to the points you selected with the box,
+  lasso or brush tools.
+
+New boxes take the class chosen under **Assign class**. Each box in **Objects
+(3D boxes)** has its own class and three actions: **Select points** (the points
+inside it), **Assign class to points** (undoable like **Apply**) and **Delete**.
+Click a box to open **Box views**, three orthographic views of the points
+around it: top, side (along its length) and front (across it). Drag inside the
+box to move it, drag an edge to resize it (the opposite face stays put), drag
+the knob beyond the front edge in the top view to rotate it, and scroll to zoom
+about the pointer. While a box is open in the views, the keyboard nudges it:
+arrow keys move it 10 cm north/south/east/west (1 m with **Shift**), **Q** and
+**E** rotate it by 1° (5° with **Shift**), and **+** / **-** raise or lower its
+top by 10 cm.
+
+Boxes on a cloud loaded from a URL are saved with the project. Export them as
+**Boxes as GeoJSON** (one footprint polygon per box, with its class, `z_min`,
+`z_max`, size and heading) or **Boxes as Segments.ai JSON** (a
+[`pointcloud-cuboid`](https://docs.segments.ai/reference/label-types) label in
+the same CRS and units as the LAS export, with the heading measured from grid
+east).
+
 ## Saving labels with the project
 
 Labels on a cloud loaded from a URL are saved with the project. Each edit is
@@ -72,5 +103,5 @@ them.
 - MapLibre renderer only.
 - COPC output is not available; export LAZ and convert it with PDAL
   (`writers.copc`) if you need a COPC file.
-- Cuboids, instance labels, and assisted pre-labeling are later phases of
-  #2749.
+- Boxes rotate about the vertical only (no pitch or roll). Instance labels
+  and assisted pre-labeling are later phases of #2749.

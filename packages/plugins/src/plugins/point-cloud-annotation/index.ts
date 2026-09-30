@@ -10,6 +10,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../../types";
 import { getLidarControl, openLidarLayerPanel } from "../components/lidar";
 import { ASPRS_CLASSES, classDefinition, countClasses } from "./classes";
+import { CuboidSection, encodeCuboids, loadCuboids } from "./cuboid-panel";
 import { LabelHistory } from "./history";
 import { PointLabelStore, type LabelledCloud } from "./label-store";
 import { buildSegmentsLabel, writeLas, writeLaz, writeNpy, type LazEncoder } from "./las-writer";
@@ -59,7 +60,7 @@ export function setPointCloudAnnotationFileSaver(
   fileSaver = saver;
 }
 
-type Tool = "pan" | "box" | "lasso" | "brush";
+type Tool = "pan" | "box" | "lasso" | "brush" | "autobox";
 
 let lazEncoder: Promise<LazEncoder> | null = null;
 
@@ -242,6 +243,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const lassoButton = button("");
   const brushButton = button("");
   brushButton.dataset.tool = "brush";
+  const autoBoxButton = button("");
+  autoBoxButton.dataset.tool = "autobox";
   const brushSize = numberInput("");
   brushSize.min = "2";
   brushSize.max = "200";
@@ -257,7 +260,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const modeSelect = select();
   const toolHint = el("div", "", "line-height:1.4;color:hsl(var(--muted-foreground));");
   tools.root.append(
-    row(panButton, boxButton, lassoButton, brushButton),
+    row(panButton, boxButton, lassoButton, brushButton, autoBoxButton),
     brushSizeLabel,
     modeSelect,
     toolHint,
@@ -314,7 +317,54 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     exportNote,
   );
 
-  const sessionSections = [tools.root, filters.root, assign.root, summary.root, exportSection.root];
+  const cuboids = new CuboidSection(
+    {
+      app,
+      tr: (key, fallback, params) => tr(app, key, fallback, params),
+      control: () => control(),
+      session: () =>
+        session
+          ? {
+              cloudId: session.cloudId,
+              cloudName: session.cloudName,
+              source: session.source,
+              wkt: session.wkt,
+            }
+          : null,
+      data: () => activeData(),
+      classifications: () => (session ? liveClassifications(session.cloudId) : undefined),
+      selection: () => session?.selection ?? new Uint32Array(0),
+      setSelection: (indices) => {
+        if (!session) return;
+        session.selection = indices;
+        renderSelection();
+        renderHighlight();
+      },
+      targetClass: () => targetClass,
+      className: (code) => className(app, code),
+      protectedClasses: () =>
+        new Set([...(control()?.getHiddenClassifications() ?? []), ...lockedClasses]),
+      assignClass: (indices, code) => assignPoints(indices, code),
+      setStatus: (text) => setStatus(text),
+      exportText: (name, text) => {
+        if (app.exportTextFile)
+          app.exportTextFile(name, text, {
+            description: "JSON",
+            extensions: [name.split(".").pop() ?? "json"],
+          });
+        else downloadBytes(new TextEncoder().encode(text), name, "application/json");
+      },
+    },
+    button,
+  );
+  const sessionSections = [
+    tools.root,
+    filters.root,
+    assign.root,
+    summary.root,
+    cuboids.root,
+    exportSection.root,
+  ];
   container.append(hint, setup.root, ...sessionSections, status);
 
   const setStatus = (text: string) => {
@@ -474,7 +524,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const renderTools = () => {
     brushSizeLabel.hidden = tool !== "brush";
-    for (const node of [panButton, boxButton, lassoButton, brushButton]) {
+    for (const node of [panButton, boxButton, lassoButton, brushButton, autoBoxButton]) {
       node.style.cssText = node.dataset.tool === tool ? ACTIVE_TOOL_STYLE : BUTTON_STYLE;
       node.setAttribute("aria-pressed", String(node.dataset.tool === tool));
     }
@@ -529,6 +579,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     boxButton.textContent = tr(app, "toolBox", "Box (B)");
     lassoButton.textContent = tr(app, "toolLasso", "Lasso (L)");
     brushButton.textContent = tr(app, "toolBrush", "Brush (P)");
+    autoBoxButton.textContent = tr(app, "toolAutoBox", "Auto box (A)");
+    cuboids.renderLabels();
     brushSizeText.textContent = tr(app, "brushSize", "Brush size (px, [ and ])");
     const modeValue = modeSelect.value || mode;
     modeSelect.replaceChildren(
@@ -701,6 +753,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     if (!session || tool === "pan" || event.button !== 0 || !map) return;
     event.preventDefault();
     event.stopPropagation();
+    if (tool === "autobox") {
+      const [x, y] = localPoint(event);
+      cuboids.autoBoxAt(x, y);
+      return;
+    }
     const modifiers: SelectionMode | null = event.shiftKey
       ? "add"
       : event.altKey
@@ -813,6 +870,21 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     if (labelStore.record(session.source, data as LabelledCloud, indices) > 0) startLabelSync();
   };
 
+  // Assigns a class to given points (box contents), undoable like Apply.
+  const assignPoints = (indices: Uint32Array, code: number) => {
+    const classes = session ? liveClassifications(session.cloudId) : undefined;
+    if (!session || !classes || indices.length === 0) return;
+    const changed = session.history.assign(session.cloudId, classes, indices, code);
+    recordLabels(indices);
+    refreshAfterEdit(session.cloudId);
+    setStatus(
+      tr(app, "applied", "Assigned {{count}} points to {{name}}.", {
+        count: numberFormat.format(changed),
+        name: className(app, code),
+      }),
+    );
+  };
+
   const applyClass = () => {
     const ctl = control();
     if (!session || !ctl || session.selection.length === 0) return;
@@ -848,6 +920,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const ended = session;
     session = null;
     removeHighlight();
+    cuboids.clear();
     unbindMapInteraction();
     applyToolToMap();
     ended.resumeStreaming?.();
@@ -890,6 +963,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     setTool(tool === "pan" ? "box" : tool);
     renderLabels();
     renderSessionVisibility();
+    cuboids.render();
     hint.textContent = tr(
       app,
       "sessionHint",
@@ -926,16 +1000,28 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 
   const exportPoints = async (format: "las" | "laz" | "npy") => {
+    // Load the LAZ encoder before reading the cloud: its first load is a
+    // network fetch, and edits made meanwhile must not leak into the export.
+    let encoder: LazEncoder | null = null;
+    try {
+      if (format === "laz") encoder = await loadLazEncoder();
+    } catch (error) {
+      setStatus(
+        tr(app, "exportFailed", "Export failed: {{message}}", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return;
+    }
     const cloud = exportCloudData();
     if (!session || !cloud) return;
     const name = `${safeFileStem(session.cloudName)}-annotated.${format}`;
     try {
-      const bytes =
-        format === "laz"
-          ? writeLaz(cloud, await loadLazEncoder())
-          : format === "npy"
-            ? writeNpy(cloud)
-            : new Uint8Array(writeLas(cloud));
+      const bytes = encoder
+        ? writeLaz(cloud, encoder)
+        : format === "npy"
+          ? writeNpy(cloud)
+          : new Uint8Array(writeLas(cloud));
       const options = {
         defaultName: name,
         extension: format,
@@ -991,10 +1077,17 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   // --- Wiring.
   const onKeyDown = (event: KeyboardEvent) => {
     if (!session || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
+    // Nudges for the selected box take precedence over tool shortcuts.
+    if (cuboids.handleKey(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const key = event.key.toLowerCase();
     if (key === "b") setTool("box");
     else if (key === "l") setTool("lasso");
     else if (key === "p") setTool("brush");
+    else if (key === "a") setTool("autobox");
     else if (key === "[" || key === "]") setBrushRadius(brushRadius + (key === "]" ? 4 : -4));
     else if (key === "enter") applyClass();
     else if (key === "escape") clearSelection();
@@ -1038,6 +1131,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   boxButton.addEventListener("click", () => setTool("box"));
   lassoButton.addEventListener("click", () => setTool("lasso"));
   brushButton.addEventListener("click", () => setTool("brush"));
+  autoBoxButton.addEventListener("click", () => setTool("autobox"));
   brushSize.addEventListener("change", () => setBrushRadius(Number(brushSize.value) / 2));
   modeSelect.addEventListener("change", () => {
     mode = modeSelect.value as SelectionMode;
@@ -1068,7 +1162,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   exportLazButton.addEventListener("click", () => void exportPoints("laz"));
   exportNpyButton.addEventListener("click", () => void exportPoints("npy"));
   exportSegmentsButton.addEventListener("click", exportSegments);
-  document.addEventListener("keydown", onKeyDown);
+  // Capture phase: a box nudge must win over the map's own arrow-key panning.
+  document.addEventListener("keydown", onKeyDown, true);
   const unsubscribeLocale = app.onLocaleChange?.(() => {
     renderLabels();
     if (session) {
@@ -1102,7 +1197,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     labelAppliedListeners.delete(onLabelsApplied);
     clearInterval(bindTimer);
     endSession();
-    document.removeEventListener("keydown", onKeyDown);
+    cuboids.destroy();
+    document.removeEventListener("keydown", onKeyDown, true);
     boundControl?.off("load", onControlChange);
     boundControl?.off("unload", onControlChange);
     unsubscribeLocale?.();
@@ -1228,9 +1324,15 @@ export const pointCloudAnnotationPlugin: GeoLibrePlugin = {
     // Saved labels stay applied to the map after the panel closes.
   },
   // Point labels are saved with the project whether or not the panel is open.
-  getProjectState: () => labelStore.encode(),
+  getProjectState: () => {
+    const labels = labelStore.encode();
+    const cuboids = encodeCuboids();
+    if (!labels && cuboids.length === 0) return undefined;
+    return { version: 1, sources: labels?.sources ?? [], cuboids };
+  },
   applyProjectState: (_app, state) => {
     labelStore.load(state);
+    loadCuboids((state as { cuboids?: unknown } | undefined)?.cuboids);
     if (labelStore.isEmpty) stopLabelSync();
     else startLabelSync();
   },

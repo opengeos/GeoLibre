@@ -1,0 +1,667 @@
+// Cuboid (3D bounding box) objects for the point cloud annotator: the object
+// list, box creation (fit to the selection, or grow-and-fit from a clicked
+// point), wireframes on the map, the orthographic editor, persistence and
+// export (GeoJSON footprints, Segments.ai `pointcloud-cuboid`).
+
+import { LineLayer } from "@deck.gl/layers";
+import type { LidarControl } from "maplibre-gl-components";
+import type { PointCloudData } from "maplibre-gl-lidar";
+import type { GeoLibreAppAPI } from "../../types";
+import { ASPRS_CLASSES, classDefinition } from "./classes";
+import {
+  CUBOID_EDGES,
+  fromBoxFrame,
+  cuboidCorners,
+  fitCuboid,
+  growCluster,
+  localFrame,
+  pointsInCuboid,
+  type Cuboid,
+} from "./cuboid";
+import { resolveExportCrs } from "./las-writer";
+import { getOverlayViewport, getRenderZOffset } from "./lidar-access";
+import { ObjectViews, boxFramePoints } from "./object-views";
+import { createOffsetProjector } from "./selection";
+
+/** A labelled box. */
+export interface CuboidObject {
+  id: number;
+  classCode: number;
+  box: Cuboid;
+}
+
+/** Saved boxes for one source (URL is a value, so redaction can scrub it). */
+export interface EncodedCuboids {
+  url: string;
+  boxes: { id: number; classCode: number; center: number[]; size: number[]; yaw: number }[];
+}
+
+/** Boxes per source URL, saved with the project alongside point labels. */
+const cuboidStore = new Map<string, CuboidObject[]>();
+
+/**
+ * Serialises every source's boxes for the project file.
+ *
+ * @returns The saved boxes, or an empty list.
+ */
+export function encodeCuboids(): EncodedCuboids[] {
+  // Boxes on a local file (keyed by session) cannot be reopened, so skip them.
+  return [...cuboidStore]
+    .filter(([url, objects]) => objects.length > 0 && /^https?:\/\//i.test(url))
+    .map(([url, objects]) => ({
+      url,
+      boxes: objects.map(({ id, classCode, box }) => ({
+        id,
+        classCode,
+        center: [...box.center],
+        size: [...box.size],
+        yaw: box.yaw,
+      })),
+    }));
+}
+
+/**
+ * Replaces the stored boxes with saved ones.
+ *
+ * @param state - The `cuboids` list from the project, or anything else to clear.
+ */
+export function loadCuboids(state: unknown): void {
+  cuboidStore.clear();
+  if (!Array.isArray(state)) return;
+  const isTriple = (value: unknown): value is [number, number, number] =>
+    Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
+  for (const entry of state as Partial<EncodedCuboids>[]) {
+    if (typeof entry?.url !== "string" || !Array.isArray(entry.boxes)) continue;
+    const objects: CuboidObject[] = [];
+    for (const saved of entry.boxes) {
+      if (!isTriple(saved?.center) || !isTriple(saved.size) || !Number.isFinite(saved.yaw))
+        continue;
+      objects.push({
+        id: Number(saved.id) || objects.length + 1,
+        classCode: Number(saved.classCode) || 0,
+        box: { center: saved.center, size: saved.size, yaw: saved.yaw },
+      });
+    }
+    if (objects.length > 0) cuboidStore.set(entry.url, objects);
+  }
+}
+
+/** Whether any source has boxes. */
+export function hasCuboids(): boolean {
+  return [...cuboidStore.values()].some((objects) => objects.length > 0);
+}
+
+/**
+ * Converts boxes to GeoJSON: one footprint polygon per box, with its class,
+ * vertical extent and size as properties.
+ *
+ * @param objects - The boxes.
+ * @param className - Name for a class code.
+ * @returns A FeatureCollection.
+ */
+export function cuboidsToGeoJson(
+  objects: readonly CuboidObject[],
+  className: (code: number) => string,
+): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: objects.map(({ id, classCode, box }) => {
+      const corners = cuboidCorners(box);
+      const ring = [0, 1, 2, 3, 0].map((k) => [corners[k][0], corners[k][1]]);
+      return {
+        type: "Feature",
+        id,
+        geometry: { type: "Polygon", coordinates: [ring] },
+        properties: {
+          id,
+          classification: classCode,
+          class_name: className(classCode),
+          z_min: box.center[2] - box.size[2] / 2,
+          z_max: box.center[2] + box.size[2] / 2,
+          length_m: box.size[0],
+          width_m: box.size[1],
+          height_m: box.size[2],
+          yaw_deg: (box.yaw * 180) / Math.PI,
+        },
+      };
+    }),
+  };
+}
+
+/**
+ * Converts boxes to a Segments.ai `pointcloud-cuboid` label in the same CRS
+ * and units as the annotator's LAS export, so it lines up with that file:
+ * position and dimensions in CRS units, yaw measured from the CRS x axis
+ * (grid east, which differs from true east by the meridian convergence).
+ *
+ * @param objects - The boxes.
+ * @param wkt - The source CRS WKT (WGS 84 when missing).
+ * @returns The label as a JSON-serialisable object.
+ */
+export function cuboidsToSegments(objects: readonly CuboidObject[], wkt: string | undefined) {
+  const crs = resolveExportCrs(wkt);
+  return {
+    format_version: "0.2",
+    annotations: objects.map(({ id, classCode, box }) => {
+      const frame = localFrame(box.center[1]);
+      const [x, y] = crs.forward(box.center[0], box.center[1]);
+      // Project a point a metre ahead along the heading to get the grid yaw
+      // and the CRS's horizontal units per metre at the box.
+      const ahead = crs.forward(
+        box.center[0] + Math.cos(box.yaw) / frame.mx,
+        box.center[1] + Math.sin(box.yaw) / frame.my,
+      );
+      const scale = Math.hypot(ahead[0] - x, ahead[1] - y);
+      return {
+        id,
+        track_id: id,
+        category_id: classCode,
+        type: "cuboid",
+        position: { x, y, z: box.center[2] / crs.zFactor },
+        dimensions: {
+          x: box.size[0] * scale,
+          y: box.size[1] * scale,
+          z: box.size[2] / crs.zFactor,
+        },
+        yaw: Math.atan2(ahead[1] - y, ahead[0] - x),
+      };
+    }),
+  };
+}
+
+/** What the cuboid section needs from the annotator panel. */
+export interface CuboidHost {
+  app: GeoLibreAppAPI;
+  tr: (key: string, fallback: string, params?: Record<string, string | number>) => string;
+  control: () => LidarControl | null;
+  /** The running session, or null. */
+  session: () => { cloudId: string; cloudName: string; source: string | null; wkt?: string } | null;
+  data: () => PointCloudData | null;
+  classifications: () => Uint8Array | undefined;
+  selection: () => Uint32Array;
+  setSelection: (indices: Uint32Array) => void;
+  targetClass: () => number;
+  className: (code: number) => string;
+  /** Classes a selection must never pick (hidden and locked). */
+  protectedClasses: () => ReadonlySet<number>;
+  assignClass: (indices: Uint32Array, code: number) => void;
+  setStatus: (text: string) => void;
+  exportText: (name: string, text: string) => void;
+}
+
+const LAYER_ID = "pointcloud-annotation-cuboids";
+const VIEWS_PANEL_ID = "pc-annotation-object-views";
+/** Metres of context shown around a box in the orthographic views. */
+const VIEW_MARGIN = 1.5;
+/** Ground and noise never join an auto-fitted object. */
+const AUTO_BOX_SKIP = new Set([2, 7, 9, 18]);
+
+/** The cuboid section of the annotator panel. */
+export class CuboidSection {
+  readonly root: HTMLElement;
+  private readonly heading: HTMLElement;
+  private readonly list: HTMLElement;
+  private readonly fromSelection: HTMLButtonElement;
+  private readonly exportGeoJson: HTMLButtonElement;
+  private readonly exportSegments: HTMLButtonElement;
+  private selectedId: number | null = null;
+  private views: ObjectViews | null = null;
+  private unregisterViews: (() => void) | null = null;
+  private frame = 0;
+
+  /**
+   * @param host - Hooks into the annotator panel.
+   * @param makeButton - The panel's button factory, for a consistent look.
+   */
+  constructor(
+    private readonly host: CuboidHost,
+    makeButton: (text: string, primary?: boolean) => HTMLButtonElement,
+  ) {
+    this.root = document.createElement("div");
+    this.root.style.cssText = "display:flex;flex-direction:column;gap:6px;";
+    this.heading = document.createElement("div");
+    this.heading.style.fontWeight = "600";
+    this.fromSelection = makeButton("");
+    this.fromSelection.dataset.testid = "pc-annotation-box-from-selection";
+    this.exportGeoJson = makeButton("");
+    this.exportGeoJson.dataset.testid = "pc-annotation-export-cuboids-geojson";
+    this.exportSegments = makeButton("");
+    this.exportSegments.dataset.testid = "pc-annotation-export-cuboids-segments";
+    this.list = document.createElement("div");
+    this.list.dataset.testid = "pc-annotation-cuboids";
+    this.list.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;";
+    row.append(this.fromSelection);
+    const exportRow = document.createElement("div");
+    exportRow.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;";
+    exportRow.append(this.exportGeoJson, this.exportSegments);
+    this.root.append(this.heading, row, this.list, exportRow);
+    this.fromSelection.addEventListener("click", () => this.addFromSelection());
+    this.exportGeoJson.addEventListener("click", () => this.exportAs("geojson"));
+    this.exportSegments.addEventListener("click", () => this.exportAs("segments"));
+    this.renderLabels();
+  }
+
+  /** The current source's boxes (live array). */
+  private objects(): CuboidObject[] {
+    const source = this.host.session()?.source ?? null;
+    const key = source ?? `session:${this.host.session()?.cloudId ?? ""}`;
+    let objects = cuboidStore.get(key);
+    if (!objects) {
+      objects = [];
+      cuboidStore.set(key, objects);
+    }
+    return objects;
+  }
+
+  /** Re-applies translated text. */
+  renderLabels(): void {
+    const tr = this.host.tr;
+    this.heading.textContent = tr("cuboids", "Objects (3D boxes)");
+    this.fromSelection.textContent = tr("boxFromSelection", "Box from selection");
+    this.exportGeoJson.textContent = tr("exportCuboidsGeoJson", "Boxes as GeoJSON");
+    this.exportSegments.textContent = tr("exportCuboidsSegments", "Boxes as Segments.ai JSON");
+    this.renderList();
+  }
+
+  /** Redraws the list, the wireframes and (for the selected box) the views. */
+  render(refit = false): void {
+    this.renderList();
+    this.renderMap();
+    this.renderViews(refit);
+  }
+
+  /** Removes the wireframes and closes the views (session end). */
+  clear(): void {
+    this.host.control()?.getDeckOverlay()?.removeLayer(LAYER_ID);
+    this.selectedId = null;
+    this.host.app.closeFloatingPanel?.(VIEWS_PANEL_ID);
+    this.renderList();
+  }
+
+  /** Releases the views and their panel. */
+  destroy(): void {
+    this.clear();
+    this.views?.destroy();
+    this.views = null;
+    this.unregisterViews?.();
+    this.unregisterViews = null;
+  }
+
+  private nextId(): number {
+    return this.objects().reduce((max, object) => Math.max(max, object.id), 0) + 1;
+  }
+
+  private add(box: Cuboid): void {
+    const object: CuboidObject = { id: this.nextId(), classCode: this.host.targetClass(), box };
+    this.objects().push(object);
+    this.select(object.id);
+    this.host.setStatus(
+      this.host.tr("boxAdded", "Added box {{id}} ({{l}} × {{w}} × {{h}} m).", {
+        id: object.id,
+        l: box.size[0].toFixed(2),
+        w: box.size[1].toFixed(2),
+        h: box.size[2].toFixed(2),
+      }),
+    );
+  }
+
+  private addFromSelection(): void {
+    const data = this.host.data();
+    const selection = this.host.selection();
+    if (!data || selection.length === 0) {
+      this.host.setStatus(this.host.tr("boxNeedsSelection", "Select the object's points first."));
+      return;
+    }
+    const box = fitCuboid(data, selection);
+    if (box) this.add(box);
+  }
+
+  /**
+   * Auto box: grows a cluster from the point under the cursor (skipping
+   * ground, water and noise) and fits a box to it.
+   *
+   * @param x - Pointer x in map-container pixels.
+   * @param y - Pointer y in map-container pixels.
+   */
+  autoBoxAt(x: number, y: number): void {
+    const ctl = this.host.control();
+    const data = this.host.data();
+    const viewport = ctl ? getOverlayViewport(ctl) : null;
+    if (!ctl || !data || !viewport) return;
+    const classes = this.host.classifications();
+    const protectedClasses = this.host.protectedClasses();
+    const project = createOffsetProjector(viewport, data.coordinateOrigin);
+    const zOffset = getRenderZOffset(ctl);
+    const out = new Float64Array(2);
+    let seed = -1;
+    let best = 8 * 8;
+    for (let i = 0; i < data.pointCount; i++) {
+      const code = classes?.[i];
+      if (code !== undefined && (AUTO_BOX_SKIP.has(code) || protectedClasses.has(code))) continue;
+      const p = data.positions;
+      if (!project(p[i * 3], p[i * 3 + 1], p[i * 3 + 2] + zOffset, out)) continue;
+      const d = (out[0] - x) ** 2 + (out[1] - y) ** 2;
+      if (d < best) {
+        best = d;
+        seed = i;
+      }
+    }
+    if (seed < 0) {
+      this.host.setStatus(
+        this.host.tr(
+          "noPointUnderCursor",
+          "No object point under the cursor (ground and noise are skipped).",
+        ),
+      );
+      return;
+    }
+    const cluster = growCluster(data, seed, {
+      radius: 0.75,
+      // Large enough for a warehouse or a stadium stand; the grow still stops
+      // at the object's edge.
+      searchRadius: 150,
+      skip: (i) => {
+        const code = classes?.[i];
+        return code !== undefined && (AUTO_BOX_SKIP.has(code) || protectedClasses.has(code));
+      },
+    });
+    this.host.setSelection(cluster);
+    const box = fitCuboid(data, cluster);
+    if (box) this.add(box);
+  }
+
+  private select(id: number | null): void {
+    this.selectedId = id;
+    if (id !== null) this.openViews();
+    this.render(true);
+  }
+
+  private remove(id: number): void {
+    const objects = this.objects();
+    const index = objects.findIndex((object) => object.id === id);
+    if (index >= 0) objects.splice(index, 1);
+    if (this.selectedId === id) {
+      this.selectedId = null;
+      this.host.app.closeFloatingPanel?.(VIEWS_PANEL_ID);
+    }
+    this.render();
+  }
+
+  private pointsIn(object: CuboidObject): Uint32Array {
+    const data = this.host.data();
+    if (!data) return new Uint32Array(0);
+    const protectedClasses = this.host.protectedClasses();
+    const classes = this.host.classifications();
+    const inside = pointsInCuboid(data, object.box);
+    return classes && protectedClasses.size > 0
+      ? inside.filter((i) => !protectedClasses.has(classes[i]))
+      : inside;
+  }
+
+  private renderList(): void {
+    this.list.replaceChildren();
+    if (!this.host.session()) return;
+    const tr = this.host.tr;
+    for (const object of this.objects()) {
+      const row = document.createElement("div");
+      row.dataset.box = String(object.id);
+      row.style.cssText = `display:flex;flex-direction:column;gap:4px;padding:4px;border-radius:4px;border:1px solid ${
+        object.id === this.selectedId ? "hsl(var(--primary))" : "hsl(var(--border))"
+      };`;
+      const title = document.createElement("button");
+      title.type = "button";
+      title.style.cssText =
+        "display:flex;gap:6px;align-items:center;border:0;background:transparent;color:inherit;cursor:pointer;padding:0;text-align:start;";
+      const [r, g, b] = classDefinition(object.classCode).color;
+      title.innerHTML = "";
+      const swatch = document.createElement("span");
+      swatch.style.cssText = `width:10px;height:10px;border-radius:2px;background:rgb(${r},${g},${b});flex:none;`;
+      const label = document.createElement("span");
+      label.textContent = `#${object.id} · ${object.box.size.map((v) => v.toFixed(1)).join(" × ")} m`;
+      title.append(swatch, label);
+      title.title = tr("editBox", "Edit in the side views");
+      title.addEventListener("click", () => this.select(object.id));
+      const classSelect = document.createElement("select");
+      classSelect.style.cssText =
+        "padding:4px;border:1px solid hsl(var(--border));border-radius:4px;background:hsl(var(--background));min-width:0;";
+      classSelect.style.setProperty("color", "hsl(var(--foreground))", "important");
+      for (const entry of ASPRS_CLASSES) {
+        classSelect.append(
+          new Option(`${entry.code} · ${this.host.className(entry.code)}`, String(entry.code)),
+        );
+      }
+      classSelect.value = String(object.classCode);
+      classSelect.setAttribute("aria-label", tr("boxClass", "Box class"));
+      classSelect.addEventListener("change", () => {
+        object.classCode = Number(classSelect.value);
+        this.render();
+      });
+      const actions = document.createElement("div");
+      actions.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;";
+      const action = (key: string, fallback: string, onClick: () => void) => {
+        const node = document.createElement("button");
+        node.type = "button";
+        node.textContent = tr(key, fallback);
+        node.dataset.action = key;
+        node.style.cssText =
+          "padding:2px 6px;border:1px solid hsl(var(--border));border-radius:4px;background:transparent;color:inherit;cursor:pointer;font-size:11px;";
+        node.addEventListener("click", onClick);
+        actions.append(node);
+      };
+      action("selectInBox", "Select points", () => this.host.setSelection(this.pointsIn(object)));
+      action("assignInBox", "Assign class to points", () => {
+        this.host.assignClass(this.pointsIn(object), object.classCode);
+      });
+      action("deleteBox", "Delete", () => this.remove(object.id));
+      row.append(title, classSelect, actions);
+      this.list.append(row);
+    }
+    const hasBoxes = this.objects().length > 0;
+    this.exportGeoJson.disabled = !hasBoxes;
+    this.exportSegments.disabled = !hasBoxes;
+  }
+
+  private renderMap(): void {
+    const ctl = this.host.control();
+    const overlay = ctl?.getDeckOverlay();
+    if (!ctl || !overlay) return;
+    const objects = this.host.session() ? this.objects() : [];
+    if (objects.length === 0) {
+      overlay.removeLayer(LAYER_ID);
+      return;
+    }
+    const zOffset = getRenderZOffset(ctl);
+    const edges: { source: number[]; target: number[]; color: number[] }[] = [];
+    for (const object of objects) {
+      const corners = cuboidCorners(object.box).map(([lng, lat, z]) => [lng, lat, z + zOffset]);
+      const color =
+        object.id === this.selectedId
+          ? [250, 204, 21, 255]
+          : [...classDefinition(object.classCode).color, 255];
+      for (const [a, b] of CUBOID_EDGES)
+        edges.push({ source: corners[a], target: corners[b], color });
+    }
+    overlay.addLayer(
+      LAYER_ID,
+      new LineLayer({
+        id: LAYER_ID,
+        data: edges,
+        getSourcePosition: (d: { source: number[] }) => d.source as [number, number, number],
+        getTargetPosition: (d: { target: number[] }) => d.target as [number, number, number],
+        getColor: (d: { color: number[] }) => d.color as [number, number, number, number],
+        getWidth: 2,
+        widthUnits: "pixels",
+        // Like the selection highlight: stay visible through the points.
+        parameters: { depthTest: false } as Record<string, unknown>,
+      }),
+    );
+  }
+
+  private openViews(): void {
+    const app = this.host.app;
+    if (!this.unregisterViews && app.registerFloatingPanel) {
+      this.unregisterViews = app.registerFloatingPanel({
+        id: VIEWS_PANEL_ID,
+        title: () => this.host.tr("sideViews", "Box views (top · side · front)"),
+        defaultWidth: 720,
+        defaultHeight: 280,
+        position: "bottom-left",
+        render: (container) => {
+          const host = document.createElement("div");
+          host.style.cssText = "height:100%;min-height:180px;padding:4px;box-sizing:border-box;";
+          host.dataset.testid = "pc-annotation-box-views";
+          container.append(host);
+          this.views = new ObjectViews(
+            host,
+            {
+              onChange: (box) => this.onDrag(box),
+              onCommit: () => this.render(),
+            },
+            {
+              top: this.host.tr("viewTop", "Top"),
+              side: this.host.tr("viewSide", "Side"),
+              front: this.host.tr("viewFront", "Front"),
+            },
+          );
+          // Wait a frame for the card to lay out before sizing the views.
+          requestAnimationFrame(() => this.renderViews(true));
+          return () => {
+            this.views?.destroy();
+            this.views = null;
+          };
+        },
+        onClose: () => {
+          this.selectedId = null;
+          this.renderList();
+          this.renderMap();
+        },
+      });
+    }
+    app.openFloatingPanel?.(VIEWS_PANEL_ID);
+  }
+
+  /**
+   * Keyboard nudges for the selected box: arrows move it 10 cm along the map
+   * axes (1 m with Shift), Q / E rotate it by 1 degree (5 with Shift), and
+   * + / - raise or lower its top by 10 cm.
+   *
+   * @param event - The key event.
+   * @returns True when the key edited the box (the caller stops it).
+   */
+  handleKey(event: KeyboardEvent): boolean {
+    const object = this.selected();
+    if (!object) return false;
+    const step = event.shiftKey ? 1 : 0.1;
+    const box = object.box;
+    const cos = Math.cos(box.yaw);
+    const sin = Math.sin(box.yaw);
+    // Map-axis moves expressed in the box frame (x along heading, y left).
+    const move = (east: number, north: number): typeof box => ({
+      ...box,
+      center: fromBoxFrame(box, east * cos + north * sin, -east * sin + north * cos, 0),
+    });
+    let next: typeof box | null = null;
+    switch (event.key) {
+      case "ArrowUp":
+        next = move(0, step);
+        break;
+      case "ArrowDown":
+        next = move(0, -step);
+        break;
+      case "ArrowLeft":
+        next = move(-step, 0);
+        break;
+      case "ArrowRight":
+        next = move(step, 0);
+        break;
+      case "q":
+      case "Q":
+      case "e":
+      case "E": {
+        const degrees = (event.shiftKey ? 5 : 1) * (event.key.toLowerCase() === "q" ? 1 : -1);
+        const yaw = box.yaw + (degrees * Math.PI) / 180;
+        next = { ...box, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)) };
+        break;
+      }
+      case "+":
+      case "=":
+      case "-": {
+        const delta = event.key === "-" ? -0.1 : 0.1;
+        const height = Math.max(0.05, box.size[2] + delta);
+        const grown = height - box.size[2];
+        next = {
+          ...box,
+          size: [box.size[0], box.size[1], height],
+          center: [box.center[0], box.center[1], box.center[2] + grown / 2],
+        };
+        break;
+      }
+      default:
+        return false;
+    }
+    object.box = next;
+    this.render();
+    return true;
+  }
+
+  private selected(): CuboidObject | undefined {
+    return this.objects().find((object) => object.id === this.selectedId);
+  }
+
+  private onDrag(box: Cuboid): void {
+    const object = this.selected();
+    if (!object) return;
+    object.box = box;
+    if (this.frame) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = 0;
+      this.renderMap();
+      this.renderViews(false);
+    });
+  }
+
+  private renderViews(refit: boolean): void {
+    const object = this.selected();
+    const data = this.host.data();
+    if (!this.views) return;
+    if (!object || !data) {
+      this.views.update(null, null);
+      return;
+    }
+    const classes = this.host.classifications();
+    const nearby = pointsInCuboid(data, object.box, VIEW_MARGIN);
+    const points = boxFramePoints(
+      object.box,
+      data.positions,
+      data.coordinateOrigin,
+      nearby,
+      (i) => classDefinition(classes?.[i] ?? 1).color,
+    );
+    this.views.update(object.box, points, refit);
+  }
+
+  private exportAs(format: "geojson" | "segments"): void {
+    const session = this.host.session();
+    const objects = this.objects();
+    if (!session || objects.length === 0) return;
+    const stem =
+      session.cloudName.replace(/\.(copc\.)?la[sz]$/i, "").replace(/[^\w.-]+/g, "_") ||
+      "point-cloud";
+    if (format === "geojson") {
+      this.host.exportText(
+        `${stem}-boxes.geojson`,
+        JSON.stringify(cuboidsToGeoJson(objects, this.host.className)),
+      );
+    } else {
+      this.host.exportText(
+        `${stem}-cuboids-segments-label.json`,
+        JSON.stringify(cuboidsToSegments(objects, session.wkt)),
+      );
+    }
+    this.host.setStatus(
+      this.host.tr("exportedBoxes", "Exported {{count}} boxes.", { count: objects.length }),
+    );
+  }
+}

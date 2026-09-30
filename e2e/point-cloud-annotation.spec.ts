@@ -320,4 +320,83 @@ test.describe("point cloud annotation", () => {
     ).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/Failed to load/)).toHaveCount(0);
   });
+
+  test("fits a 3D box to a selection, shows its side views, exports and restores it", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await captureSavedFiles(page);
+    await page.addInitScript(() => {
+      delete (window as unknown as Record<string, unknown>).showOpenFilePicker;
+    });
+    await waitForMap(page);
+    await loadCopc(page);
+    await startSession(page);
+    const canvas = (await page.locator(".maplibregl-canvas").boundingBox())!;
+
+    // Select part of the cloud and fit a box to it.
+    await page.mouse.move(canvas.x + canvas.width * 0.3, canvas.y + canvas.height * 0.3);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + canvas.width * 0.7, canvas.y + canvas.height * 0.7, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    await page.getByTestId("pc-annotation-target").selectOption("6");
+    await page.getByTestId("pc-annotation-box-from-selection").click();
+    const boxes = page.getByTestId("pc-annotation-cuboids");
+    await expect(boxes.locator('[data-box="1"]')).toBeVisible();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("Added box 1");
+
+    // The three orthographic views open, each with its own deck.gl canvas.
+    const views = page.getByTestId("pc-annotation-box-views");
+    await expect(views).toBeVisible();
+    await expect(views.locator("canvas")).toHaveCount(3);
+
+    // Keyboard nudge: "+" twice raises the box top by 20 cm.
+    const heightOf = async () =>
+      Number(/× ([\d.]+) m/.exec((await boxes.locator('[data-box="1"]').textContent()) ?? "")?.[1]);
+    const before = await heightOf();
+    await page.keyboard.press("+");
+    await page.keyboard.press("+");
+    await expect.poll(heightOf).toBeCloseTo(before + 0.2, 1);
+
+    // Export the box as GeoJSON: one closed footprint with class and extent.
+    await page.getByTestId("pc-annotation-export-cuboids-geojson").click();
+    await expect.poll(() => savedFile(page, "1.2-with-color-boxes.geojson")).not.toBeNull();
+    const geojson = JSON.parse(
+      (await savedFile(page, "1.2-with-color-boxes.geojson"))!.toString("utf8"),
+    ) as GeoJSON.FeatureCollection<GeoJSON.Polygon>;
+    expect(geojson.features).toHaveLength(1);
+    expect(geojson.features[0].properties?.classification).toBe(6);
+    expect(geojson.features[0].geometry.coordinates[0]).toHaveLength(5);
+    const saved = geojson.features[0].properties!;
+
+    // Save and reopen: the box comes back with the same size.
+    await page.getByTestId("pc-annotation-start").click();
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Save", exact: true }).click();
+    const strip = page.getByRole("button", { name: "Strip credentials", exact: true });
+    if (await strip.isVisible({ timeout: 3_000 }).catch(() => false)) await strip.click();
+    const findProject = () =>
+      page.evaluate(() =>
+        Object.keys(
+          (window as unknown as { __savedFiles: Record<string, number[]> }).__savedFiles,
+        ).find((name) => /\.geolibre(\.json)?$/.test(name)),
+      );
+    await expect.poll(findProject).toBeTruthy();
+    const projectBytes = (await savedFile(page, (await findProject())!))!;
+    const dir = await mkdtemp(join(tmpdir(), "geolibre-pc-boxes-"));
+    const projectPath = join(dir, "boxes.geolibre.json");
+    await writeFile(projectPath, projectBytes);
+    await waitForMap(page);
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Open From" }).click();
+    await page.getByRole("menuitem", { name: "File..." }).click();
+    await (await chooserPromise).setFiles(projectPath);
+    await startSession(page, { restored: true });
+    await expect(page.getByTestId("pc-annotation-cuboids").locator('[data-box="1"]')).toContainText(
+      `${Number(saved.length_m).toFixed(1)} × ${Number(saved.width_m).toFixed(1)}`,
+    );
+  });
 });
