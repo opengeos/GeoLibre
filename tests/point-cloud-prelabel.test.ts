@@ -11,6 +11,7 @@ import {
   PRELABEL_TOOLS,
   keepUntouched,
   mergePrelabels,
+  planPrelabelTiles,
   readLasClassifications,
 } from "../packages/plugins/src/plugins/point-cloud-annotation/prelabel";
 
@@ -201,16 +202,16 @@ describe("Whitebox pre-labelling through the WASM runner", () => {
   });
 });
 
-describe("planPrelabelTiles", async () => {
-  const { planPrelabelTiles } =
-    await import("../packages/plugins/src/plugins/point-cloud-annotation/prelabel");
+describe("planPrelabelTiles", () => {
   it("covers every point exactly once in the cores, with buffered inputs", () => {
     const { cloud } = fieldWithBuilding(); // 3,600 points on a 60 m square
     const tiles = planPrelabelTiles(cloud, 1000, 5);
     assert.ok(tiles.length >= 4, `tiles ${tiles.length}`);
     const seen = new Uint8Array(cloud.pointCount);
     for (const tile of tiles) {
+      // Both the owned points and what the tool is given stay under the cap.
       assert.ok(tile.core.length <= 1000);
+      assert.ok(tile.input.length <= 1000, `input ${tile.input.length}`);
       assert.ok(tile.input.length >= tile.core.length);
       const inputSet = new Set(tile.input);
       for (const i of tile.core) {

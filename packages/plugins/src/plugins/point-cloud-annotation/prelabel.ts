@@ -122,6 +122,9 @@ export function mergePrelabels(
   count: number,
   options: PrelabelMergeOptions,
 ): { indices: Uint32Array; codes: Uint8Array } {
+  if (current.length < count) {
+    throw new Error(`Expected ${count} current classes, got ${current.length}.`);
+  }
   if (result.length !== count) {
     throw new Error(
       `The tool returned ${result.length} points for ${count}; it must keep every point in order.`,
@@ -205,18 +208,19 @@ export function planPrelabelTiles(
       xs[i] < bx1 + buffer &&
       ys[i] >= by0 - buffer &&
       ys[i] < by1 + buffer;
+    // The tool sees the buffered input, so that (not just the core) must fit.
     if (indices.length <= maxPoints) {
-      tiles.push({
-        core: indices,
-        input: candidates.filter((i) => inBuffered(i, x0, y0, x1, y1)),
-      });
-      return;
+      const input = candidates.filter((i) => inBuffered(i, x0, y0, x1, y1));
+      if (input.length <= maxPoints) {
+        tiles.push({ core: indices, input });
+        return;
+      }
     }
     if (x1 - x0 < MIN_TILE_SIZE) {
       // Too dense to split further (e.g. a terrestrial scan): refuse rather
       // than hand the tool more points than it has memory for.
       throw new Error(
-        `Too many points (${indices.length}) in a ${MIN_TILE_SIZE} m tile to pre-label; select a sparser area.`,
+        `Too many points around a ${MIN_TILE_SIZE} m tile to pre-label; select a sparser area.`,
       );
     }
     const mxMid = (x0 + x1) / 2;
