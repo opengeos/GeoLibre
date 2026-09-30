@@ -24,6 +24,7 @@ import {
   geometryEditMetadata,
   captureEditedGeometries,
   captureEditedProperties,
+  geomanUsesRightClick,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
@@ -456,8 +457,26 @@ function geomanLayerStylesForMap(map: maplibregl.Map, mapbox: boolean) {
     }
   }
 
+  // Geoman draws the midpoint "add a vertex here" handles almost exactly like
+  // real vertices (radius 6 vs 7), so editing a line looks like it multiplies
+  // nodes (discussion #2750). Make the handles smaller and fainter.
+  for (const sourceLayers of Object.values(layerStyles.edge_marker ?? {})) {
+    for (const layer of sourceLayers) {
+      if (layer.type !== "circle") continue;
+      layer.paint = { ...layer.paint, ...EDGE_MARKER_PAINT };
+    }
+  }
+
   return layerStyles;
 }
+
+/** Paint for Geoman's midpoint handles, distinct from its vertex markers. */
+const EDGE_MARKER_PAINT = {
+  "circle-radius": 4,
+  "circle-opacity": 0.5,
+  "circle-stroke-width": 1.5,
+  "circle-stroke-opacity": 0.6,
+};
 
 /** The font stack the default MapLibre basemaps serve glyphs for. */
 const MAPLIBRE_TEXT_FONT = ["Noto Sans Regular"];
@@ -878,6 +897,22 @@ export function buildEditorSaveCollection(options: {
 /** Id of the layer being geometry-edited, or null when no session is active. */
 export function getGeometryEditTargetLayerId(): string | null {
   return editTargetLayerId;
+}
+
+/**
+ * Whether the geo editor is in a draw or edit mode that acts on right-click
+ * (vertex removal, finishing a draw, the rotate popup). The map's right-click
+ * menu checks this so it doesn't open over the editor's own gesture.
+ *
+ * @returns True while a Geoman draw or edit mode is enabled.
+ */
+export function isGeoEditorUsingRightClick(): boolean {
+  try {
+    return geomanUsesRightClick(geomanInstance);
+  } catch {
+    // Geoman can throw before its deferred init finishes; no mode is active then.
+    return false;
+  }
 }
 
 /** Subscribe to geometry-edit session changes (for `useSyncExternalStore`). */

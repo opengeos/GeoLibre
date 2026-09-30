@@ -11,6 +11,7 @@ import {
   canonicalGeometryKey,
   captureEditedGeometries,
   captureEditedProperties,
+  geomanUsesRightClick,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
@@ -760,5 +761,25 @@ describe("editor tracking — copied and id-less features", () => {
 
     const result = applySyncedEditorTracking(editorCopy, stored, keyOf, stamp);
     assert.equal(result.features[0].properties?.created_at, "2026-08-01T00:00:00.000Z");
+  });
+});
+
+describe("geomanUsesRightClick", () => {
+  const modes = (draw: string[], edit: string[]) => ({
+    getActiveDrawModes: () => draw,
+    getActiveEditModes: () => edit,
+  });
+
+  it("is false without an editor or with only helper modes on", () => {
+    assert.equal(geomanUsesRightClick(null), false);
+    assert.equal(geomanUsesRightClick(modes([], [])), false);
+  });
+
+  it("is true while editing vertices (right-click removes one)", () => {
+    assert.equal(geomanUsesRightClick(modes([], ["change"])), true);
+  });
+
+  it("is true while drawing (right-click finishes the shape)", () => {
+    assert.equal(geomanUsesRightClick(modes(["line"], [])), true);
   });
 });

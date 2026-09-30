@@ -1,5 +1,6 @@
 import { useAppStore, FEET_PER_METER, METERS_PER_MILE } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
+import { isGeoEditorUsingRightClick } from "@geolibre/plugins";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -167,6 +168,9 @@ export function MapContextMenu({
     };
     const handleContextMenu = (event: MouseEvent) => {
       event.preventDefault();
+      // The geo editor owns right-click while drawing or editing: it removes
+      // the vertex under the cursor or finishes the draw (discussion #2750).
+      if (isGeoEditorUsingRightClick()) return;
       tracker.contextMenu(event);
     };
 
