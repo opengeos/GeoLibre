@@ -253,6 +253,7 @@ describe("cuboid persistence and export", async () => {
     const emoji = sanitizeAttributes({ ["😀".repeat(40)]: "😀".repeat(200) });
     assert.deepEqual(emoji, { ["😀".repeat(32)]: "😀".repeat(128) });
     assert.equal(clipText("a😀", 2), "a");
+    assert.equal(clipText("\ud800" + "a".repeat(64), 64), "\ud800" + "a".repeat(63));
   });
 
   it("writes Segments.ai cuboids in the source CRS (grid yaw, CRS units)", () => {

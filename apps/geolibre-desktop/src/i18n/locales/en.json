@@ -8760,6 +8760,7 @@
       "attributeAdd": "Add",
       "attributeRemove": "Remove",
       "attributeInvalid": "Give the attribute a name (at most {{count}} per box).",
+      "attributeReserved": "{{name}} is a built-in box property; choose another name.",
       "newObject": "New instance (N)",
       "newObjectHint": "Assign the class and group the selected points as a new instance.",
       "objects": "Instances ({{count}})",

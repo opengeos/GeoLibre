@@ -90,6 +90,20 @@ export function sanitizeAttributes(value: unknown): Record<string, string> {
   return out;
 }
 
+/** Property names the box exports set themselves; an attribute cannot use them. */
+export const RESERVED_ATTRIBUTE_NAMES: ReadonlySet<string> = new Set([
+  "id",
+  "status",
+  "classification",
+  "class_name",
+  "z_min",
+  "z_max",
+  "length_m",
+  "width_m",
+  "height_m",
+  "yaw_deg",
+]);
+
 function parseStatus(value: unknown): ObjectStatus {
   return OBJECT_STATUSES.includes(value as ObjectStatus) ? (value as ObjectStatus) : "new";
 }
@@ -636,6 +650,14 @@ export class CuboidSection {
       const full =
         !Object.hasOwn(object.attributes, key) &&
         Object.keys(object.attributes).length >= MAX_OBJECT_ATTRIBUTES;
+      if (RESERVED_ATTRIBUTE_NAMES.has(key)) {
+        this.host.setStatus(
+          tr("attributeReserved", "{{name}} is a built-in box property; choose another name.", {
+            name: key,
+          }),
+        );
+        return;
+      }
       if (!key || key === "__proto__" || full) {
         this.host.setStatus(
           tr("attributeInvalid", "Give the attribute a name (at most {{count}} per box).", {

@@ -2104,7 +2104,10 @@ def _clip_utf16(text: str, length: int) -> str:
     encoded = text.encode("utf-16-le", "surrogatepass")
     if len(encoded) <= 2 * length:
         return text
-    return encoded[: 2 * length].decode("utf-16-le", "ignore")
+    cut = encoded[: 2 * length].decode("utf-16-le", "surrogatepass")
+    # Drop only a high surrogate left dangling by the cut; interior unpaired
+    # surrogates (valid in JSON) stay, as they do in the app.
+    return cut[:-1] if "\ud800" <= cut[-1] <= "\udbff" else cut
 
 
 def apply_point_labels(classification: Any, nodes: dict[str, dict[int, int]]) -> int:

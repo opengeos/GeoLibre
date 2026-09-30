@@ -1096,6 +1096,8 @@ def test_point_cloud_annotations_read_box_status_and_attributes():
     }
     # A pair that would be split is dropped whole.
     assert p._clip_utf16("a" + "\U0001f600", 2) == "a"
+    # An interior unpaired surrogate is kept, as the app keeps it.
+    assert p._clip_utf16("\ud800" + "a" * 64, 64) == "\ud800" + "a" * 63
     assert [(b["status"], b["attributes"]) for b in boxes] == [
         ("reviewed", {"make": "Ford"}),
         ("new", {}),
