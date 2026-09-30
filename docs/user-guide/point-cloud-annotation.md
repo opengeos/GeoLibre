@@ -23,40 +23,54 @@ Scroll to zoom and right-drag to tilt or rotate as usual.
 
 ## Select and assign
 
-- **Box (B)** and **Lasso (L)**: drag on the map to select points. Hold
-  **Shift** to add to the selection or **Alt** to remove from it, or pick a
-  mode in the panel. **Pan** returns left-drag to moving the map.
+- **Box (B)**, **Lasso (L)** and **Brush (P)**: drag on the map to select
+  points. The brush selects everything within its radius of the dragged path;
+  set its size in the panel or with **[** and **]**. Hold **Shift** to add to
+  the selection or **Alt** to remove from it, or pick a mode in the panel.
+  **Pan** returns left-drag to moving the map.
 - Selection goes through all depths, like a camera frustum. Narrow it with
   the **Min Z** / **Max Z** filter (metres) or **Only points in class**,
   which relabels just the points currently in one class.
-- Hidden classes (toggled in the LiDAR panel's legend) and points outside the
-  LiDAR panel's elevation filter are never selected.
+- **Lock** a class in **Classes in session** to protect its points: locked
+  classes, hidden classes (toggled in the LiDAR panel's legend) and points
+  outside the LiDAR panel's elevation filter are never selected.
 - Selected points are drawn in yellow. Choose the class to assign and press
   **Apply (Enter)**; **Clear (Esc)** drops the selection. Clicking a row in
   **Classes in session** makes it the class to assign.
 - **Undo** and **Redo** step through the class assignments of the session.
 
-## Export
+## Saving labels with the project
 
-Edits live in memory, so export before finishing the session:
+Labels on a cloud loaded from a URL are saved with the project. Each edit is
+stored against the point's source node and its index in that node, not its
+position in memory, so the labels are re-applied when the project reopens and
+as streamed nodes load again, whatever order they arrive in. Labels on a local
+file are not saved (the file cannot be reopened from the project), so export
+them.
+
+## Export
 
 - **LAS 1.4** writes every point loaded in the session (point format 7 with
   RGB, or 6 without) with its edited class, intensity, returns, GPS time and
   scan angle. Coordinates are written back in the source file's CRS, feet
   included, when its WKT is known, and in WGS 84 otherwise.
+- **LAZ (compressed)** writes the same records as the LAS export, compressed
+  with LASzip in the browser (a laz-rs WebAssembly build). It is typically
+  about a quarter of the LAS size.
+- **NumPy (.npy)** writes a structured array with `x`, `y`, `z` (float64, in
+  the same CRS as the LAS export), `intensity`, `classification`, and `red`,
+  `green`, `blue` when the cloud has colour, ready for `numpy.load`.
 - **Segments.ai JSON** writes a
   [`pointcloud-segmentation`](https://docs.segments.ai/reference/label-types)
   label. Its `point_annotations` line up point for point with the LAS file,
   one annotation per class with `category_id` set to the ASPRS code.
 
-**Finish session** resumes streaming. Streaming may evict edited points once
-you move the map, which is why labels need to be exported first.
+**Finish session** resumes streaming.
 
 ## Limitations
 
 - MapLibre renderer only.
-- Labels are not saved in the project yet, and LAZ/COPC output is not
-  available (the browser has no LAZ encoder); convert the LAS with PDAL or
-  laspy if you need compression.
+- COPC output is not available; export LAZ and convert it with PDAL
+  (`writers.copc`) if you need a COPC file.
 - Cuboids, instance labels, and assisted pre-labeling are later phases of
   #2749.

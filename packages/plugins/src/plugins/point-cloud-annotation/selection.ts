@@ -54,7 +54,9 @@ export function createOffsetProjector(
 /** A shape drawn on screen, in CSS pixels relative to the map container. */
 export type SelectionShape =
   | { kind: "rect"; x0: number; y0: number; x1: number; y1: number }
-  | { kind: "polygon"; points: ReadonlyArray<readonly [number, number]> };
+  | { kind: "polygon"; points: ReadonlyArray<readonly [number, number]> }
+  /** A brush stroke: every pixel within `radius` of the dragged path. */
+  | { kind: "stroke"; points: ReadonlyArray<readonly [number, number]>; radius: number };
 
 /** The per-point data selection reads. */
 export interface SelectableCloud {
@@ -103,6 +105,7 @@ export function rasterizeShape(shape: SelectionShape): ShapeMask | null {
     if (width < 1 || height < 1) return null;
     return { x0, y0, width, height, bits: null };
   }
+  if (shape.kind === "stroke") return rasterizeStroke(shape.points, shape.radius);
   const points = shape.points;
   if (points.length < 3) return null;
   let minX = Infinity;
@@ -138,6 +141,58 @@ export function rasterizeShape(shape: SelectionShape): ShapeMask | null {
       const end = Math.min(width - 1, Math.floor(crossings[k + 1] - x0 - 0.5));
       bits.fill(1, row * width + start, row * width + end + 1);
     }
+  }
+  return { x0, y0, width, height, bits };
+}
+
+/**
+ * Rasterises a brush stroke by stamping discs along the path, a step of half
+ * the radius apart, so a fast drag leaves no gaps.
+ *
+ * @param points - The dragged path in CSS pixels.
+ * @param radius - Brush radius in CSS pixels.
+ * @returns The mask, or null for an empty path or radius.
+ */
+function rasterizeStroke(
+  points: ReadonlyArray<readonly [number, number]>,
+  radius: number,
+): ShapeMask | null {
+  if (points.length === 0 || !(radius > 0)) return null;
+  const r = Math.max(1, Math.round(radius));
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of points) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  const x0 = Math.floor(minX) - r;
+  const y0 = Math.floor(minY) - r;
+  const width = Math.ceil(maxX) + r - x0 + 1;
+  const height = Math.ceil(maxY) + r - y0 + 1;
+  const bits = new Uint8Array(width * height);
+  const stamp = (cx: number, cy: number) => {
+    const px = Math.round(cx) - x0;
+    const py = Math.round(cy) - y0;
+    for (let dy = -r; dy <= r; dy++) {
+      const row = py + dy;
+      if (row < 0 || row >= height) continue;
+      const half = Math.floor(Math.sqrt(r * r - dy * dy));
+      const start = Math.max(0, px - half);
+      const end = Math.min(width - 1, px + half);
+      bits.fill(1, row * width + start, row * width + end + 1);
+    }
+  };
+  stamp(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) {
+    const [ax, ay] = points[i - 1];
+    const [bx, by] = points[i];
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (r / 2)));
+    for (let k = 1; k <= steps; k++)
+      stamp(ax + ((bx - ax) * k) / steps, ay + ((by - ay) * k) / steps);
   }
   return { x0, y0, width, height, bits };
 }

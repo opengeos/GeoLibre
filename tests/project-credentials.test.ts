@@ -195,6 +195,37 @@ describe("project credential redaction", () => {
     });
   });
 
+  it("keeps point cloud annotation labels but scrubs a signed source URL", () => {
+    // The labels are compressed class edits; dropping them on save would lose
+    // the user's annotation. Their source URL is a value, so the sweep still
+    // redacts a presigned one.
+    const original = createEmptyProject("Labels");
+    original.plugins = {
+      manifestUrls: [],
+      activePluginIds: [],
+      settings: {
+        "geolibre-point-cloud-annotation": {
+          version: 1,
+          sources: [
+            { url: "https://example.com/a.copc.laz", nodes: { "0-0-0-0": "eJwDAAAAAAE=" } },
+            {
+              url: "https://bucket.example.com/b.copc.laz?X-Amz-Signature=abc123&sig=zzz",
+              nodes: { "1-0-0-0": "eJwDAAAAAAE=" },
+            },
+          ],
+        },
+      },
+    };
+    const { project, redactedPaths } = redactProjectCredentials(original);
+    const kept = project.plugins!.settings["geolibre-point-cloud-annotation"] as {
+      sources: { url: string; nodes: Record<string, string> }[];
+    };
+    assert.equal(kept.sources[0].url, "https://example.com/a.copc.laz");
+    assert.deepEqual(kept.sources[0].nodes, { "0-0-0-0": "eJwDAAAAAAE=" });
+    assert.ok(!kept.sources[1].url.includes("zzz"));
+    assert.ok(redactedPaths.length > 0);
+  });
+
   it("provides a stable schema-level credential decision registry", () => {
     assert.deepEqual(PROJECT_CREDENTIAL_FIELDS.preferences, [
       "environmentVariables",

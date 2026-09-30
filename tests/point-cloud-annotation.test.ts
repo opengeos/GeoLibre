@@ -8,12 +8,27 @@ import {
 } from "../packages/plugins/src/plugins/point-cloud-annotation/classes";
 import { LabelHistory } from "../packages/plugins/src/plugins/point-cloud-annotation/history";
 import {
+  PointLabelStore,
+  decodeNodeEdits,
+  encodeNodeEdits,
+  rangeForIndex,
+} from "../packages/plugins/src/plugins/point-cloud-annotation/label-store";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import {
+  initSync,
+  compress_points,
+  laszip_vlr_data,
+} from "../packages/plugins/src/plugins/point-cloud-annotation/laz-encoder/laz_encoder.js";
+import {
   buildSegmentsLabel,
   extractProjcsFromWkt,
   resolveExportCrs,
   verticalUnitFactor,
   WGS84_WKT,
   writeLas,
+  writeLaz,
+  writeNpy,
 } from "../packages/plugins/src/plugins/point-cloud-annotation/las-writer";
 import {
   combineSelection,
@@ -135,14 +150,20 @@ describe("LabelHistory", () => {
     const history = new LabelHistory();
     assert.equal(history.assign("a", classes, Uint32Array.from([0, 1, 3]), 2), 2);
     assert.deepEqual([...classes], [2, 2, 1, 2]);
-    assert.equal(
+    assert.deepEqual(
       history.undo(() => classes),
-      "a",
+      {
+        cloudId: "a",
+        indices: Uint32Array.from([0, 3]),
+      },
     );
     assert.deepEqual([...classes], [1, 2, 1, 1]);
-    assert.equal(
+    assert.deepEqual(
       history.redo(() => classes),
-      "a",
+      {
+        cloudId: "a",
+        indices: Uint32Array.from([0, 3]),
+      },
     );
     assert.deepEqual([...classes], [2, 2, 1, 2]);
     assert.equal(history.assign("a", classes, Uint32Array.from([0]), 2), 0);
@@ -273,5 +294,172 @@ describe("ASPRS_CLASSES colour mirror", () => {
     ASPRS_CLASSES.forEach((entry, i) => {
       assert.deepEqual([...colors.subarray(i * 4, i * 4 + 3)], entry.color, `class ${entry.code}`);
     });
+  });
+});
+
+describe("LAZ export", () => {
+  it("round-trips through laz-perf to the same records as the LAS export", async () => {
+    initSync({
+      module: readFileSync(
+        new URL(
+          "../packages/plugins/src/plugins/point-cloud-annotation/laz-encoder/laz_encoder_bg.wasm",
+          import.meta.url,
+        ),
+      ),
+    });
+    const count = 5000;
+    const positions = new Float32Array(count * 3);
+    const classifications = new Uint8Array(count);
+    const colors = new Uint8Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (i % 97) * 1e-6;
+      positions[i * 3 + 1] = Math.floor(i / 97) * 1e-6;
+      positions[i * 3 + 2] = 100 + (i % 13) * 0.5;
+      classifications[i] = i % 7;
+      colors.set([i % 256, (i * 3) % 256, (i * 7) % 256, 255], i * 4);
+    }
+    const cloud = {
+      positions,
+      coordinateOrigin: ORIGIN,
+      pointCount: count,
+      classifications,
+      colors,
+      hasRGB: true,
+    };
+    const now = new Date(Date.UTC(2026, 8, 29));
+    const las = new Uint8Array(writeLas(cloud, { now }));
+    const laz = writeLaz(cloud, { compress_points, laszip_vlr_data }, { now });
+    assert.ok(laz.length < las.length / 2, `LAZ ${laz.length} vs LAS ${las.length}`);
+    assert.equal(laz[104], 7 | 0x80);
+
+    const require = createRequire(import.meta.url);
+    const { createLazPerf } = require("laz-perf/lib/node");
+    const LazPerf = await createLazPerf();
+    const file = LazPerf._malloc(laz.length);
+    LazPerf.HEAPU8.set(laz, file);
+    const reader = new LazPerf.LASZip();
+    reader.open(file, laz.length);
+    assert.equal(reader.getCount(), count);
+    assert.equal(reader.getPointFormat(), 7);
+    const recordLength = reader.getPointLength();
+    assert.equal(recordLength, 36);
+    const point = LazPerf._malloc(recordLength);
+    const lasOffset = new DataView(las.buffer).getUint32(96, true);
+    for (let i = 0; i < count; i++) {
+      reader.getPoint(point);
+      const decoded = LazPerf.HEAPU8.subarray(point, point + recordLength);
+      const expected = las.subarray(
+        lasOffset + i * recordLength,
+        lasOffset + (i + 1) * recordLength,
+      );
+      if (!decoded.every((byte: number, k: number) => byte === expected[k])) {
+        assert.fail(`record ${i} differs`);
+      }
+    }
+    reader.delete();
+    LazPerf._free(point);
+    LazPerf._free(file);
+  });
+});
+
+describe("writeNpy", () => {
+  it("writes a 64-byte-aligned v1.0 header and one record per point", () => {
+    const bytes = writeNpy({
+      positions: new Float32Array([0, 0, 10, 0, 0, 12]),
+      coordinateOrigin: ORIGIN,
+      pointCount: 2,
+      classifications: Uint8Array.from([2, 6]),
+      intensities: Float32Array.from([0, 1]),
+    });
+    const view = new DataView(bytes.buffer);
+    assert.deepEqual([...bytes.subarray(0, 8)], [0x93, 0x4e, 0x55, 0x4d, 0x50, 0x59, 1, 0]);
+    const headerLength = view.getUint16(8, true);
+    assert.equal((10 + headerLength) % 64, 0);
+    const header = new TextDecoder().decode(bytes.subarray(10, 10 + headerLength));
+    assert.match(header, /'shape': \(2,\)/);
+    assert.ok(header.endsWith("\n"));
+    assert.ok(!header.includes("'red'"));
+    const recordSize = 27;
+    assert.equal(bytes.length, 10 + headerLength + 2 * recordSize);
+    const second = 10 + headerLength + recordSize;
+    assert.equal(view.getFloat64(second + 16, true), 12);
+    assert.equal(view.getUint16(second + 24, true), 65535);
+    assert.equal(bytes[second + 26], 6);
+  });
+});
+
+describe("stroke selection", () => {
+  it("covers every pixel within the radius of the dragged path", () => {
+    const mask = rasterizeShape({
+      kind: "stroke",
+      points: [
+        [0, 0],
+        [40, 0],
+      ],
+      radius: 5,
+    });
+    assert.ok(mask?.bits);
+    const at = (x: number, y: number) => mask.bits![(y - mask.y0) * mask.width + (x - mask.x0)];
+    assert.equal(at(20, 4), 1);
+    assert.equal(at(20, -4), 1);
+    assert.equal(at(45, 0), 1);
+    assert.equal(at(20, 5), 1);
+    assert.equal(mask.height, 11);
+  });
+});
+
+describe("PointLabelStore", () => {
+  it("round-trips node edits through the varint + deflate encoding", () => {
+    const edits = new Map([
+      [0, 6],
+      [1, 6],
+      [300, 2],
+      [70000, 5],
+    ]);
+    assert.deepEqual([...decodeNodeEdits(encodeNodeEdits(edits))], [...edits]);
+  });
+
+  it("records edits by node key and re-applies them after the buffers move", () => {
+    const store = new PointLabelStore();
+    const first = {
+      classifications: Uint8Array.from([1, 1, 1, 1, 1]),
+      nodeRanges: [
+        { key: "0-0-0-0", start: 0, count: 2 },
+        { key: "1-0-0-0", start: 2, count: 3 },
+      ],
+    };
+    first.classifications[3] = 6;
+    assert.equal(store.record("https://x/a.copc.laz", first, [3]), 1);
+
+    // After a reload the same node lands elsewhere in the buffers.
+    const reloaded = {
+      classifications: new Uint8Array(6).fill(1),
+      nodeRanges: [
+        { key: "1-0-0-0", start: 0, count: 3 },
+        { key: "0-0-0-0", start: 4, count: 2 },
+      ],
+    };
+    const restored = new PointLabelStore();
+    restored.load(JSON.parse(JSON.stringify(store.encode())));
+    assert.equal(restored.apply("https://x/a.copc.laz", reloaded), 1);
+    assert.deepEqual([...reloaded.classifications], [1, 6, 1, 1, 1, 1]);
+    assert.equal(restored.apply("https://x/other.laz", reloaded), 0);
+  });
+
+  it("finds a buffer index's node and ignores unloaded gaps", () => {
+    const ranges = [
+      { key: "a", start: 0, count: 2 },
+      { key: "b", start: 5, count: 2 },
+    ];
+    assert.equal(rangeForIndex(ranges, 1)?.key, "a");
+    assert.equal(rangeForIndex(ranges, 3), undefined);
+    assert.equal(rangeForIndex(ranges, 6)?.key, "b");
+  });
+
+  it("treats a malformed project state as empty", () => {
+    const store = new PointLabelStore();
+    store.load({ version: 2 });
+    assert.equal(store.isEmpty, true);
+    assert.equal(store.encode(), undefined);
   });
 });

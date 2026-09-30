@@ -1,0 +1,17 @@
+[package]
+name = "laz-encoder"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal WASM LAZ (LASzip) encoder built on laz-rs, for GeoLibre's point cloud annotator"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+laz = "0.13"
+wasm-bindgen = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true

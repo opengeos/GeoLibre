@@ -119,29 +119,57 @@ function writeAscii(view: DataView, offset: number, text: string, length: number
     view.setUint8(offset + i, i < text.length ? text.charCodeAt(i) & 0x7f : 0);
 }
 
-function attribute(cloud: LasExportCloud, name: string): ArrayLike<number> | undefined {
+function attribute(
+  cloud: LasExportCloud,
+  name: string,
+  count: number,
+): ArrayLike<number> | undefined {
   const arr = cloud.extraAttributes?.[name];
-  return arr && arr.length >= cloud.pointCount ? arr : undefined;
+  return arr && arr.length >= count ? arr : undefined;
+}
+
+/** A variable length record appended after the WKT VLR. */
+export interface LasVlr {
+  userId: string;
+  recordId: number;
+  description: string;
+  data: Uint8Array;
+}
+
+/** Options for {@link writeLas}. */
+export interface WriteLasOptions {
+  softwareName?: string;
+  /** Overrides the output CRS (defaults to the cloud's own, else WGS 84). */
+  crs?: ExportCrs;
+  now?: Date;
+  /** VLRs written after the WKT one (e.g. the LASzip VLR for a LAZ file). */
+  extraVlrs?: LasVlr[];
+  /** OR-ed into the header's point data format byte (0x80 marks LAZ). */
+  pointFormatFlags?: number;
 }
 
 /**
  * Serialises the cloud as LAS 1.4.
  *
  * @param cloud - The loaded points, with edited classifications.
- * @param options - `softwareName` for the header; `crs` to override the output CRS.
+ * @param options - Header, CRS and extra-VLR options.
  * @returns The file bytes.
  */
-export function writeLas(
-  cloud: LasExportCloud,
-  options: { softwareName?: string; crs?: ExportCrs; now?: Date } = {},
-): ArrayBuffer {
+export function writeLas(cloud: LasExportCloud, options: WriteLasOptions = {}): ArrayBuffer {
   const count = Math.min(cloud.pointCount, Math.floor(cloud.positions.length / 3));
   const crs = options.crs ?? resolveExportCrs(cloud.wkt);
   const hasRgb = Boolean(cloud.hasRGB && cloud.colors && cloud.colors.length >= count * 4);
   const format = hasRgb ? 7 : 6;
   const recordLength = hasRgb ? 36 : 30;
   const wktBytes = new TextEncoder().encode(`${crs.wkt}\0`);
-  const pointOffset = HEADER_SIZE + VLR_HEADER_SIZE + wktBytes.length;
+  const vlrs: LasVlr[] = [
+    { userId: "LASF_Projection", recordId: 2112, description: "OGC WKT", data: wktBytes },
+    ...(options.extraVlrs ?? []),
+  ];
+  const pointOffset = vlrs.reduce(
+    (offset, vlr) => offset + VLR_HEADER_SIZE + vlr.data.length,
+    HEADER_SIZE,
+  );
 
   // Project every point once, tracking the bounds for the header.
   const xs = new Float64Array(count);
@@ -191,8 +219,8 @@ export function writeLas(
   view.setUint16(92, now.getUTCFullYear(), true);
   view.setUint16(94, HEADER_SIZE, true);
   view.setUint32(96, pointOffset, true);
-  view.setUint32(100, 1, true);
-  view.setUint8(104, format);
+  view.setUint32(100, vlrs.length, true);
+  view.setUint8(104, format | (options.pointFormatFlags ?? 0));
   view.setUint16(105, recordLength, true);
   // Legacy point counts (offsets 107-130) stay 0, as LAS 1.4 allows for formats 6-10.
   view.setFloat64(131, xyScale, true);
@@ -209,25 +237,27 @@ export function writeLas(
   view.setFloat64(219, bounds[4], true);
   view.setBigUint64(247, BigInt(count), true);
 
-  // The OGC WKT VLR.
   let offset = HEADER_SIZE;
-  writeAscii(view, offset + 2, "LASF_Projection", 16);
-  view.setUint16(offset + 18, 2112, true);
-  view.setUint16(offset + 20, wktBytes.length, true);
-  writeAscii(view, offset + 22, "OGC WKT", 32);
-  new Uint8Array(buffer, offset + VLR_HEADER_SIZE, wktBytes.length).set(wktBytes);
+  for (const vlr of vlrs) {
+    writeAscii(view, offset + 2, vlr.userId, 16);
+    view.setUint16(offset + 18, vlr.recordId, true);
+    view.setUint16(offset + 20, vlr.data.length, true);
+    writeAscii(view, offset + 22, vlr.description, 32);
+    new Uint8Array(buffer, offset + VLR_HEADER_SIZE, vlr.data.length).set(vlr.data);
+    offset += VLR_HEADER_SIZE + vlr.data.length;
+  }
 
-  const returnNumber = attribute(cloud, "ReturnNumber");
-  const numberOfReturns = attribute(cloud, "NumberOfReturns");
-  const scanDirection = attribute(cloud, "ScanDirectionFlag");
-  const edgeOfFlightLine = attribute(cloud, "EdgeOfFlightLine");
-  const scannerChannel = attribute(cloud, "ScannerChannel");
-  const classFlags = attribute(cloud, "ClassFlags");
-  const userData = attribute(cloud, "UserData");
-  const scanAngle = attribute(cloud, "ScanAngle");
-  const scanAngleRank = attribute(cloud, "ScanAngleRank");
-  const pointSourceId = attribute(cloud, "PointSourceId");
-  const gpsTime = attribute(cloud, "GpsTime");
+  const returnNumber = attribute(cloud, "ReturnNumber", count);
+  const numberOfReturns = attribute(cloud, "NumberOfReturns", count);
+  const scanDirection = attribute(cloud, "ScanDirectionFlag", count);
+  const edgeOfFlightLine = attribute(cloud, "EdgeOfFlightLine", count);
+  const scannerChannel = attribute(cloud, "ScannerChannel", count);
+  const classFlags = attribute(cloud, "ClassFlags", count);
+  const userData = attribute(cloud, "UserData", count);
+  const scanAngle = attribute(cloud, "ScanAngle", count);
+  const scanAngleRank = attribute(cloud, "ScanAngleRank", count);
+  const pointSourceId = attribute(cloud, "PointSourceId", count);
+  const gpsTime = attribute(cloud, "GpsTime", count);
   const returnCounts = new Array<number>(15).fill(0);
 
   offset = pointOffset;
@@ -311,4 +341,119 @@ export function buildSegmentsLabel(
     point_annotations: pointAnnotations,
     categories: codes.sort((a, b) => a - b).map((code) => ({ id: code, name: names(code) })),
   };
+}
+
+/** The two calls {@link writeLaz} needs from the laz-rs WASM encoder. */
+export interface LazEncoder {
+  laszip_vlr_data(pointFormat: number, extraBytes: number): Uint8Array;
+  compress_points(
+    prefix: Uint8Array,
+    points: Uint8Array,
+    pointFormat: number,
+    extraBytes: number,
+    recordLength: number,
+  ): Uint8Array;
+}
+
+/**
+ * Serialises the cloud as LAZ (LASzip-compressed LAS 1.4): the same header and
+ * records as {@link writeLas}, plus the LASzip VLR, with the point records
+ * compressed by laz-rs.
+ *
+ * @param cloud - The loaded points, with edited classifications.
+ * @param encoder - The initialised laz-rs WASM encoder.
+ * @param options - Header and CRS options.
+ * @returns The file bytes.
+ */
+export function writeLaz(
+  cloud: LasExportCloud,
+  encoder: LazEncoder,
+  options: Omit<WriteLasOptions, "extraVlrs" | "pointFormatFlags"> = {},
+): Uint8Array {
+  const count = Math.min(cloud.pointCount, Math.floor(cloud.positions.length / 3));
+  const hasRgb = Boolean(cloud.hasRGB && cloud.colors && cloud.colors.length >= count * 4);
+  const format = hasRgb ? 7 : 6;
+  const recordLength = hasRgb ? 36 : 30;
+  const laszip: LasVlr = {
+    userId: "laszip encoded",
+    recordId: 22204,
+    description: "laz-rs",
+    data: encoder.laszip_vlr_data(format, 0),
+  };
+  const bytes = new Uint8Array(
+    writeLas(cloud, { ...options, extraVlrs: [laszip], pointFormatFlags: 0x80 }),
+  );
+  const pointOffset = new DataView(bytes.buffer).getUint32(96, true);
+  return encoder.compress_points(
+    bytes.subarray(0, pointOffset),
+    bytes.subarray(pointOffset),
+    format,
+    0,
+    recordLength,
+  );
+}
+
+/**
+ * Serialises the cloud as a NumPy `.npy` structured array, ready for
+ * `numpy.load` in a training pipeline: one record per point with `x`, `y`,
+ * `z` (float64, in the same CRS and units as {@link writeLas}), `intensity`
+ * (uint16), `classification` (uint8) and, when the cloud has colour, `red`,
+ * `green`, `blue` (uint8).
+ *
+ * @param cloud - The loaded points, with edited classifications.
+ * @param options - `crs` to override the output CRS.
+ * @returns The file bytes.
+ */
+export function writeNpy(cloud: LasExportCloud, options: { crs?: ExportCrs } = {}): Uint8Array {
+  const count = Math.min(cloud.pointCount, Math.floor(cloud.positions.length / 3));
+  const crs = options.crs ?? resolveExportCrs(cloud.wkt);
+  const hasRgb = Boolean(cloud.hasRGB && cloud.colors && cloud.colors.length >= count * 4);
+  const fields: [string, string, number][] = [
+    ["x", "<f8", 8],
+    ["y", "<f8", 8],
+    ["z", "<f8", 8],
+    ["intensity", "<u2", 2],
+    ["classification", "|u1", 1],
+    ...(hasRgb
+      ? ([
+          ["red", "|u1", 1],
+          ["green", "|u1", 1],
+          ["blue", "|u1", 1],
+        ] as [string, string, number][])
+      : []),
+  ];
+  const recordSize = fields.reduce((sum, [, , size]) => sum + size, 0);
+  const descr = fields.map(([name, type]) => `('${name}', '${type}')`).join(", ");
+  let header = `{'descr': [${descr}], 'fortran_order': False, 'shape': (${count},), }`;
+  // Magic (6) + version (2) + length (2) + header, padded with spaces to a
+  // multiple of 64 bytes and ending in a newline, per the .npy v1.0 format.
+  const unpadded = 10 + header.length + 1;
+  header += " ".repeat((64 - (unpadded % 64)) % 64) + "\n";
+  const bytes = new Uint8Array(10 + header.length + count * recordSize);
+  const view = new DataView(bytes.buffer);
+  bytes.set([0x93, 0x4e, 0x55, 0x4d, 0x50, 0x59, 1, 0]);
+  view.setUint16(8, header.length, true);
+  for (let i = 0; i < header.length; i++) bytes[10 + i] = header.charCodeAt(i);
+  const [lng0, lat0] = cloud.coordinateOrigin;
+  let offset = 10 + header.length;
+  for (let i = 0; i < count; i++) {
+    const [x, y] = crs.forward(lng0 + cloud.positions[i * 3], lat0 + cloud.positions[i * 3 + 1]);
+    view.setFloat64(offset, x, true);
+    view.setFloat64(offset + 8, y, true);
+    view.setFloat64(offset + 16, cloud.positions[i * 3 + 2] / crs.zFactor, true);
+    const intensity = cloud.intensities?.[i];
+    view.setUint16(
+      offset + 24,
+      intensity === undefined ? 0 : Math.round(Math.min(1, Math.max(0, intensity)) * 65535),
+      true,
+    );
+    view.setUint8(offset + 26, cloud.classifications?.[i] ?? 1);
+    if (hasRgb && cloud.colors) {
+      view.setUint8(offset + 27, cloud.colors[i * 4]);
+      view.setUint8(offset + 28, cloud.colors[i * 4 + 1]);
+      view.setUint8(offset + 29, cloud.colors[i * 4 + 2]);
+    }
+    offset += recordSize;
+  }
+  return bytes;
 }

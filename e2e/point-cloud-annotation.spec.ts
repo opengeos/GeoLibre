@@ -1,3 +1,6 @@
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { COPC_URL, waitForMap } from "./helpers";
 
@@ -60,6 +63,36 @@ function readLas(buffer: Buffer): { count: number; format: number; classes: Map<
     classes.set(code, (classes.get(code) ?? 0) + 1);
   }
   return { count, format, classes };
+}
+
+async function loadCopc(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Add Data", exact: true }).click();
+  await page.getByRole("menuitem", { name: "LiDAR Layer", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "https://example.com/pointcloud.laz", exact: true })
+    .fill(COPC_URL);
+  await page.getByRole("button", { name: "Load", exact: true }).click();
+  await expect(page.getByText("1,065 points", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
+}
+
+/** Opens the plugin and starts a session; returns the start/finish button. */
+async function startSession(page: Page, options: { restored?: boolean } = {}) {
+  if (options.restored) {
+    // A restored project re-activates the plugin with its panel collapsed to
+    // the right rail; the Plugins menu entry would toggle it off instead.
+    const rail = page.getByRole("button", { name: "Expand Point Cloud Annotation" });
+    await expect(rail).toBeVisible({ timeout: 30_000 });
+    await rail.click();
+  } else {
+    await page.getByRole("button", { name: "Plugins", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Point Cloud Annotation", exact: true }).click();
+  }
+  const start = page.getByTestId("pc-annotation-start");
+  await expect(start).toBeEnabled({ timeout: 30_000 });
+  await start.click();
+  await expect(start).toHaveText("Finish session");
+  return start;
 }
 
 test.describe("point cloud annotation", () => {
@@ -167,5 +200,113 @@ test.describe("point cloud annotation", () => {
     await start.click();
     await expect(start).toHaveText("Start annotating");
     await expect(page.locator(".geolibre-pc-annotation-overlay")).toHaveCount(0);
+  });
+
+  test("brushes, locks a class, exports LAZ, and keeps labels across save and reopen", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await captureSavedFiles(page);
+    await page.addInitScript(() => {
+      // Force the <input type=file> open path, which Playwright can drive.
+      delete (window as unknown as Record<string, unknown>).showOpenFilePicker;
+    });
+    await waitForMap(page);
+    await loadCopc(page);
+    const start = await startSession(page);
+    const canvas = (await page.locator(".maplibregl-canvas").boundingBox())!;
+    const classes = page.getByTestId("pc-annotation-classes");
+    const countOf = async (code: number) => {
+      const row = classes.locator(`[data-code="${code}"]`);
+      if ((await row.count()) === 0) return 0;
+      return Number(((await row.textContent()) ?? "").split("·")[1].replace(/\D/g, ""));
+    };
+
+    // Brush a wide stroke across the middle of the cloud, then assign Building.
+    await page.getByRole("button", { name: "Brush (P)" }).click();
+    await page.getByRole("spinbutton", { name: /Brush size/ }).fill("120");
+    await page.getByRole("spinbutton", { name: /Brush size/ }).press("Enter");
+    await page.mouse.move(canvas.x + canvas.width * 0.2, canvas.y + canvas.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + canvas.width * 0.8, canvas.y + canvas.height * 0.5, {
+      steps: 12,
+    });
+    await page.mouse.up();
+    const brushed = Number(
+      ((await page.getByTestId("pc-annotation-selected").textContent()) ?? "").replace(/\D/g, ""),
+    );
+    expect(brushed).toBeGreaterThan(0);
+    await page.getByTestId("pc-annotation-target").selectOption("6");
+    await page.getByTestId("pc-annotation-apply").click();
+    const buildings = await countOf(6);
+    expect(buildings).toBe(brushed);
+
+    // Lock Building, then relabel everything else as Water: Building survives.
+    await classes.locator('[data-lock="6"]').click();
+    await page.getByRole("button", { name: "Box (B)" }).click();
+    await page.mouse.move(canvas.x + 5, canvas.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + canvas.width - 5, canvas.y + canvas.height - 5, { steps: 8 });
+    await page.mouse.up();
+    await page.getByTestId("pc-annotation-target").selectOption("9");
+    await page.getByTestId("pc-annotation-apply").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("to Water");
+    expect(await countOf(6)).toBe(buildings);
+    const water = await countOf(9);
+    expect(water).toBeGreaterThan(0);
+
+    // LAZ export: a LASzip-compressed LAS 1.4 file (format bit 0x80 set).
+    await page.getByTestId("pc-annotation-export-laz").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("Exported");
+    const laz = await savedFile(page, "1.2-with-color-annotated.laz");
+    expect(laz).not.toBeNull();
+    expect(laz!.readUInt8(104)).toBe(7 | 0x80);
+    const exportedText = await page.getByTestId("pc-annotation-status").textContent();
+    const exported = Number(
+      /Exported ([\d,]+) points/.exec(exportedText ?? "")?.[1].replace(/,/g, ""),
+    );
+    expect(Number(laz!.readBigUInt64LE(247))).toBe(exported);
+    await start.click();
+
+    // Save the project: the labels travel in the plugin's project state.
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Save", exact: true }).click();
+    // Other plugins' settings may prompt to strip credentials. Stripping must
+    // keep the labels, which are publishable plugin state.
+    const strip = page.getByRole("button", { name: "Strip credentials", exact: true });
+    if (await strip.isVisible({ timeout: 3_000 }).catch(() => false)) await strip.click();
+    const findProject = () =>
+      page.evaluate(() =>
+        Object.keys(
+          (window as unknown as { __savedFiles: Record<string, number[]> }).__savedFiles,
+        ).find((name) => /\.geolibre(\.json)?$/.test(name)),
+      );
+    await expect.poll(findProject).toBeTruthy();
+    const projectName = await findProject();
+    const projectBytes = (await savedFile(page, projectName!))!;
+    const project = JSON.parse(projectBytes.toString("utf8")) as {
+      plugins?: { settings?: Record<string, { sources?: { url: string }[] }> };
+    };
+    const labels = project.plugins?.settings?.["geolibre-point-cloud-annotation"];
+    expect(labels?.sources?.map((source) => source.url)).toEqual([COPC_URL]);
+
+    // Reopen it in a fresh page: the cloud re-streams and the labels come back.
+    const dir = await mkdtemp(join(tmpdir(), "geolibre-pc-annotation-"));
+    const projectPath = join(dir, "labels.geolibre.json");
+    await writeFile(projectPath, projectBytes);
+    await waitForMap(page);
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Open From" }).click();
+    await page.getByRole("menuitem", { name: "File..." }).click();
+    await (await chooserPromise).setFiles(projectPath);
+    await expect(
+      page.locator('[data-testid="layer-row"][data-layer-name="1.2-with-color.copc.laz"]'),
+    ).toBeVisible({
+      timeout: 60_000,
+    });
+    await startSession(page, { restored: true });
+    await expect.poll(() => countOf(6), { timeout: 30_000 }).toBe(buildings);
+    expect(await countOf(9)).toBe(water);
   });
 });

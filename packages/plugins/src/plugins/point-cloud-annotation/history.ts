@@ -10,6 +10,12 @@ interface LabelEdit {
   next: number;
 }
 
+/** The points an undo or redo changed. */
+export interface LabelChange {
+  cloudId: string;
+  indices: Uint32Array;
+}
+
 /** Resolves a cloud id to its live classification array. */
 export type ClassificationResolver = (cloudId: string) => Uint8Array | undefined;
 
@@ -59,9 +65,9 @@ export class LabelHistory {
    * Reverts the most recent edit.
    *
    * @param resolve - Looks up the live array for the edit's cloud.
-   * @returns The id of the cloud that changed, or null when nothing was undone.
+   * @returns The cloud and points that changed, or null when nothing was undone.
    */
-  undo(resolve: ClassificationResolver): string | null {
+  undo(resolve: ClassificationResolver): LabelChange | null {
     const edit = this.undoStack.pop();
     if (!edit) return null;
     const classifications = resolve(edit.cloudId);
@@ -71,16 +77,16 @@ export class LabelHistory {
       });
     }
     this.redoStack.push(edit);
-    return edit.cloudId;
+    return { cloudId: edit.cloudId, indices: edit.indices };
   }
 
   /**
    * Re-applies the most recently undone edit.
    *
    * @param resolve - Looks up the live array for the edit's cloud.
-   * @returns The id of the cloud that changed, or null when nothing was redone.
+   * @returns The cloud and points that changed, or null when nothing was redone.
    */
-  redo(resolve: ClassificationResolver): string | null {
+  redo(resolve: ClassificationResolver): LabelChange | null {
     const edit = this.redoStack.pop();
     if (!edit) return null;
     const classifications = resolve(edit.cloudId);
@@ -90,7 +96,7 @@ export class LabelHistory {
       }
     }
     this.undoStack.push(edit);
-    return edit.cloudId;
+    return { cloudId: edit.cloudId, indices: edit.indices };
   }
 
   /** Whether there is an edit to undo. */

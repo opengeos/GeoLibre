@@ -2172,6 +2172,9 @@ PUBLISHABLE_PLUGIN_SETTINGS: dict[str, tuple[str, ...] | None] = {
     # silently start counting each new toggle as a credential. The retained
     # value is still recursively credential-scrubbed by the caller.
     "gods-eye-view": None,
+    # Point class edits keyed by (node key, index): compressed numbers, no user
+    # text. Source URLs are values, so the caller's scrub still covers them.
+    "geolibre-point-cloud-annotation": None,
 }
 
 # Plugins the app activates by default (``activeByDefault: true`` in

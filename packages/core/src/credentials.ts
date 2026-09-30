@@ -63,6 +63,10 @@ export const PUBLISHABLE_PLUGIN_SETTINGS: Readonly<Record<string, readonly strin
   // silently start counting each new toggle as a credential, which is the bug
   // this entry fixes. Still swept by redactConfigurationValue below.
   "gods-eye-view": null,
+  // Point class edits keyed by (node key, index): compressed numbers, no
+  // user text. Source URLs are values, so the sweep below still scrubs a
+  // credentialed one.
+  "geolibre-point-cloud-annotation": null,
 };
 
 export interface CredentialRedactionResult {
