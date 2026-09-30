@@ -23,6 +23,7 @@ The built-in plugins are:
 | **Overture Maps** | Browse and add Overture Maps themes. |
 | **GeoAgent** | An in-map AI agent panel. |
 | **USGS LiDAR** | Clip a USGS point cloud to an area of interest and download the result as COPC. |
+| **Point Cloud Annotation** | Select LiDAR points with a box or lasso, assign ASPRS classes, and export the edited cloud as LAS 1.4 or a Segments.ai label. See [Point cloud annotation](point-cloud-annotation.md). |
 | **Street View** | Google Street View panoramas at a clicked point. |
 | **Mapillary** | Mapillary street-level imagery. |
 | **Elevation Profile** | A terrain profile along a drawn line, or along the line features currently selected on a layer. |
@@ -116,6 +117,7 @@ with a shared project and the read-only viewer.
 | Overture Maps | `overture-maps` |
 | GeoAgent | `geoagent` |
 | USGS LiDAR | `usgs-lidar` |
+| Point Cloud Annotation | `point-cloud-annotation` |
 | Street View | `streetview` |
 | Mapillary | `mapillary` |
 | Elevation Profile | `elevation-profile` |

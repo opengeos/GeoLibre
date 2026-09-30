@@ -484,6 +484,12 @@ export {
 export { maplibreGeoAgentPlugin, GEOAGENT_PLUGIN_ID } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export {
+  pointCloudAnnotationPlugin,
+  POINT_CLOUD_ANNOTATION_PLUGIN_ID,
+  setPointCloudAnnotationFileSaver,
+  type PointCloudAnnotationFileSaver,
+} from "./plugins/point-cloud-annotation";
+export {
   buildBasinUrl,
   buildFlowtraceBody,
   buildHydrolocationUrl,

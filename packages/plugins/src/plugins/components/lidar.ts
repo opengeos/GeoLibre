@@ -82,6 +82,16 @@ const pendingLidarRestores = new Map<string, PendingLidarRestore[]>();
 let lidarRestoreInFlightPromise: Promise<void> | null = null;
 let lidarThemeObserver: MutationObserver | null = null;
 
+/**
+ * The mounted LiDAR control, or null before the LiDAR panel first opens. Read
+ * by the point cloud annotator, which edits the control's loaded points.
+ *
+ * @returns The current LiDAR control singleton.
+ */
+export function getLidarControl(): LidarControl | null {
+  return lidarControl;
+}
+
 export function openLidarLayerPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLidarControl(app);
 }

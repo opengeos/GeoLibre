@@ -94,7 +94,9 @@ import {
   maplibreTimelapsePlugin,
   maplibreTimeSliderPlugin,
   setTimelapseVideoSaver,
+  setPointCloudAnnotationFileSaver,
   maplibreUsgsLidarPlugin,
+  pointCloudAnnotationPlugin,
   maplibreUsgsNldiPlugin,
   PluginManager,
   registerRightPanel,
@@ -262,6 +264,7 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreOvertureMapsPlugin,
   maplibreGeoAgentPlugin,
   maplibreUsgsLidarPlugin,
+  pointCloudAnnotationPlugin,
   maplibreStreetViewPlugin,
   maplibreMapillaryPlugin,
   maplibreElevationProfilePlugin,
@@ -322,6 +325,17 @@ setTimelapseVideoSaver((blob, { defaultName, extension, mimeType }) =>
         accept: { [mimeType.split(";")[0]]: [`.${extension}`] },
       },
     ],
+    mimeType,
+  }),
+);
+
+// The point cloud annotator exports LAS files but cannot depend on the app's
+// Tauri I/O helpers, so the binary save is injected here like the timelapse's.
+setPointCloudAnnotationFileSaver((bytes, { defaultName, extension, mimeType, description }) =>
+  saveBinaryFileWithFallback(bytes, {
+    defaultName,
+    filters: [{ name: description, extensions: [extension] }],
+    browserTypes: [{ description, accept: { [mimeType]: [`.${extension}`] } }],
     mimeType,
   }),
 );

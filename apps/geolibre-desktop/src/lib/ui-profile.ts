@@ -227,6 +227,7 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
   "maplibre-gl-geoagent": "advanced",
   "maplibre-samgeo": "advanced",
   "maplibre-gl-usgs-lidar": "advanced",
+  "geolibre-point-cloud-annotation": "advanced",
   "maplibre-gl-overture-maps": "advanced",
   "maplibre-gl-time-slider": "advanced",
   "maplibre-gl-components": "advanced",
