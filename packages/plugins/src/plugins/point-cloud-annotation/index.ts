@@ -1951,6 +1951,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   exportSegmentsButton.addEventListener("click", exportSegments);
   // Capture phase: a box nudge must win over the map's own arrow-key panning.
   document.addEventListener("keydown", onKeyDown, true);
+  // Keep the polygon-layer list current as layers are added, renamed or removed.
+  const unsubscribeLayers = useAppStore.subscribe((state, previous) => {
+    if (state.layers !== previous.layers) renderLiftLayers();
+  });
   const unsubscribeLocale = app.onLocaleChange?.(() => {
     renderLabels();
     if (session) {
@@ -1991,6 +1995,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     boundControl?.off("load", onControlChange);
     boundControl?.off("unload", onControlChange);
     unsubscribeLocale?.();
+    unsubscribeLayers();
     container.replaceChildren();
   };
 }

@@ -117,7 +117,8 @@ export class LabelHistory {
    * @param code - The class code to assign.
    * @param firstId - Object id for the first non-empty group; later groups
    *   count up from it.
-   * @returns How many points changed and how many objects were created.
+   * @returns How many points changed and how many objects were created
+   *   (groups that changed at least one point).
    */
   assignGroups(
     cloudId: string,
@@ -139,8 +140,9 @@ export class LabelHistory {
       for (const index of group) {
         if (index >= classifications.length || index >= ids.length || seen.has(index)) continue;
         seen.add(index);
-        used = true;
         if (classifications[index] === code && ids[index] === id) continue;
+        // Only a group that changes a point counts as a created object.
+        used = true;
         changed.push(index);
         previous.push(classifications[index]);
         previousIds.push(ids[index]);
