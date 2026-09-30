@@ -2,7 +2,14 @@
  * How a `pmtiles` store layer is shaped, kept apart from `layer-sync` so the plugins package can
  * import it (`@geolibre/map/pmtiles-layer`) without pulling in MapLibre and its stylesheet.
  */
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  isCredentialedS3Url,
+  isS3Uri,
+  resolveReadableUrl,
+  type GeoLibreLayer,
+  type LayerStyle,
+} from "@geolibre/core";
 import {
   FetchSource,
   FileSource,
@@ -295,7 +302,53 @@ export function readRemotePMTilesInfo(
   url: string,
   signal?: AbortSignal,
 ): Promise<PMTilesArchiveInfo> {
+  if (needsS3Resolution(url)) return readArchive(new PMTiles(new S3ResolvedSource(url, signal)));
   return readArchive(new PMTiles(signal ? new AbortableSource(url, signal) : url));
+}
+
+/** Whether an archive URL must be resolved (signed, or mapped to HTTPS) before each read. */
+function needsS3Resolution(url: string): boolean {
+  return isS3Uri(url) || isCredentialedS3Url(url);
+}
+
+/**
+ * The archive behind `url`: a plain HTTP source, or for `s3://` and private
+ * bucket URLs one that reads through `resolveReadableUrl`, so the archive is
+ * keyed by the unsigned URL and a presigned URL that expires mid-session is
+ * simply minted again.
+ */
+export function remotePMTilesArchive(url: string): PMTiles {
+  return needsS3Resolution(url) ? new PMTiles(new S3ResolvedSource(url)) : new PMTiles(url);
+}
+
+class S3ResolvedSource implements Source {
+  private inner: FetchSource | null = null;
+  private innerHref = "";
+
+  constructor(
+    private readonly url: string,
+    private readonly signal?: AbortSignal,
+  ) {}
+
+  getKey(): string {
+    return this.url;
+  }
+
+  async getBytes(
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+    etag?: string,
+  ): Promise<RangeResponse> {
+    const effectiveSignal = signal ?? this.signal;
+    // The app's signer caches signed URLs until they near expiry.
+    const href = await resolveReadableUrl(this.url, effectiveSignal);
+    if (!this.inner || href !== this.innerHref) {
+      this.inner = new FetchSource(href);
+      this.innerHref = href;
+    }
+    return this.inner.getBytes(offset, length, effectiveSignal, etag);
+  }
 }
 
 /**

@@ -1,4 +1,6 @@
 mod arcgis_http;
+mod aws_credentials;
+mod aws_sts;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
 // a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
 // inbound connection requires the `com.apple.security.network.server`
@@ -457,6 +459,7 @@ pub fn run() {
             process: Mutex::new(None),
             lifecycle: Mutex::new(()),
         })
+        .manage(aws_credentials::AwsSsoLoginState::default())
         .manage(JupyterServerState {
             process: Mutex::new(None),
             token: Mutex::new(None),
@@ -472,6 +475,10 @@ pub fn run() {
             fetch_url_response,
             arcgis_http::fetch_arcgis_response,
             arcgis_http::cancel_arcgis_request,
+            aws_credentials::aws_list_profiles,
+            aws_credentials::aws_resolve_credentials,
+            aws_credentials::aws_sso_login_start,
+            aws_credentials::aws_sso_login_poll,
             install_external_plugin_archive,
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,

@@ -221,6 +221,7 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
   "geolibre-us-state-gis": "advanced",
   "geolibre-us-local-gis": "advanced",
   "maplibre-gl-source-coop": "advanced",
+  "geolibre-s3-browser": "advanced",
   "maplibre-gl-huggingface": "advanced",
   "maplibre-gl-vantor": "advanced",
   "maplibre-gl-esri-wayback": "advanced",

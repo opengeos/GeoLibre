@@ -703,6 +703,13 @@ export {
   type StacSearchResult,
 } from "./plugins/stac-api";
 export {
+  DEFAULT_S3_BROWSER_LABELS,
+  maplibreS3BrowserPlugin,
+  S3_BROWSER_PLUGIN_ID,
+  setS3BrowserLabels,
+  type S3BrowserLabels,
+} from "./plugins/maplibre-s3-browser";
+export {
   DEFAULT_SOURCE_COOP_LABELS,
   maplibreNaturalEarthPlugin,
   maplibreSourceCoopPlugin,

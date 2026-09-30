@@ -36,6 +36,7 @@ They are grouped together because they behave the same way, not because they sha
 | [CKAN](#ckan) | HDX | Humanitarian Data Exchange resources |
 | [STAC Catalogs](#stac-catalogs) | any STAC | Any STAC API or static catalog, via STAC Index |
 | [Source Cooperative](#source-cooperative) | Source.coop | Cloud-native products (PMTiles, GeoParquet, COG) |
+| [S3 Browser](#s3-browser) | Amazon S3 / S3-compatible | Browse any bucket, public or private, and add its files |
 | [Natural Earth](#natural-earth) | Natural Earth | The Natural Earth vector and raster themes |
 | [Hugging Face](#hugging-face) | Hugging Face | Geospatial files in dataset repos — and uploads |
 | [Satellite Embeddings](#satellite-embeddings) | Source.coop, Tessera | Pre-computed foundation-model embeddings (AlphaEarth, Tessera, Earth Index, …) |
@@ -217,6 +218,16 @@ Browses [Source Cooperative](https://source.coop) — a repository of large, clo
 - Filter the catalog, or jump straight to an `account/product` reference.
 - Browse a product's files with their sizes and formats, then add one to the map or download it.
 - Adding delegates to the same code paths as [Add Data](adding-data.md): PMTiles archives, GeoParquet and other vector formats, and COG rasters all land in the Layers panel exactly as if you had added the file by hand. Large GeoParquet can be **streamed** rather than fully downloaded.
+
+## S3 Browser
+
+Browses Amazon S3 and S3-compatible buckets. Public buckets are read anonymously; private ones with the S3 connections in **Settings → Cloud Storage**, including AWS profiles, SSO, and IAM roles on the desktop app.
+
+- Type `s3://bucket/prefix/` and press **Go**, or pick a connection and **List buckets**.
+- **Add** puts COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, and PMTiles files on the map through the same paths as [Add Data](adding-data.md); layers keep the `s3://` URI, never a signed URL.
+- **Set as default** makes the current folder the one the browser opens at.
+
+See [Cloud Storage](cloud-storage.md) for connections, credential sources, and the CORS rule private buckets need on the web.
 
 ## Natural Earth
 

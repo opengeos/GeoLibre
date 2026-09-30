@@ -25,6 +25,7 @@ import {
   pmtilesIdNamesSourceLayer,
   pmtilesLayerKinds,
   pmtilesVectorLayerId,
+  remotePMTilesArchive,
 } from "./pmtiles-layer";
 import { encodeVectorTileLayerPart } from "./vector-tile-layer-ids";
 import {
@@ -1093,7 +1094,7 @@ function ensurePMTilesProtocol(url: string): void {
   // FetchSource for a URL that does not exist.
   const key = stripPMTilesProtocol(url);
   if (!protocol.tiles.has(key)) {
-    protocol.add(new PMTiles(key));
+    protocol.add(remotePMTilesArchive(key));
   }
 }
 

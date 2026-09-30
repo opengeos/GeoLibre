@@ -45,6 +45,7 @@ import type { MapEngine } from "@geolibre/map";
 import {
   Bot,
   Braces,
+  Cloud,
   Check,
   Crosshair,
   DownloadCloud,
@@ -159,6 +160,8 @@ import {
   type ProviderField,
 } from "../../lib/assistant/provider-fields";
 import { AiSectionContent } from "./AiSectionContent";
+import { CloudStorageSection } from "./CloudStorageSection";
+import { normalizeS3DefaultLocation, type S3Connection } from "../../lib/s3-connections";
 import { CredentialStorageNotice } from "./CredentialStorageNotice";
 import {
   projectCredentialsInKeychain,
@@ -174,6 +177,7 @@ export type SettingsSection =
   | "geocoding"
   | "ai"
   | "environment"
+  | "cloudStorage"
   | "updates"
   | "startup";
 
@@ -300,6 +304,7 @@ const SECTION_ITEMS: Array<{
     labelKey: "settings.section.environment",
     icon: Braces,
   },
+  { id: "cloudStorage", labelKey: "settings.section.cloudStorage", icon: Cloud },
   {
     id: "updates",
     labelKey: "settings.section.updates",
@@ -340,6 +345,8 @@ interface DraftDesktopSettings {
   arcgisApiKey: string;
   aiProfiles: AssistantProfile[];
   defaultAiProfileId: string | null;
+  s3Connections: S3Connection[];
+  s3DefaultLocation: string;
   uiProfile: UiProfileSettings;
   updates: UpdateSettings;
   startup: StartupSettings;
@@ -426,6 +433,11 @@ function cloneDesktopSettings(
       fieldValues: { ...p.fieldValues },
     })),
     defaultAiProfileId: settings.defaultAiProfileId,
+    s3Connections: settings.s3Connections.map((connection) => ({
+      ...connection,
+      buckets: [...connection.buckets],
+    })),
+    s3DefaultLocation: settings.s3DefaultLocation,
     uiProfile: {
       ...settings.uiProfile,
       hiddenDataSources: [...settings.uiProfile.hiddenDataSources],
@@ -1431,6 +1443,8 @@ export function SettingsDialog({
       arcgisApiKey: draftDesktopSettings.arcgisApiKey,
       aiProfiles: draftDesktopSettings.aiProfiles,
       defaultAiProfileId: draftDesktopSettings.defaultAiProfileId,
+      s3Connections: draftDesktopSettings.s3Connections,
+      s3DefaultLocation: normalizeS3DefaultLocation(draftDesktopSettings.s3DefaultLocation),
       uiProfile: committedUiProfile,
       updates: draftDesktopSettings.updates,
       startup: draftDesktopSettings.startup,
@@ -2849,6 +2863,21 @@ export function SettingsDialog({
                     getProviderField={getProviderField}
                     setProviderField={setProviderField}
                     osFieldEnvName={osFieldEnvName}
+                  />
+                </div>
+              ) : null}
+              {effectiveSection === "cloudStorage" ? (
+                <div className="space-y-5">
+                  <CredentialStorageNotice />
+                  <CloudStorageSection
+                    connections={draftDesktopSettings.s3Connections}
+                    onChange={(s3Connections) =>
+                      setDraftDesktopSettings((current) => ({ ...current, s3Connections }))
+                    }
+                    defaultLocation={draftDesktopSettings.s3DefaultLocation}
+                    onDefaultLocationChange={(s3DefaultLocation) =>
+                      setDraftDesktopSettings((current) => ({ ...current, s3DefaultLocation }))
+                    }
                   />
                 </div>
               ) : null}

@@ -67,6 +67,7 @@ nav:
       - Python Console: user-guide/python-console.md
       - AI Assistant: user-guide/ai-assistant.md
       - Data Integrations: user-guide/data-integrations.md
+      - Cloud Storage (S3): user-guide/cloud-storage.md
       - Plugins & Marketplace: user-guide/plugins.md
       - Web Services: user-guide/web-services.md
       - Settings & Preferences: user-guide/settings.md

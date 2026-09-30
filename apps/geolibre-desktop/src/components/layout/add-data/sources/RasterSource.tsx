@@ -43,7 +43,9 @@ export function RasterSource() {
     else {
       try {
         const address = new URL(url.trim());
-        if (!["http:", "https:"].includes(address.protocol))
+        // s3:// is read with a configured S3 connection's credentials, or
+        // anonymously from the public endpoint when none covers the bucket.
+        if (!["http:", "https:", "s3:"].includes(address.protocol))
           throw new Error("Unsupported protocol");
         input = address.href;
       } catch {
@@ -84,7 +86,7 @@ export function RasterSource() {
             setUrl(e.target.value);
             setFile(null);
           }}
-          placeholder="https://example.com/image.tif"
+          placeholder={t("addData.raster.urlPlaceholder")}
         />
       </div>
     </AddDataSourceForm>

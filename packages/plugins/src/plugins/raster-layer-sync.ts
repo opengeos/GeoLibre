@@ -3,6 +3,7 @@ import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   styleValue,
+  unsignedSourceUrl,
   useAppStore,
 } from "@geolibre/core";
 import type { RasterLayerInfo, RasterLayerState, RenderEngine } from "maplibre-gl-raster";
@@ -168,7 +169,10 @@ export function createRasterStoreLayer(
         /^https?:\/\/asset\.localhost(?:\/|$)/i.test(info.source.url)))
       ? candidateLocalPath
       : undefined;
-  const url = info.source.kind === "url" && !localFilePath ? info.source.url : undefined;
+  // A presigned S3 read maps back to the `s3://` (or plain object) URL it was
+  // minted from, so the store and saved projects never hold a signature.
+  const url =
+    info.source.kind === "url" && !localFilePath ? unsignedSourceUrl(info.source.url) : undefined;
   // The control retains a File-backed raster's original bytes behind a blob
   // URL (source.objectUrl). Surface it as metadata.localBytesUrl so in-browser
   // tools (the WASM Whitebox runner, the symbology stats reader, raster export)

@@ -44,6 +44,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "geolibre-stac-catalogs",
   "geolibre-portolan",
   "maplibre-gl-source-coop",
+  "geolibre-s3-browser",
   "maplibre-gl-natural-earth",
   "maplibre-gl-huggingface",
   "geolibre-satellite-embeddings",

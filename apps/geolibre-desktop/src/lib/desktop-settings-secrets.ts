@@ -9,6 +9,7 @@
 import type { DesktopSettings } from "../hooks/useDesktopSettings";
 import type { AssistantProviderId } from "./assistant/provider";
 import { PROVIDER_FIELDS, type ProviderField } from "./assistant/provider-fields";
+import { S3_CONNECTION_SECRET_FIELDS } from "./s3-connections";
 
 const SETTINGS_SECRET_ACCOUNTS = {
   shareToken: "settings.shareToken",
@@ -23,6 +24,10 @@ const SETTINGS_SECRET_FIELDS = Object.keys(SETTINGS_SECRET_ACCOUNTS) as Settings
 
 export function aiProfileSecretAccount(profileId: string, fieldKey: string): string {
   return `ai.${profileId}.${fieldKey}`;
+}
+
+export function s3ConnectionSecretAccount(connectionId: string, field: string): string {
+  return `s3.${connectionId}.${field}`;
 }
 
 /** Every env key (canonical names and aliases) a provider treats as secret. */
@@ -58,6 +63,15 @@ export function splitDesktopSettingsSecrets(settings: DesktopSettings): {
     }
     return { ...profile, fieldValues };
   });
+  publicSettings.s3Connections = settings.s3Connections.map((connection) => {
+    const stripped = { ...connection };
+    for (const field of S3_CONNECTION_SECRET_FIELDS) {
+      if (connection[field])
+        secrets[s3ConnectionSecretAccount(connection.id, field)] = connection[field];
+      stripped[field] = "";
+    }
+    return stripped;
+  });
   return { publicSettings, secrets };
 }
 
@@ -79,6 +93,14 @@ export function mergeDesktopSettingsSecrets(
     }
     return { ...profile, fieldValues };
   });
+  merged.s3Connections = settings.s3Connections.map((connection) => {
+    const restored = { ...connection };
+    for (const field of S3_CONNECTION_SECRET_FIELDS) {
+      const value = secrets[s3ConnectionSecretAccount(connection.id, field)];
+      if (value !== undefined) restored[field] = value;
+    }
+    return restored;
+  });
   return merged;
 }
 
@@ -88,6 +110,9 @@ export function desktopSettingsSecretAccounts(settings: DesktopSettings): string
     ...Object.values(SETTINGS_SECRET_ACCOUNTS),
     ...settings.aiProfiles.flatMap((profile) =>
       secretFieldKeys(profile.provider).map((key) => aiProfileSecretAccount(profile.id, key)),
+    ),
+    ...settings.s3Connections.flatMap((connection) =>
+      S3_CONNECTION_SECRET_FIELDS.map((field) => s3ConnectionSecretAccount(connection.id, field)),
     ),
   ];
 }

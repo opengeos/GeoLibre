@@ -6,6 +6,7 @@ import { DesktopShell } from "./components/layout/DesktopShell";
 import { OnboardingDialog } from "./components/layout/OnboardingDialog";
 import { UpdateNotificationModal } from "./components/layout/UpdateNotificationModal";
 import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
+import "./lib/s3-signer-setup";
 import { useLayoutOptions } from "./hooks/useLayoutOptions";
 import { useProjectUrlLoader } from "./hooks/useProjectUrlLoader";
 import { useDataUrlLoader } from "./hooks/useDataUrlLoader";

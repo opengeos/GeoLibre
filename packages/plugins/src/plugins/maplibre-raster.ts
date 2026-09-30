@@ -1,4 +1,9 @@
-import { effectiveLayerRenderState, styleValue, useAppStore } from "@geolibre/core";
+import {
+  effectiveLayerRenderState,
+  resolveReadableUrl,
+  styleValue,
+  useAppStore,
+} from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type { Map as MapboxMap } from "mapbox-gl";
 import type {
@@ -404,7 +409,10 @@ export async function addRasterToMap(
   if (options.defaults?.engine && control.getEngine() !== options.defaults.engine) {
     control.setEngine(options.defaults.engine);
   }
-  const id = await control.addRaster(source, {
+  // `s3://` sources and private-bucket object URLs are read through a
+  // presigned URL; the store sync maps it back to `source`.
+  const readable = typeof source === "string" ? await resolveReadableUrl(source) : source;
+  const id = await control.addRaster(readable, {
     name: options.name,
     zoomTo: options.zoomTo ?? true,
     // Safe to pass before the band count is known: the renderer applies a
@@ -707,9 +715,19 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
                 : undefined;
             return url
               ? [
-                  readableStacLayerHref(layer, url).then(
-                    (href) => [layer.id, { sourceUrl: url, href }] as const,
-                  ),
+                  readableStacLayerHref(layer, url)
+                    // An `s3://` source (or a private bucket's object URL) is
+                    // signed afresh on every load; the saved URL holds no
+                    // signature.
+                    .then((href) =>
+                      resolveReadableUrl(href).catch((error: unknown) => {
+                        // One bucket's missing credentials must not stop the
+                        // other rasters from restoring.
+                        console.error(`[GeoLibre] Could not sign S3 raster "${layer.name}"`, error);
+                        return href;
+                      }),
+                    )
+                    .then((href) => [layer.id, { sourceUrl: url, href }] as const),
                 ]
               : [];
           }),

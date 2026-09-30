@@ -69,6 +69,10 @@ Panels also auto-hide on small screens for a responsive layout.
 !!! tip "Protomaps basemaps"
     To use the [Protomaps](https://protomaps.com) basemaps in the **New map** dialog, add an environment variable named `VITE_PROTOMAPS_API_KEY` with your own Protomaps API key. The Protomaps options appear in the dialog as soon as the key is enabled — no restart needed. When no key is set, the Protomaps section is hidden. See [Getting Started](../getting-started.md#optional-basemap-credentials) for setting the key at build time for a self-hosted deployment.
 
+## Cloud Storage
+
+**Settings → Cloud Storage** holds the S3 connections that read private Amazon S3 and S3-compatible buckets (access keys, AWS profiles including SSO, environment variables, and IAM roles), and the S3 Browser's default location. See [Cloud Storage](cloud-storage.md).
+
 ## Project name and file
 
 The project name is edited in place on the right of the toolbar, and it is saved into the `.geolibre.json` file. To also see the file path the project was opened from or last saved to, turn on **Show project info** under [Layout](#layout). See [Projects](projects.md) for the rest of the project lifecycle and [Project Format](../project-format.md) for what the file contains.

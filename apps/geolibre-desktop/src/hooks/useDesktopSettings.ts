@@ -25,6 +25,11 @@ import {
 } from "../lib/theme-schemes";
 import type { UpdateNotificationLevel } from "../lib/updates";
 import { migrateLegacyAiEnv } from "../lib/assistant/profiles";
+import {
+  normalizeS3Connections,
+  normalizeS3DefaultLocation,
+  type S3Connection,
+} from "../lib/s3-connections";
 import { ASSISTANT_PROVIDER_IDS } from "../lib/assistant/provider";
 import type { AssistantProfile } from "../lib/assistant/provider";
 
@@ -88,6 +93,18 @@ export interface DesktopSettings {
    * survives settings dialog Cancel without extra plumbing.
    */
   defaultAiProfileId: string | null;
+  /**
+   * S3 (and S3-compatible) connections used to read private buckets, matched
+   * by bucket name. Device-local, never in a project file. The secret key and
+   * session token of an access-key connection live in the OS credential store
+   * on desktop and in this blob on the web.
+   */
+  s3Connections: S3Connection[];
+  /**
+   * Where the S3 Browser opens (`s3://bucket/prefix/`), or "" for the last
+   * location browsed. Device-local like the connections.
+   */
+  s3DefaultLocation: string;
   /**
    * Appearance preferences (the accent color scheme). The light/dark mode is
    * handled separately by `useThemeMode` (it tracks the OS / embed preference).
@@ -269,6 +286,8 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   arcgisApiKey: "",
   aiProfiles: [],
   defaultAiProfileId: null,
+  s3Connections: [],
+  s3DefaultLocation: "",
   theme: DEFAULT_THEME_SETTINGS,
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
   updates: DEFAULT_UPDATE_SETTINGS,
@@ -311,6 +330,8 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
       typeof candidate.defaultAiProfileId === "string" && candidate.defaultAiProfileId.trim()
         ? candidate.defaultAiProfileId.trim()
         : null,
+    s3Connections: normalizeS3Connections(candidate.s3Connections),
+    s3DefaultLocation: normalizeS3DefaultLocation(candidate.s3DefaultLocation),
     theme: normalizeThemeSettings(candidate.theme),
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
     updates: normalizeUpdateSettings(candidate.updates),

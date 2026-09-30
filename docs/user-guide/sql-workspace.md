@@ -42,8 +42,8 @@ SELECT * FROM read_parquet('az://account/container/data.parquet') LIMIT 10;
 
 The bare `FROM s3://…` form works too — the workspace wraps it in the matching reader automatically.
 
-!!! note "Public access only"
-    Cloud URL translation targets anonymous / public buckets. Private buckets that require credentials are not yet supported.
+!!! note "Private S3 buckets"
+    An `s3://` URL in a bucket covered by an S3 connection (**Settings → Cloud Storage**) is read through a presigned URL signed with that connection's credentials; every other cloud URL is read anonymously. Name individual files: globs are not signed. See [Cloud Storage](cloud-storage.md). `gs://` and `az://` are public-only.
 
 !!! tip "CORS"
     Browser-side reads require the bucket's CORS policy to allow cross-origin requests. Most public dataset buckets (e.g. AWS Open Data, Source Cooperative) already allow this. If you hit a CORS error, check the bucket's CORS configuration.

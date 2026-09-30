@@ -102,6 +102,20 @@ describe("diagnostics network info capture", () => {
     assert.ok(!record.detail?.includes("SECRET123"));
   });
 
+  it("redacts SigV4 presigned S3 URLs, including the session token", () => {
+    appendDiagnostic({
+      category: "network",
+      level: "error",
+      message: "GET failed",
+      url: "https://b.s3.amazonaws.com/k.tif?X-Amz-Credential=ASIAKEY%2F20260101&X-Amz-Security-Token=SESSIONTOKEN&X-Amz-Signature=SIGNATURE",
+    });
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.ok(record.url?.startsWith("https://b.s3.amazonaws.com/k.tif?"));
+    for (const secret of ["ASIAKEY", "SESSIONTOKEN", "SIGNATURE"]) {
+      assert.ok(!record.url?.includes(secret), secret);
+    }
+  });
+
   it("removes OAuth secrets from callback URLs and embedded diagnostic text", () => {
     appendDiagnostic({
       category: "runtime",
