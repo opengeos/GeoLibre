@@ -357,8 +357,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const renderSummary = () => {
     summaryList.replaceChildren();
     const data = activeData();
-    if (!data?.classifications) return;
-    const counts = countClasses(data.classifications, data.pointCount);
+    const classifications = session ? liveClassifications(session.cloudId) : undefined;
+    if (!data || !classifications) return;
+    const counts = countClasses(classifications, data.pointCount);
     for (const [code, count] of counts) {
       const entry = el(
         "button",
@@ -576,7 +577,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const picked = selectPointsInShape(
       {
         positions: data.positions,
-        classifications: data.classifications,
+        classifications: liveClassifications(session.cloudId),
         pointCount: data.pointCount,
         zOffset: getRenderZOffset(ctl),
       },

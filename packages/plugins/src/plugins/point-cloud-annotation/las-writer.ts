@@ -96,13 +96,10 @@ export function resolveExportCrs(wkt: string | undefined): ExportCrs {
       if (probe.every((value) => Number.isFinite(value))) {
         return {
           wkt,
-          // A compound WKT keeps its COMPD_CS/COMPOUNDCRS prefix after
-          // extraction, so ask the parsed projection, and fall back to "has a
-          // geographic CRS but no projected one".
-          geographic:
-            (converter as unknown as { oProj?: { projName?: string } }).oProj?.projName ===
-              "longlat" ||
-            (!/PROJ(CS|CRS)\[/i.test(wkt) && /GEOG(CS|CRS)\[|GEODCRS\[/i.test(wkt)),
+          // Decided from the WKT text rather than proj4's internals: geographic
+          // when it has a geographic CRS but no projected one, which also
+          // covers a COMPD_CS/COMPOUNDCRS wrapper.
+          geographic: !/PROJ(CS|CRS)\[/i.test(wkt) && /GEOG(CS|CRS)\[|GEODCRS\[/i.test(wkt),
           forward: (lng, lat) => converter.forward([lng, lat]) as [number, number],
           zFactor: verticalUnitFactor(wkt),
         };
