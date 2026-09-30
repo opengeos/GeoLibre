@@ -1096,13 +1096,14 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     // Only a streamed COPC can; stay disabled while a load runs, whatever
     // re-renders meanwhile.
     fullDetailButton.disabled =
-      !ctl || !activeCloud || fullDetailLoading || !canLoadFullDetail(ctl, activeCloud);
+      !ctl || !map || !activeCloud || fullDetailLoading || !canLoadFullDetail(ctl, activeCloud);
     const pinned = pinnedClouds(ctl);
     for (const id of [...pinned]) {
       if (!clouds.some((cloud) => cloud.id === id)) pinned.delete(id);
     }
-    // Release applies to the cloud in use: the session's, else the selected one.
-    releaseDetailButton.hidden = !pinned.has(activeCloud);
+    // Release applies to the cloud in use: the session's, else the selected
+    // one. Hidden while a load runs, which would re-pin what it released.
+    releaseDetailButton.hidden = !pinned.has(activeCloud) || fullDetailLoading;
     if (!session) {
       hint.textContent =
         clouds.length === 0
