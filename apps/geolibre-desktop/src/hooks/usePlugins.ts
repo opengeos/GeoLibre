@@ -287,7 +287,7 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   flightSimulatorPlugin,
   godsEyeViewPlugin,
   maplibreSamGeoPlugin,
-  // Last visible entry of the Plugins menu; the ids below are skipped by
+  // Last visible entry of the Plugins menu; the ids below it are skipped by
   // PluginsMenu and surface elsewhere.
   pointCloudAnnotationPlugin,
   maplibreDirectionsPlugin,

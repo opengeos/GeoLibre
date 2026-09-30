@@ -102,15 +102,4 @@ export class LabelHistory {
   get canRedo(): boolean {
     return this.redoStack.length > 0;
   }
-
-  /** Number of points changed by all edits still on the undo stack. */
-  get editedPointCount(): number {
-    return this.undoStack.reduce((sum, edit) => sum + edit.indices.length, 0);
-  }
-
-  /** Drops every recorded edit. */
-  clear(): void {
-    this.undoStack.length = 0;
-    this.redoStack.length = 0;
-  }
 }

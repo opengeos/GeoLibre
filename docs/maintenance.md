@@ -321,6 +321,23 @@ layer, before `loadPointCloud` resolves; it throws if not.
 `tests/lidar-url-layer.test.ts` pins the GeoLibre side of both. Re-read
 `loadPointCloud` on a bump.
 
+The point cloud annotator (`packages/plugins/src/plugins/point-cloud-annotation/`)
+edits the control's loaded points, which the package has no API for yet
+(opengeos/GeoLibre#2749). Every private read is in `lidar-access.ts`:
+`LidarControl._pointCloudManager` (its `_pointClouds` map, `getOptions()` and
+`updateStyle()`), `_viewportManagers` (`stop`/`start`/`forceUpdate`, to pause
+streaming), `_streamingLoaders`/`_eptStreamingLoaders` (`isLoading`), and the
+overlay's `_overlay._deck.getViewports()`. Each read degrades to null or a no-op
+when a field is gone, so a rename breaks the plugin quietly: the panel lists the
+cloud but selection finds nothing and edits never recolour. Edits also rely on
+a streamed cloud's `classifications` being a view of the loader's buffer, so they
+survive later `updatePointCloud` calls. `ASPRS_CLASSES` in `classes.ts` hand-mirrors
+the package's unexported `CLASSIFICATION_COLORS`;
+`tests/point-cloud-annotation.test.ts` reads the real colours back through
+`ColorSchemeProcessor` and fails on drift. The private reads are not compiler
+checked, so run `npx playwright test e2e/point-cloud-annotation.spec.ts --project=features`
+on a bump.
+
 ### `maplibre-gl-splat` (`packages/plugins/package.json`) — private internals
 
 `packages/plugins/src/plugins/components/splatting.ts` reaches into

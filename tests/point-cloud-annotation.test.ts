@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { WebMercatorViewport } from "@deck.gl/core";
-import { countClasses } from "../packages/plugins/src/plugins/point-cloud-annotation/classes";
+import { ColorSchemeProcessor, type PointCloudData } from "maplibre-gl-lidar";
+import {
+  ASPRS_CLASSES,
+  countClasses,
+} from "../packages/plugins/src/plugins/point-cloud-annotation/classes";
 import { LabelHistory } from "../packages/plugins/src/plugins/point-cloud-annotation/history";
 import {
   buildSegmentsLabel,
@@ -247,5 +251,27 @@ describe("buildSegmentsLabel", () => {
       { id: 2, name: "c2" },
       { id: 6, name: "c6" },
     ]);
+  });
+});
+
+describe("ASPRS_CLASSES colour mirror", () => {
+  it("matches the colours maplibre-gl-lidar renders for each class", () => {
+    // The package does not export CLASSIFICATION_COLORS from its root, so read
+    // them back through its public colour processor.
+    const count = ASPRS_CLASSES.length;
+    const data = {
+      positions: new Float32Array(count * 3),
+      coordinateOrigin: [0, 0, 0],
+      classifications: Uint8Array.from(ASPRS_CLASSES.map((entry) => entry.code)),
+      pointCount: count,
+      bounds: { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 },
+      hasRGB: false,
+      hasIntensity: false,
+      hasClassification: true,
+    } as unknown as PointCloudData;
+    const colors = new ColorSchemeProcessor().getColors(data, "classification");
+    ASPRS_CLASSES.forEach((entry, i) => {
+      assert.deepEqual([...colors.subarray(i * 4, i * 4 + 3)], entry.color, `class ${entry.code}`);
+    });
   });
 });

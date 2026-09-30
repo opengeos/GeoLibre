@@ -564,8 +564,12 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       return;
     }
     const started = performance.now();
-    const readZ = (input: HTMLInputElement) =>
-      input.value.trim() === "" ? null : Number(input.value);
+    // Blank or unparseable means "no bound" rather than a NaN that would
+    // silently disable the filter.
+    const readZ = (input: HTMLInputElement) => {
+      const value = input.value.trim() === "" ? Number.NaN : Number(input.value);
+      return Number.isFinite(value) ? value : null;
+    };
     const range = getRenderElevationRange(ctl);
     const zMin = readZ(minZ);
     const zMax = readZ(maxZ);
@@ -751,7 +755,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     }
     liveClassifications(info.id);
     const stillLoading = isStreamingLoading(ctl, info.id);
-    const previousColorScheme = (ctl.getState().colorScheme as ColorScheme | undefined) ?? null;
+    // Fall back to the control's default so finishing always restores a scheme.
+    const previousColorScheme: ColorScheme =
+      (ctl.getState().colorScheme as ColorScheme | undefined) ?? "elevation";
     session = {
       cloudId: info.id,
       cloudName: info.name,
