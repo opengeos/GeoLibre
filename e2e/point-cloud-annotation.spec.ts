@@ -427,4 +427,46 @@ test.describe("point cloud annotation", () => {
       await expect.poll(() => classes.innerText()).toBe(before);
     }
   });
+
+  test("selects with a click-by-click polygon and assigns a class by digit key", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await waitForMap(page);
+    await loadCopc(page);
+    await startSession(page);
+    const canvas = (await page.locator(".maplibregl-canvas").boundingBox())!;
+    const at = (fx: number, fy: number) =>
+      [canvas.x + canvas.width * fx, canvas.y + canvas.height * fy] as const;
+
+    await page.keyboard.press("g");
+    await expect(page.getByRole("button", { name: "Polygon (G)" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    for (const [fx, fy] of [
+      [0.1, 0.1],
+      [0.9, 0.1],
+      [0.9, 0.9],
+      [0.1, 0.9],
+    ]) {
+      await page.mouse.click(...at(fx, fy));
+    }
+    // Nothing is selected until the ring is closed.
+    await expect(page.getByTestId("pc-annotation-selected")).toHaveText("0 points selected");
+    await page.keyboard.press("Enter");
+    const selected = Number(
+      ((await page.getByTestId("pc-annotation-selected").textContent()) ?? "").replace(/\D/g, ""),
+    );
+    expect(selected).toBeGreaterThan(0);
+
+    // Digit 9 picks Water as the class to assign, then Enter applies it.
+    await page.keyboard.press("9");
+    await expect(page.getByTestId("pc-annotation-target")).toHaveValue("9");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("to Water");
+    await expect(
+      page.getByTestId("pc-annotation-classes").locator('[data-code="9"]'),
+    ).toContainText(selected.toLocaleString("en-US"));
+  });
 });

@@ -87,7 +87,7 @@ export function setPointCloudAnnotationFileSaver(
   fileSaver = saver;
 }
 
-type Tool = "pan" | "box" | "lasso" | "brush" | "autobox";
+type Tool = "pan" | "box" | "lasso" | "polygon" | "brush" | "autobox";
 
 let lazEncoder: Promise<LazEncoder> | null = null;
 
@@ -267,6 +267,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   brushButton.dataset.tool = "brush";
   const autoBoxButton = button("");
   autoBoxButton.dataset.tool = "autobox";
+  const polygonButton = button("");
+  polygonButton.dataset.tool = "polygon";
   const brushSize = numberInput("");
   brushSize.min = "2";
   brushSize.max = "200";
@@ -282,7 +284,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const modeSelect = select();
   const toolHint = el("div", "", "line-height:1.4;color:hsl(var(--muted-foreground));");
   tools.root.append(
-    row(panButton, boxButton, lassoButton, brushButton, autoBoxButton),
+    row(panButton, boxButton, lassoButton, polygonButton, brushButton, autoBoxButton),
     brushSizeLabel,
     modeSelect,
     toolHint,
@@ -562,18 +564,31 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const renderTools = () => {
     brushSizeLabel.hidden = tool !== "brush";
-    for (const node of [panButton, boxButton, lassoButton, brushButton, autoBoxButton]) {
+    for (const node of [
+      panButton,
+      boxButton,
+      lassoButton,
+      polygonButton,
+      brushButton,
+      autoBoxButton,
+    ]) {
       node.style.cssText = node.dataset.tool === tool ? ACTIVE_TOOL_STYLE : BUTTON_STYLE;
       node.setAttribute("aria-pressed", String(node.dataset.tool === tool));
     }
     toolHint.textContent =
       tool === "pan"
         ? tr(app, "panHint", "Drag to move the map; right-drag to tilt and rotate.")
-        : tr(
-            app,
-            "drawHint",
-            "Drag on the map to select points. Hold Shift to add, Alt to subtract. Right-drag still tilts the map.",
-          );
+        : tool === "polygon"
+          ? tr(
+              app,
+              "polygonHint",
+              "Click to add vertices; double-click, press Enter or click the first vertex to close. Esc cancels. Hold Shift or Alt on the last click to add or subtract.",
+            )
+          : tr(
+              app,
+              "drawHint",
+              "Drag on the map to select points. Hold Shift to add, Alt to subtract. Right-drag still tilts the map.",
+            );
   };
 
   const renderCloudOptions = () => {
@@ -618,6 +633,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     lassoButton.textContent = tr(app, "toolLasso", "Lasso (L)");
     brushButton.textContent = tr(app, "toolBrush", "Brush (P)");
     autoBoxButton.textContent = tr(app, "toolAutoBox", "Auto box (A)");
+    polygonButton.textContent = tr(app, "toolPolygon", "Polygon (G)");
     cuboids.renderLabels();
     brushSizeText.textContent = tr(app, "brushSize", "Brush size (px, [ and ])");
     const modeValue = modeSelect.value || mode;
@@ -803,10 +819,59 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     );
   };
 
+  // A polygon in progress: its vertices and the pointer, for the rubber band.
+  let polygon: { points: [number, number][]; cursor: [number, number] | null } | null = null;
+
+  const drawPolygon = () => {
+    if (!svgPath) return;
+    svgPath.setAttribute("fill", "rgba(255,255,0,0.12)");
+    svgPath.setAttribute("stroke", "#facc15");
+    svgPath.setAttribute("stroke-width", "1.5");
+    svgPath.setAttribute("stroke-dasharray", "4 3");
+    const points = polygon ? [...polygon.points, ...(polygon.cursor ? [polygon.cursor] : [])] : [];
+    svgPath.setAttribute(
+      "d",
+      points.length === 0 ? "" : `M${points.map(([x, y]) => `${x},${y}`).join("L")}Z`,
+    );
+  };
+
+  const closePolygon = (combine: SelectionMode) => {
+    const finished = polygon;
+    polygon = null;
+    drawPolygon();
+    if (finished && finished.points.length >= 3) {
+      runSelection({ kind: "polygon", points: finished.points }, combine);
+    }
+  };
+
+  const cancelPolygon = () => {
+    polygon = null;
+    drawPolygon();
+  };
+
   const onPointerDown = (event: PointerEvent) => {
     if (!session || tool === "pan" || event.button !== 0 || !map) return;
     event.preventDefault();
     event.stopPropagation();
+    if (tool === "polygon") {
+      const point = localPoint(event);
+      const combine: SelectionMode = event.shiftKey ? "add" : event.altKey ? "subtract" : mode;
+      if (!polygon) polygon = { points: [], cursor: null };
+      const first = polygon.points[0];
+      // A double-click, or a click back on the first vertex, closes the ring.
+      if (
+        event.detail >= 2 ||
+        (first &&
+          polygon.points.length >= 3 &&
+          Math.hypot(point[0] - first[0], point[1] - first[1]) <= 8)
+      ) {
+        closePolygon(combine);
+        return;
+      }
+      polygon.points.push(point);
+      drawPolygon();
+      return;
+    }
     if (tool === "autobox") {
       const [x, y] = localPoint(event);
       cuboids.autoBoxAt(x, y);
@@ -823,6 +888,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 
   const onPointerMove = (event: PointerEvent) => {
+    if (polygon && tool === "polygon") {
+      polygon.cursor = localPoint(event);
+      drawPolygon();
+      return;
+    }
     if (!drawing || event.pointerId !== drawing.pointerId) return;
     const point = localPoint(event);
     if (tool === "box") {
@@ -865,6 +935,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     overlay = null;
     svgPath = null;
     drawing = null;
+    polygon = null;
   };
 
   const applyToolToMap = () => {
@@ -898,6 +969,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const setTool = (next: Tool) => {
     tool = next;
+    if (next !== "polygon") cancelPolygon();
     // A shortcut can switch tools while the previously clicked button still
     // has focus; its focus ring would then read as the active tool. Move focus
     // to the new tool's button, so keyboard users keep their place.
@@ -973,7 +1045,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         });
         for (const i of tile.core) owned[i] = 0;
       }
-      if (!session || session.cloudId !== cloudId) return;
+      if (!session || session.cloudId !== cloudId) {
+        setStatus(tr(app, "prelabelCancelled", "Pre-label cancelled: the session changed."));
+        return;
+      }
       const merged = mergePrelabels(snapshot, results, cloud.pointCount, {
         onlyUnclassified: prelabelOnlyUnclassified.checked,
         protectedClasses: new Set([...ctl.getHiddenClassifications(), ...lockedClasses]),
@@ -1219,7 +1294,21 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       return;
     }
     const key = event.key.toLowerCase();
+    // Digits pick the class to assign, like Segments.ai's category hotkeys.
+    if (/^[0-9]$/.test(key)) {
+      targetClass = Number(key);
+      targetSelect.value = key;
+      event.preventDefault();
+      return;
+    }
+    if (polygon && (key === "enter" || key === "escape")) {
+      if (key === "enter") closePolygon(mode);
+      else cancelPolygon();
+      event.preventDefault();
+      return;
+    }
     if (key === "b") setTool("box");
+    else if (key === "g") setTool("polygon");
     else if (key === "l") setTool("lasso");
     else if (key === "p") setTool("brush");
     else if (key === "a") setTool("autobox");
@@ -1267,6 +1356,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   lassoButton.addEventListener("click", () => setTool("lasso"));
   brushButton.addEventListener("click", () => setTool("brush"));
   autoBoxButton.addEventListener("click", () => setTool("autobox"));
+  polygonButton.addEventListener("click", () => setTool("polygon"));
   brushSize.addEventListener("change", () => setBrushRadius(Number(brushSize.value) / 2));
   modeSelect.addEventListener("change", () => {
     mode = modeSelect.value as SelectionMode;

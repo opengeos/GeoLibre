@@ -192,8 +192,9 @@ function convexHull(xs: Float64Array, ys: Float64Array): [number, number][] {
       upper.pop();
     upper.push(p);
   }
-  // A lone (or all-duplicate) point: both chains hold just it, and dropping
-  // the shared endpoints below would return an empty hull.
+  // A lone point: both chains hold just it, and dropping the shared endpoints
+  // below would return an empty hull. (Two or more coincident points leave a
+  // two-point degenerate hull, which fitCuboid handles.)
   if (lower.length === 1 && upper.length === 1) return lower;
   lower.pop();
   upper.pop();

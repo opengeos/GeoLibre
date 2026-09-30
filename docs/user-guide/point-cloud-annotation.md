@@ -28,14 +28,17 @@ Scroll to zoom and right-drag to tilt or rotate as usual.
   set its size in the panel or with **[** and **]**. Hold **Shift** to add to
   the selection or **Alt** to remove from it, or pick a mode in the panel.
   **Pan** returns left-drag to moving the map.
+- **Polygon (G)**: click vertices, then double-click, press **Enter** or click
+  the first vertex to close the ring and select what it encloses. **Esc**
+  cancels. Hold **Shift** or **Alt** on the closing click to add or subtract.
 - Selection goes through all depths, like a camera frustum. Narrow it with
   the **Min Z** / **Max Z** filter (metres) or **Only points in class**,
   which relabels just the points currently in one class.
 - **Lock** a class in **Classes in session** to protect its points: locked
   classes, hidden classes (toggled in the LiDAR panel's legend) and points
   outside the LiDAR panel's elevation filter are never selected.
-- Selected points are drawn in yellow. Choose the class to assign and press
-  **Apply (Enter)**; **Clear (Esc)** drops the selection. Clicking a row in
+- Selected points are drawn in yellow. Choose the class to assign (or press
+  **0**-**9** for ASPRS classes 0-9) and press **Apply (Enter)**; **Clear (Esc)** drops the selection. Clicking a row in
   **Classes in session** makes it the class to assign.
 - **Undo** and **Redo** step through the class assignments of the session.
 
