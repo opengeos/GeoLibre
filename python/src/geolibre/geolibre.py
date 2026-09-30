@@ -307,13 +307,18 @@ def render_project_html(
     if theme is not None:
         flags.append(f"theme={theme}")
     base, hash_sep, fragment = base_url.partition("#")
-    # A key the app_url already sets wins, like the in-app exporter's flags.
-    preset = {
-        key
-        for key, _ in urllib.parse.parse_qsl(
-            urllib.parse.urlsplit(base).query, keep_blank_values=True
-        )
-    }
+    # A layout/theme key the app_url already sets wins, like the in-app
+    # exporter's flags. embed=1 is forced: without embed mode the app never
+    # accepts the posted project, and the app reads only the first "embed", so
+    # an app_url "embed" that does not enable it is dropped rather than kept.
+    path, query_sep, query = base.partition("?")
+    kept = [
+        pair
+        for pair in query.split("&")
+        if pair and not (pair.split("=", 1)[0] == "embed" and pair not in ("embed=1", "embed=true"))
+    ]
+    base = f"{path}{query_sep if kept else ''}{'&'.join(kept)}"
+    preset = {pair.split("=", 1)[0] for pair in kept}
     flags = [flag for flag in flags if flag.split("=", 1)[0] not in preset]
     separator = "&" if "?" in base else "?"
     query = "&".join(flags)

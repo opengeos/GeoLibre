@@ -7,6 +7,7 @@ import {
   INLINE_PROJECT_FRAGMENT_KEY,
   INLINE_VIEWER_FRAGMENT_KEY,
 } from "./inline-project-fragment";
+import { arePanelsHidden, HIDDEN_PANEL_VALUES, normalizedParam } from "./layout-params";
 
 // Hosted viewer used as the default embed target (matches Python's default).
 export const DEFAULT_VIEWER_BASE_URL = "https://web.geolibre.app/";
@@ -86,12 +87,6 @@ function withViewerFlags(
 // Query params that pick the app's chrome (see useLayoutOptions); an export
 // carries the exporting app's values so it opens looking the same (#2764).
 const CHROME_PARAMS = ["layout", "maponly", "toolbar", "panels", "hidePanels"] as const;
-const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
-const MAP_ONLY_VALUES = new Set(["", "true", "1", "yes", "on"]);
-
-function normalized(value: string | null): string {
-  return value?.trim().toLowerCase() ?? "";
-}
 
 export interface ViewerChromeState {
   /** The theme the exporting app is showing. */
@@ -123,17 +118,12 @@ export function viewerChromeParams(
     // Only a hidden `panels` value is forwarded: the live collapse state below
     // replaces any other (e.g. a launch-time `panels=collapsed` the user has
     // since expanded).
-    if (value === null || (key === "panels" && !HIDDEN_PANEL_VALUES.has(normalized(value)))) {
+    if (value === null || (key === "panels" && !HIDDEN_PANEL_VALUES.has(normalizedParam(value)))) {
       continue;
     }
     out.push([key, value]);
   }
-  // Mirrors panelsHidden in useLayoutOptions.
-  const panelsHidden =
-    (params.has("maponly") && MAP_ONLY_VALUES.has(normalized(params.get("maponly")))) ||
-    HIDDEN_PANEL_VALUES.has(normalized(params.get("panels"))) ||
-    normalized(params.get("hidePanels")) === "true";
-  if (state.layersCollapsed && !panelsHidden) out.push(["panels", "collapsed"]);
+  if (state.layersCollapsed && !arePanelsHidden(params)) out.push(["panels", "collapsed"]);
   if (state.themeMode) out.push(["theme", state.themeMode]);
   return out;
 }

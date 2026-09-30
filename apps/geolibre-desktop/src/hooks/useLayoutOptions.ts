@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { arePanelsHidden, isMapOnly, normalizedParam } from "../lib/layout-params";
 import { useDesktopSettingsStore, type DesktopLayoutSettings } from "./useDesktopSettings";
 
 export interface LayoutOptions {
@@ -28,8 +29,6 @@ export interface LayoutOptions {
 const COMPACT_LAYOUT_VALUES = new Set(["compact", "embed", "iframe"]);
 const ICON_TOOLBAR_VALUES = new Set(["icon", "icons", "icon-only"]);
 const HIDDEN_TOOLBAR_VALUES = new Set(["hidden", "hide", "none", "off"]);
-const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
-const MAP_ONLY_VALUES = new Set(["", "true", "1", "yes", "on"]);
 
 export function useLayoutOptions(): LayoutOptions {
   // Shallow equality keeps unrelated desktop-settings updates (which always
@@ -70,20 +69,15 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
   const panels = normalizedParam(params.get("panels"));
   const toolbar = normalizedParam(params.get("toolbar"));
   // `maponly` hides the entire chrome (toolbar, panels, status bar), leaving
-  // only the map. The param can be a bare flag (`?maponly`) or an explicit
-  // truthy value (`?maponly=true`).
-  const mapOnly =
-    params.has("maponly") && MAP_ONLY_VALUES.has(normalizedParam(params.get("maponly")));
+  // only the map.
+  const mapOnly = isMapOnly(params);
   const viewer = isViewerLayout(window.location.search);
   // `maponly` implies `compact` so the map fills its container (the `<main>`
   // element gets `min-h-0`). This also forces `toolbarLabels` and
   // `showProjectInfo` to false below, which is harmless since the toolbar is
   // hidden, but any other consumer of `compact` sees `true` in map-only mode.
   const compact = mapOnly || viewer || COMPACT_LAYOUT_VALUES.has(layout);
-  const panelsHidden =
-    mapOnly ||
-    HIDDEN_PANEL_VALUES.has(panels) ||
-    normalizedParam(params.get("hidePanels")) === "true";
+  const panelsHidden = arePanelsHidden(params);
   const panelsCollapsed = !panelsHidden && panels === "collapsed";
   const toolbarLabels =
     !compact && !ICON_TOOLBAR_VALUES.has(toolbar) ? layoutSettings.toolbarLabels : false;
@@ -108,8 +102,4 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     toolbarVisible: !mapOnly && !HIDDEN_TOOLBAR_VALUES.has(toolbar),
     viewer,
   };
-}
-
-function normalizedParam(value: string | null): string {
-  return value?.trim().toLowerCase() ?? "";
 }
