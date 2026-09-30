@@ -852,6 +852,25 @@ describe("removeMultiLineStringVertex", () => {
     ]);
   });
 
+  it("removes the closing vertex of a closed part when the path points at it", () => {
+    const geometry = multi([
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 0],
+      ],
+    ]);
+    const path = ["geometry", "coordinates", 0, 3];
+    assert.deepEqual(removeMultiLineStringVertex(geometry, [0, 0], path)?.coordinates, [
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+      ],
+    ]);
+  });
+
   it("ignores a stale path and matches on the coordinate", () => {
     const geometry = multi([
       [
