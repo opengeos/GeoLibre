@@ -8445,7 +8445,14 @@
       "valuesInt8": "Thô (int8)",
       "stretch": "Kéo giãn (±)",
       "downloadValues": "Giá trị GeoTIFF",
-      "title": "Vectơ nhúng vệ tinh"
+      "title": "Vectơ nhúng vệ tinh",
+      "visualizeTesseraTitle": "Thêm các băng đã chọn trong vùng tìm kiếm vào bản đồ dưới dạng lớp RGB",
+      "readingChunks": "Đang đọc khối {{done}}/{{total}} (tối đa {{size}})…",
+      "tesseraTooLarge": "Vùng này cần {{count}} khối (khoảng {{size}}); giới hạn là {{limit}}. Hãy phóng to hoặc vẽ khung nhỏ hơn.",
+      "tesseraYearMissing": "Tessera {{year}} chưa hoàn thiện cho vùng này.",
+      "tesseraEmpty": "Không có embedding trong vùng này cho năm {{year}}.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "Trực quan hóa đọc các embedding v1.1 (AWS Open Data) ở độ phân giải đầy đủ 10 m trên vùng tìm kiếm, khoảng 1 MB mỗi km², và kéo giãn mỗi băng về khoảng 2–98% của nó."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} đã có trên bản đồ.",

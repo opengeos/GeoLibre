@@ -8532,7 +8532,14 @@
       "valuesInt8": "Ruw (int8)",
       "stretch": "Rek (±)",
       "downloadValues": "GeoTIFF-waarden",
-      "title": "Satellietembeddings"
+      "title": "Satellietembeddings",
+      "visualizeTesseraTitle": "De geselecteerde banden binnen het zoekgebied als RGB-laag aan de kaart toevoegen",
+      "readingChunks": "Chunk {{done}} van {{total}} lezen (tot {{size}})…",
+      "tesseraTooLarge": "Het gebied vereist {{count}} chunks (ongeveer {{size}}); de limiet is {{limit}}. Zoom in of teken een kleiner vak.",
+      "tesseraYearMissing": "Tessera {{year}} is voor dit gebied nog niet compleet.",
+      "tesseraEmpty": "Geen embeddings in dit gebied voor {{year}}.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "Visualiseren leest de v1.1-embeddings (AWS Open Data) op volledige 10 m-resolutie binnen het zoekgebied, ongeveer 1 MB per km², en rekt elke band op tot zijn 2–98%-bereik."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} staat al op de kaart.",

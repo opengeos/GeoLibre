@@ -8532,7 +8532,14 @@
       "valuesInt8": "Ham (int8)",
       "stretch": "Germe (±)",
       "downloadValues": "GeoTIFF değerleri",
-      "title": "Uydu Gömme Vektörleri"
+      "title": "Uydu Gömme Vektörleri",
+      "visualizeTesseraTitle": "Arama alanındaki seçili bantları haritaya RGB katmanı olarak ekle",
+      "readingChunks": "{{total}} parçadan {{done}}. okunuyor ({{size}}'a kadar)…",
+      "tesseraTooLarge": "Alan için {{count}} parça (yaklaşık {{size}}) gerekiyor; sınır {{limit}}. Yakınlaştırın veya daha küçük bir kutu çizin.",
+      "tesseraYearMissing": "Tessera {{year}} bu alan için henüz tamamlanmadı.",
+      "tesseraEmpty": "Bu alanda {{year}} için gömme yok.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "Görselleştir, arama alanındaki v1.1 gömmelerini (AWS Open Data) tam 10 m çözünürlükte okur (km² başına yaklaşık 1 MB) ve her bandı %2–98 aralığına gerer."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} zaten haritada.",

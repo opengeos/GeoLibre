@@ -8532,7 +8532,14 @@
       "valuesInt8": "Sin procesar (int8)",
       "stretch": "Estiramiento (±)",
       "downloadValues": "Valores GeoTIFF",
-      "title": "Embeddings satelitales"
+      "title": "Embeddings satelitales",
+      "visualizeTesseraTitle": "Añadir las bandas seleccionadas en el área de búsqueda al mapa como capa RGB",
+      "readingChunks": "Leyendo fragmento {{done}} de {{total}} (hasta {{size}})…",
+      "tesseraTooLarge": "El área necesita {{count}} fragmentos (unos {{size}}); el límite es {{limit}}. Acerque el mapa o dibuje un recuadro más pequeño.",
+      "tesseraYearMissing": "Tessera {{year}} aún no está completo para esta área.",
+      "tesseraEmpty": "No hay embeddings en esta área para {{year}}.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "Visualizar lee los embeddings v1.1 (AWS Open Data) a resolución completa de 10 m en el área de búsqueda, alrededor de 1 MB por km², y ajusta cada banda a su rango del 2–98 %."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} ya está en el mapa.",

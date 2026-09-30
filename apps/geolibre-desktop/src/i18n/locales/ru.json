@@ -8706,7 +8706,14 @@
       "valuesInt8": "Исходные (int8)",
       "stretch": "Растяжка (±)",
       "downloadValues": "Значения GeoTIFF",
-      "title": "Спутниковые эмбеддинги"
+      "title": "Спутниковые эмбеддинги",
+      "visualizeTesseraTitle": "Добавить выбранные каналы в области поиска на карту как RGB-слой",
+      "readingChunks": "Чтение блока {{done}} из {{total}} (до {{size}})…",
+      "tesseraTooLarge": "Для области нужно {{count}} блоков (около {{size}}); лимит — {{limit}}. Приблизьте карту или нарисуйте меньшую рамку.",
+      "tesseraYearMissing": "Tessera {{year}} для этой области ещё не готов полностью.",
+      "tesseraEmpty": "В этой области нет эмбеддингов за {{year}}.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "Визуализация читает эмбеддинги v1.1 (AWS Open Data) в полном разрешении 10 м в области поиска — около 1 МБ на км² — и растягивает каждый канал на его диапазон 2–98%."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} уже есть на карте.",

@@ -8445,7 +8445,14 @@
       "valuesInt8": "ค่าดิบ (int8)",
       "stretch": "ช่วงการยืดค่า (±)",
       "downloadValues": "ค่า GeoTIFF",
-      "title": "เอ็มเบดดิงภาพดาวเทียม"
+      "title": "เอ็มเบดดิงภาพดาวเทียม",
+      "visualizeTesseraTitle": "เพิ่มแบนด์ที่เลือกในพื้นที่ค้นหาลงในแผนที่เป็นเลเยอร์ RGB",
+      "readingChunks": "กำลังอ่านชังก์ {{done}} จาก {{total}} (สูงสุด {{size}})…",
+      "tesseraTooLarge": "พื้นที่นี้ต้องใช้ {{count}} ชังก์ (ประมาณ {{size}}) ขีดจำกัดคือ {{limit}} ซูมเข้าหรือวาดกรอบที่เล็กลง",
+      "tesseraYearMissing": "Tessera {{year}} ยังไม่สมบูรณ์สำหรับพื้นที่นี้",
+      "tesseraEmpty": "ไม่มีเอ็มเบดดิงในพื้นที่นี้สำหรับปี {{year}}",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "การแสดงผลจะอ่านเอ็มเบดดิง v1.1 (AWS Open Data) ที่ความละเอียดเต็ม 10 ม. ในพื้นที่ค้นหา ประมาณ 1 MB ต่อ ตร.กม. และยืดแต่ละแบนด์ให้อยู่ในช่วง 2–98%"
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} อยู่บนแผนที่แล้ว",

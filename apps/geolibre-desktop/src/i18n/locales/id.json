@@ -8445,7 +8445,14 @@
       "valuesInt8": "Mentah (int8)",
       "stretch": "Rentang (±)",
       "downloadValues": "Nilai GeoTIFF",
-      "title": "Embedding Satelit"
+      "title": "Embedding Satelit",
+      "visualizeTesseraTitle": "Tambahkan kanal yang dipilih di area pencarian ke peta sebagai layer RGB",
+      "readingChunks": "Membaca chunk {{done}} dari {{total}} (hingga {{size}})…",
+      "tesseraTooLarge": "Area ini memerlukan {{count}} chunk (sekitar {{size}}); batasnya {{limit}}. Perbesar peta atau gambar kotak yang lebih kecil.",
+      "tesseraYearMissing": "Tessera {{year}} belum lengkap untuk area ini.",
+      "tesseraEmpty": "Tidak ada embedding di area ini untuk {{year}}.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "Visualisasi membaca embedding v1.1 (AWS Open Data) pada resolusi penuh 10 m di area pencarian, sekitar 1 MB per km², dan meregangkan setiap kanal ke rentang 2–98%-nya."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} sudah ada di peta.",

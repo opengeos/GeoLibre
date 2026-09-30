@@ -8532,7 +8532,14 @@
       "valuesInt8": "خام (int8)",
       "stretch": "کشش (±)",
       "downloadValues": "مقادیر GeoTIFF",
-      "title": "جاسازی‌های ماهواره‌ای"
+      "title": "جاسازی‌های ماهواره‌ای",
+      "visualizeTesseraTitle": "باندهای انتخاب‌شده در محدودهٔ جستجو را به‌صورت لایهٔ RGB به نقشه بیفزایید",
+      "readingChunks": "در حال خواندن قطعهٔ {{done}} از {{total}} (تا {{size}})…",
+      "tesseraTooLarge": "این محدوده به {{count}} قطعه (حدود {{size}}) نیاز دارد؛ حد مجاز {{limit}} است. بزرگ‌نمایی کنید یا کادر کوچک‌تری بکشید.",
+      "tesseraYearMissing": "Tessera {{year}} هنوز برای این محدوده کامل نشده است.",
+      "tesseraEmpty": "در این محدوده برای {{year}} هیچ بردار نهانی وجود ندارد.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "نمایش، بردارهای نهان نسخهٔ v1.1 (داده‌های باز AWS) را با تفکیک کامل ۱۰ متر در محدودهٔ جستجو می‌خواند (حدود ۱ مگابایت برای هر کیلومتر مربع) و هر باند را به بازهٔ ۲ تا ۹۸ درصد آن می‌کشد."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} از پیش روی نقشه است.",

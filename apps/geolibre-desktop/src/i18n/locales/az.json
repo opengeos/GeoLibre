@@ -8556,7 +8556,14 @@
       "valuesInt8": "İlkin (int8)",
       "stretch": "Kontrast genişləndirilməsi (±)",
       "downloadValues": "GeoTIFF dəyərləri",
-      "title": "Peyk vektor təsvirləri"
+      "title": "Peyk vektor təsvirləri",
+      "visualizeTesseraTitle": "Axtarış sahəsi üzrə seçilmiş kanalları RGB layı kimi xəritəyə əlavə et",
+      "readingChunks": "{{total}} hissədən {{done}}-i oxunur ({{size}}-a qədər)…",
+      "tesseraTooLarge": "Sahə üçün {{count}} hissə lazımdır (təxminən {{size}}); limit {{limit}}-dir. Yaxınlaşdırın və ya daha kiçik çərçivə çəkin.",
+      "tesseraYearMissing": "Tessera {{year}} bu sahə üçün hələ tamamlanmayıb.",
+      "tesseraEmpty": "Bu sahədə {{year}} üçün embedding yoxdur.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "Vizuallaşdırma v1.1 embedding-lərini (AWS Open Data) axtarış sahəsi üzrə tam 10 m ayırdetmə ilə oxuyur (təxminən 1 MB/km²) və hər kanalı 2–98% aralığına uzadır."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} artıq xəritədədir.",

@@ -8445,7 +8445,14 @@
       "valuesInt8": "原始值（int8）",
       "stretch": "拉伸（±）",
       "downloadValues": "GeoTIFF 数值",
-      "title": "卫星嵌入"
+      "title": "卫星嵌入",
+      "visualizeTesseraTitle": "将搜索区域内所选波段作为 RGB 图层添加到地图",
+      "readingChunks": "正在读取第 {{done}}/{{total}} 个数据块（最多 {{size}}）…",
+      "tesseraTooLarge": "该区域需要 {{count}} 个数据块（约 {{size}}），上限为 {{limit}}。请放大或绘制更小的范围框。",
+      "tesseraYearMissing": "该区域的 Tessera {{year}} 数据尚未完成。",
+      "tesseraEmpty": "该区域没有 {{year}} 年的嵌入数据。",
+      "tesseraLayerName": "Tessera {{year}}（{{bands}}）",
+      "tesseraRenderHint": "可视化会以 10 米全分辨率读取搜索区域内的 v1.1 嵌入（AWS 开放数据），每平方公里约 1 MB，并将每个波段拉伸到其 2–98% 范围。"
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} 已在地图上。",

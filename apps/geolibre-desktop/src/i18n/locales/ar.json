@@ -8879,7 +8879,14 @@
       "valuesInt8": "خام (int8)",
       "stretch": "التمديد (±)",
       "downloadValues": "قيم GeoTIFF",
-      "title": "تضمينات الأقمار الصناعية"
+      "title": "تضمينات الأقمار الصناعية",
+      "visualizeTesseraTitle": "إضافة النطاقات المحددة ضمن منطقة البحث إلى الخريطة كطبقة RGB",
+      "readingChunks": "قراءة الجزء {{done}} من {{total}} (حتى {{size}})…",
+      "tesseraTooLarge": "تحتاج المنطقة إلى {{count}} جزءًا (نحو {{size}})؛ والحد الأقصى {{limit}}. كبّر الخريطة أو ارسم مربعًا أصغر.",
+      "tesseraYearMissing": "بيانات Tessera لعام {{year}} غير مكتملة لهذه المنطقة بعد.",
+      "tesseraEmpty": "لا توجد تضمينات في هذه المنطقة لعام {{year}}.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "يقرأ التصوّر تضمينات الإصدار v1.1 (بيانات AWS المفتوحة) بدقة 10 م الكاملة ضمن منطقة البحث، أي نحو 1 ميغابايت لكل كم²، ويمدّ كل نطاق إلى مداه بين 2 و98%."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} موجودة بالفعل على الخريطة.",

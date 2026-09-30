@@ -92,7 +92,8 @@
     "shpjs": "^6.2.0",
     "three": "^0.186.1",
     "webdggrid": "^1.9.0",
-    "whitebox-wasm": "^0.6.0"
+    "whitebox-wasm": "^0.6.0",
+    "zarrita": "^0.7.5"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

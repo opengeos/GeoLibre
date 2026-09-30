@@ -51,6 +51,18 @@ import {
   tesseraTilesForBbox,
   tesseraTileUrls,
 } from "./satellite-embeddings-grids";
+import {
+  TESSERA_BAND_COUNT,
+  TESSERA_CHUNK_BYTES,
+  TESSERA_DEFAULT_RGB_BANDS,
+  TESSERA_MAX_READ_CHUNKS,
+  TesseraTooLargeError,
+  TesseraYearMissingError,
+  readTesseraBands,
+  renderTesseraRgba,
+  tesseraUtmBoundsToCorners,
+  tesseraZone,
+} from "./satellite-embeddings-tessera";
 import { getRasterRenderEngine } from "./maplibre-raster";
 import { getControlMap } from "./style-map";
 
@@ -177,7 +189,7 @@ interface ResultRow {
   ring: [number, number][];
   bbox: LonLatBbox;
   aef?: AefTile;
-  tessera?: { embeddings: string; scales: string };
+  tessera?: { embeddings: string; scales: string; year: number };
   earthIndex?: { url: string; tileId: string };
 }
 
@@ -198,6 +210,8 @@ interface PanelState {
   status: { text: string; error: boolean } | null;
   busy: boolean;
   rgbBands: [number, number, number];
+  /** Tessera's RGB bands (its 128 dimensions differ from AlphaEarth's 64). */
+  tesseraBands: [number, number, number];
   stretch: number;
   downloadFloat: boolean;
   /** Whether the dataset info card is expanded (collapsed by default). */
@@ -222,6 +236,7 @@ function initialState(): PanelState {
     status: null,
     busy: false,
     rgbBands: [...AEF_DEFAULT_RGB_BANDS],
+    tesseraBands: [...TESSERA_DEFAULT_RGB_BANDS],
     stretch: AEF_DEFAULT_STRETCH,
     downloadFloat: true,
     infoExpanded: false,
@@ -659,7 +674,7 @@ async function searchTessera(bbox: LonLatBbox, signal: AbortSignal): Promise<Res
         subtitle: `${year} · ${formatBytes(size)}`,
         ring: bboxRing(tile.bbox),
         bbox: tile.bbox,
-        tessera: tesseraTileUrls(tile.name, year),
+        tessera: { ...tesseraTileUrls(tile.name, year), year },
       },
     ];
   });
@@ -798,6 +813,99 @@ async function visualizeAlphaEarth(
       ? `${done} ${tr("overviewNote", "Rendered from a 1/{{factor}} overview; search a smaller area for full 10 m detail.", { factor: 2 ** plan.level })}`
       : done,
   );
+}
+
+/**
+ * Visualizes a Tessera tile's RGB composite from the v1.1 store (the release
+ * on AWS Open Data), read at full 10 m over the search area clipped to the
+ * tile. The store has no overviews, so the read is capped by area rather than
+ * downsampled.
+ */
+async function visualizeTessera(
+  row: ResultRow,
+  setStatus: (text: string) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const { year } = row.tessera!;
+  // Read settings once: the user may change them while the chunks load.
+  const bands: [number, number, number] = [...state.tesseraBands];
+  const bandLabel = bands.join(", ");
+  setStatus(tr("opening", "Opening {{name}}…", { name: row.title }));
+  let result;
+  try {
+    result = await readTesseraBands(readRegion(row), year, bands, signal, (done, total) => {
+      setStatus(
+        tr("readingChunks", "Reading chunk {{done}} of {{total}} (up to {{size}})…", {
+          done,
+          total,
+          size: formatBytes(total * TESSERA_CHUNK_BYTES),
+        }),
+      );
+    });
+  } catch (error) {
+    if (error instanceof TesseraTooLargeError) {
+      throw new Error(
+        tr(
+          "tesseraTooLarge",
+          "The area needs {{count}} chunks (about {{size}}); the limit is {{limit}}. Zoom in or draw a smaller box.",
+          {
+            count: error.chunkCount,
+            size: formatBytes(error.chunkCount * TESSERA_CHUNK_BYTES),
+            limit: TESSERA_MAX_READ_CHUNKS,
+          },
+        ),
+        { cause: error },
+      );
+    }
+    if (error instanceof TesseraYearMissingError) {
+      throw new Error(
+        tr("tesseraYearMissing", "Tessera {{year}} is not complete for this area yet.", { year }),
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+  if (!result) throw new Error(tr("outsideTile", "The search area does not overlap this tile."));
+  signal.throwIfAborted();
+  const { plan } = result;
+  if (!result.bands[0].some((value) => Number.isFinite(value))) {
+    setStatus(tr("tesseraEmpty", "No embeddings in this area for {{year}}.", { year }));
+    return;
+  }
+  const rgba = renderTesseraRgba(result.bands, plan.width, plan.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = plan.width;
+  canvas.height = plan.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas 2D is not available");
+  context.putImageData(
+    new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, plan.width, plan.height),
+    0,
+    0,
+  );
+  const zone = tesseraZone((row.bbox[0] + row.bbox[2]) / 2);
+  const coordinates = tesseraUtmBoundsToCorners(plan.bounds, zone);
+  const dataset = getSatelliteEmbeddingDataset("tessera");
+  const layer: GeoLibreLayer = {
+    id: crypto.randomUUID(),
+    name: tr("tesseraLayerName", "Tessera {{year}} ({{bands}})", { year, bands: bandLabel }),
+    type: "image",
+    source: { type: "image", url: canvas.toDataURL("image/png"), coordinates },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      sourceKind: IMAGE_SOURCE_KIND,
+      bounds: ringBbox(coordinates),
+      dataset: dataset.id,
+      tile: row.title,
+      year,
+      bands: bandLabel,
+    },
+  };
+  useAppStore.getState().addLayer(layer);
+  appRef?.fitBounds?.(ringBbox(coordinates));
+  setStatus(tr("visualized", "Added {{name}}.", { name: layer.name }));
 }
 
 /** Builds a clipped 64-band GeoTIFF of an AlphaEarth tile and saves it. */
@@ -1166,6 +1274,14 @@ function buildPanel(container: HTMLElement): () => void {
     if (row.tessera) {
       const urls = row.tessera;
       return [
+        taskButton(
+          tr("visualize", "Visualize"),
+          (signal) => visualizeTessera(row, statusSetter, signal),
+          tr(
+            "visualizeTesseraTitle",
+            "Add the selected bands over the search area to the map as an RGB layer",
+          ),
+        ),
         button(tr("downloadEmbeddings", "Embeddings (.npy)"), CSS.action, () =>
           downloadUrl(urls.embeddings),
         ),
@@ -1330,21 +1446,23 @@ function buildPanel(container: HTMLElement): () => void {
     searchSection.append(searchButton);
     body.append(searchSection);
 
-    // --- AlphaEarth rendering options ---------------------------------------
-    if (dataset.id === "alphaearth") {
-      const options = element("div", CSS.section);
-      options.append(element("div", CSS.sectionTitle, tr("renderOptions", "Visualization")));
+    // Red/green/blue band pickers writing into `selected` (edited in place).
+    const bandPicker = (
+      count: number,
+      name: (band: number) => string,
+      selected: [number, number, number],
+    ): HTMLElement => {
       const bandGrid = element("div", CSS.grid3);
       (["red", "green", "blue"] as const).forEach((channel, channelIndex) => {
         const select = element("select", CSS.input);
-        for (let band = 0; band < AEF_BAND_COUNT; band += 1) {
-          const option = element("option", undefined, aefBandName(band));
+        for (let band = 0; band < count; band += 1) {
+          const option = element("option", undefined, name(band));
           option.value = String(band);
-          option.selected = state.rgbBands[channelIndex] === band;
+          option.selected = selected[channelIndex] === band;
           select.append(option);
         }
         select.addEventListener("change", () => {
-          state.rgbBands[channelIndex] = Number(select.value);
+          selected[channelIndex] = Number(select.value);
         });
         const names = {
           red: tr("red", "Red"),
@@ -1353,6 +1471,32 @@ function buildPanel(container: HTMLElement): () => void {
         };
         bandGrid.append(labeled(names[channel], select));
       });
+      return bandGrid;
+    };
+
+    // --- Tessera rendering options ------------------------------------------
+    if (dataset.id === "tessera") {
+      const options = element("div", CSS.section);
+      options.append(
+        element("div", CSS.sectionTitle, tr("renderOptions", "Visualization")),
+        bandPicker(TESSERA_BAND_COUNT, String, state.tesseraBands),
+        element(
+          "p",
+          CSS.hint,
+          tr(
+            "tesseraRenderHint",
+            "Visualize reads the v1.1 embeddings (AWS Open Data) at full 10 m resolution over the search area, about 1 MB per km², and stretches each band to its 2–98% range.",
+          ),
+        ),
+      );
+      body.append(options);
+    }
+
+    // --- AlphaEarth rendering options ---------------------------------------
+    if (dataset.id === "alphaearth") {
+      const options = element("div", CSS.section);
+      options.append(element("div", CSS.sectionTitle, tr("renderOptions", "Visualization")));
+      const bandGrid = bandPicker(AEF_BAND_COUNT, aefBandName, state.rgbBands);
       const stretch = element("input", CSS.input);
       stretch.type = "number";
       stretch.min = "0.05";
@@ -1465,7 +1609,7 @@ function clearOverlays(app: GeoLibreAppAPI): void {
  * Satellite Embeddings plugin: a catalog of popular pre-computed embedding
  * datasets (AlphaEarth/Google Satellite Embedding, Tessera, Earth Index, Clay,
  * Major TOM, Copernicus-Embed) with search by map view or drawn box, on-map
- * visualization (AlphaEarth RGB composites, Earth Index points colored by
+ * visualization (AlphaEarth and Tessera RGB composites, Earth Index points colored by
  * PCA), and downloads (clipped GeoTIFFs, source tiles and files).
  */
 export const maplibreSatelliteEmbeddingsPlugin: GeoLibrePlugin = {

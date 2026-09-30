@@ -36,6 +36,16 @@ import {
   tesseraTilesForBbox,
   tesseraTileUrls,
 } from "../packages/plugins/src/plugins/satellite-embeddings-grids";
+import {
+  lonLatBboxToTesseraUtm,
+  percentileRange,
+  planTesseraWindow,
+  renderTesseraRgba,
+  tesseraUtmBoundsToCorners,
+  tesseraZone,
+  tesseraZoneGroup,
+  tesseraZoneInfo,
+} from "../packages/plugins/src/plugins/satellite-embeddings-tessera";
 
 const AEF_HREF =
   "s3://us-west-2.opendata.source.coop/tge-labs/aef/v1/annual/2024/17N/xs5hlzg8b1yjj29ta-0000000000-0000000000.tiff";
@@ -321,5 +331,65 @@ describe("Earth Index helpers", () => {
       else assert.ok(first[index] <= first[index - 1]);
     }
     assert.deepEqual(pcaColors([]), []);
+  });
+});
+
+describe("Tessera v1.1 helpers", () => {
+  // Zone 33's group, as the store publishes it.
+  const transform = [10, 0, 163840, 0, -10, 9338880];
+  const shape = [1826816, 69632];
+
+  it("picks the nominal 6° zone and its group", () => {
+    assert.equal(tesseraZone(14.42), 33);
+    assert.equal(tesseraZone(-180), 1);
+    assert.equal(tesseraZone(179.99), 60);
+    assert.equal(tesseraZone(186), 2);
+    assert.equal(tesseraZoneGroup(7), "utm07");
+  });
+
+  it("plans a window and counts the chunks it touches", () => {
+    const plan = planTesseraWindow(transform, shape, [500000, 5540000, 500640, 5540320]);
+    assert.ok(plan);
+    assert.deepEqual(plan.window, [33616, 379856, 33680, 379888]);
+    assert.equal(plan.width, 64);
+    assert.equal(plan.height, 32);
+    assert.deepEqual(plan.bounds, [500000, 5540000, 500640, 5540320]);
+    // Columns 33616–33679 span chunks 1050–1052; rows 379856–379887 span 11870–11871.
+    assert.equal(plan.chunkCount, 6);
+    assert.equal(planTesseraWindow(transform, shape, [0, 0, 100, 100]), null);
+  });
+
+  it("projects south of the equator with negative northings", () => {
+    const [, minY, , maxY] = lonLatBboxToTesseraUtm([14.9, -10.1, 15.1, -9.9], 33);
+    assert.ok(maxY < 0 && minY < maxY);
+    const corners = tesseraUtmBoundsToCorners(
+      lonLatBboxToTesseraUtm([14.9, -10.1, 15.1, -9.9], 33),
+      33,
+    );
+    assert.ok(Math.abs(corners[0][1] - -9.9) < 0.01);
+  });
+
+  it("reads years complete per hemisphere", () => {
+    const info = tesseraZoneInfo(1, {
+      "spatial:transform": transform,
+      "spatial:shape": shape,
+      "geotessera:source_groups": {
+        "01N": { years_complete: [2024, 2025] },
+        "01S": { years_complete: [2025] },
+      },
+    });
+    assert.deepEqual(info.yearsComplete, { N: [2024, 2025], S: [2025] });
+    assert.throws(() => tesseraZoneInfo(1, {}));
+  });
+
+  it("stretches each band to its percentiles and hides unembedded pixels", () => {
+    const values = Float32Array.from({ length: 101 }, (_, index) => index);
+    assert.deepEqual(percentileRange(values), [2, 98]);
+    assert.equal(percentileRange(Float32Array.of(Number.NaN)), null);
+    const band = Float32Array.from([Number.NaN, ...Array.from({ length: 100 }, (_, i) => i)]);
+    const rgba = renderTesseraRgba([band, band, band], 101, 1);
+    assert.deepEqual([...rgba.slice(0, 4)], [0, 0, 0, 0]);
+    assert.equal(rgba[4 * 100 + 3], 255);
+    assert.equal(rgba[4 * 100], 255);
   });
 });

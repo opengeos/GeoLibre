@@ -8445,7 +8445,14 @@
       "valuesInt8": "원시 값(int8)",
       "stretch": "스트레치(±)",
       "downloadValues": "GeoTIFF 값",
-      "title": "위성 임베딩"
+      "title": "위성 임베딩",
+      "visualizeTesseraTitle": "검색 영역의 선택한 밴드를 RGB 레이어로 지도에 추가",
+      "readingChunks": "청크 {{done}}/{{total}} 읽는 중(최대 {{size}})…",
+      "tesseraTooLarge": "이 영역에는 청크 {{count}}개(약 {{size}})가 필요하며 한도는 {{limit}}개입니다. 확대하거나 더 작은 상자를 그리세요.",
+      "tesseraYearMissing": "이 영역의 Tessera {{year}} 데이터는 아직 완성되지 않았습니다.",
+      "tesseraEmpty": "이 영역에는 {{year}}년 임베딩이 없습니다.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "시각화는 검색 영역의 v1.1 임베딩(AWS Open Data)을 10m 전체 해상도로 읽고(1km²당 약 1MB), 각 밴드를 2–98% 범위로 스트레치합니다."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}}이(가) 이미 지도에 있습니다.",

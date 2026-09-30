@@ -94,9 +94,9 @@ export const SATELLITE_EMBEDDING_DATASETS: readonly SatelliteEmbeddingDataset[] 
     dimensions: 128,
     years: range(2017, 2025),
     coverage: "Global land (0.1° tiles)",
-    dataUrl: "https://github.com/ucam-eo/geotessera",
+    dataUrl: "https://registry.opendata.aws/tessera/",
     paperUrl: "https://arxiv.org/abs/2506.20380",
-    capabilities: { search: true, visualize: false, download: true },
+    capabilities: { search: true, visualize: true, download: true },
   },
   {
     id: "earth-index",

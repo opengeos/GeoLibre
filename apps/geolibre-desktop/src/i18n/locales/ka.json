@@ -8532,7 +8532,14 @@
       "valuesInt8": "ნედლი (int8)",
       "stretch": "გაჭიმვა (±)",
       "downloadValues": "GeoTIFF მნიშვნელობები",
-      "title": "სატელიტური ემბედინგები"
+      "title": "სატელიტური ემბედინგები",
+      "visualizeTesseraTitle": "საძიებო არეალში არჩეული არხების რუკაზე დამატება RGB შრედ",
+      "readingChunks": "იკითხება ნაწილი {{done}} / {{total}} ({{size}}-მდე)…",
+      "tesseraTooLarge": "არეალს სჭირდება {{count}} ნაწილი (დაახლ. {{size}}); ლიმიტია {{limit}}. გაადიდეთ ან დახაზეთ უფრო პატარა ჩარჩო.",
+      "tesseraYearMissing": "Tessera {{year}} ამ არეალისთვის ჯერ არ არის სრული.",
+      "tesseraEmpty": "ამ არეალში {{year}} წლისთვის ჩაშენებები არ არის.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "ვიზუალიზაცია კითხულობს v1.1 ჩაშენებებს (AWS Open Data) სრული 10 მ გარჩევადობით საძიებო არეალში, დაახლ. 1 MB კმ²-ზე, და თითოეულ არხს 2–98% დიაპაზონზე ჭიმავს."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} უკვე რუკაზეა.",

@@ -8556,7 +8556,14 @@
       "valuesInt8": "Raw (int8)",
       "stretch": "Stretch (±)",
       "downloadValues": "GeoTIFF values",
-      "title": "Satellite Embeddings"
+      "title": "Satellite Embeddings",
+      "visualizeTesseraTitle": "Add the selected bands over the search area to the map as an RGB layer",
+      "readingChunks": "Reading chunk {{done}} of {{total}} (up to {{size}})…",
+      "tesseraTooLarge": "The area needs {{count}} chunks (about {{size}}); the limit is {{limit}}. Zoom in or draw a smaller box.",
+      "tesseraYearMissing": "Tessera {{year}} is not complete for this area yet.",
+      "tesseraEmpty": "No embeddings in this area for {{year}}.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "Visualize reads the v1.1 embeddings (AWS Open Data) at full 10 m resolution over the search area, about 1 MB per km², and stretches each band to its 2–98% range."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} is already on the map.",

@@ -238,7 +238,7 @@ A catalog of popular pre-computed **satellite embedding** datasets — per-pixel
 | Dataset | Layout | Resolution | Search | Visualize | Download |
 | --- | --- | --- | --- | --- | --- |
 | [AlphaEarth Foundations](https://source.coop/tge-labs/aef) (Google Satellite Embedding V1), 2017–2025 | 64-band raster | 10 m | ✓ | RGB composite of any three bands | Clipped GeoTIFF, source COG, VRT |
-| [Tessera](https://github.com/ucam-eo/geotessera), 2017–2025 | 128-band raster | 10 m | ✓ | — | Embeddings and scales (`.npy`) |
+| [Tessera](https://registry.opendata.aws/tessera/), 2017–2025 | 128-band raster | 10 m | ✓ | RGB composite of any three bands | Embeddings and scales (`.npy`) |
 | [Earth Index](https://source.coop/earthgenome/earthindexembeddings), 2024 | Points (GeoParquet) | ~320 m | ✓ | Points colored by principal components | Source GeoParquet |
 | Clay, Major TOM, Copernicus-Embed | — | — | Links to the data source only | | |
 
@@ -246,10 +246,14 @@ A catalog of popular pre-computed **satellite embedding** datasets — per-pixel
 - Search by the **current map view** or a **box drawn on the map**, and (for annual datasets) a year. Result footprints are drawn as one entry in the Layers panel; hovering a result outlines it, and clicking a footprint scrolls to its result.
 - **AlphaEarth → Visualize** adds the chosen bands (Earth Engine's `A01`, `A16`, `A09` by default) as an RGB layer, stretching de-quantized values across ±0.3 by default. When the raster rendering engine is **cog-tiler-wasm (WASM)** (the default) the whole tile becomes a regular COG layer, zoomable to full 10 m detail, with its bands and range adjustable in the Style panel; the stretch is applied to the raw int8 values, so colors differ slightly from the de-quantized stretch. The GPU and TiTiler engines cannot read these files, so on those the panel instead renders a snapshot image of the search area (from an overview when the area is large; the status line says so) rather than switching the engine for every raster on the map.
 - **AlphaEarth → GeoTIFF** saves all 64 bands over the search area as a north-up GeoTIFF in the tile's UTM zone, either de-quantized to float32 (unit-length vectors, NoData as NaN) or as the raw int8 values (NoData −128). The clip is built in memory and capped at 256 MB: about 100 km² of float32 values, or 400 km² of int8.
+- **Tessera → Visualize** reads the chosen bands (0, 1, 2 by default) of the v1.1 embeddings released on [AWS Open Data](https://registry.opendata.aws/tessera/) over the search area clipped to the 0.1° tile, de-quantizes them (int8 × the per-pixel scale), and adds them as an RGB image layer, stretching each band to its own 2–98% range. Unembedded pixels are transparent. The store has no overviews, so the read is always full 10 m resolution and costs about 1 MB per km² whichever bands you pick; it is capped at 1,300 chunks of 320 × 320 m (about 130 MB, enough for one whole tile). The status line shows the progress and the upper bound. The **`.npy`** downloads still fetch the v1 tiles.
 - **Earth Index → Load points** adds the embeddings inside the search area as a point layer. Each point is colored by the top three principal components of the loaded vectors, so similar places get similar colors.
 
 !!! note "AlphaEarth files are stored bottom-up"
     The AlphaEarth COGs on Source Cooperative put their southern row first, which many GDAL workflows do not expect. The WASM engine (cog-tiler-wasm 0.3.8 and later) and the panel's own reader flip them; the GPU engine does not yet. The panel also offers each tile's companion `.vrt`, which GDAL reads north-up. The data is licensed CC-BY 4.0: *The AlphaEarth Foundations Satellite Embedding dataset is produced by Google and Google DeepMind.*
+
+!!! note "Where the Tessera v1.1 data is read from"
+    The AWS release (`s3://tessera-embeddings/v1.1/dclimate.icechunk`) is an Icechunk repository whose `scales` array is PCodec-encoded, which no browser Zarr reader decodes. The panel reads the publishers' plain Zarr v3 mirror of the same snapshot on [Source Cooperative](https://source.coop/tessera/tessera/zarr/v1.1-dclimate) instead. A 0.1° tile always lies in one UTM zone, so no reprojection across zones is needed.
 
 ## Fields of the World
 

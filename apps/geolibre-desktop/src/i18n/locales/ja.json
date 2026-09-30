@@ -8445,7 +8445,14 @@
       "valuesInt8": "生の値 (int8)",
       "stretch": "ストレッチ (±)",
       "downloadValues": "GeoTIFF値",
-      "title": "衛星エンベディング"
+      "title": "衛星エンベディング",
+      "visualizeTesseraTitle": "検索範囲の選択したバンドをRGBレイヤーとして地図に追加",
+      "readingChunks": "チャンク {{done}} / {{total}} を読み込み中（最大 {{size}}）…",
+      "tesseraTooLarge": "この範囲には {{count}} 個のチャンク（約 {{size}}）が必要です。上限は {{limit}} です。ズームインするか、小さい範囲を描画してください。",
+      "tesseraYearMissing": "この範囲の Tessera {{year}} はまだ完成していません。",
+      "tesseraEmpty": "この範囲には {{year}} の埋め込みがありません。",
+      "tesseraLayerName": "Tessera {{year}}（{{bands}}）",
+      "tesseraRenderHint": "可視化では、検索範囲の v1.1 埋め込み（AWS Open Data）を 10 m のフル解像度で読み込み（1 km² あたり約 1 MB）、各バンドを 2〜98% の範囲にストレッチします。"
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} はすでに地図上にあります。",

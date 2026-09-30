@@ -8532,7 +8532,14 @@
       "valuesInt8": "कच्चा (int8)",
       "stretch": "स्ट्रेच (±)",
       "downloadValues": "GeoTIFF मान",
-      "title": "सैटेलाइट एम्बेडिंग"
+      "title": "सैटेलाइट एम्बेडिंग",
+      "visualizeTesseraTitle": "खोज क्षेत्र पर चयनित बैंड को RGB लेयर के रूप में मानचित्र में जोड़ें",
+      "readingChunks": "{{total}} में से चंक {{done}} पढ़ा जा रहा है ({{size}} तक)…",
+      "tesseraTooLarge": "इस क्षेत्र के लिए {{count}} चंक (लगभग {{size}}) चाहिए; सीमा {{limit}} है। ज़ूम इन करें या छोटा बॉक्स बनाएँ।",
+      "tesseraYearMissing": "इस क्षेत्र के लिए Tessera {{year}} अभी पूरा नहीं है।",
+      "tesseraEmpty": "इस क्षेत्र में {{year}} के लिए कोई एम्बेडिंग नहीं है।",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "विज़ुअलाइज़ खोज क्षेत्र पर v1.1 एम्बेडिंग (AWS Open Data) को पूर्ण 10 मी रिज़ॉल्यूशन पर पढ़ता है, लगभग 1 MB प्रति किमी², और प्रत्येक बैंड को उसकी 2–98% सीमा तक फैलाता है।"
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} पहले से मानचित्र पर है।",

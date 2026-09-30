@@ -8619,7 +8619,14 @@
       "valuesInt8": "גולמי (int8)",
       "stretch": "מתיחה (±)",
       "downloadValues": "ערכי GeoTIFF",
-      "title": "הטמעות לוויין"
+      "title": "הטמעות לוויין",
+      "visualizeTesseraTitle": "הוסף את הערוצים שנבחרו באזור החיפוש למפה כשכבת RGB",
+      "readingChunks": "קורא מקטע {{done}} מתוך {{total}} (עד {{size}})…",
+      "tesseraTooLarge": "האזור דורש {{count}} מקטעים (כ-{{size}}); המגבלה היא {{limit}}. התקרב או שרטט תיבה קטנה יותר.",
+      "tesseraYearMissing": "Tessera {{year}} עדיין אינו שלם עבור אזור זה.",
+      "tesseraEmpty": "אין הטמעות באזור זה עבור {{year}}.",
+      "tesseraLayerName": "Tessera {{year}} ({{bands}})",
+      "tesseraRenderHint": "ההדמיה קוראת את ההטמעות של v1.1 (AWS Open Data) ברזולוציה מלאה של 10 מ' באזור החיפוש, כ-1 MB לקמ\"ר, ומותחת כל ערוץ לטווח 2–98% שלו."
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} כבר נמצא במפה.",
