@@ -289,8 +289,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   // Classes whose points no selection may pick (Segments.ai's protect/lock).
   const lockedClasses = new Set<number>();
   let boundControl: LidarControl | null = null;
-  /** The cloud whose view area is pinned at full detail, if any. */
-  let pinnedCloudId: string | null = null;
+  /** Clouds with an area pinned at full detail (each releases on its own). */
+  const pinnedClouds = new Set<string>();
+  let fullDetailLoading = false;
   let disposed = false;
 
   container.replaceChildren();
@@ -1066,9 +1067,13 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     cloudSelect.disabled = clouds.length === 0 || session !== null;
     startButton.disabled = clouds.length === 0 && session === null;
     openLidarButton.hidden = clouds.length > 0 || session !== null;
-    fullDetailButton.disabled = clouds.length === 0;
-    if (pinnedCloudId && !clouds.some((cloud) => cloud.id === pinnedCloudId)) pinnedCloudId = null;
-    releaseDetailButton.hidden = pinnedCloudId === null;
+    // Stay disabled while a load runs, whatever re-renders meanwhile.
+    fullDetailButton.disabled = clouds.length === 0 || fullDetailLoading;
+    for (const id of [...pinnedClouds]) {
+      if (!clouds.some((cloud) => cloud.id === id)) pinnedClouds.delete(id);
+    }
+    // Release applies to the cloud in use: the session's, else the selected one.
+    releaseDetailButton.hidden = !pinnedClouds.has(session?.cloudId ?? cloudSelect.value);
     if (!session) {
       hint.textContent =
         clouds.length === 0
@@ -1943,7 +1948,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const loadViewAtFullDetail = async () => {
     const ctl = control();
     const cloudId = session?.cloudId ?? cloudSelect.value;
-    if (!ctl || !map || !cloudId) return;
+    if (!ctl || !map || !cloudId || fullDetailLoading) return;
+    fullDetailLoading = true;
     const view = map.getBounds();
     fullDetailButton.disabled = true;
     setStatus(tr(app, "fullDetailLoading", "Loading the view at full detail…"));
@@ -1954,9 +1960,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         [view.getWest(), view.getSouth(), view.getEast(), view.getNorth()],
         FULL_DETAIL_MAX_POINTS,
       );
-      pinnedCloudId = cloudId;
+      pinnedClouds.add(cloudId);
       const data = getCloudData(ctl, cloudId);
-      if (session && data) {
+      // The session may have ended, or moved to another cloud, while loading.
+      if (session && session.cloudId === cloudId && data) {
         hint.textContent = tr(
           app,
           "sessionHint",
@@ -1977,6 +1984,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         }),
       );
     } finally {
+      fullDetailLoading = false;
       renderCloudOptions();
       if (session) {
         renderSummary();
@@ -1986,10 +1994,13 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 
   fullDetailButton.addEventListener("click", () => void loadViewAtFullDetail());
+  // Release follows the chosen cloud.
+  cloudSelect.addEventListener("change", renderCloudOptions);
   releaseDetailButton.addEventListener("click", () => {
     const ctl = control();
-    if (ctl && pinnedCloudId) releaseFullDetail(ctl, pinnedCloudId);
-    pinnedCloudId = null;
+    const cloudId = session?.cloudId ?? cloudSelect.value;
+    if (ctl && pinnedClouds.has(cloudId)) releaseFullDetail(ctl, cloudId);
+    pinnedClouds.delete(cloudId);
     renderCloudOptions();
     setStatus(tr(app, "detailReleased", "Full detail released; the area streams like the rest."));
   });
