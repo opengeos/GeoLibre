@@ -1063,6 +1063,47 @@ def test_point_cloud_annotations_cap_the_decoded_entry_count(monkeypatch):
     assert list(labels) == ["a"]
 
 
+def test_point_cloud_annotations_merge_repeated_source_urls():
+    from geolibre import project as p
+
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "sources": [
+                        {"url": "https://x/a.laz", "nodes": {"a": _encode_node({0: 6})}},
+                        {"url": "https://x/a.laz", "nodes": {"b": _encode_node({1: 2})}},
+                    ]
+                }
+            }
+        }
+    }
+    assert p.point_cloud_annotations(project)["labels"] == {
+        "https://x/a.laz": {"a": {0: 6}, "b": {1: 2}}
+    }
+
+
+def test_point_cloud_annotations_charge_the_inflated_size(monkeypatch):
+    from geolibre import project as p
+
+    # Long varints: these two edits inflate to 11 bytes, not 2 per edit.
+    monkeypatch.setattr(p, "MAX_POINT_LABEL_BYTES", 12)
+    far = _encode_node({2**28: 6, 2**29: 6})
+    near = _encode_node({0: 6})
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "sources": [{"url": "https://x/a.laz", "nodes": {"a": far, "b": near}}],
+                }
+            }
+        }
+    }
+    # Charged 11 bytes, the budget cannot fit the second (2-byte) node; a
+    # 2-per-edit charge would have left room for it.
+    assert list(p.point_cloud_annotations(project)["labels"]["https://x/a.laz"]) == ["a"]
+
+
 def test_point_cloud_annotations_charge_rejected_nodes_to_the_budget(monkeypatch):
     from geolibre import project as p
 
@@ -1074,7 +1115,7 @@ def test_point_cloud_annotations_charge_rejected_nodes_to_the_budget(monkeypatch
         calls.append(limit)
         raise ValueError("too large")
 
-    monkeypatch.setattr(p, "decode_point_label_node", reject)
+    monkeypatch.setattr(p, "_decode_point_label_node_sized", reject)
     nodes = {str(i): "x" for i in range(50)}
     project = {
         "plugins": {

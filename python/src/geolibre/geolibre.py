@@ -2730,7 +2730,7 @@ class Map(anywidget.AnyWidget):
         Returns:
             The id of the added layer.
         """
-        if name is None:
+        if name is None and isinstance(url, str):
             tail = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
             name = tail or "LiDAR"
         return self._add_layer(_project.lidar_layer(name, url, **style))

@@ -1918,6 +1918,23 @@ def decode_point_label_node(text: str, limit: int = MAX_POINT_LABEL_NODE_BYTES) 
         ValueError: If the record is truncated, not valid DEFLATE, or
             inflates past ``limit``.
     """
+    return _decode_point_label_node_sized(text, limit)[0]
+
+
+def _decode_point_label_node_sized(text: str, limit: int) -> tuple[dict[int, int], int]:
+    """Decode one node's saved point labels and report its inflated size.
+
+    Args:
+        text: The base64 string from the project.
+        limit: Maximum inflated size in bytes.
+
+    Returns:
+        The edits (as :func:`decode_point_label_node`) and the number of bytes
+        inflated to produce them.
+
+    Raises:
+        ValueError: As :func:`decode_point_label_node`.
+    """
     try:
         inflater = zlib.decompressobj(-15)
         data = inflater.decompress(base64.b64decode(text), limit + 1)
@@ -1950,7 +1967,7 @@ def decode_point_label_node(text: str, limit: int = MAX_POINT_LABEL_NODE_BYTES) 
         previous = index
         edits[index] = data[at]
         at += 1
-    return edits
+    return edits, len(data)
 
 
 def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
@@ -1991,19 +2008,20 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
                 continue
             cap = min(MAX_POINT_LABEL_NODE_BYTES, budget)
             try:
-                edits = decode_point_label_node(text, cap)
+                edits, inflated = _decode_point_label_node_sized(text, cap)
             except ValueError:
                 # A rejected node may have inflated up to its cap before
                 # failing, so charge the cap: bad nodes cannot bypass the budget.
                 budget -= cap
                 continue
-            # Each edit is at least two inflated bytes (varint + class).
-            budget -= 2 * len(edits)
+            # Charge what was actually inflated (varints run to five bytes).
+            budget -= inflated
             if len(edits) > entries:
                 continue
             entries -= len(edits)
             decoded[key] = edits
-        labels[url] = decoded
+        # Merge repeated entries for one URL rather than dropping the first.
+        labels.setdefault(url, {}).update(decoded)
     boxes: list[dict[str, Any]] = []
     cuboids = state.get("cuboids") if isinstance(state, dict) else None
     for entry in cuboids if isinstance(cuboids, list) else []:
