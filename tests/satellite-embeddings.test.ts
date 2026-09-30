@@ -38,10 +38,10 @@ import {
 } from "../packages/plugins/src/plugins/satellite-embeddings-grids";
 import {
   lonLatBboxToTesseraUtm,
+  mergeRanges,
+  parseShardIndex,
   percentileRange,
   planTesseraWindow,
-  renderTesseraRgba,
-  tesseraUtmBoundsToCorners,
   tesseraZone,
   tesseraZoneGroup,
   tesseraZoneInfo,
@@ -265,6 +265,49 @@ describe("GeoTIFF encoder", () => {
     assert.equal(metadata?.DESCRIPTION, "A01");
   });
 
+  it("writes a tiled float32 GeoTIFF, padding the edge tiles", async () => {
+    const width = 20;
+    const height = 18;
+    const bands = [0, 1, 2].map((offset) =>
+      Float32Array.from({ length: width * height }, (_, index) => index + offset * 1000),
+    );
+    const parts = encodeGeoTiff({
+      width,
+      height,
+      bands,
+      sampleType: "float32",
+      epsg: 32633,
+      originX: 500_000,
+      originY: -1_000_000,
+      pixelSizeX: 10,
+      pixelSizeY: 10,
+      nodata: "nan",
+      tileSize: 16,
+    });
+    const image = await (await fromArrayBuffer(await new Blob(parts).arrayBuffer())).getImage();
+    assert.equal(image.isTiled, true);
+    assert.equal(image.getTileWidth(), 16);
+    assert.deepEqual(image.getBoundingBox(), [500_000, -1_000_180, 500_200, -1_000_000]);
+    const rasters = (await image.readRasters({ interleave: false })) as unknown as Float32Array[];
+    for (let band = 0; band < 3; band += 1) assert.deepEqual([...rasters[band]], [...bands[band]]);
+    assert.throws(() =>
+      encodeGeoTiff({
+        ...{
+          width,
+          height,
+          bands,
+          sampleType: "float32",
+          epsg: 32633,
+          originX: 0,
+          originY: 0,
+          pixelSizeX: 10,
+          pixelSizeY: 10,
+        },
+        tileSize: 10,
+      }),
+    );
+  });
+
   it("writes float32 bands", async () => {
     const parts = encodeGeoTiff({
       width: 3,
@@ -362,11 +405,6 @@ describe("Tessera v1.1 helpers", () => {
   it("projects south of the equator with negative northings", () => {
     const [, minY, , maxY] = lonLatBboxToTesseraUtm([14.9, -10.1, 15.1, -9.9], 33);
     assert.ok(maxY < 0 && minY < maxY);
-    const corners = tesseraUtmBoundsToCorners(
-      lonLatBboxToTesseraUtm([14.9, -10.1, 15.1, -9.9], 33),
-      33,
-    );
-    assert.ok(Math.abs(corners[0][1] - -9.9) < 0.01);
   });
 
   it("reads years complete per hemisphere", () => {
@@ -382,14 +420,39 @@ describe("Tessera v1.1 helpers", () => {
     assert.throws(() => tesseraZoneInfo(1, {}));
   });
 
-  it("stretches each band to its percentiles and hides unembedded pixels", () => {
+  it("stretches each band to its 2nd and 98th percentiles", () => {
     const values = Float32Array.from({ length: 101 }, (_, index) => index);
     assert.deepEqual(percentileRange(values), [2, 98]);
+    assert.deepEqual(percentileRange(Float32Array.of(Number.NaN, 5, 5)), [4, 6]);
     assert.equal(percentileRange(Float32Array.of(Number.NaN)), null);
-    const band = Float32Array.from([Number.NaN, ...Array.from({ length: 100 }, (_, i) => i)]);
-    const rgba = renderTesseraRgba([band, band, band], 101, 1);
-    assert.deepEqual([...rgba.slice(0, 4)], [0, 0, 0, 0]);
-    assert.equal(rgba[4 * 100 + 3], 255);
-    assert.equal(rgba[4 * 100], 255);
+  });
+
+  it("merges shard byte ranges into few requests", () => {
+    const ranges = [
+      { offset: 300, length: 100, item: "c" },
+      { offset: 0, length: 100, item: "a" },
+      { offset: 100, length: 100, item: "b" },
+      { offset: 10_000, length: 100, item: "d" },
+    ];
+    const merged = mergeRanges(ranges, 150, 1_000);
+    assert.deepEqual(
+      merged.map(({ offset, length, items }) => [offset, length, items.map((r) => r.item)]),
+      [
+        [0, 400, ["a", "b", "c"]],
+        [10_000, 100, ["d"]],
+      ],
+    );
+    // A size cap splits a run even without a gap.
+    assert.equal(mergeRanges(ranges.slice(1, 3), 0, 150).length, 2);
+  });
+
+  it("parses a shard index with missing chunks", () => {
+    const bytes = new Uint8Array(2 * 16 + 4);
+    const view = new DataView(bytes.buffer);
+    view.setBigUint64(0, 42n, true);
+    view.setBigUint64(8, 7n, true);
+    view.setBigUint64(16, 0xffff_ffff_ffff_ffffn, true);
+    view.setBigUint64(24, 0xffff_ffff_ffff_ffffn, true);
+    assert.deepEqual(parseShardIndex(bytes), [{ offset: 42, length: 7 }, null]);
   });
 });

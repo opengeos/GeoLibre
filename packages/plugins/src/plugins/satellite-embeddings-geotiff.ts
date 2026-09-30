@@ -5,7 +5,8 @@
  * silently writes zeros for `Int8Array` input, which is exactly what quantized
  * embeddings are. This encoder writes an uncompressed, band-separate
  * (PlanarConfiguration 2) classic TIFF with one strip per band, so each band's
- * typed array is emitted as-is: the result is a list of blob parts rather than
+ * typed array is emitted as-is, or with square tiles (which the map's raster
+ * renderer needs) at the cost of one tiled copy: the result is a list of blob parts rather than
  * one concatenated buffer, which keeps a large download from being copied a
  * second time in memory.
  */
@@ -32,6 +33,43 @@ export interface GeoTiffEncodeOptions {
   nodata?: string;
   /** Band descriptions written to `GDAL_METADATA`, e.g. `["A00", "A01"]`. */
   bandNames?: string[];
+  /**
+   * Write square tiles of this many pixels (a multiple of 16) instead of one
+   * strip per band. The map's raster renderer streams tiles and rejects a
+   * striped file; edge tiles are padded with NaN (float32) or 0 (int8).
+   */
+  tileSize?: number;
+}
+
+/**
+ * Copies a row-major band into row-major tiles of `size` × `size`, padding
+ * the right and bottom edge tiles.
+ */
+export function tileBand<T extends Int8Array | Float32Array>(
+  band: T,
+  width: number,
+  height: number,
+  size: number,
+): T {
+  const across = Math.ceil(width / size);
+  const down = Math.ceil(height / size);
+  const Ctor = band.constructor as new (length: number) => T;
+  const tiled = new Ctor(across * down * size * size);
+  if (tiled instanceof Float32Array) tiled.fill(Number.NaN);
+  for (let tileY = 0; tileY < down; tileY += 1) {
+    for (let tileX = 0; tileX < across; tileX += 1) {
+      const tileStart = (tileY * across + tileX) * size * size;
+      const x0 = tileX * size;
+      const rowLength = Math.min(size, width - x0);
+      for (let row = 0; row < size; row += 1) {
+        const y = tileY * size + row;
+        if (y >= height) break;
+        const source = y * width + x0;
+        tiled.set(band.subarray(source, source + rowLength), tileStart + row * size);
+      }
+    }
+  }
+  return tiled;
 }
 
 /** Classic TIFF offsets are 32-bit, so a file must stay under 4 GiB. */
@@ -73,6 +111,16 @@ export function encodeGeoTiff(options: GeoTiffEncodeOptions): BlobPart[] {
     }
   }
   const samples = bands.length;
+  const { tileSize } = options;
+  if (tileSize !== undefined && (!Number.isInteger(tileSize) || tileSize % 16 !== 0)) {
+    throw new Error("GeoTIFF tile size must be a multiple of 16");
+  }
+  const tilesPerBand = tileSize ? Math.ceil(width / tileSize) * Math.ceil(height / tileSize) : 1;
+  const tileBytes = tileSize ? tileSize * tileSize * bytesPerSample : bandBytes;
+  const storedBands = tileSize
+    ? bands.map((band) => tileBand(band, width, height, tileSize))
+    : bands;
+  const storedBandBytes = tilesPerBand * tileBytes;
   const geographic = epsg === 4326;
   const geoKeys = geographic
     ? [1, 1, 0, 3, 1024, 0, 1, 2, 1025, 0, 1, 1, 2048, 0, 1, 4326]
@@ -84,11 +132,24 @@ export function encodeGeoTiff(options: GeoTiffEncodeOptions): BlobPart[] {
     { code: 258, type: SHORT, values: new Array(samples).fill(bytesPerSample * 8) },
     { code: 259, type: SHORT, values: [1] }, // no compression
     { code: 262, type: SHORT, values: [1] }, // BlackIsZero
-    { code: 273, type: LONG, values: new Array(samples).fill(0) }, // patched below
-    { code: 277, type: SHORT, values: [samples] },
-    { code: 278, type: LONG, values: [height] },
-    { code: 279, type: LONG, values: new Array(samples).fill(bandBytes) },
+    ...(tileSize
+      ? [{ code: 277, type: SHORT, values: [samples] }]
+      : [
+          { code: 273, type: LONG, values: new Array(samples).fill(0) }, // patched below
+          { code: 277, type: SHORT, values: [samples] },
+          { code: 278, type: LONG, values: [height] },
+          { code: 279, type: LONG, values: new Array(samples).fill(bandBytes) },
+        ]),
     { code: 284, type: SHORT, values: [2] }, // band-separate
+    ...(tileSize
+      ? [
+          { code: 322, type: LONG, values: [tileSize] },
+          { code: 323, type: LONG, values: [tileSize] },
+          // Band-separate tiles run band by band: every tile of band 0 first.
+          { code: 324, type: LONG, values: new Array(samples * tilesPerBand).fill(0) }, // patched below
+          { code: 325, type: LONG, values: new Array(samples * tilesPerBand).fill(tileBytes) },
+        ]
+      : []),
     ...(samples > 1 ? [{ code: 338, type: SHORT, values: new Array(samples - 1).fill(0) }] : []),
     { code: 339, type: SHORT, values: new Array(samples).fill(sampleType === "int8" ? 2 : 3) },
     { code: 33550, type: DOUBLE, values: [options.pixelSizeX, options.pixelSizeY, 0] },
@@ -126,12 +187,15 @@ export function encodeGeoTiff(options: GeoTiffEncodeOptions): BlobPart[] {
     }
   }
   const headerSize = extraOffset;
-  const total = headerSize + bandBytes * samples;
+  const total = headerSize + storedBandBytes * samples;
   if (total > MAX_CLASSIC_TIFF_BYTES) {
     throw new Error("The GeoTIFF would exceed the 4 GiB classic TIFF limit");
   }
-  const stripOffsets = tags.find((tag) => tag.code === 273)!;
-  stripOffsets.values = bands.map((_, index) => headerSize + index * bandBytes);
+  const dataOffsets = tags.find((tag) => tag.code === (tileSize ? 324 : 273))!;
+  dataOffsets.values = Array.from(
+    { length: samples * tilesPerBand },
+    (_, index) => headerSize + index * tileBytes,
+  );
 
   const header = new ArrayBuffer(headerSize);
   const view = new DataView(header);
@@ -175,5 +239,5 @@ export function encodeGeoTiff(options: GeoTiffEncodeOptions): BlobPart[] {
 
   // Typed arrays hold native-endian values, and every platform a browser runs
   // on is little-endian, matching the "II" byte order declared above.
-  return [header, ...bands.map((band) => band as unknown as ArrayBufferView<ArrayBuffer>)];
+  return [header, ...storedBands.map((band) => band as unknown as ArrayBufferView<ArrayBuffer>)];
 }

@@ -59,11 +59,10 @@ import {
   TesseraTooLargeError,
   TesseraYearMissingError,
   readTesseraBands,
-  renderTesseraRgba,
-  tesseraUtmBoundsToCorners,
+  percentileRange,
   tesseraZone,
 } from "./satellite-embeddings-tessera";
-import { getRasterRenderEngine } from "./maplibre-raster";
+import { addRasterToMap, getRasterRenderEngine } from "./maplibre-raster";
 import { getControlMap } from "./style-map";
 
 export const SATELLITE_EMBEDDINGS_PLUGIN_ID = "geolibre-satellite-embeddings";
@@ -872,40 +871,41 @@ async function visualizeTessera(
     setStatus(tr("tesseraEmpty", "No embeddings in this area for {{year}}.", { year }));
     return;
   }
-  const rgba = renderTesseraRgba(result.bands, plan.width, plan.height);
-  const canvas = document.createElement("canvas");
-  canvas.width = plan.width;
-  canvas.height = plan.height;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Canvas 2D is not available");
-  context.putImageData(
-    new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, plan.width, plan.height),
-    0,
-    0,
-  );
+  // A real raster layer rather than a PNG: the three de-quantized bands as a
+  // float32 GeoTIFF in the zone's grid, so the Style panel can re-stretch or
+  // reorder them and Identify reads the embedding values.
   const zone = tesseraZone((row.bbox[0] + row.bbox[2]) / 2);
-  const coordinates = tesseraUtmBoundsToCorners(plan.bounds, zone);
-  const dataset = getSatelliteEmbeddingDataset("tessera");
-  const layer: GeoLibreLayer = {
-    id: crypto.randomUUID(),
-    name: tr("tesseraLayerName", "Tessera {{year}} ({{bands}})", { year, bands: bandLabel }),
-    type: "image",
-    source: { type: "image", url: canvas.toDataURL("image/png"), coordinates },
-    visible: true,
-    opacity: 1,
-    style: { ...DEFAULT_LAYER_STYLE },
-    metadata: {
-      sourceKind: IMAGE_SOURCE_KIND,
-      bounds: ringBbox(coordinates),
-      dataset: dataset.id,
-      tile: row.title,
-      year,
-      bands: bandLabel,
-    },
-  };
-  useAppStore.getState().addLayer(layer);
-  appRef?.fitBounds?.(ringBbox(coordinates));
-  setStatus(tr("visualized", "Added {{name}}.", { name: layer.name }));
+  const [minX, , maxX, maxY] = plan.bounds;
+  const pixelSize = (maxX - minX) / plan.width;
+  const parts = encodeGeoTiff({
+    width: plan.width,
+    height: plan.height,
+    bands: result.bands,
+    sampleType: "float32",
+    epsg: 32600 + zone,
+    originX: minX,
+    originY: maxY,
+    pixelSizeX: pixelSize,
+    pixelSizeY: pixelSize,
+    nodata: "nan",
+    bandNames: bands.map((band) => `Band ${band}`),
+    tileSize: 256,
+  });
+  const name = tr("tesseraLayerName", "Tessera {{year}} ({{bands}})", { year, bands: bandLabel });
+  const stem = row.title.replace(/[^\w.-]+/g, "_");
+  const file = new File(parts, `tessera_${year}_${stem}_${bands.join("-")}.tif`, {
+    type: "image/tiff",
+  });
+  const rescale = result.bands.map(
+    (band) => percentileRange(band) ?? ([-1, 1] as [number, number]),
+  );
+  signal.throwIfAborted();
+  if (!appRef) return;
+  await addRasterToMap(appRef, file, {
+    name,
+    state: { bands: [1, 2, 3], mode: "rgb", rescale },
+  });
+  setStatus(tr("visualized", "Added {{name}}.", { name }));
 }
 
 /** Builds a clipped 64-band GeoTIFF of an AlphaEarth tile and saves it. */

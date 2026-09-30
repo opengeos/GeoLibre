@@ -130,22 +130,6 @@ export function lonLatBboxToTesseraUtm(
 }
 
 /**
- * The lon/lat corners of a zone-grid box in MapLibre image-source order:
- * top-left, top-right, bottom-right, bottom-left.
- */
-export function tesseraUtmBoundsToCorners(
-  [minX, minY, maxX, maxY]: [number, number, number, number],
-  zone: number,
-): [[number, number], [number, number], [number, number], [number, number]] {
-  const toLonLat = proj4(utmProjection(zone, false), "EPSG:4326");
-  const corner = (x: number, y: number): [number, number] => {
-    const [lon, lat] = toLonLat.forward([x, y]);
-    return [lon, lat];
-  };
-  return [corner(minX, maxY), corner(maxX, maxY), corner(maxX, minY), corner(minX, minY)];
-}
-
-/**
  * The `[low, high]` display range of a band: the 2nd and 98th percentiles of
  * its finite values, from an even sample. Null when the band has none.
  */
@@ -163,30 +147,6 @@ export function percentileRange(values: Float32Array): [number, number] | null {
   const low = at(STRETCH_PERCENTILES[0]);
   const high = at(STRETCH_PERCENTILES[1]);
   return high > low ? [low, high] : [low - 1, low + 1];
-}
-
-/**
- * Renders three de-quantized bands as RGBA, stretching each band between its
- * own 2nd and 98th percentiles. Pixels with no value (NaN) are transparent.
- */
-export function renderTesseraRgba(
-  bands: [Float32Array, Float32Array, Float32Array],
-  width: number,
-  height: number,
-): Uint8ClampedArray {
-  const ranges = bands.map(percentileRange);
-  const rgba = new Uint8ClampedArray(width * height * 4);
-  for (let pixel = 0; pixel < width * height; pixel += 1) {
-    if (!Number.isFinite(bands[0][pixel])) continue; // unembedded in every band at once
-    const target = pixel * 4;
-    for (let channel = 0; channel < 3; channel += 1) {
-      const range = ranges[channel];
-      if (!range) continue;
-      rgba[target + channel] = ((bands[channel][pixel] - range[0]) / (range[1] - range[0])) * 255;
-    }
-    rgba[target + 3] = 255;
-  }
-  return rgba;
 }
 
 /** Georeferencing and coverage of one zone group. */
@@ -228,14 +188,163 @@ export interface TesseraWindowBands {
 }
 
 type ZarrArray = import("zarrita").Array<import("zarrita").DataType>;
+type ZarrKey = `/${string}`;
+type ZarrRange = { offset: number; length: number } | { suffixLength: number };
+
+/** Side of a shard, in pixels: one object holds 128 × 128 inner chunks. */
+export const TESSERA_SHARD_SIZE = 4096;
+const CHUNKS_PER_SHARD_SIDE = TESSERA_SHARD_SIZE / TESSERA_CHUNK_SIZE;
+/** Bytes of a shard index: an (offset, length) uint64 pair per inner chunk, then a CRC32C. */
+const SHARD_INDEX_BYTES = CHUNKS_PER_SHARD_SIDE * CHUNKS_PER_SHARD_SIDE * 16 + 4;
+/**
+ * Largest run of unwanted bytes a merged request may carry. A request costs
+ * ~0.7 s of latency on Source Cooperative against ~20 MB/s of transfer, so
+ * fetching a few unneeded chunks is cheaper than a second request.
+ */
+const MAX_RANGE_GAP = 512 * 1024;
+/** Largest merged request, so a big read still streams in parallel and reports progress. */
+const MAX_RANGE_BYTES = 8 * 1024 * 1024;
+/** Merged requests in flight at once. */
+const RANGE_CONCURRENCY = 6;
+
+/** One byte range of a shard and what it holds. */
+export interface ShardRange<T> {
+  offset: number;
+  length: number;
+  item: T;
+}
+
+/** Contiguous-enough ranges merged into one request. */
+export interface MergedRange<T> {
+  offset: number;
+  length: number;
+  items: ShardRange<T>[];
+}
+
+/**
+ * Merges byte ranges into as few requests as possible: ranges are sorted by
+ * offset and joined while the gap between them is at most `maxGap` and the
+ * merged request stays within `maxBytes`. The store writes a shard's inner
+ * chunks in Z-order, so the chunks of a window fall into a few long runs.
+ */
+export function mergeRanges<T>(
+  ranges: ShardRange<T>[],
+  maxGap = MAX_RANGE_GAP,
+  maxBytes = MAX_RANGE_BYTES,
+): MergedRange<T>[] {
+  const sorted = [...ranges].sort((a, b) => a.offset - b.offset);
+  const merged: MergedRange<T>[] = [];
+  for (const range of sorted) {
+    const last = merged.at(-1);
+    const end = range.offset + range.length;
+    if (
+      last &&
+      range.offset - (last.offset + last.length) <= maxGap &&
+      end - last.offset <= maxBytes
+    ) {
+      last.length = Math.max(last.length, end - last.offset);
+      last.items.push(range);
+    } else {
+      merged.push({ offset: range.offset, length: range.length, items: [range] });
+    }
+  }
+  return merged;
+}
+
+/**
+ * Parses a shard index into `(offset, length)` per inner chunk, row-major over
+ * the shard's chunk grid, with null for a chunk the shard does not hold.
+ */
+export function parseShardIndex(bytes: Uint8Array): ({ offset: number; length: number } | null)[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const count = Math.floor((bytes.byteLength - 4) / 16);
+  const missing = 0xffff_ffff_ffff_ffffn;
+  const entries: ({ offset: number; length: number } | null)[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const offset = view.getBigUint64(index * 16, true);
+    const length = view.getBigUint64(index * 16 + 8, true);
+    entries.push(
+      offset === missing && length === missing
+        ? null
+        : { offset: Number(offset), length: Number(length) },
+    );
+  }
+  return entries;
+}
+
+/**
+ * A store that answers zarrita's shard reads from bytes fetched in bulk.
+ * zarrita requests every inner chunk separately (two round trips per chunk
+ * once `scales` is counted); the reader instead fetches merged ranges, parks
+ * them here, and lets zarrita decode from memory. Anything not parked falls
+ * through to the network.
+ */
+class BulkRangeStore {
+  /** Fetched ranges by key, removed once their chunks are decoded. */
+  readonly ranges = new Map<string, { offset: number; bytes: Uint8Array }[]>();
+  /** Shard indexes by key, as zarrita asks for them (a suffix read). */
+  readonly suffixes = new Map<string, Uint8Array>();
+
+  constructor(readonly inner: import("zarrita").FetchStore) {}
+
+  get(key: ZarrKey, options?: RequestInit): Promise<Uint8Array | undefined> {
+    return this.inner.get(key, options);
+  }
+
+  async getRange(
+    key: ZarrKey,
+    range: ZarrRange,
+    options?: RequestInit,
+  ): Promise<Uint8Array | undefined> {
+    if ("suffixLength" in range) {
+      const cached = this.suffixes.get(key);
+      if (cached && cached.byteLength === range.suffixLength) return cached;
+    } else {
+      for (const parked of this.ranges.get(key) ?? []) {
+        const start = range.offset - parked.offset;
+        if (start >= 0 && start + range.length <= parked.bytes.byteLength) {
+          return parked.bytes.subarray(start, start + range.length);
+        }
+      }
+    }
+    return this.inner.getRange(key, range, options);
+  }
+
+  /** Fetches (once) and parses a shard's index, or null when the shard does not exist. */
+  shardIndex(key: ZarrKey, signal?: AbortSignal) {
+    let index = this.indexes.get(key);
+    if (!index) {
+      index = this.inner
+        .getRange(key, { suffixLength: SHARD_INDEX_BYTES }, signal ? { signal } : undefined)
+        .then((bytes) => {
+          if (!bytes) return null;
+          this.suffixes.set(key, bytes);
+          return parseShardIndex(bytes);
+        })
+        .catch((error: unknown) => {
+          this.indexes.delete(key);
+          throw error;
+        });
+      this.indexes.set(key, index);
+    }
+    return index;
+  }
+
+  private readonly indexes = new Map<
+    string,
+    Promise<({ offset: number; length: number } | null)[] | null>
+  >();
+}
 
 interface OpenedZone {
   info: TesseraZoneInfo;
+  group: string;
+  store: BulkRangeStore;
   embeddings: ZarrArray;
   scales: ZarrArray;
 }
 
-/** Opened zones, kept for the page's life (a zone's shard indexes are cached in its arrays). */
+/** Opened zones, kept for the page's life (their shard indexes stay cached). */
 const openZones = new Map<number, Promise<OpenedZone>>();
 
 async function openZone(zone: number): Promise<OpenedZone> {
@@ -243,14 +352,17 @@ async function openZone(zone: number): Promise<OpenedZone> {
   if (!opened) {
     opened = (async () => {
       const zarr = await import("zarrita");
-      const root = zarr.root(new zarr.FetchStore(TESSERA_ZARR_URL));
-      const group = await zarr.open.v3(root.resolve(tesseraZoneGroup(zone)), { kind: "group" });
+      const store = new BulkRangeStore(new zarr.FetchStore(TESSERA_ZARR_URL));
+      const groupName = tesseraZoneGroup(zone);
+      const group = await zarr.open.v3(zarr.root(store).resolve(groupName), { kind: "group" });
       const [embeddings, scales] = await Promise.all([
         zarr.open.v3(group.resolve("embeddings"), { kind: "array" }),
         zarr.open.v3(group.resolve("scales"), { kind: "array" }),
       ]);
       return {
         info: tesseraZoneInfo(zone, group.attrs as Record<string, unknown>),
+        group: groupName,
+        store,
         embeddings,
         scales,
       };
@@ -261,6 +373,76 @@ async function openZone(zone: number): Promise<OpenedZone> {
     openZones.set(zone, opened);
   }
   return opened;
+}
+
+/**
+ * Visits inner chunks of one array, fetching them shard by shard in merged
+ * ranges and handing each to `visit` while its bytes are parked in the store.
+ * Chunks a shard does not hold are visited too (zarrita fills them without a
+ * request).
+ */
+async function visitChunks(
+  store: BulkRangeStore,
+  shardKey: (shardY: number, shardX: number) => ZarrKey,
+  chunks: [number, number][],
+  visit: (chunk: [number, number]) => Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  const byShard = new Map<ZarrKey, [number, number][]>();
+  for (const chunk of chunks) {
+    const key = shardKey(
+      Math.floor(chunk[0] / CHUNKS_PER_SHARD_SIDE),
+      Math.floor(chunk[1] / CHUNKS_PER_SHARD_SIDE),
+    );
+    const list = byShard.get(key);
+    if (list) list.push(chunk);
+    else byShard.set(key, [chunk]);
+  }
+  const requests: { key: ZarrKey; merged: MergedRange<[number, number]> }[] = [];
+  const unfetched: [number, number][] = [];
+  await Promise.all(
+    [...byShard].map(async ([key, shardChunks]) => {
+      const index = await store.shardIndex(key, signal);
+      const ranges: ShardRange<[number, number]>[] = [];
+      for (const chunk of shardChunks) {
+        const entry =
+          index?.[
+            (chunk[0] % CHUNKS_PER_SHARD_SIDE) * CHUNKS_PER_SHARD_SIDE +
+              (chunk[1] % CHUNKS_PER_SHARD_SIDE)
+          ];
+        if (entry) ranges.push({ ...entry, item: chunk });
+        else unfetched.push(chunk);
+      }
+      for (const merged of mergeRanges(ranges)) requests.push({ key, merged });
+    }),
+  );
+  for (const chunk of unfetched) await visit(chunk);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < requests.length) {
+      const { key, merged } = requests[next];
+      next += 1;
+      signal?.throwIfAborted();
+      const bytes = await store.inner.getRange(
+        key,
+        { offset: merged.offset, length: merged.length },
+        signal ? { signal } : undefined,
+      );
+      if (!bytes) throw new Error(`Missing shard ${key}`);
+      const parked = { offset: merged.offset, bytes };
+      const list = store.ranges.get(key) ?? [];
+      list.push(parked);
+      store.ranges.set(key, list);
+      try {
+        for (const range of merged.items) await visit(range.item);
+      } finally {
+        const remaining = (store.ranges.get(key) ?? []).filter((entry) => entry !== parked);
+        if (remaining.length > 0) store.ranges.set(key, remaining);
+        else store.ranges.delete(key);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(RANGE_CONCURRENCY, requests.length) }, worker));
 }
 
 /** Thrown when a window would read more than {@link TESSERA_MAX_READ_CHUNKS} chunks. */
@@ -291,10 +473,9 @@ export async function readTesseraBands(
   bandIndices: [number, number, number],
   signal?: AbortSignal,
   onProgress?: (done: number, total: number) => void,
-  concurrency = 24,
 ): Promise<TesseraWindowBands | null> {
   const zone = tesseraZone((bbox[0] + bbox[2]) / 2);
-  const { info, embeddings, scales } = await openZone(zone);
+  const { info, group, store, embeddings, scales } = await openZone(zone);
   signal?.throwIfAborted();
   const hemisphere = (bbox[1] + bbox[3]) / 2 >= 0 ? "N" : "S";
   const complete = info.yearsComplete[hemisphere];
@@ -320,44 +501,59 @@ export async function readTesseraBands(
   const options = signal ? { signal } : undefined;
   let done = 0;
   onProgress?.(done, chunks.length);
-  const readChunk = async ([cy, cx]: [number, number]): Promise<void> => {
-    const scaleChunk = await scales.getChunk([timeIndex, cy, cx], options);
-    const scaleData = scaleChunk.data as Float32Array;
-    // A chunk with no embedded pixel is left NaN without fetching its 128 bands.
-    if (!scaleData.some((value) => Number.isFinite(value))) return;
-    const embeddingChunk = await embeddings.getChunk([timeIndex, 0, cy, cx], options);
-    const data = embeddingChunk.data as Int8Array;
-    const [, bandStride, rowStride, colStride] = embeddingChunk.stride;
-    const [, scaleRowStride, scaleColStride] = scaleChunk.stride;
-    const y0 = Math.max(row0, cy * size);
-    const y1 = Math.min(row1, (cy + 1) * size);
-    const x0 = Math.max(col0, cx * size);
-    const x1 = Math.min(col1, (cx + 1) * size);
-    for (let y = y0; y < y1; y += 1) {
-      const localY = y - cy * size;
-      for (let x = x0; x < x1; x += 1) {
-        const localX = x - cx * size;
-        const scale = scaleData[localY * scaleRowStride + localX * scaleColStride];
-        if (!Number.isFinite(scale)) continue;
-        const target = (y - row0) * width + (x - col0);
-        const offset = localY * rowStride + localX * colStride;
-        for (let channel = 0; channel < 3; channel += 1) {
-          bands[channel][target] = data[offset + bandIndices[channel] * bandStride] * scale;
+
+  // Scales first (~3 KB a chunk): a chunk with no embedded pixel is left NaN
+  // without fetching its 128 bands.
+  const scaleChunks = new Map<string, { data: Float32Array; stride: number[] }>();
+  await visitChunks(
+    store,
+    (shardY, shardX) => `/${group}/scales/c/${timeIndex}/${shardY}/${shardX}`,
+    chunks,
+    async ([cy, cx]) => {
+      const chunk = await scales.getChunk([timeIndex, cy, cx], options);
+      const data = chunk.data as Float32Array;
+      if (data.some((value) => Number.isFinite(value))) {
+        scaleChunks.set(`${cy},${cx}`, { data, stride: chunk.stride });
+      } else {
+        done += 1;
+      }
+    },
+    signal,
+  );
+  onProgress?.(done, chunks.length);
+
+  const embedded = chunks.filter(([cy, cx]) => scaleChunks.has(`${cy},${cx}`));
+  await visitChunks(
+    store,
+    (shardY, shardX) => `/${group}/embeddings/c/${timeIndex}/0/${shardY}/${shardX}`,
+    embedded,
+    async ([cy, cx]) => {
+      const scaleChunk = scaleChunks.get(`${cy},${cx}`)!;
+      const embeddingChunk = await embeddings.getChunk([timeIndex, 0, cy, cx], options);
+      const data = embeddingChunk.data as Int8Array;
+      const [, bandStride, rowStride, colStride] = embeddingChunk.stride;
+      const [, scaleRowStride, scaleColStride] = scaleChunk.stride;
+      const y0 = Math.max(row0, cy * size);
+      const y1 = Math.min(row1, (cy + 1) * size);
+      const x0 = Math.max(col0, cx * size);
+      const x1 = Math.min(col1, (cx + 1) * size);
+      for (let y = y0; y < y1; y += 1) {
+        const localY = y - cy * size;
+        for (let x = x0; x < x1; x += 1) {
+          const localX = x - cx * size;
+          const scale = scaleChunk.data[localY * scaleRowStride + localX * scaleColStride];
+          if (!Number.isFinite(scale)) continue;
+          const target = (y - row0) * width + (x - col0);
+          const offset = localY * rowStride + localX * colStride;
+          for (let channel = 0; channel < 3; channel += 1) {
+            bands[channel][target] = data[offset + bandIndices[channel] * bandStride] * scale;
+          }
         }
       }
-    }
-  };
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < chunks.length) {
-      const chunk = chunks[next];
-      next += 1;
-      signal?.throwIfAborted();
-      await readChunk(chunk);
       done += 1;
       onProgress?.(done, chunks.length);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, chunks.length) }, worker));
+    },
+    signal,
+  );
   return { plan, bands };
 }
