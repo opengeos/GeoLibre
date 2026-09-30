@@ -99,23 +99,45 @@ export const MAX_NODE_EDIT_BYTES = 16 * 1024 * 1024;
 /** Largest total inflated size of all labels in one project. */
 export const MAX_LABEL_BYTES = 256 * 1024 * 1024;
 
+/** A shared allowance of inflated bytes, drawn down across many records. */
+export interface InflateBudget {
+  remaining: number;
+}
+
 /**
- * Inflates with a size cap, aborting as soon as the output passes it.
+ * Compressed bytes fed to the inflater per push. Deflate expands at most
+ * ~1032:1, so one push can produce at most about 1 MB before the caps below
+ * are checked again.
+ */
+const INFLATE_SLICE = 1024;
+
+/**
+ * Inflates with a size cap, feeding the input in small slices so a
+ * decompression bomb is stopped before it allocates much past the cap.
  *
  * @param data - Deflated bytes.
- * @param limit - Maximum inflated size.
+ * @param limit - Maximum inflated size of this record.
+ * @param budget - Shared allowance, charged for every inflated byte (also
+ *   when the record is later rejected).
  * @returns The inflated bytes.
- * @throws RangeError when the output would exceed `limit`.
+ * @throws RangeError when the output would exceed `limit` or the budget.
  */
-function inflateCapped(data: Uint8Array, limit: number): Uint8Array {
+function inflateCapped(data: Uint8Array, limit: number, budget?: InflateBudget): Uint8Array {
   const chunks: Uint8Array[] = [];
   let total = 0;
   const inflater = new Inflate((chunk) => {
     total += chunk.length;
-    if (total > limit) throw new RangeError("point label record is too large");
+    if (budget) budget.remaining -= chunk.length;
+    if (total > limit || (budget && budget.remaining < 0)) {
+      throw new RangeError("point label record is too large");
+    }
     chunks.push(chunk);
   });
-  inflater.push(data, true);
+  if (data.length === 0) inflater.push(data, true);
+  for (let at = 0; at < data.length; at += INFLATE_SLICE) {
+    const end = Math.min(at + INFLATE_SLICE, data.length);
+    inflater.push(data.subarray(at, end), end === data.length);
+  }
   const out = new Uint8Array(total);
   let at = 0;
   for (const chunk of chunks) {
@@ -131,8 +153,12 @@ function inflateCapped(data: Uint8Array, limit: number): Uint8Array {
  * @param text - base64 text.
  * @returns Index within the node -> class code.
  */
-export function decodeNodeEdits(text: string, limit = MAX_NODE_EDIT_BYTES): Map<number, number> {
-  const bytes = inflateCapped(fromBase64(text), limit);
+export function decodeNodeEdits(
+  text: string,
+  limit = MAX_NODE_EDIT_BYTES,
+  budget?: InflateBudget,
+): Map<number, number> {
+  const bytes = inflateCapped(fromBase64(text), limit, budget);
   const edits = new Map<number, number>();
   let previous = -1;
   let at = 0;
@@ -265,7 +291,8 @@ export class PointLabelStore {
     if (!state || typeof state !== "object") return;
     const { version, sources } = state as Partial<EncodedLabelStore>;
     if (version !== 1 || !Array.isArray(sources)) return;
-    let budget = MAX_LABEL_BYTES;
+    // Charged with the real inflated size of every record, failed ones too.
+    const budget: InflateBudget = { remaining: MAX_LABEL_BYTES };
     for (const entry of sources) {
       const source = entry?.url;
       const encoded = entry?.nodes;
@@ -273,12 +300,9 @@ export class PointLabelStore {
       const nodes = new Map<string, Map<number, number>>();
       for (const [key, text] of Object.entries(encoded)) {
         if (typeof text !== "string") continue;
-        if (budget <= 0) break;
+        if (budget.remaining <= 0) break;
         try {
-          const edits = decodeNodeEdits(text, Math.min(MAX_NODE_EDIT_BYTES, budget));
-          // Each edit is at least 2 inflated bytes (varint + class).
-          budget -= edits.size * 2;
-          nodes.set(key, edits);
+          nodes.set(key, decodeNodeEdits(text, MAX_NODE_EDIT_BYTES, budget));
         } catch {
           // Skip a corrupt node rather than the whole project.
         }

@@ -482,6 +482,12 @@ describe("PointLabelStore", () => {
     assert.throws(() => decodeNodeEdits(bomb, 64 * 1024), /too large/);
     // Within the cap the same bytes decode normally.
     assert.equal(decodeNodeEdits(bomb, 2 * 1024 * 1024).size, 512 * 1024);
+    // A shared budget is charged for inflated bytes, including a rejected record.
+    const budget = { remaining: 1.5 * 1024 * 1024 };
+    decodeNodeEdits(bomb, 2 * 1024 * 1024, budget);
+    assert.ok(budget.remaining <= 0.5 * 1024 * 1024 + 1);
+    assert.throws(() => decodeNodeEdits(bomb, 2 * 1024 * 1024, budget), /too large/);
+    assert.ok(budget.remaining < 0);
   });
 
   it("treats a malformed project state as empty", () => {
