@@ -2170,13 +2170,9 @@ def _hex_color(value: Any) -> str | None:
     """
     if isinstance(value, str):
         text = value.strip()
-        if len(text) == 7 and text[0] == "#":
-            try:
-                int(text[1:], 16)
-            except ValueError:
-                return None
-            return text.lower()
-        return None
+        # Strict, like the app's parseHexColor: int(..., 16) would also take a
+        # sign or "_" separators, which the app then rejects on load.
+        return text.lower() if re.fullmatch(r"#[0-9a-fA-F]{6}", text) else None
     if (
         isinstance(value, (list, tuple))
         and len(value) == 3

@@ -1164,6 +1164,8 @@ def test_point_cloud_class_schema_validates_and_normalizes():
         {"code": True, "name": "x", "color": "#000000"},
         {"code": 64, "name": " ", "color": "#000000"},
         {"code": 64, "name": "x", "color": "red"},
+        {"code": 64, "name": "x", "color": "#-00000"},
+        {"code": 64, "name": "x", "color": "#1_2345"},
         {"code": 64, "name": "x", "color": (1, 2, 300)},
     ):
         with pytest.raises(ValueError):
