@@ -91,6 +91,16 @@ export function setCustomClasses(classes: readonly PointClassDefinition[]): void
 }
 
 /**
+ * Whether a code is a user-defined class.
+ *
+ * @param code - The class code.
+ * @returns True when a custom class uses the code.
+ */
+export function isCustomClass(code: number): boolean {
+  return customClasses.has(code);
+}
+
+/**
  * The user-defined classes, ascending by code.
  *
  * @returns Copies of the classes.

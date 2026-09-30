@@ -16,6 +16,7 @@ import {
   classDefinition,
   countClasses,
   getCustomClasses,
+  isCustomClass,
   parseHexColor,
   setCustomClasses,
   toHexColor,
@@ -153,9 +154,7 @@ function tr(
 function className(app: GeoLibreAppAPI, code: number): string {
   const definition = classDefinition(code);
   // A user-defined class shows its own name; standard ones are translated.
-  if (code >= CUSTOM_CLASS_MIN && getCustomClasses().some((entry) => entry.code === code)) {
-    return definition.name;
-  }
+  if (isCustomClass(code)) return definition.name;
   return tr(app, `classes.${code}`, definition.name);
 }
 
@@ -597,6 +596,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     applyClassStyles(control());
     startLabelSync();
     renderLabels();
+    // Boxes and their side views draw in their class colour.
+    cuboids.render();
   };
 
   const addCustomClass = () => {
