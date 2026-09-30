@@ -238,3 +238,20 @@ def test_endpoint_checks_extensions_and_hands_labels_over_in_a_file(
         assert json.loads(payload_path.read_text())["labels"] == {"file": APP_CLASSES}
     finally:
         payload_path.unlink()
+
+
+def test_a_shared_payload_folder_is_not_trusted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX permissions only")
+    monkeypatch.setattr(pointcloud.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(pointcloud, "_PRIVATE_PAYLOAD_DIR", None)
+    shared = tmp_path / "geolibre-pointcloud-payloads"
+    shared.mkdir()
+    shared.chmod(0o777)
+    folder = Path(pointcloud._payload_dir())
+    assert folder != shared
+    assert folder.stat().st_mode & 0o077 == 0

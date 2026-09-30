@@ -341,6 +341,7 @@ def _ensure_pointcloud_runtime() -> str:
 
 
 PAYLOAD_MAX_AGE_SECS = 3600
+_PRIVATE_PAYLOAD_DIR: str | None = None
 
 
 def _payload_dir() -> str:
@@ -353,8 +354,17 @@ def _payload_dir() -> str:
     Returns:
         The folder path.
     """
+    global _PRIVATE_PAYLOAD_DIR
     folder = Path(tempfile.gettempdir()) / "geolibre-pointcloud-payloads"
     folder.mkdir(mode=0o700, exist_ok=True)
+    # A folder another user pre-created (or can write to) in a shared temp
+    # directory could have a payload swapped before the job reads it; use a
+    # fresh private folder instead.
+    info = folder.stat()
+    if hasattr(os, "getuid") and (info.st_uid != os.getuid() or info.st_mode & 0o077):
+        if _PRIVATE_PAYLOAD_DIR is None or not Path(_PRIVATE_PAYLOAD_DIR).is_dir():
+            _PRIVATE_PAYLOAD_DIR = tempfile.mkdtemp(prefix="geolibre-pointcloud-")
+        folder = Path(_PRIVATE_PAYLOAD_DIR)
     cutoff = time.time() - PAYLOAD_MAX_AGE_SECS
     for stale in folder.glob("labels-*.json"):
         try:

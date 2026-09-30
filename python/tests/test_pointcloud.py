@@ -138,6 +138,8 @@ def test_write_labeled_point_cloud_applies_labels_and_instances(tmp_path):
     assert out["instance"].dtype == np.uint32
     assert int(out["instance"][0]) == 3 and int(out["instance"][1]) == 0
     assert np.array_equal(np.asarray(out.X), np.asarray(las.X))
+    with pytest.raises(ValueError, match="different file"):
+        pc.write_labeled_point_cloud(tmp_path / "field.las", tmp_path / "field.las", {})
 
 
 def test_legacy_format_is_upgraded_only_for_classes_above_31(tmp_path):

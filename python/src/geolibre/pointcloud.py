@@ -305,6 +305,9 @@ def write_labeled_point_cloud(
     import numpy as np
 
     laspy = _require_laspy()
+    # Writing opens (and truncates) the output while the input is being read.
+    if Path(path).expanduser().resolve() == Path(output).expanduser().resolve():
+        raise ValueError("The output must be a different file from the input.")
     ranges = point_node_ranges(path)
     label_index, label_value = _global_edits(labels, ranges)
     inst_index, inst_value = _global_edits(instances or {}, ranges)
