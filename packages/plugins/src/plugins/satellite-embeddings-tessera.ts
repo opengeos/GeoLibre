@@ -185,6 +185,10 @@ export function tesseraZoneInfo(zone: number, attrs: Record<string, unknown>): T
 export interface TesseraWindowBands {
   plan: TesseraWindowPlan;
   bands: [Float32Array, Float32Array, Float32Array];
+  /** UTM zone the window was read from (its grid is EPSG:326xx). */
+  zone: number;
+  /** Pixel width and height in metres, from the zone's transform. */
+  pixelSize: [number, number];
 }
 
 type ZarrArray = import("zarrita").Array<import("zarrita").DataType>;
@@ -284,6 +288,8 @@ class BulkRangeStore {
   readonly ranges = new Map<string, { offset: number; bytes: Uint8Array }[]>();
   /** Shard indexes by key, as zarrita asks for them (a suffix read). */
   readonly suffixes = new Map<string, Uint8Array>();
+  /** Shards the store does not have, so zarrita's own index read is not repeated. */
+  readonly missing = new Set<string>();
 
   constructor(readonly inner: import("zarrita").FetchStore) {}
 
@@ -297,6 +303,7 @@ class BulkRangeStore {
     options?: RequestInit,
   ): Promise<Uint8Array | undefined> {
     if ("suffixLength" in range) {
+      if (this.missing.has(key)) return undefined;
       const cached = this.suffixes.get(key);
       if (cached && cached.byteLength === range.suffixLength) return cached;
     } else {
@@ -317,7 +324,10 @@ class BulkRangeStore {
       index = this.inner
         .getRange(key, { suffixLength: SHARD_INDEX_BYTES }, signal ? { signal } : undefined)
         .then((bytes) => {
-          if (!bytes) return null;
+          if (!bytes) {
+            this.missing.add(key);
+            return null;
+          }
           this.suffixes.set(key, bytes);
           return parseShardIndex(bytes);
         })
@@ -352,7 +362,11 @@ async function openZone(zone: number): Promise<OpenedZone> {
   if (!opened) {
     opened = (async () => {
       const zarr = await import("zarrita");
-      const store = new BulkRangeStore(new zarr.FetchStore(TESSERA_ZARR_URL));
+      // A suffix range reads a shard index in one request; the default is a
+      // HEAD for the length first. Source Cooperative honours suffix ranges.
+      const store = new BulkRangeStore(
+        new zarr.FetchStore(TESSERA_ZARR_URL, { useSuffixRequest: true }),
+      );
       const groupName = tesseraZoneGroup(zone);
       const group = await zarr.open.v3(zarr.root(store).resolve(groupName), { kind: "group" });
       const [embeddings, scales] = await Promise.all([
@@ -418,23 +432,35 @@ async function visitChunks(
   );
   for (const chunk of unfetched) await visit(chunk);
   let next = 0;
+  // Once one request fails the read is lost, so the other workers stop
+  // claiming requests rather than fetching the rest of the window.
+  let failed = false;
   const worker = async (): Promise<void> => {
-    while (next < requests.length) {
+    while (!failed && next < requests.length) {
       const { key, merged } = requests[next];
       next += 1;
       signal?.throwIfAborted();
-      const bytes = await store.inner.getRange(
-        key,
-        { offset: merged.offset, length: merged.length },
-        signal ? { signal } : undefined,
-      );
-      if (!bytes) throw new Error(`Missing shard ${key}`);
+      let bytes: Uint8Array | undefined;
+      try {
+        bytes = await store.inner.getRange(
+          key,
+          { offset: merged.offset, length: merged.length },
+          signal ? { signal } : undefined,
+        );
+        if (!bytes) throw new Error(`Missing shard ${key}`);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
       const parked = { offset: merged.offset, bytes };
       const list = store.ranges.get(key) ?? [];
       list.push(parked);
       store.ranges.set(key, list);
       try {
         for (const range of merged.items) await visit(range.item);
+      } catch (error) {
+        failed = true;
+        throw error;
       } finally {
         const remaining = (store.ranges.get(key) ?? []).filter((entry) => entry !== parked);
         if (remaining.length > 0) store.ranges.set(key, remaining);
@@ -555,5 +581,10 @@ export async function readTesseraBands(
     },
     signal,
   );
-  return { plan, bands };
+  return {
+    plan,
+    bands,
+    zone,
+    pixelSize: [Math.abs(info.transform[0]), Math.abs(info.transform[4])],
+  };
 }

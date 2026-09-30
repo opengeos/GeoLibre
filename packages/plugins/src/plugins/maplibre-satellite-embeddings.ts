@@ -60,7 +60,6 @@ import {
   TesseraYearMissingError,
   readTesseraBands,
   percentileRange,
-  tesseraZone,
 } from "./satellite-embeddings-tessera";
 import { addRasterToMap, getRasterRenderEngine } from "./maplibre-raster";
 import { getControlMap } from "./style-map";
@@ -874,9 +873,8 @@ async function visualizeTessera(
   // A real raster layer rather than a PNG: the three de-quantized bands as a
   // float32 GeoTIFF in the zone's grid, so the Style panel can re-stretch or
   // reorder them and Identify reads the embedding values.
-  const zone = tesseraZone((row.bbox[0] + row.bbox[2]) / 2);
-  const [minX, , maxX, maxY] = plan.bounds;
-  const pixelSize = (maxX - minX) / plan.width;
+  const { zone, pixelSize } = result;
+  const [minX, , , maxY] = plan.bounds;
   const parts = encodeGeoTiff({
     width: plan.width,
     height: plan.height,
@@ -885,8 +883,8 @@ async function visualizeTessera(
     epsg: 32600 + zone,
     originX: minX,
     originY: maxY,
-    pixelSizeX: pixelSize,
-    pixelSizeY: pixelSize,
+    pixelSizeX: pixelSize[0],
+    pixelSizeY: pixelSize[1],
     nodata: "nan",
     bandNames: bands.map((band) => `Band ${band}`),
     tileSize: 256,
