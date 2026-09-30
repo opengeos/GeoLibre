@@ -14,7 +14,8 @@ interface LabelEdit {
   };
   instances?: {
     previous: Uint32Array;
-    next: number;
+    /** One id for every point, or one per point. */
+    next: number | Uint32Array;
   };
 }
 
@@ -102,6 +103,64 @@ export class LabelHistory {
         : {}),
     });
     return changed.length;
+  }
+
+  /**
+   * Assigns one class to several groups of points and gives each group its
+   * own new object id, as one undoable edit (e.g. one instance per SAM mask).
+   *
+   * @param cloudId - The point cloud being edited.
+   * @param classifications - Its live classification array (mutated).
+   * @param ids - Its per-point object ids (mutated).
+   * @param groups - Point indices per new object; a point in several groups
+   *   keeps the first.
+   * @param code - The class code to assign.
+   * @param firstId - Object id for the first non-empty group; later groups
+   *   count up from it.
+   * @returns How many points changed and how many objects were created.
+   */
+  assignGroups(
+    cloudId: string,
+    classifications: Uint8Array,
+    ids: Uint32Array,
+    groups: readonly Uint32Array[],
+    code: number,
+    firstId: number,
+  ): { points: number; objects: number } {
+    const changed: number[] = [];
+    const previous: number[] = [];
+    const previousIds: number[] = [];
+    const nextIds: number[] = [];
+    const seen = new Set<number>();
+    let id = firstId;
+    let objects = 0;
+    for (const group of groups) {
+      let used = false;
+      for (const index of group) {
+        if (index >= classifications.length || index >= ids.length || seen.has(index)) continue;
+        seen.add(index);
+        used = true;
+        if (classifications[index] === code && ids[index] === id) continue;
+        changed.push(index);
+        previous.push(classifications[index]);
+        previousIds.push(ids[index]);
+        nextIds.push(id);
+        classifications[index] = code;
+        ids[index] = id;
+      }
+      if (used) {
+        id++;
+        objects++;
+      }
+    }
+    if (changed.length === 0) return { points: 0, objects };
+    this.push({
+      cloudId,
+      indices: Uint32Array.from(changed),
+      classes: { previous: Uint8Array.from(previous), next: code },
+      instances: { previous: Uint32Array.from(previousIds), next: Uint32Array.from(nextIds) },
+    });
+    return { points: changed.length, objects };
   }
 
   /**
@@ -206,7 +265,10 @@ export class LabelHistory {
         const { next } = edit.classes;
         classifications[index] = typeof next === "number" ? next : next[k];
       }
-      if (ids && edit.instances && index < ids.length) ids[index] = edit.instances.next;
+      if (ids && edit.instances && index < ids.length) {
+        const { next } = edit.instances;
+        ids[index] = typeof next === "number" ? next : next[k];
+      }
     });
     this.undoStack.push(edit);
     return { cloudId: edit.cloudId, indices: edit.indices, instances: Boolean(edit.instances) };

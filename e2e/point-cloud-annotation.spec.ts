@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { COPC_URL, waitForMap } from "./helpers";
+import { COPC_URL, dropGeoJson, layerRow, waitForMap } from "./helpers";
 
 /**
  * Point Cloud Annotation (opengeos/GeoLibre#2749): select LiDAR points with a
@@ -746,5 +746,77 @@ test.describe("point cloud annotation", () => {
       "polyline",
       "polygon",
     ]);
+  });
+  test("lifts polygon layer footprints onto points, one instance per polygon", async ({ page }) => {
+    test.setTimeout(120_000);
+    await waitForMap(page);
+    await loadCopc(page);
+    // Split the fitted view (which holds the whole cloud) into west and east
+    // halves, as a stand-in for SAM masks or building footprints.
+    await page.waitForTimeout(1_500);
+    const bbox = /BBox: ([-\d.]+), ([-\d.]+), ([-\d.]+), ([-\d.]+)/
+      .exec((await page.locator("footer").textContent()) ?? "")!
+      .slice(1)
+      .map(Number);
+    const [west, south, east, north] = bbox;
+    const mid = (west + east) / 2;
+    const ring = (x0: number, x1: number) => [
+      [x0, south],
+      [x1, south],
+      [x1, north],
+      [x0, north],
+      [x0, south],
+    ];
+    await dropGeoJson(
+      page,
+      "halves",
+      JSON.stringify({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: { side: "west" },
+            geometry: { type: "Polygon", coordinates: [ring(west, mid)] },
+          },
+          {
+            type: "Feature",
+            properties: { side: "east" },
+            geometry: { type: "Polygon", coordinates: [ring(mid, east)] },
+          },
+        ],
+      }),
+    );
+    await expect(layerRow(page, "halves")).toBeVisible({ timeout: 15_000 });
+    await startSession(page);
+    const hint = await page.getByTestId("pc-annotation-hint").textContent();
+    const loaded = Number(/: ([\d,]+) points loaded/.exec(hint ?? "")?.[1].replace(/,/g, ""));
+
+    const layerSelect = page.getByTestId("pc-annotation-lift-layer");
+    await layerSelect.focus();
+    await expect(layerSelect.locator("option")).toHaveText(["halves"]);
+    await page.getByTestId("pc-annotation-lift-select").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText(
+      "inside 2 polygons of halves",
+    );
+    const selected = Number(
+      ((await page.getByTestId("pc-annotation-selected").textContent()) ?? "").replace(/\D/g, ""),
+    );
+    expect(selected).toBe(loaded);
+
+    await page.getByTestId("pc-annotation-target").selectOption("6");
+    await page.getByTestId("pc-annotation-lift-instances").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("Created 2 instances");
+    const rows = page.getByTestId("pc-annotation-objects").locator("[data-instance]");
+    await expect(rows).toHaveCount(2);
+    const counts = await rows.evaluateAll((nodes) =>
+      nodes.map((node) =>
+        Number(/([\d,]+) pts/.exec(node.textContent ?? "")?.[1].replace(/,/g, "")),
+      ),
+    );
+    expect(counts[0] + counts[1]).toBe(loaded);
+    expect(counts.every((count) => count > 0)).toBe(true);
+    // One undo removes both instances.
+    await page.getByTestId("pc-annotation-undo").click();
+    await expect(rows).toHaveCount(0);
   });
 });

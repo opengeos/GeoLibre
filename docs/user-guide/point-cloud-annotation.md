@@ -66,6 +66,23 @@ class and point count; **Select** selects its points again and **Dissolve**
 removes the instance while its points keep their class. Instance ids are saved
 with the project like classes, and exported with the points (see below).
 
+## Polygons to points
+
+**Polygons to points** lifts a polygon layer straight up through the cloud:
+masks from **Plugins → SamGeo** segmenting imagery, building footprints, or any
+other polygons in the project. Pick the layer, then:
+
+- **Select inside** selects the points whose position falls inside any polygon
+  (holes excluded), combined with the current selection like a drawn shape.
+- **Instance per polygon** gives the points inside each polygon the class to
+  assign and their own [instance](#instances), as one undoable edit. A point in
+  overlapping polygons belongs to the first one.
+
+A footprint takes every point above and below it, ground included, so narrow
+it with the **Min Z** / **Max Z** and **Only points in class** filters first
+(for example, only unclassified points above the ground). Locked, hidden and
+elevation-filtered points are skipped, as in a drawn selection.
+
 ## Pre-labelling with Whitebox
 
 **Pre-label (Whitebox)** runs a Whitebox LiDAR classifier on the session's

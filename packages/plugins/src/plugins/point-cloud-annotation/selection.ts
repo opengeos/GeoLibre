@@ -283,3 +283,123 @@ export function combineSelection(
   }
   return Uint32Array.from(result);
 }
+
+/** A polygon as GeoJSON rings of `[lng, lat]`: the outer ring, then holes. */
+export type LngLatPolygon = ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>;
+
+/**
+ * Collects the polygons of a FeatureCollection (Polygon and MultiPolygon
+ * features, including those inside a GeometryCollection).
+ *
+ * @param collection - GeoJSON features in WGS 84.
+ * @returns One entry per polygon, in feature order.
+ */
+export function collectPolygons(
+  collection: GeoJSON.FeatureCollection | undefined,
+): LngLatPolygon[] {
+  const out: LngLatPolygon[] = [];
+  const visit = (geometry: GeoJSON.Geometry | null | undefined) => {
+    if (!geometry) return;
+    if (geometry.type === "Polygon") out.push(geometry.coordinates);
+    else if (geometry.type === "MultiPolygon") out.push(...geometry.coordinates);
+    else if (geometry.type === "GeometryCollection") geometry.geometries.forEach(visit);
+  };
+  for (const feature of collection?.features ?? []) visit(feature.geometry);
+  return out.filter((rings) => rings.length > 0 && rings[0].length >= 3);
+}
+
+/** Even-odd ray casting against one ring. */
+function inRing(ring: ReadonlyArray<ReadonlyArray<number>>, x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * The points inside each polygon, by longitude/latitude (a footprint lifted
+ * straight up through the cloud), e.g. to turn SAM masks or building
+ * footprints into point labels. A point on several polygons belongs to the
+ * first one.
+ *
+ * @param cloud - The cloud's points (`[dLng, dLat, z]` offsets from `origin`).
+ * @param origin - The cloud's coordinate origin.
+ * @param polygons - Polygons as GeoJSON rings; holes are excluded.
+ * @param filters - Z range and class restrictions, as for screen selections.
+ * @returns For each polygon, the indices of the points inside it.
+ */
+export function selectPointsInPolygons(
+  cloud: Omit<SelectableCloud, "zOffset">,
+  origin: readonly [number, number, number],
+  polygons: readonly LngLatPolygon[],
+  filters: SelectionFilters = {},
+): Uint32Array[] {
+  const results: number[][] = polygons.map(() => []);
+  if (polygons.length === 0) return [];
+  // Bounding boxes, bucketed on a coarse grid so each point tests only the
+  // polygons near it (SAM output can be hundreds of masks).
+  const boxes = polygons.map((rings) => {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const [x, y] of rings[0]) {
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    }
+    return [x0, y0, x1, y1];
+  });
+  const gx0 = Math.min(...boxes.map((b) => b[0]));
+  const gy0 = Math.min(...boxes.map((b) => b[1]));
+  const gx1 = Math.max(...boxes.map((b) => b[2]));
+  const gy1 = Math.max(...boxes.map((b) => b[3]));
+  const cells = 64;
+  const cw = (gx1 - gx0) / cells || 1;
+  const ch = (gy1 - gy0) / cells || 1;
+  const cellOf = (v: number, v0: number, size: number) =>
+    Math.min(cells - 1, Math.max(0, Math.floor((v - v0) / size)));
+  const grid: number[][] = Array.from({ length: cells * cells }, () => []);
+  boxes.forEach(([x0, y0, x1, y1], k) => {
+    for (let cy = cellOf(y0, gy0, ch); cy <= cellOf(y1, gy0, ch); cy++) {
+      for (let cx = cellOf(x0, gx0, cw); cx <= cellOf(x1, gx0, cw); cx++) {
+        grid[cy * cells + cx].push(k);
+      }
+    }
+  });
+  const { positions, classifications } = cloud;
+  const count = Math.min(cloud.pointCount, Math.floor(positions.length / 3));
+  const minZ = filters.minZ ?? -Infinity;
+  const maxZ = filters.maxZ ?? Infinity;
+  const only = filters.onlyClasses && filters.onlyClasses.size > 0 ? filters.onlyClasses : null;
+  const skip = filters.skipClasses && filters.skipClasses.size > 0 ? filters.skipClasses : null;
+  const [lng0, lat0] = origin;
+  for (let i = 0; i < count; i++) {
+    const z = positions[i * 3 + 2];
+    if (z < minZ || z > maxZ) continue;
+    if (classifications && (only || skip)) {
+      const code = classifications[i];
+      if (only && !only.has(code)) continue;
+      if (skip && skip.has(code)) continue;
+    }
+    const x = lng0 + positions[i * 3];
+    const y = lat0 + positions[i * 3 + 1];
+    if (x < gx0 || x > gx1 || y < gy0 || y > gy1) continue;
+    for (const k of grid[cellOf(y, gy0, ch) * cells + cellOf(x, gx0, cw)]) {
+      const [x0, y0, x1, y1] = boxes[k];
+      if (x < x0 || x > x1 || y < y0 || y > y1) continue;
+      const rings = polygons[k];
+      if (!inRing(rings[0], x, y)) continue;
+      let inHole = false;
+      for (let h = 1; h < rings.length && !inHole; h++) inHole = inRing(rings[h], x, y);
+      if (inHole) continue;
+      results[k].push(i);
+      break;
+    }
+  }
+  return results.map((indices) => Uint32Array.from(indices));
+}
