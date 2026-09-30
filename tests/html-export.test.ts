@@ -6,6 +6,7 @@ import {
   buildProjectHtml,
   DEFAULT_VIEWER_BASE_URL,
   resolveViewerBaseUrl,
+  viewerChromeParams,
 } from "../apps/geolibre-desktop/src/lib/html-export";
 
 // A minimal project that only exercises the fields the HTML builder touches.
@@ -178,6 +179,53 @@ describe("buildProjectHtml", () => {
     // Dangerous permissions must NOT be present.
     assert.ok(!html.includes("allow-top-navigation"));
     assert.ok(!html.includes("allow-popups"));
+  });
+});
+
+describe("viewerChromeParams (#2764)", () => {
+  it("carries the layout flags, theme and a collapsed Layers panel", () => {
+    assert.deepEqual(
+      viewerChromeParams("?embed=1&layout=embed&theme=light&foo=1", {
+        themeMode: "dark",
+        layersCollapsed: true,
+      }),
+      [
+        ["layout", "embed"],
+        ["panels", "collapsed"],
+        ["theme", "dark"],
+      ],
+    );
+    assert.deepEqual(viewerChromeParams("?maponly=1&toolbar=hidden"), [
+      ["maponly", "1"],
+      ["toolbar", "hidden"],
+    ]);
+  });
+
+  it("drops a launch-time panels=collapsed the user has since expanded", () => {
+    assert.deepEqual(viewerChromeParams("?panels=collapsed", { layersCollapsed: false }), []);
+  });
+
+  it("does not collapse panels that are hidden", () => {
+    assert.deepEqual(viewerChromeParams("?maponly", { layersCollapsed: true }), [["maponly", ""]]);
+    assert.deepEqual(viewerChromeParams("?panels=hidden", { layersCollapsed: true }), [
+      ["panels", "hidden"],
+    ]);
+  });
+
+  it("lands in the viewer URL before a fragment, without overriding the configured URL", () => {
+    const html = buildProjectHtml({
+      project: PROJECT,
+      title: "My Map",
+      appUrl: "https://example.com/app?theme=light#x",
+      viewerParams: viewerChromeParams("?layout=embed", {
+        themeMode: "dark",
+        layersCollapsed: true,
+      }),
+    });
+    assert.match(
+      html,
+      /data-src="https:\/\/example\.com\/app\?theme=light&amp;embed=1&amp;welcome=0&amp;layout=embed&amp;panels=collapsed#x"/,
+    );
   });
 });
 

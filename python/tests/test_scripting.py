@@ -583,7 +583,31 @@ def test_to_html_inserts_embed_before_fragment(m):
     # embed=1 must land in the query string, before any "#fragment", or the
     # browser folds it into the fragment and the iframe never sees the flag.
     html = m.to_html(app_url="https://example.com/app#section")
-    assert "https://example.com/app?embed=1#section" in html
+    assert "https://example.com/app?embed=1&amp;layout=embed&amp;theme=light#section" in html
+
+
+@pytest.mark.parametrize(
+    ("layout", "theme", "flags"),
+    [
+        ("maponly", "dark", "embed=1&amp;maponly=1&amp;theme=dark"),
+        ("embed", "light", "embed=1&amp;layout=embed&amp;theme=light"),
+        ("full", "dark", "embed=1&amp;theme=dark"),
+    ],
+)
+def test_to_html_carries_the_layout_and_theme(monkeypatch, layout, theme, flags):
+    # The export frames the app with the same chrome flags the widget uses, so a
+    # map-only notebook map exports as map-only (#2764).
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    html = Map(layout=layout, theme=theme).to_html(app_url="https://example.com/app")
+    assert f'src="https://example.com/app?{flags}"' in html
+
+
+def test_render_project_html_rejects_an_unknown_layout():
+    with pytest.raises(ValueError, match="layout must be one of"):
+        gmod.render_project_html({}, layout="sidebar")
+    with pytest.raises(ValueError, match="theme must be one of"):
+        gmod.render_project_html({}, theme="sepia")
 
 
 def test_to_html_posts_the_project_to_the_app_origin_only(m):

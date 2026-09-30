@@ -60,6 +60,7 @@ import { useLayerRefresh } from "./layer-panel/useLayerRefresh";
 import { useLayerRename } from "./layer-panel/useLayerRename";
 import { useLayerSelection } from "./layer-panel/useLayerSelection";
 import { useTimeSliderBinding } from "./layer-panel/useTimeSliderBinding";
+import { setLayersPanelCollapsed } from "../../lib/layer-panel-collapse";
 
 interface LayerPanelProps {
   themeMode: ThemeMode;
@@ -270,6 +271,11 @@ export function LayerPanel({
   // ref starts as null (not `autoCollapse`) so a mount with `autoCollapse`
   // already true reads as a null→true transition and still collapses. Skipped in
   // controlled mode, where the parent (shared rail) owns collapse.
+  // Publish the collapse state for Export as HTML (see layer-panel-collapse).
+  useEffect(() => {
+    setLayersPanelCollapsed(isCollapsed);
+    return () => setLayersPanelCollapsed(false);
+  }, [isCollapsed]);
   const prevAutoCollapse = useRef<boolean | null>(null);
   const collapsedBeforeAuto = useRef(internalCollapsed);
   useEffect(() => {

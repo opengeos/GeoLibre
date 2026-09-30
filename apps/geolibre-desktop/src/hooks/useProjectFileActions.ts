@@ -39,7 +39,8 @@ import {
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
-import { buildProjectHtml } from "../lib/html-export";
+import { buildProjectHtml, viewerChromeParams } from "../lib/html-export";
+import { isLayersPanelCollapsed } from "../lib/layer-panel-collapse";
 import { ensureHtmlFileName, ensureProjectFileName } from "../lib/file-names";
 import { mergeStringLists } from "../lib/string-lists";
 import { fetchProjectFromUrl } from "../lib/project-url";
@@ -1560,6 +1561,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const html = buildProjectHtml({
         project,
         title: defaultProjectName,
+        // Open the export with this app's chrome: its layout flags, theme,
+        // and a collapsed Layers panel (#2764).
+        viewerParams: viewerChromeParams(window.location.search, {
+          themeMode: document.documentElement.classList.contains("dark") ? "dark" : "light",
+          layersCollapsed: isLayersPanelCollapsed(),
+        }),
       });
       // Returns null when the user cancels the save dialog; report that as a
       // no-op rather than a successful export.
