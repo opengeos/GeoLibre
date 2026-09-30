@@ -286,8 +286,8 @@ def write_labeled_point_cloud(
 
     Streams the file chunk by chunk, so it works on files larger than memory.
     A COPC input is written as plain LAS/LAZ (by ``output``'s extension); a
-    legacy point format (0-5) is upgraded to LAS 1.4 format 6/7 when a label
-    needs a class above 31. Instance ids add a uint32 ``instance`` extra
+    legacy point format (0-5) is upgraded to LAS 1.4 (6, 7, or 9/10 for the
+    waveform formats) when a label needs a class above 31. Instance ids add a uint32 ``instance`` extra
     dimension, like the app's LAS export.
 
     Args:
@@ -371,7 +371,7 @@ _GEOTIFF_RECORDS = {34735, 34736, 34737}
 
 
 def _upgraded_header(source: Any) -> Any:
-    """A LAS 1.4 format 6/7 header carrying over a legacy header's metadata.
+    """A LAS 1.4 header (format 6, 7, 9 or 10) carrying a legacy header's metadata.
 
     Keeps the scales and offsets, identifiers, creation date, extra-bytes
     dimensions and CRS; the CRS is rewritten as WKT (formats 6-10 require it)
@@ -385,7 +385,9 @@ def _upgraded_header(source: Any) -> Any:
     """
     laspy = _require_laspy()
     fmt = source.point_format.id
-    header = laspy.LasHeader(point_format=7 if fmt in (2, 3, 5) else 6, version="1.4")
+    # Waveform formats keep their packets in 9/10; colour in 7.
+    target = {4: 9, 5: 10}.get(fmt, 7 if fmt in (2, 3) else 6)
+    header = laspy.LasHeader(point_format=target, version="1.4")
     header.scales = source.scales
     header.offsets = source.offsets
     for name in ("system_identifier", "generating_software", "creation_date"):

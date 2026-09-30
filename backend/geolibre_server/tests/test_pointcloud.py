@@ -192,6 +192,22 @@ def test_payload_is_removed_when_the_job_cannot_start(
     assert created and not Path(created[0]).exists()
 
 
+def test_stale_payloads_are_cleared(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+    import time
+
+    monkeypatch.setattr(pointcloud.tempfile, "gettempdir", lambda: str(tmp_path))
+    folder = Path(pointcloud._payload_dir())
+    stale = folder / "labels-old.json"
+    fresh = folder / "labels-new.json"
+    stale.write_text("{}")
+    fresh.write_text("{}")
+    hour_ago = time.time() - pointcloud.PAYLOAD_MAX_AGE_SECS - 10
+    os.utime(stale, (hour_ago, hour_ago))
+    pointcloud._payload_dir()
+    assert not stale.exists() and fresh.exists()
+
+
 def test_endpoint_checks_extensions_and_hands_labels_over_in_a_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -20,6 +20,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -195,7 +196,9 @@ with laspy.open(input_path) as reader:
     if fmt < 6 and len(lv) and int(lv.max()) > 31:
         # LAS 1.4 format 6/7 for classes above 31, keeping the metadata, the
         # extra-bytes dimensions and the CRS (as WKT, which 6-10 require).
-        header = laspy.LasHeader(point_format=7 if fmt in (2, 3, 5) else 6, version="1.4")
+        # Waveform formats keep their packets in 9/10; colour in 7.
+        target = {4: 9, 5: 10}.get(fmt, 7 if fmt in (2, 3) else 6)
+        header = laspy.LasHeader(point_format=target, version="1.4")
         header.scales = source.scales
         header.offsets = source.offsets
         for name in ("system_identifier", "generating_software", "creation_date"):
@@ -337,6 +340,31 @@ def _ensure_pointcloud_runtime() -> str:
     return python
 
 
+PAYLOAD_MAX_AGE_SECS = 3600
+
+
+def _payload_dir() -> str:
+    """The folder for job label payloads, cleared of stale ones.
+
+    A job removes its payload as soon as it starts; one that never got that
+    far (killed, or its runtime broke) would leave the file behind, so files
+    older than an hour are removed whenever a new job is prepared.
+
+    Returns:
+        The folder path.
+    """
+    folder = Path(tempfile.gettempdir()) / "geolibre-pointcloud-payloads"
+    folder.mkdir(mode=0o700, exist_ok=True)
+    cutoff = time.time() - PAYLOAD_MAX_AGE_SECS
+    for stale in folder.glob("labels-*.json"):
+        try:
+            if stale.stat().st_mtime < cutoff:
+                stale.unlink()
+        except OSError:
+            pass
+    return str(folder)
+
+
 @router.get("/status")
 def pointcloud_status():
     """Report whether labelled point cloud rewrites are available."""
@@ -371,7 +399,8 @@ def pointcloud_apply_labels(request: ApplyLabelsRequest):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     # Labels can run to megabytes, past the per-argument limit of a command
     # line, so the job reads them from a private temporary file.
-    handle, payload_path = tempfile.mkstemp(prefix="geolibre-labels-", suffix=".json")
+    payload_dir = _payload_dir()
+    handle, payload_path = tempfile.mkstemp(prefix="labels-", suffix=".json", dir=payload_dir)
     with os.fdopen(handle, "w", encoding="utf-8") as payload:
         json.dump({"labels": request.labels, "instances": request.instances}, payload)
     params = {"input_path": input_path, "output_path": output_path, "payload_path": payload_path}

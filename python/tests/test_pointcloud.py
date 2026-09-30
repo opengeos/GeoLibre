@@ -152,6 +152,13 @@ def test_legacy_format_is_upgraded_only_for_classes_above_31(tmp_path):
     pc.write_labeled_point_cloud(tmp_path / "legacy.las", tmp_path / "big.las", {"file": {0: 64}})
     big = laspy.read(str(tmp_path / "big.las"))
     assert big.header.point_format.id == 6
+    # Waveform formats keep their waveform fields (4 -> 9).
+    wave, _ = _field(point_format=4)
+    wave.write(str(tmp_path / "wave.las"))
+    pc.write_labeled_point_cloud(
+        tmp_path / "wave.las", tmp_path / "wave-out.las", {"file": {0: 64}}
+    )
+    assert laspy.read(str(tmp_path / "wave-out.las")).header.point_format.id == 9
     assert big.classification[0] == 64
     assert np.allclose(np.asarray(big.z), np.asarray(las.z))
 
