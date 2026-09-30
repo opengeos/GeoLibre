@@ -106,6 +106,12 @@ since the WebAssembly build runs out of memory on a few million points at once;
 a 4.6 million point session takes a couple of minutes. The result is a starting
 point: review it, then correct it with the selection tools.
 
+Notebooks and agents can pre-label without the app: `Map.prelabel_point_cloud`
+in the [Python package](../python.md) and the `prelabel_point_cloud`
+[MCP tool](../mcp.md) run the same classifiers on a local copy of the layer's
+file (with the `geolibre[pointcloud]` extra) and save the result as the layer's
+labels, which the annotator shows when the project opens.
+
 ## 3D boxes (cuboids)
 
 Label objects such as buildings, trees or vehicles with oriented 3D boxes:
@@ -191,6 +197,16 @@ them.
   label. Its `point_annotations` line up point for point with the LAS file,
   with one annotation per instance and one per class for points in no
   instance, each with `category_id` set to the class code.
+
+The exports above cover the points loaded in the session. **Full file with
+labels** writes a whole local copy of the point cloud with every saved label
+(and instance id) applied instead: enter the path of the local copy (the same
+LAS, LAZ or COPC file the layer streams) and an output `.las` or `.laz` path,
+then **Write file**. It runs in the GeoLibre server, which reads the file chunk
+by chunk, so files larger than memory work; a COPC is written as plain LAS/LAZ.
+The section shows when the server is running and the cloud was loaded from a
+URL (only those have saved labels). In the web build the paths must be inside
+the server's allowed folders.
 
 **Finish session** resumes streaming.
 

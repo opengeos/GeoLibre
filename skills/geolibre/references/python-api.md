@@ -63,6 +63,8 @@ m.add_wfs(endpoint, type_name, max_features=1000)
 m.add_lidar(url, name=None)                          # LAS/LAZ/COPC/EPT point cloud by URL
 m.point_cloud_annotations()                           # labels, instances, classes + 3D boxes saved by the annotator
 m.set_point_cloud_classes([{"code": 64, "name": "Car", "color": "#e11d48"}])  # custom classes
+m.prelabel_point_cloud(url, "local.copc.laz", tool="ground")  # Whitebox pre-labels -> project labels
+m.write_labeled_point_cloud(url, "local.copc.laz", "labeled.laz")  # full file with labels applied
 m.add_3d_tiles(url, name, altitude_offset=0)          # or ion_asset_id=96188 (3D globe only)
 m.add_cesium_ion(asset_id, name, kind="3d-tiles")     # kind="imagery" for an imagery asset
 m.add_czml(url, name)                                  # or data=[...packets] (3D globe only)

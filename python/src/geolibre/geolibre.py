@@ -2746,6 +2746,69 @@ class Map(anywidget.AnyWidget):
         """
         return _project.point_cloud_annotations(self.project)
 
+    def prelabel_point_cloud(
+        self,
+        url: str,
+        input_file: str,
+        tool: str = "ground",
+        *,
+        only_unclassified: bool = True,
+    ) -> dict[str, int]:
+        """Pre-label a LiDAR layer with a Whitebox classifier, without the app.
+
+        Runs the app's Pre-label classifiers on a local copy of the layer's file
+        and saves the changed classes as annotator labels for the layer, so
+        they show when the project opens. Needs ``geolibre[pointcloud]``.
+
+        Args:
+            url: The LiDAR layer's source URL (as passed to :meth:`add_lidar`).
+            input_file: A local copy of that point cloud (LAS/LAZ/COPC).
+            tool: ``"ground"`` or ``"ground-vegetation"``.
+            only_unclassified: Only relabel points still 0 or 1.
+
+        Returns:
+            Class code -> number of points relabelled into it.
+
+        Raises:
+            ValueError: When no LiDAR layer uses ``url``, or for an unknown tool.
+        """
+        from . import pointcloud as _pointcloud
+
+        if url not in _authoring.lidar_source_urls(self.project):
+            raise ValueError("No LiDAR layer in this map uses that URL; add it with add_lidar().")
+        current, _ = _pointcloud.labels_for_source(self.project, url)
+        labels = _pointcloud.prelabel_point_cloud(
+            input_file, tool, current=current, only_unclassified=only_unclassified
+        )
+        self._update_project(lambda project: _authoring.merge_point_labels(project, url, labels))
+        counts: dict[int, int] = {}
+        for edits in labels.values():
+            for code in edits.values():
+                counts[code] = counts.get(code, 0) + 1
+        return counts
+
+    def write_labeled_point_cloud(
+        self, url: str, input_file: str, output_file: str
+    ) -> dict[str, int]:
+        """Write a LiDAR layer's file with this map's point labels applied.
+
+        Streams ``input_file`` (a local copy of the layer's LAS/LAZ/COPC file)
+        and writes every point with the annotator's saved classes and instance
+        ids applied. Needs ``geolibre[pointcloud]``.
+
+        Args:
+            url: The LiDAR layer's source URL whose labels to apply.
+            input_file: A local copy of that point cloud.
+            output_file: The ``.las`` or ``.laz`` file to write.
+
+        Returns:
+            ``{"points", "relabelled", "instanced"}`` counts.
+        """
+        from . import pointcloud as _pointcloud
+
+        labels, instances = _pointcloud.labels_for_source(self.project, url)
+        return _pointcloud.write_labeled_point_cloud(input_file, output_file, labels, instances)
+
     def set_point_cloud_classes(self, classes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Define custom point cloud classes for the app's annotator.
 

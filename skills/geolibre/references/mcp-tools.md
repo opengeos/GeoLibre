@@ -40,6 +40,8 @@ create_project(path, name="Untitled Project", center=None, zoom=None,
 describe_project(path)
 get_point_cloud_annotations(path)
 set_point_cloud_classes(path, classes)
+prelabel_point_cloud(path, url, input_file, tool="ground", only_unclassified=True)
+write_labeled_point_cloud(path, url, input_file, output_file, overwrite=False)
 list_catalog()
 ```
 
@@ -57,6 +59,13 @@ plus every saved 3D box (with its status and attributes).
 `set_point_cloud_classes` defines the annotator's custom classes (its label
 schema): `[{"code": 64, "name": "Car", "color": "#e11d48"}]`, codes 19-255.
 Existing labels, instances and boxes are kept; an empty list clears them.
+
+`prelabel_point_cloud` runs the app's Pre-label classifiers (`ground`,
+`ground-vegetation`) on a local copy of a LiDAR layer's file and saves the
+changed classes as labels for the layer `url`. `write_labeled_point_cloud`
+writes that local file with the project's labels (and instance ids) applied, as
+full-resolution LAS/LAZ. Both need the `geolibre[pointcloud]` extra, and `url`
+must be a LiDAR layer in the project.
 
 `list_catalog` returns the basemaps, color ramp names, legend presets, and the
 active workspace roots. Call it before guessing any of those names.

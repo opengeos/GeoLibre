@@ -574,6 +574,61 @@ def test_set_point_cloud_classes_tool_saves_the_schema(server, project_path, tmp
     assert json.loads((tmp_path / project_path).read_text()) == saved
 
 
+def test_point_cloud_file_tools_prelabel_and_write(server, project_path, tmp_path):
+    """Pre-label a LiDAR layer from a local file, then write the labelled file."""
+    laspy = pytest.importorskip("laspy")
+    np = pytest.importorskip("numpy")
+    pytest.importorskip("whitebox_workflows")
+    xs, ys = np.meshgrid(np.arange(-30.0, 30.0), np.arange(-30.0, 30.0))
+    header = laspy.LasHeader(point_format=6, version="1.4")
+    header.scales = [0.01, 0.01, 0.01]
+    las = laspy.LasData(header)
+    las.x, las.y = xs.ravel() + 500000, ys.ravel() + 4800000
+    las.z = 100 + 0.02 * xs.ravel()
+    las.classification = np.ones(xs.size, dtype=np.uint8)
+    las.write(str(tmp_path / "field.las"))
+    url = "https://x/field.las"
+    call(server, "add_lidar_layer", path=project_path, name="Field", url=url)
+
+    result = call(
+        server, "prelabel_point_cloud", path=project_path, url=url, input_file="field.las"
+    )
+    assert result["relabelled"] > 3000
+    assert set(result["classes"]) == {"2"}
+    saved = call(server, "get_point_cloud_annotations", path=project_path)
+    assert saved["labels"][url] == result["classes"]
+
+    written = call(
+        server,
+        "write_labeled_point_cloud",
+        path=project_path,
+        url=url,
+        input_file="field.las",
+        output_file="labeled.laz",
+    )
+    assert written["points"] == xs.size
+    out = laspy.read(str(tmp_path / "labeled.laz"))
+    assert int((np.asarray(out.classification) == 2).sum()) == result["relabelled"]
+
+    # The URL must be one of the project's LiDAR layers, and the output a new file.
+    assert "No LiDAR layer" in call_error(
+        server,
+        "prelabel_point_cloud",
+        path=project_path,
+        url="https://x/other.las",
+        input_file="field.las",
+    )
+    assert "different file" in call_error(
+        server,
+        "write_labeled_point_cloud",
+        path=project_path,
+        url=url,
+        input_file="field.las",
+        output_file="field.las",
+        overwrite=True,
+    )
+
+
 def test_cesium_ion_tools_persist_the_asset_id(server, project_path, tmp_path):
     """The globe loads Ion assets from `source.ionAssetId`, so it must survive the save."""
     call(server, "add_3d_tiles_layer", path=project_path, name="A", ion_asset_id=96188)

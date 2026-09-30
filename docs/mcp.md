@@ -92,6 +92,8 @@ Give it a directory meant for maps, not your home directory.
 | `describe_project` | Summarize the camera, basemap, layers, and map controls. Inlined feature data is reported as a count, never echoed back. |
 | `get_point_cloud_annotations` | Per point cloud, how many points the app's annotator relabelled into each class and how many points each instance holds, plus the custom classes, 3D vectors and saved 3D boxes (with status and attributes). |
 | `set_point_cloud_classes` | Define the annotator's custom classes (codes 19-255, name, `#rrggbb` color); keeps existing labels and boxes. |
+| `prelabel_point_cloud` | Run the app's Whitebox pre-label classifiers on a local copy of a LiDAR layer and save the changed classes as its labels (needs `geolibre[pointcloud]`). |
+| `write_labeled_point_cloud` | Write a local copy of a LiDAR layer's LAS/LAZ/COPC file with the project's labels and instance ids applied (needs `geolibre[pointcloud]`). |
 | `list_catalog` | List the named basemaps, color ramps, and legend presets, plus the active workspace roots. |
 
 ### Adding layers

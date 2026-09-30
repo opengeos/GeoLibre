@@ -96,6 +96,7 @@ import {
   setTimelapseVideoSaver,
   setPointCloudAnnotationFileSaver,
   setPointCloudPrelabelRunner,
+  setPointCloudLabelWriter,
   maplibreUsgsLidarPlugin,
   pointCloudAnnotationPlugin,
   maplibreUsgsNldiPlugin,
@@ -364,6 +365,46 @@ setPointCloudPrelabelRunner(async (toolId, parameters, las) => {
     throw new Error(job.error || job.messages.slice(-1)[0] || `${toolId} failed`);
   }
   return output;
+});
+
+// The point cloud annotator writes a whole local file with its saved labels
+// through the sidecar's /pointcloud job; the client lives in the processing
+// package, loaded on first use.
+setPointCloudLabelWriter({
+  available: async () => {
+    const { fetchPointCloudStatus } = await import("@geolibre/processing");
+    try {
+      return (await fetchPointCloudStatus()).available;
+    } catch {
+      return false;
+    }
+  },
+  write: async ({ inputPath, outputPath, labels, instances }) => {
+    const { fetchConversionJob, runPointCloudApplyLabels } = await import("@geolibre/processing");
+    let job = await runPointCloudApplyLabels({
+      input_path: inputPath,
+      output_path: outputPath,
+      labels,
+      instances,
+    });
+    while (job.status === "pending" || job.status === "running") {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      job = await fetchConversionJob(job.id);
+    }
+    if (job.status !== "succeeded") {
+      throw new Error(job.error || job.messages.slice(-1)[0] || "The point cloud job failed");
+    }
+    const result = (job.result ?? {}) as {
+      points?: number;
+      relabelled?: number;
+      instanced?: number;
+    };
+    return {
+      points: result.points ?? 0,
+      relabelled: result.relabelled ?? 0,
+      instanced: result.instanced ?? 0,
+    };
+  },
 });
 
 // The Earthdata GIS plugin exports an ArcGIS service as a plain GeoTIFF but

@@ -86,6 +86,32 @@ let fileSaver: PointCloudAnnotationFileSaver | null = null;
 let prelabelRunner: PrelabelRunner | null = null;
 
 /**
+ * Writes a whole local LAS/LAZ/COPC file with a source's saved labels applied
+ * (the sidecar's /pointcloud job). `available` resolves false when the sidecar
+ * or its point cloud runtime is missing.
+ */
+export interface PointCloudLabelWriter {
+  available: () => Promise<boolean>;
+  write: (request: {
+    inputPath: string;
+    outputPath: string;
+    labels: Record<string, string>;
+    instances: Record<string, string>;
+  }) => Promise<{ points: number; relabelled: number; instanced: number }>;
+}
+
+let labelWriter: PointCloudLabelWriter | null = null;
+
+/**
+ * Registers how to write a labelled full file (the app's sidecar client).
+ *
+ * @param writer - The writer, or null to hide the option.
+ */
+export function setPointCloudLabelWriter(writer: PointCloudLabelWriter | null): void {
+  labelWriter = writer;
+}
+
+/**
  * Registers how to run a Whitebox LiDAR tool for pre-labelling (the app's
  * in-browser WASM runner).
  *
@@ -317,6 +343,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const lockedClasses = new Set<number>();
   let boundControl: LidarControl | null = null;
   let fullDetailLoading = false;
+  /** Whether the server can write labelled full files (resolved after build). */
+  let fullFileAvailable = false;
   let disposed = false;
 
   container.replaceChildren();
@@ -495,9 +523,30 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   exportLasButton.dataset.testid = "pc-annotation-export-las";
   exportSegmentsButton.dataset.testid = "pc-annotation-export-segments";
   const exportNote = el("div", "", "line-height:1.4;color:hsl(var(--muted-foreground));");
+  // Full file: the GeoLibre server rewrites a local copy of the cloud with every
+  // saved label applied, beyond the points a session has loaded.
+  const fullFile = el("details", undefined, "display:flex;flex-direction:column;gap:6px;");
+  fullFile.dataset.testid = "pc-annotation-full-file";
+  fullFile.hidden = true;
+  const fullFileSummary = el("summary", "", "cursor:pointer;");
+  const fullFileNote = el("div", "", "line-height:1.4;color:hsl(var(--muted-foreground));");
+  const pathInput = (testid: string) => {
+    const input = el("input");
+    input.type = "text";
+    input.dataset.testid = testid;
+    input.style.cssText =
+      "padding:6px;border:1px solid hsl(var(--border));border-radius:5px;background:transparent;color:inherit;min-width:0;";
+    return input;
+  };
+  const fullFileInput = pathInput("pc-annotation-full-file-input");
+  const fullFileOutput = pathInput("pc-annotation-full-file-output");
+  const fullFileWrite = button("");
+  fullFileWrite.dataset.testid = "pc-annotation-full-file-write";
+  fullFile.append(fullFileSummary, fullFileNote, fullFileInput, fullFileOutput, fullFileWrite);
   exportSection.root.append(
     row(exportLasButton, exportLazButton, exportNpyButton, exportSegmentsButton),
     exportNote,
+    fullFile,
   );
 
   const cuboids = new CuboidSection(
@@ -1201,6 +1250,17 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     exportLazButton.textContent = tr(app, "exportLaz", "LAZ (compressed)");
     exportNpyButton.textContent = tr(app, "exportNpy", "NumPy (.npy)");
     exportSegmentsButton.textContent = tr(app, "exportSegments", "Segments.ai JSON");
+    fullFileSummary.textContent = tr(app, "fullFile", "Full file with labels");
+    fullFileNote.textContent = tr(
+      app,
+      "fullFileNote",
+      "Writes a local copy of this point cloud with every saved label applied, not only the points loaded here. Runs in the GeoLibre server.",
+    );
+    fullFileInput.placeholder = tr(app, "fullFileInput", "Local copy (.las, .laz or .copc.laz)");
+    fullFileInput.setAttribute("aria-label", fullFileInput.placeholder);
+    fullFileOutput.placeholder = tr(app, "fullFileOutput", "Output file (.las or .laz)");
+    fullFileOutput.setAttribute("aria-label", fullFileOutput.placeholder);
+    fullFileWrite.textContent = tr(app, "fullFileWrite", "Write file");
     exportNote.textContent = tr(
       app,
       "exportNote",
@@ -1223,6 +1283,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     for (const node of sessionSections) node.hidden = session === null;
     // Pre-labelling needs the host's WASM runner.
     if (!prelabelRunner) prelabel.root.hidden = true;
+    // Saved labels exist only for a cloud loaded from a URL, and the rewrite
+    // needs the server.
+    fullFile.hidden = !(fullFileAvailable && session?.source);
   };
 
   // --- Map interaction.
@@ -2028,6 +2091,60 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 
   fullDetailButton.addEventListener("click", () => void loadViewAtFullDetail());
+
+  // Whether the server can write labelled files, checked once per panel.
+  void labelWriter
+    ?.available()
+    .then((available) => {
+      fullFileAvailable = available;
+      if (!disposed) renderSessionVisibility();
+    })
+    .catch(() => {});
+
+  const writeFullFile = async () => {
+    if (!labelWriter || !session?.source) return;
+    const inputPath = fullFileInput.value.trim();
+    const outputPath = fullFileOutput.value.trim();
+    if (!inputPath || !outputPath) {
+      setStatus(tr(app, "fullFileMissing", "Enter the local copy and the output file."));
+      return;
+    }
+    const encoded = labelStore.encode();
+    const source = session.source;
+    const labels = encoded?.sources.find((entry) => entry.url === source)?.nodes ?? {};
+    const instances = encoded?.instances?.find((entry) => entry.url === source)?.nodes ?? {};
+    if (Object.keys(labels).length === 0 && Object.keys(instances).length === 0) {
+      setStatus(tr(app, "fullFileNoLabels", "This point cloud has no saved labels yet."));
+      return;
+    }
+    fullFileWrite.disabled = true;
+    setStatus(tr(app, "fullFileWriting", "Writing {{name}}…", { name: outputPath }));
+    try {
+      const result = await labelWriter.write({ inputPath, outputPath, labels, instances });
+      setStatus(
+        tr(
+          app,
+          "fullFileWritten",
+          "Wrote {{points}} points to {{name}}: {{relabelled}} relabelled, {{instanced}} in instances.",
+          {
+            points: numberFormat.format(result.points),
+            name: outputPath,
+            relabelled: numberFormat.format(result.relabelled),
+            instanced: numberFormat.format(result.instanced),
+          },
+        ),
+      );
+    } catch (error) {
+      setStatus(
+        tr(app, "exportFailed", "Export failed: {{message}}", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      fullFileWrite.disabled = false;
+    }
+  };
+  fullFileWrite.addEventListener("click", () => void writeFullFile());
   // Release follows the chosen cloud.
   cloudSelect.addEventListener("change", renderCloudOptions);
   releaseDetailButton.addEventListener("click", () => {

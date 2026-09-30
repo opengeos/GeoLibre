@@ -319,6 +319,18 @@ also assume a pinned region's nodes keep their octree keys, so a bump that
 changes node keys or pinning semantics must rerun
 `e2e/point-cloud-annotation.spec.ts` ("loads the view at full detail").
 
+The annotator's label encoding (delta-varint point index, then a class byte or a
+varint instance id, raw DEFLATE, base64; `label-store.ts`) is decoded in three
+places the compiler cannot link: `geolibre.project` (Python reader),
+`geolibre.pointcloud` (pre-labels and labelled-file rewrites) and the embedded
+job script in `backend/geolibre_server/geolibre_server/app/pointcloud.py`
+(`/pointcloud/apply-labels`, which runs on the conversion runtime and cannot
+import the Python package). Their tests share app-encoded fixtures
+(`Y2BkWcP0ahHLfyDgBwA=` for instance ids), so a change to the format must update
+all three and the fixtures together. The COPC node order they rebuild from the
+hierarchy (data nodes sorted by chunk offset) must match the order
+maplibre-gl-lidar's `nodeRanges` index points within a node.
+
 The `?data=` LiDAR deep link leans on two more things the compiler cannot see.
 `isStreamedLidarUrl` (`apps/geolibre-desktop/src/lib/data-url.ts`) copies the
 routing at the top of `LidarControl.loadPointCloud` (an `/ept.json` suffix or a

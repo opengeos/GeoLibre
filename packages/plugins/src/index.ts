@@ -489,7 +489,9 @@ export {
   POINT_CLOUD_ANNOTATION_PLUGIN_ID,
   setPointCloudAnnotationFileSaver,
   setPointCloudPrelabelRunner,
+  setPointCloudLabelWriter,
   type PointCloudAnnotationFileSaver,
+  type PointCloudLabelWriter,
 } from "./plugins/point-cloud-annotation";
 export {
   buildBasinUrl,

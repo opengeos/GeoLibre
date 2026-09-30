@@ -12,7 +12,7 @@ dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0"]
 # the vector/raster/SQL/ML tests skip themselves (via skipif/importorskip), so a
 # `[dev]`-only install reports a misleadingly green, near-empty run. CI installs
 # this group; run it locally with `pip install -e "backend/geolibre_server[test]"`.
-test = ["geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis,notebook]"]
+test = ["geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis,notebook,pointcloud]"]
 whitebox = ["whitebox-workflows>=2.0.2"]
 conversion = ["duckdb>=1.1.0", "rio-cogeo>=5.0.0", "freestiler>=0.1.0"]
 # Optional GeoPandas engine for the Vector processing tools. Not installed by
@@ -37,6 +37,10 @@ sedona = ["apache-sedona[db]>=1.7.0", "geopandas>=1.0", "shapely>=2.0"]
 # model stack (segment-geospatial[api,samgeo3] + Torch) is installed and run
 # separately (its own GPU env or launched on demand). See app/ml.py.
 ml = ["httpx>=0.27"]
+# Labelled point cloud rewrites (/pointcloud). The job runs on the managed
+# conversion runtime, which installs the same requirement on first use; list it
+# here so a self-managed runtime (GEOLIBRE_CONVERSION_PYTHON) can be prepared.
+pointcloud = ["laspy[lazrs]>=2.5", "numpy>=1.24"]
 # Full JupyterLab server for the desktop Notebook panel. The desktop app
 # launches `jupyter lab` from this uv-managed env (see src-tauri/src/lib.rs);
 # the web build embeds the in-browser JupyterLite site instead, so this extra is

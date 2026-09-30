@@ -661,6 +661,52 @@ export async function runRasterTool(
   return startConversion(`${baseUrl}/raster/run`, request, baseUrl);
 }
 
+export interface PointCloudStatus {
+  available: boolean;
+  message: string;
+}
+
+/** A labelled rewrite of a local point cloud file (the sidecar's /pointcloud). */
+export interface PointCloudApplyLabelsRequest {
+  input_path: string;
+  output_path: string;
+  /** The annotator's saved labels for the source: node key -> base64 edits. */
+  labels: Record<string, string>;
+  /** Its instance ids, same layout. */
+  instances?: Record<string, string>;
+}
+
+/**
+ * Whether the sidecar can rewrite point cloud files with labels (laspy +
+ * lazrs in its runtime, installed on first use).
+ */
+export async function fetchPointCloudStatus(
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<PointCloudStatus> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}/pointcloud/status`);
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(`Point cloud status failed: HTTP ${res.status}`);
+  }
+  return (await res.json()) as PointCloudStatus;
+}
+
+/**
+ * Start writing a whole LAS/LAZ/COPC file with the annotator's labels
+ * applied. The job shares the conversion job store, so poll it with
+ * {@link fetchConversionJob}.
+ */
+export async function runPointCloudApplyLabels(
+  request: PointCloudApplyLabelsRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(`${baseUrl}/pointcloud/apply-labels`, request, baseUrl);
+}
+
 type ConversionRequest =
   | VectorToVectorRequest
   | VectorLayersRequest
@@ -671,7 +717,8 @@ type ConversionRequest =
   | CsvToGeoParquetRequest
   | VectorToPmtilesRequest
   | RasterToCogRequest
-  | RasterToolRequest;
+  | RasterToolRequest
+  | PointCloudApplyLabelsRequest;
 
 async function startConversion(
   url: string,
