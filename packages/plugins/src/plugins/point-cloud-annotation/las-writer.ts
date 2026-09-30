@@ -139,7 +139,7 @@ function hasInstances(cloud: LasExportCloud, count: number): boolean {
 export function instanceExtraBytesDescriptor(): Uint8Array {
   const data = new Uint8Array(192);
   const view = new DataView(data.buffer);
-  data[2] = 6; // data_type: unsigned long (uint32)
+  data[2] = 5; // data_type 5: unsigned long (uint32); 6 would be signed
   data[3] = 0; // options: no no_data/min/max/scale/offset
   writeAscii(view, 4, "instance", 32);
   writeAscii(view, 160, "Object (instance) id, 0 = none", 32);

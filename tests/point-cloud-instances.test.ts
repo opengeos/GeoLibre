@@ -172,7 +172,7 @@ describe("exports with objects", () => {
     assert.equal(view.getUint16(vlr + 18, true), 4);
     assert.equal(view.getUint16(vlr + 20, true), 192);
     const descriptor = vlr + 54;
-    assert.equal(bytes[descriptor + 2], 6);
+    assert.equal(bytes[descriptor + 2], 5); // uint32
     assert.equal(
       new TextDecoder().decode(bytes.subarray(descriptor + 4, descriptor + 12)),
       "instance",
