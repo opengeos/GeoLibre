@@ -227,7 +227,9 @@ export function snapToPoint(
   let best = radius * radius;
   let found = -1;
   const p = data.positions;
-  for (let i = 0; i < data.pointCount; i++) {
+  // Only indices the live buffers cover (a streamed cloud's count can run ahead).
+  const count = Math.min(data.pointCount, Math.floor(p.length / 3));
+  for (let i = 0; i < count; i++) {
     if (options.skip?.(i)) continue;
     if (!project(p[i * 3], p[i * 3 + 1], p[i * 3 + 2] + options.zOffset, out)) continue;
     const d = (out[0] - x) ** 2 + (out[1] - y) ** 2;

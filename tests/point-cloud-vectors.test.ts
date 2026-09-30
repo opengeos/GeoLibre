@@ -136,5 +136,8 @@ describe("snapToPoint", () => {
     const [x, y] = viewport.project([offsets[1][0], offsets[1][1], 20]);
     assert.equal(snapToPoint(data, project, x, y, { zOffset: 0, skip: (i) => i === 1 }), null);
     assert.equal(snapToPoint(data, project, x + 200, y + 200, { zOffset: 0 }), null);
+    // A count past the buffer is clamped rather than read as NaN.
+    const ahead = snapToPoint({ ...data, pointCount: 10 }, project, x, y, { zOffset: 0 });
+    assert.equal(ahead?.[2], 20);
   });
 });
