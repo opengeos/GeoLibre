@@ -708,8 +708,9 @@ def build_server(workspace: Workspace) -> MCPServer:
             path: Path to the `.geolibre.json` file.
 
         Returns:
-            Per source URL, how many points were relabelled per class, plus
-            every saved 3D box (`class_code`, `center` [lng, lat, elevation m],
+            Per source URL, how many points were relabelled per class and how
+            many points each instance (object) id holds, the project's custom
+            classes, plus every saved 3D box (`class_code`, `center` [lng, lat, elevation m],
             `size` [length, width, height] m, `yaw` radians from east,
             `status` new/reviewed/flagged, and free-form `attributes`).
         """
@@ -727,7 +728,40 @@ def build_server(workspace: Workspace) -> MCPServer:
                 for code in edits.values():
                     counts[str(code)] = counts.get(str(code), 0) + 1
         boxes = [{**box, "url": _project.redact_url(box["url"])} for box in annotations["boxes"]]
-        return {"labels": labels, "boxes": boxes}
+        # Instances as point counts per id, like the labels, not every point.
+        instances: dict[str, dict[str, int]] = {}
+        for url, nodes in annotations["instances"].items():
+            counts = instances.setdefault(_project.redact_url(url), {})
+            for edits in nodes.values():
+                for instance in edits.values():
+                    counts[str(instance)] = counts.get(str(instance), 0) + 1
+        return {
+            "labels": labels,
+            "instances": instances,
+            "boxes": boxes,
+            "classes": annotations["classes"],
+        }
+
+    @tool()
+    def set_point_cloud_classes(path: str, classes: list[dict[str, Any]]) -> dict[str, Any]:
+        """Define the point cloud annotator's custom classes (its label schema).
+
+        Custom classes extend the ASPRS standard classes (0-18) with codes the
+        annotator can assign; the LiDAR layer draws them in their colour and
+        names them in its legend. Existing labels, instances and boxes are kept.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            classes: `{"code", "name", "color"}` objects: `code` an integer
+                19-255 (64-255 are the ASPRS user range), `name` text, `color`
+                `"#rrggbb"`. An empty list clears them.
+
+        Returns:
+            The project summary with the classes as saved.
+        """
+        with edit(path) as (file, project):
+            saved = authoring.set_point_cloud_classes(project, classes)
+        return _summarize(file, project, classes=saved)
 
     @tool()
     def add_3d_tiles_layer(

@@ -532,6 +532,43 @@ def test_get_point_cloud_annotations_counts_labels_and_lists_boxes(server, proje
     assert list(result["labels"].values()) == [{"6": 4, "2": 2}]
 
 
+def test_set_point_cloud_classes_tool_saves_the_schema(server, project_path, tmp_path):
+    """Custom classes land in the annotator's state and read back with the annotations."""
+    import base64
+    import zlib
+
+    call(server, "add_lidar_layer", path=project_path, name="Autzen", url="https://x/a.laz")
+    result = call(
+        server,
+        "set_point_cloud_classes",
+        path=project_path,
+        classes=[{"code": 64, "name": "Car", "color": "#E11D48"}],
+    )
+    assert result["classes"] == [{"code": 64, "name": "Car", "color": "#e11d48"}]
+    saved = json.loads((tmp_path / project_path).read_text())
+    state = saved["plugins"]["settings"]["geolibre-point-cloud-annotation"]
+    assert state["customClasses"] == result["classes"]
+    # Instance ids (app encoding: varint values) are summarized as point counts.
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    node = compressor.compress(bytes([0, 7, 0, 7, 0, 9])) + compressor.flush()
+    state["instances"] = [
+        {"url": "https://x/a.laz", "nodes": {"file": base64.b64encode(node).decode()}}
+    ]
+    (tmp_path / project_path).write_text(json.dumps(saved))
+    read = call(server, "get_point_cloud_annotations", path=project_path)
+    assert read["instances"] == {"https://x/a.laz": {"7": 2, "9": 1}}
+    assert read["classes"] == result["classes"]
+    error = call_error(
+        server,
+        "set_point_cloud_classes",
+        path=project_path,
+        classes=[{"code": 3, "name": "Low", "color": "#000000"}],
+    )
+    assert "19-255" in error
+    # A rejected schema leaves the file as it was.
+    assert json.loads((tmp_path / project_path).read_text()) == saved
+
+
 def test_cesium_ion_tools_persist_the_asset_id(server, project_path, tmp_path):
     """The globe loads Ion assets from `source.ionAssetId`, so it must survive the save."""
     call(server, "add_3d_tiles_layer", path=project_path, name="A", ion_asset_id=96188)

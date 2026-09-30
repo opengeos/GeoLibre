@@ -1008,6 +1008,44 @@ def color_ramp_names() -> list[str]:
 # -- map controls -------------------------------------------------------------
 
 
+def set_point_cloud_classes(
+    project: dict[str, Any], classes: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Set the point cloud annotator's custom classes (its label schema).
+
+    Replaces the custom classes and keeps the saved point labels, instance ids
+    and 3D boxes. The annotator applies them when the project opens, so the
+    LiDAR layer draws those codes in their colour and names them in its
+    legend, and the classes can be assigned from the annotator's panel.
+
+    Args:
+        project: The project dict (mutated in place).
+        classes: ``{"code", "name", "color"}`` dicts; see
+            :func:`geolibre.project.point_cloud_class_schema`. An empty list
+            clears them.
+
+    Returns:
+        The validated classes as saved.
+
+    Raises:
+        ValueError: For an invalid class.
+    """
+    schema = _project.point_cloud_class_schema(classes)
+    plugins = _project.ensure_plugins_block(project)
+    current = plugins["settings"].get(_project.POINT_CLOUD_ANNOTATION_PLUGIN_ID)
+    state = dict(current) if isinstance(current, dict) else {}
+    state.setdefault("version", 1)
+    state.setdefault("sources", [])
+    state.setdefault("cuboids", [])
+    state["customClasses"] = schema
+    # The annotator restores its state whether or not its panel is open, so
+    # the classes apply without opening the panel.
+    _project.set_plugin_state(
+        project, _project.POINT_CLOUD_ANNOTATION_PLUGIN_ID, state, activate=False
+    )
+    return schema
+
+
 def merge_components_state(
     project: dict[str, Any],
     key: str,

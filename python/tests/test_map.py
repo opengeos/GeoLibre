@@ -379,7 +379,12 @@ def test_add_lidar(m):
 
 
 def test_point_cloud_annotations_empty_by_default(m):
-    assert m.point_cloud_annotations() == {"labels": {}, "boxes": []}
+    assert m.point_cloud_annotations() == {
+        "labels": {},
+        "instances": {},
+        "boxes": [],
+        "classes": [],
+    }
 
 
 def test_add_3d_tiles(m):

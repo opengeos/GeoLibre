@@ -39,6 +39,7 @@ create_project(path, name="Untitled Project", center=None, zoom=None,
                basemap=None, overwrite=False)
 describe_project(path)
 get_point_cloud_annotations(path)
+set_point_cloud_classes(path, classes)
 list_catalog()
 ```
 
@@ -49,7 +50,13 @@ project even with `overwrite=True`, so a retry cannot destroy an unrelated
 `describe_project` reports inlined feature data as a count, never echoed back.
 
 `get_point_cloud_annotations` reports, per point cloud URL, how many points the
-app's annotator relabelled into each ASPRS class, plus every saved 3D box.
+app's annotator relabelled into each class and how many points each instance id
+holds, the custom classes, plus every saved 3D box (with its status and
+attributes).
+
+`set_point_cloud_classes` defines the annotator's custom classes (its label
+schema): `[{"code": 64, "name": "Car", "color": "#e11d48"}]`, codes 19-255.
+Existing labels, instances and boxes are kept; an empty list clears them.
 
 `list_catalog` returns the basemaps, color ramp names, legend presets, and the
 active workspace roots. Call it before guessing any of those names.

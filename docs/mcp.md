@@ -90,7 +90,8 @@ Give it a directory meant for maps, not your home directory.
 | --- | --- |
 | `create_project` | Write a new, empty project with a name, center, zoom, and basemap. |
 | `describe_project` | Summarize the camera, basemap, layers, and map controls. Inlined feature data is reported as a count, never echoed back. |
-| `get_point_cloud_annotations` | Per point cloud, how many points the app's annotator relabelled into each class, plus its saved 3D boxes. |
+| `get_point_cloud_annotations` | Per point cloud, how many points the app's annotator relabelled into each class and how many points each instance holds, plus the custom classes and saved 3D boxes (with status and attributes). |
+| `set_point_cloud_classes` | Define the annotator's custom classes (codes 19-255, name, `#rrggbb` color); keeps existing labels and boxes. |
 | `list_catalog` | List the named basemaps, color ramps, and legend presets, plus the active workspace roots. |
 
 ### Adding layers

@@ -940,7 +940,12 @@ def test_point_cloud_annotations_decode_labels_and_boxes():
     assert result["labels"]["https://x/b.copc.laz"] == {}
     assert result["boxes"][0]["class_code"] == 6
     assert result["boxes"][0]["size"] == [10, 8, 5]
-    assert p.point_cloud_annotations({}) == {"labels": {}, "boxes": []}
+    assert p.point_cloud_annotations({}) == {
+        "labels": {},
+        "instances": {},
+        "boxes": [],
+        "classes": [],
+    }
 
 
 def test_apply_point_labels_to_a_whole_file_source():
@@ -1001,7 +1006,12 @@ def test_point_cloud_annotations_skip_malformed_entries():
             }
         }
     }
-    assert p.point_cloud_annotations(project) == {"labels": {}, "boxes": []}
+    assert p.point_cloud_annotations(project) == {
+        "labels": {},
+        "instances": {},
+        "boxes": [],
+        "classes": [],
+    }
     no_url = {
         "plugins": {
             "settings": {
@@ -1012,7 +1022,12 @@ def test_point_cloud_annotations_skip_malformed_entries():
         }
     }
     assert p.point_cloud_annotations(no_url)["boxes"] == []
-    assert p.point_cloud_annotations({"plugins": "bad"}) == {"labels": {}, "boxes": []}
+    assert p.point_cloud_annotations({"plugins": "bad"}) == {
+        "labels": {},
+        "instances": {},
+        "boxes": [],
+        "classes": [],
+    }
 
 
 def test_apply_point_labels_changes_nothing_when_it_rejects():
@@ -1105,6 +1120,95 @@ def test_point_cloud_annotations_read_box_status_and_attributes():
     ]
 
 
+def test_point_cloud_annotations_decode_app_instance_ids():
+    from geolibre import project as p
+
+    # Encoded by the app's label store (encodeNodeEdits with wide values) for
+    # instance ids {0: 1, 5: 300, 70000: 4294967295}.
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "version": 1,
+                    "sources": [{"url": "https://x/a.laz", "nodes": {"file": "Y2ADQiYA"}}],
+                    "instances": [
+                        {"url": "https://x/a.laz", "nodes": {"file": "Y2BkWcP0ahHLfyDgBwA="}}
+                    ],
+                }
+            }
+        }
+    }
+    result = p.point_cloud_annotations(project)
+    assert result["labels"]["https://x/a.laz"]["file"] == {0: 6, 1: 6, 2: 2}
+    assert result["instances"]["https://x/a.laz"]["file"] == {0: 1, 5: 300, 70000: 4294967295}
+
+
+def test_point_cloud_class_schema_validates_and_normalizes():
+    import pytest
+
+    from geolibre import project as p
+
+    assert p.point_cloud_class_schema(
+        [
+            {"code": 70, "name": " Solar panel ", "color": "#E11D48"},
+            {"code": 64, "name": "Car", "color": (0, 128, 255)},
+            {"code": 64, "name": "Van", "color": "#000000"},
+        ]
+    ) == [
+        {"code": 64, "name": "Van", "color": "#000000"},
+        {"code": 70, "name": "Solar panel", "color": "#e11d48"},
+    ]
+    for bad in (
+        {"code": 18, "name": "x", "color": "#000000"},
+        {"code": 256, "name": "x", "color": "#000000"},
+        {"code": True, "name": "x", "color": "#000000"},
+        {"code": 64, "name": " ", "color": "#000000"},
+        {"code": 64, "name": "x", "color": "red"},
+        {"code": 64, "name": "x", "color": (1, 2, 300)},
+    ):
+        with pytest.raises(ValueError):
+            p.point_cloud_class_schema([bad])
+    with pytest.raises(ValueError):
+        p.point_cloud_class_schema("oops")
+    # Reading a saved project skips bad entries instead of raising.
+    assert p.point_cloud_class_schema([{"code": 1}, "x"], strict=False) == []
+
+
+def test_set_point_cloud_classes_keeps_labels_and_boxes():
+    from geolibre import authoring
+    from geolibre import project as p
+
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "version": 1,
+                    "sources": [{"url": "https://x/a.laz", "nodes": {"file": "Y2ADQiYA"}}],
+                    "cuboids": [{"url": "https://x/a.laz", "boxes": []}],
+                }
+            }
+        }
+    }
+    saved = authoring.set_point_cloud_classes(
+        project, [{"code": 64, "name": "Car", "color": "#e11d48"}]
+    )
+    assert saved == [{"code": 64, "name": "Car", "color": "#e11d48"}]
+    state = project["plugins"]["settings"]["geolibre-point-cloud-annotation"]
+    assert state["sources"][0]["nodes"] == {"file": "Y2ADQiYA"}
+    assert state["cuboids"] == [{"url": "https://x/a.laz", "boxes": []}]
+    assert p.point_cloud_annotations(project)["classes"] == saved
+    # Not activated: the annotator restores its state with its panel closed.
+    assert "geolibre-point-cloud-annotation" not in project["plugins"].get("activePluginIds", [])
+    fresh: dict = {}
+    authoring.set_point_cloud_classes(fresh, [])
+    assert fresh["plugins"]["settings"]["geolibre-point-cloud-annotation"] == {
+        "version": 1,
+        "sources": [],
+        "cuboids": [],
+        "customClasses": [],
+    }
+
+
 def test_point_cloud_annotations_merge_repeated_source_urls():
     from geolibre import project as p
 
@@ -1153,7 +1257,7 @@ def test_point_cloud_annotations_charge_rejected_nodes_to_the_budget(monkeypatch
     monkeypatch.setattr(p, "MAX_POINT_LABEL_NODE_BYTES", 6)
     calls = []
 
-    def reject(text, limit):
+    def reject(text, limit, wide=False):
         calls.append(limit)
         raise ValueError("too large")
 

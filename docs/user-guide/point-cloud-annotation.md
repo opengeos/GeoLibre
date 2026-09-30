@@ -52,7 +52,8 @@ panel suggests the first free code from 64), a name and a colour, then press
 **Add**. A custom class can be assigned, locked and boxed like a standard
 one; the LiDAR panel's legend and tooltips show its name and colour. Custom
 classes are saved with the project, and the exports write their codes (the
-LAS classification byte holds 0-255).
+LAS classification byte holds 0-255). A notebook or agent can define them ahead of time
+with `Map.set_point_cloud_classes` or the `set_point_cloud_classes` MCP tool.
 
 ## Instances
 

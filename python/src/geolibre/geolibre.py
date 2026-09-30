@@ -2739,12 +2739,36 @@ class Map(anywidget.AnyWidget):
         """The point labels and 3D boxes saved by the app's point cloud annotator.
 
         Returns:
-            ``{"labels": {url: {node_key: {index: class}}}, "boxes": [...]}``;
-            see :func:`geolibre.project.point_cloud_annotations`. Apply the
+            ``{"labels", "instances", "boxes", "classes"}``; see
+            :func:`geolibre.project.point_cloud_annotations`. Apply the
             labels of a whole-file LAS/LAZ source to ``laspy`` data with
             :func:`geolibre.project.apply_point_labels`.
         """
         return _project.point_cloud_annotations(self.project)
+
+    def set_point_cloud_classes(self, classes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Define custom point cloud classes for the app's annotator.
+
+        Custom classes (codes 19-255) extend the ASPRS standard classes: the
+        annotator can assign them, and the LiDAR layer draws them in their
+        colour and names them in its legend.
+
+        Args:
+            classes: ``{"code", "name", "color"}`` dicts, e.g.
+                ``[{"code": 64, "name": "Car", "color": "#e11d48"}]``;
+                ``color`` may also be an ``(r, g, b)`` triple. An empty list
+                clears them.
+
+        Returns:
+            The validated classes as saved.
+
+        Raises:
+            ValueError: For an invalid class.
+        """
+        # Validate first so a bad class raises before the project changes.
+        schema = _project.point_cloud_class_schema(classes)
+        self._update_project(lambda project: _authoring.set_point_cloud_classes(project, schema))
+        return schema
 
     def add_cesium_ion(
         self,

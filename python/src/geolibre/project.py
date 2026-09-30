@@ -1921,12 +1921,16 @@ def decode_point_label_node(text: str, limit: int = MAX_POINT_LABEL_NODE_BYTES) 
     return _decode_point_label_node_sized(text, limit)[0]
 
 
-def _decode_point_label_node_sized(text: str, limit: int) -> tuple[dict[int, int], int]:
+def _decode_point_label_node_sized(
+    text: str, limit: int, wide: bool = False
+) -> tuple[dict[int, int], int]:
     """Decode one node's saved point labels and report its inflated size.
 
     Args:
         text: The base64 string from the project.
         limit: Maximum inflated size in bytes.
+        wide: Values are varints (instance ids, up to 32 bits) rather than
+            class bytes.
 
     Returns:
         The edits (as :func:`decode_point_label_node`) and the number of bytes
@@ -1965,9 +1969,72 @@ def _decode_point_label_node_sized(text: str, limit: int) -> tuple[dict[int, int
             raise ValueError("truncated point label record")
         index = previous + 1 + delta
         previous = index
-        edits[index] = data[at]
-        at += 1
+        if not wide:
+            edits[index] = data[at]
+            at += 1
+            continue
+        value = 0
+        shift = 0
+        while True:
+            if at >= len(data):
+                raise ValueError("truncated point label record")
+            # An instance id is a uint32: at most five varint bytes.
+            if shift > 28:
+                raise ValueError("invalid point label record: varint too long")
+            byte = data[at]
+            at += 1
+            value += (byte & 0x7F) << shift
+            shift += 7
+            if not byte & 0x80:
+                break
+        if value > 0xFFFFFFFF:
+            raise ValueError("invalid point label record: id out of range")
+        edits[index] = value
     return edits, len(data)
+
+
+def _decode_label_sources(
+    entries: Any, limits: dict[str, int], wide: bool
+) -> dict[str, dict[str, dict[int, int]]]:
+    """Decode one kind of saved per-source edits (classes or instance ids).
+
+    Args:
+        entries: The saved ``[{"url", "nodes"}]`` list.
+        limits: Shared ``{"budget", "entries"}`` allowances, drawn down in place.
+        wide: Decode varint values (instance ids) rather than class bytes.
+
+    Returns:
+        ``{url: {node_key: {index: value}}}``.
+    """
+    out: dict[str, dict[str, dict[int, int]]] = {}
+    for source in entries if isinstance(entries, list) else []:
+        if not isinstance(source, dict):
+            continue
+        url = source.get("url")
+        nodes = source.get("nodes") or {}
+        if not isinstance(url, str) or not isinstance(nodes, dict):
+            continue
+        decoded: dict[str, dict[int, int]] = {}
+        for key, text in nodes.items():
+            if not isinstance(text, str) or limits["budget"] <= 0 or limits["entries"] <= 0:
+                continue
+            cap = min(MAX_POINT_LABEL_NODE_BYTES, limits["budget"])
+            try:
+                edits, inflated = _decode_point_label_node_sized(text, cap, wide)
+            except ValueError:
+                # A rejected node may have inflated up to its cap before
+                # failing, so charge the cap: bad nodes cannot bypass the budget.
+                limits["budget"] -= cap
+                continue
+            # Charge what was actually inflated (varints run to five bytes).
+            limits["budget"] -= inflated
+            if len(edits) > limits["entries"]:
+                continue
+            limits["entries"] -= len(edits)
+            decoded[key] = edits
+        # Merge repeated entries for one URL rather than dropping the first.
+        out.setdefault(url, {}).update(decoded)
+    return out
 
 
 def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
@@ -1981,50 +2048,24 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
         project: A project dict (e.g. ``Map.project`` or a loaded file).
 
     Returns:
-        ``{"labels": {url: {node_key: {index: class}}}, "boxes": [...]}``, where
-        each box is ``{"url", "id", "class_code", "center", "size", "yaw",
-        "status", "attributes"}``: ``center`` is ``[lng, lat, elevation_m]``,
-        ``size`` ``[length, width, height]`` in metres, ``yaw`` radians
-        counter-clockwise from east, ``status`` one of ``"new"``,
-        ``"reviewed"`` or ``"flagged"``, and ``attributes`` the box's
-        free-form string name/value pairs.
+        ``{"labels": {url: {node_key: {index: class}}}, "instances": {url:
+        {node_key: {index: instance_id}}}, "boxes": [...], "classes": [...]}``.
+        ``classes`` is the project's custom class schema (see
+        :func:`point_cloud_class_schema`), and each box is ``{"url", "id",
+        "class_code", "center", "size", "yaw", "status", "attributes"}``:
+        ``center`` is ``[lng, lat, elevation_m]``, ``size`` ``[length, width,
+        height]`` in metres, ``yaw`` radians counter-clockwise from east,
+        ``status`` one of ``"new"``, ``"reviewed"`` or ``"flagged"``, and
+        ``attributes`` the box's free-form string name/value pairs.
     """
     plugins = project.get("plugins") if isinstance(project, dict) else None
     settings = plugins.get("settings") if isinstance(plugins, dict) else None
     state = settings.get(POINT_CLOUD_ANNOTATION_PLUGIN_ID) if isinstance(settings, dict) else None
     if not isinstance(state, dict):
         state = {}
-    labels: dict[str, dict[str, dict[int, int]]] = {}
-    budget = MAX_POINT_LABEL_BYTES
-    entries = MAX_POINT_LABEL_EDITS
-    sources = state.get("sources") if isinstance(state, dict) else None
-    for source in sources if isinstance(sources, list) else []:
-        if not isinstance(source, dict):
-            continue
-        url = source.get("url")
-        nodes = source.get("nodes") or {}
-        if not isinstance(url, str) or not isinstance(nodes, dict):
-            continue
-        decoded: dict[str, dict[int, int]] = {}
-        for key, text in nodes.items():
-            if not isinstance(text, str) or budget <= 0 or entries <= 0:
-                continue
-            cap = min(MAX_POINT_LABEL_NODE_BYTES, budget)
-            try:
-                edits, inflated = _decode_point_label_node_sized(text, cap)
-            except ValueError:
-                # A rejected node may have inflated up to its cap before
-                # failing, so charge the cap: bad nodes cannot bypass the budget.
-                budget -= cap
-                continue
-            # Charge what was actually inflated (varints run to five bytes).
-            budget -= inflated
-            if len(edits) > entries:
-                continue
-            entries -= len(edits)
-            decoded[key] = edits
-        # Merge repeated entries for one URL rather than dropping the first.
-        labels.setdefault(url, {}).update(decoded)
+    limits = {"budget": MAX_POINT_LABEL_BYTES, "entries": MAX_POINT_LABEL_EDITS}
+    labels = _decode_label_sources(state.get("sources"), limits, wide=False)
+    instances = _decode_label_sources(state.get("instances"), limits, wide=True)
     boxes: list[dict[str, Any]] = []
     cuboids = state.get("cuboids") if isinstance(state, dict) else None
     for entry in cuboids if isinstance(cuboids, list) else []:
@@ -2049,7 +2090,8 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
                     "attributes": _box_attributes(box.get("attributes")),
                 }
             )
-    return {"labels": labels, "boxes": boxes}
+    classes = point_cloud_class_schema(state.get("customClasses"), strict=False)
+    return {"labels": labels, "instances": instances, "boxes": boxes, "classes": classes}
 
 
 _BOX_STATUSES = ("new", "reviewed", "flagged")
@@ -2108,6 +2150,89 @@ def _clip_utf16(text: str, length: int) -> str:
     # Drop only a high surrogate left dangling by the cut; interior unpaired
     # surrogates (valid in JSON) stay, as they do in the app.
     return cut[:-1] if "\ud800" <= cut[-1] <= "\udbff" else cut
+
+
+CUSTOM_CLASS_MIN = 19
+"""Lowest code a custom class may use (ASPRS reserves 19-63, 64-255 are user)."""
+
+CUSTOM_CLASS_MAX = 255
+"""Highest code a custom class may use (the LAS classification byte)."""
+
+
+def _hex_color(value: Any) -> str | None:
+    """Normalize ``#rrggbb`` text or an ``(r, g, b)`` triple to ``#rrggbb``.
+
+    Args:
+        value: The colour.
+
+    Returns:
+        Lower-case ``#rrggbb``, or None when malformed.
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        if len(text) == 7 and text[0] == "#":
+            try:
+                int(text[1:], 16)
+            except ValueError:
+                return None
+            return text.lower()
+        return None
+    if (
+        isinstance(value, (list, tuple))
+        and len(value) == 3
+        and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255 for v in value)
+    ):
+        return "#{:02x}{:02x}{:02x}".format(*value)
+    return None
+
+
+def point_cloud_class_schema(classes: Any, *, strict: bool = True) -> list[dict[str, Any]]:
+    """Validate custom point classes for the annotator (its label schema).
+
+    Custom classes extend the ASPRS standard classes 0-18 with user codes the
+    annotator can assign, drawn in their own colour and named in the LiDAR
+    legend.
+
+    Args:
+        classes: A list of ``{"code", "name", "color"}`` dicts; ``code`` an
+            integer 19-255, ``name`` non-empty text (clipped to 64 UTF-16
+            units, as the app does), ``color`` ``"#rrggbb"`` or ``(r, g, b)``.
+        strict: Raise on an invalid entry (authoring) instead of skipping it
+            (reading a saved project).
+
+    Returns:
+        The classes as ``{"code", "name", "color": "#rrggbb"}``, ascending by
+        code; a repeated code keeps its last definition.
+
+    Raises:
+        ValueError: With ``strict``, for a malformed list or entry.
+    """
+    if classes is None:
+        return []
+    if not isinstance(classes, list):
+        if strict:
+            raise ValueError("classes must be a list of {code, name, color} objects")
+        return []
+    by_code: dict[int, dict[str, Any]] = {}
+    for entry in classes:
+        code = entry.get("code") if isinstance(entry, dict) else None
+        name = entry.get("name") if isinstance(entry, dict) else None
+        color = _hex_color(entry.get("color")) if isinstance(entry, dict) else None
+        problem = None
+        if not isinstance(code, int) or isinstance(code, bool):
+            problem = "code must be an integer"
+        elif not CUSTOM_CLASS_MIN <= code <= CUSTOM_CLASS_MAX:
+            problem = f"code must be {CUSTOM_CLASS_MIN}-{CUSTOM_CLASS_MAX}"
+        elif not isinstance(name, str) or not name.strip():
+            problem = "name must be non-empty text"
+        elif color is None:
+            problem = "color must be #rrggbb or an (r, g, b) triple"
+        if problem:
+            if strict:
+                raise ValueError(f"invalid custom class {entry!r}: {problem}")
+            continue
+        by_code[code] = {"code": code, "name": _clip_utf16(name.strip(), 64), "color": color}
+    return [by_code[code] for code in sorted(by_code)]
 
 
 def apply_point_labels(classification: Any, nodes: dict[str, dict[int, int]]) -> int:
