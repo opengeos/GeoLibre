@@ -363,6 +363,9 @@ export function CloudStorageSection({
                   <Label htmlFor={fieldId("buckets")}>{t("settings.cloudStorage.buckets")}</Label>
                   <Input
                     id={fieldId("buckets")}
+                    // Uncontrolled so typing is not re-parsed per keystroke;
+                    // keyed so a re-seeded draft replaces stale text.
+                    key={connection.buckets.join(",")}
                     defaultValue={connection.buckets.join(", ")}
                     placeholder={t("settings.cloudStorage.bucketsPlaceholder")}
                     onBlur={(event) =>

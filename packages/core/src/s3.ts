@@ -95,7 +95,7 @@ export function parseS3Url(url: string): S3ObjectLocation | null {
     const slash = rest.indexOf("/");
     const bucket = slash === -1 ? rest : rest.slice(0, slash);
     const key = slash === -1 ? "" : rest.slice(slash + 1);
-    return bucket ? { bucket, key } : null;
+    return isSafeBucketName(bucket) ? { bucket, key } : null;
   }
   let parsed: URL;
   try {
@@ -126,6 +126,18 @@ export function parseS3Url(url: string): S3ObjectLocation | null {
     };
   }
   return null;
+}
+
+/**
+ * Bucket names are letters, digits, dots, dashes, and underscores (the last
+ * two outside AWS's own rules, for S3-compatible stores). Anything else, a
+ * backslash or `@` say, could move a virtual-hosted URL's authority to
+ * another host before a signature is attached, so it is refused outright.
+ */
+const SAFE_BUCKET_NAME = /^[A-Za-z0-9._-]{1,255}$/;
+
+function isSafeBucketName(bucket: string): boolean {
+  return SAFE_BUCKET_NAME.test(bucket);
 }
 
 /** Whether `url` is an `s3://` URI (as opposed to an HTTPS object URL). */
@@ -168,6 +180,9 @@ export function s3ObjectHttpsUrl(
   location: S3ObjectLocation,
   config: Partial<S3EndpointConfig> = {},
 ): string {
+  if (location.bucket && !isSafeBucketName(location.bucket)) {
+    throw new Error(`Invalid S3 bucket name: ${location.bucket}`);
+  }
   const key = encodeS3Key(location.key);
   const endpoint = config.endpoint?.trim().replace(/\/+$/, "");
   // No bucket addresses the service itself (ListBuckets).

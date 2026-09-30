@@ -21,7 +21,7 @@
 //! authorization flow in-app, writing the same cache file, so the CLI and
 //! GeoLibre share one sign-in.
 
-use crate::aws_sts::{self, AssumeRoleOptions, RoleCredentials};
+use crate::aws_sts::{self, validate_region, AssumeRoleOptions, RoleCredentials};
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
@@ -311,20 +311,6 @@ fn http_client() -> Result<reqwest::blocking::Client, String> {
         .map_err(|error| error.to_string())
 }
 
-/// AWS regions are lower-case letters, digits, and dashes. Checked before a
-/// region from a config file becomes part of an endpoint host name.
-fn validate_region(region: &str) -> Result<(), String> {
-    if region.is_empty()
-        || region.len() > 32
-        || !region
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-    {
-        return Err(format!("\"{region}\" is not a valid AWS region."));
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // IAM Identity Center (SSO)
 // ---------------------------------------------------------------------------
@@ -410,15 +396,23 @@ fn write_sso_cache(path: &Path, token: &SsoTokenCache) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     let body = serde_json::to_vec_pretty(token).map_err(|error| error.to_string())?;
-    // Written through a temp file so a concurrent CLI read never sees half a token.
-    let temp = path.with_extension("json.tmp");
-    std::fs::write(&temp, body).map_err(|error| error.to_string())?;
+    // Written through a uniquely named temp file, created owner-only (the
+    // token is a credential), so a concurrent CLI read never sees half a token
+    // and two writers never share a temp file.
+    let temp = path.with_extension(format!("json.{}.tmp", random_id()?));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&temp, std::fs::Permissions::from_mode(0o600));
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let result = options
+        .open(&temp)
+        .and_then(|mut file| std::io::Write::write_all(&mut file, &body))
+        .and_then(|()| std::fs::rename(&temp, path));
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(&temp);
+        return Err(error.to_string());
     }
-    std::fs::rename(&temp, path).map_err(|error| error.to_string())
+    Ok(())
 }
 
 fn sso_login_hint(profile: &str) -> String {

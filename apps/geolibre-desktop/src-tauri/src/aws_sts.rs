@@ -183,6 +183,21 @@ fn http_client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
         .map_err(|error| error.to_string())
 }
 
+/// AWS regions are lower-case letters, digits, and dashes. Checked before a
+/// region from a config file or the environment becomes part of a host name,
+/// so a malformed one cannot send credentials to another host.
+pub fn validate_region(region: &str) -> Result<(), String> {
+    if region.is_empty()
+        || region.len() > 32
+        || !region
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return Err(format!("\"{region}\" is not a valid AWS region."));
+    }
+    Ok(())
+}
+
 fn sts_host(region: &str) -> String {
     if region.starts_with("cn-") {
         format!("sts.{region}.amazonaws.com.cn")
@@ -241,6 +256,7 @@ pub fn assume_role(
     options: &AssumeRoleOptions,
 ) -> Result<RoleCredentials, String> {
     validate_role_arn(options.role_arn)?;
+    validate_region(options.region)?;
     let session = session_name(options.session_name);
     let duration = options
         .duration_seconds
@@ -304,6 +320,7 @@ pub fn assume_role_with_web_identity(
     region: &str,
 ) -> Result<RoleCredentials, String> {
     validate_role_arn(role_arn)?;
+    validate_region(region)?;
     let session = session_name(session_name_hint);
     let duration = ROLE_SESSION_SECONDS.to_string();
     let body = form_body(&[
@@ -570,5 +587,6 @@ mod tests {
         assert_eq!(session_name(Some("me@corp; drop")), "me@corpdrop");
         assert!(session_name(None).starts_with("geolibre-"));
         assert_eq!(uri_encode("a b/+="), "a%20b%2F%2B%3D");
+        assert!(validate_region("evil.com/x#").is_err());
     }
 }

@@ -21,6 +21,9 @@ describe("parseS3Url", () => {
     });
     assert.deepEqual(parseS3Url("s3a://bucket"), { bucket: "bucket", key: "" });
     assert.equal(parseS3Url("s3://"), null);
+    // A bucket that could rewrite a virtual-hosted URL's authority.
+    assert.equal(parseS3Url("s3://evil.com\\x/key"), null);
+    assert.equal(parseS3Url("s3://user@evil.com/key"), null);
   });
 
   it("parses virtual-hosted and path-style AWS URLs, dropping the query", () => {
@@ -83,6 +86,13 @@ describe("s3ObjectHttpsUrl", () => {
       s3ObjectHttpsUrl({ bucket: "b", key: "k" }, { region: "auto", endpoint: "r2.example.com" }),
       "https://b.r2.example.com/k",
     );
+  });
+
+  it("refuses bucket names that could change the URL's host", () => {
+    assert.throws(() =>
+      s3ObjectHttpsUrl({ bucket: "a\\b", key: "k" }, { endpoint: "https://x.test" }),
+    );
+    assert.throws(() => s3ObjectHttpsUrl({ bucket: "a@b", key: "k" }));
   });
 
   it("encodes reserved characters SigV4 treats as unreserved-only", () => {

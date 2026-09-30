@@ -47,9 +47,16 @@ interface CachedCredentials {
 
 const credentialCache = new Map<string, CachedCredentials>();
 const signedUrlCache = new Map<string, S3SignedUrl>();
-/** Bucket → region, learned from S3's wrong-region errors. */
+/**
+ * Region learned from S3's wrong-region errors, keyed by {@link regionKey}: the
+ * same bucket name on two endpoints (AWS and a MinIO, say) is two buckets.
+ */
 const bucketRegions = new Map<string, string>();
 const pendingRegionProbes = new Map<string, Promise<string | null>>();
+
+function regionKey(connection: S3Connection, bucket: string): string {
+  return `${connection.endpoint}\u0000${bucket}`;
+}
 
 function connectionFingerprint(connection: S3Connection): string {
   return [
@@ -202,9 +209,10 @@ function probeBucketRegion(
   bucket: string,
   signal?: AbortSignal,
 ): Promise<string | null> {
-  const known = bucketRegions.get(bucket);
+  const cacheKey = regionKey(connection, bucket);
+  const known = bucketRegions.get(cacheKey);
   if (known) return Promise.resolve(known);
-  const pending = pendingRegionProbes.get(bucket);
+  const pending = pendingRegionProbes.get(cacheKey);
   if (pending) return pending;
   const probe = (async () => {
     const url = await presignFor(
@@ -220,17 +228,12 @@ function probeBucketRegion(
   })()
     .catch(() => null)
     .then((region) => {
-      if (region) bucketRegions.set(bucket, region);
+      if (region) bucketRegions.set(cacheKey, region);
       return region;
     })
-    .finally(() => pendingRegionProbes.delete(bucket));
-  pendingRegionProbes.set(bucket, probe);
+    .finally(() => pendingRegionProbes.delete(cacheKey));
+  pendingRegionProbes.set(cacheKey, probe);
   return probe;
-}
-
-/** Records a bucket's region, e.g. from an error body the S3 browser read. */
-export function rememberS3BucketRegion(bucket: string, region: string): void {
-  bucketRegions.set(bucket, region);
 }
 
 async function regionFor(
@@ -243,7 +246,7 @@ async function regionFor(
   if (request.region) return request.region;
   // ListBuckets is answered by the global endpoint, signed for us-east-1.
   if (!request.bucket) return DEFAULT_REGION;
-  const known = bucketRegions.get(request.bucket);
+  const known = bucketRegions.get(regionKey(connection, request.bucket));
   if (known) return known;
   // A custom endpoint has no region errors to learn from; `us-east-1` is what
   // MinIO and most S3-compatible stores expect by default.

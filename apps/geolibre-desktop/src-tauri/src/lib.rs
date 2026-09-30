@@ -448,6 +448,10 @@ pub fn run() {
     #[cfg(not(any(feature = "mas", target_os = "ios")))]
     let builder = builder.manage(EarthEngineOAuthState::default());
 
+    // The AWS SSO device sign-in is HTTPS plus a cache file, so it runs in
+    // every build, the App Store one included (which has no AWS CLI fallback).
+    let builder = builder.manage(aws_credentials::AwsSsoLoginState::default());
+
     // The Martin/sidecar/Jupyter process managers exist only where the commands
     // that spawn those processes do; the MAS build compiles both out together.
     #[cfg(not(feature = "mas"))]
@@ -459,7 +463,6 @@ pub fn run() {
             process: Mutex::new(None),
             lifecycle: Mutex::new(()),
         })
-        .manage(aws_credentials::AwsSsoLoginState::default())
         .manage(JupyterServerState {
             process: Mutex::new(None),
             token: Mutex::new(None),
