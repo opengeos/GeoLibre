@@ -603,6 +603,11 @@ def test_to_html_carries_the_layout_and_theme(monkeypatch, layout, theme, flags)
     assert f'src="https://example.com/app?{flags}"' in html
 
 
+def test_to_html_keeps_flags_the_app_url_already_sets(m):
+    html = m.to_html(app_url="https://example.com/app?theme=dark&embed=1")
+    assert 'src="https://example.com/app?theme=dark&amp;embed=1&amp;layout=embed"' in html
+
+
 def test_render_project_html_rejects_an_unknown_layout():
     with pytest.raises(ValueError, match="layout must be one of"):
         gmod.render_project_html({}, layout="sidebar")

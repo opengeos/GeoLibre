@@ -307,8 +307,17 @@ def render_project_html(
     if theme is not None:
         flags.append(f"theme={theme}")
     base, hash_sep, fragment = base_url.partition("#")
+    # A key the app_url already sets wins, like the in-app exporter's flags.
+    preset = {
+        key
+        for key, _ in urllib.parse.parse_qsl(
+            urllib.parse.urlsplit(base).query, keep_blank_values=True
+        )
+    }
+    flags = [flag for flag in flags if flag.split("=", 1)[0] not in preset]
     separator = "&" if "?" in base else "?"
-    iframe_src = f"{base}{separator}{'&'.join(flags)}{hash_sep}{fragment}"
+    query = "&".join(flags)
+    iframe_src = f"{base}{separator if query else ''}{query}{hash_sep}{fragment}"
     # width/height land inside a <style> rule; _html_escape does not neutralise
     # CSS metacharacters like "}" or ";", so validate them as plain CSS
     # dimensions to keep a stray value from closing the rule and injecting CSS.
