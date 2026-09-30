@@ -787,6 +787,12 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const setTool = (next: Tool) => {
     tool = next;
+    // A shortcut can switch tools while the previously clicked button still
+    // has focus; its focus ring would then read as the active tool.
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.dataset.tool && focused.dataset.tool !== next) {
+      focused.blur();
+    }
     renderTools();
     applyToolToMap();
   };
