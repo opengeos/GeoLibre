@@ -710,7 +710,8 @@ def build_server(workspace: Workspace) -> MCPServer:
         Returns:
             Per source URL, how many points were relabelled per class, plus
             every saved 3D box (`class_code`, `center` [lng, lat, elevation m],
-            `size` [length, width, height] m, `yaw` radians from east).
+            `size` [length, width, height] m, `yaw` radians from east,
+            `status` new/reviewed/flagged, and free-form `attributes`).
         """
         file = workspace.resolve(path, must_exist=True)
         project = authoring.load_project(file)

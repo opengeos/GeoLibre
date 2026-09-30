@@ -360,6 +360,14 @@ test.describe("point cloud annotation", () => {
     await page.keyboard.press("+");
     await expect.poll(heightOf).toBeCloseTo(before + 0.2, 1);
 
+    // Review status and a free-form attribute.
+    await boxes.locator('[data-status="1"]').selectOption("reviewed");
+    await boxes.locator('[data-attributes="1"] summary').click();
+    await boxes.locator('[data-attribute-key="1"]').fill("make");
+    await boxes.locator('[data-attribute-value="1"]').fill("Ford");
+    await boxes.locator('[data-attribute-add="1"]').click();
+    await expect(boxes.locator('[data-attributes="1"] summary')).toHaveText("Attributes (1)");
+
     // Export the box as GeoJSON: one closed footprint with class and extent.
     await page.getByTestId("pc-annotation-export-cuboids-geojson").click();
     await expect.poll(() => savedFile(page, "1.2-with-color-boxes.geojson")).not.toBeNull();
@@ -369,6 +377,8 @@ test.describe("point cloud annotation", () => {
     expect(geojson.features).toHaveLength(1);
     expect(geojson.features[0].properties?.classification).toBe(6);
     expect(geojson.features[0].geometry.coordinates[0]).toHaveLength(5);
+    expect(geojson.features[0].properties?.status).toBe("reviewed");
+    expect(geojson.features[0].properties?.make).toBe("Ford");
     const saved = geojson.features[0].properties!;
 
     // Save and reopen: the box comes back with the same size.
@@ -398,6 +408,9 @@ test.describe("point cloud annotation", () => {
     await expect(page.getByTestId("pc-annotation-cuboids").locator('[data-box="1"]')).toContainText(
       `${Number(saved.length_m).toFixed(1)} × ${Number(saved.width_m).toFixed(1)}`,
     );
+    const restored = page.getByTestId("pc-annotation-cuboids");
+    await expect(restored.locator('[data-status="1"]')).toHaveValue("reviewed");
+    await expect(restored.locator('[data-attributes="1"] summary')).toHaveText("Attributes (1)");
   });
 
   test("pre-labels with a Whitebox classifier as one undoable edit", async ({ page }) => {

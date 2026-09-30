@@ -108,12 +108,18 @@ arrow keys move it 10 cm north/south/east/west (1 m with **Shift**), **Q** and
 **E** rotate it by 1° (5° with **Shift**), and **+** / **-** raise or lower its
 top by 10 cm.
 
-Boxes on a cloud loaded from a URL are saved with the project. Export them as
-**Boxes as GeoJSON** (one footprint polygon per box, with its class, `z_min`,
-`z_max`, size and heading) or **Boxes as Segments.ai JSON** (a
+Each box also has a review **status** (New, Reviewed or Flagged) and free-form
+**Attributes**: name/value pairs such as `make: Ford` or `occluded: yes`, up to
+32 per box. Expand **Attributes**, type a name and value and press **Add**;
+edit a value in place, or **Remove** it.
+
+Boxes on a cloud loaded from a URL are saved with the project, with their
+status and attributes. Export them as **Boxes as GeoJSON** (one footprint
+polygon per box, with its class, `z_min`, `z_max`, size, heading, `status` and
+attributes as properties) or **Boxes as Segments.ai JSON** (a
 [`pointcloud-cuboid`](https://docs.segments.ai/reference/label-types) label in
 the same CRS and units as the LAS export, with the heading measured from grid
-east).
+east, and the status and attributes in each annotation's `attributes`).
 
 ## Saving labels with the project
 

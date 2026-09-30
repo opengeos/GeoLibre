@@ -1063,6 +1063,40 @@ def test_point_cloud_annotations_cap_the_decoded_entry_count(monkeypatch):
     assert list(labels) == ["a"]
 
 
+def test_point_cloud_annotations_read_box_status_and_attributes():
+    from geolibre import project as p
+
+    box = {"id": 1, "classCode": 6, "center": [0, 0, 1], "size": [1, 1, 1], "yaw": 0}
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "cuboids": [
+                        {
+                            "url": "https://x/a.laz",
+                            "boxes": [
+                                {
+                                    **box,
+                                    "status": "reviewed",
+                                    "attributes": {"make": "Ford", "n": 3},
+                                },
+                                {**box, "id": 2, "status": "bogus", "attributes": ["x"]},
+                                {**box, "id": 3},
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    boxes = p.point_cloud_annotations(project)["boxes"]
+    assert [(b["status"], b["attributes"]) for b in boxes] == [
+        ("reviewed", {"make": "Ford"}),
+        ("new", {}),
+        ("new", {}),
+    ]
+
+
 def test_point_cloud_annotations_merge_repeated_source_urls():
     from geolibre import project as p
 

@@ -1982,9 +1982,12 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
 
     Returns:
         ``{"labels": {url: {node_key: {index: class}}}, "boxes": [...]}``, where
-        each box is ``{"url", "id", "class_code", "center", "size", "yaw"}``:
-        ``center`` is ``[lng, lat, elevation_m]``, ``size`` ``[length, width,
-        height]`` in metres and ``yaw`` radians counter-clockwise from east.
+        each box is ``{"url", "id", "class_code", "center", "size", "yaw",
+        "status", "attributes"}``: ``center`` is ``[lng, lat, elevation_m]``,
+        ``size`` ``[length, width, height]`` in metres, ``yaw`` radians
+        counter-clockwise from east, ``status`` one of ``"new"``,
+        ``"reviewed"`` or ``"flagged"``, and ``attributes`` the box's
+        free-form string name/value pairs.
     """
     plugins = project.get("plugins") if isinstance(project, dict) else None
     settings = plugins.get("settings") if isinstance(plugins, dict) else None
@@ -2042,9 +2045,47 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
                     "center": box.get("center"),
                     "size": box.get("size"),
                     "yaw": box.get("yaw"),
+                    "status": _box_status(box.get("status")),
+                    "attributes": _box_attributes(box.get("attributes")),
                 }
             )
     return {"labels": labels, "boxes": boxes}
+
+
+_BOX_STATUSES = ("new", "reviewed", "flagged")
+_MAX_BOX_ATTRIBUTES = 32
+
+
+def _box_status(value: Any) -> str:
+    """Return a saved box status, or ``"new"`` for a missing or unknown one.
+
+    Args:
+        value: The saved ``status`` field.
+
+    Returns:
+        One of ``"new"``, ``"reviewed"`` or ``"flagged"``.
+    """
+    return value if value in _BOX_STATUSES else "new"
+
+
+def _box_attributes(value: Any) -> dict[str, str]:
+    """Return a saved box's string attributes, dropping anything else.
+
+    Args:
+        value: The saved ``attributes`` field.
+
+    Returns:
+        Up to 32 name/value pairs with string keys and values, as the app caps them.
+    """
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, item in value.items():
+        if len(out) >= _MAX_BOX_ATTRIBUTES:
+            break
+        if isinstance(key, str) and key.strip() and isinstance(item, str):
+            out[key.strip()[:64]] = item[:256]
+    return out
 
 
 def apply_point_labels(classification: Any, nodes: dict[str, dict[int, int]]) -> int:

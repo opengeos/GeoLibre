@@ -22,17 +22,61 @@ import { getOverlayViewport, getRenderZOffset } from "./lidar-access";
 import { ObjectViews, boxFramePoints } from "./object-views";
 import { createOffsetProjector } from "./selection";
 
+/** Review status of a labelled object. */
+export type ObjectStatus = "new" | "reviewed" | "flagged";
+
+export const OBJECT_STATUSES: readonly ObjectStatus[] = ["new", "reviewed", "flagged"];
+
+/** Limits on free-form attributes, so a project file stays small and sane. */
+export const MAX_OBJECT_ATTRIBUTES = 32;
+export const MAX_ATTRIBUTE_KEY = 64;
+export const MAX_ATTRIBUTE_VALUE = 256;
+
 /** A labelled box. */
 export interface CuboidObject {
   id: number;
   classCode: number;
   box: Cuboid;
+  status: ObjectStatus;
+  /** Free-form name/value attributes (e.g. make, occluded). */
+  attributes: Record<string, string>;
 }
 
 /** Saved boxes for one source (URL is a value, so redaction can scrub it). */
 export interface EncodedCuboids {
   url: string;
-  boxes: { id: number; classCode: number; center: number[]; size: number[]; yaw: number }[];
+  boxes: {
+    id: number;
+    classCode: number;
+    center: number[];
+    size: number[];
+    yaw: number;
+    status?: ObjectStatus;
+    attributes?: Record<string, string>;
+  }[];
+}
+
+/**
+ * Validates free-form attributes: string keys and values within the length
+ * limits, at most {@link MAX_OBJECT_ATTRIBUTES} of them.
+ *
+ * @param value - Anything (e.g. from a project file).
+ * @returns The attributes that pass, as a plain object.
+ */
+export function sanitizeAttributes(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+  for (const [rawKey, rawValue] of Object.entries(value)) {
+    if (Object.keys(out).length >= MAX_OBJECT_ATTRIBUTES) break;
+    const key = rawKey.trim().slice(0, MAX_ATTRIBUTE_KEY);
+    if (!key || typeof rawValue !== "string" || key === "__proto__") continue;
+    out[key] = rawValue.slice(0, MAX_ATTRIBUTE_VALUE);
+  }
+  return out;
+}
+
+function parseStatus(value: unknown): ObjectStatus {
+  return OBJECT_STATUSES.includes(value as ObjectStatus) ? (value as ObjectStatus) : "new";
 }
 
 /** Boxes per source URL, saved with the project alongside point labels. */
@@ -49,12 +93,14 @@ export function encodeCuboids(): EncodedCuboids[] {
     .filter(([url, objects]) => objects.length > 0 && /^https?:\/\//i.test(url))
     .map(([url, objects]) => ({
       url,
-      boxes: objects.map(({ id, classCode, box }) => ({
+      boxes: objects.map(({ id, classCode, box, status, attributes }) => ({
         id,
         classCode,
         center: [...box.center],
         size: [...box.size],
         yaw: box.yaw,
+        ...(status !== "new" ? { status } : {}),
+        ...(Object.keys(attributes).length > 0 ? { attributes: { ...attributes } } : {}),
       })),
     }));
 }
@@ -89,6 +135,8 @@ export function loadCuboids(state: unknown): void {
         id,
         classCode: Number(saved.classCode) || 0,
         box: { center: saved.center, size: saved.size, yaw: saved.yaw },
+        status: parseStatus(saved.status),
+        attributes: sanitizeAttributes(saved.attributes),
       });
     }
     if (objects.length > 0) cuboidStore.set(entry.url, objects);
@@ -109,7 +157,7 @@ export function cuboidsToGeoJson(
 ): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: objects.map(({ id, classCode, box }) => {
+    features: objects.map(({ id, classCode, box, status, attributes }) => {
       const corners = cuboidCorners(box);
       const ring = [0, 1, 2, 3, 0].map((k) => [corners[k][0], corners[k][1]]);
       return {
@@ -117,6 +165,10 @@ export function cuboidsToGeoJson(
         id,
         geometry: { type: "Polygon", coordinates: [ring] },
         properties: {
+          // Free-form attributes first, so a clashing name cannot replace a
+          // built-in property.
+          ...attributes,
+          status,
           id,
           classification: classCode,
           class_name: className(classCode),
@@ -146,7 +198,7 @@ export function cuboidsToSegments(objects: readonly CuboidObject[], wkt: string 
   const crs = resolveExportCrs(wkt);
   return {
     format_version: "0.2",
-    annotations: objects.map(({ id, classCode, box }) => {
+    annotations: objects.map(({ id, classCode, box, status, attributes }) => {
       const frame = localFrame(box.center[1]);
       const [x, y] = crs.forward(box.center[0], box.center[1]);
       // Project a point a metre ahead along the heading to get the grid yaw
@@ -168,6 +220,7 @@ export function cuboidsToSegments(objects: readonly CuboidObject[], wkt: string 
           z: box.size[2] / crs.zFactor,
         },
         yaw: Math.atan2(ahead[1] - y, ahead[0] - x),
+        attributes: { ...attributes, status },
       };
     }),
   };
@@ -209,6 +262,8 @@ export class CuboidSection {
   private readonly exportGeoJson: HTMLButtonElement;
   private readonly exportSegments: HTMLButtonElement;
   private selectedId: number | null = null;
+  /** Boxes whose attribute editor is expanded. */
+  private readonly openAttributes = new Set<number>();
   private views: ObjectViews | null = null;
   private unregisterViews: (() => void) | null = null;
   private frame = 0;
@@ -298,7 +353,13 @@ export class CuboidSection {
   }
 
   private add(box: Cuboid): void {
-    const object: CuboidObject = { id: this.nextId(), classCode: this.host.targetClass(), box };
+    const object: CuboidObject = {
+      id: this.nextId(),
+      classCode: this.host.targetClass(),
+      box,
+      status: "new",
+      attributes: {},
+    };
     this.objects().push(object);
     this.select(object.id);
     this.host.setStatus(
@@ -442,6 +503,18 @@ export class CuboidSection {
         object.classCode = Number(classSelect.value);
         this.render();
       });
+      const statusSelect = document.createElement("select");
+      statusSelect.style.cssText = classSelect.style.cssText;
+      statusSelect.dataset.status = String(object.id);
+      for (const status of OBJECT_STATUSES) {
+        statusSelect.append(new Option(this.statusLabel(status), status));
+      }
+      statusSelect.value = object.status;
+      statusSelect.setAttribute("aria-label", tr("boxStatus", "Review status"));
+      statusSelect.addEventListener("change", () => {
+        object.status = parseStatus(statusSelect.value);
+        this.renderList();
+      });
       const actions = document.createElement("div");
       actions.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;";
       const action = (key: string, fallback: string, onClick: () => void) => {
@@ -459,12 +532,111 @@ export class CuboidSection {
         this.host.assignClass(this.pointsIn(object), object.classCode);
       });
       action("deleteBox", "Delete", () => this.remove(object.id));
-      row.append(title, classSelect, actions);
+      row.append(title, classSelect, statusSelect, this.attributesEditor(object), actions);
       this.list.append(row);
     }
     const hasBoxes = this.objects().length > 0;
     this.exportGeoJson.disabled = !hasBoxes;
     this.exportSegments.disabled = !hasBoxes;
+  }
+
+  private statusLabel(status: ObjectStatus): string {
+    const tr = this.host.tr;
+    if (status === "reviewed") return tr("statusReviewed", "Reviewed");
+    if (status === "flagged") return tr("statusFlagged", "Flagged");
+    return tr("statusNew", "New");
+  }
+
+  /** A collapsible name/value editor for one box's attributes. */
+  private attributesEditor(object: CuboidObject): HTMLElement {
+    const tr = this.host.tr;
+    const details = document.createElement("details");
+    details.dataset.attributes = String(object.id);
+    // Stay open across re-renders while the user is editing.
+    details.open = this.openAttributes.has(object.id);
+    details.addEventListener("toggle", () => {
+      if (details.open) this.openAttributes.add(object.id);
+      else this.openAttributes.delete(object.id);
+    });
+    const summary = document.createElement("summary");
+    summary.style.cssText = "cursor:pointer;font-size:11px;";
+    const entries = Object.entries(object.attributes);
+    summary.textContent = tr("boxAttributes", "Attributes ({{count}})", { count: entries.length });
+    details.append(summary);
+    const inputStyle =
+      "padding:3px;border:1px solid hsl(var(--border));border-radius:4px;background:transparent;color:inherit;min-width:0;flex:1;font-size:11px;";
+    const small =
+      "padding:2px 6px;border:1px solid hsl(var(--border));border-radius:4px;background:transparent;color:inherit;cursor:pointer;font-size:11px;";
+    for (const [key, value] of entries) {
+      const line = document.createElement("div");
+      line.style.cssText = "display:flex;gap:4px;align-items:center;margin-top:3px;";
+      line.dataset.attribute = key;
+      const name = document.createElement("span");
+      name.textContent = key;
+      name.style.cssText = "font-weight:600;font-size:11px;max-width:40%;overflow-wrap:anywhere;";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = value;
+      input.maxLength = MAX_ATTRIBUTE_VALUE;
+      input.style.cssText = inputStyle;
+      input.setAttribute("aria-label", key);
+      input.addEventListener("change", () => {
+        object.attributes[key] = input.value.slice(0, MAX_ATTRIBUTE_VALUE);
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = tr("attributeRemove", "Remove");
+      remove.style.cssText = small;
+      remove.addEventListener("click", () => {
+        delete object.attributes[key];
+        this.renderList();
+      });
+      line.append(name, input, remove);
+      details.append(line);
+    }
+    const add = document.createElement("div");
+    add.style.cssText = "display:flex;gap:4px;align-items:center;margin-top:3px;";
+    const keyInput = document.createElement("input");
+    keyInput.type = "text";
+    keyInput.maxLength = MAX_ATTRIBUTE_KEY;
+    keyInput.placeholder = tr("attributeName", "Name");
+    keyInput.setAttribute("aria-label", keyInput.placeholder);
+    keyInput.dataset.attributeKey = String(object.id);
+    keyInput.style.cssText = inputStyle;
+    const valueInput = document.createElement("input");
+    valueInput.type = "text";
+    valueInput.maxLength = MAX_ATTRIBUTE_VALUE;
+    valueInput.placeholder = tr("attributeValue", "Value");
+    valueInput.setAttribute("aria-label", valueInput.placeholder);
+    valueInput.dataset.attributeValue = String(object.id);
+    valueInput.style.cssText = inputStyle;
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.textContent = tr("attributeAdd", "Add");
+    addButton.dataset.attributeAdd = String(object.id);
+    addButton.style.cssText = small;
+    addButton.addEventListener("click", () => {
+      const key = keyInput.value.trim().slice(0, MAX_ATTRIBUTE_KEY);
+      const full =
+        !(key in object.attributes) &&
+        Object.keys(object.attributes).length >= MAX_OBJECT_ATTRIBUTES;
+      if (!key || key === "__proto__" || full) {
+        this.host.setStatus(
+          tr("attributeInvalid", "Give the attribute a name (at most {{count}} per box).", {
+            count: MAX_OBJECT_ATTRIBUTES,
+          }),
+        );
+        return;
+      }
+      object.attributes = {
+        ...object.attributes,
+        [key]: valueInput.value.slice(0, MAX_ATTRIBUTE_VALUE),
+      };
+      this.renderList();
+    });
+    add.append(keyInput, valueInput, addButton);
+    details.append(add);
+    return details;
   }
 
   private renderMap(): void {

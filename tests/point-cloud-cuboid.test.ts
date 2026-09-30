@@ -145,7 +145,7 @@ describe("object view editing", async () => {
 });
 
 describe("cuboid persistence and export", async () => {
-  const { cuboidsToGeoJson, cuboidsToSegments, encodeCuboids, loadCuboids } =
+  const { cuboidsToGeoJson, cuboidsToSegments, encodeCuboids, loadCuboids, sanitizeAttributes } =
     await import("../packages/plugins/src/plugins/point-cloud-annotation/cuboid-panel");
   const box: Cuboid = { center: [ORIGIN[0], ORIGIN[1], 100], size: [4, 2, 3], yaw: Math.PI / 6 };
 
@@ -190,7 +190,10 @@ describe("cuboid persistence and export", async () => {
   });
 
   it("writes a closed footprint polygon with the box's extent", () => {
-    const fc = cuboidsToGeoJson([{ id: 1, classCode: 6, box }], (code) => `c${code}`);
+    const fc = cuboidsToGeoJson(
+      [{ id: 1, classCode: 6, box, status: "reviewed", attributes: { make: "Ford", id: "x" } }],
+      (code) => `c${code}`,
+    );
     const ring = (fc.features[0].geometry as GeoJSON.Polygon).coordinates[0];
     assert.equal(ring.length, 5);
     assert.deepEqual(ring[0], ring[4]);
@@ -199,15 +202,60 @@ describe("cuboid persistence and export", async () => {
     assert.equal(props.z_min, 98.5);
     assert.equal(props.height_m, 3);
     assert.ok(Math.abs(props.yaw_deg - 30) < 1e-9);
+    assert.equal(props.status, "reviewed");
+    assert.equal(props.make, "Ford");
+    // A clashing attribute name never replaces a built-in property.
+    assert.equal(props.id, 1);
+  });
+
+  it("round-trips status and attributes, dropping invalid ones", () => {
+    loadCuboids([
+      {
+        url: "https://x/a.copc.laz",
+        boxes: [
+          {
+            id: 1,
+            classCode: 6,
+            center: box.center,
+            size: box.size,
+            yaw: 0,
+            status: "flagged",
+            attributes: { make: "Ford", occluded: "yes", bad: 3, " ": "blank" },
+          },
+          { id: 2, classCode: 6, center: box.center, size: box.size, yaw: 0, status: "bogus" },
+        ],
+      },
+    ]);
+    const [first, second] = encodeCuboids()[0].boxes;
+    assert.equal(first.status, "flagged");
+    assert.deepEqual(first.attributes, { make: "Ford", occluded: "yes" });
+    // Defaults are not written, so older projects stay unchanged.
+    assert.equal(second.status, undefined);
+    assert.equal(second.attributes, undefined);
+    loadCuboids(undefined);
+  });
+
+  it("caps attribute count and lengths", () => {
+    const many = Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`k${i}`, "v"]));
+    assert.equal(Object.keys(sanitizeAttributes(many)).length, 32);
+    const long = sanitizeAttributes({ ["k".repeat(100)]: "v".repeat(1000) });
+    const [[key, value]] = Object.entries(long);
+    assert.equal(key.length, 64);
+    assert.equal(value.length, 256);
+    assert.deepEqual(sanitizeAttributes(["a"]), {});
   });
 
   it("writes Segments.ai cuboids in the source CRS (grid yaw, CRS units)", () => {
     // UTM 10N in metres: dimensions stay ~metres (scale factor ~0.9996).
     const wkt =
       'PROJCS["NAD83 / UTM zone 10N",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-123],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]';
-    const label = cuboidsToSegments([{ id: 7, classCode: 5, box }], wkt);
+    const label = cuboidsToSegments(
+      [{ id: 7, classCode: 5, box, status: "new", attributes: { species: "oak" } }],
+      wkt,
+    );
     const cuboid = label.annotations[0];
     assert.equal(cuboid.category_id, 5);
+    assert.deepEqual(cuboid.attributes, { species: "oak", status: "new" });
     assert.ok(cuboid.position.x > 490000 && cuboid.position.x < 500000);
     assert.ok(Math.abs(cuboid.dimensions.x - 4) < 0.01, `length ${cuboid.dimensions.x}`);
     assert.equal(cuboid.dimensions.z, 3);
