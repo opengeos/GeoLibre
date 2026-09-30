@@ -361,6 +361,24 @@ not catch that either: re-read `loadSplat` / `loadModel` in the package on a bum
 Better still, upstream an id option and a per-asset placement getter and delete
 the patching.
 
+### `@geoman-io/maplibre-geoman-free` (`packages/plugins/package.json`) — change-mode internals
+
+Geoman's change mode removes a vertex on right-click, but only for LineString,
+Polygon and MultiPolygon. `installMultiLineVertexRemoval` in
+`packages/plugins/src/plugins/maplibre-geo-editor.ts` adds MultiLineString
+(discussion #2750). It hooks `geoman.actionInstances` and wraps the
+`edit__change` action's `cutVertex`, reading the `featureData` / `markerData`
+payload and calling `fireFeatureUpdatedEvent`. None of that is checked by the
+compiler. `patch-package` is no help here: the app loads the nested copies
+under `packages/plugins` and `apps/geolibre-desktop`, not the root one.
+
+If a bump renames the action key or those members, the wrapper silently stops
+applying and MultiLineString vertices go back to logging
+`EditChange.cutVertex: feature not updated`. On a bump, re-read `cutVertex` in
+the package's `dist/maplibre-geoman.es.js`, then right-click a MultiLineString
+vertex in Edit mode. If upstream adds MultiLineString support, delete the
+wrapper.
+
 ### `zarr-cesium` (`packages/map/package.json`) — private internals
 
 `packages/map/src/cesium-zarr-imagery.ts` draws Zarr layers on the globe and
