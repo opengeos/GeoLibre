@@ -9,6 +9,7 @@ import { localFrame } from "../packages/plugins/src/plugins/point-cloud-annotati
 import { writeLas } from "../packages/plugins/src/plugins/point-cloud-annotation/las-writer";
 import {
   PRELABEL_TOOLS,
+  keepUntouched,
   mergePrelabels,
   readLasClassifications,
 } from "../packages/plugins/src/plugins/point-cloud-annotation/prelabel";
@@ -61,6 +62,16 @@ describe("readLasClassifications", () => {
     assert.equal(classes[6], 1);
   });
 
+  it("rejects a malformed record geometry", () => {
+    const las = new Uint8Array(writeLas(fieldWithBuilding().cloud));
+    const zeroLength = las.slice();
+    new DataView(zeroLength.buffer).setUint16(105, 0, true);
+    assert.throws(() => readLasClassifications(zeroLength), /malformed/);
+    const short = las.slice();
+    new DataView(short.buffer).setUint16(105, 16, true);
+    assert.throws(() => readLasClassifications(short), /malformed/);
+  });
+
   it("reads a legacy format's 5-bit class and rejects LAZ", () => {
     const las = new Uint8Array(writeLas(fieldWithBuilding().cloud));
     const legacy = las.slice();
@@ -100,6 +111,20 @@ describe("mergePrelabels", () => {
         }),
       /keep every point/,
     );
+  });
+});
+
+describe("keepUntouched", () => {
+  it("keeps edits made while the tool ran", () => {
+    const snapshot = Uint8Array.from([1, 1, 1]);
+    const current = Uint8Array.from([1, 6, 1]); // point 1 relabelled mid-run
+    const kept = keepUntouched(
+      { indices: Uint32Array.from([0, 1, 2]), codes: Uint8Array.from([2, 2, 2]) },
+      snapshot,
+      current,
+    );
+    assert.deepEqual([...kept.indices], [0, 2]);
+    assert.deepEqual([...kept.codes], [2, 2]);
   });
 });
 
@@ -194,6 +219,15 @@ describe("planPrelabelTiles", async () => {
       }
     }
     assert.ok(seen.every((n) => n === 1));
+  });
+
+  it("refuses a tile too dense to split instead of running out of memory", () => {
+    // 5,000 points stacked on one spot.
+    const positions = new Float32Array(5000 * 3);
+    assert.throws(
+      () => planPrelabelTiles({ positions, coordinateOrigin: ORIGIN, pointCount: 5000 }, 1000, 5),
+      /Too many points/,
+    );
   });
 
   it("returns one tile when the cloud already fits", () => {

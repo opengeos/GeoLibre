@@ -24,6 +24,7 @@ import {
 } from "./las-writer";
 import {
   PRELABEL_TOOLS,
+  keepUntouched,
   mergePrelabels,
   planPrelabelTiles,
   readLasClassifications,
@@ -940,7 +941,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       // so run it tile by tile (with an overlap buffer) and keep each tile's
       // core results.
       const tiles = planPrelabelTiles(cloud);
-      const results = classes.slice(0, cloud.pointCount);
+      // Classes as the tool sees them. Edits made while tiles run (the run can
+      // take minutes) are kept: only points still at this value are relabelled.
+      const snapshot = classes.slice(0, cloud.pointCount);
+      const results = snapshot.slice();
       const owned = new Uint8Array(cloud.pointCount);
       for (const [n, tile] of tiles.entries()) {
         if (tiles.length > 1) {
@@ -970,10 +974,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         for (const i of tile.core) owned[i] = 0;
       }
       if (!session || session.cloudId !== cloudId) return;
-      const { indices, codes } = mergePrelabels(classes, results, cloud.pointCount, {
+      const merged = mergePrelabels(snapshot, results, cloud.pointCount, {
         onlyUnclassified: prelabelOnlyUnclassified.checked,
         protectedClasses: new Set([...ctl.getHiddenClassifications(), ...lockedClasses]),
       });
+      const { indices, codes } = keepUntouched(merged, snapshot, classes);
       const changed = session.history.assignEach(cloudId, classes, indices, codes);
       recordLabels(indices);
       refreshAfterEdit(cloudId);

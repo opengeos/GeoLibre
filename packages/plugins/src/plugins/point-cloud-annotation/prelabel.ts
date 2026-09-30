@@ -77,6 +77,17 @@ export function readLasClassifications(bytes: Uint8Array): Uint8Array {
   // give it a full byte at 16.
   const legacy = format < 6;
   const at = legacy ? 15 : 16;
+  // Reject a header whose record geometry would read the same or out-of-record
+  // bytes as classes (record length 0, or too short for the format).
+  const minimumRecord = legacy ? 20 : 30;
+  if (
+    format > 10 ||
+    recordLength < minimumRecord ||
+    pointOffset < 227 ||
+    pointOffset > bytes.length
+  ) {
+    throw new Error("The tool returned a malformed LAS file.");
+  }
   const available = Math.floor((bytes.length - pointOffset) / recordLength);
   const n = Math.min(count, available);
   const classes = new Uint8Array(n);
@@ -137,6 +148,9 @@ interface TileablePoints {
   pointCount: number;
 }
 
+/** Smallest tile edge (m) before a too-dense tile is refused. */
+const MIN_TILE_SIZE = 2;
+
 /** One unit of work: the points a tile owns and the points it is run on. */
 export interface PrelabelTile {
   /** Points whose result this tile provides (each point is in one core). */
@@ -175,31 +189,57 @@ export function planPrelabelTiles(
     ys[i] = points.positions[i * 3 + 1] * my;
   }
   const tiles: PrelabelTile[] = [];
-  const split = (indices: Uint32Array, x0: number, y0: number, x1: number, y1: number) => {
+  // Each call gets the points inside its tile's buffered bounds (`candidates`)
+  // so a leaf builds its buffered input without rescanning the whole cloud.
+  const split = (
+    indices: Uint32Array,
+    candidates: Uint32Array,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+  ) => {
     if (indices.length === 0) return;
-    if (indices.length <= maxPoints || x1 - x0 < 2 * buffer) {
-      const input: number[] = [];
-      for (let i = 0; i < count; i++) {
-        if (
-          xs[i] >= x0 - buffer &&
-          xs[i] < x1 + buffer &&
-          ys[i] >= y0 - buffer &&
-          ys[i] < y1 + buffer
-        ) {
-          input.push(i);
-        }
-      }
-      tiles.push({ core: indices, input: Uint32Array.from(input) });
+    const inBuffered = (i: number, bx0: number, by0: number, bx1: number, by1: number) =>
+      xs[i] >= bx0 - buffer &&
+      xs[i] < bx1 + buffer &&
+      ys[i] >= by0 - buffer &&
+      ys[i] < by1 + buffer;
+    if (indices.length <= maxPoints) {
+      tiles.push({
+        core: indices,
+        input: candidates.filter((i) => inBuffered(i, x0, y0, x1, y1)),
+      });
       return;
+    }
+    if (x1 - x0 < MIN_TILE_SIZE) {
+      // Too dense to split further (e.g. a terrestrial scan): refuse rather
+      // than hand the tool more points than it has memory for.
+      throw new Error(
+        `Too many points (${indices.length}) in a ${MIN_TILE_SIZE} m tile to pre-label; select a sparser area.`,
+      );
     }
     const mxMid = (x0 + x1) / 2;
     const myMid = (y0 + y1) / 2;
     const quads: number[][] = [[], [], [], []];
     for (const i of indices) quads[(xs[i] >= mxMid ? 1 : 0) + (ys[i] >= myMid ? 2 : 0)].push(i);
-    split(Uint32Array.from(quads[0]), x0, y0, mxMid, myMid);
-    split(Uint32Array.from(quads[1]), mxMid, y0, x1, myMid);
-    split(Uint32Array.from(quads[2]), x0, myMid, mxMid, y1);
-    split(Uint32Array.from(quads[3]), mxMid, myMid, x1, y1);
+    const bounds: [number, number, number, number][] = [
+      [x0, y0, mxMid, myMid],
+      [mxMid, y0, x1, myMid],
+      [x0, myMid, mxMid, y1],
+      [mxMid, myMid, x1, y1],
+    ];
+    bounds.forEach(([bx0, by0, bx1, by1], q) => {
+      if (quads[q].length === 0) return;
+      split(
+        Uint32Array.from(quads[q]),
+        candidates.filter((i) => inBuffered(i, bx0, by0, bx1, by1)),
+        bx0,
+        by0,
+        bx1,
+        by1,
+      );
+    });
   };
   let minX = Infinity;
   let minY = Infinity;
@@ -213,6 +253,27 @@ export function planPrelabelTiles(
   }
   // A square root so the first split works on a square (no sliver tiles).
   const side = Math.max(maxX - minX, maxY - minY) + 1e-6;
-  split(all, minX, minY, minX + side, minY + side);
+  split(all, all, minX, minY, minX + side, minY + side);
   return tiles;
+}
+
+/**
+ * Drops merged results for points that changed after the tool was given its
+ * input (edits made during a long run), so they are not overwritten.
+ *
+ * @param merged - Output of {@link mergePrelabels} against `snapshot`.
+ * @param snapshot - Classes when the run started.
+ * @param current - Classes now.
+ * @returns The results for points still at their snapshot class.
+ */
+export function keepUntouched(
+  merged: { indices: Uint32Array; codes: Uint8Array },
+  snapshot: Uint8Array,
+  current: Uint8Array,
+): { indices: Uint32Array; codes: Uint8Array } {
+  const keep = merged.indices.map((i) => (current[i] === snapshot[i] ? 1 : 0));
+  return {
+    indices: merged.indices.filter((_, k) => keep[k] === 1),
+    codes: merged.codes.filter((_, k) => keep[k] === 1),
+  };
 }
