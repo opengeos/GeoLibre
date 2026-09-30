@@ -38,7 +38,8 @@ Scroll to zoom and right-drag to tilt or rotate as usual.
   classes, hidden classes (toggled in the LiDAR panel's legend) and points
   outside the LiDAR panel's elevation filter are never selected.
 - Selected points are drawn in yellow. Choose the class to assign (or press
-  **0**-**9** for ASPRS classes 0-9) and press **Apply (Enter)**; **Clear (Esc)** drops the selection. Clicking a row in
+  **0**-**9** for ASPRS classes 0-9) and press **Apply (Enter)**;
+  **Clear (Esc)** drops the selection. Clicking a row in
   **Classes in session** makes it the class to assign.
 - **Undo** and **Redo** step through the class assignments of the session.
 

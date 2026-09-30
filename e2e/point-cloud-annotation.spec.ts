@@ -452,6 +452,20 @@ test.describe("point cloud annotation", () => {
     ]) {
       await page.mouse.click(...at(fx, fy));
     }
+    // The camera is locked while the ring is open: vertices are screen
+    // positions, so a wheel zoom between clicks must not move the map.
+    const zoomText = async () =>
+      /Zoom: ([\d.]+)/.exec((await page.locator("footer").textContent()) ?? "")?.[1];
+    // Let the post-load fly-to finish first.
+    await expect
+      .poll(async () => Number(await zoomText()), { timeout: 30_000 })
+      .toBeGreaterThan(10);
+    await page.waitForTimeout(1_000);
+    const zoomBefore = await zoomText();
+    await page.mouse.move(...at(0.5, 0.5));
+    await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(500);
+    expect(await zoomText()).toBe(zoomBefore);
     // Nothing is selected until the ring is closed.
     await expect(page.getByTestId("pc-annotation-selected")).toHaveText("0 points selected");
     await page.keyboard.press("Enter");
@@ -459,14 +473,29 @@ test.describe("point cloud annotation", () => {
       ((await page.getByTestId("pc-annotation-selected").textContent()) ?? "").replace(/\D/g, ""),
     );
     expect(selected).toBeGreaterThan(0);
+    // Once the ring closes the camera is unlocked again: the same wheel zooms.
+    await page.mouse.wheel(0, -400);
+    await expect.poll(zoomText).not.toBe(zoomBefore);
 
     // Digit 9 picks Water as the class to assign, then Enter applies it.
+    const classes = page.getByTestId("pc-annotation-classes");
+    // The count is the last span of a class row's pick button.
+    const countOf = async (code: number) => {
+      const row = classes.locator(`[data-code="${code}"] button`).first();
+      if ((await row.count()) === 0) return 0;
+      return Number(((await row.locator("span").last().textContent()) ?? "").replace(/\D/g, ""));
+    };
+    const waterBefore = await countOf(9);
     await page.keyboard.press("9");
     await expect(page.getByTestId("pc-annotation-target")).toHaveValue("9");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("pc-annotation-status")).toContainText("to Water");
-    await expect(
-      page.getByTestId("pc-annotation-classes").locator('[data-code="9"]'),
-    ).toContainText(selected.toLocaleString("en-US"));
+    const assigned = Number(
+      /Assigned ([\d,]+) points/
+        .exec((await page.getByTestId("pc-annotation-status").textContent()) ?? "")?.[1]
+        .replace(/,/g, ""),
+    );
+    await expect.poll(() => countOf(9)).toBe(waterBefore + assigned);
+    expect(assigned).toBeLessThanOrEqual(selected);
   });
 });

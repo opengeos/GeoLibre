@@ -707,6 +707,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   } | null = null;
   let dragPanWasEnabled = false;
   let boxZoomWasEnabled = false;
+  let doubleClickZoomWasEnabled = false;
+  // Camera handlers suspended while a polygon ring is open: its vertices are
+  // screen positions, so the view must not move between clicks.
+  let lockedCameraHandlers: { enable(): void }[] = [];
 
   const ensureOverlay = (): void => {
     if (!map || overlay) return;
@@ -835,9 +839,25 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     );
   };
 
+  const lockCamera = () => {
+    if (!map || lockedCameraHandlers.length > 0) return;
+    for (const handler of [map.scrollZoom, map.dragRotate, map.touchZoomRotate, map.keyboard]) {
+      if (handler.isEnabled()) {
+        handler.disable();
+        lockedCameraHandlers.push(handler);
+      }
+    }
+  };
+
+  const unlockCamera = () => {
+    for (const handler of lockedCameraHandlers) handler.enable();
+    lockedCameraHandlers = [];
+  };
+
   const closePolygon = (combine: SelectionMode) => {
     const finished = polygon;
     polygon = null;
+    unlockCamera();
     drawPolygon();
     if (finished && finished.points.length >= 3) {
       runSelection({ kind: "polygon", points: finished.points }, combine);
@@ -846,6 +866,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const cancelPolygon = () => {
     polygon = null;
+    unlockCamera();
     drawPolygon();
   };
 
@@ -856,11 +877,15 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     if (tool === "polygon") {
       const point = localPoint(event);
       const combine: SelectionMode = event.shiftKey ? "add" : event.altKey ? "subtract" : mode;
-      if (!polygon) polygon = { points: [], cursor: null };
+      if (!polygon) {
+        polygon = { points: [], cursor: null };
+        lockCamera();
+      }
       const first = polygon.points[0];
-      // A double-click, or a click back on the first vertex, closes the ring.
+      // A double-click, or a click back on the first vertex, closes the ring
+      // once it has a shape (a fast double-click at the start just adds).
       if (
-        event.detail >= 2 ||
+        (event.detail >= 2 && polygon.points.length >= 3) ||
         (first &&
           polygon.points.length >= 3 &&
           Math.hypot(point[0] - first[0], point[1] - first[1]) <= 8)
@@ -936,6 +961,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     svgPath = null;
     drawing = null;
     polygon = null;
+    unlockCamera();
   };
 
   const applyToolToMap = () => {
@@ -951,12 +977,19 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         boxZoomWasEnabled = true;
         map.boxZoom.disable();
       }
+      // A double-click closes a polygon; it must not also zoom the map.
+      if (map.doubleClickZoom.isEnabled()) {
+        doubleClickZoomWasEnabled = true;
+        map.doubleClickZoom.disable();
+      }
       map.getCanvas().style.cursor = "crosshair";
     } else {
       if (dragPanWasEnabled) map.dragPan.enable();
       if (boxZoomWasEnabled) map.boxZoom.enable();
+      if (doubleClickZoomWasEnabled) map.doubleClickZoom.enable();
       dragPanWasEnabled = false;
       boxZoomWasEnabled = false;
+      doubleClickZoomWasEnabled = false;
       map.getCanvas().style.cursor = "";
     }
   };
