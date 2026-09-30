@@ -715,14 +715,21 @@ def build_server(workspace: Workspace) -> MCPServer:
         file = workspace.resolve(path, must_exist=True)
         project = authoring.load_project(file)
         annotations = _project.point_cloud_annotations(project)
+        # Source URLs can be signed (e.g. a presigned S3 link); report them the
+        # way the rest of the project is shared, with credentials stripped.
         labels: dict[str, dict[str, int]] = {}
         for url, nodes in annotations["labels"].items():
+            url = _project.redact_url(url)
             counts: dict[str, int] = {}
             for edits in nodes.values():
                 for code in edits.values():
                     counts[str(code)] = counts.get(str(code), 0) + 1
             labels[url] = counts
-        return {"labels": labels, "boxes": annotations["boxes"]}
+        boxes = [
+            {**box, "url": _project.redact_url(box["url"]) if isinstance(box["url"], str) else None}
+            for box in annotations["boxes"]
+        ]
+        return {"labels": labels, "boxes": boxes}
 
     @tool()
     def add_3d_tiles_layer(

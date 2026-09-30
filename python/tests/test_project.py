@@ -969,3 +969,48 @@ def test_decode_point_label_node_rejects_a_truncated_record():
     truncated = base64.b64encode(compressor.compress(b"\x80") + compressor.flush()).decode()
     with pytest.raises(ValueError, match="truncated"):
         p.decode_point_label_node(truncated)
+
+
+def test_decode_point_label_node_refuses_a_decompression_bomb():
+    import base64
+    import zlib
+
+    import pytest
+
+    from geolibre import project as p
+
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    bomb = base64.b64encode(compressor.compress(bytes(1024 * 1024)) + compressor.flush()).decode()
+    assert len(bomb) < 4096
+    with pytest.raises(ValueError, match="too large"):
+        p.decode_point_label_node(bomb, limit=64 * 1024)
+    # Within the limit the same bytes decode (zeros are delta 0, class 0 pairs).
+    assert len(p.decode_point_label_node(bomb, limit=2 * 1024 * 1024)) == 512 * 1024
+
+
+def test_point_cloud_annotations_skip_malformed_entries():
+    from geolibre import project as p
+
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "sources": ["oops", None, {"url": 3}],
+                    "cuboids": [None, {"url": "https://x/a.laz", "boxes": ["oops", None]}],
+                }
+            }
+        }
+    }
+    assert p.point_cloud_annotations(project) == {"labels": {}, "boxes": []}
+    assert p.point_cloud_annotations({"plugins": "bad"}) == {"labels": {}, "boxes": []}
+
+
+def test_apply_point_labels_changes_nothing_when_it_rejects():
+    import pytest
+
+    from geolibre import project as p
+
+    classification = [1] * 5
+    with pytest.raises(ValueError):
+        p.apply_point_labels(classification, {"file": {0: 6, 9: 2}})
+    assert classification == [1] * 5

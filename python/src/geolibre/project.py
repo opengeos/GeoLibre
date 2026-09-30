@@ -1889,7 +1889,14 @@ POINT_CLOUD_ANNOTATION_PLUGIN_ID = "geolibre-point-cloud-annotation"
 """Plugin id under which the app saves point cloud labels and 3D boxes."""
 
 
-def decode_point_label_node(text: str) -> dict[int, int]:
+MAX_POINT_LABEL_NODE_BYTES = 16 * 1024 * 1024
+"""Largest inflated size of one node's saved labels (mirrors the app's cap)."""
+
+MAX_POINT_LABEL_BYTES = 256 * 1024 * 1024
+"""Largest total inflated size of all saved labels in one project."""
+
+
+def decode_point_label_node(text: str, limit: int = MAX_POINT_LABEL_NODE_BYTES) -> dict[int, int]:
     """Decode one node's saved point labels.
 
     The app stores a node's edits as raw-DEFLATE compressed pairs of
@@ -1897,17 +1904,23 @@ def decode_point_label_node(text: str) -> dict[int, int]:
 
     Args:
         text: The base64 string from the project.
+        limit: Maximum inflated size in bytes; a larger record is rejected
+            without being inflated in full (a crafted decompression bomb).
 
     Returns:
         Point index within the node -> ASPRS class code.
 
     Raises:
-        ValueError: If the record is truncated or not valid DEFLATE.
+        ValueError: If the record is truncated, not valid DEFLATE, or
+            inflates past ``limit``.
     """
     try:
-        data = zlib.decompress(base64.b64decode(text), -15)
+        inflater = zlib.decompressobj(-15)
+        data = inflater.decompress(base64.b64decode(text), limit + 1)
     except (ValueError, zlib.error) as error:
         raise ValueError(f"invalid point label record: {error}") from error
+    if len(data) > limit or inflater.unconsumed_tail:
+        raise ValueError("point label record is too large")
     edits: dict[int, int] = {}
     previous = -1
     at = 0
@@ -1948,26 +1961,43 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
         ``center`` is ``[lng, lat, elevation_m]``, ``size`` ``[length, width,
         height]`` in metres and ``yaw`` radians counter-clockwise from east.
     """
-    settings = (project.get("plugins") or {}).get("settings") or {}
-    state = settings.get(POINT_CLOUD_ANNOTATION_PLUGIN_ID) or {}
+    plugins = project.get("plugins") if isinstance(project, dict) else None
+    settings = plugins.get("settings") if isinstance(plugins, dict) else None
+    state = settings.get(POINT_CLOUD_ANNOTATION_PLUGIN_ID) if isinstance(settings, dict) else None
+    if not isinstance(state, dict):
+        state = {}
     labels: dict[str, dict[str, dict[int, int]]] = {}
-    for source in state.get("sources") or []:
+    budget = MAX_POINT_LABEL_BYTES
+    sources = state.get("sources") if isinstance(state, dict) else None
+    for source in sources if isinstance(sources, list) else []:
+        if not isinstance(source, dict):
+            continue
         url = source.get("url")
         nodes = source.get("nodes") or {}
         if not isinstance(url, str) or not isinstance(nodes, dict):
             continue
         decoded: dict[str, dict[int, int]] = {}
         for key, text in nodes.items():
-            if isinstance(text, str):
-                try:
-                    decoded[key] = decode_point_label_node(text)
-                except ValueError:
-                    continue
+            if not isinstance(text, str) or budget <= 0:
+                continue
+            try:
+                edits = decode_point_label_node(text, min(MAX_POINT_LABEL_NODE_BYTES, budget))
+            except ValueError:
+                continue
+            # Each edit is at least two inflated bytes (varint + class).
+            budget -= 2 * len(edits)
+            decoded[key] = edits
         labels[url] = decoded
     boxes: list[dict[str, Any]] = []
-    for entry in state.get("cuboids") or []:
+    cuboids = state.get("cuboids") if isinstance(state, dict) else None
+    for entry in cuboids if isinstance(cuboids, list) else []:
+        if not isinstance(entry, dict):
+            continue
         url = entry.get("url")
-        for box in entry.get("boxes") or []:
+        entry_boxes = entry.get("boxes")
+        for box in entry_boxes if isinstance(entry_boxes, list) else []:
+            if not isinstance(box, dict):
+                continue
             boxes.append(
                 {
                     "url": url,
@@ -2002,16 +2032,19 @@ def apply_point_labels(classification: Any, nodes: dict[str, dict[int, int]]) ->
         ValueError: If the labels are keyed by COPC/EPT node, or an index is
             past the end of ``classification``.
     """
-    changed = 0
+    # Validate everything first, so a rejected record changes nothing.
     for key, edits in nodes.items():
         if key != "file":
             raise ValueError(
                 f"labels keyed by octree node {key!r} need the COPC node order; "
                 "export the annotated cloud as LAS/LAZ from the app instead"
             )
-        for index, code in edits.items():
+        for index in edits:
             if index >= len(classification):
                 raise ValueError(f"label index {index} is past the {len(classification)} points")
+    changed = 0
+    for edits in nodes.values():
+        for index, code in edits.items():
             if int(classification[index]) != code:
                 classification[index] = code
                 changed += 1

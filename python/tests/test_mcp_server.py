@@ -513,6 +513,16 @@ def test_get_point_cloud_annotations_counts_labels_and_lists_boxes(server, proje
     assert result["labels"] == {"https://x/a.laz": {"6": 2, "2": 1}}
     assert result["boxes"][0]["class_code"] == 6
 
+    # A signed source URL is reported without its credentials.
+    signed = "https://bucket.example.com/a.laz?X-Amz-Signature=abc&sig=zzz"
+    settings = saved["plugins"]["settings"]["geolibre-point-cloud-annotation"]
+    settings["sources"][0]["url"] = signed
+    settings["cuboids"][0]["url"] = signed
+    (tmp_path / project_path).write_text(json.dumps(saved))
+    result = call(server, "get_point_cloud_annotations", path=project_path)
+    assert all("zzz" not in url for url in result["labels"])
+    assert "zzz" not in result["boxes"][0]["url"]
+
 
 def test_cesium_ion_tools_persist_the_asset_id(server, project_path, tmp_path):
     """The globe loads Ion assets from `source.ionAssetId`, so it must survive the save."""
