@@ -183,6 +183,27 @@ def _global_edits(
     )
 
 
+def _read_classes(path: str | Path) -> Any:
+    """Read only a file's classification codes, chunk by chunk.
+
+    Args:
+        path: A LAS/LAZ/COPC file.
+
+    Returns:
+        One int64 class code per point, in file order.
+    """
+    import numpy as np
+
+    laspy = _require_laspy()
+    with laspy.open(str(path)) as reader:
+        classes = np.empty(int(reader.header.point_count), dtype=np.int64)
+        at = 0
+        for chunk in reader.chunk_iterator(1_000_000):
+            classes[at : at + len(chunk)] = np.asarray(chunk.classification)
+            at += len(chunk)
+    return classes[:at]
+
+
 def prelabel_point_cloud(
     path: str | Path,
     tool: str = "ground",
@@ -226,7 +247,7 @@ def prelabel_point_cloud(
             "Pre-labelling needs whitebox-workflows: pip install 'geolibre[pointcloud]'"
         ) from error
     ranges = point_node_ranges(path)
-    before = np.asarray(laspy.read(str(path)).classification, dtype=np.int64)
+    before = _read_classes(path)
     if current:
         indices, values = _global_edits(current, ranges)
         before[indices] = values
@@ -235,7 +256,7 @@ def prelabel_point_cloud(
     with tempfile.TemporaryDirectory() as tmp:
         output = str(Path(tmp) / "prelabel.las")
         getattr(wbe.lidar, tool_name)(input=str(path), output=output, **parameters)
-        after = np.asarray(laspy.read(output).classification, dtype=np.int64)
+        after = _read_classes(output)
     if len(after) != len(before):
         raise ValueError(
             f"The tool returned {len(after)} points for {len(before)}; it must keep every point"
@@ -292,11 +313,7 @@ def write_labeled_point_cloud(
         fmt = source.point_format.id
         needs_upgrade = fmt < 6 and bool(len(label_value)) and int(label_value.max()) > 31
         if needs_upgrade:
-            target_fmt = 7 if fmt in (2, 3, 5) else 6
-            header = laspy.LasHeader(point_format=target_fmt, version="1.4")
-            header.scales = source.scales
-            header.offsets = source.offsets
-            header.vlrs = [vlr for vlr in source.vlrs if not _is_copc_or_laszip(vlr)]
+            header = _upgraded_header(source)
         else:
             header = copy.deepcopy(source)
             header.vlrs = [vlr for vlr in header.vlrs if not _is_copc_or_laszip(vlr)]
@@ -348,6 +365,64 @@ def write_labeled_point_cloud(
         "relabelled": int(len(label_index)),
         "instanced": int(len(inst_index)),
     }
+
+
+_GEOTIFF_RECORDS = {34735, 34736, 34737}
+
+
+def _upgraded_header(source: Any) -> Any:
+    """A LAS 1.4 format 6/7 header carrying over a legacy header's metadata.
+
+    Keeps the scales and offsets, identifiers, creation date, extra-bytes
+    dimensions and CRS; the CRS is rewritten as WKT (formats 6-10 require it)
+    when pyproj can parse it, else the GeoTIFF records are kept as they are.
+
+    Args:
+        source: The legacy (format 0-5) laspy header.
+
+    Returns:
+        The new header.
+    """
+    laspy = _require_laspy()
+    fmt = source.point_format.id
+    header = laspy.LasHeader(point_format=7 if fmt in (2, 3, 5) else 6, version="1.4")
+    header.scales = source.scales
+    header.offsets = source.offsets
+    for name in ("system_identifier", "generating_software", "creation_date"):
+        try:
+            setattr(header, name, getattr(source, name))
+        except (AttributeError, ValueError):
+            pass
+    extra = [
+        laspy.ExtraBytesParams(
+            name=dim.name,
+            type=dim.type_str() if callable(dim.type_str) else dim.type_str,
+            description=dim.description or "",
+            offsets=dim.offsets,
+            scales=dim.scales,
+            no_data=dim.no_data,
+        )
+        for dim in source.point_format.extra_dimensions
+    ]
+    if extra:
+        header.add_extra_dims(extra)
+    try:
+        crs = source.parse_crs()
+    except Exception:  # pyproj missing, or GeoKeys it cannot read
+        crs = None
+
+    def keep(vlr: Any) -> bool:
+        user = vlr.user_id.strip("\0")
+        if _is_copc_or_laszip(vlr) or (user == "LASF_Spec" and vlr.record_id == 4):
+            return False
+        return not (
+            crs is not None and user == "LASF_Projection" and vlr.record_id in _GEOTIFF_RECORDS
+        )
+
+    header.vlrs.extend(vlr for vlr in source.vlrs if keep(vlr))
+    if crs is not None:
+        header.add_crs(crs)
+    return header
 
 
 def _is_copc_or_laszip(vlr: Any) -> bool:

@@ -2806,6 +2806,8 @@ class Map(anywidget.AnyWidget):
         """
         from . import pointcloud as _pointcloud
 
+        if url not in _authoring.lidar_source_urls(self.project):
+            raise ValueError("No LiDAR layer in this map uses that URL; add it with add_lidar().")
         labels, instances = _pointcloud.labels_for_source(self.project, url)
         return _pointcloud.write_labeled_point_cloud(input_file, output_file, labels, instances)
 

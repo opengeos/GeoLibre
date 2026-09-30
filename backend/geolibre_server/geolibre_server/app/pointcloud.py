@@ -73,8 +73,10 @@ os.unlink(params["payload_path"])
 input_path = params["input_path"]
 output_path = params["output_path"]
 
+# The same caps as geolibre.project's reader: inflated bytes per node and in
+# total, and decoded entries (each costs far more than its inflated bytes).
 NODE_LIMIT = 16 * 1024 * 1024
-budget = [256 * 1024 * 1024]
+budget = [256 * 1024 * 1024, 20_000_000]
 
 
 def decode(text, wide):
@@ -103,11 +105,16 @@ def decode(text, wide):
         previous = index
         if wide:
             value, at = varint(at, 28)
+            if value > 0xFFFFFFFF:
+                raise ValueError("instance id out of range")
         else:
             if at >= len(data):
                 raise ValueError("truncated label record")
             value = data[at]; at += 1
         edits[index] = value
+    if len(edits) > budget[1]:
+        raise ValueError("too many label entries")
+    budget[1] -= len(edits)
     return edits
 
 
@@ -153,9 +160,15 @@ def flatten(encoded, ranges, wide):
     idx, val = [], []
     for key, text in encoded.items():
         span = lookup.get(key)
-        if span is None or not isinstance(text, str):
+        if span is None or not isinstance(text, str) or budget[0] <= 0 or budget[1] <= 0:
             continue
-        for offset, value in decode(text, wide).items():
+        try:
+            edits = decode(text, wide)
+        except ValueError as error:
+            # Skip one bad record, as the Python reader does, not the job.
+            print(f"Skipped the labels of node {key}: {error}")
+            continue
+        for offset, value in edits.items():
             if 0 <= offset < span[1]:
                 idx.append(span[0] + offset)
                 val.append(value)
@@ -177,10 +190,44 @@ with laspy.open(input_path) as reader:
     print(f"Applying {len(li)} labels and {len(ii)} instance ids to {total} points")
     fmt = source.point_format.id
     if fmt < 6 and len(lv) and int(lv.max()) > 31:
+        # LAS 1.4 format 6/7 for classes above 31, keeping the metadata, the
+        # extra-bytes dimensions and the CRS (as WKT, which 6-10 require).
         header = laspy.LasHeader(point_format=7 if fmt in (2, 3, 5) else 6, version="1.4")
         header.scales = source.scales
         header.offsets = source.offsets
-        header.vlrs = [v for v in source.vlrs if not_copc(v)]
+        for name in ("system_identifier", "generating_software", "creation_date"):
+            try:
+                setattr(header, name, getattr(source, name))
+            except (AttributeError, ValueError):
+                pass
+        extra = [
+            laspy.ExtraBytesParams(
+                name=d.name,
+                type=d.type_str() if callable(d.type_str) else d.type_str,
+                description=d.description or "",
+                offsets=d.offsets,
+                scales=d.scales,
+                no_data=d.no_data,
+            )
+            for d in source.point_format.extra_dimensions
+        ]
+        if extra:
+            header.add_extra_dims(extra)
+        try:
+            crs = source.parse_crs()
+        except Exception:
+            crs = None
+        geotiff = {34735, 34736, 34737}
+
+        def keep(v):
+            user = v.user_id.strip("\0")
+            if not not_copc(v) or (user == "LASF_Spec" and v.record_id == 4):
+                return False
+            return not (crs is not None and user == "LASF_Projection" and v.record_id in geotiff)
+
+        header.vlrs.extend(v for v in source.vlrs if keep(v))
+        if crs is not None:
+            header.add_crs(crs)
     else:
         import copy
         header = copy.deepcopy(source)
@@ -323,4 +370,9 @@ def pointcloud_apply_labels(request: ApplyLabelsRequest):
     with os.fdopen(handle, "w", encoding="utf-8") as payload:
         json.dump({"labels": request.labels, "instances": request.instances}, payload)
     params = {"input_path": input_path, "output_path": output_path, "payload_path": payload_path}
-    return _start_job("pointcloud-apply-labels", _APPLY_LABELS_SCRIPT, params, "point cloud")
+    try:
+        return _start_job("pointcloud-apply-labels", _APPLY_LABELS_SCRIPT, params, "point cloud")
+    except BaseException:
+        # A job that never starts never reads (and removes) the payload.
+        Path(payload_path).unlink(missing_ok=True)
+        raise

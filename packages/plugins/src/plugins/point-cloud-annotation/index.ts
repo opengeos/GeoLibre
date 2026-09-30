@@ -345,6 +345,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   let fullDetailLoading = false;
   /** Whether the server can write labelled full files (resolved after build). */
   let fullFileAvailable = false;
+  let checkFullFile = () => {};
   let disposed = false;
 
   container.replaceChildren();
@@ -1858,6 +1859,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       instances: new Uint32Array(0),
     };
     if (previousColorScheme !== "classification") ctl.setColorScheme("classification");
+    checkFullFile();
     bindMapInteraction();
     setTool(tool === "pan" ? "box" : tool);
     renderLabels();
@@ -2092,14 +2094,19 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   fullDetailButton.addEventListener("click", () => void loadViewAtFullDetail());
 
-  // Whether the server can write labelled files, checked once per panel.
-  void labelWriter
-    ?.available()
-    .then((available) => {
-      fullFileAvailable = available;
-      if (!disposed) renderSessionVisibility();
-    })
-    .catch(() => {});
+  // Whether the server can write labelled files: checked when the panel opens
+  // and again at each session start (the server may start, or install its
+  // point cloud support, later).
+  checkFullFile = () => {
+    void labelWriter
+      ?.available()
+      .then((available) => {
+        fullFileAvailable = available;
+        if (!disposed) renderSessionVisibility();
+      })
+      .catch(() => {});
+  };
+  checkFullFile();
 
   const writeFullFile = async () => {
     if (!labelWriter || !session?.source) return;

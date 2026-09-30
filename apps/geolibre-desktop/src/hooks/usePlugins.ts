@@ -387,9 +387,17 @@ setPointCloudLabelWriter({
       labels,
       instances,
     });
+    // A long rewrite outlives a brief sidecar hiccup: retry a failed poll a
+    // few times before giving up (the job keeps running on the server).
+    let failures = 0;
     while (job.status === "pending" || job.status === "running") {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      job = await fetchConversionJob(job.id);
+      try {
+        job = await fetchConversionJob(job.id);
+        failures = 0;
+      } catch (error) {
+        if (++failures >= 5) throw error;
+      }
     }
     if (job.status !== "succeeded") {
       throw new Error(job.error || job.messages.slice(-1)[0] || "The point cloud job failed");

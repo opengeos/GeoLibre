@@ -156,6 +156,24 @@ def test_legacy_format_is_upgraded_only_for_classes_above_31(tmp_path):
     assert np.allclose(np.asarray(big.z), np.asarray(las.z))
 
 
+def test_upgrade_keeps_crs_extra_dimensions_and_metadata(tmp_path):
+    pyproj = pytest.importorskip("pyproj")
+    las, _ = _field(point_format=1)
+    las.header.add_crs(pyproj.CRS.from_epsg(32610))
+    las.header.generating_software = "survey tool"
+    las.add_extra_dim(laspy.ExtraBytesParams(name="height", type=np.float32, description="m"))
+    las.height = np.arange(len(las.points), dtype=np.float32)
+    las.write(str(tmp_path / "legacy.las"))
+    pc.write_labeled_point_cloud(tmp_path / "legacy.las", tmp_path / "big.laz", {"file": {0: 64}})
+    out = laspy.read(str(tmp_path / "big.laz"))
+    assert out.header.point_format.id == 6
+    assert out.header.parse_crs().to_epsg() == 32610
+    assert out.header.global_encoding.wkt
+    assert out.header.generating_software.strip("\0") == "survey tool"
+    assert np.array_equal(np.asarray(out.height), np.asarray(las.height))
+    assert int(out.classification[0]) == 64
+
+
 def test_copc_labels_land_on_the_right_points(tmp_path):
     las, _ = _field()
     path = tmp_path / "field.copc.laz"

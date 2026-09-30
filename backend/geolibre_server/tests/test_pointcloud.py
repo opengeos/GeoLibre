@@ -127,6 +127,71 @@ def test_upgrades_a_legacy_format_for_classes_above_31(tmp_path: Path) -> None:
     assert int(out.classification[0]) == 64
 
 
+def test_a_bad_node_is_skipped_not_the_job(tmp_path: Path) -> None:
+    _write_las(tmp_path / "in.las")
+    result = _run(
+        {"input_path": str(tmp_path / "in.las"), "output_path": str(tmp_path / "out.las")},
+        # "!!" is not base64: that node is skipped, the valid one still applies.
+        {"labels": {"file": APP_CLASSES, "0-0-0-0": "!!"}},
+        tmp_path,
+    )
+    assert result["relabelled"] == 3
+
+
+def test_upgrade_keeps_crs_and_extra_dimensions(tmp_path: Path) -> None:
+    import base64
+    import zlib
+
+    pyproj = pytest.importorskip("pyproj")
+    header = laspy.LasHeader(point_format=1, version="1.2")
+    header.add_crs(pyproj.CRS.from_epsg(32610))
+    las = laspy.LasData(header)
+    las.x = np.arange(10, dtype=float)
+    las.y = np.zeros(10)
+    las.z = np.zeros(10)
+    las.add_extra_dim(laspy.ExtraBytesParams(name="height", type=np.float32))
+    las.height = np.arange(10, dtype=np.float32)
+    las.write(str(tmp_path / "legacy.las"))
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    edits = base64.b64encode(compressor.compress(bytes([0, 64])) + compressor.flush()).decode()
+    _run(
+        {"input_path": str(tmp_path / "legacy.las"), "output_path": str(tmp_path / "out.laz")},
+        {"labels": {"file": edits}},
+        tmp_path,
+    )
+    out = laspy.read(str(tmp_path / "out.laz"))
+    assert out.header.point_format.id == 6
+    assert out.header.parse_crs().to_epsg() == 32610
+    assert np.array_equal(np.asarray(out.height), np.arange(10, dtype=np.float32))
+
+
+def test_payload_is_removed_when_the_job_cannot_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_las(tmp_path / "in.las")
+    created: list[str] = []
+    real_mkstemp = pointcloud.tempfile.mkstemp
+
+    def tracking_mkstemp(*args, **kwargs):
+        handle, path = real_mkstemp(*args, **kwargs)
+        created.append(path)
+        return handle, path
+
+    def busy(*_args, **_kwargs):
+        raise HTTPException(status_code=429, detail="busy")
+
+    monkeypatch.setattr(pointcloud, "_ensure_pointcloud_runtime", lambda: sys.executable)
+    monkeypatch.setattr(pointcloud.tempfile, "mkstemp", tracking_mkstemp)
+    monkeypatch.setattr(pointcloud, "_start_job", busy)
+    with pytest.raises(HTTPException):
+        pointcloud_apply_labels(
+            ApplyLabelsRequest(
+                input_path=str(tmp_path / "in.las"), output_path=str(tmp_path / "out.las")
+            )
+        )
+    assert created and not Path(created[0]).exists()
+
+
 def test_endpoint_checks_extensions_and_hands_labels_over_in_a_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
