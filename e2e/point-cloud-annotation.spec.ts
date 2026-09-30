@@ -498,4 +498,59 @@ test.describe("point cloud annotation", () => {
     await expect.poll(() => countOf(9)).toBe(waterBefore + assigned);
     expect(assigned).toBeLessThanOrEqual(selected);
   });
+  test("adds a custom class, assigns it, exports its code and saves it", async ({ page }) => {
+    test.setTimeout(120_000);
+    await captureSavedFiles(page);
+    await waitForMap(page);
+    await loadCopc(page);
+    const start = await startSession(page);
+
+    await page.getByTestId("pc-annotation-custom-classes").locator("summary").click();
+    await page.getByTestId("pc-annotation-custom-code").fill("64");
+    await page.getByTestId("pc-annotation-custom-name").fill("Car");
+    await page.getByTestId("pc-annotation-custom-color").fill("#e11d48");
+    await page.getByTestId("pc-annotation-custom-add").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("Added class 64");
+    await expect(page.getByTestId("pc-annotation-target")).toHaveValue("64");
+
+    const canvas = (await page.locator(".maplibregl-canvas").boundingBox())!;
+    await page.getByRole("button", { name: "Box (B)" }).click();
+    await page.mouse.move(canvas.x + 5, canvas.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + canvas.width - 5, canvas.y + canvas.height - 5, { steps: 8 });
+    await page.mouse.up();
+    const selected = Number(
+      ((await page.getByTestId("pc-annotation-selected").textContent()) ?? "").replace(/\D/g, ""),
+    );
+    expect(selected).toBeGreaterThan(0);
+    await page.getByTestId("pc-annotation-apply").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("to Car");
+    const row = page.getByTestId("pc-annotation-classes").locator('[data-code="64"]');
+    await expect(row).toContainText("Car");
+    await expect(row).toContainText(selected.toLocaleString("en-US"));
+
+    // The LAS classification byte carries the custom code.
+    await page.getByTestId("pc-annotation-export-las").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("Exported");
+    const las = await savedFile(page, "1.2-with-color-annotated.las");
+    expect(readLas(las!).classes.get(64)).toBe(selected);
+    await start.click();
+
+    // The class definition travels with the project.
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Save", exact: true }).click();
+    const strip = page.getByRole("button", { name: "Strip credentials", exact: true });
+    if (await strip.isVisible({ timeout: 3_000 }).catch(() => false)) await strip.click();
+    const findProject = () =>
+      page.evaluate(() =>
+        Object.keys(
+          (window as unknown as { __savedFiles: Record<string, number[]> }).__savedFiles,
+        ).find((name) => /\.geolibre(\.json)?$/.test(name)),
+      );
+    await expect.poll(findProject).toBeTruthy();
+    const project = JSON.parse((await savedFile(page, (await findProject())!))!.toString("utf8"));
+    expect(project.plugins.settings["geolibre-point-cloud-annotation"].customClasses).toEqual([
+      { code: 64, name: "Car", color: "#e11d48" },
+    ]);
+  });
 });

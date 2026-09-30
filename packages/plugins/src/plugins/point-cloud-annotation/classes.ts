@@ -45,12 +45,81 @@ export const ASPRS_CLASSES: readonly PointClassDefinition[] = [
  */
 export function classDefinition(code: number): PointClassDefinition {
   return (
+    customClasses.get(code) ??
     ASPRS_CLASSES.find((entry) => entry.code === code) ?? {
       code,
       name: `Class ${code}`,
       color: [128, 128, 128],
     }
   );
+}
+
+/** Lowest and highest code a custom class may use (ASPRS 19-63 are reserved
+ * for future standard classes, 64-255 are user-definable). */
+export const CUSTOM_CLASS_MIN = 19;
+export const CUSTOM_CLASS_MAX = 255;
+
+/** User-defined classes, by code (saved with the project). */
+const customClasses = new Map<number, PointClassDefinition>();
+
+/**
+ * Replaces the user-defined classes.
+ *
+ * @param classes - The classes; entries with an invalid code, empty name or
+ *   bad colour are dropped.
+ */
+export function setCustomClasses(classes: readonly PointClassDefinition[]): void {
+  customClasses.clear();
+  for (const entry of classes) {
+    if (
+      Number.isInteger(entry.code) &&
+      entry.code >= CUSTOM_CLASS_MIN &&
+      entry.code <= CUSTOM_CLASS_MAX &&
+      typeof entry.name === "string" &&
+      entry.name.trim() &&
+      Array.isArray(entry.color) &&
+      entry.color.length === 3 &&
+      entry.color.every((v) => Number.isInteger(v) && v >= 0 && v <= 255)
+    ) {
+      customClasses.set(entry.code, {
+        code: entry.code,
+        name: entry.name.trim().slice(0, 64),
+        color: [entry.color[0], entry.color[1], entry.color[2]],
+      });
+    }
+  }
+}
+
+/**
+ * The user-defined classes, ascending by code.
+ *
+ * @returns Copies of the classes.
+ */
+export function getCustomClasses(): PointClassDefinition[] {
+  return [...customClasses.values()]
+    .sort((a, b) => a.code - b.code)
+    .map((entry) => ({ ...entry, color: [...entry.color] as [number, number, number] }));
+}
+
+/**
+ * Every class the annotator can assign: the ASPRS standard classes followed
+ * by the user-defined ones.
+ *
+ * @returns Class definitions, ascending by code.
+ */
+export function assignableClasses(): PointClassDefinition[] {
+  return [...ASPRS_CLASSES, ...getCustomClasses()];
+}
+
+/** Parses `#rrggbb` into an RGB triple (null when malformed). */
+export function parseHexColor(text: string): [number, number, number] | null {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(text.trim());
+  return match ? [parseInt(match[1], 16), parseInt(match[2], 16), parseInt(match[3], 16)] : null;
+}
+
+/** Formats an RGB triple as `#rrggbb`. */
+export function toHexColor([r, g, b]: readonly [number, number, number]): string {
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /**

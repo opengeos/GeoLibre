@@ -4,7 +4,13 @@ import { WebMercatorViewport } from "@deck.gl/core";
 import { ColorSchemeProcessor, type PointCloudData } from "maplibre-gl-lidar";
 import {
   ASPRS_CLASSES,
+  assignableClasses,
+  classDefinition,
   countClasses,
+  getCustomClasses,
+  parseHexColor,
+  setCustomClasses,
+  toHexColor,
 } from "../packages/plugins/src/plugins/point-cloud-annotation/classes";
 import { LabelHistory } from "../packages/plugins/src/plugins/point-cloud-annotation/history";
 import {
@@ -196,6 +202,43 @@ describe("countClasses", () => {
         [6, 1],
       ],
     );
+  });
+});
+
+describe("custom classes", () => {
+  it("validates, sorts and lists them after the ASPRS classes", () => {
+    setCustomClasses([
+      { code: 70, name: "  Solar panel ", color: [225, 29, 72] },
+      { code: 64, name: "Car", color: [0, 128, 255] },
+      { code: 18, name: "Reserved clash", color: [0, 0, 0] },
+      { code: 300, name: "Too big", color: [0, 0, 0] },
+      { code: 80, name: " ", color: [0, 0, 0] },
+      { code: 81, name: "Bad colour", color: [256, 0, 0] },
+    ]);
+    assert.deepEqual(
+      getCustomClasses().map((entry) => [entry.code, entry.name]),
+      [
+        [64, "Car"],
+        [70, "Solar panel"],
+      ],
+    );
+    assert.equal(classDefinition(70).name, "Solar panel");
+    const codes = assignableClasses().map((entry) => entry.code);
+    assert.deepEqual(codes.slice(-2), [64, 70]);
+    assert.equal(codes.length, ASPRS_CLASSES.length + 2);
+    // Copies, so a caller cannot mutate the registry.
+    getCustomClasses()[0].color[0] = 1;
+    assert.equal(classDefinition(64).color[0], 0);
+    setCustomClasses([]);
+    assert.notEqual(classDefinition(70).name, "Solar panel");
+  });
+
+  it("round-trips hex colours", () => {
+    assert.deepEqual(parseHexColor("#E11D48"), [225, 29, 72]);
+    assert.equal(parseHexColor("e11d48"), null);
+    assert.equal(parseHexColor("#12345"), null);
+    assert.equal(toHexColor([225, 29, 72]), "#e11d48");
+    assert.equal(toHexColor([0, 0, 5]), "#000005");
   });
 });
 

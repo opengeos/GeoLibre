@@ -9,7 +9,17 @@ import type { ColorScheme, LidarControlEventHandler, PointCloudData } from "mapl
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../../types";
 import { getLidarControl, openLidarLayerPanel } from "../components/lidar";
-import { ASPRS_CLASSES, classDefinition, countClasses } from "./classes";
+import {
+  CUSTOM_CLASS_MAX,
+  CUSTOM_CLASS_MIN,
+  assignableClasses,
+  classDefinition,
+  countClasses,
+  getCustomClasses,
+  parseHexColor,
+  setCustomClasses,
+  toHexColor,
+} from "./classes";
 import { CuboidSection, encodeCuboids, loadCuboids } from "./cuboid-panel";
 import { LabelHistory } from "./history";
 import { PointLabelStore, type LabelledCloud } from "./label-store";
@@ -142,7 +152,25 @@ function tr(
 
 function className(app: GeoLibreAppAPI, code: number): string {
   const definition = classDefinition(code);
+  // A user-defined class shows its own name; standard ones are translated.
+  if (code >= CUSTOM_CLASS_MIN && getCustomClasses().some((entry) => entry.code === code)) {
+    return definition.name;
+  }
   return tr(app, `classes.${code}`, definition.name);
+}
+
+/**
+ * Pushes the user-defined classes' names and colours to the LiDAR control, so
+ * points, its legend and its tooltip show them.
+ *
+ * @param control - The LiDAR control, if mounted.
+ */
+function applyClassStyles(control: LidarControl | null): void {
+  control?.setClassificationStyles(
+    Object.fromEntries(
+      getCustomClasses().map((entry) => [entry.code, { name: entry.name, color: entry.color }]),
+    ),
+  );
 }
 
 const numberFormat = new Intl.NumberFormat();
@@ -312,11 +340,41 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const redoButton = button("");
   undoButton.dataset.testid = "pc-annotation-undo";
   redoButton.dataset.testid = "pc-annotation-redo";
+  // User-defined classes (codes 19-255) with their own name and colour.
+  const customDetails = el("details", undefined, "display:flex;flex-direction:column;gap:6px;");
+  customDetails.dataset.testid = "pc-annotation-custom-classes";
+  const customSummary = el("summary", "", "cursor:pointer;");
+  const customList = el("div", undefined, "display:flex;flex-direction:column;gap:4px;");
+  const customCode = numberInput("");
+  customCode.min = String(CUSTOM_CLASS_MIN);
+  customCode.max = String(CUSTOM_CLASS_MAX);
+  customCode.step = "1";
+  customCode.style.width = "5em";
+  customCode.dataset.testid = "pc-annotation-custom-code";
+  const customName = el("input");
+  customName.type = "text";
+  customName.maxLength = 64;
+  customName.dataset.testid = "pc-annotation-custom-name";
+  customName.style.cssText =
+    "padding:6px;border:1px solid hsl(var(--border));border-radius:5px;background:transparent;color:inherit;min-width:0;flex:1;";
+  const customColor = el("input");
+  customColor.type = "color";
+  customColor.value = "#e11d48";
+  customColor.dataset.testid = "pc-annotation-custom-color";
+  customColor.style.cssText = "width:2.5em;height:2em;padding:0;border:0;background:transparent;";
+  const customAdd = button("");
+  customAdd.dataset.testid = "pc-annotation-custom-add";
+  customDetails.append(
+    customSummary,
+    customList,
+    row(customCode, customName, customColor, customAdd),
+  );
   assign.root.append(
     selectedCount,
     targetSelect,
     row(applyButton, clearButton),
     row(undoButton, redoButton),
+    customDetails,
   );
 
   // Pre-label with a Whitebox classifier.
@@ -498,6 +556,78 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     target.value = selected === null ? "" : String(selected);
   };
 
+  // Lowest free code for a new custom class (user range first).
+  const nextCustomCode = (): number | null => {
+    const used = new Set(getCustomClasses().map((entry) => entry.code));
+    for (let code = 64; code <= CUSTOM_CLASS_MAX; code++) if (!used.has(code)) return code;
+    for (let code = CUSTOM_CLASS_MIN; code < 64; code++) if (!used.has(code)) return code;
+    return null;
+  };
+
+  const renderCustomClasses = () => {
+    const classes = getCustomClasses();
+    customSummary.textContent = tr(app, "customClasses", "Custom classes ({{count}})", {
+      count: classes.length,
+    });
+    customList.replaceChildren();
+    for (const entry of classes) {
+      const item = el("div", undefined, "display:flex;gap:6px;align-items:center;");
+      item.dataset.customCode = String(entry.code);
+      const label = el("span", `${entry.code} · ${entry.name}`, "flex:1;");
+      const remove = button(tr(app, "customRemove", "Remove"));
+      remove.style.padding = "1px 6px";
+      remove.addEventListener("click", () => {
+        setCustomClasses(getCustomClasses().filter((item) => item.code !== entry.code));
+        if (targetClass === entry.code) targetClass = 1;
+        onCustomClassesChanged();
+      });
+      item.append(swatch(entry.color), label, remove);
+      customList.append(item);
+    }
+    customCode.placeholder = tr(app, "customCode", "Code");
+    customCode.setAttribute("aria-label", customCode.placeholder);
+    if (!customCode.value) customCode.value = String(nextCustomCode() ?? "");
+    customName.placeholder = tr(app, "customName", "Name");
+    customName.setAttribute("aria-label", customName.placeholder);
+    customColor.setAttribute("aria-label", tr(app, "customColor", "Color"));
+    customAdd.textContent = tr(app, "customAdd", "Add");
+  };
+
+  const onCustomClassesChanged = () => {
+    applyClassStyles(control());
+    startLabelSync();
+    renderLabels();
+  };
+
+  const addCustomClass = () => {
+    const code = Number(customCode.value);
+    const name = customName.value.trim();
+    const color = parseHexColor(customColor.value);
+    if (!Number.isInteger(code) || code < CUSTOM_CLASS_MIN || code > CUSTOM_CLASS_MAX) {
+      setStatus(
+        tr(app, "customCodeInvalid", "A custom class code must be {{min}}-{{max}}.", {
+          min: CUSTOM_CLASS_MIN,
+          max: CUSTOM_CLASS_MAX,
+        }),
+      );
+      return;
+    }
+    if (!name || !color) {
+      setStatus(tr(app, "customNameMissing", "Give the class a name."));
+      return;
+    }
+    setCustomClasses([
+      ...getCustomClasses().filter((entry) => entry.code !== code),
+      { code, name, color },
+    ]);
+    targetClass = code;
+    customName.value = "";
+    customCode.value = "";
+    onCustomClassesChanged();
+    targetSelect.value = String(code);
+    setStatus(tr(app, "customAdded", "Added class {{code}} · {{name}}.", { code, name }));
+  };
+
   const renderSummary = () => {
     summaryList.replaceChildren();
     const data = activeData();
@@ -622,6 +752,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 
   const renderLabels = () => {
+    renderCustomClasses();
     setup.heading.textContent = tr(app, "pointCloud", "Point cloud");
     openLidarButton.textContent = tr(app, "openLidar", "Open LiDAR panel");
     startButton.textContent = session
@@ -681,7 +812,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     );
     fillClassOptions(
       targetSelect,
-      ASPRS_CLASSES.map((entry) => entry.code),
+      assignableClasses().map((entry) => entry.code),
       targetClass,
     );
     targetSelect.setAttribute("aria-label", assign.heading.textContent);
@@ -1367,6 +1498,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     boundControl?.off("load", onControlChange);
     boundControl?.off("unload", onControlChange);
     boundControl = ctl;
+    applyClassStyles(ctl);
     ctl?.on("load", onControlChange);
     ctl?.on("unload", onControlChange);
   };
@@ -1401,6 +1533,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     targetClass = Number(targetSelect.value);
   });
   applyButton.addEventListener("click", applyClass);
+  customAdd.addEventListener("click", addCustomClass);
   clearButton.addEventListener("click", clearSelection);
   undoButton.addEventListener("click", () => {
     const changed = session?.history.undo(liveClassifications);
@@ -1519,6 +1652,7 @@ function startLabelSync(): void {
     labelSyncControl?.off("load", onLabelSyncEvent);
     labelSyncControl?.off("streamingprogress", onLabelSyncEvent);
     labelSyncControl = ctl;
+    applyClassStyles(ctl);
     ctl?.on("load", onLabelSyncEvent);
     ctl?.on("streamingprogress", onLabelSyncEvent);
     onLabelSyncEvent({} as Parameters<LidarControlEventHandler>[0]);
@@ -1586,13 +1720,33 @@ export const pointCloudAnnotationPlugin: GeoLibrePlugin = {
   getProjectState: () => {
     const labels = labelStore.encode();
     const cuboids = encodeCuboids();
-    if (!labels && cuboids.length === 0) return undefined;
-    return { version: 1, sources: labels?.sources ?? [], cuboids };
+    const customClasses = getCustomClasses().map((entry) => ({
+      code: entry.code,
+      name: entry.name,
+      color: toHexColor(entry.color),
+    }));
+    if (!labels && cuboids.length === 0 && customClasses.length === 0) return undefined;
+    return { version: 1, sources: labels?.sources ?? [], cuboids, customClasses };
   },
   applyProjectState: (_app, state) => {
     labelStore.load(state);
     loadCuboids((state as { cuboids?: unknown } | undefined)?.cuboids);
-    if (labelStore.isEmpty) stopLabelSync();
+    const saved = (state as { customClasses?: unknown } | undefined)?.customClasses;
+    setCustomClasses(
+      (Array.isArray(saved) ? saved : []).flatMap((entry) => {
+        const { code, name, color } = (entry ?? {}) as {
+          code?: unknown;
+          name?: unknown;
+          color?: unknown;
+        };
+        const rgb = typeof color === "string" ? parseHexColor(color) : null;
+        return typeof code === "number" && typeof name === "string" && rgb
+          ? [{ code, name, color: rgb }]
+          : [];
+      }),
+    );
+    applyClassStyles(getLidarControl());
+    if (labelStore.isEmpty && getCustomClasses().length === 0) stopLabelSync();
     else startLabelSync();
   },
 };

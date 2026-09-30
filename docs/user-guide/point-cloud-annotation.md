@@ -43,6 +43,17 @@ Scroll to zoom and right-drag to tilt or rotate as usual.
   **Classes in session** makes it the class to assign.
 - **Undo** and **Redo** step through the class assignments of the session.
 
+## Custom classes
+
+Open **Custom classes** under the assign controls to add classes of your own
+(for example *Car* or *Solar panel*). Give each a code from 19 to 255 (ASPRS
+reserves 19-63 for future standard classes and leaves 64-255 to users, so the
+panel suggests the first free code from 64), a name and a colour, then press
+**Add**. A custom class can be assigned, locked and boxed like a standard
+one; the LiDAR panel's legend and tooltips show its name and colour. Custom
+classes are saved with the project, and the exports write their codes (the
+LAS classification byte holds 0-255).
+
 ## Pre-labelling with Whitebox
 
 **Pre-label (Whitebox)** runs a Whitebox LiDAR classifier on the session's

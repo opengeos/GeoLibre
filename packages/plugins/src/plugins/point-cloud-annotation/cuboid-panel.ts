@@ -7,7 +7,7 @@ import { LineLayer } from "@deck.gl/layers";
 import type { LidarControl } from "maplibre-gl-components";
 import type { PointCloudData } from "maplibre-gl-lidar";
 import type { GeoLibreAppAPI } from "../../types";
-import { ASPRS_CLASSES, classDefinition } from "./classes";
+import { assignableClasses, classDefinition } from "./classes";
 import {
   CUBOID_EDGES,
   cuboidCorners,
@@ -431,7 +431,7 @@ export class CuboidSection {
       classSelect.style.cssText =
         "padding:4px;border:1px solid hsl(var(--border));border-radius:4px;background:hsl(var(--background));min-width:0;";
       classSelect.style.setProperty("color", "hsl(var(--foreground))", "important");
-      for (const entry of ASPRS_CLASSES) {
+      for (const entry of assignableClasses()) {
         classSelect.append(
           new Option(`${entry.code} · ${this.host.className(entry.code)}`, String(entry.code)),
         );
