@@ -24,7 +24,6 @@ import {
   geometryEditMetadata,
   captureEditedGeometries,
   captureEditedProperties,
-  geomanUsesRightClick,
   removeMultiLineStringVertex,
   planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
@@ -450,7 +449,6 @@ interface GeomanCutVertexEvent {
   featureData: {
     getGeoJson(): Feature;
     updateGeometry(geometry: MultiLineString): Promise<void>;
-    delete(): Promise<void>;
   };
   markerData: {
     type: string;
@@ -460,6 +458,7 @@ interface GeomanCutVertexEvent {
 
 /** Geoman's change-mode action instance, as far as vertex removal goes. */
 interface GeomanChangeAction {
+  gm: { features: { delete(feature: unknown): Promise<void> } };
   cutVertex(event: GeomanCutVertexEvent): Promise<void>;
   fireFeatureUpdatedEvent(event: {
     sourceFeatures: unknown[];
@@ -508,7 +507,10 @@ function patchChangeAction(value: unknown): void {
     const next = removeMultiLineStringVertex(feature.geometry, position.coordinate, position.path);
     if (next === undefined) return original(event);
     if (next === null) {
-      await event.featureData.delete();
+      // Same call Geoman makes when a cut leaves too few vertices: it also
+      // drops the feature from the store and selection, which delete() alone
+      // doesn't.
+      await action.gm.features.delete(event.featureData);
       return;
     }
     await event.featureData.updateGeometry(next);
@@ -981,15 +983,10 @@ export function getGeometryEditTargetLayerId(): string | null {
  * (vertex removal, finishing a draw, the rotate popup). The map's right-click
  * menu checks this so it doesn't open over the editor's own gesture.
  *
- * @returns True while a Geoman draw or edit mode is enabled.
+ * @returns True while a GeoEditor draw or edit mode is enabled.
  */
 export function isGeoEditorUsingRightClick(): boolean {
-  try {
-    return geomanUsesRightClick(geomanInstance);
-  } catch {
-    // Geoman can throw before its deferred init finishes; no mode is active then.
-    return false;
-  }
+  return isGeoEditorInteractionMode();
 }
 
 /** Subscribe to geometry-edit session changes (for `useSyncExternalStore`). */

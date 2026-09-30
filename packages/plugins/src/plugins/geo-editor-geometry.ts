@@ -592,27 +592,6 @@ export function geometryEditMetadata(
   return changed ? { ...layer.metadata, geometryEdited: true } : layer.metadata;
 }
 
-/** The slice of a Geoman instance that reports its active modes. */
-export interface GeomanModeReader {
-  getActiveDrawModes(): readonly string[];
-  getActiveEditModes(): readonly string[];
-}
-
-/**
- * Whether the editor currently acts on a right-click, so the map's own
- * right-click menu must stay closed. Geoman deletes a vertex when you
- * right-click it in edit mode, and the editor finishes a line or polygon draw
- * (and opens its rotate popup) on right-click. Helper modes such as snapping
- * don't use the gesture.
- *
- * @param geoman - The live Geoman instance, or null when the editor is inactive.
- * @returns True when any Geoman draw or edit mode is enabled.
- */
-export function geomanUsesRightClick(geoman: GeomanModeReader | null): boolean {
-  if (!geoman) return false;
-  return geoman.getActiveDrawModes().length > 0 || geoman.getActiveEditModes().length > 0;
-}
-
 /**
  * Removes one vertex from a MultiLineString, which Geoman's own right-click
  * vertex removal doesn't support (it handles LineString, Polygon and
