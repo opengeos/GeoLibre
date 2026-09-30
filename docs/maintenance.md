@@ -310,6 +310,15 @@ is not visible to the compiler, so
 resulting DOM order and z-indices — run it on a bump
 (`npx playwright test e2e/lidar-canvas-stacking.spec.ts --project=features`).
 
+The point cloud annotator's **Full detail in view** calls `loadRegion` /
+`clearPinnedRegion` (0.20+) and decides whether a cloud qualifies without an
+upstream flag: a streamed COPC is one whose source contains `.copc.` and whose
+`nodeRanges` carry octree keys rather than `"file"`
+(`canLoadFullDetail` in `point-cloud-annotation/index.ts`). Its saved labels
+also assume a pinned region's nodes keep their octree keys, so a bump that
+changes node keys or pinning semantics must rerun
+`e2e/point-cloud-annotation.spec.ts` ("loads the view at full detail").
+
 The `?data=` LiDAR deep link leans on two more things the compiler cannot see.
 `isStreamedLidarUrl` (`apps/geolibre-desktop/src/lib/data-url.ts`) copies the
 routing at the top of `LidarControl.loadPointCloud` (an `/ept.json` suffix or a
