@@ -819,4 +819,25 @@ test.describe("point cloud annotation", () => {
     await page.getByTestId("pc-annotation-undo").click();
     await expect(rows).toHaveCount(0);
   });
+  test("loads the view at full detail so a session labels every point", async ({ page }) => {
+    test.setTimeout(120_000);
+    await waitForMap(page);
+    await loadCopc(page);
+    await page.getByRole("button", { name: "Plugins", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Point Cloud Annotation", exact: true }).click();
+    // The fitted view streams a coarse level of detail; full detail loads
+    // every node in view (here, the whole 1,065-point test cloud) and pins it.
+    await page.getByTestId("pc-annotation-full-detail").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText(
+      "Loaded 1,065 points at full detail",
+      { timeout: 60_000 },
+    );
+    await expect(page.getByTestId("pc-annotation-release-detail")).toBeVisible();
+    const start = page.getByTestId("pc-annotation-start");
+    await start.click();
+    await expect(page.getByTestId("pc-annotation-hint")).toContainText("1,065 points loaded");
+    await start.click();
+    await page.getByTestId("pc-annotation-release-detail").click();
+    await expect(page.getByTestId("pc-annotation-release-detail")).toBeHidden();
+  });
 });

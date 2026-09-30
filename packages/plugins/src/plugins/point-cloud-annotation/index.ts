@@ -45,6 +45,8 @@ import {
 } from "./prelabel";
 import {
   getCloudData,
+  loadFullDetail,
+  releaseFullDetail,
   getOverlayViewport,
   getRenderElevationRange,
   getRenderZOffset,
@@ -127,6 +129,13 @@ function loadLazEncoder(): Promise<LazEncoder> {
   });
   return lazEncoder;
 }
+
+/**
+ * Largest area "Full detail in view" loads. Each loaded point costs about 20
+ * bytes of buffers plus the renderer's copy, so this keeps a full-detail area
+ * well inside a browser tab's memory.
+ */
+const FULL_DETAIL_MAX_POINTS = 4_000_000;
 
 interface Session {
   cloudId: string;
@@ -280,6 +289,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   // Classes whose points no selection may pick (Segments.ai's protect/lock).
   const lockedClasses = new Set<number>();
   let boundControl: LidarControl | null = null;
+  /** The cloud whose view area is pinned at full detail, if any. */
+  let pinnedCloudId: string | null = null;
   let disposed = false;
 
   container.replaceChildren();
@@ -300,7 +311,18 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const startButton = button("", true);
   startButton.dataset.testid = "pc-annotation-start";
   const openLidarButton = button("");
-  setup.root.append(cloudSelect, row(startButton, openLidarButton));
+  // Full detail: load the view's area at the cloud's full resolution and keep
+  // it loaded, so labels go on every point rather than the current LOD.
+  const fullDetailButton = button("");
+  fullDetailButton.dataset.testid = "pc-annotation-full-detail";
+  const releaseDetailButton = button("");
+  releaseDetailButton.dataset.testid = "pc-annotation-release-detail";
+  releaseDetailButton.hidden = true;
+  setup.root.append(
+    cloudSelect,
+    row(startButton, openLidarButton),
+    row(fullDetailButton, releaseDetailButton),
+  );
 
   // Tools.
   const tools = section("");
@@ -1044,6 +1066,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     cloudSelect.disabled = clouds.length === 0 || session !== null;
     startButton.disabled = clouds.length === 0 && session === null;
     openLidarButton.hidden = clouds.length > 0 || session !== null;
+    fullDetailButton.disabled = clouds.length === 0;
+    if (pinnedCloudId && !clouds.some((cloud) => cloud.id === pinnedCloudId)) pinnedCloudId = null;
+    releaseDetailButton.hidden = pinnedCloudId === null;
     if (!session) {
       hint.textContent =
         clouds.length === 0
@@ -1064,6 +1089,13 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     renderCustomClasses();
     setup.heading.textContent = tr(app, "pointCloud", "Point cloud");
     openLidarButton.textContent = tr(app, "openLidar", "Open LiDAR panel");
+    fullDetailButton.textContent = tr(app, "fullDetail", "Full detail in view");
+    fullDetailButton.title = tr(
+      app,
+      "fullDetailHint",
+      "Load the area in view at the point cloud's full resolution and keep it loaded, so every point can be labelled (streamed COPC only).",
+    );
+    releaseDetailButton.textContent = tr(app, "releaseDetail", "Release full detail");
     startButton.textContent = session
       ? tr(app, "finishSession", "Finish session")
       : tr(app, "startSession", "Start annotating");
@@ -1907,6 +1939,60 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     ctl?.on("load", onControlChange);
     ctl?.on("unload", onControlChange);
   };
+
+  const loadViewAtFullDetail = async () => {
+    const ctl = control();
+    const cloudId = session?.cloudId ?? cloudSelect.value;
+    if (!ctl || !map || !cloudId) return;
+    const view = map.getBounds();
+    fullDetailButton.disabled = true;
+    setStatus(tr(app, "fullDetailLoading", "Loading the view at full detail…"));
+    try {
+      const result = await loadFullDetail(
+        ctl,
+        cloudId,
+        [view.getWest(), view.getSouth(), view.getEast(), view.getNorth()],
+        FULL_DETAIL_MAX_POINTS,
+      );
+      pinnedCloudId = cloudId;
+      const data = getCloudData(ctl, cloudId);
+      if (session && data) {
+        hint.textContent = tr(
+          app,
+          "sessionHint",
+          "Annotating {{name}}: {{count}} points loaded. Streaming is paused; export before finishing the session.",
+          { name: session.cloudName, count: numberFormat.format(data.pointCount) },
+        );
+      }
+      setStatus(
+        tr(app, "fullDetailLoaded", "Loaded {{points}} points at full detail ({{nodes}} nodes).", {
+          points: numberFormat.format(result.points),
+          nodes: numberFormat.format(result.nodes),
+        }),
+      );
+    } catch (error) {
+      setStatus(
+        tr(app, "fullDetailFailed", "Could not load full detail: {{message}}", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      renderCloudOptions();
+      if (session) {
+        renderSummary();
+        renderObjects();
+      }
+    }
+  };
+
+  fullDetailButton.addEventListener("click", () => void loadViewAtFullDetail());
+  releaseDetailButton.addEventListener("click", () => {
+    const ctl = control();
+    if (ctl && pinnedCloudId) releaseFullDetail(ctl, pinnedCloudId);
+    pinnedCloudId = null;
+    renderCloudOptions();
+    setStatus(tr(app, "detailReleased", "Full detail released; the area streams like the rest."));
+  });
 
   startButton.addEventListener("click", () => {
     bindControl();

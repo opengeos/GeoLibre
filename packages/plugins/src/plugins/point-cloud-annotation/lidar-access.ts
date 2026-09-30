@@ -82,3 +82,34 @@ export function isStreamingLoading(control: LidarControl, id: string): boolean {
 export function getOverlayViewport(control: LidarControl): ProjectionViewport | null {
   return (control.getDeckOverlay()?.getViewport() as ProjectionViewport | null | undefined) ?? null;
 }
+
+/**
+ * Loads a streamed COPC cloud at full resolution inside `bounds` and pins it,
+ * so a session can label the data's full density rather than the level of
+ * detail the view happened to load.
+ *
+ * @param control - The LiDAR control.
+ * @param id - The point cloud id.
+ * @param bounds - `[west, south, east, north]` in degrees.
+ * @param maxPoints - Largest region to load.
+ * @returns The region's node and point counts.
+ * @throws Error for a cloud that is not a streamed COPC, or a region too large.
+ */
+export function loadFullDetail(
+  control: LidarControl,
+  id: string,
+  bounds: [number, number, number, number],
+  maxPoints?: number,
+): Promise<{ nodes: number; points: number }> {
+  return control.loadRegion(id, bounds, maxPoints === undefined ? {} : { maxPoints });
+}
+
+/**
+ * Unpins a region loaded by {@link loadFullDetail}.
+ *
+ * @param control - The LiDAR control.
+ * @param id - The point cloud id.
+ */
+export function releaseFullDetail(control: LidarControl, id: string): void {
+  control.clearPinnedRegion(id);
+}

@@ -12,8 +12,13 @@ plan tracked in
 1. Load a point cloud with **Add Data → LiDAR Layer** (LAS, LAZ, COPC, or
    EPT).
 2. Zoom to the area you want to label. A COPC or EPT cloud streams by level
-   of detail, so the session holds the points loaded at the current view:
-   zoom in further to label at full density.
+   of detail, so the session holds the points loaded at the current view.
+   For a streamed COPC, **Full detail in view** loads every point inside the
+   view at the file's full resolution (up to 4 million points) and keeps it
+   loaded however you zoom, so labels go on every point; **Release full
+   detail** lets the area stream normally again. It works before or during a
+   session; during one, the area must fit in the space streaming left free.
+   A large area can take a minute or two to download.
 3. Open **Plugins → Point Cloud Annotation**, pick the cloud, and choose
    **Start annotating**.
 
