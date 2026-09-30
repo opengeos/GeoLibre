@@ -95,6 +95,7 @@ import {
   maplibreTimeSliderPlugin,
   setTimelapseVideoSaver,
   setPointCloudAnnotationFileSaver,
+  setPointCloudPrelabelRunner,
   maplibreUsgsLidarPlugin,
   pointCloudAnnotationPlugin,
   maplibreUsgsNldiPlugin,
@@ -339,6 +340,31 @@ setPointCloudAnnotationFileSaver((bytes, { defaultName, extension, mimeType, des
     mimeType,
   }),
 );
+
+// The point cloud annotator pre-labels with Whitebox LiDAR classifiers run by
+// the in-browser WASM runner, which lives in the processing package the
+// plugins package cannot import; loaded on first use to stay off startup.
+setPointCloudPrelabelRunner(async (toolId, parameters, las) => {
+  const { runWhiteboxToolWasm } = await import("@geolibre/processing");
+  const job = await runWhiteboxToolWasm({
+    tool_id: toolId,
+    parameters,
+    layer_inputs: { input: { name: "input.las", kind: "lidar_in", bytes: las } },
+    tool: {
+      id: toolId,
+      params: [
+        { name: "input", kind: "lidar_in", required: true },
+        { name: "output", kind: "lidar_out", required: true },
+        ...Object.keys(parameters).map((name) => ({ name, kind: "string" })),
+      ],
+    },
+  });
+  const output = job.outputs.output;
+  if (job.status !== "succeeded" || !(output instanceof Uint8Array)) {
+    throw new Error(job.error || job.messages.slice(-1)[0] || `${toolId} failed`);
+  }
+  return output;
+});
 
 // The Earthdata GIS plugin exports an ArcGIS service as a plain GeoTIFF but
 // cannot re-encode it: ArcGIS has no COG output (`format=cog` falls back to

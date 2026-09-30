@@ -7,7 +7,8 @@ interface LabelEdit {
   cloudId: string;
   indices: Uint32Array;
   previous: Uint8Array;
-  next: number;
+  /** One code for every point, or one per point (a pre-label run). */
+  next: number | Uint8Array;
 }
 
 /** The points an undo or redo changed. */
@@ -62,6 +63,44 @@ export class LabelHistory {
   }
 
   /**
+   * Assigns a different code to each point as one undoable edit (e.g. the
+   * result of a pre-labelling tool).
+   *
+   * @param cloudId - The point cloud being edited.
+   * @param classifications - Its live classification array (mutated).
+   * @param indices - Points to relabel.
+   * @param codes - The new code for each point, parallel to `indices`.
+   * @returns How many points actually changed class.
+   */
+  assignEach(
+    cloudId: string,
+    classifications: Uint8Array,
+    indices: Uint32Array,
+    codes: Uint8Array,
+  ): number {
+    const changed: number[] = [];
+    const previous: number[] = [];
+    const next: number[] = [];
+    indices.forEach((index, k) => {
+      if (index >= classifications.length || classifications[index] === codes[k]) return;
+      changed.push(index);
+      previous.push(classifications[index]);
+      next.push(codes[k]);
+      classifications[index] = codes[k];
+    });
+    if (changed.length === 0) return 0;
+    this.undoStack.push({
+      cloudId,
+      indices: Uint32Array.from(changed),
+      previous: Uint8Array.from(previous),
+      next: Uint8Array.from(next),
+    });
+    if (this.undoStack.length > this.limit) this.undoStack.shift();
+    this.redoStack.length = 0;
+    return changed.length;
+  }
+
+  /**
    * Reverts the most recent edit.
    *
    * @param resolve - Looks up the live array for the edit's cloud.
@@ -91,9 +130,12 @@ export class LabelHistory {
     if (!edit) return null;
     const classifications = resolve(edit.cloudId);
     if (classifications) {
-      for (const index of edit.indices) {
-        if (index < classifications.length) classifications[index] = edit.next;
-      }
+      const { next } = edit;
+      edit.indices.forEach((index, k) => {
+        if (index < classifications.length) {
+          classifications[index] = typeof next === "number" ? next : next[k];
+        }
+      });
     }
     this.undoStack.push(edit);
     return { cloudId: edit.cloudId, indices: edit.indices };

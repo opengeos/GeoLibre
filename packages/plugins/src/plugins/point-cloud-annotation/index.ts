@@ -13,7 +13,22 @@ import { ASPRS_CLASSES, classDefinition, countClasses } from "./classes";
 import { CuboidSection, encodeCuboids, loadCuboids } from "./cuboid-panel";
 import { LabelHistory } from "./history";
 import { PointLabelStore, type LabelledCloud } from "./label-store";
-import { buildSegmentsLabel, writeLas, writeLaz, writeNpy, type LazEncoder } from "./las-writer";
+import {
+  buildSegmentsLabel,
+  safeFileStem,
+  subsetCloud,
+  writeLas,
+  writeLaz,
+  writeNpy,
+  type LazEncoder,
+} from "./las-writer";
+import {
+  PRELABEL_TOOLS,
+  mergePrelabels,
+  planPrelabelTiles,
+  readLasClassifications,
+  type PrelabelRunner,
+} from "./prelabel";
 import {
   getCloudData,
   getOverlayViewport,
@@ -48,6 +63,17 @@ export type PointCloudAnnotationFileSaver = (
 ) => Promise<string | null>;
 
 let fileSaver: PointCloudAnnotationFileSaver | null = null;
+let prelabelRunner: PrelabelRunner | null = null;
+
+/**
+ * Registers how to run a Whitebox LiDAR tool for pre-labelling (the app's
+ * in-browser WASM runner).
+ *
+ * @param runner - The runner, or null to hide pre-labelling.
+ */
+export function setPointCloudPrelabelRunner(runner: PrelabelRunner | null): void {
+  prelabelRunner = runner;
+}
 
 /**
  * Registers the host's binary file saver.
@@ -197,11 +223,6 @@ function downloadBytes(bytes: Uint8Array, name: string, mimeType: string): void 
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function safeFileStem(name: string): string {
-  const stem = name.replace(/\.(copc\.)?la[sz]$/i, "").replace(/[^\w.-]+/g, "_");
-  return stem || "point-cloud";
-}
-
 /** Builds the panel and its map interaction; returns the teardown. */
 function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const map = app.getMap?.() as MapLibreMap | null | undefined;
@@ -295,6 +316,21 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     row(undoButton, redoButton),
   );
 
+  // Pre-label with a Whitebox classifier.
+  const prelabel = section("");
+  const prelabelSelect = select();
+  prelabelSelect.dataset.testid = "pc-annotation-prelabel-tool";
+  const prelabelOnlyUnclassified = el("input");
+  prelabelOnlyUnclassified.type = "checkbox";
+  prelabelOnlyUnclassified.checked = true;
+  prelabelOnlyUnclassified.dataset.testid = "pc-annotation-prelabel-only-unclassified";
+  const prelabelOnlyText = el("span");
+  const prelabelOnlyLabel = el("label", undefined, "display:flex;gap:6px;align-items:center;");
+  prelabelOnlyLabel.append(prelabelOnlyUnclassified, prelabelOnlyText);
+  const prelabelButton = button("");
+  prelabelButton.dataset.testid = "pc-annotation-prelabel-run";
+  prelabel.root.append(prelabelSelect, prelabelOnlyLabel, prelabelButton);
+
   // Class summary.
   const summary = section("");
   const summaryList = el("div", undefined, "display:flex;flex-direction:column;gap:2px;");
@@ -361,6 +397,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     tools.root,
     filters.root,
     assign.root,
+    prelabel.root,
     summary.root,
     cuboids.root,
     exportSection.root,
@@ -601,6 +638,20 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     undoButton.textContent = tr(app, "undo", "Undo");
     redoButton.textContent = tr(app, "redo", "Redo");
     summary.heading.textContent = tr(app, "classSummary", "Classes in session");
+    prelabel.heading.textContent = tr(app, "prelabel", "Pre-label (Whitebox)");
+    const prelabelValue = prelabelSelect.value || PRELABEL_TOOLS[0].id;
+    prelabelSelect.replaceChildren(
+      ...PRELABEL_TOOLS.map((tool) => new Option(tr(app, tool.labelKey, tool.label), tool.id)),
+    );
+    prelabelSelect.value = prelabelValue;
+    prelabelSelect.setAttribute("aria-label", prelabel.heading.textContent);
+    prelabelOnlyText.textContent = tr(
+      app,
+      "prelabelOnlyUnclassified",
+      "Only relabel unclassified points (0 and 1)",
+    );
+    prelabelButton.textContent = tr(app, "prelabelRun", "Run pre-label");
+    prelabel.root.hidden = session === null || !prelabelRunner;
     exportSection.heading.textContent = tr(app, "export", "Export");
     exportLasButton.textContent = tr(app, "exportLas", "LAS 1.4");
     exportLazButton.textContent = tr(app, "exportLaz", "LAZ (compressed)");
@@ -625,6 +676,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
 
   const renderSessionVisibility = () => {
     for (const node of sessionSections) node.hidden = session === null;
+    // Pre-labelling needs the host's WASM runner.
+    if (!prelabelRunner) prelabel.root.hidden = true;
   };
 
   // --- Map interaction.
@@ -864,6 +917,83 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 
   // Saves the current class of changed points so they persist with the project.
+  // Runs the chosen Whitebox classifier on the session's points and applies
+  // its classes as one undoable edit.
+  const runPrelabel = async () => {
+    const ctl = control();
+    const tool = PRELABEL_TOOLS.find((entry) => entry.id === prelabelSelect.value);
+    if (!session || !ctl || !tool || !prelabelRunner) return;
+    const cloud = exportCloudData();
+    const classes = liveClassifications(session.cloudId);
+    if (!cloud || !classes) return;
+    const cloudId = session.cloudId;
+    const started = performance.now();
+    prelabelButton.disabled = true;
+    setStatus(
+      tr(app, "prelabelRunning", "Running {{tool}} on {{count}} points…", {
+        tool: tr(app, tool.labelKey, tool.label),
+        count: numberFormat.format(cloud.pointCount),
+      }),
+    );
+    try {
+      // Whitebox's WASM build runs out of memory past a few million points,
+      // so run it tile by tile (with an overlap buffer) and keep each tile's
+      // core results.
+      const tiles = planPrelabelTiles(cloud);
+      const results = classes.slice(0, cloud.pointCount);
+      const owned = new Uint8Array(cloud.pointCount);
+      for (const [n, tile] of tiles.entries()) {
+        if (tiles.length > 1) {
+          setStatus(
+            tr(app, "prelabelTile", "Running {{tool}}: tile {{n}} of {{total}}…", {
+              tool: tr(app, tool.labelKey, tool.label),
+              n: n + 1,
+              total: tiles.length,
+            }),
+          );
+        }
+        const output = await prelabelRunner(
+          tool.toolId,
+          tool.parameters,
+          new Uint8Array(writeLas(subsetCloud(cloud, tile.input))),
+        );
+        const tileClasses = readLasClassifications(output);
+        if (tileClasses.length !== tile.input.length) {
+          throw new Error(
+            `The tool returned ${tileClasses.length} points for ${tile.input.length}; it must keep every point in order.`,
+          );
+        }
+        for (const i of tile.core) owned[i] = 1;
+        tile.input.forEach((i, k) => {
+          if (owned[i]) results[i] = tileClasses[k];
+        });
+        for (const i of tile.core) owned[i] = 0;
+      }
+      if (!session || session.cloudId !== cloudId) return;
+      const { indices, codes } = mergePrelabels(classes, results, cloud.pointCount, {
+        onlyUnclassified: prelabelOnlyUnclassified.checked,
+        protectedClasses: new Set([...ctl.getHiddenClassifications(), ...lockedClasses]),
+      });
+      const changed = session.history.assignEach(cloudId, classes, indices, codes);
+      recordLabels(indices);
+      refreshAfterEdit(cloudId);
+      setStatus(
+        tr(app, "prelabelDone", "Pre-labelled {{count}} points in {{seconds}} s.", {
+          count: numberFormat.format(changed),
+          seconds: ((performance.now() - started) / 1000).toFixed(1),
+        }),
+      );
+    } catch (error) {
+      setStatus(
+        tr(app, "prelabelFailed", "Pre-label failed: {{message}}", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      prelabelButton.disabled = false;
+    }
+  };
+
   const recordLabels = (indices: ArrayLike<number>) => {
     const data = activeData();
     if (!session?.source || !data) return;
@@ -1158,6 +1288,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       refreshAfterEdit(changed.cloudId);
     }
   });
+  prelabelButton.addEventListener("click", () => void runPrelabel());
   exportLasButton.addEventListener("click", () => void exportPoints("las"));
   exportLazButton.addEventListener("click", () => void exportPoints("laz"));
   exportNpyButton.addEventListener("click", () => void exportPoints("npy"));

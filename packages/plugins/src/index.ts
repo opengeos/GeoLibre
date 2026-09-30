@@ -488,6 +488,7 @@ export {
   pointCloudAnnotationPlugin,
   POINT_CLOUD_ANNOTATION_PLUGIN_ID,
   setPointCloudAnnotationFileSaver,
+  setPointCloudPrelabelRunner,
   type PointCloudAnnotationFileSaver,
 } from "./plugins/point-cloud-annotation";
 export {

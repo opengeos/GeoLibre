@@ -814,6 +814,12 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
         });
         args.push(`--${name}=/work/${file}`);
       }
+    } else if (kind === "lidar_out") {
+      // LiDAR outputs come back as raw LAS bytes (e.g. a classified copy of the
+      // input); callers decide whether to load or parse them.
+      const file = `${outputBaseName(request.tool_id, name)}.las`;
+      outputs.push({ name, file, kind: "bytes" });
+      args.push(`--${name}=/work/${file}`);
     } else if (kind === "raster_out" || kind === "file_out") {
       // raster_out is always a GeoTIFF. file_out is an opaque output whose
       // format the tool infers from the output *extension* (e.g.

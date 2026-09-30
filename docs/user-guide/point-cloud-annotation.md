@@ -39,6 +39,24 @@ Scroll to zoom and right-drag to tilt or rotate as usual.
   **Classes in session** makes it the class to assign.
 - **Undo** and **Redo** step through the class assignments of the session.
 
+## Pre-labelling with Whitebox
+
+**Pre-label (Whitebox)** runs a Whitebox LiDAR classifier on the session's
+points in the browser (the same WebAssembly build as **Processing → Whitebox**)
+and applies its classes as one undoable edit:
+
+- **Ground (improved ground point filter)** separates ground (2) from
+  everything else (1).
+- **Ground, vegetation and unclassified (classify LiDAR)** also marks
+  vegetation.
+
+**Only relabel unclassified points (0 and 1)**, on by default, keeps every
+point you or the survey already classified. Locked and hidden classes are never
+changed. The tool runs in tiles of about 750,000 points with a 20 m overlap,
+since the WebAssembly build runs out of memory on a few million points at once;
+a 4.6 million point session takes a couple of minutes. The result is a starting
+point: review it, then correct it with the selection tools.
+
 ## 3D boxes (cuboids)
 
 Label objects such as buildings, trees or vehicles with oriented 3D boxes:

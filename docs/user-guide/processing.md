@@ -344,7 +344,7 @@ Either way the tool list is the same; only the executing engine changes.
 - **Search** by name at the top of the tool list, or narrow with the **category** and **source** dropdowns.
 - **Browse by category** without opening the dialog at all: the Processing menu has a submenu per category (Conversion, Hydrology, LiDAR, Network, Projection, Raster, Remote Sensing, Terrain, Vector) with nested subcategory submenus, including the `GeoLibre (WASM)` subheading for GeoLibre's own tools. Picking a tool opens the dialog with it preselected. The catalog is bundled offline, so the menu works with no network.
 - **Fill in the form** — the dialog builds it from the tool's own parameter manifest, with a file picker for path inputs and an output-format dropdown for vector outputs. Parameters that are ground distances get a metric unit picker.
-- **Run**, and the output is added to the map. Raster outputs are Cloud Optimized GeoTIFFs.
+- **Run**, and the output is added to the map. Raster outputs are Cloud Optimized GeoTIFFs. A LiDAR output from the in-browser (WASM) engine, such as a classified point cloud, is downloaded as a LAS file; load it with **Add Data → LiDAR Layer**.
 
 ![The Whitebox Toolbox dialog, with the tool search on the left and the selected tool's generated form on the right](https://assets.geolibre.app/images/geolibre-whitebox-toolbox.webp)
 

@@ -399,4 +399,32 @@ test.describe("point cloud annotation", () => {
       `${Number(saved.length_m).toFixed(1)} × ${Number(saved.width_m).toFixed(1)}`,
     );
   });
+
+  test("pre-labels with a Whitebox classifier as one undoable edit", async ({ page }) => {
+    test.setTimeout(180_000);
+    await waitForMap(page);
+    await loadCopc(page);
+    await startSession(page);
+    const classes = page.getByTestId("pc-annotation-classes");
+    const before = await classes.innerText();
+
+    // Relabel every class (not just 0/1) so the tool's result is visible.
+    await page.getByTestId("pc-annotation-prelabel-tool").selectOption("ground-vegetation");
+    await page.getByTestId("pc-annotation-prelabel-only-unclassified").uncheck();
+    await page.getByTestId("pc-annotation-prelabel-run").click();
+    const status = page.getByTestId("pc-annotation-status");
+    await expect(status).toContainText(/Pre-labelled|Pre-label failed/, { timeout: 120_000 });
+    await expect(status).toContainText("Pre-labelled");
+    const changed = Number(
+      /Pre-labelled ([\d,]+) points/
+        .exec((await status.textContent()) ?? "")?.[1]
+        .replace(/,/g, ""),
+    );
+    if (changed > 0) {
+      expect(await classes.innerText()).not.toBe(before);
+      // One undo restores the classes from before the run.
+      await page.getByTestId("pc-annotation-undo").click();
+      await expect.poll(() => classes.innerText()).toBe(before);
+    }
+  });
 });

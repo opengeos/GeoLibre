@@ -166,6 +166,7 @@ function fileOutputExtension(bytes: Uint8Array): string {
   if (matches([0x66, 0x67, 0x62, 0x03])) return "fgb"; // FlatGeobuf "fgb\x03"
   if (matches([0x50, 0x4b, 0x03, 0x04])) return "zip"; // Shapefile bundle "PK\x03\x04"
   if (matches([0x89, 0x50, 0x4e, 0x47])) return "png";
+  if (matches([0x4c, 0x41, 0x53, 0x46])) return "las"; // "LASF" (LAS/LAZ)
   // "PMTiles"
   if (matches([0x50, 0x4d, 0x54, 0x69, 0x6c, 0x65, 0x73])) return "pmtiles";
   return "bin";
@@ -1587,7 +1588,10 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         // output only as "Optional output path" — so sniff the bytes rather
         // than trust the declared kind, the way the scripting/assistant path
         // does, and put a raster on the map instead of downloading it.
-        const declaredFile = outKind === "file_out" || outKind === "vector_out";
+        // A `lidar_out` (a classified/filtered LAS from the WASM runner) is
+        // downloaded too; it never belongs on the raster path.
+        const declaredFile =
+          outKind === "file_out" || outKind === "vector_out" || outKind === "lidar_out";
         if (declaredFile && (!isTiff(value) || !onAddRaster)) {
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
           // Prefer the content signature: a `vector_out` and most binary

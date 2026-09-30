@@ -469,3 +469,60 @@ export function writeNpy(cloud: LasExportCloud, options: { crs?: ExportCrs } = {
   }
   return bytes;
 }
+
+/**
+ * Copies a subset of a cloud's points (in the given order) into a new cloud,
+ * e.g. one tile of a larger session for a tool with a memory limit.
+ *
+ * @param cloud - The source cloud.
+ * @param indices - Points to keep.
+ * @returns A cloud holding just those points.
+ */
+export function subsetCloud(cloud: LasExportCloud, indices: ArrayLike<number>): LasExportCloud {
+  const n = indices.length;
+  const positions = new Float32Array(n * 3);
+  const classifications = cloud.classifications ? new Uint8Array(n) : undefined;
+  const intensities = cloud.intensities ? new Float32Array(n) : undefined;
+  const colors = cloud.colors ? new Uint8Array(n * 4) : undefined;
+  const extraAttributes: Record<string, number[]> = {};
+  const extras = Object.entries(cloud.extraAttributes ?? {});
+  for (const [name] of extras) extraAttributes[name] = new Array<number>(n);
+  for (let k = 0; k < n; k++) {
+    const i = indices[k];
+    positions[k * 3] = cloud.positions[i * 3];
+    positions[k * 3 + 1] = cloud.positions[i * 3 + 1];
+    positions[k * 3 + 2] = cloud.positions[i * 3 + 2];
+    if (classifications) classifications[k] = cloud.classifications![i];
+    if (intensities) intensities[k] = cloud.intensities![i];
+    if (colors) {
+      colors[k * 4] = cloud.colors![i * 4];
+      colors[k * 4 + 1] = cloud.colors![i * 4 + 1];
+      colors[k * 4 + 2] = cloud.colors![i * 4 + 2];
+      colors[k * 4 + 3] = cloud.colors![i * 4 + 3];
+    }
+    for (const [name, values] of extras) extraAttributes[name][k] = values[i];
+  }
+  return {
+    positions,
+    coordinateOrigin: cloud.coordinateOrigin,
+    pointCount: n,
+    classifications,
+    intensities,
+    colors,
+    hasRGB: cloud.hasRGB,
+    extraAttributes,
+    wkt: cloud.wkt,
+  };
+}
+
+/**
+ * A file-name stem for a point cloud's exports: its name without a
+ * LAS/LAZ/COPC extension, with unsafe characters replaced.
+ *
+ * @param name - The cloud's display name.
+ * @returns The stem, or "point-cloud" when nothing is left.
+ */
+export function safeFileStem(name: string): string {
+  const stem = name.replace(/\.(copc\.)?la[sz]$/i, "").replace(/[^\w.-]+/g, "_");
+  return stem || "point-cloud";
+}

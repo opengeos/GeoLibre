@@ -72,6 +72,12 @@ describe("fitCuboid", () => {
     assert.ok(Math.hypot(x, y) < 1e-3);
   });
 
+  it("fits a box to a single point", () => {
+    const box = fitCuboid(cloud([[3, 4, 50]]), [0])!;
+    assert.deepEqual(box.size, [0.01, 0.01, 0.01]);
+    assert.ok(Math.abs(box.center[2] - 50) < 1e-9);
+  });
+
   it("returns null for no points", () => {
     assert.equal(fitCuboid(cloud([[0, 0, 0]]), []), null);
   });

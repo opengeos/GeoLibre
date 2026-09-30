@@ -17,7 +17,7 @@ import {
   pointsInCuboid,
   type Cuboid,
 } from "./cuboid";
-import { resolveExportCrs } from "./las-writer";
+import { resolveExportCrs, safeFileStem } from "./las-writer";
 import { getOverlayViewport, getRenderZOffset } from "./lidar-access";
 import { ObjectViews, boxFramePoints } from "./object-views";
 import { createOffsetProjector } from "./selection";
@@ -93,11 +93,6 @@ export function loadCuboids(state: unknown): void {
     }
     if (objects.length > 0) cuboidStore.set(entry.url, objects);
   }
-}
-
-/** Whether any source has boxes. */
-export function hasCuboids(): boolean {
-  return [...cuboidStore.values()].some((objects) => objects.length > 0);
 }
 
 /**
@@ -654,9 +649,7 @@ export class CuboidSection {
     const session = this.host.session();
     const objects = this.objects();
     if (!session || objects.length === 0) return;
-    const stem =
-      session.cloudName.replace(/\.(copc\.)?la[sz]$/i, "").replace(/[^\w.-]+/g, "_") ||
-      "point-cloud";
+    const stem = safeFileStem(session.cloudName);
     if (format === "geojson") {
       this.host.exportText(
         `${stem}-boxes.geojson`,
