@@ -20,7 +20,6 @@ import logging
 import os
 import subprocess
 import tempfile
-import threading
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -28,6 +27,7 @@ from pydantic import BaseModel
 
 from .conversion import (
     _RESULT_MARKER,
+    _RUNTIME_SETUP_LOCK,
     _runtime_python,
     _start_job,
     _validate_paths,
@@ -46,7 +46,6 @@ POINTCLOUD_PACKAGES = os.environ.get(
     "GEOLIBRE_POINTCLOUD_PACKAGES", "laspy[lazrs]>=2.5 numpy>=1.24"
 ).split()
 _POINTCLOUD_EXTENSIONS = {".las", ".laz"}
-_INSTALL_LOCK = threading.Lock()
 
 
 class ApplyLabelsRequest(BaseModel):
@@ -162,10 +161,14 @@ def flatten(encoded, ranges, wide):
         span = lookup.get(key)
         if span is None or not isinstance(text, str) or budget[0] <= 0 or budget[1] <= 0:
             continue
+        cap = min(NODE_LIMIT, budget[0])
+        before = budget[0]
         try:
             edits = decode(text, wide)
-        except ValueError as error:
-            # Skip one bad record, as the Python reader does, not the job.
+        except (ValueError, zlib.error) as error:
+            # Skip one bad record, as the Python reader does, not the job, and
+            # charge its full cap: bad records cannot bypass the budget.
+            budget[0] = before - cap
             print(f"Skipped the labels of node {key}: {error}")
             continue
         for offset, value in edits.items():
@@ -311,7 +314,9 @@ def _ensure_pointcloud_runtime() -> str:
     python = _runtime_python()
     if _check_pointcloud_import(python):
         return python
-    with _INSTALL_LOCK:
+    # The conversion runtime's own setup lock: this install mutates the same
+    # venv its bootstrap creates and repopulates.
+    with _RUNTIME_SETUP_LOCK:
         if _check_pointcloud_import(python):
             return python
         # Local import: runtime.py owns uv discovery for every router.
