@@ -518,10 +518,14 @@ def test_get_point_cloud_annotations_counts_labels_and_lists_boxes(server, proje
     settings = saved["plugins"]["settings"]["geolibre-point-cloud-annotation"]
     settings["sources"][0]["url"] = signed
     settings["cuboids"][0]["url"] = signed
+    settings["vectors"] = [
+        {"url": signed, "items": [{"kind": "keypoint", "classCode": 15, "points": [[0, 0, 0]]}]}
+    ]
     (tmp_path / project_path).write_text(json.dumps(saved))
     result = call(server, "get_point_cloud_annotations", path=project_path)
     assert all("zzz" not in url for url in result["labels"])
     assert "zzz" not in result["boxes"][0]["url"]
+    assert "zzz" not in result["vectors"][0]["url"]
 
     # Two signed links to the same cloud merge their counts.
     settings["sources"].append(

@@ -2,6 +2,7 @@
 // and assign ASPRS classes, then export the edited cloud as LAS 1.4 or a
 // Segments.ai segmentation label. First slice of opengeos/GeoLibre#2749.
 
+import { useAppStore } from "@geolibre/core";
 import { COORDINATE_SYSTEM } from "@deck.gl/core";
 import { PointCloudLayer } from "@deck.gl/layers";
 import type { LidarControl } from "maplibre-gl-components";
@@ -135,6 +136,15 @@ interface Session {
   history: LabelHistory;
   /** Per-point object (instance) ids, 0 for none; grown as nodes arrive. */
   instances: Uint32Array;
+}
+
+/**
+ * Flags the project as changed: the annotator's labels, boxes and vectors live
+ * in plugin state, not in the store's layers, so an edit would otherwise not
+ * prompt to save when the project closes.
+ */
+function markChanged(): void {
+  if (!useAppStore.getState().isDirty) useAppStore.setState({ isDirty: true });
 }
 
 function tr(
@@ -455,6 +465,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
         new Set([...(control()?.getHiddenClassifications() ?? []), ...lockedClasses]),
       assignClass: (indices, code) => assignPoints(indices, code),
       setStatus: (text) => setStatus(text),
+      changed: () => markChanged(),
       exportText: (name, text) => {
         if (app.exportTextFile)
           app.exportTextFile(name, text, {
@@ -490,6 +501,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       lockCamera: () => lockCamera(),
       unlockCamera: () => unlockCamera(),
       setStatus: (text) => setStatus(text),
+      changed: () => markChanged(),
       exportText: (name, text) => {
         if (app.exportTextFile)
           app.exportTextFile(name, text, {
@@ -667,6 +679,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   };
 
   const onCustomClassesChanged = () => {
+    markChanged();
     applyClassStyles(control());
     startLabelSync();
     renderLabels();
@@ -1420,7 +1433,10 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     let recorded = labelStore.record(session.source, data as LabelledCloud, indices);
     const ids = instances ? sessionInstances(session.cloudId) : undefined;
     if (ids) recorded += labelStore.recordInstances(session.source, data, ids, indices);
-    if (recorded > 0) startLabelSync();
+    if (recorded > 0) {
+      startLabelSync();
+      markChanged();
+    }
   };
 
   // Assigns a class to points and groups them as a new object, undoable.

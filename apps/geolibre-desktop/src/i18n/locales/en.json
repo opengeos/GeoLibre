@@ -8771,6 +8771,7 @@
       "keypointHint": "Click a point to place a keypoint.",
       "vectorDrawHint": "Click points to add vertices; double-click or press Enter to finish, Backspace removes the last vertex, Esc cancels.",
       "vectorNoPoint": "No point under the cursor to snap to.",
+      "vectorDiscarded": "Discarded the unfinished vector ({{count}} vertices).",
       "vectorAdded": "Added vector {{id}}: {{kind}}, {{count}} vertices.",
       "vectorClass": "Vector class",
       "deleteVector": "Delete",

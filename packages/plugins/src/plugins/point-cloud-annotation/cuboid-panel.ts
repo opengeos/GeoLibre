@@ -273,6 +273,8 @@ export interface CuboidHost {
   assignClass: (indices: Uint32Array, code: number) => void;
   setStatus: (text: string) => void;
   exportText: (name: string, text: string) => void;
+  /** Flags the project as changed, so closing it asks to save. */
+  changed: () => void;
 }
 
 const LAYER_ID = "pointcloud-annotation-cuboids";
@@ -390,6 +392,7 @@ export class CuboidSection {
       attributes: {},
     };
     this.objects().push(object);
+    this.host.changed();
     this.select(object.id);
     this.host.setStatus(
       this.host.tr("boxAdded", "Added box {{id}} ({{l}} × {{w}} × {{h}} m).", {
@@ -475,7 +478,10 @@ export class CuboidSection {
   private remove(id: number): void {
     const objects = this.objects();
     const index = objects.findIndex((object) => object.id === id);
-    if (index >= 0) objects.splice(index, 1);
+    if (index >= 0) {
+      objects.splice(index, 1);
+      this.host.changed();
+    }
     if (this.selectedId === id) {
       this.selectedId = null;
       this.host.app.closeFloatingPanel?.(VIEWS_PANEL_ID);
@@ -530,6 +536,7 @@ export class CuboidSection {
       classSelect.setAttribute("aria-label", tr("boxClass", "Box class"));
       classSelect.addEventListener("change", () => {
         object.classCode = Number(classSelect.value);
+        this.host.changed();
         this.render();
       });
       const statusSelect = document.createElement("select");
@@ -542,6 +549,7 @@ export class CuboidSection {
       statusSelect.setAttribute("aria-label", tr("boxStatus", "Review status"));
       statusSelect.addEventListener("change", () => {
         object.status = parseStatus(statusSelect.value);
+        this.host.changed();
         this.renderList();
       });
       const actions = document.createElement("div");
@@ -611,6 +619,7 @@ export class CuboidSection {
       input.setAttribute("aria-label", key);
       input.addEventListener("change", () => {
         object.attributes[key] = clipText(input.value, MAX_ATTRIBUTE_VALUE);
+        this.host.changed();
       });
       const remove = document.createElement("button");
       remove.type = "button";
@@ -618,6 +627,7 @@ export class CuboidSection {
       remove.style.cssText = small;
       remove.addEventListener("click", () => {
         delete object.attributes[key];
+        this.host.changed();
         this.renderList();
       });
       line.append(name, input, remove);
@@ -666,6 +676,7 @@ export class CuboidSection {
         );
         return;
       }
+      this.host.changed();
       object.attributes = {
         ...object.attributes,
         [key]: clipText(valueInput.value, MAX_ATTRIBUTE_VALUE),
@@ -815,6 +826,7 @@ export class CuboidSection {
         return false;
     }
     object.box = next;
+    this.host.changed();
     this.render();
     return true;
   }
@@ -827,6 +839,7 @@ export class CuboidSection {
     const object = this.selected();
     if (!object) return;
     object.box = box;
+    this.host.changed();
     if (this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;

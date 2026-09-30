@@ -260,6 +260,8 @@ export interface VectorHost {
   unlockCamera: () => void;
   setStatus: (text: string) => void;
   exportText: (name: string, text: string) => void;
+  /** Flags the project as changed, so closing it asks to save. */
+  changed: () => void;
 }
 
 const LINE_LAYER_ID = "pointcloud-annotation-vectors-lines";
@@ -364,6 +366,14 @@ export class VectorSection {
 
   /** Arms the vector tool for one kind. */
   start(kind: VectorKind): void {
+    if (this.draft && this.draft.length > 0) {
+      // Switching kinds drops the vector being drawn; say so, as Esc would.
+      this.host.setStatus(
+        this.host.tr("vectorDiscarded", "Discarded the unfinished vector ({{count}} vertices).", {
+          count: this.draft.length,
+        }),
+      );
+    }
     this.cancel();
     this.kind = kind;
     this.host.activateTool();
@@ -445,7 +455,9 @@ export class VectorSection {
     else if (event.key === "Escape") this.cancel();
     else if (event.key === "Backspace") {
       this.draft.pop();
-      this.renderMap();
+      // Removing the last vertex ends the draft, releasing the camera.
+      if (this.draft.length === 0) this.cancel();
+      else this.renderMap();
     } else return false;
     return true;
   }
@@ -493,6 +505,7 @@ export class VectorSection {
       points,
     };
     objects.push(object);
+    this.host.changed();
     this.render();
     this.host.setStatus(
       this.host.tr("vectorAdded", "Added vector {{id}}: {{kind}}, {{count}} vertices.", {
@@ -506,7 +519,10 @@ export class VectorSection {
   private remove(id: number): void {
     const objects = this.objects();
     const index = objects.findIndex((object) => object.id === id);
-    if (index >= 0) objects.splice(index, 1);
+    if (index >= 0) {
+      objects.splice(index, 1);
+      this.host.changed();
+    }
     this.render();
   }
 
@@ -560,6 +576,7 @@ export class VectorSection {
       classSelect.setAttribute("aria-label", tr("vectorClass", "Vector class"));
       classSelect.addEventListener("change", () => {
         object.classCode = Number(classSelect.value);
+        this.host.changed();
         this.render();
       });
       const remove = this.makeButton(tr("deleteVector", "Delete"));
