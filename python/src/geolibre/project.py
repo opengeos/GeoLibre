@@ -1895,6 +1895,10 @@ MAX_POINT_LABEL_NODE_BYTES = 16 * 1024 * 1024
 MAX_POINT_LABEL_BYTES = 256 * 1024 * 1024
 """Largest total inflated size of all saved labels in one project."""
 
+MAX_POINT_LABEL_EDITS = 20_000_000
+"""Most decoded label entries across a project; bounds Python memory, since a
+dict entry costs far more than the two inflated bytes behind it."""
+
 
 def decode_point_label_node(text: str, limit: int = MAX_POINT_LABEL_NODE_BYTES) -> dict[int, int]:
     """Decode one node's saved point labels.
@@ -1936,6 +1940,10 @@ def decode_point_label_node(text: str, limit: int = MAX_POINT_LABEL_NODE_BYTES) 
             shift += 7
             if not byte & 0x80:
                 break
+            # A point index needs at most five varint bytes; a longer run is
+            # malformed (and would make this bigint loop quadratic).
+            if shift >= 35:
+                raise ValueError("invalid point label record: varint too long")
         if at >= len(data):
             raise ValueError("truncated point label record")
         index = previous + 1 + delta
@@ -1968,6 +1976,7 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
         state = {}
     labels: dict[str, dict[str, dict[int, int]]] = {}
     budget = MAX_POINT_LABEL_BYTES
+    entries = MAX_POINT_LABEL_EDITS
     sources = state.get("sources") if isinstance(state, dict) else None
     for source in sources if isinstance(sources, list) else []:
         if not isinstance(source, dict):
@@ -1978,14 +1987,17 @@ def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
             continue
         decoded: dict[str, dict[int, int]] = {}
         for key, text in nodes.items():
-            if not isinstance(text, str) or budget <= 0:
+            if not isinstance(text, str) or budget <= 0 or entries <= 0:
                 continue
             try:
                 edits = decode_point_label_node(text, min(MAX_POINT_LABEL_NODE_BYTES, budget))
             except ValueError:
                 continue
+            if len(edits) > entries:
+                continue
             # Each edit is at least two inflated bytes (varint + class).
             budget -= 2 * len(edits)
+            entries -= len(edits)
             decoded[key] = edits
         labels[url] = decoded
     boxes: list[dict[str, Any]] = []
@@ -2040,7 +2052,7 @@ def apply_point_labels(classification: Any, nodes: dict[str, dict[int, int]]) ->
                 "export the annotated cloud as LAS/LAZ from the app instead"
             )
         for index in edits:
-            if index >= len(classification):
+            if index < 0 or index >= len(classification):
                 raise ValueError(f"label index {index} is past the {len(classification)} points")
     changed = 0
     for edits in nodes.values():

@@ -1014,3 +1014,51 @@ def test_apply_point_labels_changes_nothing_when_it_rejects():
     with pytest.raises(ValueError):
         p.apply_point_labels(classification, {"file": {0: 6, 9: 2}})
     assert classification == [1] * 5
+
+
+def test_decode_point_label_node_rejects_an_overlong_varint():
+    import base64
+    import zlib
+
+    import pytest
+
+    from geolibre import project as p
+
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    endless = base64.b64encode(
+        compressor.compress(b"\x80" * 64 + b"\x01\x02") + compressor.flush()
+    ).decode()
+    with pytest.raises(ValueError, match="varint too long"):
+        p.decode_point_label_node(endless)
+
+
+def test_point_cloud_annotations_cap_the_decoded_entry_count(monkeypatch):
+    from geolibre import project as p
+
+    monkeypatch.setattr(p, "MAX_POINT_LABEL_EDITS", 3)
+    node = _encode_node({0: 6, 1: 6})
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "sources": [
+                        {"url": "https://x/a.laz", "nodes": {"a": node, "b": node}},
+                    ]
+                }
+            }
+        }
+    }
+    labels = p.point_cloud_annotations(project)["labels"]["https://x/a.laz"]
+    # The second node would pass the 3-entry cap, so it is left out.
+    assert list(labels) == ["a"]
+
+
+def test_apply_point_labels_rejects_a_negative_index():
+    import pytest
+
+    from geolibre import project as p
+
+    classification = [1] * 3
+    with pytest.raises(ValueError):
+        p.apply_point_labels(classification, {"file": {-1: 6}})
+    assert classification == [1] * 3

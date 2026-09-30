@@ -365,6 +365,23 @@ def test_add_pmtiles(m):
     assert layer["metadata"]["sourceLayers"] == ["roads"]
 
 
+def test_add_lidar(m):
+    layer_id = m.add_lidar("https://example.com/data/autzen.copc.laz?token=1")
+    layer = next(item for item in m.project["layers"] if item["id"] == layer_id)
+    assert layer["type"] == "lidar"
+    # The default name is the file name, without the query string.
+    assert layer["name"] == "autzen.copc.laz"
+    assert layer["sourcePath"] == "https://example.com/data/autzen.copc.laz?token=1"
+    assert m.add_lidar("https://example.com/cloud/", name="Mine") != layer_id
+    assert m.project["layers"][-1]["name"] == "Mine"
+    trailing = m.add_lidar("https://example.com/ept/")
+    assert next(i for i in m.project["layers"] if i["id"] == trailing)["name"] == "ept"
+
+
+def test_point_cloud_annotations_empty_by_default(m):
+    assert m.point_cloud_annotations() == {"labels": {}, "boxes": []}
+
+
 def test_add_3d_tiles(m):
     m.add_3d_tiles("https://e/tileset.json", altitude_offset=5)
     layer = _last_layer(m)
