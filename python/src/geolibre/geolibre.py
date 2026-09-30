@@ -2715,6 +2715,37 @@ class Map(anywidget.AnyWidget):
             )
         )
 
+    def add_lidar(self, url: str, name: str | None = None, **style: Any) -> str:
+        """Add a LiDAR point cloud from a LAS, LAZ, COPC or EPT URL.
+
+        COPC and EPT stream by level of detail; LAS/LAZ download whole. Open the
+        app's **Plugins → Point Cloud Annotation** to label its points.
+
+        Args:
+            url: HTTP(S) URL of a ``.las``, ``.laz``, ``.copc.laz`` file or an
+                EPT ``ept.json``.
+            name: Layer display name (defaults to the file name).
+            **style: Style overrides.
+
+        Returns:
+            The id of the added layer.
+        """
+        if name is None:
+            tail = url.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]
+            name = tail or "LiDAR"
+        return self._add_layer(_project.lidar_layer(name, url, **style))
+
+    def point_cloud_annotations(self) -> dict[str, Any]:
+        """The point labels and 3D boxes saved by the app's point cloud annotator.
+
+        Returns:
+            ``{"labels": {url: {node_key: {index: class}}}, "boxes": [...]}``;
+            see :func:`geolibre.project.point_cloud_annotations`. Apply the
+            labels of a whole-file LAS/LAZ source to ``laspy`` data with
+            :func:`geolibre.project.apply_point_labels`.
+        """
+        return _project.point_cloud_annotations(self.project)
+
     def add_cesium_ion(
         self,
         asset_id: int,

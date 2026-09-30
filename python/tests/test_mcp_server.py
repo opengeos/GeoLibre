@@ -440,6 +440,7 @@ def test_add_raster_layer_records_its_source(server, project_path):
             "vector-tiles",
         ),
         ("add_tile_layer", {"url": "https://example.com/{z}/{x}/{y}.png"}, "xyz"),
+        ("add_lidar_layer", {"url": "https://example.com/autzen.copc.laz"}, "lidar"),
         ("add_3d_tiles_layer", {"url": "https://example.com/tileset.json"}, "3d-tiles"),
         ("add_3d_tiles_layer", {"ion_asset_id": 96188}, "3d-tiles"),
         ("add_cesium_ion_layer", {"asset_id": 96188}, "3d-tiles"),
@@ -480,6 +481,37 @@ def test_each_layer_tool_adds_a_layer_of_its_type(
     described = call(server, "describe_project", path=project_path)
     assert described["layers"][0]["name"] == "Added"
     assert described["layers"][0]["type"] == expected_type
+
+
+def test_get_point_cloud_annotations_counts_labels_and_lists_boxes(server, project_path, tmp_path):
+    """Summarizes what the app's annotator saved, without echoing every point."""
+    import base64
+    import zlib
+
+    call(server, "add_lidar_layer", path=project_path, name="Autzen", url="https://x/a.laz")
+    saved = json.loads((tmp_path / project_path).read_text())
+    assert saved["layers"][0]["metadata"]["sourceKind"] == "lidar-url"
+    # Edits {0: 6, 1: 6, 2: 2} as the app encodes them (varint delta + class).
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    node = compressor.compress(bytes([0, 6, 0, 6, 0, 2])) + compressor.flush()
+    saved.setdefault("plugins", {}).setdefault("settings", {})[
+        "geolibre-point-cloud-annotation"
+    ] = {
+        "version": 1,
+        "sources": [{"url": "https://x/a.laz", "nodes": {"file": base64.b64encode(node).decode()}}],
+        "cuboids": [
+            {
+                "url": "https://x/a.laz",
+                "boxes": [
+                    {"id": 1, "classCode": 6, "center": [0, 0, 1], "size": [2, 2, 2], "yaw": 0}
+                ],
+            }
+        ],
+    }
+    (tmp_path / project_path).write_text(json.dumps(saved))
+    result = call(server, "get_point_cloud_annotations", path=project_path)
+    assert result["labels"] == {"https://x/a.laz": {"6": 2, "2": 1}}
+    assert result["boxes"][0]["class_code"] == 6
 
 
 def test_cesium_ion_tools_persist_the_asset_id(server, project_path, tmp_path):

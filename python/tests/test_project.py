@@ -863,3 +863,109 @@ def test_popup_field_rejects_a_fractional_decimals():
 
 def test_popup_field_accepts_an_integral_float_for_decimals():
     assert project.popup_field("pop", kind="number", decimals=2.0)["format"]["decimals"] == 2
+
+
+def _encode_node(edits: dict[int, int]) -> str:
+    """Encode edits the way the app's label store does (varint + raw DEFLATE)."""
+    import base64
+    import zlib
+
+    out = bytearray()
+    previous = -1
+    for index in sorted(edits):
+        delta = index - previous - 1
+        previous = index
+        while delta >= 0x80:
+            out.append((delta & 0x7F) | 0x80)
+            delta >>= 7
+        out.append(delta)
+        out.append(edits[index])
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    return base64.b64encode(compressor.compress(bytes(out)) + compressor.flush()).decode()
+
+
+def test_lidar_layer_matches_the_app_restore_shape():
+    from geolibre import project as p
+
+    layer = p.lidar_layer("Autzen", "https://example.com/autzen.copc.laz")
+    assert layer["type"] == "lidar"
+    assert layer["sourcePath"] == "https://example.com/autzen.copc.laz"
+    assert layer["source"] == {
+        "type": "lidar",
+        "url": "https://example.com/autzen.copc.laz",
+        "sourceId": layer["id"],
+    }
+    assert layer["metadata"]["sourceKind"] == "lidar-url"
+    assert layer["metadata"]["externalNativeLayer"] is True
+    import pytest
+
+    with pytest.raises(ValueError):
+        p.lidar_layer("bad", "/tmp/local.laz")
+
+
+def test_point_cloud_annotations_decode_labels_and_boxes():
+    from geolibre import project as p
+
+    edits = {0: 6, 1: 6, 300: 2, 70000: 5}
+    project = {
+        "plugins": {
+            "settings": {
+                "geolibre-point-cloud-annotation": {
+                    "version": 1,
+                    "sources": [
+                        {"url": "https://x/a.laz", "nodes": {"file": _encode_node(edits)}},
+                        {"url": "https://x/b.copc.laz", "nodes": {"0-0-0-0": "not base64!"}},
+                    ],
+                    "cuboids": [
+                        {
+                            "url": "https://x/a.laz",
+                            "boxes": [
+                                {
+                                    "id": 1,
+                                    "classCode": 6,
+                                    "center": [-123.07, 44.05, 120.0],
+                                    "size": [10, 8, 5],
+                                    "yaw": 0.5,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            }
+        }
+    }
+    result = p.point_cloud_annotations(project)
+    assert result["labels"]["https://x/a.laz"]["file"] == edits
+    # A corrupt node is skipped, not fatal.
+    assert result["labels"]["https://x/b.copc.laz"] == {}
+    assert result["boxes"][0]["class_code"] == 6
+    assert result["boxes"][0]["size"] == [10, 8, 5]
+    assert p.point_cloud_annotations({}) == {"labels": {}, "boxes": []}
+
+
+def test_apply_point_labels_to_a_whole_file_source():
+    import pytest
+
+    from geolibre import project as p
+
+    classification = [1] * 5
+    assert p.apply_point_labels(classification, {"file": {1: 6, 4: 2, 2: 1}}) == 2
+    assert classification == [1, 6, 1, 1, 2]
+    with pytest.raises(ValueError, match="octree node"):
+        p.apply_point_labels(classification, {"0-0-0-0": {0: 2}})
+    with pytest.raises(ValueError, match="past the"):
+        p.apply_point_labels(classification, {"file": {9: 2}})
+
+
+def test_decode_point_label_node_rejects_a_truncated_record():
+    import base64
+    import zlib
+
+    import pytest
+
+    from geolibre import project as p
+
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    truncated = base64.b64encode(compressor.compress(b"\x80") + compressor.flush()).decode()
+    with pytest.raises(ValueError, match="truncated"):
+        p.decode_point_label_node(truncated)

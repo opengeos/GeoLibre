@@ -8,6 +8,7 @@ a project produced entirely from Python.
 
 from __future__ import annotations
 
+import base64
 import copy
 import ipaddress
 import json
@@ -16,6 +17,7 @@ import re
 import socket
 import uuid
 import warnings
+import zlib
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
@@ -1842,6 +1844,178 @@ def three_d_tiles_layer(
     }
     layer["sourcePath"] = url
     return layer
+
+
+LIDAR_SOURCE_KIND = "lidar-url"
+"""``metadata.sourceKind`` of a LiDAR point cloud the app streams from a URL."""
+
+
+def lidar_layer(name: str, url: str, **style: Any) -> dict[str, Any]:
+    """Build a LiDAR point cloud layer from a LAS, LAZ, COPC or EPT URL.
+
+    The layer matches what the app's LiDAR control writes, so a saved project
+    re-streams the point cloud when it opens (COPC and EPT by level of detail,
+    LAS/LAZ as a whole download).
+
+    Args:
+        name: Layer display name.
+        url: HTTP(S) URL of a ``.las``, ``.laz``, ``.copc.laz`` file or an EPT
+            ``ept.json``.
+        **style: Style overrides merged into the default layer style.
+
+    Returns:
+        A layer dict for the project's ``layers`` array.
+
+    Raises:
+        ValueError: If ``url`` is not an HTTP(S) URL.
+    """
+    if not isinstance(url, str) or not url.lower().startswith(("http://", "https://")):
+        raise ValueError("url must be an http(s) URL of a LAS/LAZ/COPC file or an EPT ept.json")
+    layer = _layer_base(name, "lidar", **style)
+    source_id = layer["id"]
+    layer["source"] = {"type": "lidar", "url": url, "sourceId": source_id}
+    layer["metadata"] = {
+        "sourceKind": LIDAR_SOURCE_KIND,
+        "externalNativeLayer": True,
+        "customLayerType": "lidar",
+        "identifiable": False,
+        "sourceId": source_id,
+    }
+    layer["sourcePath"] = url
+    return layer
+
+
+POINT_CLOUD_ANNOTATION_PLUGIN_ID = "geolibre-point-cloud-annotation"
+"""Plugin id under which the app saves point cloud labels and 3D boxes."""
+
+
+def decode_point_label_node(text: str) -> dict[int, int]:
+    """Decode one node's saved point labels.
+
+    The app stores a node's edits as raw-DEFLATE compressed pairs of
+    (delta-varint point index, class byte), base64 encoded.
+
+    Args:
+        text: The base64 string from the project.
+
+    Returns:
+        Point index within the node -> ASPRS class code.
+
+    Raises:
+        ValueError: If the record is truncated or not valid DEFLATE.
+    """
+    try:
+        data = zlib.decompress(base64.b64decode(text), -15)
+    except (ValueError, zlib.error) as error:
+        raise ValueError(f"invalid point label record: {error}") from error
+    edits: dict[int, int] = {}
+    previous = -1
+    at = 0
+    while at < len(data):
+        delta = 0
+        shift = 0
+        while True:
+            if at >= len(data):
+                raise ValueError("truncated point label record")
+            byte = data[at]
+            at += 1
+            delta += (byte & 0x7F) << shift
+            shift += 7
+            if not byte & 0x80:
+                break
+        if at >= len(data):
+            raise ValueError("truncated point label record")
+        index = previous + 1 + delta
+        previous = index
+        edits[index] = data[at]
+        at += 1
+    return edits
+
+
+def point_cloud_annotations(project: dict[str, Any]) -> dict[str, Any]:
+    """Read the point labels and 3D boxes the annotator saved in a project.
+
+    Labels are keyed by each point's stable identity: the source node key (a
+    COPC/EPT octree key such as ``"2-1-0-1"``, or ``"file"`` for a LAS/LAZ
+    loaded whole) and the point's index within that node.
+
+    Args:
+        project: A project dict (e.g. ``Map.project`` or a loaded file).
+
+    Returns:
+        ``{"labels": {url: {node_key: {index: class}}}, "boxes": [...]}``, where
+        each box is ``{"url", "id", "class_code", "center", "size", "yaw"}``:
+        ``center`` is ``[lng, lat, elevation_m]``, ``size`` ``[length, width,
+        height]`` in metres and ``yaw`` radians counter-clockwise from east.
+    """
+    settings = (project.get("plugins") or {}).get("settings") or {}
+    state = settings.get(POINT_CLOUD_ANNOTATION_PLUGIN_ID) or {}
+    labels: dict[str, dict[str, dict[int, int]]] = {}
+    for source in state.get("sources") or []:
+        url = source.get("url")
+        nodes = source.get("nodes") or {}
+        if not isinstance(url, str) or not isinstance(nodes, dict):
+            continue
+        decoded: dict[str, dict[int, int]] = {}
+        for key, text in nodes.items():
+            if isinstance(text, str):
+                try:
+                    decoded[key] = decode_point_label_node(text)
+                except ValueError:
+                    continue
+        labels[url] = decoded
+    boxes: list[dict[str, Any]] = []
+    for entry in state.get("cuboids") or []:
+        url = entry.get("url")
+        for box in entry.get("boxes") or []:
+            boxes.append(
+                {
+                    "url": url,
+                    "id": box.get("id"),
+                    "class_code": box.get("classCode"),
+                    "center": box.get("center"),
+                    "size": box.get("size"),
+                    "yaw": box.get("yaw"),
+                }
+            )
+    return {"labels": labels, "boxes": boxes}
+
+
+def apply_point_labels(classification: Any, nodes: dict[str, dict[int, int]]) -> int:
+    """Apply saved labels to the classification of a LAS/LAZ loaded whole.
+
+    Labels on a whole-file source are keyed ``"file"`` with the point's index
+    in file order, so they map straight onto e.g. ``laspy``'s
+    ``las.classification``. COPC/EPT labels are keyed by octree node and need
+    the node's point order; export those from the app as LAS/LAZ instead.
+
+    Args:
+        classification: A mutable sequence or NumPy array of class codes in
+            file order (modified in place).
+        nodes: One source's labels, as returned in
+            ``point_cloud_annotations(project)["labels"][url]``.
+
+    Returns:
+        The number of points whose class changed.
+
+    Raises:
+        ValueError: If the labels are keyed by COPC/EPT node, or an index is
+            past the end of ``classification``.
+    """
+    changed = 0
+    for key, edits in nodes.items():
+        if key != "file":
+            raise ValueError(
+                f"labels keyed by octree node {key!r} need the COPC node order; "
+                "export the annotated cloud as LAS/LAZ from the app instead"
+            )
+        for index, code in edits.items():
+            if index >= len(classification):
+                raise ValueError(f"label index {index} is past the {len(classification)} points")
+            if int(classification[index]) != code:
+                classification[index] = code
+                changed += 1
+    return changed
 
 
 CESIUM_ION_SOURCE_KIND = "cesium-ion"

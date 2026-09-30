@@ -90,6 +90,7 @@ Give it a directory meant for maps, not your home directory.
 | --- | --- |
 | `create_project` | Write a new, empty project with a name, center, zoom, and basemap. |
 | `describe_project` | Summarize the camera, basemap, layers, and map controls. Inlined feature data is reported as a count, never echoed back. |
+| `get_point_cloud_annotations` | Per point cloud, how many points the app's annotator relabelled into each class, plus its saved 3D boxes. |
 | `list_catalog` | List the named basemaps, color ramps, and legend presets, plus the active workspace roots. |
 
 ### Adding layers
@@ -102,6 +103,7 @@ Give it a directory meant for maps, not your home directory.
 | `add_tile_layer` | A raster XYZ tile template. |
 | `add_tiles_layer` | PMTiles archives and vector tile services. |
 | `add_ogc_layer` | WMS and WMTS endpoints. |
+| `add_lidar_layer` | LAS/LAZ/COPC/EPT point clouds by URL. |
 | `add_3d_tiles_layer` | OGC 3D Tiles tilesets, by URL or Cesium Ion asset id. |
 | `add_cesium_ion_layer` | Cesium Ion assets (tileset or imagery) by id; rendered by the 3D globe only. |
 | `add_czml_layer` | A CZML (Cesium Language) dynamic 3D scene, by URL or inline packets; rendered by the 3D globe only. |

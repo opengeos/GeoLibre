@@ -60,6 +60,7 @@ Pick the layer tool by what the data *is*, not by file extension alone:
 - `add_tile_layer`     - a raster XYZ tile template with {z}/{x}/{y}.
 - `add_tiles_layer`    - PMTiles or a vector tile service.
 - `add_ogc_layer`      - a WMS or WMTS endpoint.
+- `add_lidar_layer`    - a LAS/LAZ/COPC/EPT point cloud by URL.
 - `add_3d_tiles_layer` - an OGC 3D Tiles tileset (URL or Cesium Ion asset id).
 - `add_cesium_ion_layer` - a Cesium Ion asset (tileset or imagery) by id, 3D globe only.
 - `add_czml_layer`     - a CZML dynamic 3D scene (orbits, vehicle tracks) by URL or
@@ -673,6 +674,55 @@ def build_server(workspace: Workspace) -> MCPServer:
         else:
             raise ValueError(f"kind must be 'pmtiles' or 'vector-tiles', got {kind!r}")
         return add(path, layer, index)
+
+    @tool()
+    def add_lidar_layer(
+        path: str,
+        name: str,
+        url: str,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add a LiDAR point cloud from a LAS, LAZ, COPC or EPT URL.
+
+        COPC and EPT stream by level of detail; LAS/LAZ download whole. The app
+        re-streams it when the project opens, and its Point Cloud Annotation
+        plugin can label its points.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            name: Layer display name.
+            url: HTTP(S) URL of a `.las`, `.laz`, `.copc.laz` file or an EPT
+                `ept.json`.
+            index: Draw-order position; omit to add on top.
+
+        Returns:
+            A summary of the added layer.
+        """
+        return add(path, _project.lidar_layer(name, url), index)
+
+    @tool()
+    def get_point_cloud_annotations(path: str) -> dict[str, Any]:
+        """Read the point labels and 3D boxes saved by the point cloud annotator.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+
+        Returns:
+            Per source URL, how many points were relabelled per class, plus
+            every saved 3D box (`class_code`, `center` [lng, lat, elevation m],
+            `size` [length, width, height] m, `yaw` radians from east).
+        """
+        file = workspace.resolve(path, must_exist=True)
+        project = authoring.load_project(file)
+        annotations = _project.point_cloud_annotations(project)
+        labels: dict[str, dict[str, int]] = {}
+        for url, nodes in annotations["labels"].items():
+            counts: dict[str, int] = {}
+            for edits in nodes.values():
+                for code in edits.values():
+                    counts[str(code)] = counts.get(str(code), 0) + 1
+            labels[url] = counts
+        return {"labels": labels, "boxes": annotations["boxes"]}
 
     @tool()
     def add_3d_tiles_layer(

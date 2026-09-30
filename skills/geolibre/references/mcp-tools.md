@@ -20,6 +20,7 @@ Pick by what the data **is**:
 | An XYZ raster tile template (`{z}/{x}/{y}.png`) | `add_tile_layer` | Basemaps like OSM go here, not `set_basemap`. |
 | A PMTiles archive, or a vector tile service | `add_tiles_layer` | `kind="pmtiles"` (with `tile_type`) or `kind="vector-tiles"`. |
 | A WMS or WMTS endpoint | `add_ogc_layer` | `service="wms"` or `"wmts"`. |
+| A LAS/LAZ/COPC/EPT point cloud | `add_lidar_layer` | COPC and EPT stream by level of detail; the app's Point Cloud Annotation plugin can label it. |
 | An OGC 3D Tiles tileset | `add_3d_tiles_layer` | `altitude_offset` to sit it on the ground; `ion_asset_id` instead of `url` for a Cesium Ion tileset. |
 | A Cesium Ion asset (tileset or imagery) | `add_cesium_ion_layer` | 3D globe only: pair it with `set_renderer` / `primaryRenderer: "cesium"`. `kind="imagery"` for imagery. |
 | A CZML (Cesium Language) dynamic scene: orbits, tracks, moving models | `add_czml_layer` | 3D globe only: `url` for a `.czml` document, or `data` for its packet array inline. The globe follows the document's `clock`. |
@@ -37,6 +38,7 @@ position); omitted, the layer goes on top.
 create_project(path, name="Untitled Project", center=None, zoom=None,
                basemap=None, overwrite=False)
 describe_project(path)
+get_point_cloud_annotations(path)
 list_catalog()
 ```
 
@@ -45,6 +47,9 @@ project even with `overwrite=True`, so a retry cannot destroy an unrelated
 `package.json` sitting in a root.
 
 `describe_project` reports inlined feature data as a count, never echoed back.
+
+`get_point_cloud_annotations` reports, per point cloud URL, how many points the
+app's annotator relabelled into each ASPRS class, plus every saved 3D box.
 
 `list_catalog` returns the basemaps, color ramp names, legend presets, and the
 active workspace roots. Call it before guessing any of those names.
@@ -63,6 +68,7 @@ add_ogc_layer(path, name, service, endpoint, layers=None, styles="",
               version="1.1.1", crs=None, bounds=None, index=None)
 add_tiles_layer(path, name, url, kind="pmtiles", tile_type="vector",
                 source_layers=None, style=None, index=None)
+add_lidar_layer(path, name, url, index=None)
 add_3d_tiles_layer(path, name, url=None, ion_asset_id=None, altitude_offset=0, index=None)
 add_cesium_ion_layer(path, name, asset_id, kind="3d-tiles", altitude_offset=0, index=None)
 add_czml_layer(path, name, url=None, data=None, index=None)
