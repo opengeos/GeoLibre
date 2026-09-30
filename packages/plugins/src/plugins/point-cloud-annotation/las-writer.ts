@@ -17,6 +17,8 @@ export interface LasExportCloud {
   colors?: Uint8Array;
   hasRGB?: boolean;
   extraAttributes?: Record<string, ArrayLike<number>>;
+  /** Per-point object (instance) ids, 0 for none; written as an extra dimension. */
+  instances?: Uint32Array;
   /** The source file's WKT, if it had one. */
   wkt?: string;
 }
@@ -114,6 +116,36 @@ export function resolveExportCrs(wkt: string | undefined): ExportCrs {
 const HEADER_SIZE = 375;
 const VLR_HEADER_SIZE = 54;
 
+/** Bytes the `instance` extra dimension adds to every point record. */
+export const INSTANCE_EXTRA_BYTES = 4;
+
+/**
+ * Whether the export carries object ids (so records get the extra dimension).
+ *
+ * @param cloud - The export.
+ * @param count - Points written.
+ * @returns True when `instances` covers every point.
+ */
+function hasInstances(cloud: LasExportCloud, count: number): boolean {
+  return Boolean(cloud.instances && cloud.instances.length >= count);
+}
+
+/**
+ * The LAS 1.4 Extra Bytes VLR payload describing a uint32 `instance`
+ * dimension (one 192-byte descriptor), which laspy, PDAL and LAStools read.
+ *
+ * @returns The VLR data.
+ */
+export function instanceExtraBytesDescriptor(): Uint8Array {
+  const data = new Uint8Array(192);
+  const view = new DataView(data.buffer);
+  data[2] = 6; // data_type: unsigned long (uint32)
+  data[3] = 0; // options: no no_data/min/max/scale/offset
+  writeAscii(view, 4, "instance", 32);
+  writeAscii(view, 160, "Object (instance) id, 0 = none", 32);
+  return data;
+}
+
 function writeAscii(view: DataView, offset: number, text: string, length: number): void {
   for (let i = 0; i < length; i++)
     view.setUint8(offset + i, i < text.length ? text.charCodeAt(i) & 0x7f : 0);
@@ -160,10 +192,22 @@ export function writeLas(cloud: LasExportCloud, options: WriteLasOptions = {}): 
   const crs = options.crs ?? resolveExportCrs(cloud.wkt);
   const hasRgb = Boolean(cloud.hasRGB && cloud.colors && cloud.colors.length >= count * 4);
   const format = hasRgb ? 7 : 6;
-  const recordLength = hasRgb ? 36 : 30;
+  const standardLength = hasRgb ? 36 : 30;
+  const withInstances = hasInstances(cloud, count);
+  const recordLength = standardLength + (withInstances ? INSTANCE_EXTRA_BYTES : 0);
   const wktBytes = new TextEncoder().encode(`${crs.wkt}\0`);
   const vlrs: LasVlr[] = [
     { userId: "LASF_Projection", recordId: 2112, description: "OGC WKT", data: wktBytes },
+    ...(withInstances
+      ? [
+          {
+            userId: "LASF_Spec",
+            recordId: 4,
+            description: "Extra Bytes",
+            data: instanceExtraBytesDescriptor(),
+          },
+        ]
+      : []),
     ...(options.extraVlrs ?? []),
   ];
   // A VLR's payload length is a uint16; a longer one (e.g. a huge WKT)
@@ -302,6 +346,7 @@ export function writeLas(cloud: LasExportCloud, options: WriteLasOptions = {}): 
       view.setUint16(offset + 32, cloud.colors[i * 4 + 1] * 257, true);
       view.setUint16(offset + 34, cloud.colors[i * 4 + 2] * 257, true);
     }
+    if (withInstances) view.setUint32(offset + standardLength, cloud.instances![i], true);
     offset += recordLength;
   }
   returnCounts.forEach((value, index) => view.setBigUint64(255 + index * 8, BigInt(value), true));
@@ -310,39 +355,46 @@ export function writeLas(cloud: LasExportCloud, options: WriteLasOptions = {}): 
 
 /**
  * Builds a Segments.ai `pointcloud-segmentation` label whose
- * `point_annotations` line up index-for-index with {@link writeLas}'s output:
- * one annotation per class present, with `category_id` set to the class code.
+ * `point_annotations` line up index-for-index with {@link writeLas}'s output.
+ * Each object (instance) becomes its own annotation; points in no object get
+ * one annotation per class. `category_id` is the class code.
  *
  * @param classifications - Per-point class codes, in export order.
  * @param count - Number of points exported.
  * @param names - Display name per class code, for the `categories` list.
+ * @param instances - Per-point object ids (0 for none), in export order.
  * @returns The label as a JSON-serialisable object.
  */
 export function buildSegmentsLabel(
   classifications: Uint8Array,
   count: number,
   names: (code: number) => string,
+  instances?: Uint32Array,
 ): {
   format_version: string;
   annotations: { id: number; category_id: number }[];
   point_annotations: number[];
   categories: { id: number; name: string }[];
 } {
-  const idForCode = new Map<number, number>();
+  // Keyed by class, and object id when there is one, so a point relabelled
+  // after joining an object still gets its own class.
+  const idForKey = new Map<number, { id: number; code: number }>();
   const pointAnnotations = new Array<number>(count);
   for (let i = 0; i < count; i++) {
     const code = classifications[i];
-    let id = idForCode.get(code);
-    if (id === undefined) {
-      id = idForCode.size + 1;
-      idForCode.set(code, id);
+    const instance = instances && i < instances.length ? instances[i] : 0;
+    const key = instance * 256 + code;
+    let entry = idForKey.get(key);
+    if (entry === undefined) {
+      entry = { id: idForKey.size + 1, code };
+      idForKey.set(key, entry);
     }
-    pointAnnotations[i] = id;
+    pointAnnotations[i] = entry.id;
   }
-  const codes = [...idForCode.keys()];
+  const codes = [...new Set([...idForKey.values()].map((entry) => entry.code))];
   return {
     format_version: "0.1",
-    annotations: codes.map((code) => ({ id: idForCode.get(code) as number, category_id: code })),
+    annotations: [...idForKey.values()].map(({ id, code }) => ({ id, category_id: code })),
     point_annotations: pointAnnotations,
     categories: codes.sort((a, b) => a - b).map((code) => ({ id: code, name: names(code) })),
   };
@@ -378,12 +430,13 @@ export function writeLaz(
   const count = Math.min(cloud.pointCount, Math.floor(cloud.positions.length / 3));
   const hasRgb = Boolean(cloud.hasRGB && cloud.colors && cloud.colors.length >= count * 4);
   const format = hasRgb ? 7 : 6;
-  const recordLength = hasRgb ? 36 : 30;
+  const extraBytes = hasInstances(cloud, count) ? INSTANCE_EXTRA_BYTES : 0;
+  const recordLength = (hasRgb ? 36 : 30) + extraBytes;
   const laszip: LasVlr = {
     userId: "laszip encoded",
     recordId: 22204,
     description: "laz-rs",
-    data: encoder.laszip_vlr_data(format, 0),
+    data: encoder.laszip_vlr_data(format, extraBytes),
   };
   const bytes = new Uint8Array(
     writeLas(cloud, {
@@ -400,7 +453,7 @@ export function writeLaz(
     bytes.subarray(0, pointOffset),
     bytes.subarray(pointOffset),
     format,
-    0,
+    extraBytes,
     recordLength,
   );
 }
@@ -409,8 +462,8 @@ export function writeLaz(
  * Serialises the cloud as a NumPy `.npy` structured array, ready for
  * `numpy.load` in a training pipeline: one record per point with `x`, `y`,
  * `z` (float64, in the same CRS and units as {@link writeLas}), `intensity`
- * (uint16), `classification` (uint8) and, when the cloud has colour, `red`,
- * `green`, `blue` (uint8).
+ * (uint16), `classification` (uint8), when the cloud has colour, `red`,
+ * `green`, `blue` (uint8), and with objects, `instance` (uint32, 0 for none).
  *
  * @param cloud - The loaded points, with edited classifications.
  * @param options - `crs` to override the output CRS.
@@ -420,6 +473,7 @@ export function writeNpy(cloud: LasExportCloud, options: { crs?: ExportCrs } = {
   const count = Math.min(cloud.pointCount, Math.floor(cloud.positions.length / 3));
   const crs = options.crs ?? resolveExportCrs(cloud.wkt);
   const hasRgb = Boolean(cloud.hasRGB && cloud.colors && cloud.colors.length >= count * 4);
+  const withInstances = hasInstances(cloud, count);
   const fields: [string, string, number][] = [
     ["x", "<f8", 8],
     ["y", "<f8", 8],
@@ -433,6 +487,7 @@ export function writeNpy(cloud: LasExportCloud, options: { crs?: ExportCrs } = {
           ["blue", "|u1", 1],
         ] as [string, string, number][])
       : []),
+    ...(withInstances ? ([["instance", "<u4", 4]] as [string, string, number][]) : []),
   ];
   const recordSize = fields.reduce((sum, [, , size]) => sum + size, 0);
   const descr = fields.map(([name, type]) => `('${name}', '${type}')`).join(", ");
@@ -465,6 +520,7 @@ export function writeNpy(cloud: LasExportCloud, options: { crs?: ExportCrs } = {
       view.setUint8(offset + 28, cloud.colors[i * 4 + 1]);
       view.setUint8(offset + 29, cloud.colors[i * 4 + 2]);
     }
+    if (withInstances) view.setUint32(offset + recordSize - 4, cloud.instances![i], true);
     offset += recordSize;
   }
   return bytes;
@@ -484,6 +540,7 @@ export function subsetCloud(cloud: LasExportCloud, indices: ArrayLike<number>): 
   const classifications = cloud.classifications ? new Uint8Array(n) : undefined;
   const intensities = cloud.intensities ? new Float32Array(n) : undefined;
   const colors = cloud.colors ? new Uint8Array(n * 4) : undefined;
+  const instances = cloud.instances ? new Uint32Array(n) : undefined;
   const extraAttributes: Record<string, number[]> = {};
   const extras = Object.entries(cloud.extraAttributes ?? {});
   for (const [name] of extras) extraAttributes[name] = new Array<number>(n);
@@ -494,6 +551,7 @@ export function subsetCloud(cloud: LasExportCloud, indices: ArrayLike<number>): 
     positions[k * 3 + 2] = cloud.positions[i * 3 + 2];
     if (classifications) classifications[k] = cloud.classifications![i];
     if (intensities) intensities[k] = cloud.intensities![i];
+    if (instances) instances[k] = cloud.instances![i] ?? 0;
     if (colors) {
       colors[k * 4] = cloud.colors![i * 4];
       colors[k * 4 + 1] = cloud.colors![i * 4 + 1];
@@ -511,6 +569,7 @@ export function subsetCloud(cloud: LasExportCloud, indices: ArrayLike<number>): 
     colors,
     hasRGB: cloud.hasRGB,
     extraAttributes,
+    instances,
     wkt: cloud.wkt,
   };
 }

@@ -23,7 +23,7 @@ import {
 } from "./classes";
 import { CuboidSection, encodeCuboids, loadCuboids } from "./cuboid-panel";
 import { LabelHistory } from "./history";
-import { PointLabelStore, type LabelledCloud } from "./label-store";
+import { PointLabelStore, type LabelledCloud, type RangedCloud } from "./label-store";
 import {
   buildSegmentsLabel,
   safeFileStem,
@@ -132,6 +132,8 @@ interface Session {
   previousColorScheme: ColorScheme | null;
   selection: Uint32Array;
   history: LabelHistory;
+  /** Per-point object (instance) ids, 0 for none; grown as nodes arrive. */
+  instances: Uint32Array;
 }
 
 function tr(
@@ -335,6 +337,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const applyButton = button("", true);
   applyButton.dataset.testid = "pc-annotation-apply";
   const clearButton = button("");
+  clearButton.dataset.testid = "pc-annotation-clear";
+  const newObjectButton = button("");
+  newObjectButton.dataset.testid = "pc-annotation-new-object";
   const undoButton = button("");
   const redoButton = button("");
   undoButton.dataset.testid = "pc-annotation-undo";
@@ -371,10 +376,17 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   assign.root.append(
     selectedCount,
     targetSelect,
-    row(applyButton, clearButton),
+    row(applyButton, newObjectButton, clearButton),
     row(undoButton, redoButton),
     customDetails,
   );
+
+  // Objects (instances): points grouped under one id, like one car or tree.
+  const objects = section("");
+  const objectsList = el("div", undefined, "display:flex;flex-direction:column;gap:2px;");
+  objectsList.dataset.testid = "pc-annotation-objects";
+  const objectsEmpty = el("div", "", "line-height:1.4;color:hsl(var(--muted-foreground));");
+  objects.root.append(objectsList, objectsEmpty);
 
   // Pre-label with a Whitebox classifier.
   const prelabel = section("");
@@ -457,6 +469,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     tools.root,
     filters.root,
     assign.root,
+    objects.root,
     prelabel.root,
     summary.root,
     cuboids.root,
@@ -489,6 +502,30 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       data.classifications = grown;
     }
     return data.classifications;
+  };
+
+  // The session's per-point object ids, grown (and filled from the saved
+  // labels) when late streamed nodes raise pointCount.
+  const sessionInstances = (cloudId: string): Uint32Array | undefined => {
+    const data = session?.cloudId === cloudId ? activeData() : null;
+    if (!session || !data) return undefined;
+    if (session.instances.length < data.pointCount) {
+      const grown = new Uint32Array(data.pointCount);
+      grown.set(session.instances);
+      if (session.source) {
+        labelStore.applyInstances(session.source, data as RangedCloud, grown);
+        // Keep this session's unsaved edits over the stored ids.
+        grown.set(session.instances);
+      }
+      session.instances = grown;
+    }
+    return session.instances;
+  };
+
+  const nextObjectId = (): number => {
+    let max = labelStore.maxInstanceId();
+    for (const id of session?.instances ?? []) if (id > max) max = id;
+    return max + 1;
   };
 
   // --- Selection highlight, drawn into the LiDAR overlay's own canvas so it
@@ -682,12 +719,76 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     fillClassOptions(onlyClassSelect, presentCodes, onlyClass, tr(app, "anyClass", "Any class"));
   };
 
+  const renderObjects = () => {
+    objectsList.replaceChildren();
+    const data = activeData();
+    const ids = session ? sessionInstances(session.cloudId) : undefined;
+    const classifications = session ? liveClassifications(session.cloudId) : undefined;
+    const count = data?.pointCount ?? 0;
+    // Point count and the most common class of each object.
+    const stats = new Map<number, { points: number; classes: Map<number, number> }>();
+    if (ids && classifications) {
+      for (let i = 0; i < Math.min(count, ids.length); i++) {
+        const id = ids[i];
+        if (id === 0) continue;
+        let entry = stats.get(id);
+        if (!entry) {
+          entry = { points: 0, classes: new Map() };
+          stats.set(id, entry);
+        }
+        entry.points++;
+        entry.classes.set(classifications[i], (entry.classes.get(classifications[i]) ?? 0) + 1);
+      }
+    }
+    objects.heading.textContent = tr(app, "objects", "Instances ({{count}})", {
+      count: stats.size,
+    });
+    objectsEmpty.textContent =
+      stats.size === 0
+        ? tr(
+            app,
+            "objectsEmpty",
+            "Select points and press New instance (N) to group them as one instance of an object, such as a car or a tree.",
+          )
+        : "";
+    for (const [id, entry] of [...stats].sort((a, b) => a[0] - b[0])) {
+      const code = [...entry.classes].sort((a, b) => b[1] - a[1])[0][0];
+      const item = el("div", undefined, "display:flex;gap:4px;align-items:center;");
+      item.dataset.instance = String(id);
+      const label = el(
+        "span",
+        tr(app, "objectRow", "#{{id}} · {{name}} · {{count}} pts", {
+          id,
+          name: className(app, code),
+          count: numberFormat.format(entry.points),
+        }),
+        "flex:1;min-width:0;",
+      );
+      const pick = button(tr(app, "objectSelect", "Select"));
+      pick.style.padding = "1px 6px";
+      pick.dataset.objectSelect = String(id);
+      pick.addEventListener("click", () => selectObject(id));
+      const remove = button(tr(app, "objectDissolve", "Dissolve"));
+      remove.style.padding = "1px 6px";
+      remove.dataset.objectDissolve = String(id);
+      remove.title = tr(
+        app,
+        "objectDissolveHint",
+        "Remove the instance; its points keep their class.",
+      );
+      remove.addEventListener("click", () => dissolveObject(id));
+      item.append(swatch(classDefinition(code).color), label, pick, remove);
+      objectsList.append(item);
+    }
+  };
+
   const renderSelection = () => {
     const count = session?.selection.length ?? 0;
     selectedCount.textContent = tr(app, "selectedCount", "{{count}} points selected", {
       count: numberFormat.format(count),
     });
     applyButton.disabled = count === 0;
+    newObjectButton.disabled = count === 0;
     clearButton.disabled = count === 0;
     undoButton.disabled = !session?.history.canUndo;
     redoButton.disabled = !session?.history.canRedo;
@@ -783,6 +884,12 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     onlyClassSelect.setAttribute("aria-label", tr(app, "onlyClass", "Only points in class"));
     assign.heading.textContent = tr(app, "assign", "Assign class");
     applyButton.textContent = tr(app, "apply", "Apply (Enter)");
+    newObjectButton.textContent = tr(app, "newObject", "New instance (N)");
+    newObjectButton.title = tr(
+      app,
+      "newObjectHint",
+      "Assign the class and group the selected points as a new instance.",
+    );
     clearButton.textContent = tr(app, "clearSelection", "Clear (Esc)");
     undoButton.textContent = tr(app, "undo", "Undo");
     redoButton.textContent = tr(app, "redo", "Redo");
@@ -821,6 +928,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     renderTools();
     renderSelection();
     renderSummary();
+    renderObjects();
   };
 
   const renderSessionVisibility = () => {
@@ -1151,6 +1259,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const ctl = control();
     if (ctl && session?.cloudId === cloudId) refreshCloudColors(ctl);
     renderSummary();
+    renderObjects();
     renderSelection();
   };
 
@@ -1161,7 +1270,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     const ctl = control();
     const tool = PRELABEL_TOOLS.find((entry) => entry.id === prelabelSelect.value);
     if (!session || !ctl || !tool || !prelabelRunner) return;
-    const cloud = exportCloudData();
+    // The tool gets plain LAS; object ids are the annotator's own.
+    const exported = exportCloudData();
+    const cloud = exported ? { ...exported, instances: undefined } : null;
     const classes = liveClassifications(session.cloudId);
     if (!cloud || !classes) return;
     const cloudId = session.cloudId;
@@ -1239,26 +1350,75 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     }
   };
 
-  const recordLabels = (indices: ArrayLike<number>) => {
+  const recordLabels = (indices: ArrayLike<number>, instances = false) => {
     const data = activeData();
     if (!session?.source || !data) return;
-    if (labelStore.record(session.source, data as LabelledCloud, indices) > 0) startLabelSync();
+    let recorded = labelStore.record(session.source, data as LabelledCloud, indices);
+    const ids = instances ? sessionInstances(session.cloudId) : undefined;
+    if (ids) recorded += labelStore.recordInstances(session.source, data, ids, indices);
+    if (recorded > 0) startLabelSync();
   };
 
-  // Assigns a class to given points (box contents), undoable like Apply.
-  const assignPoints = (indices: Uint32Array, code: number) => {
+  // Assigns a class to points and groups them as a new object, undoable.
+  const createObject = (indices: Uint32Array, code: number): number | null => {
     const classes = session ? liveClassifications(session.cloudId) : undefined;
-    if (!session || !classes || indices.length === 0) return;
-    const changed = session.history.assign(session.cloudId, classes, indices, code);
-    recordLabels(indices);
+    const ids = session ? sessionInstances(session.cloudId) : undefined;
+    if (!session || !classes || !ids || indices.length === 0) return null;
+    const id = nextObjectId();
+    const changed = session.history.assign(session.cloudId, classes, indices, code, { ids, id });
+    recordLabels(indices, true);
     refreshAfterEdit(session.cloudId);
     setStatus(
-      tr(app, "applied", "Assigned {{count}} points to {{name}}.", {
+      tr(app, "objectCreated", "Created instance #{{id}}: {{count}} points of {{name}}.", {
+        id,
         count: numberFormat.format(changed),
         name: className(app, code),
       }),
     );
+    return id;
   };
+
+  // A box's points form one object, like Segments.ai's "assign points in box".
+  const assignPoints = (indices: Uint32Array, code: number) => {
+    createObject(indices, code);
+  };
+
+  const newObject = () => {
+    if (!session || session.selection.length === 0) return;
+    if (createObject(session.selection, targetClass) === null) return;
+    session.selection = new Uint32Array(0);
+    renderHighlight();
+    renderSelection();
+  };
+
+  const objectPoints = (id: number): Uint32Array => {
+    const ids = session ? sessionInstances(session.cloudId) : undefined;
+    const count = Math.min(activeData()?.pointCount ?? 0, ids?.length ?? 0);
+    const out: number[] = [];
+    for (let i = 0; i < count; i++) if (ids![i] === id) out.push(i);
+    return Uint32Array.from(out);
+  };
+
+  function selectObject(id: number): void {
+    if (!session) return;
+    session.selection = objectPoints(id);
+    renderHighlight();
+    renderSelection();
+  }
+
+  function dissolveObject(id: number): void {
+    const ids = session ? sessionInstances(session.cloudId) : undefined;
+    if (!session || !ids) return;
+    const indices = objectPoints(id);
+    session.history.setInstances(session.cloudId, ids, indices, 0);
+    recordLabels(indices, true);
+    refreshAfterEdit(session.cloudId);
+    setStatus(
+      tr(app, "objectDissolved", "Dissolved instance #{{id}}; its points keep their class.", {
+        id,
+      }),
+    );
+  }
 
   const applyClass = () => {
     const ctl = control();
@@ -1332,6 +1492,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       previousColorScheme,
       selection: new Uint32Array(0),
       history: new LabelHistory(),
+      instances: new Uint32Array(0),
     };
     if (previousColorScheme !== "classification") ctl.setColorScheme("classification");
     bindMapInteraction();
@@ -1370,6 +1531,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       colors: data.colors,
       hasRGB: data.hasRGB,
       extraAttributes: data.extraAttributes as Record<string, ArrayLike<number>> | undefined,
+      // The extra dimension is written only when the session has objects.
+      instances: (() => {
+        const ids = sessionInstances(session.cloudId);
+        return ids?.subarray(0, count).some((id) => id !== 0) ? ids.subarray(0, count) : undefined;
+      })(),
       wkt: session.wkt,
     };
   };
@@ -1434,6 +1600,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
       cloud.classifications,
       cloud.pointCount,
       (code) => classDefinition(code).name,
+      cloud.instances,
     );
     const name = `${safeFileStem(session.cloudName)}-segments-label.json`;
     const text = JSON.stringify(label);
@@ -1478,6 +1645,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     else if (key === "p") setTool("brush");
     else if (key === "a") setTool("autobox");
     else if (key === "[" || key === "]") setBrushRadius(brushRadius + (key === "]" ? 4 : -4));
+    else if (key === "n") newObject();
     else if (key === "enter") applyClass();
     else if (key === "escape") clearSelection();
     else return;
@@ -1534,19 +1702,20 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
     targetClass = Number(targetSelect.value);
   });
   applyButton.addEventListener("click", applyClass);
+  newObjectButton.addEventListener("click", newObject);
   customAdd.addEventListener("click", addCustomClass);
   clearButton.addEventListener("click", clearSelection);
   undoButton.addEventListener("click", () => {
-    const changed = session?.history.undo(liveClassifications);
+    const changed = session?.history.undo(liveClassifications, sessionInstances);
     if (changed) {
-      recordLabels(changed.indices);
+      recordLabels(changed.indices, changed.instances);
       refreshAfterEdit(changed.cloudId);
     }
   });
   redoButton.addEventListener("click", () => {
-    const changed = session?.history.redo(liveClassifications);
+    const changed = session?.history.redo(liveClassifications, sessionInstances);
     if (changed) {
-      recordLabels(changed.indices);
+      recordLabels(changed.indices, changed.instances);
       refreshAfterEdit(changed.cloudId);
     }
   });
@@ -1573,6 +1742,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const onLabelsApplied = () => {
     if (disposed) return;
     renderSummary();
+    renderObjects();
   };
   labelAppliedListeners.add(onLabelsApplied);
   // The LiDAR control may mount after this panel; poll cheaply until it does.
@@ -1727,7 +1897,13 @@ export const pointCloudAnnotationPlugin: GeoLibrePlugin = {
       color: toHexColor(entry.color),
     }));
     if (!labels && cuboids.length === 0 && customClasses.length === 0) return undefined;
-    return { version: 1, sources: labels?.sources ?? [], cuboids, customClasses };
+    return {
+      version: 1,
+      sources: labels?.sources ?? [],
+      ...(labels?.instances ? { instances: labels.instances } : {}),
+      cuboids,
+      customClasses,
+    };
   },
   applyProjectState: (_app, state) => {
     labelStore.load(state);

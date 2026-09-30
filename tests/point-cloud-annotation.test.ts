@@ -162,6 +162,7 @@ describe("LabelHistory", () => {
       {
         cloudId: "a",
         indices: Uint32Array.from([0, 3]),
+        instances: false,
       },
     );
     assert.deepEqual([...classes], [1, 2, 1, 1]);
@@ -170,6 +171,7 @@ describe("LabelHistory", () => {
       {
         cloudId: "a",
         indices: Uint32Array.from([0, 3]),
+        instances: false,
       },
     );
     assert.deepEqual([...classes], [2, 2, 1, 2]);

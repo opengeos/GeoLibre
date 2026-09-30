@@ -54,6 +54,17 @@ one; the LiDAR panel's legend and tooltips show its name and colour. Custom
 classes are saved with the project, and the exports write their codes (the
 LAS classification byte holds 0-255).
 
+## Instances
+
+Instances group points that belong to one object, such as one car or one
+tree, for instance segmentation. Select its points and press **New instance
+(N)**: they get the class chosen under **Assign class** and a new instance id,
+as one undoable edit. **Assign class to points** on a 3D box does the same for
+the points inside the box. **Instances** lists each one with its most common
+class and point count; **Select** selects its points again and **Dissolve**
+removes the instance while its points keep their class. Instance ids are saved
+with the project like classes, and exported with the points (see below).
+
 ## Pre-labelling with Whitebox
 
 **Pre-label (Whitebox)** runs a Whitebox LiDAR classifier on the session's
@@ -86,7 +97,8 @@ Label objects such as buildings, trees or vehicles with oriented 3D boxes:
 
 New boxes take the class chosen under **Assign class**. Each box in **Objects
 (3D boxes)** has its own class and three actions: **Select points** (the points
-inside it), **Assign class to points** (undoable like **Apply**) and **Delete**.
+inside it), **Assign class to points** (undoable like **Apply**; the points
+also become a new [instance](#instances)) and **Delete**.
 Click a box to open **Box views**, three orthographic views of the points
 around it: top, side (along its length) and front (across it). Drag inside the
 box to move it, drag an edge to resize it (the opposite face stays put), drag
@@ -117,17 +129,21 @@ them.
 - **LAS 1.4** writes every point loaded in the session (point format 7 with
   RGB, or 6 without) with its edited class, intensity, returns, GPS time and
   scan angle. Coordinates are written back in the source file's CRS, feet
-  included, when its WKT is known, and in WGS 84 otherwise.
+  included, when its WKT is known, and in WGS 84 otherwise. When the session
+  has instances, each point also carries an `instance` extra-bytes dimension
+  (uint32, 0 for none), which laspy, PDAL and LAStools read by name.
 - **LAZ (compressed)** writes the same records as the LAS export, compressed
   with LASzip in the browser (a laz-rs WebAssembly build). It is typically
   about a quarter of the LAS size.
 - **NumPy (.npy)** writes a structured array with `x`, `y`, `z` (float64, in
-  the same CRS as the LAS export), `intensity`, `classification`, and `red`,
-  `green`, `blue` when the cloud has colour, ready for `numpy.load`.
+  the same CRS as the LAS export), `intensity`, `classification`, `red`,
+  `green`, `blue` when the cloud has colour, and `instance` when the session
+  has instances, ready for `numpy.load`.
 - **Segments.ai JSON** writes a
   [`pointcloud-segmentation`](https://docs.segments.ai/reference/label-types)
   label. Its `point_annotations` line up point for point with the LAS file,
-  one annotation per class with `category_id` set to the ASPRS code.
+  with one annotation per instance and one per class for points in no
+  instance, each with `category_id` set to the class code.
 
 **Finish session** resumes streaming.
 
@@ -136,5 +152,6 @@ them.
 - MapLibre renderer only.
 - COPC output is not available; export LAZ and convert it with PDAL
   (`writers.copc`) if you need a COPC file.
-- Boxes rotate about the vertical only (no pitch or roll). Instance labels
-  and assisted pre-labeling are later phases of #2749.
+- Boxes rotate about the vertical only (no pitch or roll).
+- Instances are not colored by id on the map; select one from **Instances**
+  to see its points highlighted.

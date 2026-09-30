@@ -18,6 +18,11 @@ export interface LabelledCloud {
   nodeRanges?: readonly NodeRange[];
 }
 
+/** Node ranges alone, enough to key per-point values other than the class. */
+export interface RangedCloud {
+  nodeRanges?: readonly NodeRange[];
+}
+
 /** Serialised labels for one source: node key -> base64(deflate(edits)). */
 export type EncodedSourceLabels = Record<string, string>;
 
@@ -28,6 +33,8 @@ export type EncodedSourceLabels = Record<string, string>;
 export interface EncodedLabelStore {
   version: 1;
   sources: { url: string; nodes: EncodedSourceLabels }[];
+  /** Per-point object (instance) ids, same layout with varint values. */
+  instances?: { url: string; nodes: EncodedSourceLabels }[];
 }
 
 /**
@@ -65,14 +72,25 @@ function fromBase64(text: string): Uint8Array {
   return bytes;
 }
 
+function pushVarint(out: number[], value: number): void {
+  let rest = value;
+  while (rest >= 0x80) {
+    out.push((rest & 0x7f) | 0x80);
+    rest = Math.floor(rest / 0x80);
+  }
+  out.push(rest);
+}
+
 /**
- * Encodes a node's edits as (delta-varint index, class byte) pairs, ascending
- * by index, then deflates them.
+ * Encodes a node's edits as (delta-varint index, value) pairs, ascending by
+ * index, then deflates them. The value is a class byte, or a varint for
+ * `wide` values such as object ids.
  *
- * @param edits - Index within the node -> class code.
+ * @param edits - Index within the node -> class code (or object id).
+ * @param wide - Encode values as varints (up to 32 bits) instead of bytes.
  * @returns base64 text.
  */
-export function encodeNodeEdits(edits: ReadonlyMap<number, number>): string {
+export function encodeNodeEdits(edits: ReadonlyMap<number, number>, wide = false): string {
   const indices = [...edits.keys()].sort((a, b) => a - b);
   const out: number[] = [];
   let previous = -1;
@@ -84,7 +102,8 @@ export function encodeNodeEdits(edits: ReadonlyMap<number, number>): string {
       delta >>>= 7;
     }
     out.push(delta);
-    out.push(edits.get(index)! & 0xff);
+    if (wide) pushVarint(out, edits.get(index)! >>> 0);
+    else out.push(edits.get(index)! & 0xff);
   }
   return toBase64(deflateSync(Uint8Array.from(out), { level: 9 }));
 }
@@ -151,12 +170,16 @@ function inflateCapped(data: Uint8Array, limit: number, budget?: InflateBudget):
  * Decodes {@link encodeNodeEdits} output.
  *
  * @param text - base64 text.
- * @returns Index within the node -> class code.
+ * @param limit - Maximum inflated size of this record.
+ * @param budget - Shared inflate allowance across records.
+ * @param wide - Values are varints (object ids) rather than class bytes.
+ * @returns Index within the node -> class code (or object id).
  */
 export function decodeNodeEdits(
   text: string,
   limit = MAX_NODE_EDIT_BYTES,
   budget?: InflateBudget,
+  wide = false,
 ): Map<number, number> {
   const bytes = inflateCapped(fromBase64(text), limit, budget);
   const edits = new Map<number, number>();
@@ -177,18 +200,80 @@ export function decodeNodeEdits(
     const index = previous + 1 + delta;
     previous = index;
     if (at >= bytes.length) throw new RangeError("truncated point label record");
-    edits.set(index, bytes[at++]);
+    if (!wide) {
+      edits.set(index, bytes[at++]);
+      continue;
+    }
+    let value = 0;
+    shift = 0;
+    do {
+      if (at >= bytes.length) throw new RangeError("truncated point label record");
+      // An object id is a uint32: at most five varint bytes.
+      if (shift > 28) throw new RangeError("invalid point label record");
+      byte = bytes[at++];
+      value += (byte & 0x7f) * 2 ** shift;
+      shift += 7;
+    } while (byte & 0x80);
+    if (value > 0xffffffff) throw new RangeError("invalid point label record");
+    edits.set(index, value);
   }
   return edits;
 }
 
+type NodeEdits = Map<string, Map<number, number>>;
+
+/** Encodes one kind of per-source edits for the project file. */
+function encodeSources(
+  sources: Map<string, NodeEdits>,
+  wide: boolean,
+): { url: string; nodes: EncodedSourceLabels }[] {
+  const out: { url: string; nodes: EncodedSourceLabels }[] = [];
+  for (const [url, nodes] of sources) {
+    const encoded: EncodedSourceLabels = {};
+    for (const [key, edits] of nodes) {
+      if (edits.size > 0) encoded[key] = encodeNodeEdits(edits, wide);
+    }
+    out.push({ url, nodes: encoded });
+  }
+  return out;
+}
+
+/** Decodes {@link encodeSources} output, skipping malformed entries. */
+function decodeSources(
+  entries: unknown,
+  budget: InflateBudget,
+  wide: boolean,
+): Map<string, NodeEdits> {
+  const out = new Map<string, NodeEdits>();
+  if (!Array.isArray(entries)) return out;
+  for (const entry of entries) {
+    const source = (entry as { url?: unknown } | null)?.url;
+    const encoded = (entry as { nodes?: unknown } | null)?.nodes;
+    if (typeof source !== "string" || !encoded || typeof encoded !== "object") continue;
+    const nodes: NodeEdits = out.get(source) ?? new Map();
+    for (const [key, text] of Object.entries(encoded)) {
+      if (typeof text !== "string") continue;
+      if (budget.remaining <= 0) break;
+      try {
+        nodes.set(key, decodeNodeEdits(text, MAX_NODE_EDIT_BYTES, budget, wide));
+      } catch {
+        // Skip a corrupt node rather than the whole project.
+      }
+    }
+    if (nodes.size > 0) out.set(source, nodes);
+  }
+  return out;
+}
+
 /** Point class edits for every labelled source, keyed by stable point identity. */
 export class PointLabelStore {
-  private readonly sources = new Map<string, Map<string, Map<number, number>>>();
+  private sources = new Map<string, NodeEdits>();
+  /** Object ids by source; 0 (no object) is not stored. */
+  private instanceSources = new Map<string, NodeEdits>();
 
   /** Whether any source has edits. */
   get isEmpty(): boolean {
-    return this.sources.size === 0;
+    return this.sources.size === 0 && this.instanceSources.size === 0;
   }
 
   /** Source URLs with edits. */
@@ -258,9 +343,91 @@ export class PointLabelStore {
     return changed;
   }
 
+  /**
+   * Records the object ids of edited points (0 removes a point from its object).
+   *
+   * @param source - The cloud's source URL.
+   * @param cloud - Its node ranges.
+   * @param instances - Per-point object ids, parallel to the cloud's buffers.
+   * @param indices - Buffer indices whose object changed.
+   * @returns How many points were recorded (those inside a loaded node).
+   */
+  recordInstances(
+    source: string,
+    cloud: RangedCloud,
+    instances: Uint32Array,
+    indices: ArrayLike<number>,
+  ): number {
+    const ranges = cloud.nodeRanges;
+    if (!ranges) return 0;
+    const nodes: NodeEdits = this.instanceSources.get(source) ?? new Map();
+    let recorded = 0;
+    for (let i = 0; i < indices.length; i++) {
+      const index = indices[i];
+      const range = rangeForIndex(ranges, index);
+      if (!range || index >= instances.length) continue;
+      let edits = nodes.get(range.key);
+      if (!edits) {
+        edits = new Map();
+        nodes.set(range.key, edits);
+      }
+      const id = instances[index];
+      if (id === 0) edits.delete(index - range.start);
+      else edits.set(index - range.start, id);
+      if (edits.size === 0) nodes.delete(range.key);
+      recorded++;
+    }
+    if (nodes.size > 0) this.instanceSources.set(source, nodes);
+    else this.instanceSources.delete(source);
+    return recorded;
+  }
+
+  /**
+   * Writes a source's stored object ids into a per-point array.
+   *
+   * @param source - The cloud's source URL.
+   * @param cloud - Its node ranges.
+   * @param instances - Per-point object ids to fill (points without a stored
+   *   id are left as they are).
+   * @returns How many points were given a stored id.
+   */
+  applyInstances(source: string, cloud: RangedCloud, instances: Uint32Array): number {
+    const nodes = this.instanceSources.get(source);
+    const ranges = cloud.nodeRanges;
+    if (!nodes || !ranges) return 0;
+    let applied = 0;
+    for (const range of ranges) {
+      const edits = nodes.get(range.key);
+      if (!edits) continue;
+      for (const [offset, id] of edits) {
+        const index = range.start + offset;
+        if (offset >= range.count || index >= instances.length) continue;
+        instances[index] = id;
+        applied++;
+      }
+    }
+    return applied;
+  }
+
+  /**
+   * The largest object id stored for any source, so new objects get unique ids.
+   *
+   * @returns The id, or 0 when there are none.
+   */
+  maxInstanceId(): number {
+    let max = 0;
+    for (const nodes of this.instanceSources.values()) {
+      for (const edits of nodes.values()) {
+        for (const id of edits.values()) if (id > max) max = id;
+      }
+    }
+    return max;
+  }
+
   /** Drops every stored edit. */
   clear(): void {
     this.sources.clear();
+    this.instanceSources.clear();
   }
 
   /**
@@ -270,15 +437,11 @@ export class PointLabelStore {
    */
   encode(): EncodedLabelStore | undefined {
     if (this.isEmpty) return undefined;
-    const sources: EncodedLabelStore["sources"] = [];
-    for (const [url, nodes] of this.sources) {
-      const encoded: EncodedSourceLabels = {};
-      for (const [key, edits] of nodes) {
-        if (edits.size > 0) encoded[key] = encodeNodeEdits(edits);
-      }
-      sources.push({ url, nodes: encoded });
+    const encoded: EncodedLabelStore = { version: 1, sources: encodeSources(this.sources, false) };
+    if (this.instanceSources.size > 0) {
+      encoded.instances = encodeSources(this.instanceSources, true);
     }
-    return { version: 1, sources };
+    return encoded;
   }
 
   /**
@@ -288,26 +451,13 @@ export class PointLabelStore {
    */
   load(state: unknown): void {
     this.sources.clear();
+    this.instanceSources.clear();
     if (!state || typeof state !== "object") return;
-    const { version, sources } = state as Partial<EncodedLabelStore>;
+    const { version, sources, instances } = state as Partial<EncodedLabelStore>;
     if (version !== 1 || !Array.isArray(sources)) return;
     // Charged with the real inflated size of every record, failed ones too.
     const budget: InflateBudget = { remaining: MAX_LABEL_BYTES };
-    for (const entry of sources) {
-      const source = entry?.url;
-      const encoded = entry?.nodes;
-      if (typeof source !== "string" || !encoded || typeof encoded !== "object") continue;
-      const nodes = new Map<string, Map<number, number>>();
-      for (const [key, text] of Object.entries(encoded)) {
-        if (typeof text !== "string") continue;
-        if (budget.remaining <= 0) break;
-        try {
-          nodes.set(key, decodeNodeEdits(text, MAX_NODE_EDIT_BYTES, budget));
-        } catch {
-          // Skip a corrupt node rather than the whole project.
-        }
-      }
-      if (nodes.size > 0) this.sources.set(source, nodes);
-    }
+    this.sources = decodeSources(sources, budget, false);
+    this.instanceSources = decodeSources(instances, budget, true);
   }
 }

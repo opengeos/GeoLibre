@@ -553,4 +553,71 @@ test.describe("point cloud annotation", () => {
       { code: 64, name: "Car", color: "#e11d48" },
     ]);
   });
+  test("groups a selection as an object, exports its ids and saves them", async ({ page }) => {
+    test.setTimeout(120_000);
+    await captureSavedFiles(page);
+    await waitForMap(page);
+    await loadCopc(page);
+    const start = await startSession(page);
+    const canvas = (await page.locator(".maplibregl-canvas").boundingBox())!;
+    const selected = async () =>
+      Number(
+        ((await page.getByTestId("pc-annotation-selected").textContent()) ?? "").replace(/\D/g, ""),
+      );
+
+    // Box the left half and make it an object with the N key.
+    await page.getByRole("button", { name: "Box (B)" }).click();
+    await page.mouse.move(canvas.x + 5, canvas.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height - 5, { steps: 8 });
+    await page.mouse.up();
+    const count = await selected();
+    expect(count).toBeGreaterThan(0);
+    await page.getByTestId("pc-annotation-target").selectOption("6");
+    await page.keyboard.press("n");
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("Created instance #1");
+    const objects = page.getByTestId("pc-annotation-objects");
+    await expect(objects.locator('[data-instance="1"]')).toContainText(
+      `${count.toLocaleString("en-US")} pts`,
+    );
+
+    // Select brings its points back; dissolve and undo round-trip.
+    await objects.locator('[data-object-select="1"]').click();
+    expect(await selected()).toBe(count);
+    await page.getByTestId("pc-annotation-clear").click();
+    await objects.locator('[data-object-dissolve="1"]').click();
+    await expect(objects.locator("[data-instance]")).toHaveCount(0);
+    await page.getByTestId("pc-annotation-undo").click();
+    await expect(objects.locator('[data-instance="1"]')).toBeVisible();
+
+    // LAS export: a 4-byte instance extra dimension after each format 7 record.
+    await page.getByTestId("pc-annotation-export-las").click();
+    await expect(page.getByTestId("pc-annotation-status")).toContainText("Exported");
+    const las = (await savedFile(page, "1.2-with-color-annotated.las"))!;
+    const recordLength = las.readUInt16LE(105);
+    expect(recordLength).toBe(40);
+    const pointOffset = las.readUInt32LE(96);
+    const points = Number(las.readBigUInt64LE(247));
+    let inObject = 0;
+    for (let i = 0; i < points; i++) {
+      if (las.readUInt32LE(pointOffset + i * recordLength + 36) === 1) inObject++;
+    }
+    expect(inObject).toBe(count);
+    await start.click();
+
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Save", exact: true }).click();
+    const strip = page.getByRole("button", { name: "Strip credentials", exact: true });
+    if (await strip.isVisible({ timeout: 3_000 }).catch(() => false)) await strip.click();
+    const findProject = () =>
+      page.evaluate(() =>
+        Object.keys(
+          (window as unknown as { __savedFiles: Record<string, number[]> }).__savedFiles,
+        ).find((name) => /\.geolibre(\.json)?$/.test(name)),
+      );
+    await expect.poll(findProject).toBeTruthy();
+    const project = JSON.parse((await savedFile(page, (await findProject())!))!.toString("utf8"));
+    const state = project.plugins.settings["geolibre-point-cloud-annotation"];
+    expect(state.instances.map((entry: { url: string }) => entry.url)).toEqual([COPC_URL]);
+  });
 });
