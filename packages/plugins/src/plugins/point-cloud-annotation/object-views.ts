@@ -219,7 +219,7 @@ export class ObjectViews {
       const caption = document.createElement("div");
       caption.textContent = labels[plane];
       caption.style.cssText =
-        "position:absolute;top:2px;left:4px;z-index:1;font-size:11px;color:#ddd;pointer-events:none;";
+        "position:absolute;top:2px;inset-inline-start:4px;z-index:1;font-size:11px;color:#ddd;pointer-events:none;";
       const canvasHost = document.createElement("div");
       canvasHost.style.cssText = "position:absolute;inset:0;";
       cell.append(canvasHost, caption);
@@ -264,7 +264,7 @@ export class ObjectViews {
     this.points = points;
     for (const view of this.views) {
       if (refit && box) this.fit(view);
-      view.deck.setProps({ layers: this.layers(view.plane) });
+      view.deck.setProps({ layers: this.layers(view) });
     }
   }
 
@@ -287,7 +287,8 @@ export class ObjectViews {
     this.setView(view, [0, 0], Math.log2(width / span));
   }
 
-  private layers(plane: ViewPlane) {
+  private layers(view: PlaneView) {
+    const { plane } = view;
     const box = this.box;
     const points = this.points;
     if (!box) return [];
@@ -309,15 +310,13 @@ export class ObjectViews {
     const paths: { path: number[][]; color: [number, number, number] }[] = [
       { path: outline, color: [250, 204, 21] },
     ];
-    // A heading tick on the front face, and the rotation knob in the top view.
+    // In the top view, a heading tick from the front face to the rotation
+    // knob, drawn exactly where hitHandle accepts a rotate grab.
+    const knob: [number, number][] = [];
     if (plane === "top") {
-      paths.push({
-        path: [
-          [ha, 0],
-          [ha + Math.max(ha, hb) * 0.3, 0],
-        ],
-        color: [250, 204, 21],
-      });
+      const reach = this.tolerance(view);
+      knob.push([ha + 3 * reach, 0]);
+      paths.push({ path: [[ha, 0], knob[0]], color: [250, 204, 21] });
     }
     return [
       new ScatterplotLayer({
@@ -343,6 +342,20 @@ export class ObjectViews {
         widthUnits: "pixels",
         getWidth: 2,
       }),
+      new ScatterplotLayer({
+        id: `knob-${plane}`,
+        coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+        data: knob,
+        getPosition: (d: [number, number]) => d,
+        // 1.5 x the 8 px grab reach, the knob's hit radius.
+        radiusUnits: "pixels",
+        getRadius: 12,
+        getFillColor: [17, 17, 17, 255],
+        getLineColor: [250, 204, 21, 255],
+        stroked: true,
+        lineWidthUnits: "pixels",
+        getLineWidth: 2,
+      }),
     ];
   }
 
@@ -350,6 +363,8 @@ export class ObjectViews {
     view.target = target;
     view.zoom = zoom;
     view.deck.setProps({ initialViewState: { target: [target[0], target[1], 0], zoom } });
+    // The knob sits a fixed pixel distance out, so it moves with the zoom.
+    if (view.plane === "top") view.deck.setProps({ layers: this.layers(view) });
   }
 
   private toPlane(view: PlaneView, event: PointerEvent | WheelEvent): [number, number] | null {

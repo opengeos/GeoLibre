@@ -10,7 +10,6 @@ import type { GeoLibreAppAPI } from "../../types";
 import { ASPRS_CLASSES, classDefinition } from "./classes";
 import {
   CUBOID_EDGES,
-  fromBoxFrame,
   cuboidCorners,
   fitCuboid,
   growCluster,
@@ -73,11 +72,21 @@ export function loadCuboids(state: unknown): void {
   for (const entry of state as Partial<EncodedCuboids>[]) {
     if (typeof entry?.url !== "string" || !Array.isArray(entry.boxes)) continue;
     const objects: CuboidObject[] = [];
+    const used = new Set<number>();
+    let nextFree = 1;
     for (const saved of entry.boxes) {
       if (!isTriple(saved?.center) || !isTriple(saved.size) || !Number.isFinite(saved.yaw))
         continue;
+      // Keep a saved id when it is a positive integer not taken yet; give a
+      // missing or duplicate one a fresh id, so select/delete are unambiguous.
+      let id = Number(saved.id);
+      if (!Number.isInteger(id) || id < 1 || used.has(id)) {
+        while (used.has(nextFree)) nextFree++;
+        id = nextFree;
+      }
+      used.add(id);
       objects.push({
-        id: Number(saved.id) || objects.length + 1,
+        id,
         classCode: Number(saved.classCode) || 0,
         box: { center: saved.center, size: saved.size, yaw: saved.yaw },
       });
@@ -555,12 +564,11 @@ export class CuboidSection {
     if (!object) return false;
     const step = event.shiftKey ? 1 : 0.1;
     const box = object.box;
-    const cos = Math.cos(box.yaw);
-    const sin = Math.sin(box.yaw);
-    // Map-axis moves expressed in the box frame (x along heading, y left).
+    const frame = localFrame(box.center[1]);
+    // Moves along the map axes (east/north), independent of the heading.
     const move = (east: number, north: number): typeof box => ({
       ...box,
-      center: fromBoxFrame(box, east * cos + north * sin, -east * sin + north * cos, 0),
+      center: [box.center[0] + east / frame.mx, box.center[1] + north / frame.my, box.center[2]],
     });
     let next: typeof box | null = null;
     switch (event.key) {

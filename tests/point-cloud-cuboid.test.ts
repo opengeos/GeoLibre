@@ -164,6 +164,21 @@ describe("cuboid persistence and export", async () => {
       size: box.size,
       yaw: box.yaw,
     });
+    // Duplicate or missing ids are renumbered so every box is addressable.
+    loadCuboids([
+      {
+        url: "https://x/a.copc.laz",
+        boxes: [
+          { id: 2, classCode: 6, center: box.center, size: box.size, yaw: 0 },
+          { id: 2, classCode: 6, center: box.center, size: box.size, yaw: 0 },
+          { id: 0, classCode: 6, center: box.center, size: box.size, yaw: 0 },
+        ],
+      },
+    ]);
+    assert.deepEqual(
+      encodeCuboids()[0].boxes.map((b) => b.id),
+      [2, 1, 3],
+    );
     loadCuboids(undefined);
     assert.deepEqual(encodeCuboids(), []);
   });
