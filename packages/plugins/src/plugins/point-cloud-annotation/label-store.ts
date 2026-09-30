@@ -3,7 +3,7 @@
 // the source node key (COPC/EPT octree key, or "file") and the point's index
 // within that node, from maplibre-gl-lidar's `nodeRanges`.
 
-import { deflateSync, inflateSync } from "fflate";
+import { Inflate, deflateSync } from "fflate";
 
 /** A run of buffer indices holding one source node's points, in file order. */
 export interface NodeRange {
@@ -90,13 +90,49 @@ export function encodeNodeEdits(edits: ReadonlyMap<number, number>): string {
 }
 
 /**
+ * Largest inflated size of one node's edits. A node holds at most a few
+ * hundred thousand points at up to 6 bytes each, so this is generous; it
+ * stops a crafted project file from inflating a tiny string into gigabytes.
+ */
+export const MAX_NODE_EDIT_BYTES = 16 * 1024 * 1024;
+
+/** Largest total inflated size of all labels in one project. */
+export const MAX_LABEL_BYTES = 256 * 1024 * 1024;
+
+/**
+ * Inflates with a size cap, aborting as soon as the output passes it.
+ *
+ * @param data - Deflated bytes.
+ * @param limit - Maximum inflated size.
+ * @returns The inflated bytes.
+ * @throws RangeError when the output would exceed `limit`.
+ */
+function inflateCapped(data: Uint8Array, limit: number): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const inflater = new Inflate((chunk) => {
+    total += chunk.length;
+    if (total > limit) throw new RangeError("point label record is too large");
+    chunks.push(chunk);
+  });
+  inflater.push(data, true);
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.length;
+  }
+  return out;
+}
+
+/**
  * Decodes {@link encodeNodeEdits} output.
  *
  * @param text - base64 text.
  * @returns Index within the node -> class code.
  */
-export function decodeNodeEdits(text: string): Map<number, number> {
-  const bytes = inflateSync(fromBase64(text));
+export function decodeNodeEdits(text: string, limit = MAX_NODE_EDIT_BYTES): Map<number, number> {
+  const bytes = inflateCapped(fromBase64(text), limit);
   const edits = new Map<number, number>();
   let previous = -1;
   let at = 0;
@@ -229,6 +265,7 @@ export class PointLabelStore {
     if (!state || typeof state !== "object") return;
     const { version, sources } = state as Partial<EncodedLabelStore>;
     if (version !== 1 || !Array.isArray(sources)) return;
+    let budget = MAX_LABEL_BYTES;
     for (const entry of sources) {
       const source = entry?.url;
       const encoded = entry?.nodes;
@@ -236,8 +273,12 @@ export class PointLabelStore {
       const nodes = new Map<string, Map<number, number>>();
       for (const [key, text] of Object.entries(encoded)) {
         if (typeof text !== "string") continue;
+        if (budget <= 0) break;
         try {
-          nodes.set(key, decodeNodeEdits(text));
+          const edits = decodeNodeEdits(text, Math.min(MAX_NODE_EDIT_BYTES, budget));
+          // Each edit is at least 2 inflated bytes (varint + class).
+          budget -= edits.size * 2;
+          nodes.set(key, edits);
         } catch {
           // Skip a corrupt node rather than the whole project.
         }

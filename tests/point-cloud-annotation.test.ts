@@ -475,6 +475,15 @@ describe("PointLabelStore", () => {
     assert.equal(store.isEmpty, true);
   });
 
+  it("refuses a record that inflates past its cap (decompression bomb)", () => {
+    // 1 MB of zeros deflates to about a kilobyte.
+    const bomb = Buffer.from(deflateSync(new Uint8Array(1024 * 1024))).toString("base64");
+    assert.ok(bomb.length < 4096);
+    assert.throws(() => decodeNodeEdits(bomb, 64 * 1024), /too large/);
+    // Within the cap the same bytes decode normally.
+    assert.equal(decodeNodeEdits(bomb, 2 * 1024 * 1024).size, 512 * 1024);
+  });
+
   it("treats a malformed project state as empty", () => {
     const store = new PointLabelStore();
     store.load({ version: 2 });
