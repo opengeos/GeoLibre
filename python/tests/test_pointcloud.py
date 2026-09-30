@@ -24,9 +24,8 @@ def _field(point_format: int = 7):
     xs, ys = xs.ravel(), ys.ravel()
     roof = (np.abs(xs) < 6) & (np.abs(ys) < 6)
     zs = 100 + 0.02 * xs + 0.01 * ys + np.where(roof, 8.0, 0.0)
-    header = laspy.LasHeader(
-        point_format=point_format, version="1.4" if point_format >= 6 else "1.2"
-    )
+    version = "1.4" if point_format >= 6 else "1.3" if point_format in (4, 5) else "1.2"
+    header = laspy.LasHeader(point_format=point_format, version=version)
     header.scales = [0.01, 0.01, 0.01]
     header.offsets = [500000.0, 4800000.0, 0.0]
     las = laspy.LasData(header)

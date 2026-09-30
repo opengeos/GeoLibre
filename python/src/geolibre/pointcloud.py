@@ -287,8 +287,8 @@ def write_labeled_point_cloud(
     Streams the file chunk by chunk, so it works on files larger than memory.
     A COPC input is written as plain LAS/LAZ (by ``output``'s extension); a
     legacy point format (0-5) is upgraded to LAS 1.4 (6, 7, or 9/10 for the
-    waveform formats) when a label needs a class above 31. Instance ids add a uint32 ``instance`` extra
-    dimension, like the app's LAS export.
+    waveform formats) when a label needs a class above 31. Instance ids add a
+    uint32 ``instance`` extra dimension, like the app's LAS export.
 
     Args:
         path: The source LAS/LAZ/COPC file.
