@@ -237,7 +237,7 @@ def prelabel_point_cloud(
     """
     import numpy as np
 
-    laspy = _require_laspy()
+    _require_laspy()
     if tool not in PRELABEL_TOOLS:
         raise ValueError(f"tool must be one of {sorted(PRELABEL_TOOLS)}")
     try:
