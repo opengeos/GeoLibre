@@ -18,7 +18,7 @@ import { createAppAPI } from "../../../../hooks/usePlugins";
 import { serviceRequestErrorMessage } from "../helpers";
 import { DEFAULT_ARCGIS_URLS } from "../constants";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
-import { serviceFieldString, type ServiceFields } from "../service-library";
+import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 /**
@@ -77,6 +77,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
   const [arcgisPageSize, setArcgisPageSize] = useState("");
   const [arcgisMaxFeatures, setArcgisMaxFeatures] = useState("");
   const [arcgisSublayers, setArcgisSublayers] = useState("");
+  const [arcgisSplitSublayers, setArcgisSplitSublayers] = useState(false);
   const [sublayerOptions, setSublayerOptions] = useState<ArcGISMapServiceSublayer[]>([]);
   const [isRetrievingSublayers, setIsRetrievingSublayers] = useState(false);
   const [sublayerError, setSublayerError] = useState<string | null>(null);
@@ -214,6 +215,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     pageSize: arcgisPageSize,
     maxFeatures: arcgisMaxFeatures,
     sublayers: arcgisSublayers,
+    splitSublayers: arcgisSplitSublayers,
     renderingRule: arcgisRenderingRule,
   });
 
@@ -230,6 +232,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     setArcgisPageSize(serviceFieldString(fields, "pageSize"));
     setArcgisMaxFeatures(serviceFieldString(fields, "maxFeatures"));
     setArcgisSublayers(serviceFieldString(fields, "sublayers"));
+    setArcgisSplitSublayers(serviceFieldBoolean(fields, "splitSublayers", false));
     setArcgisRenderingRule(serviceFieldString(fields, "renderingRule"));
     // Tokens are never saved, so clear any token typed for a previous entry to
     // avoid sending it to the newly selected service's endpoint.
@@ -249,7 +252,9 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
   };
 
   const handleSubmit = source.runSubmit(async () => {
-    const name = source.layerName.trim() || t("addData.arcgis.defaultName");
+    const defaultName = t("addData.arcgis.defaultName");
+    const name = source.layerName.trim() || defaultName;
+    const splitSublayers = arcgisLayerType === "map-service" && arcgisSplitSublayers;
     setProgress(null);
     try {
       await addArcGISLayer(createAppAPI(source.shell.mapControllerRef), {
@@ -257,7 +262,9 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
         itemId: arcgisItemId.trim() || undefined,
         layerType: arcgisLayerType,
         maxFeatures: positiveCount(arcgisMaxFeatures),
-        name,
+        // A split service names its group; left at the generic default, the
+        // service's own name (from its URL) reads better than "ArcGIS Layer".
+        name: splitSublayers && name === defaultName ? undefined : name,
         // A feature layer can take dozens of requests to download, so keep the
         // running count in front of the user instead of an inert spinner.
         onProgress: (loaded, total) => setProgress({ loaded, total }),
@@ -265,6 +272,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
         portalUrl: arcgisPortalUrl.trim() || undefined,
         renderingRule: arcgisRenderingRule.trim() || undefined,
         sourceType: arcgisSourceType,
+        splitSublayers,
         sublayers: arcgisSublayers.trim() || undefined,
         token: arcgisAccessToken.trim() || undefined,
         url: arcgisUrl.trim() || undefined,
@@ -469,6 +477,21 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
               </fieldset>
             ) : null}
             <p className="text-xs text-muted-foreground">{t("addData.arcgis.sublayersHint")}</p>
+            <label className="flex cursor-pointer items-start gap-2 pt-1 text-sm">
+              <input
+                id="arcgis-split-sublayers"
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-primary"
+                checked={arcgisSplitSublayers}
+                onChange={(event) => setArcgisSplitSublayers(event.target.checked)}
+              />
+              <span>
+                {t("addData.arcgis.splitSublayers")}
+                <span className="block text-xs text-muted-foreground">
+                  {t("addData.arcgis.splitSublayersHint")}
+                </span>
+              </span>
+            </label>
           </div>
         ) : null}
         {arcgisLayerType === "image-service" ? (

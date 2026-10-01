@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { RecentProjectEntry } from "@geolibre/core";
 import {
+  augmentArcGISServices,
   augmentConnections,
   augmentFolders,
   buildBrowserTree,
@@ -9,6 +10,7 @@ import {
   buildFavoriteNodes,
   buildPostgisTableNodes,
   filterBrowserTree,
+  isArcGISMapServiceEntry,
   flattenVisibleTree,
   MAX_DIRECTORY_ENTRIES,
   type BrowserNode,
@@ -711,5 +713,155 @@ describe("filterBrowserTree", () => {
     const before = tree[0].children?.length;
     filterBrowserTree(tree, "landsat");
     assert.equal(tree[0].children?.length, before);
+  });
+});
+
+describe("ArcGIS MapServer sublayers (GeoLibre#2780)", () => {
+  const MAP_SERVICE = service("storm", "Stormwater", "arcgis", {
+    fields: {
+      layerType: "map-service",
+      sourceType: "url",
+      url: "https://example.com/arcgis/rest/services/Stormwater/MapServer",
+    },
+  });
+  const FEATURE_SERVICE = service("cities", "Cities", "arcgis", {
+    fields: { layerType: "feature", sourceType: "url", url: "https://example.com/FeatureServer/0" },
+  });
+  const PORTAL_MAP_SERVICE = service("portal", "Portal map", "arcgis", {
+    fields: { layerType: "map-service", sourceType: "portal-item", itemId: "abc" },
+  });
+  const LABELS = { loading: "Loading sublayers…", allLayers: "All layers" };
+
+  function arcgisServices(tree: BrowserNode[]): BrowserNode[] {
+    const services = tree.find((node) => node.id === "section:services");
+    return services?.children?.find((node) => node.id === "kind:arcgis")?.children ?? [];
+  }
+
+  it("only treats URL-addressed map services as expandable", () => {
+    assert.equal(isArcGISMapServiceEntry(MAP_SERVICE), true);
+    assert.equal(isArcGISMapServiceEntry(FEATURE_SERVICE), false);
+    assert.equal(isArcGISMapServiceEntry(PORTAL_MAP_SERVICE), false);
+    assert.equal(isArcGISMapServiceEntry(service("x", "XYZ")), false);
+  });
+
+  it("renders a map service as an expandable group and other services as leaves", () => {
+    const tree = buildBrowserTree({
+      services: [MAP_SERVICE, FEATURE_SERVICE, PORTAL_MAP_SERVICE],
+      recentProjects: [],
+    });
+    const byId = new Map(arcgisServices(tree).map((node) => [node.serviceId, node]));
+    assert.deepEqual(byId.get("storm")?.children, []);
+    assert.equal(byId.get("cities")?.children, undefined);
+    assert.equal(byId.get("portal")?.children, undefined);
+  });
+
+  it("makes a favorited map service expandable too", () => {
+    const tree = buildBrowserTree({
+      services: [MAP_SERVICE],
+      recentProjects: [],
+      favorites: [
+        {
+          id: "service:storm",
+          kind: "service",
+          label: "Stormwater",
+          serviceId: "storm",
+          serviceKind: "arcgis",
+        },
+      ],
+    });
+    const favorite = tree.find((node) => node.id === "section:favorites")?.children?.[0];
+    assert.deepEqual(favorite?.children, []);
+  });
+
+  it("fills a loaded service with All layers and the service's layer tree", () => {
+    const tree = buildBrowserTree({ services: [MAP_SERVICE], recentProjects: [] });
+    const augmented = augmentArcGISServices(
+      tree,
+      {
+        storm: {
+          status: "loaded",
+          sublayers: [
+            // A group wrapping a same-named leaf plus its label layer, the
+            // shape real utility services use.
+            { id: 0, name: "Storm Inlet", subLayerIds: [1, 2] },
+            { id: 1, name: "Storm Inlet", subLayerIds: null },
+            { id: 2, name: "Storm Inlet Label" },
+            { id: 3, name: "Storm Main" },
+          ],
+        },
+      },
+      LABELS,
+    );
+    const children = arcgisServices(augmented)[0].children ?? [];
+    const summary = (node: BrowserNode): unknown => [
+      node.label,
+      node.arcgisSublayerId,
+      node.addable,
+      ...(node.arcgisLayerName ? [node.arcgisLayerName] : []),
+      ...(node.children ? [node.children.map(summary)] : []),
+    ];
+    assert.deepEqual(children.map(summary), [
+      ["All layers", undefined, true],
+      [
+        // The group row only expands; its "All layers" row is what adds it.
+        "Storm Inlet",
+        undefined,
+        false,
+        [
+          // Adds the whole group, under the group's name.
+          ["All layers", 0, true, "Storm Inlet"],
+          ["Storm Inlet", 1, true],
+          ["Storm Inlet Label", 2, true],
+        ],
+      ],
+      ["Storm Main", 3, true],
+    ]);
+    const all = (nodes: BrowserNode[]): BrowserNode[] =>
+      nodes.flatMap((node) => [node, ...all(node.children ?? [])]);
+    const flat = all(children);
+    assert.ok(flat.every((node) => node.kind === "arcgis-sublayer" && node.serviceId === "storm"));
+    assert.equal(new Set(flat.map((node) => node.id)).size, flat.length);
+  });
+
+  it("survives a group that lists itself as a descendant", () => {
+    const tree = buildBrowserTree({ services: [MAP_SERVICE], recentProjects: [] });
+    const augmented = augmentArcGISServices(
+      tree,
+      {
+        storm: {
+          status: "loaded",
+          sublayers: [
+            { id: 0, name: "Root", subLayerIds: [1] },
+            { id: 1, name: "Loop", subLayerIds: [0] },
+          ],
+        },
+      },
+      LABELS,
+    );
+    // Both ids are someone's child, so neither is a root: no infinite recursion.
+    assert.deepEqual(
+      arcgisServices(augmented)[0].children?.map((child) => child.label),
+      ["All layers"],
+    );
+  });
+
+  it("shows loading and error status rows", () => {
+    const tree = buildBrowserTree({ services: [MAP_SERVICE], recentProjects: [] });
+    const loading = augmentArcGISServices(tree, { storm: { status: "loading" } }, LABELS);
+    assert.deepEqual(
+      arcgisServices(loading)[0].children?.map((child) => [child.kind, child.label]),
+      [["info", "Loading sublayers…"]],
+    );
+    const failed = augmentArcGISServices(
+      tree,
+      { storm: { status: "error", message: "Boom" } },
+      LABELS,
+    );
+    assert.deepEqual(
+      arcgisServices(failed)[0].children?.map((child) => [child.kind, child.label]),
+      [["info", "Boom"]],
+    );
+    // An unexpanded service keeps its empty child list.
+    assert.deepEqual(arcgisServices(augmentArcGISServices(tree, {}, LABELS))[0].children, []);
   });
 });

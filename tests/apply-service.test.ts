@@ -341,6 +341,7 @@ describe("field mappers", () => {
         pageSize: undefined,
         maxFeatures: undefined,
         sublayers: undefined,
+        splitSublayers: false,
         renderingRule: undefined,
       },
     );
@@ -358,12 +359,14 @@ describe("field mappers", () => {
         sourceType: "url",
         url: "https://e/arcgis/rest/services/Boundaries/MapServer",
         sublayers: " 2,5 ",
+        splitSublayers: true,
       }),
     );
     // A saved map service must come back as one: coercing an unknown layer type
     // to "feature" would silently load the wrong thing from the Browser panel.
     assert.equal(options.layerType, "map-service");
     assert.equal(options.sublayers, "2,5");
+    assert.equal(options.splitSublayers, true);
   });
 
   it("round-trips a saved image service, keeping its rendering rule", () => {

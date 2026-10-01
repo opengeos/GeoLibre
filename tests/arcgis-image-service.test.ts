@@ -11,6 +11,7 @@ import {
   addArcGISLayer,
   fetchArcGISImageServiceRasterFunctions,
   fetchArcGISMapServiceSublayers,
+  planArcGISMapServiceSublayers,
 } from "../packages/plugins/src/plugins/arcgis-layer";
 
 const MAP_SERVICE_URL = "https://example.com/arcgis/rest/services/Boundaries/MapServer";
@@ -501,6 +502,117 @@ describe("addArcGISLayer (map and image services)", () => {
       zoomTo: false,
     });
     assert.deepEqual(fitBoundsCalls, []);
+  });
+
+  describe("splitSublayers", () => {
+    /**
+     * A MapServer shaped like a real utility service: top-level leaves (0, 1)
+     * and a group (2) holding a default-visible leaf and a default-hidden one.
+     */
+    const GROUPED_MAP_SERVICE = {
+      ...CACHED_MAP_SERVICE,
+      layers: [
+        { id: 0, name: "Manholes", defaultVisibility: true, subLayerIds: null },
+        { id: 1, name: "Inlets", defaultVisibility: false, subLayerIds: null },
+        { id: 2, name: "Pipes", defaultVisibility: true, subLayerIds: [3, 4] },
+        { id: 3, name: "Trunk mains", defaultVisibility: true, subLayerIds: null },
+        { id: 4, name: "Laterals", defaultVisibility: false, subLayerIds: null },
+      ],
+    };
+
+    it("adds one dynamic layer per top-level sublayer inside a group", async () => {
+      respondWith(GROUPED_MAP_SERVICE);
+      const topId = await addArcGISLayer(app, {
+        layerType: "map-service",
+        sourceType: "url",
+        url: MAP_SERVICE_URL,
+        splitSublayers: true,
+      });
+
+      const { layers, layerGroups } = useAppStore.getState();
+      assert.deepEqual(
+        layers.map((layer) => [layer.name, layer.metadata.arcgisSublayers, layer.visible]),
+        // The store is bottom-to-top, so sublayer 0 (drawn on top) is last.
+        [
+          // A group draws through its default-visible leaves: `show:2` would
+          // also draw the default-hidden Laterals.
+          ["Pipes", "3", true],
+          // Each layer keeps the service's own default visibility.
+          ["Inlets", "1", false],
+          ["Manholes", "0", true],
+        ],
+      );
+      assert.equal(topId, layers[layers.length - 1].id);
+      assert.equal(layerGroups.length, 1);
+      // Named after the service folder, not its generic `mapName` ("Layers").
+      assert.equal(layerGroups[0].name, "Boundaries");
+      assert.ok(layers.every((layer) => layer.groupId === layerGroups[0].id));
+      // Each child draws only its own sublayers, so the cache cannot be used.
+      for (const layer of layers) {
+        const template = tileTemplate(layer.id);
+        assert.match(template, /\/MapServer\/export\?/);
+        assert.ok(template.includes(`layers=show%3A${layer.metadata.arcgisSublayers}`), template);
+      }
+      // The service description is fetched once, not once per sublayer.
+      assert.equal(fetchUrls.length, 1);
+      // One camera move for the whole group.
+      assert.equal(fitBoundsCalls.length, 1);
+    });
+
+    it("draws a group with no default-visible leaf through all of them, hidden", () => {
+      assert.deepEqual(
+        planArcGISMapServiceSublayers([
+          { id: 0, name: "Basins", defaultVisibility: true, subLayerIds: [1, 2] },
+          { id: 1, name: "Basin", defaultVisibility: false },
+          { id: 2, name: "Basin Label", defaultVisibility: false },
+          // A hidden group hides its leaves too.
+          { id: 3, name: "Archive", defaultVisibility: false, subLayerIds: [4] },
+          { id: 4, name: "Old pipes", defaultVisibility: true },
+        ]),
+        [
+          { name: "Basins", sublayers: "1,2", visible: false },
+          { name: "Archive", sublayers: "4", visible: false },
+        ],
+      );
+    });
+
+    it("splits only the selected sublayers when some were chosen", async () => {
+      respondWith(GROUPED_MAP_SERVICE);
+      await addArcGISLayer(app, {
+        layerType: "map-service",
+        sourceType: "url",
+        url: MAP_SERVICE_URL,
+        name: "Stormwater",
+        sublayers: "1,2",
+        splitSublayers: true,
+      });
+      const { layers, layerGroups } = useAppStore.getState();
+      // A selected group layer stays one layer that draws all its leaves.
+      assert.deepEqual(
+        layers.map((layer) => layer.name),
+        ["Pipes", "Inlets"],
+      );
+      // An explicit selection is drawn, whatever the service default says.
+      assert.ok(layers.every((layer) => layer.visible));
+      assert.equal(layerGroups[0].name, "Stormwater");
+    });
+
+    it("adds a single sublayer as a plain layer with no group", async () => {
+      respondWith(GROUPED_MAP_SERVICE);
+      await addArcGISLayer(app, {
+        layerType: "map-service",
+        sourceType: "url",
+        url: MAP_SERVICE_URL,
+        name: "Inlets only",
+        sublayers: "1",
+        splitSublayers: true,
+      });
+      const { layers, layerGroups } = useAppStore.getState();
+      assert.equal(layers.length, 1);
+      assert.equal(layers[0].name, "Inlets only");
+      assert.equal(layers[0].groupId, undefined);
+      assert.equal(layerGroups.length, 0);
+    });
   });
 });
 

@@ -14,6 +14,7 @@
  */
 
 import {
+  serviceFieldString,
   type ServiceLibraryEntry,
   type ServiceLibraryKind,
 } from "../components/layout/add-data/service-library";
@@ -33,6 +34,7 @@ export type BrowserNodeKind =
   | "folder" // a filesystem directory; expands to its subfolders/loadable files
   | "file" // a loadable file on disk that adds a layer when activated
   | "library-layer" // a saved Layer Library entry, re-added when activated
+  | "arcgis-sublayer" // one sublayer of a saved ArcGIS MapServer, added on its own
   | "info"; // a non-interactive status row (loading / error)
 
 /** One node in the Browser tree. */
@@ -90,6 +92,16 @@ export interface BrowserNode {
   deployment?: boolean;
   /** The project path a recent node opens (kind `recent-project`). */
   projectPath?: string;
+  /**
+   * The MapServer sublayer id an `arcgis-sublayer` node adds. Absent on the
+   * service's "All layers" row, which adds the saved service as configured.
+   */
+  arcgisSublayerId?: number;
+  /**
+   * The name to give the layer an addable `arcgis-sublayer` row adds, when it
+   * differs from the row's label (a group's "All layers" row).
+   */
+  arcgisLayerName?: string;
   /** Leaf count under a `section`/`category`, for a count badge. */
   count?: number;
 }
@@ -203,6 +215,9 @@ function buildServiceKinds(services: readonly ServiceLibraryEntry[]): BrowserNod
           serviceKind: entry.kind,
           builtin: entry.builtin,
           deployment: entry.deployment,
+          // A MapServer expands to its sublayers, filled lazily on first
+          // expand (GeoLibre#2780); see augmentArcGISServices.
+          ...(isArcGISMapServiceEntry(entry) ? { children: [] } : {}),
         }),
       ),
     };
@@ -265,7 +280,10 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
       label: labels.favorites ?? "Favorites",
       addable: false,
       count: input.favorites.length,
-      children: buildFavoriteNodes(input.favorites),
+      children: buildFavoriteNodes(
+        input.favorites,
+        new Set(input.services.filter(isArcGISMapServiceEntry).map((entry) => entry.id)),
+      ),
     });
   }
 
@@ -430,9 +448,14 @@ export interface FavoriteNodeInput {
  * Pure so it unit-tests without the store or filesystem.
  *
  * @param favorites - The user's favorited node descriptors.
+ * @param expandableServiceIds - Saved services that expand to their sublayers
+ *   (ArcGIS MapServers), so a favorited one expands like the original.
  * @returns One node per favorite (service/connection/folder/file).
  */
-export function buildFavoriteNodes(favorites: readonly FavoriteNodeInput[]): BrowserNode[] {
+export function buildFavoriteNodes(
+  favorites: readonly FavoriteNodeInput[],
+  expandableServiceIds: ReadonlySet<string> = new Set(),
+): BrowserNode[] {
   return favorites.map((fav): BrowserNode => {
     switch (fav.kind) {
       case "service":
@@ -446,6 +469,8 @@ export function buildFavoriteNodes(favorites: readonly FavoriteNodeInput[]): Bro
           // Keep the origin badge on a favorited managed service.
           builtin: fav.builtin,
           deployment: fav.deployment,
+          // Shares the original node's id, so it shares its sublayer listing.
+          ...(fav.serviceId && expandableServiceIds.has(fav.serviceId) ? { children: [] } : {}),
         };
       case "folder":
         return {
@@ -574,6 +599,153 @@ export function augmentConnections(
         ...node,
         children: augmentConnections(node.children, loads, loadingLabel),
       };
+    }
+    return node;
+  });
+}
+
+/**
+ * Whether a saved service is an ArcGIS MapServer the Browser can expand into
+ * its sublayers: a `map-service` entry addressed by URL (a portal item has no
+ * service URL to introspect until it is resolved).
+ *
+ * @param entry - The saved service.
+ * @returns True when the entry should render as an expandable group.
+ */
+export function isArcGISMapServiceEntry(entry: ServiceLibraryEntry): boolean {
+  return (
+    entry.kind === "arcgis" &&
+    serviceFieldString(entry.fields, "layerType") === "map-service" &&
+    serviceFieldString(entry.fields, "sourceType") !== "portal-item" &&
+    serviceFieldString(entry.fields, "url").trim() !== ""
+  );
+}
+
+/** One sublayer advertised by a MapServer (matches `ArcGISMapServiceSublayer`). */
+export interface ArcGISSublayerRef {
+  id: number;
+  name: string;
+  /** Child layer ids when this is a group layer; absent or empty for a leaf. */
+  subLayerIds?: readonly number[] | null;
+}
+
+/** Async load state for one saved MapServer's sublayer listing. */
+export type ArcGISServiceLoad =
+  | { status: "loading" }
+  | { status: "loaded"; sublayers: readonly ArcGISSublayerRef[] }
+  | { status: "error"; message: string };
+
+/** Translated labels for {@link augmentArcGISServices}' rows. */
+export interface ArcGISServiceLabels {
+  /** The status row shown while the sublayers load. */
+  loading: string;
+  /** The row that adds the whole service as saved. */
+  allLayers: string;
+}
+
+/**
+ * Builds a saved MapServer's children, mirroring the service's layer tree: an
+ * "All layers" row that adds the service as saved, then one row per top-level
+ * layer. A leaf row adds that sublayer; a group layer is an expandable row
+ * holding its own "All layers" row (which adds the whole group) followed by
+ * its children, so a group and the leaf it wraps (services often name both
+ * "Storm Inlet") never sit side by side as look-alike rows. Pure so it
+ * unit-tests without the network.
+ *
+ * @param serviceNode - The expandable `service` node the rows belong to.
+ * @param sublayers - The layers the service advertises.
+ * @param allLayersLabel - Translated label for the "All layers" rows.
+ * @returns The child nodes.
+ */
+export function buildArcGISSublayerNodes(
+  serviceNode: BrowserNode,
+  sublayers: readonly ArcGISSublayerRef[],
+  allLayersLabel: string,
+): BrowserNode[] {
+  const base = {
+    kind: "arcgis-sublayer" as const,
+    serviceId: serviceNode.serviceId,
+    serviceKind: serviceNode.serviceKind,
+  };
+  const byId = new Map(sublayers.map((sublayer) => [sublayer.id, sublayer]));
+  const childIds = new Set(sublayers.flatMap((sublayer) => sublayer.subLayerIds ?? []));
+  // Guards against a malformed service whose group lists itself as a descendant.
+  const seen = new Set<number>();
+
+  const build = (sublayer: ArcGISSublayerRef): BrowserNode | null => {
+    if (seen.has(sublayer.id)) return null;
+    seen.add(sublayer.id);
+    const id = `${serviceNode.id}:sublayer:${sublayer.id}`;
+    const children = (sublayer.subLayerIds ?? [])
+      .map((childId) => byId.get(childId))
+      .filter((child): child is ArcGISSublayerRef => child !== undefined)
+      .map(build)
+      .filter((child): child is BrowserNode => child !== null);
+    if (children.length === 0) {
+      return { ...base, id, label: sublayer.name, addable: true, arcgisSublayerId: sublayer.id };
+    }
+    return {
+      ...base,
+      id,
+      label: sublayer.name,
+      addable: false,
+      children: [
+        {
+          ...base,
+          id: `${id}:all`,
+          label: allLayersLabel,
+          addable: true,
+          arcgisSublayerId: sublayer.id,
+          arcgisLayerName: sublayer.name,
+        },
+        ...children,
+      ],
+    };
+  };
+
+  return [
+    { ...base, id: `${serviceNode.id}:all`, label: allLayersLabel, addable: true },
+    ...sublayers
+      .filter((sublayer) => !childIds.has(sublayer.id))
+      .map(build)
+      .filter((node): node is BrowserNode => node !== null),
+  ];
+}
+
+/**
+ * Returns a copy of the tree with each expandable ArcGIS MapServer `service`
+ * node's children replaced by its lazy-load state: a status row while loading
+ * or on error, or the sublayer rows once loaded. A service with no load entry
+ * keeps its empty child list (still expandable; expanding triggers the fetch).
+ * Pure, like {@link augmentConnections}.
+ *
+ * @param nodes - The tree to augment.
+ * @param loads - Per-service sublayer state keyed by saved-service id.
+ * @param labels - Translated row labels.
+ * @returns A new tree; MapServer nodes get their status/sublayer children.
+ */
+export function augmentArcGISServices(
+  nodes: readonly BrowserNode[],
+  loads: Record<string, ArcGISServiceLoad>,
+  labels: ArcGISServiceLabels,
+): BrowserNode[] {
+  return nodes.map((node) => {
+    if (node.kind === "service" && node.serviceId && node.children) {
+      const load = loads[node.serviceId];
+      let children: BrowserNode[] = [];
+      if (load?.status === "loading") {
+        children = [
+          { id: `${node.id}:loading`, kind: "info", label: labels.loading, addable: false },
+        ];
+      } else if (load?.status === "error") {
+        children = [{ id: `${node.id}:error`, kind: "info", label: load.message, addable: false }];
+      } else if (load?.status === "loaded") {
+        children = buildArcGISSublayerNodes(node, load.sublayers, labels.allLayers);
+      }
+      return { ...node, children };
+    }
+    if (node.children) {
+      return { ...node, children: augmentArcGISServices(node.children, loads, labels) };
     }
     return node;
   });

@@ -403,6 +403,8 @@ export interface ArcGISOptions {
   maxFeatures: number | undefined;
   /** MapServer sublayer ids (`0,2,5`), for a `map-service` entry. */
   sublayers: string | undefined;
+  /** Add each MapServer sublayer as its own layer in a group (`map-service`). */
+  splitSublayers: boolean;
   /** ImageServer rendering rule JSON, for an `image-service` entry. */
   renderingRule: string | undefined;
 }
@@ -420,6 +422,7 @@ export function arcgisFieldsToOptions(entry: ServiceLibraryEntry): ArcGISOptions
     pageSize: serviceFieldCount(fields, "pageSize"),
     maxFeatures: serviceFieldCount(fields, "maxFeatures"),
     sublayers: serviceFieldString(fields, "sublayers").trim() || undefined,
+    splitSublayers: serviceFieldBoolean(fields, "splitSublayers", false),
     renderingRule: serviceFieldString(fields, "renderingRule").trim() || undefined,
   };
 }
@@ -534,6 +537,7 @@ export async function applyServiceEntry(
         portalUrl: options.portalUrl,
         renderingRule: options.renderingRule,
         sourceType: options.sourceType,
+        splitSublayers: options.splitSublayers,
         sublayers: options.sublayers,
         // Tokens are never persisted to the service library, so none is sent.
         token: undefined,

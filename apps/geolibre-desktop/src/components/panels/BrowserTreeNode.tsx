@@ -83,6 +83,9 @@ function nodeIcon(node: BrowserNode, isExpanded: boolean): LucideIcon {
       return File;
     case "library-layer":
       return Layers;
+    case "arcgis-sublayer":
+      // A MapServer group layer expands like a folder; a leaf is a layer.
+      return node.children ? (isExpanded ? FolderOpen : Folder) : Layers;
     default:
       return isExpanded ? FolderOpen : Folder;
   }

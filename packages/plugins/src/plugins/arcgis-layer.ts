@@ -169,6 +169,18 @@ export interface ArcGISLayerOptions {
    * tile that no longer has separable sublayers.
    */
   sublayers?: string;
+  /**
+   * Add each MapServer sublayer as its own raster layer inside a layer group
+   * named after the service, instead of one composite image, so every
+   * sublayer gets its own visibility toggle, opacity, and draw order.
+   *
+   * Only meaningful for `layerType: "map-service"`. One layer is added per id
+   * in `sublayers` when given, otherwise one per top-level service layer (see
+   * {@link planArcGISMapServiceSublayers}), each starting with the service's
+   * own default visibility. A service with a single drawable layer is added
+   * as one layer, with no group.
+   */
+  splitSublayers?: boolean;
   token?: string;
   url?: string;
   /**
@@ -221,6 +233,7 @@ interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
   layers?: Array<{
     defaultVisibility?: boolean;
     id?: number;
+    name?: string;
     subLayerIds?: number[] | null;
   }>;
   mapName?: string;
@@ -233,6 +246,8 @@ interface ArcGISImageProducingServiceInfo extends ArcGISServiceInfo {
 export interface ArcGISMapServiceSublayer {
   id: number;
   name: string;
+  /** Child layer ids when this is a group layer; absent or empty for a leaf. */
+  subLayerIds?: number[] | null;
 }
 
 /** One raster function advertised by an ArcGIS ImageServer. */
@@ -322,6 +337,9 @@ export async function addArcGISLayer(
   // Mercator cache, otherwise an `/export` request per tile). That keeps the
   // whole raster surface — opacity, brightness/contrast, reordering, and project
   // save/reload — working without a bespoke handler.
+  if (options.layerType === "map-service" && options.splitSublayers) {
+    return addArcGISMapServiceSublayerGroup(app, options, input);
+  }
   if (options.layerType === "map-service" || options.layerType === "image-service") {
     return addArcGISImageServiceLayer(app, options, input);
   }
@@ -1047,21 +1065,182 @@ function arcgisFeatureKey(feature: Feature, objectIdField: string | undefined): 
  * @param input - The resolved service URL or portal item id from the options.
  * @returns The new GeoLibre layer's id.
  */
-async function addArcGISImageServiceLayer(
-  app: GeoLibreAppAPI,
+/** A MapServer/ImageServer resolved to its root URL and `?f=json` description. */
+interface ArcGISImageProducingService {
+  info: ArcGISImageProducingServiceInfo;
+  serviceUrl: string;
+  /** A sublayer id read off a `.../MapServer/<id>` input URL. */
+  sublayers?: string;
+}
+
+/** Resolve a MapServer/ImageServer input and fetch its service description. */
+async function fetchArcGISImageProducingService(
   options: ArcGISLayerOptions,
   input: string,
-): Promise<string> {
+): Promise<ArcGISImageProducingService> {
   const resolved =
     options.sourceType === "url"
       ? resolveArcGISImageServiceUrl(input, options.layerType)
       : await resolvePortalArcGISImageServiceUrl(input, options);
-  const { serviceUrl } = resolved;
   const info = await fetchArcGISJson<ArcGISImageProducingServiceInfo>(
-    serviceUrl,
+    resolved.serviceUrl,
     options,
     undefined,
   );
+  return { ...resolved, info };
+}
+
+/** One layer {@link addArcGISMapServiceSublayerGroup} adds for a MapServer. */
+interface ArcGISSublayerPlan {
+  name: string;
+  /** The `layers=show:` id list the layer draws. */
+  sublayers: string;
+  visible: boolean;
+}
+
+/**
+ * Plan one layer per top-level MapServer layer, in the service's order.
+ *
+ * Top-level rather than per leaf: services commonly wrap each feature class in
+ * a group with its label layer ("Storm Inlet" holding "Storm Inlet" and "Storm
+ * Inlet Label"), so a leaf split doubles the layer count with near-duplicate
+ * names and multiplies the `/export` requests per tile. A top-level group is
+ * drawn through its leaves rather than its own id, because ArcGIS draws every
+ * descendant of a group named in `show:`, including the ones the service hides
+ * by default; only when none is visible by default are all of them drawn.
+ *
+ * @param layers - The service's advertised layer list.
+ * @returns The layers to add, top of the service's drawing order first.
+ */
+export function planArcGISMapServiceSublayers(
+  layers: readonly {
+    defaultVisibility?: boolean;
+    id?: number;
+    name?: string;
+    subLayerIds?: number[] | null;
+  }[],
+): ArcGISSublayerPlan[] {
+  const valid = layers.filter(
+    (layer): layer is typeof layer & { id: number } =>
+      Number.isSafeInteger(layer.id) && (layer.id ?? -1) >= 0,
+  );
+  const byId = new Map(valid.map((layer) => [layer.id, layer]));
+  const childIds = new Set(valid.flatMap((layer) => layer.subLayerIds ?? []));
+
+  /** Leaf descendants of `id`, each flagged with its effective default visibility. */
+  const leaves = (id: number, visible: boolean, seen: Set<number>) => {
+    const layer = byId.get(id);
+    if (!layer || seen.has(id)) return [];
+    seen.add(id);
+    const shown = visible && layer.defaultVisibility !== false;
+    const subLayerIds = layer.subLayerIds ?? [];
+    if (subLayerIds.length === 0) return [{ id, visible: shown }];
+    return subLayerIds.flatMap(
+      (childId): Array<{ id: number; visible: boolean }> => leaves(childId, shown, seen),
+    );
+  };
+
+  const plans: ArcGISSublayerPlan[] = [];
+  for (const layer of valid) {
+    if (childIds.has(layer.id)) continue;
+    const descendants = leaves(layer.id, true, new Set());
+    if (descendants.length === 0) continue;
+    const shown = descendants.filter((leaf) => leaf.visible);
+    plans.push({
+      name: layer.name?.trim() || String(layer.id),
+      sublayers: (shown.length > 0 ? shown : descendants).map((leaf) => leaf.id).join(","),
+      visible: shown.length > 0,
+    });
+  }
+  return plans;
+}
+
+/**
+ * Add a MapServer as a layer group holding one raster layer per sublayer.
+ *
+ * Each child draws its own sublayers through the dynamic `/export` endpoint
+ * (`layers=show:<ids>`), so the layer panel can toggle, fade, and reorder them
+ * independently (GeoLibre#2779). The children are stacked in the
+ * service's own drawing order: ArcGIS draws sublayer 0 on top.
+ *
+ * @param app - The host app API, used to fit the map to the service.
+ * @param options - The add options; `sublayers` narrows which sublayers to add.
+ * @param input - The service URL or portal item id.
+ * @returns The id of the topmost added layer.
+ */
+async function addArcGISMapServiceSublayerGroup(
+  app: GeoLibreAppAPI,
+  options: ArcGISLayerOptions,
+  input: string,
+): Promise<string> {
+  const service = await fetchArcGISImageProducingService(options, input);
+  const requested = normalizeArcGISSublayers(options.sublayers) ?? service.sublayers;
+  const advertised = service.info.layers ?? [];
+  const names = new Map(advertised.map((layer) => [layer.id, layer.name?.trim()]));
+  const children = requested
+    ? requested.split(",").map((id) => ({
+        name: names.get(Number(id)) || id,
+        sublayers: id,
+        visible: true,
+      }))
+    : planArcGISMapServiceSublayers(advertised);
+
+  // Nothing to split: one sublayer reads better as one plain layer.
+  if (children.length <= 1) {
+    return addArcGISImageServiceLayer(app, { ...options, splitSublayers: false }, input, service);
+  }
+
+  const layerIds: string[] = [];
+  let bounds: [number, number, number, number] | undefined;
+  // `addLayer` stacks each new layer above the previous one, so walk the list
+  // bottom-up to leave sublayer 0 on top, as the service itself draws it.
+  for (const child of [...children].reverse()) {
+    const id = await addArcGISImageServiceLayer(
+      app,
+      {
+        ...options,
+        name: child.name,
+        splitSublayers: false,
+        sublayers: child.sublayers,
+        zoomTo: false,
+      },
+      input,
+      service,
+      child.visible,
+    );
+    layerIds.push(id);
+    const layerBounds = useAppStore.getState().layers.find((layer) => layer.id === id)
+      ?.source.bounds;
+    if (isGeoBounds(layerBounds)) {
+      bounds = bounds
+        ? [
+            Math.min(bounds[0], layerBounds[0]),
+            Math.min(bounds[1], layerBounds[1]),
+            Math.max(bounds[2], layerBounds[2]),
+            Math.max(bounds[3], layerBounds[3]),
+          ]
+        : layerBounds;
+    }
+  }
+
+  // `mapName` is usually the generic "Layers", so the URL's service folder
+  // name is the better fallback.
+  const groupName =
+    options.name?.trim() || layerNameFromArcGISInput(service.serviceUrl, "ArcGIS Layer");
+  useAppStore.getState().addLayerGroup(groupName, layerIds);
+  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  return layerIds[layerIds.length - 1];
+}
+
+async function addArcGISImageServiceLayer(
+  app: GeoLibreAppAPI,
+  options: ArcGISLayerOptions,
+  input: string,
+  prefetched?: ArcGISImageProducingService,
+  visible = true,
+): Promise<string> {
+  const resolved = prefetched ?? (await fetchArcGISImageProducingService(options, input));
+  const { serviceUrl, info } = resolved;
 
   // Each option belongs to exactly one of the two service types, and the Add
   // Data form keeps both field values when the layer type is switched (so the
@@ -1111,7 +1290,7 @@ async function addArcGISImageServiceLayer(
       ...(attribution ? { attribution } : {}),
       ...(tileScheme ? { minzoom: tileScheme.minzoom, maxzoom: tileScheme.maxzoom } : {}),
     },
-    visible: true,
+    visible,
     opacity: 1,
     style: { ...DEFAULT_LAYER_STYLE },
     metadata: {
