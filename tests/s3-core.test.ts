@@ -87,6 +87,13 @@ describe("s3ObjectHttpsUrl", () => {
       s3ObjectHttpsUrl({ bucket: "b", key: "k" }, { region: "auto", endpoint: "r2.example.com" }),
       "https://b.r2.example.com/k",
     );
+    assert.equal(
+      s3ObjectHttpsUrl(
+        { bucket: "bkt", key: "k" },
+        { endpoint: "https://gw.test/s3/", pathStyle: true },
+      ),
+      "https://gw.test/s3/bkt/k",
+    );
   });
 
   it("refuses bucket names that could change the URL's host", () => {
@@ -161,6 +168,19 @@ describe("signer registry", () => {
     assert.equal(href, "https://private.s3.amazonaws.com/a.tif?X-Amz-Signature=abc");
     assert.equal(unsignedSourceUrl(href), "s3://private/a.tif");
     assert.equal(unsignedSourceUrl("https://other.test/x"), "https://other.test/x");
+  });
+
+  it("never returns a signature for a presigned URL it does not know", () => {
+    assert.equal(
+      unsignedSourceUrl(
+        "https://evicted.s3.us-west-2.amazonaws.com/a%20b.tif?X-Amz-Credential=K&X-Amz-Security-Token=T&X-Amz-Signature=S",
+      ),
+      "s3://evicted/a b.tif",
+    );
+    assert.equal(
+      unsignedSourceUrl("https://minio.test/bkt/k?v=1&X-Amz-Security-Token=T&X-Amz-Signature=S"),
+      "https://minio.test/bkt/k?v=1",
+    );
   });
 });
 

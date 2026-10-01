@@ -322,6 +322,12 @@ export function createS3Signer(
       const lifetimeMs = credentials.expiresAt
         ? Math.min(PRESIGN_SECONDS * 1000, credentials.expiresAt - Date.now())
         : PRESIGN_SECONDS * 1000;
+      if (lifetimeMs <= 0) {
+        // Say so now rather than mint a URL S3 will refuse; the next read
+        // resolves the credentials afresh.
+        credentialCache.delete(connection.id);
+        throw new Error(`The credentials of S3 connection "${connection.name}" have expired.`);
+      }
       const expiresIn = Math.max(60, Math.floor(lifetimeMs / 1000));
       const href = await presignFor(connection, credentials, request, region, expiresIn);
       const signed = { href, expiresAt: Date.now() + expiresIn * 1000 };

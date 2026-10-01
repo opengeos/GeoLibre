@@ -207,7 +207,21 @@ function writeLastLocation(value: string): void {
  */
 function isOnMap(object: S3BrowserObject, bucket: string): boolean {
   const objectUrl = s3ObjectHttpsUrl({ bucket, key: object.key });
-  const sources = new Set([object.uri, objectUrl, `pmtiles://${object.uri}`]);
+  // PMTiles normalizes its URL with `new URL(…).href`, which percent-encodes
+  // a key with spaces or other reserved characters.
+  let encodedUri = object.uri;
+  try {
+    encodedUri = new URL(object.uri).href;
+  } catch {
+    // Keep the raw URI.
+  }
+  const sources = new Set([
+    object.uri,
+    encodedUri,
+    objectUrl,
+    `pmtiles://${object.uri}`,
+    `pmtiles://${encodedUri}`,
+  ]);
   return useAppStore
     .getState()
     .layers.some(

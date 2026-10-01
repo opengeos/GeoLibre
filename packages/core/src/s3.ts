@@ -166,6 +166,11 @@ export function encodeS3Key(key: string): string {
     .join("/");
 }
 
+/** A custom endpoint's path, without a trailing slash ("" for none). */
+function endpointPathPrefix(base: URL): string {
+  return base.pathname.replace(/\/+$/, "");
+}
+
 /**
  * Builds the HTTPS URL of an object.
  *
@@ -189,7 +194,7 @@ export function s3ObjectHttpsUrl(
   if (!location.bucket) {
     if (endpoint) {
       const base = new URL(endpoint.includes("://") ? endpoint : `https://${endpoint}`);
-      return `${base.protocol}//${base.host}/`;
+      return `${base.protocol}//${base.host}${endpointPathPrefix(base)}/`;
     }
     const serviceRegion = config.region || location.region;
     return serviceRegion && serviceRegion !== "us-east-1"
@@ -198,10 +203,11 @@ export function s3ObjectHttpsUrl(
   }
   if (endpoint) {
     const base = new URL(endpoint.includes("://") ? endpoint : `https://${endpoint}`);
-    const origin = `${base.protocol}//${base.host}`;
+    // An S3-compatible gateway may sit under a path (`https://host/s3`).
+    const prefix = endpointPathPrefix(base);
     return config.pathStyle
-      ? `${origin}/${encodeS3Key(location.bucket)}/${key}`
-      : `${base.protocol}//${location.bucket}.${base.host}/${key}`;
+      ? `${base.protocol}//${base.host}${prefix}/${encodeS3Key(location.bucket)}/${key}`
+      : `${base.protocol}//${location.bucket}.${base.host}${prefix}/${key}`;
   }
   const region = config.region || location.region;
   const host = region && region !== "us-east-1" ? `s3.${region}.amazonaws.com` : "s3.amazonaws.com";
@@ -397,11 +403,27 @@ export function isCredentialedS3Url(url: string): boolean {
 
 /** Records that `signedHref` reads `sourceUrl`, so a layer can keep the latter. */
 function rememberSignedSource(signedHref: string, sourceUrl: string): void {
+  // Least recently used goes first: deleting before setting moves a URL that
+  // is signed (handed out) again to the back of the eviction order.
+  sourceBySignedHref.delete(signedHref);
   if (sourceBySignedHref.size >= SIGNED_SOURCE_LIMIT) {
     const oldest = sourceBySignedHref.keys().next().value;
     if (oldest !== undefined) sourceBySignedHref.delete(oldest);
   }
   sourceBySignedHref.set(signedHref, sourceUrl);
+}
+
+/** Removes the SigV4 query parameters (credential, token, signature) from a URL. */
+function stripPresignParameters(url: string): string {
+  try {
+    const parsed = new URL(url);
+    for (const name of [...parsed.searchParams.keys()]) {
+      if (name.toLowerCase().startsWith("x-amz-")) parsed.searchParams.delete(name);
+    }
+    return parsed.href;
+  } catch {
+    return url;
+  }
 }
 
 /**
@@ -414,7 +436,13 @@ export function unsignedSourceUrl(url: string): string;
 export function unsignedSourceUrl(url: string | undefined): string | undefined;
 export function unsignedSourceUrl(url: string | undefined): string | undefined {
   if (url === undefined) return undefined;
-  return sourceBySignedHref.get(url) ?? url;
+  const known = sourceBySignedHref.get(url);
+  if (known !== undefined) return known;
+  // A presigned URL whose mapping was evicted must still never reach a saved
+  // project: fall back to the object it signs, without the signature.
+  if (!/[?&]x-amz-signature=/i.test(url)) return url;
+  const location = parseS3Url(url);
+  return location ? formatS3Uri(location) : stripPresignParameters(url);
 }
 
 /**

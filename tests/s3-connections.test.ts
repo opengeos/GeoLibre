@@ -127,6 +127,11 @@ describe("S3 connection secrets", () => {
 });
 
 describe("SQL cloud URLs", () => {
+  it("leaves cloud URLs in quoted identifiers and comments alone", async () => {
+    const sql = `SELECT 1 AS "s3://not-a-source/key" -- s3://nor/this`;
+    assert.equal(await resolveCloudUrls(sql), sql);
+  });
+
   afterEach(() => registerS3UrlSigner(null));
 
   it("signs covered buckets and rewrites the rest to public HTTPS", async () => {

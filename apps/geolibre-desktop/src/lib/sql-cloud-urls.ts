@@ -20,9 +20,15 @@ import { isCredentialedS3Url, resolveReadableUrl } from "@geolibre/core";
  * not mistaken for a comment), but `blankLiterals` controls whether literal
  * content is blanked. Callers that need to find the end of the real statement
  * (e.g. `cleanStatement`) pass `false` so a trailing string literal is not
- * mistaken for trailing whitespace.
+ * mistaken for trailing whitespace. `blankIdentifiers` does the same for
+ * `"…"` identifiers and follows `blankLiterals` unless given: the cloud-URL
+ * rewrite keeps `'…'` literals (reader arguments) but blanks identifiers.
  */
-export function maskSqlLiterals(sql: string, blankLiterals = true): string {
+export function maskSqlLiterals(
+  sql: string,
+  blankLiterals = true,
+  blankIdentifiers = blankLiterals,
+): string {
   const out = sql.split("");
   const blank = (start: number, end: number): void => {
     for (let k = start; k < end && k < out.length; k += 1) {
@@ -45,7 +51,7 @@ export function maskSqlLiterals(sql: string, blankLiterals = true): string {
         }
         j += 1;
       }
-      if (blankLiterals) blank(i, j + 1);
+      if (char === '"' ? blankIdentifiers : blankLiterals) blank(i, j + 1);
       i = j + 1;
     } else if (char === "-" && sql[i + 1] === "-") {
       let j = i;
@@ -123,7 +129,7 @@ export function rewriteCloudUrls(sql: string): string {
 function replaceCloudUrls(sql: string, replacement: (match: RegExpMatchArray) => string): string {
   // Mask only comments and quoted identifiers (keep string literals intact) —
   // cloud URLs inside reader args like read_parquet('s3://…') must be rewritten.
-  const masked = maskSqlLiterals(sql, false);
+  const masked = maskSqlLiterals(sql, false, true);
   let result = "";
   let lastIndex = 0;
   // Run the pattern against the original SQL (not the mask) to capture the real

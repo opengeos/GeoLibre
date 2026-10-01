@@ -377,11 +377,62 @@ fn env_value(name: &str) -> Option<String> {
 }
 
 /// ECS task roles and EKS Pod Identity: the container credentials endpoint.
+/// The container credentials URL, validated the way the AWS SDKs do: a
+/// relative URI must be a plain path on the ECS endpoint, and a full URI must
+/// be HTTPS or plain HTTP to a loopback or ECS/EKS link-local address, so a
+/// tampered variable cannot send the authorization token to another host.
+fn container_credentials_url(
+    relative: Option<String>,
+    full: Option<String>,
+) -> Option<Result<String, String>> {
+    if let Some(relative) = relative {
+        if !relative.starts_with('/')
+            || relative.contains('@')
+            || relative.chars().any(char::is_control)
+        {
+            return Some(Err(
+                "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI must be a path.".to_string(),
+            ));
+        }
+        return Some(Ok(format!("http://169.254.170.2{relative}")));
+    }
+    let full = full?;
+    let Ok(parsed) = reqwest::Url::parse(&full) else {
+        return Some(Err(
+            "AWS_CONTAINER_CREDENTIALS_FULL_URI is not a URL.".to_string()
+        ));
+    };
+    let host = parsed.host_str().unwrap_or_default();
+    let allowed = match parsed.scheme() {
+        "https" => true,
+        "http" => matches!(
+            host,
+            "127.0.0.1"
+                | "localhost"
+                | "[::1]"
+                | "169.254.170.2"
+                | "169.254.170.23"
+                | "[fd00:ec2::23]"
+        ),
+        _ => false,
+    };
+    if !allowed || !parsed.username().is_empty() {
+        return Some(Err(
+            "AWS_CONTAINER_CREDENTIALS_FULL_URI must be HTTPS, or HTTP to a loopback or ECS/EKS \
+             metadata address."
+                .to_string(),
+        ));
+    }
+    Some(Ok(full))
+}
+
 fn container_credentials() -> Option<Result<RoleCredentials, String>> {
-    let url = if let Some(relative) = env_value("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") {
-        format!("http://169.254.170.2{relative}")
-    } else {
-        env_value("AWS_CONTAINER_CREDENTIALS_FULL_URI")?
+    let url = match container_credentials_url(
+        env_value("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"),
+        env_value("AWS_CONTAINER_CREDENTIALS_FULL_URI"),
+    )? {
+        Ok(url) => url,
+        Err(error) => return Some(Err(error)),
     };
     let token = env_value("AWS_CONTAINER_AUTHORIZATION_TOKEN").or_else(|| {
         env_value("AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE")
@@ -577,6 +628,30 @@ mod tests {
         .unwrap();
         assert_eq!(parsed.session_token.as_deref(), Some("T"));
         assert_eq!(parsed.expiration, Some(1_767_225_600_000));
+    }
+
+    #[test]
+    fn validates_container_credential_urls() {
+        let url = |relative: Option<&str>, full: Option<&str>| {
+            container_credentials_url(relative.map(String::from), full.map(String::from))
+        };
+        assert_eq!(
+            url(Some("/v2/credentials/abc"), None).unwrap().unwrap(),
+            "http://169.254.170.2/v2/credentials/abc"
+        );
+        assert!(url(Some("@evil.example.com/x"), None).unwrap().is_err());
+        assert!(url(Some("v2/x"), None).unwrap().is_err());
+        assert!(url(None, Some("http://169.254.170.23/v1/credentials"))
+            .unwrap()
+            .is_ok());
+        assert!(url(None, Some("https://creds.example.com/x"))
+            .unwrap()
+            .is_ok());
+        assert!(url(None, Some("http://evil.example.com/x"))
+            .unwrap()
+            .is_err());
+        assert!(url(None, Some("http://user@127.0.0.1/x")).unwrap().is_err());
+        assert!(url(None, None).is_none());
     }
 
     #[test]
