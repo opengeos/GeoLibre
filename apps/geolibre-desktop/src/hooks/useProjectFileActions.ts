@@ -1755,6 +1755,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         ],
         mimeType: "application/json",
       });
+      // Same guard as Export HTML: a native picker can stay open while another
+      // project arrives, and then this export no longer describes it.
+      if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
       return savedPath !== null;
     } catch (error) {
       setActionError(

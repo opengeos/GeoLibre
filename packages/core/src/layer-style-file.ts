@@ -116,6 +116,8 @@ const RASTER_APPEARANCE_VALIDATORS: Record<
   rescale: (value) =>
     value === null ||
     (Array.isArray(value) &&
+      // An empty array is not a meaningful rescale (as in savedRasterState).
+      value.length > 0 &&
       value.every(
         (range) =>
           Array.isArray(range) &&

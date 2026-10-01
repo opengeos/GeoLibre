@@ -40,7 +40,7 @@ import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { projectMenuItemCapability } from "../../../lib/deployment-gates";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import type { ShareHostStatus } from "../../../lib/share-geolibre";
-import { CapabilityNotice, capabilityNoticeId } from "./CapabilityNotice";
+import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import { formatRecentProjectTime, type ToolbarChrome } from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
 
@@ -141,6 +141,10 @@ export function ProjectMenu({
   const shareDeniedBy = capabilityNoticeId(SHARE_DENIED_ID, shareCapability);
   const exportDataDeniedBy = capabilityNoticeId(EXPORT_DATA_DENIED_ID, exportDataCapability);
   const exportImageDeniedBy = capabilityNoticeId(EXPORT_IMAGE_DENIED_ID, exportImageCapability);
+  // Everything in the Export submenu takes `export:data`, so a denial disables
+  // the trigger itself and explains it with a tooltip, as ProcessingMenu does:
+  // the foot-of-menu note is out of sight from inside the submenu.
+  const exportDataDeniedTitle = useCapabilityReason(exportDataCapability);
   // Two independent gates, and the deployment's comes first: the interface
   // profile is a decluttering preference the user can undo, while a capability
   // the deployment withheld is not on offer at all (issue #1673).
@@ -401,7 +405,10 @@ export function ProjectMenu({
         )}
         {showExportMenu && (
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger
+              disabled={!exportDataCapability.granted}
+              title={exportDataDeniedTitle}
+            >
               <FileOutput className="h-3.5 w-3.5" />
               {t("toolbar.menu.export")}
             </DropdownMenuSubTrigger>

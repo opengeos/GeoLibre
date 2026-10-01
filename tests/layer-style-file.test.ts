@@ -111,7 +111,7 @@ describe("raster entries from a file", () => {
         rasterState: {
           colormap: 42,
           reversed: "yes",
-          rescale: "x",
+          rescale: [],
           nodata: "sometimes",
           stretch: "cubic",
           gamma: 0,
