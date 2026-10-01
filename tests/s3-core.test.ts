@@ -181,6 +181,13 @@ describe("signer registry", () => {
       unsignedSourceUrl("https://minio.test/bkt/k?v=1&X-Amz-Security-Token=T&X-Amz-Signature=S"),
       "https://minio.test/bkt/k?v=1",
     );
+    // Keys an s3:// URI cannot hold keep the object URL form.
+    for (const key of ["a%23b.tif", "a%3Fb.tif"]) {
+      assert.equal(
+        unsignedSourceUrl(`https://bkt.s3.amazonaws.com/${key}?X-Amz-Signature=S`),
+        `https://bkt.s3.amazonaws.com/${key}`,
+      );
+    }
   });
 });
 

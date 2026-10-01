@@ -416,7 +416,7 @@ fn container_credentials_url(
         ),
         _ => false,
     };
-    if !allowed || !parsed.username().is_empty() {
+    if !allowed || !parsed.username().is_empty() || parsed.password().is_some() {
         return Some(Err(
             "AWS_CONTAINER_CREDENTIALS_FULL_URI must be HTTPS, or HTTP to a loopback or ECS/EKS \
              metadata address."
@@ -651,6 +651,9 @@ mod tests {
             .unwrap()
             .is_err());
         assert!(url(None, Some("http://user@127.0.0.1/x")).unwrap().is_err());
+        assert!(url(None, Some("http://:token@127.0.0.1/x"))
+            .unwrap()
+            .is_err());
         assert!(url(None, None).is_none());
     }
 

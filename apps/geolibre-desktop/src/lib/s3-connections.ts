@@ -211,3 +211,23 @@ export function normalizeS3DefaultLocation(value: unknown): string {
   const prefix = rest.join("/");
   return `s3://${bucket}/${prefix && !prefix.endsWith("/") ? `${prefix}/` : prefix}`;
 }
+
+/**
+ * How long a presigned URL may live, in seconds: `maxSeconds`, cut short by
+ * the credentials' expiry, never under a minute.
+ *
+ * @param expiresAt When the credentials stop working (epoch ms), if they do.
+ * @param now The current time (epoch ms).
+ * @param maxSeconds The longest lifetime wanted.
+ * @returns The lifetime, or null when the credentials have already expired.
+ */
+export function presignLifetimeSeconds(
+  expiresAt: number | undefined,
+  now: number,
+  maxSeconds: number,
+): number | null {
+  if (expiresAt === undefined) return maxSeconds;
+  const remainingMs = expiresAt - now;
+  if (remainingMs <= 0) return null;
+  return Math.max(60, Math.floor(Math.min(maxSeconds * 1000, remainingMs) / 1000));
+}

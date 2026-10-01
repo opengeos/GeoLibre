@@ -9,6 +9,7 @@ import {
   normalizeS3Connections,
   normalizeS3DefaultLocation,
   parseBucketPatterns,
+  presignLifetimeSeconds,
   type S3Connection,
 } from "../apps/geolibre-desktop/src/lib/s3-connections";
 import {
@@ -91,6 +92,16 @@ describe("S3 connections", () => {
     assert.equal(normalizeS3DefaultLocation("s3://bkt/x/"), "s3://bkt/x/");
     assert.equal(normalizeS3DefaultLocation("!!"), "");
     assert.equal(normalizeS3DefaultLocation(42), "");
+  });
+});
+
+describe("presign lifetime", () => {
+  it("caps at the maximum, follows expiring credentials, and refuses expired ones", () => {
+    assert.equal(presignLifetimeSeconds(undefined, 0, 43_200), 43_200);
+    assert.equal(presignLifetimeSeconds(3_600_000, 0, 43_200), 3_600);
+    assert.equal(presignLifetimeSeconds(10_000, 0, 43_200), 60);
+    assert.equal(presignLifetimeSeconds(1_000, 1_000, 43_200), null);
+    assert.equal(presignLifetimeSeconds(500, 1_000, 43_200), null);
   });
 });
 

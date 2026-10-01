@@ -442,7 +442,11 @@ export function unsignedSourceUrl(url: string | undefined): string | undefined {
   // project: fall back to the object it signs, without the signature.
   if (!/[?&]x-amz-signature=/i.test(url)) return url;
   const location = parseS3Url(url);
-  return location ? formatS3Uri(location) : stripPresignParameters(url);
+  // An `s3://` URI cannot carry a key with `?` or `#` (they would be read as a
+  // query or fragment), so such keys keep the object URL form.
+  return location && !/[?#]/.test(location.key)
+    ? formatS3Uri(location)
+    : stripPresignParameters(url);
 }
 
 /**

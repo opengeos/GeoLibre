@@ -21,6 +21,7 @@ import {
   isS3ConnectionComplete,
   matchS3Connection,
   needsDesktopResolution,
+  presignLifetimeSeconds,
   type S3Connection,
 } from "./s3-connections";
 
@@ -318,17 +319,20 @@ export function createS3Signer(
       if (cached && cached.expiresAt - EXPIRY_MARGIN_MS > Date.now()) return cached;
 
       const credentials = await resolveS3ConnectionCredentials(connection);
+      const lifetime = () => {
+        const seconds = presignLifetimeSeconds(credentials.expiresAt, Date.now(), PRESIGN_SECONDS);
+        if (seconds === null) {
+          // Say so now rather than sign (or probe a region with) credentials S3
+          // will refuse; the next read resolves them afresh.
+          credentialCache.delete(connection.id);
+          throw new Error(`The credentials of S3 connection "${connection.name}" have expired.`);
+        }
+        return seconds;
+      };
+      lifetime();
       const region = await regionFor(connection, credentials, request, signal);
-      const lifetimeMs = credentials.expiresAt
-        ? Math.min(PRESIGN_SECONDS * 1000, credentials.expiresAt - Date.now())
-        : PRESIGN_SECONDS * 1000;
-      if (lifetimeMs <= 0) {
-        // Say so now rather than mint a URL S3 will refuse; the next read
-        // resolves the credentials afresh.
-        credentialCache.delete(connection.id);
-        throw new Error(`The credentials of S3 connection "${connection.name}" have expired.`);
-      }
-      const expiresIn = Math.max(60, Math.floor(lifetimeMs / 1000));
+      // Again: the credentials may have expired during the region probe.
+      const expiresIn = lifetime();
       const href = await presignFor(connection, credentials, request, region, expiresIn);
       const signed = { href, expiresAt: Date.now() + expiresIn * 1000 };
       if (key) rememberSignedUrl(key, signed);
