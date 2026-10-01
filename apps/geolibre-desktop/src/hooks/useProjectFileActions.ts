@@ -1744,6 +1744,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         if (chosen === null) return false;
         defaultName = ensureJsonFileName(chosen, slug);
       }
+      // Don't write a project that is no longer open. Checked before the write,
+      // not after it: the save picker writes as it closes, so a later check
+      // would report a failure for a file already on disk. A switch while the
+      // native picker itself is open still saves the styles as they were when
+      // the user chose Export, which is what they asked for.
+      if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
       const savedPath = await saveTextFileWithFallback(serializeLayerStylesFile(entries), {
         defaultName,
         filters: [{ name: t("toolbar.item.layerStylesFile"), extensions: ["json"] }],
@@ -1755,9 +1761,6 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         ],
         mimeType: "application/json",
       });
-      // Same guard as Export HTML: a native picker can stay open while another
-      // project arrives, and then this export no longer describes it.
-      if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
       return savedPath !== null;
     } catch (error) {
       setActionError(
