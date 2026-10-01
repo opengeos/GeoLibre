@@ -80,7 +80,9 @@ describe("layer styles file round trip", () => {
     );
     assert.throws(
       () =>
-        parseLayerStylesFile(JSON.stringify({ type: LAYER_STYLES_FILE_TYPE, version: 1, styles: [] })),
+        parseLayerStylesFile(
+          JSON.stringify({ type: LAYER_STYLES_FILE_TYPE, version: 1, styles: [] }),
+        ),
       /no usable styles/,
     );
   });

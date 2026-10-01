@@ -30,7 +30,8 @@ export function useStartupLayerStyles(): void {
         added.push(layer.id);
       }
       if (added.length === 0) return;
-      const entries = useDesktopSettingsStore.getState().desktopSettings.startup.layerStyles?.entries;
+      const entries =
+        useDesktopSettingsStore.getState().desktopSettings.startup.layerStyles?.entries;
       if (!entries?.length) return;
       // Apply after this notification finishes. A store update made from inside
       // a listener notifies every listener with the new state first, and then
