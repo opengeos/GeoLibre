@@ -226,6 +226,50 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
         </DialogContent>
       </Dialog>
       <Dialog
+        open={projectFiles.layerStyleImportResult !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) projectFiles.setLayerStyleImportResult(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.item.layerStylesImported")}</DialogTitle>
+            <DialogDescription>
+              {t("toolbar.item.layerStylesImportedSummary", {
+                count: projectFiles.layerStyleImportResult?.restyled.length ?? 0,
+                file: projectFiles.layerStyleImportResult?.fileName ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          {(projectFiles.layerStyleImportResult?.restyled.length ?? 0) > 0 && (
+            <ul className="max-h-40 list-disc space-y-1 overflow-y-auto ps-5 text-sm">
+              {projectFiles.layerStyleImportResult?.restyled.map((name, index) => (
+                <li key={`${index}-${name}`}>{name}</li>
+              ))}
+            </ul>
+          )}
+          {(projectFiles.layerStyleImportResult?.unused.length ?? 0) > 0 && (
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">
+                {t("toolbar.item.layerStylesUnused", {
+                  count: projectFiles.layerStyleImportResult?.unused.length ?? 0,
+                })}
+              </p>
+              <ul className="max-h-32 list-disc space-y-1 overflow-y-auto ps-5 text-sm text-muted-foreground">
+                {projectFiles.layerStyleImportResult?.unused.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button onClick={() => projectFiles.setLayerStyleImportResult(null)}>
+              {t("common.ok")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={projectFiles.saveNamePrompt !== null}
         onOpenChange={(open: boolean) => {
           if (!open) projectFiles.cancelSaveNamePrompt();

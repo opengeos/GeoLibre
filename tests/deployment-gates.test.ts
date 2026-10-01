@@ -129,6 +129,7 @@ describe("projectMenuItemCapability", () => {
     for (const id of [
       "project.share",
       "project.exportHtml",
+      "project.exportLayerStyles",
       "project.print",
       "project.printLayout",
       "project.offlineRegion",

@@ -242,6 +242,7 @@ const PROJECT_MENU_ITEM_CAPABILITIES: Readonly<Record<string, DeploymentCapabili
   // Everything that gets data or a rendering back out of the deployment.
   "project.share": "export:data",
   "project.exportHtml": "export:data",
+  "project.exportLayerStyles": "export:data",
   "project.print": "export:data",
   "project.printLayout": "export:data",
   "project.offlineRegion": "export:data",

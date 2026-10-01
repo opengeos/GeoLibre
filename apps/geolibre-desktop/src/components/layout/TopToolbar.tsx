@@ -2310,6 +2310,7 @@ export function TopToolbar({
           onOpenGallery={() => setGalleryDialogOpen(true)}
           onImportQgisProject={() => void projectFiles.handleImportQgisProject()}
           onImportArcgisProject={() => void projectFiles.handleImportArcgisProject()}
+          onImportLayerStyles={() => void projectFiles.handleImportLayerStyles()}
           onOpenRecent={(path) => {
             void projectFiles.handleOpenRecent(path).then((error) => {
               if (error) projectFiles.setActionError(error);
@@ -2322,6 +2323,7 @@ export function TopToolbar({
           onSaveAsTemplate={() => projectFiles.handleSaveAsTemplate()}
           onShare={() => setShareDialogOpen(true)}
           onExportHtml={() => void projectFiles.handleExportHtml()}
+          onExportLayerStyles={() => void projectFiles.handleExportLayerStyles()}
           onCollaborate={() => setCollaborateDialogOpen(true)}
           onPrintLayout={() => setPrintLayoutOpen(true)}
           onOpenOfflineBasemap={onOpenBasemapExtract}

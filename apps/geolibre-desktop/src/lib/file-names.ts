@@ -35,3 +35,18 @@ export function ensureHtmlFileName(name: string, fallbackSlug: string): string {
   if (!trimmed || /^\.+$/.test(trimmed)) return `${fallbackSlug}.html`;
   return /\.html?$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
 }
+
+/**
+ * Normalize a user-entered layer styles file name: keep the user's `.json`
+ * suffix, add one when missing, and fall back to the slug-derived name for a
+ * blank or dots-only entry.
+ *
+ * @param name - The name the user typed.
+ * @param fallbackSlug - Slug used when the entry has no usable base.
+ * @returns A file name ending in `.json`.
+ */
+export function ensureJsonFileName(name: string, fallbackSlug: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || /^\.+$/.test(trimmed)) return `${fallbackSlug}.json`;
+  return /\.json$/i.test(trimmed) ? trimmed : `${trimmed}.json`;
+}

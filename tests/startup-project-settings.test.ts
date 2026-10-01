@@ -21,6 +21,7 @@ describe("startup project settings", () => {
       globeByDefault: true,
       center: [-100, 40],
       zoom: 2,
+      layerStyles: null,
     });
   });
 
@@ -43,6 +44,7 @@ describe("startup project settings", () => {
         globeByDefault: false,
         center: [-84.388, 33.749],
         zoom: 10.25,
+        layerStyles: null,
       },
     );
   });

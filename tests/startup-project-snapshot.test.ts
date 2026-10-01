@@ -32,6 +32,7 @@ function settings(patch: Partial<StartupSettings> = {}): StartupSettings {
     globeByDefault: true,
     center: [-100, 40],
     zoom: 2,
+    layerStyles: null,
     ...patch,
   };
 }

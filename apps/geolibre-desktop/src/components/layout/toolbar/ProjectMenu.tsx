@@ -17,6 +17,7 @@ import {
   Copy,
   FileCode2,
   FileInput,
+  FileOutput,
   FilePen,
   FilePlus2,
   FileText,
@@ -27,6 +28,7 @@ import {
   Import,
   LayoutGrid,
   Link2,
+  Palette,
   Printer,
   Save,
   Share2,
@@ -69,6 +71,7 @@ interface ProjectMenuProps {
   onOpenGallery: () => void;
   onImportQgisProject: () => void;
   onImportArcgisProject: () => void;
+  onImportLayerStyles: () => void;
   onOpenRecent: (path: string) => void;
   onOpenHistory: () => void;
   onSave: () => void;
@@ -77,6 +80,7 @@ interface ProjectMenuProps {
   onSaveAsTemplate?: () => void;
   onShare: () => void;
   onExportHtml: () => void;
+  onExportLayerStyles: () => void;
   onCollaborate: () => void;
   onPrintLayout: () => void;
   onOpenOfflineBasemap: () => void;
@@ -93,6 +97,7 @@ export function ProjectMenu({
   onOpenGallery,
   onImportQgisProject,
   onImportArcgisProject,
+  onImportLayerStyles,
   onOpenRecent,
   onOpenHistory,
   onSave,
@@ -101,6 +106,7 @@ export function ProjectMenu({
   onSaveAsTemplate,
   onShare,
   onExportHtml,
+  onExportLayerStyles,
   onCollaborate,
   onPrintLayout,
   onOpenOfflineBasemap,
@@ -167,6 +173,7 @@ export function ProjectMenu({
     show("project.saveAsTemplate") ||
     (!shareHidden && show("project.share")) ||
     show("project.exportHtml") ||
+    show("project.exportLayerStyles") ||
     (collaborationEnabled && show("project.collaborate"));
   // Narrower than showSaveGroup, which also covers share/export/collaborate: the
   // `project:save` note must not render when only those siblings are on screen.
@@ -177,7 +184,11 @@ export function ProjectMenu({
     (show("project.saveAsTemplate") && Boolean(onSaveAsTemplate));
   // The two `export:data` entries sit in different groups, so their shared note
   // renders at the menu's foot and needs to know whether either is on screen.
-  const showExportDataActions = show("project.exportHtml") || show("project.offlineRegion");
+  const showExportDataActions =
+    show("project.exportHtml") ||
+    show("project.exportLayerStyles") ||
+    show("project.offlineRegion");
+  const showExportMenu = show("project.exportHtml") || show("project.exportLayerStyles");
   // Same for the two `project:share` entries, which straddle Export HTML.
   const showShareActions =
     (!shareHidden && show("project.share")) ||
@@ -320,6 +331,10 @@ export function ProjectMenu({
                 <FileInput className="me-2 h-3.5 w-3.5" />
                 {t("toolbar.item.importArcgisProjectEllipsis")}
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onImportLayerStyles}>
+                <Palette className="me-2 h-3.5 w-3.5" />
+                {t("toolbar.item.importLayerStylesEllipsis")}
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}
@@ -384,15 +399,35 @@ export function ProjectMenu({
             {shareBrokenNote(SHARE_UNAVAILABLE_ID)}
           </>
         )}
-        {show("project.exportHtml") && (
-          <DropdownMenuItem
-            onSelect={onExportHtml}
-            disabled={!exportDataCapability.granted}
-            aria-describedby={exportDataDeniedBy}
-          >
-            <FileCode2 className="me-2 h-3.5 w-3.5" />
-            {t("toolbar.item.exportHtmlEllipsis")}
-          </DropdownMenuItem>
+        {showExportMenu && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <FileOutput className="h-3.5 w-3.5" />
+              {t("toolbar.menu.export")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {show("project.exportHtml") && (
+                <DropdownMenuItem
+                  onSelect={onExportHtml}
+                  disabled={!exportDataCapability.granted}
+                  aria-describedby={exportDataDeniedBy}
+                >
+                  <FileCode2 className="me-2 h-3.5 w-3.5" />
+                  {t("toolbar.item.exportHtmlEllipsis")}
+                </DropdownMenuItem>
+              )}
+              {show("project.exportLayerStyles") && (
+                <DropdownMenuItem
+                  onSelect={onExportLayerStyles}
+                  disabled={!exportDataCapability.granted}
+                  aria-describedby={exportDataDeniedBy}
+                >
+                  <Palette className="me-2 h-3.5 w-3.5" />
+                  {t("toolbar.item.exportLayerStylesEllipsis")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         )}
         {collaborationEnabled && show("project.collaborate") && (
           <DropdownMenuItem

@@ -17,6 +17,7 @@ import { useLayerLibraryPersistence } from "./hooks/useLayerLibraryPersistence";
 import { useLastBasemapPersistence } from "./hooks/useLastBasemapPersistence";
 import { useLastRendererPersistence } from "./hooks/useLastRendererPersistence";
 import { useStyleLibraryPersistence } from "./hooks/useStyleLibraryPersistence";
+import { useStartupLayerStyles } from "./hooks/useStartupLayerStyles";
 import { useTemplateLibraryPersistence } from "./hooks/useTemplateLibraryPersistence";
 import { useRuntimeEnvironmentVariables } from "./hooks/useRuntimeEnvironmentVariables";
 import { useStartupUpdateCheck } from "./hooks/useStartupUpdateCheck";
@@ -57,6 +58,7 @@ export default function App() {
   const { warning: startupProjectWarning, restoring: restoringStartupProject } =
     useStartupProject();
   useStyleLibraryPersistence();
+  useStartupLayerStyles();
   useLayerLibraryPersistence();
   useTemplateLibraryPersistence();
   useRuntimeEnvironmentVariables();

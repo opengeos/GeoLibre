@@ -2,6 +2,8 @@ import {
   createDefaultMapView,
   isAllowedPluginManifestUrl,
   normalizeMapViewState,
+  normalizeLayerStyleEntries,
+  type LayerStyleFileEntry,
 } from "@geolibre/core";
 import { useEffect } from "react";
 import { create } from "zustand";
@@ -137,6 +139,25 @@ export interface StartupSettings {
   center: [number, number];
   /** Zoom used for the untitled workspace when no project is provided. */
   zoom: number;
+  /**
+   * Layer styles file whose styles are applied, by layer name, to every layer
+   * added to the map. Null when none is set.
+   */
+  layerStyles: StartupLayerStyles | null;
+}
+
+/**
+ * The layer styles file chosen in Startup settings. The parsed styles are
+ * kept here rather than re-read from `path` on each launch: the browser build
+ * never gets a readable path back from its picker, and on desktop the file may
+ * have moved. Choosing the file again picks up later edits to it.
+ */
+export interface StartupLayerStyles {
+  /** The file's name, for display. */
+  fileName: string;
+  /** The path (desktop) or file name (browser) it was read from. */
+  path: string;
+  entries: LayerStyleFileEntry[];
 }
 
 export interface ThemeSettings {
@@ -268,6 +289,7 @@ export const DEFAULT_STARTUP_SETTINGS: StartupSettings = {
   globeByDefault: true,
   center: [...createDefaultMapView().center],
   zoom: createDefaultMapView().zoom,
+  layerStyles: null,
 };
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
@@ -365,7 +387,21 @@ function normalizeStartupSettings(startup: unknown): StartupSettings {
     globeByDefault: typeof candidate.globeByDefault === "boolean" ? candidate.globeByDefault : true,
     center: view.center,
     zoom: view.zoom,
+    layerStyles: normalizeStartupLayerStyles(candidate.layerStyles),
   };
+}
+
+function normalizeStartupLayerStyles(value: unknown): StartupLayerStyles | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<Record<keyof StartupLayerStyles, unknown>>;
+  const entries = normalizeLayerStyleEntries(candidate.entries);
+  if (entries.length === 0) return null;
+  const path = typeof candidate.path === "string" ? candidate.path : "";
+  const fileName =
+    typeof candidate.fileName === "string" && candidate.fileName.trim()
+      ? candidate.fileName.trim()
+      : path;
+  return { fileName, path, entries };
 }
 
 /**
