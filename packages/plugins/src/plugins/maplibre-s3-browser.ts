@@ -380,8 +380,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     syncEntry(entry);
     syncSelectionBar();
     const run = addQueue.then(async (): Promise<string | null> => {
-      if (!app || isOnMap(entry.object, entry.location.bucket)) return null;
       try {
+        // Inside the try so `finally` clears `pending` for a skipped file too.
+        if (!app || isOnMap(entry.object, entry.location.bucket)) return null;
         const added = await addObjectToMap(app, entry.location, entry.object);
         return added ? null : labels.addFailed(entry.object.name, labels.notAddable);
       } catch (error) {

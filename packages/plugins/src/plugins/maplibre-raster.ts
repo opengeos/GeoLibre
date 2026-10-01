@@ -397,6 +397,10 @@ export async function addRasterToMap(
     const { addArcgisRaster } = await import("./arcgis-raster-import");
     return addArcgisRaster(app, source, options);
   }
+  // `s3://` sources and private-bucket object URLs are read through a
+  // presigned URL; the store sync maps it back to `source`. Signed before the
+  // control is taken, so a control replaced while signing is never used.
+  const readable = typeof source === "string" ? await resolveReadableUrl(source) : source;
   const control = await ensureRasterControl(app);
   if (!control) {
     throw new Error("The raster control could not be initialized.");
@@ -410,9 +414,6 @@ export async function addRasterToMap(
   if (options.defaults?.engine && control.getEngine() !== options.defaults.engine) {
     control.setEngine(options.defaults.engine);
   }
-  // `s3://` sources and private-bucket object URLs are read through a
-  // presigned URL; the store sync maps it back to `source`.
-  const readable = typeof source === "string" ? await resolveReadableUrl(source) : source;
   // Named here rather than by the control, so a failure below removes exactly
   // this add's raster and never one a concurrent add created.
   const rasterId = `raster-${crypto.randomUUID().slice(0, 8)}`;
