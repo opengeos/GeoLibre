@@ -1,6 +1,16 @@
-import { useAppStore, type GeoLibreLayer, type LayerStyle } from "@geolibre/core";
+import {
+  normalizeGroupContiguity,
+  useAppStore,
+  type GeoLibreLayer,
+  type LayerStyle,
+} from "@geolibre/core";
 import type * as maplibregl from "maplibre-gl";
-import { LayerControl, type CustomLayerAdapter, type LayerState } from "maplibre-gl-layer-control";
+import {
+  LayerControl,
+  type CustomLayerAdapter,
+  type LayerGroupState,
+  type LayerState,
+} from "maplibre-gl-layer-control";
 import { getLayerBounds } from "./geojson-loader";
 
 /**
@@ -89,6 +99,8 @@ interface LayerControlInternalState {
   panel?: HTMLElement;
   basemapLayerIds?: Set<string> | null;
   state?: {
+    /** False while the panel is open. */
+    collapsed?: boolean;
     layerStates?: Record<string, { visible: boolean; opacity: number; name: string }>;
   };
   /** Rebuilds the panel's rows from `state.layerStates`; the control's own refresh path. */
@@ -102,6 +114,17 @@ interface LayerControlInternalState {
  * basemap lives in style imports.
  */
 const BASEMAP_ID_SENTINEL = "geolibre:basemap";
+
+/**
+ * Style layers that libraries add as plumbing, never as data, matched as the
+ * control's wildcard `excludeLayers` patterns. They are hidden from the
+ * control on every engine.
+ *
+ * - `mlr-attribution-*`: maplibre-gl-raster gives each attributed raster an
+ *   empty GeoJSON source and a no-op circle layer so the map's attribution
+ *   control shows its credit (e.g. the dem.tif sample's).
+ */
+const HELPER_LAYER_PATTERNS = ["mlr-attribution-*"];
 
 /**
  * Restore `refreshed` to just before `anchor` under `parent` after a
@@ -121,6 +144,35 @@ export function restoreControlOrder(
   if (anchor !== null && anchor.parentElement !== parent) return;
   if (!refreshed || refreshed === anchor) return;
   parent.insertBefore(refreshed, anchor);
+}
+
+/**
+ * Work out the store move a reorder in the layer control asks for. The control
+ * reports only the new panel order (top to bottom), and every reorder it
+ * offers moves a single layer: a drag, or a context-menu move. Find that layer
+ * and the store index it lands at (the store lists the top-most layer last).
+ *
+ * Exported for unit testing.
+ *
+ * @param previousOrder Layer ids in panel order before the reorder.
+ * @param nextOrder Layer ids in panel order after the reorder.
+ * @returns The layer and its new store index, or `null` when the orders do not
+ *   differ by exactly one moved layer.
+ */
+export function layerControlReorderMove(
+  previousOrder: readonly string[],
+  nextOrder: readonly string[],
+): { layerId: string; storeIndex: number } | null {
+  if (previousOrder.length !== nextOrder.length) return null;
+  if (previousOrder.every((id, index) => nextOrder[index] === id)) return null;
+
+  const layerId = previousOrder.find((candidate) => {
+    const before = previousOrder.filter((id) => id !== candidate);
+    const after = nextOrder.filter((id) => id !== candidate);
+    return before.length === after.length && before.every((id, index) => after[index] === id);
+  });
+  if (layerId === undefined) return null;
+  return { layerId, storeIndex: nextOrder.length - 1 - nextOrder.indexOf(layerId) };
 }
 
 /**
@@ -185,6 +237,15 @@ export class LayerControlHost {
   // so onLayerStyleChange callbacks during that refresh are ignored
   // (reentrancy guard against a sync loop). See syncState.
   private refreshingStyleEditor = false;
+  // Mount the next control with its panel open. Set by refresh() so a rebuild
+  // (e.g. after a reorder made in the panel) does not close the panel under
+  // the user.
+  private mountExpanded = false;
+  // Last symbol type read from each layer's native style layers. A plugin
+  // layer can remove its native layers while hidden (the Overture Maps
+  // control does), and the symbol type is part of the rebuild signature, so
+  // without this every visibility toggle would rebuild the control.
+  private symbolTypes = new Map<string, string>();
 
   constructor(
     private readonly adapter: LayerControlHostAdapter,
@@ -222,11 +283,13 @@ export class LayerControlHost {
     const config = this.createConfig(this.adapter.getLayers());
     this.signature = this.createSignature(config);
     const basemapStyleUrl = this.adapter.getBasemapStyleUrl();
+    const collapsed = !this.mountExpanded;
+    this.mountExpanded = false;
     const control = new LayerControl({
       // The control fetches this URL to introspect the basemap's layers; a
       // basemap it cannot fetch is seeded below instead.
       basemapStyleUrl: basemapStyleUrl ?? undefined,
-      collapsed: true,
+      collapsed,
       panelWidth: 340,
       panelMinWidth: 240,
       panelMaxWidth: 450,
@@ -246,6 +309,12 @@ export class LayerControlHost {
       // stays in sync and the change survives the next layer sync.
       onLayerStyleChange: (layerId, property, value) => {
         this.applyStyleChange(layerId, property, value);
+      },
+      // The control only restacks native MapLibre layers itself, and every
+      // GeoLibre layer is a custom adapter layer, so a drag or a context-menu
+      // move changes nothing until the store's order does.
+      onLayerReorder: (layerOrder) => {
+        this.applyReorder(layerOrder);
       },
     });
     if (basemapStyleUrl === null) {
@@ -311,6 +380,8 @@ export class LayerControlHost {
     const anchor = previous?.nextElementSibling ?? null;
     const parent = previous?.parentElement ?? null;
 
+    this.mountExpanded =
+      (this.control as unknown as LayerControlInternalState).state?.collapsed === false;
     this.remove();
     this.add();
 
@@ -337,6 +408,10 @@ export class LayerControlHost {
     if (!this.control) return;
     this.syncBackgroundState();
     this.syncLayerStates(this.adapter.getLayers());
+    // Group rows: names, visibility, opacity, and collapsed state are updated
+    // in place; a structural change already rebuilt the control (see
+    // createSignature).
+    this.control.refreshGroups();
     // Push the latest paint (already applied to the map by the engine) into
     // the control's open style editor so edits made elsewhere — e.g. the
     // right-hand Style sidebar — are reflected there too (issue #912). No-op
@@ -354,6 +429,37 @@ export class LayerControlHost {
     } finally {
       this.refreshingStyleEditor = false;
     }
+  }
+
+  /**
+   * Mirror a reorder made in the control (see {@link layerControlReorderMove})
+   * into the store; the next layer sync restacks the map and, through the
+   * signature, rebuilds the control in the new order.
+   */
+  private applyReorder(nextOrder: string[]): void {
+    const store = useAppStore.getState();
+    // The control lists the top-most layer first; the store lists it last.
+    const previousOrder = store.layers.map((layer) => layer.id).reverse();
+    const move = layerControlReorderMove(previousOrder, nextOrder);
+    const moved = move && store.layers.find((layer) => layer.id === move.layerId);
+    if (move && moved) {
+      // The control keeps every move inside the layer's own group, but the
+      // store asks for more: a group's own layers form one unbroken run, with
+      // its nested groups above or below that run, never inside it. A move
+      // that would break the run (e.g. one layer above a nested group while
+      // its siblings stay below) is not applied.
+      const next = store.layers.filter((layer) => layer.id !== move.layerId);
+      next.splice(move.storeIndex, 0, moved);
+      const normalized = normalizeGroupContiguity(next);
+      if (normalized.every((layer, index) => layer === next[index])) {
+        store.moveLayer(move.layerId, move.storeIndex);
+        return;
+      }
+    }
+    // Nothing changes, so no layer sync will rebuild the control, but a drag
+    // has already moved the row in the panel. Redraw the rows from the map's
+    // actual order.
+    (this.control as unknown as LayerControlInternalState | null)?.buildLayerItems?.();
   }
 
   /**
@@ -405,6 +511,10 @@ export class LayerControlHost {
   }
 
   private createConfig(layers: GeoLibreLayer[]): LayerControlConfig {
+    const layerIds = new Set(layers.map((layer) => layer.id));
+    for (const id of this.symbolTypes.keys()) {
+      if (!layerIds.has(id)) this.symbolTypes.delete(id);
+    }
     const nativeStyleLayerIds = layers.flatMap((layer) => this.candidateNativeLayerIds(layer));
     // Hide style layers a plugin marks as internal chrome (e.g. selection
     // footprints, draw/highlight helpers) so they don't clutter the control.
@@ -420,7 +530,12 @@ export class LayerControlHost {
       // force an unnecessary control rebuild.
       .sort();
     const excludeLayers = Array.from(
-      new Set([...this.adapter.excludedLayerIds, ...nativeStyleLayerIds, ...internalStyleLayerIds]),
+      new Set([
+        ...this.adapter.excludedLayerIds,
+        ...HELPER_LAYER_PATTERNS,
+        ...nativeStyleLayerIds,
+        ...internalStyleLayerIds,
+      ]),
     );
     if (layers.length === 0) {
       return { excludeLayers };
@@ -442,6 +557,10 @@ export class LayerControlHost {
     // store; including them here would destroy and recreate the control
     // (collapsing it and interrupting the drag) on every slider or checkbox
     // interaction.
+    //
+    // Group structure (ids, parents, membership) is structural too. A group's
+    // name, visibility, opacity, and collapsed state are not: syncState
+    // updates those rows in place through the control's refreshGroups.
     return JSON.stringify({
       excluded: config.excludeLayers ?? [],
       layers: config.customLayerAdapters?.flatMap((adapter) =>
@@ -451,8 +570,12 @@ export class LayerControlHost {
             id,
             name: state?.name,
             symbol: adapter.getSymbolType?.(id),
+            group: adapter.getLayerGroupId?.(id) ?? null,
           };
         }),
+      ),
+      groups: config.customLayerAdapters?.flatMap((adapter) =>
+        (adapter.getGroups?.() ?? []).map((group) => [group.id, group.parentId ?? null]),
       ),
     });
   }
@@ -493,23 +616,44 @@ export class LayerControlHost {
   private syncLayerStates(layers: GeoLibreLayer[]): void {
     if (!this.control) return;
     const control = this.control as unknown as LayerControlInternalState;
+    const ownState = this.ownLayerStates();
 
     for (const layer of layers) {
+      const { visible, opacity } = ownState(layer);
       const layerState = control.state?.layerStates?.[layer.id];
       if (layerState) {
-        layerState.visible = layer.visible;
-        layerState.opacity = layer.opacity;
+        layerState.visible = visible;
+        layerState.opacity = opacity;
         layerState.name = layer.name;
       }
 
       const layerItem = this.getItem(layer.id);
       if (!layerItem) continue;
-      this.updateItem(layerItem, {
-        name: layer.name,
-        visible: layer.visible,
-        opacity: layer.opacity,
-      });
+      this.updateItem(layerItem, { name: layer.name, visible, opacity });
     }
+  }
+
+  /**
+   * A reader for each layer's own visibility and opacity, which its row shows.
+   *
+   * The engines hand the host the layers they render, with their groups'
+   * visibility and opacity already folded in (`applyGroupEffects`). A row
+   * showing that folded state would read "hidden" for every child of a hidden
+   * group, and ticking it would store the visibility the layer already has, so
+   * nothing would change. Grouped layers therefore show the store's own
+   * values; the group row carries the group's. Ungrouped layers are never
+   * folded, so they keep the engine's state (and any pane override in it).
+   */
+  private ownLayerStates(): (layer: GeoLibreLayer) => { visible: boolean; opacity: number } {
+    let storedById: Map<string, GeoLibreLayer> | null = null;
+    return (layer) => {
+      if (layer.groupId) {
+        storedById ??= new Map(useAppStore.getState().layers.map((item) => [item.id, item]));
+        const stored = storedById.get(layer.id);
+        if (stored) return { visible: stored.visible, opacity: stored.opacity };
+      }
+      return { visible: layer.visible, opacity: layer.opacity };
+    };
   }
 
   private getItem(layerId: string): HTMLElement | null {
@@ -544,6 +688,7 @@ export class LayerControlHost {
 
   private createGeoLibreLayerAdapter(layers: GeoLibreLayer[]): CustomLayerAdapter {
     const layerById = new Map(layers.map((layer) => [layer.id, layer]));
+    const ownState = this.ownLayerStates();
     const nativeIdsById = (layerId: string): string[] => {
       const layer = this.adapter.getLayers().find((item) => item.id === layerId);
       return layer ? this.adapter.getNativeLayerIds(layer) : [];
@@ -555,9 +700,10 @@ export class LayerControlHost {
       getLayerState: (layerId) => {
         const layer = layerById.get(layerId);
         if (!layer) return null;
+        const { visible, opacity } = ownState(layer);
         return {
-          visible: layer.visible,
-          opacity: layer.opacity,
+          visible,
+          opacity,
           name: layer.name,
           isCustomLayer: true,
           customLayerType: this.getLayerSymbolType(layer),
@@ -575,6 +721,34 @@ export class LayerControlHost {
         useAppStore.getState().setLayerOpacity(layerId, opacity);
       },
       getName: (layerId) => layerById.get(layerId)?.name ?? layerId,
+      // The Layers panel's folders. Read live from the store so refreshGroups
+      // picks up renames and visibility/opacity/collapse changes in place.
+      getGroups: () =>
+        useAppStore.getState().layerGroups.map(
+          (group) =>
+            ({
+              id: group.id,
+              name: group.name,
+              parentId: group.parentId,
+              visible: group.visible,
+              opacity: group.opacity,
+              collapsed: group.collapsed,
+            }) satisfies LayerGroupState,
+        ),
+      getLayerGroupId: (layerId) => layerById.get(layerId)?.groupId,
+      setGroupVisibility: (groupId, visible) => {
+        useAppStore.getState().setLayerGroupVisibility(groupId, visible);
+      },
+      setGroupOpacity: (groupId, opacity) => {
+        useAppStore.getState().setLayerGroupOpacity(groupId, opacity);
+      },
+      // Shared with the Layers panel: folding a group in either place folds
+      // it in both, as the store keeps one collapsed flag per group.
+      setGroupCollapsed: (groupId, collapsed) => {
+        const store = useAppStore.getState();
+        const group = store.layerGroups.find((item) => item.id === groupId);
+        if (group && group.collapsed !== collapsed) store.toggleLayerGroupCollapsed(groupId);
+      },
       getSymbolType: (layerId) => {
         const layer = layerById.get(layerId);
         return layer ? this.getLayerSymbolType(layer) : "custom";
@@ -605,8 +779,12 @@ export class LayerControlHost {
       .map((id) => map?.getLayer(id))
       .find((item) => Boolean(item));
 
+    if (nativeLayer) {
+      this.symbolTypes.set(layer.id, nativeLayer.type);
+      return nativeLayer.type;
+    }
     return (
-      nativeLayer?.type ??
+      this.symbolTypes.get(layer.id) ??
       (typeof layer.metadata.customLayerType === "string"
         ? layer.metadata.customLayerType
         : "custom")

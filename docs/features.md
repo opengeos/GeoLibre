@@ -106,6 +106,7 @@ kepler.gl, see the [Comparison](comparison.md).
     - Ungroup while keeping the layers, or delete the group with them
     - Sort a group's contents A to Z or Z to A
     - Hiding a group hides its layers, and a layer suppressed that way is marked as such rather than looking like one you switched off
+    - The on-map Layer Control shows the same group tree, with per-group visibility, opacity, and collapse kept in sync with the Layers panel, and drag or context-menu reordering that keeps a layer inside its group
 - Auto-generated on-map Legend panel derived from the visible layers' symbology
     - Per-class rows for graduated, categorized, rule-based, and expression styling; gradient bars for heatmaps and continuous raster colormaps; proportional-symbol size ramps; diagram fields; and land-cover labels from a Raster Attribute Table
     - An edit mode for renaming, hiding, and reordering entries, adding a section from a color dictionary, choosing a corner, collapsing sections, resizing the panel, and exporting the rendered legend as JSON

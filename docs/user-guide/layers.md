@@ -2,7 +2,7 @@
 
 The **Layers panel** on the left lists every layer in the project, from the topmost drawing layer down to the basemap. Selecting a layer here drives the [Style panel](styling.md) and the [Attribute table](attribute-table.md).
 
-The on-map **Layer Control** also lists project layers, including ones currently hidden or still loading. Its checkboxes mirror the same visibility settings as the left panel.
+The on-map **Layer Control** also lists project layers, including ones currently hidden or still loading, nested under the same [layer groups](#layer-groups) as the left panel. Its checkboxes, opacity sliders, and group folders mirror the same settings as the left panel, and dragging a layer or using its right-click **Move** actions reorders the project's layers.
 
 ![The Layers panel: a group, two vector layers with the selected one's action buttons expanded, and the basemap at the bottom](https://assets.geolibre.app/images/geolibre-layers-panel.webp)
 
@@ -152,6 +152,7 @@ Groups are folders in the layer stack. They can nest, so a project can carry a r
 - **Sort**: **Sort A to Z** and **Sort Z to A** order a group's contents by name, top of the list first. Numbers sort naturally (Parcel 2 before Parcel 10) and case is ignored. Subgroups are sorted among themselves and move with everything inside them, while the group's own layers stay together as one block. Undo restores the previous order.
 - **Visibility**: hiding a group hides its layers. A layer inside a hidden group is marked *Hidden because its group is not visible*, so you can tell it apart from a layer you turned off yourself.
 - **Remove**: **Ungroup (keep layers)** dissolves the folder and leaves its layers in place; **Delete group and layers** removes both.
+- **On-map Layer Control**: groups appear there as collapsible folders with their own checkbox and opacity slider, and toggling, fading, or collapsing a group in either place updates the other. A layer dragged or moved there stays inside its own group. A group's own layers always sit together, with its subgroups above or below them, so a move that would split them (one layer above a subgroup while its siblings stay below) is not applied and the layer returns to its place.
 
 Groups and their nesting are saved with the project, and [importing a QGIS project](projects.md#importing-a-qgis-project) brings that project's group tree across.
 

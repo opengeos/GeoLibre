@@ -358,6 +358,28 @@ points would silently re-apply labels to the wrong points. `ASPRS_CLASSES` in
 `npx playwright test e2e/point-cloud-annotation.spec.ts --project=features` on
 a bump.
 
+### `maplibre-gl-layer-control` (`packages/map/package.json`) — private internals
+
+`packages/map/src/layer-control-host.ts` drives the on-map layer control
+through its public options and adapter methods (including the layer-group
+methods added in 0.18.0), but it also reaches into private members the
+compiler cannot check; `LayerControlInternalState` in that file lists them:
+
+- `panel` and the `.layer-control-item` / `.layer-control-checkbox` /
+  `.layer-control-opacity` / `.layer-control-name` DOM, to mirror store
+  visibility, opacity, and names into an already-built panel in place.
+- `state.layerStates` (same reason) and `state.collapsed`, read before a
+  rebuild so a control that was open is remounted open.
+- `basemapLayerIds`, seeded when there is no fetchable basemap style URL.
+- `buildLayerItems()`, called to add the Background row on styles with no root
+  basemap layers, and to redraw the rows after a reorder the store refused.
+
+If upstream renames any of these, the panel stops following the store (or a
+rebuild closes the panel) without an error. Re-read `LayerControl.ts` for them
+on a bump, and drive the control in the app: toggle a grouped layer, reorder
+inside a group, and hide a group. The fix belongs upstream as public API; this
+package is ours (`opengeos/maplibre-gl-layer-control`).
+
 ### `maplibre-gl-splat` (`packages/plugins/package.json`) — private internals
 
 `packages/plugins/src/plugins/components/splatting.ts` reaches into
