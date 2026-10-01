@@ -679,10 +679,17 @@ export class LayerControlHost {
    * folded, so they keep the engine's state (and any pane override in it).
    */
   private ownLayerStates(): (layer: GeoLibreLayer) => { visible: boolean; opacity: number } {
-    let storedById: Map<string, GeoLibreLayer> | null = null;
+    // Index the store's layers once per layers array: the adapter keeps this
+    // reader until the next structural rebuild, so it must follow the store.
+    let indexed: GeoLibreLayer[] | null = null;
+    let storedById = new Map<string, GeoLibreLayer>();
     return (layer) => {
       if (layer.groupId) {
-        storedById ??= new Map(useAppStore.getState().layers.map((item) => [item.id, item]));
+        const { layers } = useAppStore.getState();
+        if (layers !== indexed) {
+          indexed = layers;
+          storedById = new Map(layers.map((item) => [item.id, item]));
+        }
         const stored = storedById.get(layer.id);
         if (stored) return { visible: stored.visible, opacity: stored.opacity };
       }
