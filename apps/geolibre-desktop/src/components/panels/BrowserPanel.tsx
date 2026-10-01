@@ -297,6 +297,9 @@ export function BrowserPanel({
       // matching what activating the entry can draw.
       fetchArcGISMapServiceSublayers({ url: serviceFieldString(entry.fields, "url") })
         .then((sublayers) => {
+          // An empty listing may be a transient server answer, so re-expanding
+          // retries it like an error does.
+          if (sublayers.length === 0) arcgisFetchedRef.current.delete(serviceId);
           setArcgisLoads((prev) => ({
             ...prev,
             [serviceId]:
@@ -537,7 +540,11 @@ export function BrowserPanel({
             : {
                 ...entry,
                 name: node.arcgisLayerName ?? node.label,
-                fields: { ...entry.fields, sublayers: String(sublayerId), splitSublayers: false },
+                fields: {
+                  ...entry.fields,
+                  sublayers: node.arcgisSublayers ?? String(sublayerId),
+                  splitSublayers: false,
+                },
               },
           { addLayer, mapControllerRef },
         );

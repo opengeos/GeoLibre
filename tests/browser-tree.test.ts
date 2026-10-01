@@ -785,7 +785,8 @@ describe("ArcGIS MapServer sublayers (GeoLibre#2780)", () => {
             // shape real utility services use.
             { id: 0, name: "Storm Inlet", subLayerIds: [1, 2] },
             { id: 1, name: "Storm Inlet", subLayerIds: null },
-            { id: 2, name: "Storm Inlet Label" },
+            // Hidden by default, so the group's All layers row leaves it out.
+            { id: 2, name: "Storm Inlet Label", defaultVisibility: false },
             { id: 3, name: "Storm Main" },
           ],
         },
@@ -797,7 +798,7 @@ describe("ArcGIS MapServer sublayers (GeoLibre#2780)", () => {
       node.label,
       node.arcgisSublayerId,
       node.addable,
-      ...(node.arcgisLayerName ? [node.arcgisLayerName] : []),
+      ...(node.arcgisLayerName ? [node.arcgisLayerName, node.arcgisSublayers] : []),
       ...(node.children ? [node.children.map(summary)] : []),
     ];
     assert.deepEqual(children.map(summary), [
@@ -809,7 +810,7 @@ describe("ArcGIS MapServer sublayers (GeoLibre#2780)", () => {
         false,
         [
           // Adds the whole group, under the group's name.
-          ["All layers", 0, true, "Storm Inlet"],
+          ["All layers", 0, true, "Storm Inlet", "1"],
           ["Storm Inlet", 1, true],
           ["Storm Inlet Label", 2, true],
         ],
@@ -821,6 +822,26 @@ describe("ArcGIS MapServer sublayers (GeoLibre#2780)", () => {
     const flat = all(children);
     assert.ok(flat.every((node) => node.kind === "arcgis-sublayer" && node.serviceId === "storm"));
     assert.equal(new Set(flat.map((node) => node.id)).size, flat.length);
+  });
+
+  it("draws every leaf of a group when none is visible by default", () => {
+    const tree = buildBrowserTree({ services: [MAP_SERVICE], recentProjects: [] });
+    const augmented = augmentArcGISServices(
+      tree,
+      {
+        storm: {
+          status: "loaded",
+          sublayers: [
+            { id: 0, name: "Basins", defaultVisibility: false, subLayerIds: [1, 2] },
+            { id: 1, name: "Basin", defaultVisibility: false },
+            { id: 2, name: "Basin Label", defaultVisibility: false },
+          ],
+        },
+      },
+      LABELS,
+    );
+    const group = arcgisServices(augmented)[0].children?.[1];
+    assert.equal(group?.children?.[0].arcgisSublayers, "1,2");
   });
 
   it("survives a group that lists itself as a descendant", () => {

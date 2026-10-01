@@ -248,6 +248,8 @@ export interface ArcGISMapServiceSublayer {
   name: string;
   /** Child layer ids when this is a group layer; absent or empty for a leaf. */
   subLayerIds?: number[] | null;
+  /** Whether the service draws this layer by default (absent means yes). */
+  defaultVisibility?: boolean;
 }
 
 /** One raster function advertised by an ArcGIS ImageServer. */
@@ -1177,17 +1179,38 @@ async function addArcGISMapServiceSublayerGroup(
   const requested = normalizeArcGISSublayers(options.sublayers) ?? service.sublayers;
   const advertised = service.info.layers ?? [];
   const names = new Map(advertised.map((layer) => [layer.id, layer.name?.trim()]));
+  const position = new Map(advertised.map((layer, index) => [layer.id, index]));
   const children = requested
-    ? requested.split(",").map((id) => ({
-        name: names.get(Number(id)) || id,
-        sublayers: id,
-        visible: true,
-      }))
+    ? requested
+        .split(",")
+        // Stack a selection in the service's drawing order, not the order the
+        // ids were typed in; an id the service does not list keeps its place
+        // after the known ones.
+        .map((id, index) => ({ id, rank: position.get(Number(id)) ?? advertised.length + index }))
+        .sort((a, b) => a.rank - b.rank)
+        .map(({ id }) => ({ name: names.get(Number(id)) || id, sublayers: id, visible: true }))
     : planArcGISMapServiceSublayers(advertised);
 
-  // Nothing to split: one sublayer reads better as one plain layer.
-  if (children.length <= 1) {
+  // Nothing to split: the service has no layers to draw separately.
+  if (children.length === 0) {
     return addArcGISImageServiceLayer(app, { ...options, splitSublayers: false }, input, service);
+  }
+  // One layer reads better as a plain layer than as a group of one, but it
+  // still draws only its planned sublayers with their default visibility.
+  if (children.length === 1) {
+    const [child] = children;
+    return addArcGISImageServiceLayer(
+      app,
+      {
+        ...options,
+        name: options.name?.trim() || child.name,
+        splitSublayers: false,
+        sublayers: child.sublayers,
+      },
+      input,
+      service,
+      child.visible,
+    );
   }
 
   const layerIds: string[] = [];

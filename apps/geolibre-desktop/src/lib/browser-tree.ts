@@ -102,6 +102,12 @@ export interface BrowserNode {
    * differs from the row's label (a group's "All layers" row).
    */
   arcgisLayerName?: string;
+  /**
+   * The `layers=show:` id list a group's "All layers" row draws: the group's
+   * default-visible leaves, because ArcGIS draws every descendant of a group
+   * id, including the ones the service hides by default.
+   */
+  arcgisSublayers?: string;
   /** Leaf count under a `section`/`category`, for a count badge. */
   count?: number;
 }
@@ -627,6 +633,8 @@ export interface ArcGISSublayerRef {
   name: string;
   /** Child layer ids when this is a group layer; absent or empty for a leaf. */
   subLayerIds?: readonly number[] | null;
+  /** Whether the service draws this layer by default (absent means yes). */
+  defaultVisibility?: boolean;
 }
 
 /** Async load state for one saved MapServer's sublayer listing. */
@@ -672,6 +680,23 @@ export function buildArcGISSublayerNodes(
   // Guards against a malformed service whose group lists itself as a descendant.
   const seen = new Set<number>();
 
+  /** Leaf ids under a layer, each with its effective default visibility. */
+  const leaves = (
+    sublayer: ArcGISSublayerRef,
+    visible: boolean,
+    visited: Set<number>,
+  ): Array<{ id: number; visible: boolean }> => {
+    if (visited.has(sublayer.id)) return [];
+    visited.add(sublayer.id);
+    const shown = visible && sublayer.defaultVisibility !== false;
+    const childIds = sublayer.subLayerIds ?? [];
+    if (childIds.length === 0) return [{ id: sublayer.id, visible: shown }];
+    return childIds.flatMap((childId) => {
+      const child = byId.get(childId);
+      return child ? leaves(child, shown, visited) : [];
+    });
+  };
+
   const build = (sublayer: ArcGISSublayerRef): BrowserNode | null => {
     if (seen.has(sublayer.id)) return null;
     seen.add(sublayer.id);
@@ -684,6 +709,13 @@ export function buildArcGISSublayerNodes(
     if (children.length === 0) {
       return { ...base, id, label: sublayer.name, addable: true, arcgisSublayerId: sublayer.id };
     }
+    // The user picked this group, so its own default visibility does not
+    // matter; its descendants' does. With none visible by default, draw all.
+    const groupLeaves = (sublayer.subLayerIds ?? []).flatMap((childId) => {
+      const child = byId.get(childId);
+      return child ? leaves(child, true, new Set([sublayer.id])) : [];
+    });
+    const shownLeaves = groupLeaves.filter((leaf) => leaf.visible);
     return {
       ...base,
       id,
@@ -697,6 +729,9 @@ export function buildArcGISSublayerNodes(
           addable: true,
           arcgisSublayerId: sublayer.id,
           arcgisLayerName: sublayer.name,
+          arcgisSublayers: (shownLeaves.length > 0 ? shownLeaves : groupLeaves)
+            .map((leaf) => leaf.id)
+            .join(","),
         },
         ...children,
       ],

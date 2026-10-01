@@ -597,6 +597,61 @@ describe("addArcGISLayer (map and image services)", () => {
       assert.equal(layerGroups[0].name, "Stormwater");
     });
 
+    it("stacks a selection in service order, whatever order it was typed in", async () => {
+      respondWith(GROUPED_MAP_SERVICE);
+      await addArcGISLayer(app, {
+        layerType: "map-service",
+        sourceType: "url",
+        url: MAP_SERVICE_URL,
+        sublayers: "2,0",
+        splitSublayers: true,
+      });
+      // Bottom-to-top: Manholes (0) is drawn above Pipes (2), as the service does.
+      assert.deepEqual(
+        useAppStore.getState().layers.map((layer) => layer.name),
+        ["Pipes", "Manholes"],
+      );
+    });
+
+    it("keeps the plan of a service with one top-level layer", async () => {
+      respondWith({
+        ...CACHED_MAP_SERVICE,
+        layers: [
+          { id: 0, name: "Basins", defaultVisibility: true, subLayerIds: [1, 2] },
+          { id: 1, name: "Basin", defaultVisibility: true },
+          { id: 2, name: "Basin Label", defaultVisibility: false },
+        ],
+      });
+      await addArcGISLayer(app, {
+        layerType: "map-service",
+        sourceType: "url",
+        url: MAP_SERVICE_URL,
+        splitSublayers: true,
+      });
+      const { layers, layerGroups } = useAppStore.getState();
+      assert.equal(layerGroups.length, 0);
+      assert.equal(layers.length, 1);
+      // Drawn through its default-visible leaf, not the composite of the service.
+      assert.equal(layers[0].metadata.arcgisSublayers, "1");
+      assert.equal(layers[0].name, "Basins");
+    });
+
+    it("keeps a lone default-hidden top-level layer hidden", async () => {
+      respondWith({
+        ...CACHED_MAP_SERVICE,
+        layers: [{ id: 0, name: "Tide Gauge", defaultVisibility: false }],
+      });
+      await addArcGISLayer(app, {
+        layerType: "map-service",
+        sourceType: "url",
+        url: MAP_SERVICE_URL,
+        splitSublayers: true,
+      });
+      const [layer] = useAppStore.getState().layers;
+      assert.equal(layer.visible, false);
+      assert.equal(layer.metadata.arcgisSublayers, "0");
+    });
+
     it("adds a single sublayer as a plain layer with no group", async () => {
       respondWith(GROUPED_MAP_SERVICE);
       await addArcGISLayer(app, {
