@@ -176,6 +176,33 @@ export function layerControlReorderMove(
 }
 
 /**
+ * Reorder the layer control's `layerStates` record to match a panel order. The
+ * control sorts layers with no native layer on the map by this record's key
+ * order, with Background kept first. Keys missing from `panelOrder` keep their
+ * relative order after the listed ones.
+ *
+ * Exported for unit testing.
+ *
+ * @param states The control's layer states, keyed by layer id.
+ * @param panelOrder Layer ids top to bottom.
+ * @returns A new record with the same entries in panel order.
+ */
+export function orderLayerStates<T>(
+  states: Record<string, T>,
+  panelOrder: readonly string[],
+): Record<string, T> {
+  const ordered: Record<string, T> = {};
+  if ("Background" in states) ordered.Background = states.Background;
+  for (const id of panelOrder) {
+    if (id in states) ordered[id] = states[id];
+  }
+  for (const [id, state] of Object.entries(states)) {
+    if (!(id in ordered)) ordered[id] = state;
+  }
+  return ordered;
+}
+
+/**
  * Translate a paint property edited in the layer control's per-layer style
  * editor into a partial {@link LayerStyle} update for the store, so the
  * floating editor and the right-hand Style sidebar stay in sync (issue #912).
@@ -456,10 +483,17 @@ export class LayerControlHost {
         return;
       }
     }
-    // Nothing changes, so no layer sync will rebuild the control, but a drag
-    // has already moved the row in the panel. Redraw the rows from the map's
-    // actual order.
-    (this.control as unknown as LayerControlInternalState | null)?.buildLayerItems?.();
+    // Nothing changes, so no layer sync will rebuild the control, but the
+    // panel already shows the move: a drag moved the row, and a context-menu
+    // move rewrote the control's `layerStates` order, which is what it sorts
+    // layers by while none of their native layers is on the map (e.g. hidden
+    // Overture layers). Put that order back, then redraw the rows.
+    const control = this.control as unknown as LayerControlInternalState | null;
+    if (!control) return;
+    if (control.state?.layerStates) {
+      control.state.layerStates = orderLayerStates(control.state.layerStates, previousOrder);
+    }
+    control.buildLayerItems?.();
   }
 
   /**

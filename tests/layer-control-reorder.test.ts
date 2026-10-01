@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { layerControlReorderMove } from "../packages/map/src/layer-control-host";
+import { layerControlReorderMove, orderLayerStates } from "../packages/map/src/layer-control-host";
 
 // The on-map layer control reports a reorder only as the new panel order (top
 // to bottom). layerControlReorderMove finds the one layer that moved and the
@@ -46,5 +46,28 @@ describe("layerControlReorderMove", () => {
 
   it("returns null when the layer sets differ", () => {
     assert.equal(layerControlReorderMove(panel, panel.slice(1)), null);
+  });
+});
+
+// A refused move must not leave the control's layerStates in the move's
+// order: the control sorts layers with no native layer on the map (e.g.
+// hidden plugin layers) by that record's key order.
+describe("orderLayerStates", () => {
+  it("restores the panel order, Background first", () => {
+    const refused = { Background: 0, g1: 1, top: 2, s1: 3, g2: 4 };
+    assert.deepEqual(Object.keys(orderLayerStates(refused, ["top", "g1", "s1", "g2"])), [
+      "Background",
+      "top",
+      "g1",
+      "s1",
+      "g2",
+    ]);
+  });
+
+  it("keeps entries the panel order does not list, after the listed ones", () => {
+    const states = { extra: "x", b: "b", a: "a" };
+    const ordered = orderLayerStates(states, ["a", "b", "missing"]);
+    assert.deepEqual(Object.keys(ordered), ["a", "b", "extra"]);
+    assert.equal(ordered.extra, "x");
   });
 });
