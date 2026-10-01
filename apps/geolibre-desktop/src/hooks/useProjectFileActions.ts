@@ -1773,8 +1773,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   // each entry to a layer by name, then report what matched.
   const handleImportLayerStyles = async () => {
     try {
+      const importProjectGeneration = useAppStore.getState().projectGeneration;
       const picked = await pickLayerStylesFile();
       if (!picked) return;
+      // The styles were picked for the project open when the import started.
+      if (useAppStore.getState().projectGeneration !== importProjectGeneration) return;
       const applied = useAppStore.getState().applyLayerStyleEntries(picked.entries);
       const appliedIds = new Set(applied.map((match) => match.layerId));
       const usedEntries = new Set(applied.map((match) => match.entryIndex));
