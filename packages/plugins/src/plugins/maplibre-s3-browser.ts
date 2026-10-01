@@ -127,7 +127,9 @@ const CSS = {
     "background:hsl(var(--background));color:hsl(var(--foreground));" +
     "font-size:12px;cursor:pointer;white-space:nowrap;",
   status: "font-size:11px;color:hsl(var(--muted-foreground));line-height:1.4;",
-  error: "font-size:11px;color:hsl(var(--destructive));line-height:1.4;word-break:break-word;",
+  error:
+    "font-size:11px;color:hsl(var(--destructive));line-height:1.4;word-break:break-word;" +
+    "white-space:pre-line;",
   list: "display:flex;flex-direction:column;gap:4px;flex:1 1 auto;min-height:0;overflow-y:auto;",
   folder:
     "display:flex;align-items:center;gap:6px;padding:6px;border-radius:6px;" +
@@ -358,30 +360,53 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     if (state.layers !== previous.layers) syncAll();
   });
 
-  /** Adds one file; failures are reported in the status line. */
-  async function addEntry(entry: AddableEntry): Promise<void> {
-    if (!app) return;
+  /**
+   * Every add, single or batch, runs through this one queue, so adds never
+   * overlap: each control mounts and loads on first use, and several rasters
+   * starting at once would race that setup.
+   */
+  let addQueue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Queues one file. It is marked pending at once (so its Add button and
+   * checkbox cannot queue it twice) and skipped if it reached the map while it
+   * waited.
+   *
+   * @returns The failure message, or null when the file was added or skipped.
+   */
+  function enqueueAdd(entry: AddableEntry): Promise<string | null> {
     entry.pending = true;
     entry.select.checked = false;
     syncEntry(entry);
     syncSelectionBar();
-    try {
-      const added = await addObjectToMap(app, entry.location, entry.object);
-      if (!added) setStatus(labels.notAddable);
-    } catch (error) {
-      // The add paths already turn a CORS refusal into an explanation.
-      status.style.cssText = CSS.error;
-      status.textContent = labels.addFailed(entry.object.name, errorMessage(error));
-    } finally {
-      entry.pending = false;
-      syncEntry(entry);
-      syncSelectionBar();
-    }
+    const run = addQueue.then(async (): Promise<string | null> => {
+      if (!app || isOnMap(entry.object, entry.location.bucket)) return null;
+      try {
+        const added = await addObjectToMap(app, entry.location, entry.object);
+        return added ? null : labels.addFailed(entry.object.name, labels.notAddable);
+      } catch (error) {
+        // The add paths already turn a CORS refusal into an explanation.
+        return labels.addFailed(entry.object.name, errorMessage(error));
+      } finally {
+        entry.pending = false;
+        syncEntry(entry);
+        syncSelectionBar();
+      }
+    });
+    addQueue = run;
+    return run;
   }
 
-  // Multi-select: tick files, then add them in one go. They are added one at a
-  // time, as a user clicking Add would, since each control mounts and loads on
-  // first use and several rasters starting at once would race that setup.
+  function showFailures(failures: string[]): void {
+    if (failures.length === 0) {
+      setStatus("");
+      return;
+    }
+    status.style.cssText = CSS.error;
+    status.textContent = failures.join("\n");
+  }
+
+  // Multi-select: tick files, then add them in one go, one after another.
   let batchRunning = false;
   const selectionBar = el("div", CSS.row);
   selectionBar.style.display = "none";
@@ -401,15 +426,23 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     if (batch.length === 0) return;
     batchRunning = true;
     syncSelectionBar();
-    void (async () => {
-      for (const [index, entry] of batch.entries()) {
-        setStatus(labels.addingProgress(index + 1, batch.length));
-        await addEntry(entry);
-      }
+    let done = 0;
+    setStatus(labels.addingProgress(1, batch.length));
+    void Promise.all(
+      batch.map((entry) =>
+        enqueueAdd(entry).then((failure) => {
+          done += 1;
+          if (done < batch.length) setStatus(labels.addingProgress(done + 1, batch.length));
+          return failure;
+        }),
+      ),
+    ).then((results) => {
       batchRunning = false;
-      if (status.textContent === labels.addingProgress(batch.length, batch.length)) setStatus("");
+      // Kept until the batch ends, so an early failure is not lost under the
+      // progress line, and listed together.
+      showFailures(results.filter((failure): failure is string => failure !== null));
       syncSelectionBar();
-    })();
+    });
   });
 
   const accessLine = el("div", CSS.location);
@@ -471,7 +504,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
         addable.push(entry);
         syncEntry(entry);
         select.addEventListener("change", syncSelectionBar);
-        entry.add.addEventListener("click", () => void addEntry(entry));
+        entry.add.addEventListener("click", () => {
+          void enqueueAdd(entry).then((failure) => {
+            if (failure) showFailures([failure]);
+          });
+        });
         actions.append(entry.add);
       }
     } else if (!canAdd(object)) {
@@ -547,8 +584,16 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     } catch (error) {
       // On the web a bucket without a CORS rule for this origin fails as
       // "Failed to fetch"; explain that instead.
-      if (!isAbort(error))
-        setError(await explainS3ReadError(`s3://${location.bucket}/`, error, app?.translate));
+      if (!isAbort(error) && !signal.aborted) {
+        const explained = await explainS3ReadError(
+          `s3://${location.bucket}/`,
+          error,
+          app?.translate,
+        );
+        // The explanation makes its own requests; another folder may have
+        // been opened meanwhile.
+        if (!signal.aborted) setError(explained);
+      }
     }
   }
 

@@ -413,17 +413,20 @@ export async function addRasterToMap(
   // `s3://` sources and private-bucket object URLs are read through a
   // presigned URL; the store sync maps it back to `source`.
   const readable = typeof source === "string" ? await resolveReadableUrl(source) : source;
-  const existingIds = new Set(control.getRasters().map((info) => info.id));
+  // Named here rather than by the control, so a failure below removes exactly
+  // this add's raster and never one a concurrent add created.
+  const rasterId = `raster-${crypto.randomUUID().slice(0, 8)}`;
   let id: string;
   try {
-    id = await addRasterSource(control, readable, options);
+    id = await addRasterSource(control, readable, { ...options, id: rasterId });
   } catch (error) {
     // The control lists a raster before its header is read, so an add that
     // failed (a blocked or unreachable URL) would otherwise stay in the Layers
-    // panel as an empty layer.
-    for (const info of control.getRasters()) {
-      if (!existingIds.has(info.id)) control.removeRaster(info.id);
-    }
+    // panel as an empty layer. A striped GeoTIFF is the exception: the
+    // non-tiled conversion offer (see the control's "error" handler) owns that
+    // raster, and reads its bytes, until it dismisses it.
+    const failed = control.getRaster(rasterId);
+    if (failed && !isNonTiledRasterError(failed.error)) control.removeRaster(rasterId);
     // A bucket whose CORS rules block this origin fails as "Failed to fetch";
     // say so instead.
     throw typeof source === "string"
@@ -445,9 +448,10 @@ export async function addRasterToMap(
 function addRasterSource(
   control: RasterControl,
   source: string | File,
-  options: Parameters<typeof addRasterToMap>[2] & object,
+  options: Parameters<typeof addRasterToMap>[2] & object & { id: string },
 ): Promise<string> {
   return control.addRaster(source, {
+    id: options.id,
     name: options.name,
     zoomTo: options.zoomTo ?? true,
     // Safe to pass before the band count is known: the renderer applies a

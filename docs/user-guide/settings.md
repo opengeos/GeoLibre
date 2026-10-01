@@ -16,6 +16,7 @@ The Settings dialog is organized into these sections:
 | **Geocoding** | The address-search provider. See [Data Integrations](data-integrations.md#geocoding). |
 | **AI Providers** | Model and credentials for the [AI Assistant](ai-assistant.md). |
 | **Environment** | The share token and runtime key-value pairs. See [Environment Variables](#environment-variables). |
+| **Cloud Storage** | S3 connections for private buckets, and the S3 Browser's default location. See [Cloud Storage](#cloud-storage). |
 | **Updates** | Update checks (desktop only). See [Updates](#updates). |
 | **Startup** | Which project the app opens with (desktop only). See [Startup](#startup). |
 | **Style Manager** | Your saved symbology presets, reachable here and from a layer's **Layer actions → Styles → Saved styles**. See [Styling Layers](styling.md). |

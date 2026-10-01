@@ -575,9 +575,10 @@ export type S3ErrorTranslate = (
 /**
  * Explains why reading an S3 object failed when the browser only said
  * "Failed to fetch". A browser reports a request the bucket's CORS rules
- * blocked exactly like a network outage, so this repeats the request in
- * `no-cors` mode, which CORS cannot block: if S3 answers that one, the object
- * is reachable and the bucket's CORS configuration is what refused the read.
+ * blocked exactly like a network outage, so this repeats the request twice:
+ * normally, where success means the failure was transient; then in `no-cors`
+ * mode, which CORS cannot block. Only when the first fails and the second gets
+ * an answer is the bucket's CORS configuration the cause.
  *
  * @param url The `s3://` URI or object URL that was being read.
  * @param error What the reader threw.
@@ -598,14 +599,23 @@ export async function explainS3ReadError(
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
     const href = await resolveReadableUrl(url);
-    // An opaque answer means S3 is reachable. The body is not needed, so the
-    // request is cut off as soon as the headers arrive.
-    await fetch(href, { mode: "no-cors", signal: controller.signal, cache: "no-store" });
-    controller.abort();
+    const probe = { signal: controller.signal, cache: "no-store" as const };
+    // A normal (CORS) read first: if that works now, the failure was transient
+    // and CORS is not the cause. The body is never needed, so each request is
+    // cut off once its headers arrive.
+    const corsAllowed = await fetch(href, probe).then(
+      () => true,
+      () => false,
+    );
+    if (corsAllowed) return error;
+    // Blocked under CORS, yet S3 answers a no-cors request, which CORS cannot
+    // block: the bucket's CORS configuration is what refuses this origin.
+    await fetch(href, { ...probe, mode: "no-cors" });
   } catch {
     // Unreachable under no-cors too: a real network failure, not CORS.
     return error;
   } finally {
+    controller.abort();
     clearTimeout(timer);
   }
   const origin = window.location.origin;

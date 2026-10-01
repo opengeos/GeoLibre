@@ -372,16 +372,22 @@ export async function restoreLidarLayers(app: GeoLibreAppAPI): Promise<void> {
       };
       // A saved `s3://` (or private-bucket) URL is signed again; the queue is
       // keyed by the URL the control reports back, which is the signed one.
+      const control: LidarControl | null = lidarControl;
+      if (!control) return;
       let readableUrl = url;
       try {
         readableUrl = await resolveReadableUrl(url);
       } catch (error) {
         console.warn("[lidar] could not sign point cloud URL", url, error);
       }
+      // Signing awaited: the control may have been torn down or replaced (a
+      // renderer swap), and the layer removed, in the meantime.
+      if (lidarControl !== control) return;
+      if (!useAppStore.getState().layers.some((item) => item.id === layer.id)) continue;
       const queue = pendingLidarRestores.get(readableUrl);
       if (queue) queue.push(entry);
       else pendingLidarRestores.set(readableUrl, [entry]);
-      lidarControl.loadPointCloud(readableUrl).catch((error: unknown) => {
+      control.loadPointCloud(readableUrl).catch((error: unknown) => {
         // Drop only this layer's entry so a sibling restore for the same URL is
         // not lost; clean up the map key once its queue empties.
         const remaining = pendingLidarRestores.get(readableUrl);

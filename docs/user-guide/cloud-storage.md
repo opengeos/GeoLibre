@@ -108,7 +108,7 @@ The web app, and the desktop webview for raster and PMTiles reads, fetch S3 obje
 
 Replace the first origin with your own deployment's origin. On the desktop app, listing and vector downloads go through the native HTTP client and need no CORS rule, but COG, PMTiles, and point cloud streaming still read from the webview and need the `tauri://localhost` / `http://tauri.localhost` origins.
 
-When a read fails because the bucket's CORS rules block the app, GeoLibre says so — naming the bucket and the origin to allow — instead of a bare "Failed to fetch". It tells the two apart by repeating the request in `no-cors` mode, which CORS cannot block: if S3 answers that, the bucket is reachable and CORS is the cause.
+When a read fails because the bucket's CORS rules block the app, GeoLibre says so — naming the bucket and the origin to allow — instead of a bare "Failed to fetch". It tells the two apart by repeating the request: if a normal request now succeeds, the failure was transient; if only a `no-cors` request (which CORS cannot block) gets an answer, the bucket is reachable and its CORS configuration is the cause.
 
 ## How it works
 
