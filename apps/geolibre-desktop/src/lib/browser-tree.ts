@@ -711,9 +711,12 @@ export function buildArcGISSublayerNodes(
     }
     // The user picked this group, so its own default visibility does not
     // matter; its descendants' does. With none visible by default, draw all.
+    // One visited set for the whole subtree, so a leaf two children share is
+    // listed once.
+    const groupVisited = new Set([sublayer.id]);
     const groupLeaves = (sublayer.subLayerIds ?? []).flatMap((childId) => {
       const child = byId.get(childId);
-      return child ? leaves(child, true, new Set([sublayer.id])) : [];
+      return child ? leaves(child, true, groupVisited) : [];
     });
     const shownLeaves = groupLeaves.filter((leaf) => leaf.visible);
     return {
