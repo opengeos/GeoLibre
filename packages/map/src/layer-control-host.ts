@@ -311,7 +311,6 @@ export class LayerControlHost {
     this.signature = this.createSignature(config);
     const basemapStyleUrl = this.adapter.getBasemapStyleUrl();
     const collapsed = !this.mountExpanded;
-    this.mountExpanded = false;
     const control = new LayerControl({
       // The control fetches this URL to introspect the basemap's layers; a
       // basemap it cannot fetch is seeded below instead.
@@ -362,6 +361,9 @@ export class LayerControlHost {
       return false;
     }
     this.control = control;
+    // Cleared only once mounted, so a mount that fails mid style load (and is
+    // retried on style.load) still reopens the panel.
+    this.mountExpanded = false;
     this.syncState();
     setTimeout(() => this.syncState(), 100);
     return true;
