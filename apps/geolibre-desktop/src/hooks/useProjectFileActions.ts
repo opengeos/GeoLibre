@@ -1773,17 +1773,17 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       const picked = await pickLayerStylesFile();
       if (!picked) return;
       const applied = useAppStore.getState().applyLayerStyleEntries(picked.entries);
-      const appliedIds = new Set(applied);
+      const appliedIds = new Set(applied.map((match) => match.layerId));
+      const usedEntries = new Set(applied.map((match) => match.entryIndex));
       const layers = useAppStore.getState().layers;
       const restyled = layers.filter((layer) => appliedIds.has(layer.id));
-      // An entry is unused when no restyled layer took it; compare names the
-      // way the matcher does (case- and whitespace-insensitively).
-      const restyledKeys = new Set(restyled.map((layer) => layer.name.trim().toLocaleLowerCase()));
+      // Report the entries no layer took, including a same-named entry of the
+      // other style family and a duplicate shadowed by an earlier one.
       const unused = [
         ...new Set(
           picked.entries
-            .map((entry) => entry.layerName)
-            .filter((name) => !restyledKeys.has(name.trim().toLocaleLowerCase())),
+            .filter((_, index) => !usedEntries.has(index))
+            .map((entry) => entry.layerName),
         ),
       ];
       setLayerStyleImportResult({

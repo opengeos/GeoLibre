@@ -19,7 +19,7 @@ import {
   type CopiedLayerStyle,
   extractCopiedLayerStyle,
 } from "../layer-style-clipboard";
-import { layerStylePatchFromEntries, type LayerStyleFileEntry } from "../layer-style-file";
+import { matchLayerStyleEntry, type LayerStyleFileEntry } from "../layer-style-file";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh } from "../joins";
 import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
 import { identifyStateWithoutLayers } from "./session-slice";
@@ -97,12 +97,13 @@ export interface LayersSlice {
    * @param entries - The parsed style entries.
    * @param layerIds - Restrict the restyle to these layers; every layer when
    *   omitted.
-   * @returns The ids of the layers that were restyled.
+   * @returns Each restyled layer's id with the index of the entry it took, in
+   *   stack order.
    */
   applyLayerStyleEntries: (
     entries: readonly LayerStyleFileEntry[],
     layerIds?: readonly string[],
-  ) => string[];
+  ) => { layerId: string; entryIndex: number }[];
   /**
    * Replace a layer's persistent attribute joins and immediately re-derive its
    * joined columns (strip what the previous joins added, apply the new list).
@@ -378,13 +379,13 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
   applyLayerStyleEntries: (entries, layerIds) => {
     if (entries.length === 0) return [];
     const scope = layerIds ? new Set(layerIds) : null;
-    const applied: string[] = [];
+    const applied: { layerId: string; entryIndex: number }[] = [];
     const layers = get().layers.map((layer) => {
       if (scope && !scope.has(layer.id)) return layer;
-      const patch = layerStylePatchFromEntries(layer, entries);
-      if (!patch) return layer;
-      applied.push(layer.id);
-      return { ...layer, ...patch };
+      const match = matchLayerStyleEntry(layer, entries);
+      if (!match) return layer;
+      applied.push({ layerId: layer.id, entryIndex: match.entryIndex });
+      return { ...layer, ...match.patch };
     });
     // A style patch never carries geojson, so unlike updateLayer there is no
     // join cascade to run.

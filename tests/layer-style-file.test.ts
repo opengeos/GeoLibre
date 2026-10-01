@@ -3,9 +3,9 @@ import { beforeEach, describe, it } from "node:test";
 import {
   DEFAULT_LAYER_STYLE,
   extractLayerStyleEntries,
-  findLayerStyleEntry,
+  findLayerStyleEntryIndex,
   LAYER_STYLES_FILE_TYPE,
-  layerStylePatchFromEntries,
+  matchLayerStyleEntry,
   normalizeLayerStyleEntries,
   parseLayerStylesFile,
   serializeLayerStylesFile,
@@ -102,36 +102,81 @@ describe("layer styles file round trip", () => {
   });
 });
 
+describe("raster entries from a file", () => {
+  it("keeps only well-typed appearance keys", () => {
+    const [entry] = normalizeLayerStyleEntries([
+      {
+        layerName: "Elevation",
+        kind: "raster",
+        rasterState: {
+          colormap: 42,
+          reversed: "yes",
+          rescale: "x",
+          nodata: "sometimes",
+          stretch: "cubic",
+          gamma: 0,
+          mode: "rgb",
+        },
+      },
+    ]);
+    assert.ok(entry.kind === "raster");
+    assert.deepEqual(entry.rasterState, {});
+    const slope = normalizeLayerStyleEntries([
+      {
+        layerName: "Slope",
+        kind: "raster",
+        rasterState: {
+          colormap: "magma",
+          reversed: true,
+          rescale: [[0, 90]],
+          nodata: "off",
+          gamma: 2,
+        },
+      },
+    ])[0];
+    assert.ok(slope.kind === "raster");
+    assert.deepEqual(slope.rasterState, {
+      colormap: "magma",
+      reversed: true,
+      rescale: [[0, 90]],
+      nodata: "off",
+      gamma: 2,
+    });
+  });
+});
+
 describe("matching styles to layers by name", () => {
   it("prefers an exact name, then ignores case and surrounding whitespace", () => {
     const entries = [vectorEntry(" roads ", "#111111"), vectorEntry("Roads", "#222222")];
-    assert.equal(findLayerStyleEntry(entries, "Roads")?.layerName, "Roads");
-    assert.equal(findLayerStyleEntry(entries, "ROADS")?.layerName, " roads ");
-    assert.equal(findLayerStyleEntry(entries, "Rivers"), undefined);
+    assert.equal(findLayerStyleEntryIndex(entries, "Roads"), 1);
+    assert.equal(findLayerStyleEntryIndex(entries, "ROADS"), 0);
+    assert.equal(findLayerStyleEntryIndex(entries, "Rivers"), -1);
   });
 
   it("only applies an entry of the layer's style family", () => {
     const entries: LayerStyleFileEntry[] = [
       { layerName: "Roads", kind: "raster", rasterState: { colormap: "magma" } },
     ];
-    assert.equal(layerStylePatchFromEntries(vectorLayer(), entries), null);
+    assert.equal(matchLayerStyleEntry(vectorLayer(), entries), null);
     entries.push(vectorEntry("Roads", "#abcdef"));
-    assert.equal(layerStylePatchFromEntries(vectorLayer(), entries)?.style?.fillColor, "#abcdef");
+    const match = matchLayerStyleEntry(vectorLayer(), entries);
+    assert.equal(match?.entryIndex, 1);
+    assert.equal(match?.patch.style?.fillColor, "#abcdef");
   });
 
   it("keeps a raster's band selection and layer opacity", () => {
-    const patch = layerStylePatchFromEntries(rasterLayer({ opacity: 0.4 }), [
+    const patch = matchLayerStyleEntry(rasterLayer({ opacity: 0.4 }), [
       {
         layerName: "Elevation",
         kind: "raster",
         rasterState: { mode: "rgb", bands: [3, 2, 1], colormap: "terrain" },
       },
     ]);
-    const state = patch?.metadata?.rasterState as Record<string, unknown>;
+    const state = patch?.patch.metadata?.rasterState as Record<string, unknown>;
     assert.equal(state.colormap, "terrain");
     assert.equal(state.mode, "single");
     assert.deepEqual(state.bands, [1]);
-    assert.equal(patch && "opacity" in patch, false);
+    assert.equal(patch && "opacity" in patch.patch, false);
   });
 });
 
@@ -148,7 +193,7 @@ describe("applyLayerStyleEntries", () => {
     const applied = useAppStore
       .getState()
       .applyLayerStyleEntries([vectorEntry("Roads", "#123456")], ["a", "b"]);
-    assert.deepEqual(applied, ["a"]);
+    assert.deepEqual(applied, [{ layerId: "a", entryIndex: 0 }]);
     const byId = new Map(useAppStore.getState().layers.map((layer) => [layer.id, layer]));
     assert.equal(byId.get("a")?.style.fillColor, "#123456");
     assert.equal(byId.get("b")?.style.fillColor, DEFAULT_LAYER_STYLE.fillColor);

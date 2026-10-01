@@ -11,6 +11,7 @@ import {
   copyableLayerStyleKind,
   extractCopiedLayerStyle,
   type LayerStyleClipboardKind,
+  RASTER_APPEARANCE_STATE_KEYS,
 } from "./layer-style-clipboard";
 import { sanitizeLayerStylePatch } from "./style-library";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LayerStyle } from "./types";
@@ -54,7 +55,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * Capture the style of every layer that has one. Layers without copyable
  * symbology (basemap tiles, 3D tiles, ...) are skipped. Layers that share a
  * name are all written, in stack order; the first one wins when the file is
- * applied (see {@link findLayerStyleEntry}).
+ * applied (see {@link findLayerStyleEntryIndex}).
  *
  * @param layers - The layers to export, in store (bottom-to-top) order.
  * @returns The style entries.
@@ -95,11 +96,59 @@ export function serializeLayerStylesFile(entries: readonly LayerStyleFileEntry[]
   return JSON.stringify(file, null, 2);
 }
 
+const RASTER_STRETCHES: readonly unknown[] = ["linear", "log", "sqrt"];
+const RASTER_NODATA_MODES: readonly unknown[] = ["off", "auto"];
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * Validators for the raster appearance keys a style file may carry, by the
+ * types `maplibre-gl-raster`'s `RasterLayerState` declares for them.
+ */
+const RASTER_APPEARANCE_VALIDATORS: Record<
+  (typeof RASTER_APPEARANCE_STATE_KEYS)[number],
+  (value: unknown) => boolean
+> = {
+  colormap: (value) => typeof value === "string" && value.length > 0,
+  reversed: (value) => typeof value === "boolean",
+  rescale: (value) =>
+    value === null ||
+    (Array.isArray(value) &&
+      value.every(
+        (range) =>
+          Array.isArray(range) &&
+          range.length === 2 &&
+          isFiniteNumber(range[0]) &&
+          isFiniteNumber(range[1]),
+      )),
+  nodata: (value) => isFiniteNumber(value) || RASTER_NODATA_MODES.includes(value),
+  stretch: (value) => RASTER_STRETCHES.includes(value),
+  gamma: (value) => isFiniteNumber(value) && value > 0,
+};
+
+/**
+ * Keep only the raster appearance keys a style applies, each with a value of
+ * the type the raster renderer expects. The data selection (`mode`, `bands`,
+ * ...) is dropped too: a style never applies it.
+ */
+function sanitizeRasterAppearanceState(state: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of RASTER_APPEARANCE_STATE_KEYS) {
+    if (key in state && RASTER_APPEARANCE_VALIDATORS[key](state[key])) {
+      out[key] = structuredClone(state[key]);
+    }
+  }
+  return out;
+}
+
 /**
  * Coerce untrusted entries (a hand-edited file, or a copy kept in settings)
  * into clean ones. An entry without a name or a known kind is dropped; a
- * vector style is sanitized and completed against the default style, so
- * applying it never leaves the renderer reading an unknown or missing field.
+ * vector style is sanitized and completed against the default style, and a
+ * raster state keeps only well-typed appearance keys, so applying an entry
+ * never hands a renderer an unknown, missing or wrong-typed field.
  *
  * @param value - The raw `styles` array.
  * @returns The usable entries.
@@ -123,8 +172,11 @@ export function normalizeLayerStyleEntries(value: unknown): LayerStyleFileEntry[
         layerName,
         kind: "raster",
         ...(isPlainObject(item.rasterState)
-          ? { rasterState: structuredClone(item.rasterState) }
+          ? { rasterState: sanitizeRasterAppearanceState(item.rasterState) }
           : {}),
+        // The symbology's schema lives in `@geolibre/plugins`, which validates
+        // it on every read (`savedRasterSymbology`), as it does for a project
+        // file; a malformed one renders as unclassified there.
         ...(isPlainObject(item.rasterSymbology)
           ? { rasterSymbology: structuredClone(item.rasterSymbology) }
           : {}),
@@ -176,18 +228,18 @@ function nameKey(name: string): string {
  * @param layerName - The layer name to look up.
  * @param kind - When given, only entries of this style family are considered,
  *   so a raster style saved under a shared name does not shadow the vector one.
- * @returns The matching entry, or `undefined`.
+ * @returns The matching entry's index in `entries`, or -1.
  */
-export function findLayerStyleEntry(
+export function findLayerStyleEntryIndex(
   entries: readonly LayerStyleFileEntry[],
   layerName: string,
   kind?: LayerStyleClipboardKind,
-): LayerStyleFileEntry | undefined {
-  const candidates = kind ? entries.filter((entry) => entry.kind === kind) : entries;
-  const exact = candidates.find((entry) => entry.layerName === layerName);
-  if (exact) return exact;
+): number {
+  const ofKind = (entry: LayerStyleFileEntry) => !kind || entry.kind === kind;
+  const exact = entries.findIndex((entry) => ofKind(entry) && entry.layerName === layerName);
+  if (exact >= 0) return exact;
   const key = nameKey(layerName);
-  return candidates.find((entry) => nameKey(entry.layerName) === key);
+  return entries.findIndex((entry) => ofKind(entry) && nameKey(entry.layerName) === key);
 }
 
 function toCopiedLayerStyle(entry: LayerStyleFileEntry): CopiedLayerStyle {
@@ -203,6 +255,14 @@ function toCopiedLayerStyle(entry: LayerStyleFileEntry): CopiedLayerStyle {
   };
 }
 
+/** A layer restyled from a style entry, and the entry it took. */
+export interface LayerStyleMatch {
+  /** Index of the applied entry in the entries array. */
+  entryIndex: number;
+  /** The patch that applies it. */
+  patch: Partial<GeoLibreLayer>;
+}
+
 /**
  * Build the patch that restyles a layer from the entry matching its name, with
  * the same semantics as pasting a copied style: a vector style replaces the
@@ -211,16 +271,17 @@ function toCopiedLayerStyle(entry: LayerStyleFileEntry): CopiedLayerStyle {
  *
  * @param layer - The layer to restyle.
  * @param entries - The style entries.
- * @returns The patch, or `null` when no entry of the layer's style family
- *   matches its name (or the layer has no stylable symbology).
+ * @returns The matched entry and patch, or `null` when no entry of the layer's
+ *   style family matches its name (or the layer has no stylable symbology).
  */
-export function layerStylePatchFromEntries(
+export function matchLayerStyleEntry(
   layer: GeoLibreLayer,
   entries: readonly LayerStyleFileEntry[],
-): Partial<GeoLibreLayer> | null {
+): LayerStyleMatch | null {
   const kind = copyableLayerStyleKind(layer);
   if (!kind) return null;
-  const entry = findLayerStyleEntry(entries, layer.name, kind);
-  if (!entry) return null;
-  return applyCopiedLayerStyle(layer, toCopiedLayerStyle(entry));
+  const entryIndex = findLayerStyleEntryIndex(entries, layer.name, kind);
+  if (entryIndex < 0) return null;
+  const patch = applyCopiedLayerStyle(layer, toCopiedLayerStyle(entries[entryIndex]));
+  return patch ? { entryIndex, patch } : null;
 }
