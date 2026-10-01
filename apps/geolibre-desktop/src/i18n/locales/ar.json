@@ -2576,7 +2576,7 @@
       "chooseLayerStyles": "اختيار ملف",
       "clearLayerStyles": "مسح",
       "noLayerStylesSelected": "لم يُحدَّد أي ملف أنماط طبقات",
-      "layerStylesSelected_zero": "{{file}} ({{count}} نمط)",
+      "layerStylesSelected_zero": "{{file}} ({{count}} أنماط)",
       "layerStylesSelected_one": "{{file}} (نمط واحد: {{count}})",
       "layerStylesSelected_two": "{{file}} (نمطان: {{count}})",
       "layerStylesSelected_few": "{{file}} ({{count}} أنماط)",
