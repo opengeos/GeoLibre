@@ -1,7 +1,14 @@
 // The LiDAR point-cloud control, its store sync and project restore.
 // Split out of maplibre-components.ts (opengeos/GeoLibre#2633).
 
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  explainS3ReadError,
+  type GeoLibreLayer,
+  resolveReadableUrl,
+  unsignedSourceUrl,
+  useAppStore,
+} from "@geolibre/core";
 import type { LidarControl, LidarLayerAdapter } from "maplibre-gl-components";
 import type { LidarControlEventHandler, PointCloudInfo } from "maplibre-gl-lidar";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../../types";
@@ -120,16 +127,19 @@ export async function addLidarLayerFromUrl(
   } catch {
     // Reported below with the same message as a non-web scheme.
   }
-  if (protocol !== "https:" && protocol !== "http:") {
+  if (protocol !== "https:" && protocol !== "http:" && protocol !== "s3:") {
     throw new Error(
       app.translate?.("addData.lidar.errorUrl", "Enter a valid HTTP or HTTPS LiDAR URL.") ??
         "Enter a valid HTTP or HTTPS LiDAR URL.",
     );
   }
+  // `s3://` and private-bucket URLs stream through a presigned URL; the store
+  // layer keeps `url` (see createLidarStoreLayer).
+  const readableUrl = await resolveReadableUrl(url);
   const load = async () => {
     const opened = await openStandaloneLidarControl(app, { reveal: false });
     if (!opened || !lidarControl) return null;
-    const info = await lidarControl.loadPointCloud(url);
+    const info = await lidarControl.loadPointCloud(readableUrl);
     // maplibre-gl-lidar emits `load` synchronously before loadPointCloud
     // resolves, so the load handler has already added the store layer. Fail
     // loudly if an upgrade breaks that, rather than hand back a dangling id.
@@ -138,7 +148,12 @@ export async function addLidarLayerFromUrl(
     }
     return info.id;
   };
-  return (options.fit ?? true) ? load() : withLidarAutoZoomSuppressed(app, load);
+  try {
+    return await ((options.fit ?? true) ? load() : withLidarAutoZoomSuppressed(app, load));
+  } catch (error) {
+    // A bucket whose CORS rules block this origin fails as "Failed to fetch".
+    throw await explainS3ReadError(url, error, app.translate);
+  }
 }
 
 /** Safety net for {@link waitForPendingLidarRestores}: how long to wait for
@@ -355,17 +370,25 @@ export async function restoreLidarLayers(app: GeoLibreAppAPI): Promise<void> {
         groupId: layer.groupId,
         beforeLayerId: current[index + 1]?.id ?? null,
       };
-      const queue = pendingLidarRestores.get(url);
+      // A saved `s3://` (or private-bucket) URL is signed again; the queue is
+      // keyed by the URL the control reports back, which is the signed one.
+      let readableUrl = url;
+      try {
+        readableUrl = await resolveReadableUrl(url);
+      } catch (error) {
+        console.warn("[lidar] could not sign point cloud URL", url, error);
+      }
+      const queue = pendingLidarRestores.get(readableUrl);
       if (queue) queue.push(entry);
-      else pendingLidarRestores.set(url, [entry]);
-      lidarControl.loadPointCloud(url).catch((error: unknown) => {
+      else pendingLidarRestores.set(readableUrl, [entry]);
+      lidarControl.loadPointCloud(readableUrl).catch((error: unknown) => {
         // Drop only this layer's entry so a sibling restore for the same URL is
         // not lost; clean up the map key once its queue empties.
-        const remaining = pendingLidarRestores.get(url);
+        const remaining = pendingLidarRestores.get(readableUrl);
         if (remaining) {
           const at = remaining.indexOf(entry);
           if (at !== -1) remaining.splice(at, 1);
-          if (remaining.length === 0) pendingLidarRestores.delete(url);
+          if (remaining.length === 0) pendingLidarRestores.delete(readableUrl);
         }
         console.warn("[lidar] failed to restore point cloud", url, error);
       });
@@ -587,9 +610,15 @@ function createLidarUnloadHandler(): LidarControlEventHandler {
 }
 
 function createLidarStoreLayer(pointCloud: PointCloudInfo): GeoLibreLayer {
+  // A presigned S3 URL maps back to the unsigned URL it was minted for, so a
+  // saved project never carries a signature.
+  const sourceUrl =
+    typeof pointCloud.source === "string"
+      ? unsignedSourceUrl(pointCloud.source)
+      : pointCloud.source;
   return {
     id: pointCloud.id,
-    name: pointCloud.name || layerNameFromUrl(pointCloud.source, pointCloud.id),
+    name: pointCloud.name || layerNameFromUrl(sourceUrl, pointCloud.id),
     type: "lidar",
     source: {
       bounds: [
@@ -600,7 +629,7 @@ function createLidarStoreLayer(pointCloud: PointCloudInfo): GeoLibreLayer {
       ],
       sourceId: pointCloud.id,
       type: "lidar",
-      url: pointCloud.source,
+      url: sourceUrl,
     },
     visible: true,
     opacity: 1,
@@ -617,7 +646,7 @@ function createLidarStoreLayer(pointCloud: PointCloudInfo): GeoLibreLayer {
       sourceKind: LIDAR_SOURCE_KIND,
       wkt: pointCloud.wkt,
     },
-    sourcePath: pointCloud.source,
+    sourcePath: sourceUrl,
   };
 }
 

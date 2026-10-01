@@ -71,7 +71,7 @@ Panels also auto-hide on small screens for a responsive layout.
 
 ## Cloud Storage
 
-**Settings → Cloud Storage** holds the S3 connections that read private Amazon S3 and S3-compatible buckets (access keys, AWS profiles including SSO, environment variables, and IAM roles), and the S3 Browser's default location. See [Cloud Storage](cloud-storage.md).
+**Settings → Cloud Storage** (also in the **Settings** menu) holds the S3 connections that read private Amazon S3 and S3-compatible buckets (access keys, AWS profiles including SSO, environment variables, and IAM roles), and the S3 Browser's default location. See [Cloud Storage](cloud-storage.md).
 
 ## Project name and file
 

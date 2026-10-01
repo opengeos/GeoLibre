@@ -2285,6 +2285,7 @@
       "geocoding": "Geocoding",
       "ai": "AI Providers",
       "environmentVariables": "Environment Variables",
+      "cloudStorage": "Cloud Storage",
       "updates": "Update Settings",
       "startupSettings": "Startup Settings",
       "managePlugins": "Manage Plugins",
@@ -4347,7 +4348,7 @@
     "metaRaw": "Raw metadata"
   },
   "s3Browser": {
-    "hint": "Browse an S3 bucket and add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, or PMTiles files to the map. Enter s3://bucket/prefix/.",
+    "hint": "Browse an S3 bucket and add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ point cloud files to the map. Enter s3://bucket/prefix/.",
     "noConnections": "No S3 connections are configured, so only public buckets can be read. Add credentials in Settings > Cloud Storage.",
     "connection": "Connection",
     "listBuckets": "List buckets",
@@ -4367,6 +4368,13 @@
     "signed": "Read with your S3 connection's credentials",
     "setDefault": "Set as default",
     "isDefault": "Default",
+    "pointCloud": "point cloud",
+    "select": "Select",
+    "selectAll": "Select all",
+    "addSelected": "Add selected ({{count}})",
+    "addingProgress": "Adding {{index}} of {{total}}…",
+    "addFailed": "Could not add {{name}}: {{message}}",
+    "corsError": "The bucket \"{{bucket}}\" does not allow reads from {{origin}}: its CORS configuration is missing or does not list this origin. Add a CORS rule that allows GET and HEAD from this origin and exposes Content-Length, Content-Range, and ETag (see Settings > Cloud Storage).",
     "anonymous": "Public (anonymous) access",
     "error": "Could not list this location: {{message}}"
   },

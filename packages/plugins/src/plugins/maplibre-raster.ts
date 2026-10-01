@@ -1,5 +1,6 @@
 import {
   effectiveLayerRenderState,
+  explainS3ReadError,
   resolveReadableUrl,
   styleValue,
   useAppStore,
@@ -412,7 +413,41 @@ export async function addRasterToMap(
   // `s3://` sources and private-bucket object URLs are read through a
   // presigned URL; the store sync maps it back to `source`.
   const readable = typeof source === "string" ? await resolveReadableUrl(source) : source;
-  const id = await control.addRaster(readable, {
+  const existingIds = new Set(control.getRasters().map((info) => info.id));
+  let id: string;
+  try {
+    id = await addRasterSource(control, readable, options);
+  } catch (error) {
+    // The control lists a raster before its header is read, so an add that
+    // failed (a blocked or unreachable URL) would otherwise stay in the Layers
+    // panel as an empty layer.
+    for (const info of control.getRasters()) {
+      if (!existingIds.has(info.id)) control.removeRaster(info.id);
+    }
+    // A bucket whose CORS rules block this origin fails as "Failed to fetch";
+    // say so instead.
+    throw typeof source === "string"
+      ? await explainS3ReadError(source, error, app.translate)
+      : error;
+  }
+  applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
+  if (options.localPath) {
+    // The id only exists once addRaster resolves, which is after the rasteradd
+    // sync has already written the store layer -- so record the path and re-run
+    // the (diffing, idempotent) sync to put it on the layer.
+    rememberLocalRasterPath(id, options.localPath);
+    syncRasterLayersToStoreForRuntime(control);
+  }
+  return id;
+}
+
+/** The control call {@link addRasterToMap} makes, split out so its errors can be explained. */
+function addRasterSource(
+  control: RasterControl,
+  source: string | File,
+  options: Parameters<typeof addRasterToMap>[2] & object,
+): Promise<string> {
+  return control.addRaster(source, {
     name: options.name,
     zoomTo: options.zoomTo ?? true,
     // Safe to pass before the band count is known: the renderer applies a
@@ -427,15 +462,6 @@ export async function addRasterToMap(
       : {}),
     ...(options.beforeId ? { beforeId: options.beforeId } : {}),
   });
-  applyRgbBandDefaults(control, id, options.defaults?.rgbBands);
-  if (options.localPath) {
-    // The id only exists once addRaster resolves, which is after the rasteradd
-    // sync has already written the store layer -- so record the path and re-run
-    // the (diffing, idempotent) sync to put it on the layer.
-    rememberLocalRasterPath(id, options.localPath);
-    syncRasterLayersToStoreForRuntime(control);
-  }
-  return id;
 }
 
 /** Switch the shared COG renderer, including rasters already on the map. */

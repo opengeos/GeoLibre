@@ -3,6 +3,7 @@ import {
   setExternalNativePaintBridge,
   useAppStore,
   type AppState,
+  explainS3ReadError,
   isCredentialedS3Url,
   resolveReadableUrl,
 } from "@geolibre/core";
@@ -1391,7 +1392,13 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
         if (url !== sourceUrl) {
           // Handing the control null would make it read the unsigned URL
           // itself, which a private bucket refuses. Download the signed one.
-          const response = await fetch(url, { signal: budget() });
+          // A bucket whose CORS rules block this origin fails as "Failed to
+          // fetch"; explain that instead.
+          const response = await fetch(url, { signal: budget() }).catch(async (error: unknown) => {
+            throw await explainS3ReadError(sourceUrl, error, (key, fallback, params) =>
+              i18n.t(key as never, { defaultValue: fallback, ...params }),
+            );
+          });
           if (!response.ok) {
             throw new Error(`HTTP ${response.status} ${response.statusText}`);
           }

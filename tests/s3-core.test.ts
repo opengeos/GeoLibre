@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   encodeS3Key,
+  explainS3ReadError,
   isCredentialedS3Url,
   parseS3Error,
   parseS3ListObjects,
@@ -189,5 +190,14 @@ describe("ListObjectsV2 parsing", () => {
       { code: "AuthorizationHeaderMalformed", message: "wrong region", region: "us-west-2" },
     );
     assert.equal(parseS3Error("<ListBucketResult/>"), null);
+  });
+});
+
+describe("explainS3ReadError", () => {
+  it("leaves errors that are not network failures of S3 reads alone", async () => {
+    const parseError = new Error("Not a valid TIFF");
+    assert.equal(await explainS3ReadError("s3://bkt/a.tif", parseError), parseError);
+    const offSite = new TypeError("Failed to fetch");
+    assert.equal(await explainS3ReadError("https://example.com/a.tif", offSite), offSite);
   });
 });

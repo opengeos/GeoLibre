@@ -578,6 +578,12 @@ export function TopToolbar({
       anonymous: t("s3Browser.anonymous"),
       setDefault: t("s3Browser.setDefault"),
       isDefault: t("s3Browser.isDefault"),
+      pointCloud: t("s3Browser.pointCloud"),
+      select: t("s3Browser.select"),
+      selectAll: t("s3Browser.selectAll"),
+      addSelected: (count) => t("s3Browser.addSelected", { count }),
+      addingProgress: (index, total) => t("s3Browser.addingProgress", { index, total }),
+      addFailed: (name, message) => t("s3Browser.addFailed", { name, message }),
       error: (message) => t("s3Browser.error", { message }),
     });
     setSourceCoopLabels({

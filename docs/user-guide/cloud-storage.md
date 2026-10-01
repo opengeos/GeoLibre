@@ -9,6 +9,7 @@ GeoLibre reads data straight from Amazon S3 and S3-compatible object stores (Min
 | **Add Data → Raster Layer** | `s3://bucket/path/image.tif` (COG / GeoTIFF) |
 | **Add Data → Vector Layer** | The object URL, e.g. `https://bucket.s3.us-west-2.amazonaws.com/path/data.parquet` |
 | **Add Data → PMTiles** | `s3://bucket/path/archive.pmtiles` |
+| **LiDAR** (point clouds) | Through the S3 Browser, or `s3://bucket/path/cloud.copc.laz` |
 | **SQL Workspace** | `read_parquet('s3://bucket/path/data.parquet')`, `ST_Read('s3://…')`, or a bare `FROM 's3://…'` |
 | **Plugins → Web Services → S3 Browser** | Browse a bucket and add files with one click |
 
@@ -73,9 +74,11 @@ Temporary credentials are refreshed shortly before they expire.
 
 **Plugins → Web Services → S3 Browser** lists a bucket's folders and files:
 
-- Type `s3://bucket/prefix/` (or a bucket name, or an S3 HTTPS URL) and press **Go**. **Up** goes to the parent folder.
+- Type `s3://bucket/prefix/` (or a bucket name, or an S3 HTTPS URL) and press **Go**.
 - **List buckets** lists every bucket the selected connection's credentials can see. On the web this needs the S3 service endpoint to allow the page's origin, which AWS does not, so use the desktop app or type the bucket name.
-- **Add** puts a COG/GeoTIFF, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, or PMTiles file on the map through the same code paths as Add Data. **Copy URI** copies the `s3://` URI for use elsewhere, such as the SQL Workspace.
+- **Add** puts a COG/GeoTIFF, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ/LAS point cloud file on the map through the same code paths as Add Data. Once a file is on the map its button reads **Added**; remove the layer and it turns back into **Add**. **Copy URI** copies the `s3://` URI for use elsewhere, such as the SQL Workspace.
+- To add several files at once, tick their checkboxes (or **Select all**) and choose **Add selected**. They are added one after another, with progress shown under the buttons.
+- **Up** goes to the parent folder; **Set as default** makes the current folder the one the browser opens at.
 - The line under the location box shows whether the bucket is read with a connection's credentials or anonymously.
 
 ## Where credentials are stored
@@ -103,7 +106,9 @@ The web app, and the desktop webview for raster and PMTiles reads, fetch S3 obje
 ]
 ```
 
-Replace the first origin with your own deployment's origin. On the desktop app, listing and vector downloads go through the native HTTP client and need no CORS rule.
+Replace the first origin with your own deployment's origin. On the desktop app, listing and vector downloads go through the native HTTP client and need no CORS rule, but COG, PMTiles, and point cloud streaming still read from the webview and need the `tauri://localhost` / `http://tauri.localhost` origins.
+
+When a read fails because the bucket's CORS rules block the app, GeoLibre says so — naming the bucket and the origin to allow — instead of a bare "Failed to fetch". It tells the two apart by repeating the request in `no-cors` mode, which CORS cannot block: if S3 answers that, the bucket is reachable and CORS is the cause.
 
 ## How it works
 
@@ -111,6 +116,6 @@ A private object is read through a **SigV4 presigned URL**, minted in the app fr
 
 ## Limitations
 
-- Zarr stores and COPC point clouds are not yet read from private buckets: both read many objects, and their readers take no per-request signing hook.
+- Zarr stores are not yet read from private buckets: a store is many objects, and the Zarr readers take no per-request signing hook.
 - SQL globs (`read_parquet('s3://bucket/*.parquet')`) and Iceberg tables in private buckets are not supported; name individual files.
 - `gs://` and `az://` URLs are still read anonymously.

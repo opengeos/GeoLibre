@@ -797,6 +797,13 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     labelKey: "settings.menu.environmentVariables",
     tier: "intermediate",
   },
+  // S3 connections; advanced like the S3 Browser that uses them.
+  {
+    id: "settings.cloudStorage",
+    menuId: "settings",
+    labelKey: "settings.menu.cloudStorage",
+    tier: "advanced",
+  },
   {
     id: "settings.managePlugins",
     menuId: "settings",

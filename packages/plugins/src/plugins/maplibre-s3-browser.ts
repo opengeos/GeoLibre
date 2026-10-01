@@ -14,9 +14,9 @@
  * `s3://` URI (or the object URL), never a signature: each load signs again.
  */
 
-import { getS3UrlSigner, s3ObjectHttpsUrl, useAppStore } from "@geolibre/core";
+import { explainS3ReadError, getS3UrlSigner, s3ObjectHttpsUrl, useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import { addPMTilesLayerFromUrl } from "./maplibre-components";
+import { addLidarLayerFromUrl, addPMTilesLayerFromUrl } from "./maplibre-components";
 import { addRasterToMap } from "./maplibre-raster";
 import { addVectorLayerFromUrl } from "./maplibre-vector";
 import { formatBytes, isAddable, isTooLargeToOpen, usesDuckDB } from "./remote-file-formats";
@@ -58,11 +58,17 @@ export interface S3BrowserLabels {
   anonymous: string;
   setDefault: string;
   isDefault: string;
+  pointCloud: string;
+  select: string;
+  selectAll: string;
+  addSelected: (count: number) => string;
+  addingProgress: (index: number, total: number) => string;
+  addFailed: (name: string, message: string) => string;
   error: (message: string) => string;
 }
 
 export const DEFAULT_S3_BROWSER_LABELS: S3BrowserLabels = {
-  hint: "Browse an S3 bucket and add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, or PMTiles files to the map. Enter s3://bucket/prefix/.",
+  hint: "Browse an S3 bucket and add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ point cloud files to the map. Enter s3://bucket/prefix/.",
   noConnections:
     "No S3 connections are configured, so only public buckets can be read. Add credentials in Settings > Cloud Storage.",
   connection: "Connection",
@@ -84,6 +90,12 @@ export const DEFAULT_S3_BROWSER_LABELS: S3BrowserLabels = {
   anonymous: "Public (anonymous) access",
   setDefault: "Set as default",
   isDefault: "Default",
+  pointCloud: "point cloud",
+  select: "Select",
+  selectAll: "Select all",
+  addSelected: (count) => `Add selected (${count})`,
+  addingProgress: (index, total) => `Adding ${index} of ${total}…`,
+  addFailed: (name, message) => `Could not add ${name}: ${message}`,
   error: (message) => `Could not list this location: ${message}`,
 };
 
@@ -136,6 +148,7 @@ const CSS = {
     "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
     "color:hsl(var(--foreground));",
   location: "font-size:10px;color:hsl(var(--muted-foreground));word-break:break-all;",
+  selectLabel: "display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;",
 } as const;
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -184,30 +197,41 @@ function writeLastLocation(value: string): void {
   }
 }
 
-/** Whether a store layer already reads this object (by `s3://` URI or object URL). */
+/**
+ * Whether a store layer reads this object. Layers keep the `s3://` URI
+ * (rasters, point clouds), the object URL (vector files), or a `pmtiles://`
+ * URL wrapping the URI (PMTiles source layers). Read from the store each time,
+ * so removing the layer re-enables Add.
+ */
 function isOnMap(object: S3BrowserObject, bucket: string): boolean {
   const objectUrl = s3ObjectHttpsUrl({ bucket, key: object.key });
+  const sources = new Set([object.uri, objectUrl, `pmtiles://${object.uri}`]);
   return useAppStore
     .getState()
     .layers.some(
       (layer) =>
-        layer.source.url === object.uri ||
-        layer.source.url === objectUrl ||
-        layer.sourcePath === object.uri ||
-        layer.sourcePath === objectUrl,
+        (typeof layer.source.url === "string" && sources.has(layer.source.url)) ||
+        (typeof layer.sourcePath === "string" && sources.has(layer.sourcePath)),
     );
+}
+
+/** Whether the panel has a way to put this object on the map. */
+function canAdd(object: S3BrowserObject): boolean {
+  return object.pointCloud || isAddable(object.format);
 }
 
 /**
  * Puts one object on the map through the control that owns its format.
  * Vector files go by object URL because the vector panel's URL loader is where
- * GeoLibre signs downloads; rasters and PMTiles take the `s3://` URI.
+ * GeoLibre signs downloads; rasters, PMTiles, and point clouds take the
+ * `s3://` URI.
  */
 async function addObjectToMap(
   app: GeoLibreAppAPI,
   location: S3BrowseLocation,
   object: S3BrowserObject,
 ): Promise<boolean> {
+  if (object.pointCloud) return (await addLidarLayerFromUrl(app, object.uri)) !== null;
   switch (object.format) {
     case "cog":
       await addRasterToMap(app, object.uri, { name: object.name });
@@ -264,35 +288,136 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   input.value = signer?.defaultLocation?.() || readLastLocation();
   input.setAttribute("aria-label", labels.locationPlaceholder);
   const go = button(labels.go, CSS.primaryButton);
-  const up = button(labels.up, CSS.button);
-  locationRow.append(input, go, up);
+  locationRow.append(input, go);
   root.append(locationRow);
 
+  // Navigation for the folder being shown, apart from the location box.
+  const navRow = el("div", CSS.row);
+  const up = button(`↑ ${labels.up}`, CSS.button);
+  up.disabled = true;
   // The persisted default location (Settings > Cloud Storage). Hosts without a
   // settings store fall back to the last location browsed.
   const makeDefault = button(labels.setDefault, CSS.button);
-  makeDefault.style.alignSelf = "flex-start";
   makeDefault.style.display = signer?.setDefaultLocation ? "" : "none";
+  navRow.append(up, makeDefault);
+  root.append(navRow);
   makeDefault.addEventListener("click", () => {
     if (!current) return;
     signer?.setDefaultLocation?.(formatS3BrowseLocation(current));
     refreshDefaultButton();
   });
-  root.append(makeDefault);
 
   function refreshDefaultButton(): void {
     const isDefault =
       current !== null && signer?.defaultLocation?.() === formatS3BrowseLocation(current);
     makeDefault.textContent = isDefault ? labels.isDefault : labels.setDefault;
     makeDefault.disabled = current === null || isDefault;
+    up.disabled = current === null || current.prefix === "";
   }
+
+  /** An addable file's controls. Re-synced whenever the store's layers change. */
+  interface AddableEntry {
+    location: S3BrowseLocation;
+    object: S3BrowserObject;
+    add: HTMLButtonElement;
+    select: HTMLInputElement;
+    pending: boolean;
+  }
+  const addable: AddableEntry[] = [];
+
+  function syncEntry(entry: AddableEntry): void {
+    const onMap = isOnMap(entry.object, entry.location.bucket);
+    entry.add.textContent = entry.pending ? labels.adding : onMap ? labels.added : labels.add;
+    entry.add.disabled = entry.pending || onMap;
+    entry.select.disabled = entry.pending || onMap;
+    if (entry.select.disabled) entry.select.checked = false;
+  }
+
+  /** Selectable entries: addable files not yet on the map nor being added. */
+  function selectableEntries(): AddableEntry[] {
+    return addable.filter((entry) => !entry.select.disabled);
+  }
+
+  function syncSelectionBar(): void {
+    const selectable = selectableEntries();
+    const selected = selectable.filter((entry) => entry.select.checked);
+    selectionBar.style.display = addable.length > 0 ? "flex" : "none";
+    selectAll.disabled = selectable.length === 0 || batchRunning;
+    selectAll.checked = selectable.length > 0 && selected.length === selectable.length;
+    selectAll.indeterminate = selected.length > 0 && selected.length < selectable.length;
+    addSelected.textContent = labels.addSelected(selected.length);
+    addSelected.disabled = selected.length === 0 || batchRunning;
+  }
+
+  function syncAll(): void {
+    for (const entry of addable) syncEntry(entry);
+    syncSelectionBar();
+  }
+
+  const unsubscribeLayers = useAppStore.subscribe((state, previous) => {
+    if (state.layers !== previous.layers) syncAll();
+  });
+
+  /** Adds one file; failures are reported in the status line. */
+  async function addEntry(entry: AddableEntry): Promise<void> {
+    if (!app) return;
+    entry.pending = true;
+    entry.select.checked = false;
+    syncEntry(entry);
+    syncSelectionBar();
+    try {
+      const added = await addObjectToMap(app, entry.location, entry.object);
+      if (!added) setStatus(labels.notAddable);
+    } catch (error) {
+      // The add paths already turn a CORS refusal into an explanation.
+      status.style.cssText = CSS.error;
+      status.textContent = labels.addFailed(entry.object.name, errorMessage(error));
+    } finally {
+      entry.pending = false;
+      syncEntry(entry);
+      syncSelectionBar();
+    }
+  }
+
+  // Multi-select: tick files, then add them in one go. They are added one at a
+  // time, as a user clicking Add would, since each control mounts and loads on
+  // first use and several rasters starting at once would race that setup.
+  let batchRunning = false;
+  const selectionBar = el("div", CSS.row);
+  selectionBar.style.display = "none";
+  const selectAllLabel = el("label", CSS.selectLabel);
+  const selectAll = el("input", "");
+  selectAll.type = "checkbox";
+  selectAllLabel.append(selectAll, document.createTextNode(labels.selectAll));
+  const addSelected = button(labels.addSelected(0), CSS.primaryButton);
+  addSelected.style.marginInlineStart = "auto";
+  selectionBar.append(selectAllLabel, addSelected);
+  selectAll.addEventListener("change", () => {
+    for (const entry of selectableEntries()) entry.select.checked = selectAll.checked;
+    syncSelectionBar();
+  });
+  addSelected.addEventListener("click", () => {
+    const batch = selectableEntries().filter((entry) => entry.select.checked);
+    if (batch.length === 0) return;
+    batchRunning = true;
+    syncSelectionBar();
+    void (async () => {
+      for (const [index, entry] of batch.entries()) {
+        setStatus(labels.addingProgress(index + 1, batch.length));
+        await addEntry(entry);
+      }
+      batchRunning = false;
+      if (status.textContent === labels.addingProgress(batch.length, batch.length)) setStatus("");
+      syncSelectionBar();
+    })();
+  });
 
   const accessLine = el("div", CSS.location);
   const status = el("div", CSS.status);
   const list = el("div", CSS.list);
   const more = button(labels.loadMore, CSS.button);
   more.style.display = "none";
-  root.append(accessLine, status, list, more);
+  root.append(accessLine, selectionBar, status, list, more);
   container.append(root);
 
   function setError(error: unknown): void {
@@ -321,40 +446,35 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     card.dataset.key = object.key;
     const titleRow = el("div", CSS.row);
     titleRow.append(el("span", CSS.title, object.name));
-    if (object.format !== "other") titleRow.append(el("span", CSS.badge, object.format));
+    if (object.pointCloud) titleRow.append(el("span", CSS.badge, labels.pointCloud));
+    else if (object.format !== "other") titleRow.append(el("span", CSS.badge, object.format));
     card.append(titleRow);
     const date = object.lastModified ? ` · ${object.lastModified.slice(0, 10)}` : "";
     card.append(el("div", CSS.sub, `${formatBytes(object.size)}${date}`));
 
     const actions = el("div", CSS.actions);
-    if (app && isAddable(object.format)) {
-      if (isTooLargeToOpen(object.format, object.size)) {
+    if (app && canAdd(object)) {
+      if (!object.pointCloud && isTooLargeToOpen(object.format, object.size)) {
         card.append(el("div", CSS.sub, labels.tooLarge));
       } else {
-        const add = button(
-          isOnMap(object, location.bucket) ? labels.added : labels.add,
-          CSS.action,
-        );
-        add.disabled = isOnMap(object, location.bucket);
-        add.addEventListener("click", () => {
-          add.disabled = true;
-          add.textContent = labels.adding;
-          addObjectToMap(app, location, object).then(
-            (added) => {
-              add.textContent = added ? labels.added : labels.add;
-              add.disabled = added;
-              if (!added) setStatus(labels.notAddable);
-            },
-            (error: unknown) => {
-              add.textContent = labels.add;
-              add.disabled = false;
-              setError(error);
-            },
-          );
-        });
-        actions.append(add);
+        const select = el("input", "");
+        select.type = "checkbox";
+        select.setAttribute("aria-label", `${labels.select} ${object.name}`);
+        titleRow.prepend(select);
+        const entry: AddableEntry = {
+          location,
+          object,
+          add: button(labels.add, CSS.action),
+          select,
+          pending: false,
+        };
+        addable.push(entry);
+        syncEntry(entry);
+        select.addEventListener("change", syncSelectionBar);
+        entry.add.addEventListener("click", () => void addEntry(entry));
+        actions.append(entry.add);
       }
-    } else if (!isAddable(object.format)) {
+    } else if (!canAdd(object)) {
       card.append(el("div", CSS.sub, labels.notAddable));
     }
     const copy = button(labels.copyUri, CSS.action);
@@ -377,6 +497,8 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     refreshDefaultButton();
     more.style.display = "none";
     list.replaceChildren();
+    addable.length = 0;
+    syncSelectionBar();
     accessLine.textContent = "";
     setStatus(labels.loading);
     try {
@@ -399,6 +521,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
       current = location;
       continuationToken = undefined;
       list.replaceChildren();
+      addable.length = 0;
       input.value = formatS3BrowseLocation(location);
       writeLastLocation(input.value);
       describeAccess(location.bucket);
@@ -419,9 +542,13 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
         list.append(renderObject(location, object));
       }
       setStatus(list.childElementCount === 0 ? labels.empty : "");
+      syncSelectionBar();
       more.style.display = continuationToken ? "" : "none";
     } catch (error) {
-      if (!isAbort(error)) setError(error);
+      // On the web a bucket without a CORS rule for this origin fails as
+      // "Failed to fetch"; explain that instead.
+      if (!isAbort(error))
+        setError(await explainS3ReadError(`s3://${location.bucket}/`, error, app?.translate));
     }
   }
 
@@ -454,6 +581,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
 
   return () => {
     controller?.abort();
+    unsubscribeLayers();
     root.remove();
   };
 }

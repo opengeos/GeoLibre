@@ -14,6 +14,7 @@ const LISTING = `<ListBucketResult><IsTruncated>false</IsTruncated>
 <Contents><Key>data/</Key><Size>0</Size></Contents>
 <Contents><Key>data/dem.tif</Key><Size>100</Size></Contents>
 <Contents><Key>data/notes.txt</Key><Size>5</Size></Contents>
+<Contents><Key>data/autzen.copc.laz</Key><Size>9</Size></Contents>
 <CommonPrefixes><Prefix>data/sub/</Prefix></CommonPrefixes></ListBucketResult>`;
 
 describe("S3 browser locations", () => {
@@ -61,10 +62,11 @@ describe("S3 browser client", () => {
     assert.deepEqual(page.prefixes, ["data/sub/"]);
     const objects = describeObjects(location, page);
     assert.deepEqual(
-      objects.map((object) => [object.name, object.format, object.uri]),
+      objects.map((object) => [object.name, object.format, object.pointCloud, object.uri]),
       [
-        ["dem.tif", "cog", "s3://b/data/dem.tif"],
-        ["notes.txt", "other", "s3://b/data/notes.txt"],
+        ["dem.tif", "cog", false, "s3://b/data/dem.tif"],
+        ["notes.txt", "other", false, "s3://b/data/notes.txt"],
+        ["autzen.copc.laz", "other", true, "s3://b/data/autzen.copc.laz"],
       ],
     );
   });

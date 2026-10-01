@@ -529,3 +529,92 @@ export function parseS3BucketList(xml: string): string[] {
     .map((block) => xmlTag(block, "Name"))
     .filter((name): name is string => Boolean(name));
 }
+
+// ---------------------------------------------------------------------------
+// CORS diagnosis
+// ---------------------------------------------------------------------------
+
+/**
+ * How browsers word a request they blocked or could not complete, plus the
+ * readers that already guess at CORS themselves (maplibre-gl-lidar's message
+ * tells the user to use a file picker, which is wrong for a bucket).
+ */
+const NETWORK_FAILURE =
+  /failed to fetch|networkerror|load failed|network request failed|err_failed|cross-origin|\bcors\b/i;
+
+function errorText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 4; depth += 1) {
+    parts.push(current instanceof Error ? `${current.name}: ${current.message}` : String(current));
+    current = current instanceof Error ? (current as Error & { cause?: unknown }).cause : null;
+  }
+  return parts.join(" | ");
+}
+
+/** A read the bucket's CORS configuration blocked. */
+export class S3CorsError extends Error {
+  readonly bucket: string;
+  readonly origin: string;
+
+  constructor(message: string, bucket: string, origin: string, cause: unknown) {
+    super(message, { cause });
+    this.name = "S3CorsError";
+    this.bucket = bucket;
+    this.origin = origin;
+  }
+}
+
+/** Translates `key`, falling back to `defaultValue` (an app API's `translate`). */
+export type S3ErrorTranslate = (
+  key: string,
+  defaultValue: string,
+  params?: Record<string, string | number>,
+) => string;
+
+/**
+ * Explains why reading an S3 object failed when the browser only said
+ * "Failed to fetch". A browser reports a request the bucket's CORS rules
+ * blocked exactly like a network outage, so this repeats the request in
+ * `no-cors` mode, which CORS cannot block: if S3 answers that one, the object
+ * is reachable and the bucket's CORS configuration is what refused the read.
+ *
+ * @param url The `s3://` URI or object URL that was being read.
+ * @param error What the reader threw.
+ * @param translate Turns the message into the UI language.
+ * @returns An {@link S3CorsError} naming the bucket and the origin to allow,
+ *   or `error` unchanged when it is not a CORS refusal of an S3 read.
+ */
+export async function explainS3ReadError(
+  url: string,
+  error: unknown,
+  translate?: S3ErrorTranslate,
+): Promise<unknown> {
+  const location = parseS3Url(url);
+  if (!location || error instanceof S3CorsError) return error;
+  if (!NETWORK_FAILURE.test(errorText(error))) return error;
+  if (typeof fetch !== "function" || typeof window === "undefined") return error;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const href = await resolveReadableUrl(url);
+    // An opaque answer means S3 is reachable. The body is not needed, so the
+    // request is cut off as soon as the headers arrive.
+    await fetch(href, { mode: "no-cors", signal: controller.signal, cache: "no-store" });
+    controller.abort();
+  } catch {
+    // Unreachable under no-cors too: a real network failure, not CORS.
+    return error;
+  } finally {
+    clearTimeout(timer);
+  }
+  const origin = window.location.origin;
+  const fallback =
+    `The bucket "${location.bucket}" does not allow reads from ${origin}: its CORS configuration ` +
+    "is missing or does not list this origin. Add a CORS rule that allows GET and HEAD from this " +
+    "origin and exposes Content-Length, Content-Range, and ETag (see Settings > Cloud Storage).";
+  const message = translate
+    ? translate("s3Browser.corsError", fallback, { bucket: location.bucket, origin })
+    : fallback;
+  return new S3CorsError(message, location.bucket, origin, error);
+}

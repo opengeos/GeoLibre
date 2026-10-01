@@ -320,6 +320,7 @@ const SECTION_GATE: Partial<Record<SettingsSection, string>> = {
   map: "settings.mapPreferences",
   geocoding: "settings.geocoding",
   environment: "settings.environment",
+  cloudStorage: "settings.cloudStorage",
 };
 
 const VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -1840,6 +1841,17 @@ export function SettingsDialog({
             >
               <Braces className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.environmentVariables")}
+            </DropdownMenuItem>
+          )}
+          {showSettingsItem("settings.cloudStorage") && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setSection("cloudStorage");
+                setOpen(true);
+              }}
+            >
+              <Cloud className="me-2 h-3.5 w-3.5" />
+              {t("settings.menu.cloudStorage")}
             </DropdownMenuItem>
           )}
           {/* Share the same gate as the in-dialog nav/pane so the Store build

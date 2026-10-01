@@ -43,8 +43,21 @@ export interface S3BrowserObject {
   size: number;
   lastModified?: string;
   format: RemoteFileFormat;
+  /**
+   * A LAS/LAZ/COPC point cloud, which `remote-file-formats` does not classify
+   * (the other remote browsers have no point-cloud path); the LiDAR control
+   * streams it.
+   */
+  pointCloud: boolean;
   /** `s3://bucket/key`, which layers keep as their source. */
   uri: string;
+}
+
+const POINT_CLOUD_KEY = /\.(?:copc\.laz|laz|las)$/i;
+
+/** Whether a key names a point cloud the LiDAR control can stream. */
+export function isPointCloudKey(key: string): boolean {
+  return POINT_CLOUD_KEY.test(key);
 }
 
 /**
@@ -172,6 +185,7 @@ export function describeObjects(location: S3BrowseLocation, page: S3ListPage): S
         size: object.size,
         ...(object.lastModified ? { lastModified: object.lastModified } : {}),
         format: classifyPath(object.key),
+        pointCloud: isPointCloudKey(object.key),
         uri: `s3://${location.bucket}/${object.key}`,
       };
     });

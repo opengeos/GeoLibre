@@ -224,7 +224,7 @@ Browses [Source Cooperative](https://source.coop) — a repository of large, clo
 Browses Amazon S3 and S3-compatible buckets. Public buckets are read anonymously; private ones with the S3 connections in **Settings → Cloud Storage**, including AWS profiles, SSO, and IAM roles on the desktop app.
 
 - Type `s3://bucket/prefix/` and press **Go**, or pick a connection and **List buckets**.
-- **Add** puts COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, and PMTiles files on the map through the same paths as [Add Data](adding-data.md); layers keep the `s3://` URI, never a signed URL.
+- **Add** puts COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, and COPC/LAZ/LAS point cloud files on the map through the same paths as [Add Data](adding-data.md); layers keep the `s3://` URI, never a signed URL. Tick several files and choose **Add selected** to add them in one go.
 - **Set as default** makes the current folder the one the browser opens at.
 
 See [Cloud Storage](cloud-storage.md) for connections, credential sources, and the CORS rule private buckets need on the web.

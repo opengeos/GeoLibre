@@ -3,6 +3,7 @@
 
 import {
   DEFAULT_LAYER_STYLE,
+  explainS3ReadError,
   type GeoLibreLayer,
   resolveReadableUrl,
   unsignedSourceUrl,
@@ -228,7 +229,7 @@ export async function addPMTilesLayerFromUrl(
   // to surface it. `_addLayer` clears `error` on entry, so this reads the
   // outcome of the call above.
   const { error } = control.getState();
-  if (error) throw new Error(error);
+  if (error) throw await explainS3ReadError(normalizedUrl, new Error(error), app.translate);
   return true;
 }
 
