@@ -114,12 +114,34 @@ describe("useWindowCloseGuard", () => {
     let saves = 0;
     const guard = renderGuard(async () => {
       saves += 1;
+      useAppStore.setState({ isDirty: false });
       return true;
     });
     await requestClose();
     await act(() => guard.current.resolveWindowClosePrompt("save"));
     assert.equal(saves, 1);
     assert.ok(destroyed());
+  });
+
+  it("keeps the window when the project is still dirty after saving", async () => {
+    useAppStore.setState({ isDirty: true });
+    // Reports success, but an edit landed during the write so nothing was marked saved.
+    const guard = renderGuard(async () => true);
+    await requestClose();
+    await act(() => guard.current.resolveWindowClosePrompt("save"));
+    assert.ok(!destroyed());
+  });
+
+  it("does not discard a project that replaced the one the prompt asked about", async () => {
+    useAppStore.setState({ isDirty: true });
+    const guard = renderGuard(async () => true);
+    await requestClose();
+    act(() => {
+      useAppStore.setState((s) => ({ projectGeneration: s.projectGeneration + 1 }));
+    });
+    await act(() => guard.current.resolveWindowClosePrompt("discard"));
+    assert.equal(guard.current.windowClosePromptOpen, false);
+    assert.ok(!destroyed());
   });
 
   it("keeps the window when the save is cancelled or fails, and asks on the next close", async () => {

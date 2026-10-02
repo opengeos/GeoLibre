@@ -46,6 +46,10 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
   // A ref rather than the state above so the native listener, registered once,
   // sees an in-flight save and does not reopen the prompt over its dialogs.
   const savingRef = useRef(false);
+  // The project the prompt was raised for. Another project can arrive while it
+  // is up (Open from URL, a dropped file), and Discard must not then throw that
+  // one away unasked.
+  const promptGenerationRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -57,7 +61,9 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
           // Not prevented: the API destroys the window after this returns.
           if (!useAppStore.getState().isDirty) return;
           event.preventDefault();
-          if (!savingRef.current) setWindowClosePromptOpen(true);
+          if (savingRef.current) return;
+          promptGenerationRef.current = useAppStore.getState().projectGeneration;
+          setWindowClosePromptOpen(true);
         }),
       )
       .then((stop) => {
@@ -76,7 +82,11 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
   const resolveWindowClosePrompt = useCallback(async (choice: WindowCloseChoice) => {
     if (savingRef.current) return;
     setWindowClosePromptOpen(false);
+    const promptGeneration = promptGenerationRef.current;
+    promptGenerationRef.current = null;
     if (choice === "cancel") return;
+    // The project changed under the prompt; the next close asks about it.
+    if (useAppStore.getState().projectGeneration !== promptGeneration) return;
     if (choice === "save") {
       savingRef.current = true;
       setWindowCloseSaving(true);
@@ -93,8 +103,10 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
       }
       // A cancelled or failed save leaves the project unsaved, so keep the
       // window. The prompt is not reopened: a failed save shows its own error
-      // dialog, which the prompt would cover. Closing again asks again.
-      if (!saved) return;
+      // dialog, which the prompt would cover. Closing again asks again. A save
+      // can also succeed and still leave the project dirty (an edit that landed
+      // while it was writing), so check the flag too.
+      if (!saved || useAppStore.getState().isDirty) return;
     }
     try {
       await destroyCurrentWindow();
