@@ -134,6 +134,13 @@ function makeCesium() {
       },
     },
     createWorldTerrainAsync: () => Promise.resolve({ kind: "world-terrain" }),
+    IonResource: {
+      fromAssetId: (assetId: number, options?: { accessToken?: string }) =>
+        Promise.resolve({ kind: "ion-resource", assetId, token: options?.accessToken }),
+    },
+    CesiumTerrainProvider: {
+      fromUrl: (resource: unknown) => Promise.resolve({ kind: "ion-terrain", resource }),
+    },
   } as unknown as typeof import("@cesium/engine");
 }
 
@@ -721,6 +728,100 @@ describe("CesiumEngine terrain", () => {
     engine.setTerrainExaggeration(2.5);
     assert.equal(engine.getTerrainExaggeration(), 2.5);
     assert.equal(fakes.viewer.scene.verticalExaggeration, 2.5);
+    engine.destroy();
+  });
+
+  it("loads Cesium Ion terrain asset when configured with token", async () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer, {
+      ionToken: "tok-123",
+      terrainIonAssetId: 2767062,
+    });
+    assert.equal(engine.getTerrainIonAssetId(), 2767062);
+    await engine.enableWorldTerrain();
+    assert.equal(engine.isTerrainEnabled(), true);
+    assert.deepEqual(fakes.viewer.terrainProvider, {
+      kind: "ion-terrain",
+      resource: { kind: "ion-resource", assetId: 2767062, token: "tok-123" },
+    });
+    engine.destroy();
+  });
+
+  it("swapping and clearing Ion terrain asset dynamically updates provider", async () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer, {
+      ionToken: "tok-123",
+      terrainIonAssetId: 2767062,
+    });
+    await engine.enableWorldTerrain();
+    assert.equal(await engine.setTerrainIonAssetId(39401), true);
+    assert.equal(engine.getTerrainIonAssetId(), 39401);
+    assert.deepEqual(fakes.viewer.terrainProvider, {
+      kind: "ion-terrain",
+      resource: { kind: "ion-resource", assetId: 39401, token: "tok-123" },
+    });
+
+    // Clearing restores World Terrain
+    assert.equal(await engine.setTerrainIonAssetId(null), true);
+    assert.equal(engine.getTerrainIonAssetId(), null);
+    assert.deepEqual(fakes.viewer.terrainProvider, { kind: "world-terrain" });
+    engine.destroy();
+  });
+
+  it("rejects invalid Ion terrain asset id or missing token", async () => {
+    const fakes = makeViewer();
+    const engineWithoutToken = new CesiumEngine(makeCesium(), fakes.viewer);
+    assert.equal(await engineWithoutToken.setTerrainIonAssetId(2767062), false);
+
+    const engineWithToken = new CesiumEngine(makeCesium(), fakes.viewer, {
+      ionToken: "tok-123",
+    });
+    assert.equal(await engineWithToken.setTerrainIonAssetId(0), false);
+    assert.equal(await engineWithToken.setTerrainIonAssetId(-5), false);
+    assert.equal(await engineWithToken.setTerrainIonAssetId(1.5), false);
+    assert.equal(await engineWithToken.setTerrainIonAssetId(NaN), false);
+    engineWithoutToken.destroy();
+    engineWithToken.destroy();
+  });
+
+  it("restores previous terrain when Ion terrain asset fails to load asynchronously", async () => {
+    const fakes = makeViewer();
+    const Cesium = makeCesium();
+    Cesium.IonResource.fromAssetId = (assetId: number, options?: { accessToken?: string }) => {
+      if (assetId === 999999) return Promise.reject(new Error("Asset not found or inaccessible"));
+      return Promise.resolve({ kind: "ion-resource", assetId, token: options?.accessToken });
+    };
+    const engine = new CesiumEngine(Cesium, fakes.viewer, {
+      ionToken: "tok-123",
+      terrainIonAssetId: 2767062,
+    });
+    await engine.enableWorldTerrain();
+    assert.equal(engine.getTerrainIonAssetId(), 2767062);
+    assert.equal(engine.isTerrainEnabled(), true);
+
+    // Attempt to set a failing asset
+    const success = await engine.setTerrainIonAssetId(999999);
+    assert.equal(success, false);
+    // Previous asset id is restored
+    assert.equal(engine.getTerrainIonAssetId(), 2767062);
+    // Terrain remains enabled with restored provider
+    assert.equal(engine.isTerrainEnabled(), true);
+    assert.deepEqual(fakes.viewer.terrainProvider, {
+      kind: "ion-terrain",
+      resource: { kind: "ion-resource", assetId: 2767062, token: "tok-123" },
+    });
+    engine.destroy();
+  });
+
+  it("configures Ion asset id without enabling terrain when terrain is disabled", async () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer, {
+      ionToken: "tok-123",
+    });
+    assert.equal(engine.isTerrainEnabled(), false);
+    assert.equal(await engine.setTerrainIonAssetId(2767062), true);
+    assert.equal(engine.getTerrainIonAssetId(), 2767062);
+    assert.equal(engine.isTerrainEnabled(), false);
     engine.destroy();
   });
 });

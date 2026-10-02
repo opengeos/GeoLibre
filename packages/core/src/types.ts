@@ -1630,6 +1630,11 @@ export interface MapPreferences {
   showPointerElevation: boolean;
   /** Whether the built-in 3D terrain control and terrain surface are enabled. */
   terrainEnabled: boolean;
+  /**
+   * Optional Cesium Ion terrain asset used by the globe when terrain is enabled.
+   * Ignored by 2D renderers; absent means the renderer's normal global source.
+   */
+  terrainIonAssetId?: number;
   /** Mapbox-only style. New projects use Streets; absent follows the shared basemap. */
   mapboxStyleUrl?: string;
   /**

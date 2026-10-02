@@ -215,6 +215,10 @@ export interface MapEngine {
   getTerrainCogSource(): string | null;
   hasCustomTerrainSource(): boolean;
   setTerrainCogSource(source: string | Blob | null, band?: number): Promise<boolean>;
+  /** Cesium-only Ion terrain asset, or `null` when the normal global source is used. */
+  getTerrainIonAssetId?(): number | null;
+  /** Select or clear the Cesium-only Ion terrain source. */
+  setTerrainIonAssetId?(assetId: number | null): Promise<boolean>;
   /** Translated tooltip for the on-map terrain control. */
   setTerrainLabel(label: string): void;
 

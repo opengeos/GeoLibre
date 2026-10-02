@@ -12,6 +12,7 @@ import {
   isCesiumOnlyLayer,
   parseCesiumIonAssetId,
 } from "../packages/core/src/cesium-ion";
+import { createEmptyProject, parseProject, serializeProject } from "../packages/core/src/project";
 import type { GeoLibreLayer } from "../packages/core/src/types";
 import { CesiumLayerSync, isCesiumSupportedLayerType } from "../packages/map/src/cesium-layer-sync";
 
@@ -353,5 +354,40 @@ describe("CesiumLayerSync with Ion assets", () => {
     for (let i = 0; i < 4; i++) await flush();
     assert.deepEqual(g.calls.flights, [], "the layer the fit targeted is gone");
     sync.destroy();
+  });
+});
+
+describe("Cesium Ion terrain asset project persistence", () => {
+  it("normalizes and preserves terrainIonAssetId in project preferences", () => {
+    const project = createEmptyProject();
+    project.preferences.map.terrainIonAssetId = 2767062;
+    project.preferences.map.terrainEnabled = true;
+
+    const serialized = serializeProject(project);
+    const parsed = parseProject(serialized);
+
+    assert.equal(parsed.preferences.map.terrainIonAssetId, 2767062);
+    assert.equal(parsed.preferences.map.terrainEnabled, true);
+  });
+
+  it("normalizes invalid or missing terrainIonAssetId safely", () => {
+    const project = createEmptyProject();
+    // String number should coerce
+    (project.preferences.map as Record<string, unknown>).terrainIonAssetId = "2767062";
+    let parsed = parseProject(serializeProject(project));
+    assert.equal(parsed.preferences.map.terrainIonAssetId, 2767062);
+
+    // Negative, 0, float, or invalid text should normalize to undefined
+    (project.preferences.map as Record<string, unknown>).terrainIonAssetId = -5;
+    parsed = parseProject(serializeProject(project));
+    assert.equal(parsed.preferences.map.terrainIonAssetId, undefined);
+
+    (project.preferences.map as Record<string, unknown>).terrainIonAssetId = 0;
+    parsed = parseProject(serializeProject(project));
+    assert.equal(parsed.preferences.map.terrainIonAssetId, undefined);
+
+    (project.preferences.map as Record<string, unknown>).terrainIonAssetId = "invalid";
+    parsed = parseProject(serializeProject(project));
+    assert.equal(parsed.preferences.map.terrainIonAssetId, undefined);
   });
 });

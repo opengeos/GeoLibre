@@ -1,4 +1,4 @@
-import { useAppStore, useLayersWhen } from "@geolibre/core";
+import { parseCesiumIonAssetId, useAppStore, useLayersWhen } from "@geolibre/core";
 import {
   CogDemError,
   DEFAULT_TERRAIN_EXAGGERATION,
@@ -29,11 +29,12 @@ import {
 } from "../../lib/terrain-exaggeration";
 import { terrainRasterLayerOptions } from "../../lib/terrain-raster-layer";
 import { useMapCapabilities } from "../../hooks/useMapCapabilities";
+import { useCesiumIonToken } from "../../hooks/useCesiumIonToken";
 
 // Default sourced from the map package so it can't drift from the control's.
 const DEFAULT_EXAGGERATION = DEFAULT_TERRAIN_EXAGGERATION;
 
-type TerrainSourceAction = "url" | "file" | "layer" | "default";
+type TerrainSourceAction = "url" | "file" | "layer" | "default" | "ion";
 
 // @geolibre/map is i18n-agnostic and throws English messages, so the failure
 // kinds it tags are mapped to the catalog here rather than shown verbatim.
@@ -55,6 +56,8 @@ export interface TerrainSettingsDialogProps {
  */
 export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialogProps) {
   const { t } = useTranslation();
+  const ionToken = useCesiumIonToken();
+  const isCesiumPrimary = useAppStore((state) => state.primaryRenderer === "cesium");
   // Not every engine can take a DEM of its own: mapbox-gl has no `raster-dem`
   // source a COG can back, so `setTerrainCogSource` there returns false and the
   // whole section used to accept a URL, a file or a layer and then do nothing at
@@ -64,6 +67,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   const [open, setOpen] = useState(false);
   const [exaggeration, setExaggeration] = useState(DEFAULT_EXAGGERATION);
   const [terrainUrl, setTerrainUrl] = useState("");
+  const [ionAssetId, setIonAssetId] = useState("");
   const [rasterLayerId, setRasterLayerId] = useState("");
   const [sourceLoading, setSourceLoading] = useState<TerrainSourceAction | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -92,6 +96,8 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       setExaggeration(value);
       setDraft(String(value));
       const currentSource = mapControllerRef.current?.getTerrainCogSource() ?? "";
+      const currentIonAssetId = mapControllerRef.current?.getTerrainIonAssetId?.() ?? null;
+      setIonAssetId(currentIonAssetId === null ? "" : String(currentIonAssetId));
       const currentLayer = terrainRasterLayerOptions(useAppStore.getState().layers).find(
         (option) => option.source === currentSource,
       );
@@ -190,9 +196,24 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
     setSourceLoading(action);
     setSourceError(null);
     try {
+      if (isCesiumPrimary && controller.setTerrainIonAssetId) {
+        if (controller.getTerrainIonAssetId?.() !== null) {
+          const clearIon = await controller.setTerrainIonAssetId(null);
+          if (!clearIon || !isCurrent()) return;
+        }
+        const preferences = useAppStore.getState().preferences;
+        if (preferences.map.terrainIonAssetId !== undefined) {
+          useAppStore.getState().setPreferences({
+            ...preferences,
+            map: { ...preferences.map, terrainIonAssetId: undefined },
+          });
+        }
+        setIonAssetId("");
+      }
       // False means another caller's newer selection won, so this request must
       // not clear the field or otherwise report itself as the applied source.
-      if ((await controller.setTerrainCogSource(source)) && isCurrent()) onApplied?.();
+      if (!(await controller.setTerrainCogSource(source)) || !isCurrent()) return;
+      onApplied?.();
     } catch (error) {
       if (isCurrent()) setSourceError(translateSourceError(error));
     } finally {
@@ -232,6 +253,45 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
       setTerrainUrl("");
       setRasterLayerId("");
     });
+
+  const applyIonTerrainSource = async () => {
+    const assetId = parseCesiumIonAssetId(ionAssetId);
+    const controller = mapControllerRef.current;
+    if (assetId === null || !controller?.setTerrainIonAssetId) {
+      setSourceError(t("terrainSettings.ionErrorAssetId"));
+      return;
+    }
+    if (!ionToken) {
+      setSourceError(t("terrainSettings.ionErrorToken"));
+      return;
+    }
+    const request = ++sourceRequestRef.current;
+    const isCurrent = () => sourceRequestRef.current === request;
+    setSourceLoading("ion");
+    setSourceError(null);
+    try {
+      if (controller.hasCustomTerrainSource()) {
+        if (!(await controller.setTerrainCogSource(null)) || !isCurrent()) return;
+      }
+      if (!(await controller.setTerrainIonAssetId(assetId)) || !isCurrent()) {
+        throw new Error(t("terrainSettings.ionError"));
+      }
+      const preferences = useAppStore.getState().preferences;
+      useAppStore.getState().setPreferences({
+        ...preferences,
+        map: { ...preferences.map, terrainIonAssetId: assetId },
+      });
+      setTerrainUrl("");
+      setRasterLayerId("");
+    } catch (error) {
+      if (isCurrent()) {
+        const detail = error instanceof Error ? error.message.trim() : "";
+        setSourceError(detail || t("terrainSettings.ionError"));
+      }
+    } finally {
+      if (isCurrent()) setSourceLoading(null);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -374,13 +434,48 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
                     type="button"
                     variant="ghost"
                     disabled={
-                      !!sourceLoading || !mapControllerRef.current?.hasCustomTerrainSource()
+                      !!sourceLoading ||
+                      (!mapControllerRef.current?.hasCustomTerrainSource() &&
+                        useAppStore.getState().preferences.map.terrainIonAssetId === undefined)
                     }
                     onClick={() => void restoreDefaultSource()}
                   >
                     {t("terrainSettings.restoreDefaultSource")}
                   </Button>
                 </div>
+                {isCesiumPrimary ? (
+                  <div className="space-y-1 border-t pt-3">
+                    <Label htmlFor="terrain-ion-asset">{t("terrainSettings.ionAssetLabel")}</Label>
+                    <p className="text-muted-foreground text-xs">
+                      {t("terrainSettings.ionAssetDescription")}
+                    </p>
+                    {!ionToken ? (
+                      <p className="text-amber-600 text-xs">
+                        {t("terrainSettings.ionTokenMissing")}
+                      </p>
+                    ) : null}
+                    <div className="flex gap-2">
+                      <Input
+                        id="terrain-ion-asset"
+                        inputMode="numeric"
+                        placeholder="2767062"
+                        value={ionAssetId}
+                        disabled={!!sourceLoading || !ionToken}
+                        onChange={(event) => setIonAssetId(event.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!!sourceLoading || !ionToken || !ionAssetId.trim()}
+                        onClick={() => void applyIonTerrainSource()}
+                      >
+                        {sourceLoading === "ion"
+                          ? t("terrainSettings.ionLoading")
+                          : t("terrainSettings.useIonTerrain")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
           </div>
