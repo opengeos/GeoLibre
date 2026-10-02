@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { addVectorFileToMap, prepareRasterControl } from "@geolibre/plugins";
 import type { TFunction } from "i18next";
@@ -198,7 +198,7 @@ export function useFileDrop({
                     path,
                     layers,
                   );
-                  if (added > 0 && layers.bounds) {
+                  if (added > 0 && layers.bounds && shouldZoomToNewLayers()) {
                     mapControllerRef.current?.fitBounds(layers.bounds);
                   }
                   setDropMessage(
@@ -414,7 +414,7 @@ export function useFileDrop({
             file.name,
             layers,
           );
-          if (added > 0 && layers.bounds) {
+          if (added > 0 && layers.bounds && shouldZoomToNewLayers()) {
             mapControllerRef.current?.fitBounds(layers.bounds);
           }
           setDropMessage(

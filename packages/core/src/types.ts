@@ -1651,6 +1651,13 @@ export interface MapPreferences {
    * plugin's UTM projection; the app normalises unknown values to `"dd"`.
    */
   coordinateFormat: string;
+  /**
+   * Whether the map fits to a layer's extent after data is added (Add Data
+   * menus, drag-and-drop, file import, tool outputs). Defaults to `true`; turn
+   * it off to keep the current view. Explicit "Zoom to layer" actions always
+   * fit regardless of this setting.
+   */
+  zoomToNewLayers: boolean;
 }
 
 export interface RuntimeEnvironmentVariable {
@@ -1726,6 +1733,7 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     showPointerElevation: false,
     terrainEnabled: false,
     coordinateFormat: "dd",
+    zoomToNewLayers: true,
     mapboxStyleUrl: "mapbox://styles/mapbox/standard",
     arcgisBasemap: "arcgis/streets",
     // With an Ion token this is the globe's photographic default. The

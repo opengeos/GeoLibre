@@ -73,6 +73,7 @@ export {
   subscribeProjectRestoreHistory,
   redo,
   undo,
+  shouldZoomToNewLayers,
   useAppStore,
   useAppCapability,
   type AppState,

@@ -4,7 +4,7 @@
  * the presentational fields and footer reused across every source.
  */
 
-import type { GeoLibreLayer } from "@geolibre/core";
+import { shouldZoomToNewLayers, type GeoLibreLayer } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { AlertCircle, Globe2, Map as MapIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
@@ -30,7 +30,7 @@ export function useAddDataSource(defaultLayerName: string) {
 
   const addAndClose = (layer: GeoLibreLayer, options: { fit?: boolean } = {}) => {
     shell.addLayer(layer, beforeLayer);
-    if (options.fit) shell.mapControllerRef.current?.fitLayer(layer);
+    if (options.fit && shouldZoomToNewLayers()) shell.mapControllerRef.current?.fitLayer(layer);
     shell.closeDialog();
   };
 
@@ -42,7 +42,7 @@ export function useAddDataSource(defaultLayerName: string) {
     // Fit one transient layer carrying every batch feature so geographically
     // separated selections are all visible without animating through them.
     const fitLayer = layers.at(-1);
-    if (options.fit && fitLayer) {
+    if (options.fit && fitLayer && shouldZoomToNewLayers()) {
       const features = layers.flatMap((layer) => layer.geojson?.features ?? []);
       shell.mapControllerRef.current?.fitLayer(
         features.length > 0

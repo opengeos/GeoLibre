@@ -1,4 +1,5 @@
 import {
+  shouldZoomToNewLayers,
   csvRowsToGeocodeRequests,
   geocodeForward,
   geocodeMatchToFeature,
@@ -237,7 +238,7 @@ export function GeocodeDialog({ mapControllerRef }: GeocodeDialogProps): ReactEl
       };
       const layerId = addGeoJsonLayer(layerNameFromFile(csv.fileName), fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     }
 
     if (cancelled) {

@@ -2415,6 +2415,8 @@
       "maxZoom": "Max. Zoom",
       "maxPitch": "Max. Neigung",
       "renderWorldCopies": "Weltkopien rendern",
+      "zoomToNewLayers": "Auf neu hinzugefügte Ebenen zoomen",
+      "zoomToNewLayersHint": "Passt die Karte nach dem Hinzufügen von Daten oder dem Ausführen eines Werkzeugs an die Ausdehnung der Ebene an. Deaktivieren, um die aktuelle Ansicht beizubehalten.",
       "ellipsoid": "Himmelskörper",
       "ellipsoidHint": "Legt den für Entfernungs-, Flächen- und Maßstabsmessungen verwendeten Radius fest. Wählen Sie unter „Daten hinzufügen“ eine passende planetare Basiskarte.",
       "scaleUnit": "Einheiten der Maßstabsleiste",

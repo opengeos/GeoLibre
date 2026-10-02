@@ -1,4 +1,4 @@
-import { useAppStore, useLayersWhen } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore, useLayersWhen } from "@geolibre/core";
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   VECTOR_TOOLS,
@@ -296,7 +296,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       const layerId = addGeoJsonLayer(name, fc);
       runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     },
     [addGeoJsonLayer, appendLog, mapControllerRef],
   );

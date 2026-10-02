@@ -1,4 +1,4 @@
-import { useAppStore, useLayersWhen } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore, useLayersWhen } from "@geolibre/core";
 import { detectGeometryProfile, type MapEngine } from "@geolibre/map";
 import {
   STATISTICS_TOOLS,
@@ -247,7 +247,7 @@ export function StatisticsToolsDialog({
           appendLog(`Could not style "${name}": ${(error as Error).message}`);
         }
       }
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     },
     [addGeoJsonLayer, appendLog, mapControllerRef, setLayerStyle],
   );

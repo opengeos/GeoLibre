@@ -2368,6 +2368,8 @@
       "maxZoom": "最大ズーム",
       "maxPitch": "最大傾斜角",
       "renderWorldCopies": "世界地図の複製を描画",
+      "zoomToNewLayers": "新しく追加したレイヤーにズーム",
+      "zoomToNewLayersHint": "データの追加やツールの実行後に、地図をレイヤーの範囲に合わせます。現在の表示を維持するにはオフにします。",
       "ellipsoid": "天体",
       "ellipsoidHint": "距離・面積・縮尺の計測に使用する半径を設定します。「データを追加」から対応する惑星のベースマップを選択してください。",
       "scaleUnit": "スケールバーの単位",

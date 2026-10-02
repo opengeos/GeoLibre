@@ -1,6 +1,11 @@
 /// <reference path="../arcgis-maplibre.d.ts" />
 
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  shouldZoomToNewLayers,
+  useAppStore,
+} from "@geolibre/core";
 import type { HostedLayer, VectorTileLayer } from "@esri/maplibre-arcgis";
 import type { Feature, FeatureCollection, MultiPolygon, Position } from "geojson";
 import type * as maplibregl from "maplibre-gl";
@@ -185,7 +190,8 @@ export interface ArcGISLayerOptions {
   url?: string;
   /**
    * Whether to fit the map to the layer once its bounds are known. Defaults to
-   * true, which is what an interactive Add Data flow wants.
+   * the project's "Zoom to newly added layers" map preference (on unless the
+   * user turned it off), which is what an interactive Add Data flow wants.
    *
    * Project import sets it false: the view has already been restored from the
    * project file, and fitting each imported service in turn would pan the map
@@ -381,7 +387,7 @@ export async function addArcGISLayer(
   layer.source.arcgisLayers = styleLayers;
   const store = useAppStore.getState();
   store.addLayer(layer, options.beforeLayerId);
-  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return id;
 }
 
@@ -618,7 +624,7 @@ async function addArcGISFeatureLayerAsGeoJson(
   arcgisEditOptions.set(id, { ...options, onProgress: undefined });
   ensureArcGISFeatureLoaderCleanup();
   const bounds = arcgisExtentToBounds(layerInfo.extent);
-  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   if (map) startArcGISViewportLoader(id, map, queryUrl, options, () => Promise.resolve(layerInfo));
   return id;
 }
@@ -1251,7 +1257,7 @@ async function addArcGISMapServiceSublayerGroup(
   const groupName =
     options.name?.trim() || layerNameFromArcGISInput(service.serviceUrl, "ArcGIS Layer");
   useAppStore.getState().addLayerGroup(groupName, layerIds);
-  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return layerIds[layerIds.length - 1];
 }
 
@@ -1340,7 +1346,7 @@ async function addArcGISImageServiceLayer(
   };
 
   useAppStore.getState().addLayer(layer, options.beforeLayerId ?? null);
-  if (bounds && options.zoomTo !== false) app.fitBounds?.(bounds);
+  if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return id;
 }
 

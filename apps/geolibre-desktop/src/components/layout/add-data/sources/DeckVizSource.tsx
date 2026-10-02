@@ -1,3 +1,4 @@
+import { shouldZoomToNewLayers } from "@geolibre/core";
 import {
   createDeckVizStoreLayer,
   DECK_VIZ_CATEGORY_LABELS,
@@ -355,10 +356,12 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     source.shell.addLayer(layer, source.beforeLayer);
     // GeoJSON fits from its geometry; row-based layers fit from the stored
     // bounds (also used by the layer panel's "Zoom to layer").
-    if (def.format === "geojson") {
-      source.shell.mapControllerRef.current?.fitLayer(layer);
-    } else if (bounds) {
-      source.shell.mapControllerRef.current?.fitBounds(bounds);
+    if (shouldZoomToNewLayers()) {
+      if (def.format === "geojson") {
+        source.shell.mapControllerRef.current?.fitLayer(layer);
+      } else if (bounds) {
+        source.shell.mapControllerRef.current?.fitBounds(bounds);
+      }
     }
     if (closeAfterDeckVizAdd) {
       source.shell.closeDialog();

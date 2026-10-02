@@ -2415,6 +2415,8 @@
       "maxZoom": "Max. zoom",
       "maxPitch": "Max. kanteling",
       "renderWorldCopies": "Wereldkopieën weergeven",
+      "zoomToNewLayers": "Zoomen naar nieuw toegevoegde lagen",
+      "zoomToNewLayersHint": "Past de kaart aan de omvang van de laag aan na het toevoegen van gegevens of het uitvoeren van een tool. Schakel uit om de huidige weergave te behouden.",
       "ellipsoid": "Hemellichaam",
       "ellipsoidHint": "Stelt de straal in die wordt gebruikt voor afstands-, oppervlakte- en schaalmetingen. Kies een bijpassende planetaire basiskaart onder Gegevens toevoegen.",
       "scaleUnit": "Eenheden schaalbalk",

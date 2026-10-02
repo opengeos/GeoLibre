@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   isOrtAvailable,
@@ -259,7 +259,7 @@ export function SegmentEverythingPanel({
       if (controller.signal.aborted) return;
       const layerId = addGeoJsonLayer(t("segmentEverything.layerName"), fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       setResultMessage(t("segmentEverything.added", { count: masks.length }));
     } catch (err) {
       if (controller.signal.aborted) return;

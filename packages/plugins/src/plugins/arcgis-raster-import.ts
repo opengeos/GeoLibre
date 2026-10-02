@@ -1,4 +1,4 @@
-import { DEFAULT_LAYER_STYLE, useAppStore } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI } from "../types";
 import type { addRasterToMap, LocalRasterFileReader } from "./maplibre-raster";
 import { RASTER_SOURCE_KIND } from "./raster-layer-sync";
@@ -58,7 +58,7 @@ export async function addArcgisRaster(
     options.beforeId,
   );
   if (file) retainFile(id, url);
-  if (options.zoomTo !== false && cog.boundsLonLat.length === 4)
+  if ((options.zoomTo ?? shouldZoomToNewLayers()) && cog.boundsLonLat.length === 4)
     app.fitBounds?.(cog.boundsLonLat as [number, number, number, number]);
   return id;
 }

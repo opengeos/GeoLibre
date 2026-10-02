@@ -234,8 +234,9 @@ export interface GeoLibreCogLayerOptions {
   /** Insert the new layer directly beneath the layer with this id. */
   beforeLayerId?: string;
   /**
-   * Fit the map to the COG once it loads (default true). Pass `false` for a
-   * global layer, where fitting would throw away the user's view.
+   * Fit the map to the COG once it loads (defaults to the project's "Zoom to
+   * newly added layers" map preference). Pass `false` for a global layer,
+   * where fitting would throw away the user's view.
    */
   zoomTo?: boolean;
 }

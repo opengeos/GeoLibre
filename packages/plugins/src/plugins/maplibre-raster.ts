@@ -2,6 +2,7 @@ import {
   effectiveLayerRenderState,
   explainS3ReadError,
   resolveReadableUrl,
+  shouldZoomToNewLayers,
   styleValue,
   useAppStore,
 } from "@geolibre/core";
@@ -157,6 +158,12 @@ type RasterLayerManagerInternals = {
   };
   /** The currently selected raster id (read to restore it after inspect). */
   selectedId?: string | null;
+  /**
+   * The panel's Add data section calls this directly (not the control's
+   * `addRaster`), so it is wrapped to default `zoomTo` to the map preference.
+   */
+  addRaster?: (source: string | File, options?: { zoomTo?: boolean }) => Promise<string>;
+  geolibreZoomToPatched?: boolean;
   _device?: unknown;
   _deps?: {
     createOverlay?: (map: MapControlHost, options: OverlayFactoryOptions) => OverlayLike;
@@ -389,7 +396,10 @@ export async function addRasterToMap(
     state?: Partial<RasterLayerState>;
     /** Existing map style layer beneath which the raster is inserted. */
     beforeId?: string;
-    /** Whether to fit the map to the raster after loading. Defaults to true. */
+    /**
+     * Whether to fit the map to the raster after loading. Defaults to the
+     * project's "Zoom to newly added layers" map preference.
+     */
     zoomTo?: boolean;
   } = {},
 ): Promise<string> {
@@ -454,7 +464,7 @@ function addRasterSource(
   return control.addRaster(source, {
     id: options.id,
     name: options.name,
-    zoomTo: options.zoomTo ?? true,
+    zoomTo: options.zoomTo ?? shouldZoomToNewLayers(),
     // Safe to pass before the band count is known: the renderer applies a
     // colormap only in single-band mode and ignores it otherwise.
     ...(options.state || options.defaults?.colormap
@@ -948,6 +958,7 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
     patchCogTilerJpegTables(rasterControl);
+    defaultRasterZoomToPreference(rasterControl);
     await warmTauriWasmEngine(rasterControl);
     // On web the control renders interleaved, which shares deck.gl's per-map
     // Deck with the other interleaved overlays; route it through the shared
@@ -970,6 +981,23 @@ async function ensureRasterControl(app: GeoLibreAppAPI): Promise<RasterControl |
   }
 
   return rasterControl;
+}
+
+/**
+ * Makes the raster control's "fit to the new raster" default follow the
+ * project's Map Preferences instead of the upstream `true`. A caller passing
+ * `zoomTo` explicitly (project restore passes `false`) is left alone. Must run
+ * after addMapControl, which is when the control creates its LayerManager.
+ *
+ * @param control - The mounted raster control.
+ */
+function defaultRasterZoomToPreference(control: RasterControl): void {
+  const manager = (control as unknown as RasterControlInternals)._layerManager;
+  if (!manager?.addRaster || manager.geolibreZoomToPatched) return;
+  const addRaster = manager.addRaster.bind(manager);
+  manager.addRaster = (source, options) =>
+    addRaster(source, { ...options, zoomTo: options?.zoomTo ?? shouldZoomToNewLayers() });
+  manager.geolibreZoomToPatched = true;
 }
 
 /**

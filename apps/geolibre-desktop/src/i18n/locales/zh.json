@@ -2368,6 +2368,8 @@
       "maxZoom": "最大缩放级别",
       "maxPitch": "最大倾斜角",
       "renderWorldCopies": "渲染世界副本",
+      "zoomToNewLayers": "缩放至新添加的图层",
+      "zoomToNewLayersHint": "添加数据或运行工具后，将地图缩放至图层范围。关闭此项可保持当前视图。",
       "ellipsoid": "天体",
       "ellipsoidHint": "设置用于距离、面积和比例尺测量的半径。请在“添加数据”中选择匹配的星球底图。",
       "scaleUnit": "比例尺单位",

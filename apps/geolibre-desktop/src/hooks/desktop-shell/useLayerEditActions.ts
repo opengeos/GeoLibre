@@ -1,4 +1,4 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   endLayerGeometryEdit,
@@ -153,7 +153,7 @@ export function useLayerEditActions({
         }
         const id = addGeoJsonLayer(`${layer.name} (editable)`, result.geojson);
         const created = useAppStore.getState().layers.find((candidate) => candidate.id === id);
-        if (created) mapControllerRef.current?.fitLayer(created);
+        if (created && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(created);
         setDropMessage(`Materialized ${result.geojson.features.length.toLocaleString()} features.`);
       } catch (error) {
         setDropMessage(null);

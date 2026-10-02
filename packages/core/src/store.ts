@@ -94,6 +94,17 @@ useAppStore.subscribe((state) => {
 });
 
 /**
+ * Whether the map should fit to data the user just added, per the project's
+ * Map Preferences. Add-data paths consult this before an automatic fit; an
+ * explicit "Zoom to layer" request ignores it.
+ *
+ * @returns `true` unless the user turned off zooming to new layers.
+ */
+export function shouldZoomToNewLayers(): boolean {
+  return useAppStore.getState().preferences.map.zoomToNewLayers !== false;
+}
+
+/**
  * React hook for consuming application capability state for a specific privilege.
  *
  * @param privilege - The privilege to check.

@@ -2415,6 +2415,8 @@
       "maxZoom": "Maksimum miqyas səviyyəsi",
       "maxPitch": "Maksimum əyilmə bucağı",
       "renderWorldCopies": "Dünyanın təkrar nüsxələrini göstər",
+      "zoomToNewLayers": "Yeni əlavə edilmiş laylara yaxınlaşdır",
+      "zoomToNewLayersHint": "Məlumat əlavə etdikdən və ya alət işlətdikdən sonra xəritəni layın əhatəsinə uyğunlaşdır. Cari görünüşü saxlamaq üçün söndürün.",
       "ellipsoid": "Səma cismi",
       "ellipsoidHint": "Məsafə, sahə və miqyas ölçmələrində istifadə olunan radiusu təyin edir. Verilənlər əlavə et bölməsində uyğun planet baza xəritəsini seçin.",
       "scaleUnit": "Miqyas xəttinin vahidləri",

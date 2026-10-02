@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { fetchMlStatus, mlSegment, type MlSegmentMode, type MlStatus } from "@geolibre/processing";
 import {
@@ -192,7 +192,7 @@ export function SegmentationDialog({ mapControllerRef }: SegmentationDialogProps
           : t("segmentation.layerNameDefault");
       const layerId = addGeoJsonLayer(name, fc);
       const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       setResultMessage(t("segmentation.added", { count: features.length, name }));
     } catch (err) {
       setError(err instanceof Error ? err.message : t("segmentation.error.failed"));

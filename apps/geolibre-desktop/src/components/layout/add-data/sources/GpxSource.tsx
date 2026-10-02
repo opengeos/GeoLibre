@@ -1,4 +1,4 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { shouldZoomToNewLayers, type GeoLibreLayer } from "@geolibre/core";
 import { getLayerBounds } from "@geolibre/map";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
@@ -206,10 +206,12 @@ export function GpxSource() {
       },
       null,
     );
-    if (combinedBounds) {
-      source.shell.mapControllerRef.current?.fitBounds(combinedBounds);
-    } else {
-      source.shell.mapControllerRef.current?.fitLayer(layers[0]);
+    if (shouldZoomToNewLayers()) {
+      if (combinedBounds) {
+        source.shell.mapControllerRef.current?.fitBounds(combinedBounds);
+      } else {
+        source.shell.mapControllerRef.current?.fitLayer(layers[0]);
+      }
     }
     source.shell.closeDialog();
   });

@@ -1371,6 +1371,11 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         typeof (map as Partial<ProjectPreferences["map"]>).coordinateFormat === "string"
           ? ((map as Partial<ProjectPreferences["map"]>).coordinateFormat as string)
           : DEFAULT_PROJECT_PREFERENCES.map.coordinateFormat,
+      // Older projects omit this field and keep fitting to newly added data.
+      zoomToNewLayers: normalizeBoolean(
+        (map as Partial<ProjectPreferences["map"]>).zoomToNewLayers,
+        DEFAULT_PROJECT_PREFERENCES.map.zoomToNewLayers,
+      ),
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables

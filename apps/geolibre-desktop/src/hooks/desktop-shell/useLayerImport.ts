@@ -1,4 +1,4 @@
-import { detectNonGeographicCoordinates, useAppStore } from "@geolibre/core";
+import { shouldZoomToNewLayers, detectNonGeographicCoordinates, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { getLayerBounds } from "@geolibre/map";
 import { addRasterToMap, setKmlFileImportHandler, TIME_SLIDER_PLUGIN_ID } from "@geolibre/plugins";
@@ -267,18 +267,22 @@ export function useLayerImport({
         // overlay on the next render; fitting synchronously here races that
         // mount and the camera move is lost. Defer the fit past the mount so
         // it frames the model. MapLibre-native layers fit synchronously.
-        if (importedLayer.type === "deckgl-viz") {
-          const layerId = importedLayer.id;
-          requestAnimationFrame(() => {
+        if (shouldZoomToNewLayers()) {
+          if (importedLayer.type === "deckgl-viz") {
+            const layerId = importedLayer.id;
             requestAnimationFrame(() => {
-              window.setTimeout(() => {
-                const current = useAppStore.getState().layers.find((layer) => layer.id === layerId);
-                if (current) mapControllerRef.current?.fitLayer(current);
-              }, 50);
+              requestAnimationFrame(() => {
+                window.setTimeout(() => {
+                  const current = useAppStore
+                    .getState()
+                    .layers.find((layer) => layer.id === layerId);
+                  if (current) mapControllerRef.current?.fitLayer(current);
+                }, 50);
+              });
             });
-          });
-        } else {
-          mapControllerRef.current?.fitLayer(importedLayer);
+          } else {
+            mapControllerRef.current?.fitLayer(importedLayer);
+          }
         }
       }
     },
@@ -336,7 +340,7 @@ export function useLayerImport({
       if (!result || result.located === 0) return 0;
       const layerId = addGeoJsonLayer(t("addData.photos.defaultName"), result.featureCollection);
       const layer = useAppStore.getState().layers.find((existing) => existing.id === layerId);
-      if (layer) mapControllerRef.current?.fitLayer(layer);
+      if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       // Report skipped (no-GPS) photos too, mirroring the Add Data dialog's
       // summary, so a partially-skipped drop isn't silent.
       const summary = t("addData.photos.addedSummary", {

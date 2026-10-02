@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import { Button, Label } from "@geolibre/ui";
 import { Images, MapPin } from "lucide-react";
 import { useState } from "react";
@@ -86,7 +86,7 @@ export function PhotosSource() {
       geojson: result.featureCollection,
     };
     source.shell.addLayer(layer, source.beforeLayer);
-    source.shell.mapControllerRef.current?.fitLayer(layer);
+    if (shouldZoomToNewLayers()) source.shell.mapControllerRef.current?.fitLayer(layer);
     // Keep the dialog open on a summary panel so the skipped/no-thumbnail
     // counts are reported clearly before the user dismisses it.
     setSummary(result);

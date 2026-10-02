@@ -2216,6 +2216,24 @@ export function SettingsDialog({
                     />
                     {t("settings.map.renderWorldCopies")}
                   </label>
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={draftPreferences.map.zoomToNewLayers}
+                        onChange={(event) =>
+                          updateMapPreferences({
+                            zoomToNewLayers: event.target.checked,
+                          })
+                        }
+                      />
+                      {t("settings.map.zoomToNewLayers")}
+                    </label>
+                    <p className="ps-6 text-xs text-muted-foreground">
+                      {t("settings.map.zoomToNewLayersHint")}
+                    </p>
+                  </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="settings-ellipsoid">{t("settings.map.ellipsoid")}</Label>
                     <Select

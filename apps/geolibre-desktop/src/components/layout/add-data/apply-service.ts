@@ -19,7 +19,7 @@
  *   importable under Node for tests.
  */
 
-import type { GeoLibreLayer } from "@geolibre/core";
+import { shouldZoomToNewLayers, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 // Type-only: erased at compile time, so importing it does not pull maplibre-gl
 // (which `xyz-url` imports at runtime) into the pure builder surface.
@@ -580,7 +580,7 @@ export async function applyServiceEntry(
         srsName: request.srsName,
       });
       addLayer(layer, beforeLayerId);
-      mapControllerRef.current?.fitLayer(layer);
+      if (shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       return;
     }
     default: {

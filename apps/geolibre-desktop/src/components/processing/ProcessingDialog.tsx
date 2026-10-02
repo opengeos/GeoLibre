@@ -1,4 +1,9 @@
-import { useAppStore, useLayersWhen, type GeoLibreLayer } from "@geolibre/core";
+import {
+  shouldZoomToNewLayers,
+  useAppStore,
+  useLayersWhen,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import { getLayerBounds, type MapEngine } from "@geolibre/map";
 import {
   clearRemoteWhiteboxCatalogSnapshotCache,
@@ -1571,7 +1576,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         const layerId = addGeoJsonLayer(layerName, data, path || undefined);
         historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(layerName);
         const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-        if (layer) mapControllerRef.current?.fitLayer(layer);
+        if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
       }
 
       // Binary outputs come back from the WASM runner inline. Raster (COG) bytes

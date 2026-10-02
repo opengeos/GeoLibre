@@ -2415,6 +2415,8 @@
       "maxZoom": "Zoom maximum",
       "maxPitch": "Inclinaison maximale",
       "renderWorldCopies": "Afficher les copies du monde",
+      "zoomToNewLayers": "Zoomer sur les couches nouvellement ajoutées",
+      "zoomToNewLayersHint": "Ajuste la carte à l'étendue de la couche après l'ajout de données ou l'exécution d'un outil. Désactivez pour conserver la vue actuelle.",
       "ellipsoid": "Corps céleste",
       "ellipsoidHint": "Définit le rayon utilisé pour les mesures de distance, de surface et d'échelle. Choisissez un fond de carte planétaire correspondant dans Ajouter des données.",
       "scaleUnit": "Unités de la barre d'échelle",

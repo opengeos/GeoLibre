@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   assembleTerrainDem,
@@ -151,7 +151,7 @@ export async function runViewshed(options: RunViewshedOptions): Promise<Viewshed
   // though the clicked point was on screen, and a banner that flashes and
   // clears with nothing visible reads as "nothing happened".
   const added = useAppStore.getState().layers.find((entry) => entry.id === layerId);
-  if (added) options.mapControllerRef?.current?.fitLayer(added);
+  if (added && shouldZoomToNewLayers()) options.mapControllerRef?.current?.fitLayer(added);
 
   return {
     layerId,

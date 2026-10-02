@@ -1,4 +1,5 @@
 import {
+  shouldZoomToNewLayers,
   DEFAULT_LAYER_STYLE,
   useAppStore,
   type GeoLibreLayer,
@@ -288,7 +289,7 @@ export async function runQuickAnalysis(request: QuickAnalysisRequest): Promise<s
     tracker.addOutputLayer(resultName);
     tracker.finish("success");
     const layer = useAppStore.getState().layers.find((item) => item.id === layerId);
-    if (layer) mapControllerRef.current?.fitLayer(layer);
+    if (layer && shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(layer);
     setRunStatus({ phase: "idle" });
     return layerId;
   } catch (error) {

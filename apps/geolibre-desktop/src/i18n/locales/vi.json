@@ -2372,6 +2372,8 @@
       "maxZoom": "Thu phóng tối đa",
       "maxPitch": "Cao độ tối đa",
       "renderWorldCopies": "Kết xuất bản sao thế giới",
+      "zoomToNewLayers": "Thu phóng đến lớp mới thêm",
+      "zoomToNewLayersHint": "Khớp bản đồ với phạm vi của lớp sau khi thêm dữ liệu hoặc chạy công cụ. Tắt để giữ nguyên chế độ xem hiện tại.",
       "ellipsoid": "Thiên thể",
       "ellipsoidHint": "Đặt bán kính được sử dụng để đo khoảng cách, diện tích và tỷ lệ. Chọn bản đồ cơ sở hành tinh phù hợp trong phần Thêm dữ liệu.",
       "scaleUnit": "Đơn vị thanh tỷ lệ",

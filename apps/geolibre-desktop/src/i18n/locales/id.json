@@ -2368,6 +2368,8 @@
       "maxZoom": "Zoom maksimum",
       "maxPitch": "Kemiringan maksimum",
       "renderWorldCopies": "Tampilkan salinan dunia",
+      "zoomToNewLayers": "Zoom ke layer yang baru ditambahkan",
+      "zoomToNewLayersHint": "Sesuaikan peta dengan cakupan layer setelah menambahkan data atau menjalankan alat. Nonaktifkan untuk mempertahankan tampilan saat ini.",
       "ellipsoid": "Benda langit",
       "ellipsoidHint": "Menetapkan radius yang digunakan untuk pengukuran jarak, luas, dan skala. Pilih peta dasar planet yang sesuai di Tambah Data.",
       "scaleUnit": "Satuan bilah skala",

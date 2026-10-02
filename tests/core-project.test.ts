@@ -16,6 +16,7 @@ import {
   serializeProject,
   serializeStoryMapCsv,
   serializeStoryMapJson,
+  shouldZoomToNewLayers,
   useAppStore,
 } from "@geolibre/core";
 import { geojsonLayer } from "./helpers/layer-fixtures";
@@ -270,6 +271,37 @@ describe("project parsing", () => {
     };
     delete legacy.preferences.map.terrainEnabled;
     assert.equal(parseProject(JSON.stringify(legacy)).preferences.map.terrainEnabled, false);
+  });
+
+  it("round-trips zoom-to-new-layers and keeps it on for legacy projects", () => {
+    const base = createEmptyProject("Auto zoom");
+    assert.equal(base.preferences.map.zoomToNewLayers, true);
+    const disabled = {
+      ...base,
+      preferences: {
+        ...base.preferences,
+        map: { ...base.preferences.map, zoomToNewLayers: false },
+      },
+    };
+    assert.equal(parseProject(serializeProject(disabled)).preferences.map.zoomToNewLayers, false);
+
+    const legacy = structuredClone(base) as unknown as {
+      preferences: { map: Record<string, unknown> };
+    };
+    delete legacy.preferences.map.zoomToNewLayers;
+    assert.equal(parseProject(JSON.stringify(legacy)).preferences.map.zoomToNewLayers, true);
+  });
+
+  it("gates automatic fits on the zoom-to-new-layers preference", () => {
+    const store = useAppStore.getState();
+    const original = store.preferences;
+    try {
+      assert.equal(shouldZoomToNewLayers(), true);
+      store.setPreferences({ ...original, map: { ...original.map, zoomToNewLayers: false } });
+      assert.equal(shouldZoomToNewLayers(), false);
+    } finally {
+      useAppStore.getState().setPreferences(original);
+    }
   });
 
   it("round-trips the scale unit preference and defaults unknown values to metric", () => {

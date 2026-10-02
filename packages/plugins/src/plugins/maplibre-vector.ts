@@ -4,6 +4,7 @@ import {
   effectiveLayerRenderState,
   getSpatialExtensionPath,
   hasPathTraversal,
+  shouldZoomToNewLayers,
   useAppStore,
 } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
@@ -967,8 +968,28 @@ function createVectorControl(
   wireVectorAdoption(control);
   wireVectorStoreSync(control);
   patchVectorControlOnRemove(control, panelStateSyncHandler);
+  defaultVectorFitToPreference(control);
 
   return control;
+}
+
+/**
+ * Makes the control's "fit to the new layer" default follow the project's
+ * Map Preferences instead of the upstream `true`.
+ *
+ * The control's own panel calls `control.addData` without `fitBounds`, so the
+ * instance method is wrapped; a caller that passes `fitBounds` explicitly
+ * (project restore passes `false`) is left alone.
+ *
+ * @param control - The vector control whose `addData` is wrapped.
+ */
+function defaultVectorFitToPreference(control: VectorControl): void {
+  const addData = control.addData.bind(control);
+  control.addData = (source, options) =>
+    addData(source, {
+      ...options,
+      fitBounds: options?.fitBounds ?? shouldZoomToNewLayers(),
+    });
 }
 
 /**

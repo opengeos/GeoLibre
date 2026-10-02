@@ -2415,6 +2415,8 @@
       "maxZoom": "Zoom massimo",
       "maxPitch": "Inclinazione massima",
       "renderWorldCopies": "Visualizza copie del mondo",
+      "zoomToNewLayers": "Zoom sui layer appena aggiunti",
+      "zoomToNewLayersHint": "Adatta la mappa all'estensione del layer dopo aver aggiunto dati o eseguito uno strumento. Disattiva per mantenere la vista corrente.",
       "ellipsoid": "Corpo celeste",
       "ellipsoidHint": "Imposta il raggio usato per le misurazioni di distanza, area e scala. Scegli una mappa di base planetaria corrispondente in Aggiungi dati.",
       "scaleUnit": "Unità della barra di scala",

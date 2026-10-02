@@ -2415,6 +2415,8 @@
       "maxZoom": "Maksimum yakınlaştırma",
       "maxPitch": "Maksimum eğim",
       "renderWorldCopies": "Dünya kopyalarını işle",
+      "zoomToNewLayers": "Yeni eklenen katmanlara yakınlaştır",
+      "zoomToNewLayersHint": "Veri ekledikten veya bir araç çalıştırdıktan sonra haritayı katmanın kapsamına sığdırır. Geçerli görünümü korumak için kapatın.",
       "ellipsoid": "Gök cismi",
       "ellipsoidHint": "Mesafe, alan ve ölçek ölçümleri için kullanılan yarıçapı ayarlar. Veri Ekle altında uyumlu bir gezegensel temel harita seçin.",
       "scaleUnit": "Ölçek çubuğu birimleri",

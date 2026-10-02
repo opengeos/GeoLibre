@@ -2415,6 +2415,8 @@
       "maxZoom": "Max zoom",
       "maxPitch": "Max pitch",
       "renderWorldCopies": "Render world copies",
+      "zoomToNewLayers": "Zoom to newly added layers",
+      "zoomToNewLayersHint": "Fit the map to a layer's extent after adding data or running a tool. Turn off to keep the current view.",
       "ellipsoid": "Celestial body",
       "ellipsoidHint": "Sets the radius used for distance, area, and scale measurements. Pick a matching planetary basemap under Add Data.",
       "scaleUnit": "Scale bar units",
