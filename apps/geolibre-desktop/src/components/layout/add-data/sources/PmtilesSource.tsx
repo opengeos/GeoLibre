@@ -1,3 +1,4 @@
+import { shouldZoomToNewLayers } from "@geolibre/core";
 import { Input, Label } from "@geolibre/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,7 +32,7 @@ export function PmtilesSource({ initialUrl = "" }: { initialUrl?: string }) {
       ...info,
     });
     for (const layer of layers) source.shell.addLayer(layer, source.beforeLayer);
-    if (info.bounds) source.shell.mapControllerRef.current?.fitBounds(info.bounds);
+    if (info.bounds && shouldZoomToNewLayers()) source.shell.mapControllerRef.current?.fitBounds(info.bounds);
     source.shell.closeDialog();
   });
   return (

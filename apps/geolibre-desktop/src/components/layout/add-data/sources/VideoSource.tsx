@@ -1,3 +1,4 @@
+import { shouldZoomToNewLayers } from "@geolibre/core";
 import { Input, Label } from "@geolibre/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -87,7 +88,7 @@ export function VideoSource() {
     source.shell.addLayer(layer, source.beforeLayer);
     // Skip the fit for a degenerate (zero-area) bbox, which would otherwise
     // snap to a single point at max zoom.
-    if (west !== east || south !== north) {
+    if ((west !== east || south !== north) && shouldZoomToNewLayers()) {
       source.shell.mapControllerRef.current?.fitBounds(bounds);
     }
     source.shell.closeDialog();

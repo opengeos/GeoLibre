@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import {
   detectObjects,
@@ -436,7 +436,7 @@ export function ObjectDetectionDialog({
           }
         }
       }
-      if (Number.isFinite(minX)) {
+      if (Number.isFinite(minX) && shouldZoomToNewLayers()) {
         mapControllerRef.current?.fitBounds([minX, minY, maxX, maxY]);
       }
       setResultMessage(

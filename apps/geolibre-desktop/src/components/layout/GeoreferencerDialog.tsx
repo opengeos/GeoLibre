@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MapEngine } from "@geolibre/map";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  shouldZoomToNewLayers,
+  useAppStore,
+} from "@geolibre/core";
 import {
   Button,
   cn,
@@ -298,7 +303,7 @@ export function GeoreferencerDialog({
       },
     };
     addLayer(layer);
-    mapControllerRef.current?.fitBounds(bounds);
+    if (shouldZoomToNewLayers()) mapControllerRef.current?.fitBounds(bounds);
     onOpenChange(false);
   }, [affine, image, opacity, gcps, addLayer, mapControllerRef, onOpenChange, t]);
 

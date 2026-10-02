@@ -239,6 +239,8 @@ export function useLayerImport({
         togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
       }
 
+      if (!shouldZoomToNewLayers()) return;
+
       // A folder-aware KML becomes one layer per placemark, so framing the last
       // layer alone would open on a single point. Combine the extents of every
       // layer the last source contributed and fit that instead.
@@ -267,22 +269,18 @@ export function useLayerImport({
         // overlay on the next render; fitting synchronously here races that
         // mount and the camera move is lost. Defer the fit past the mount so
         // it frames the model. MapLibre-native layers fit synchronously.
-        if (shouldZoomToNewLayers()) {
-          if (importedLayer.type === "deckgl-viz") {
-            const layerId = importedLayer.id;
+        if (importedLayer.type === "deckgl-viz") {
+          const layerId = importedLayer.id;
+          requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                window.setTimeout(() => {
-                  const current = useAppStore
-                    .getState()
-                    .layers.find((layer) => layer.id === layerId);
-                  if (current) mapControllerRef.current?.fitLayer(current);
-                }, 50);
-              });
+              window.setTimeout(() => {
+                const current = useAppStore.getState().layers.find((layer) => layer.id === layerId);
+                if (current) mapControllerRef.current?.fitLayer(current);
+              }, 50);
             });
-          } else {
-            mapControllerRef.current?.fitLayer(importedLayer);
-          }
+          });
+        } else {
+          mapControllerRef.current?.fitLayer(importedLayer);
         }
       }
     },
