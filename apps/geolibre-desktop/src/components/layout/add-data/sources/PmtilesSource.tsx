@@ -32,7 +32,8 @@ export function PmtilesSource({ initialUrl = "" }: { initialUrl?: string }) {
       ...info,
     });
     for (const layer of layers) source.shell.addLayer(layer, source.beforeLayer);
-    if (info.bounds && shouldZoomToNewLayers()) source.shell.mapControllerRef.current?.fitBounds(info.bounds);
+    if (info.bounds && shouldZoomToNewLayers())
+      source.shell.mapControllerRef.current?.fitBounds(info.bounds);
     source.shell.closeDialog();
   });
   return (
