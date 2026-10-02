@@ -3482,6 +3482,10 @@
       "savePromptTitle": "Lưu dự án hiện tại?",
       "savePromptDescription": "Dự án hiện tại có thay đổi chưa lưu. Lưu trước khi mở dự án được thả vào?"
     },
+    "windowClose": {
+      "savePromptTitle": "Lưu thay đổi trước khi đóng?",
+      "savePromptDescription": "Dự án hiện tại có thay đổi chưa được lưu. Lưu trước khi đóng GeoLibre?"
+    },
     "error": {
       "couldNotOpenOsmPbf": "Không thể mở tệp OSM PBF.",
       "invalidOsmPbfUrl": "Nhập (các) URL http hợp lệ vào tệp .osm.pbf.",

@@ -3482,6 +3482,10 @@
       "savePromptTitle": "保存当前项目？",
       "savePromptDescription": "当前项目有未保存的更改。是否在打开拖放的项目之前保存？"
     },
+    "windowClose": {
+      "savePromptTitle": "关闭前保存更改？",
+      "savePromptDescription": "当前项目有未保存的更改。是否在关闭 GeoLibre 前保存？"
+    },
     "error": {
       "couldNotOpenProject": "无法打开项目。",
       "multipleProjectDrop": "请一次只拖放一个 GeoLibre 项目，不要同时拖放其他文件。",

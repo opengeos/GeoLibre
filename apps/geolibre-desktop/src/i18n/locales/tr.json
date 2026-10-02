@@ -3540,6 +3540,10 @@
       "savePromptTitle": "Geçerli proje kaydedilsin mi?",
       "savePromptDescription": "Geçerli projede kaydedilmemiş değişiklikler var. Bırakılan projeyi açmadan önce kaydetmek ister misiniz?"
     },
+    "windowClose": {
+      "savePromptTitle": "Kapatmadan önce değişiklikler kaydedilsin mi?",
+      "savePromptDescription": "Mevcut projede kaydedilmemiş değişiklikler var. GeoLibre kapatılmadan önce kaydedilsin mi?"
+    },
     "error": {
       "couldNotOpenProject": "Proje açılamadı.",
       "multipleProjectDrop": "Başka dosya olmadan tek seferde bir GeoLibre projesi bırakın.",

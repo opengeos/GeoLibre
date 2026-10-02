@@ -3540,6 +3540,10 @@
       "savePromptTitle": "Cari layihə yadda saxlanılsın?",
       "savePromptDescription": "Cari layihədə yadda saxlanmamış dəyişikliklər var. Buraxılan layihəni açmazdan əvvəl onları yadda saxlamaq istəyirsiniz?"
     },
+    "windowClose": {
+      "savePromptTitle": "Bağlamazdan əvvəl dəyişikliklər yadda saxlanılsın?",
+      "savePromptDescription": "Cari layihədə yadda saxlanmamış dəyişikliklər var. GeoLibre bağlanmazdan əvvəl onlar yadda saxlanılsın?"
+    },
     "error": {
       "couldNotOpenProject": "Layihəni açmaq mümkün olmadı.",
       "multipleProjectDrop": "Digər fayllar olmadan, hər dəfə yalnız bir GeoLibre layihəsi buraxın.",

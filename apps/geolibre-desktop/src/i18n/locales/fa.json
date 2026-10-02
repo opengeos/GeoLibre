@@ -3540,6 +3540,10 @@
       "savePromptTitle": "پروژهٔ فعلی ذخیره شود؟",
       "savePromptDescription": "پروژهٔ فعلی تغییرات ذخیره‌نشده دارد. آیا پیش از باز کردن پروژهٔ رهاشده آن‌ها را ذخیره می‌کنید؟"
     },
+    "windowClose": {
+      "savePromptTitle": "تغییرات پیش از بستن ذخیره شوند؟",
+      "savePromptDescription": "پروژهٔ فعلی تغییرات ذخیره‌نشده دارد. پیش از بستن GeoLibre ذخیره شوند؟"
+    },
     "error": {
       "couldNotOpenProject": "باز کردن پروژه ممکن نشد.",
       "multipleProjectDrop": "هر بار فقط یک پروژهٔ GeoLibre و بدون فایل‌های دیگر رها کنید.",

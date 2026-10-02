@@ -3540,6 +3540,10 @@
       "savePromptTitle": "Salvar o projeto atual?",
       "savePromptDescription": "O projeto atual tem alterações não salvas. Deseja salvá-las antes de abrir o projeto solto?"
     },
+    "windowClose": {
+      "savePromptTitle": "Salvar as alterações antes de fechar?",
+      "savePromptDescription": "O projeto atual tem alterações não salvas. Salvá-las antes de fechar o GeoLibre?"
+    },
     "error": {
       "couldNotOpenProject": "Não foi possível abrir o projeto.",
       "multipleProjectDrop": "Solte um projeto GeoLibre de cada vez, sem outros arquivos.",

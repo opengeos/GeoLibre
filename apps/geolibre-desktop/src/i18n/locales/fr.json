@@ -3540,6 +3540,10 @@
       "savePromptTitle": "Enregistrer le projet actuel ?",
       "savePromptDescription": "Le projet actuel contient des modifications non enregistrées. Voulez-vous les enregistrer avant d’ouvrir le projet déposé ?"
     },
+    "windowClose": {
+      "savePromptTitle": "Enregistrer les modifications avant de fermer ?",
+      "savePromptDescription": "Le projet actuel contient des modifications non enregistrées. Les enregistrer avant de fermer GeoLibre ?"
+    },
     "error": {
       "couldNotOpenProject": "Impossible d'ouvrir le projet.",
       "multipleProjectDrop": "Déposez un seul projet GeoLibre à la fois, sans autres fichiers.",

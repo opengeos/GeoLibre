@@ -39,7 +39,7 @@ interface ProjectFileDialogsProps {
   projectFiles: ProjectFileActions;
 }
 
-/** The project-file dialogs: Open-from-URL, the error dialog, the save-name prompt, and the env-var strip prompt. */
+/** The project-file dialogs: the save-before-close prompt, Open-from-URL, the error dialog, the save-name prompt, and the env-var strip prompt. */
 export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   const { t } = useTranslation();
 
@@ -100,6 +100,41 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
             <Button
               disabled={projectFiles.droppedProjectSaving}
               onClick={() => void projectFiles.resolveDroppedProjectPrompt("save")}
+            >
+              {t("common.save")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={projectFiles.windowClosePromptOpen}
+        onOpenChange={(open: boolean) => {
+          if (!open) void projectFiles.resolveWindowClosePrompt("cancel");
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("toolbar.windowClose.savePromptTitle")}</DialogTitle>
+            <DialogDescription>{t("toolbar.windowClose.savePromptDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={projectFiles.windowCloseSaving}
+              onClick={() => void projectFiles.resolveWindowClosePrompt("cancel")}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={projectFiles.windowCloseSaving}
+              onClick={() => void projectFiles.resolveWindowClosePrompt("discard")}
+            >
+              {t("newProject.doNotSave")}
+            </Button>
+            <Button
+              disabled={projectFiles.windowCloseSaving}
+              onClick={() => void projectFiles.resolveWindowClosePrompt("save")}
             >
               {t("common.save")}
             </Button>

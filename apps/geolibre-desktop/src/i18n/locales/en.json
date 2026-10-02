@@ -3544,6 +3544,10 @@
       "savePromptTitle": "Save current project?",
       "savePromptDescription": "The current project has unsaved changes. Save them before opening the dropped project?"
     },
+    "windowClose": {
+      "savePromptTitle": "Save changes before closing?",
+      "savePromptDescription": "The current project has unsaved changes. Save them before closing GeoLibre?"
+    },
     "error": {
       "couldNotOpenProject": "Could not open project.",
       "multipleProjectDrop": "Drop one GeoLibre project at a time, without other files.",

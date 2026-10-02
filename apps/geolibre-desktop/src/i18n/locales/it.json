@@ -3540,6 +3540,10 @@
       "savePromptTitle": "Salvare il progetto corrente?",
       "savePromptDescription": "Il progetto corrente contiene modifiche non salvate. Salvarle prima di aprire il progetto trascinato?"
     },
+    "windowClose": {
+      "savePromptTitle": "Salvare le modifiche prima di chiudere?",
+      "savePromptDescription": "Il progetto corrente contiene modifiche non salvate. Salvarle prima di chiudere GeoLibre?"
+    },
     "error": {
       "couldNotOpenProject": "Impossibile aprire il progetto.",
       "multipleProjectDrop": "Rilascia un solo progetto GeoLibre alla volta, senza altri file.",

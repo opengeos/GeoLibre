@@ -5,6 +5,10 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    {
+      "comment": "The unsaved-changes guard on the title-bar close (GeoLibre#2809, hooks/useWindowCloseGuard.ts). Once the webview listens for close-requested, Tauri holds every close open and the page must destroy the window itself, which core:default does not grant.",
+      "identifier": "core:window:allow-destroy"
+    },
     "deep-link:allow-get-current",
     "dialog:default",
     "fs:default",

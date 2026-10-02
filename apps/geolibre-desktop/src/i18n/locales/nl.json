@@ -3540,6 +3540,10 @@
       "savePromptTitle": "Huidig project opslaan?",
       "savePromptDescription": "Het huidige project bevat niet-opgeslagen wijzigingen. Wilt u die opslaan voordat het neergezette project wordt geopend?"
     },
+    "windowClose": {
+      "savePromptTitle": "Wijzigingen opslaan voor het sluiten?",
+      "savePromptDescription": "Het huidige project bevat niet-opgeslagen wijzigingen. Opslaan voordat GeoLibre wordt gesloten?"
+    },
     "error": {
       "couldNotOpenProject": "Het project kon niet worden geopend.",
       "multipleProjectDrop": "Zet één GeoLibre-project tegelijk neer, zonder andere bestanden.",

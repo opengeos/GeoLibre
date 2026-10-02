@@ -3771,6 +3771,10 @@
       "savePromptTitle": "هل تريد حفظ المشروع الحالي؟",
       "savePromptDescription": "يحتوي المشروع الحالي على تغييرات غير محفوظة. هل تريد حفظها قبل فتح المشروع المُسقَط؟"
     },
+    "windowClose": {
+      "savePromptTitle": "هل تريد حفظ التغييرات قبل الإغلاق؟",
+      "savePromptDescription": "يحتوي المشروع الحالي على تغييرات غير محفوظة. هل تريد حفظها قبل إغلاق GeoLibre؟"
+    },
     "error": {
       "couldNotOpenProject": "تعذر فتح المشروع.",
       "multipleProjectDrop": "أسقط مشروع GeoLibre واحدًا في كل مرة، من دون ملفات أخرى.",

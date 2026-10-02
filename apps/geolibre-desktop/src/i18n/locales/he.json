@@ -3598,6 +3598,10 @@
       "bothVectorLayers_two": "{{count}} שכבות וקטוריות",
       "bothRasterLayers_two": "{{count}} שכבות רסטר"
     },
+    "windowClose": {
+      "savePromptTitle": "לשמור את השינויים לפני הסגירה?",
+      "savePromptDescription": "בפרויקט הנוכחי יש שינויים שלא נשמרו. לשמור אותם לפני סגירת GeoLibre?"
+    },
     "error": {
       "couldNotOpenProject": "לא ניתן היה לפתוח את הפרויקט.",
       "multipleProjectDrop": "יש לגרור פרויקט GeoLibre אחד בכל פעם, ללא קבצים אחרים.",

@@ -3482,6 +3482,10 @@
       "savePromptTitle": "現在のプロジェクトを保存しますか？",
       "savePromptDescription": "現在のプロジェクトには未保存の変更があります。ドロップしたプロジェクトを開く前に保存しますか？"
     },
+    "windowClose": {
+      "savePromptTitle": "閉じる前に変更を保存しますか?",
+      "savePromptDescription": "現在のプロジェクトには未保存の変更があります。GeoLibre を閉じる前に保存しますか?"
+    },
     "error": {
       "couldNotOpenProject": "プロジェクトを開けませんでした。",
       "multipleProjectDrop": "他のファイルを含めず、GeoLibre プロジェクトを一度に1つだけドロップしてください。",

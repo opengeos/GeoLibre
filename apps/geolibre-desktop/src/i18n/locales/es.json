@@ -3540,6 +3540,10 @@
       "savePromptTitle": "¿Guardar el proyecto actual?",
       "savePromptDescription": "El proyecto actual tiene cambios sin guardar. ¿Desea guardarlos antes de abrir el proyecto soltado?"
     },
+    "windowClose": {
+      "savePromptTitle": "¿Guardar los cambios antes de cerrar?",
+      "savePromptDescription": "El proyecto actual tiene cambios sin guardar. ¿Guardarlos antes de cerrar GeoLibre?"
+    },
     "error": {
       "couldNotOpenProject": "No se pudo abrir el proyecto.",
       "multipleProjectDrop": "Suelte un solo proyecto de GeoLibre a la vez, sin otros archivos.",
