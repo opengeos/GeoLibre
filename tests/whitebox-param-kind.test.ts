@@ -84,9 +84,30 @@ describe("isDirectoryParameter", () => {
   });
 
   it("still honours a typed dataset parameter named for a folder", () => {
+    // lidar_tile and select_tiles_by_polygon name their folders this way.
+    assert.equal(isDirectoryParameter({ name: "output_directory", kind: "lidar_out" }), true);
+    assert.equal(isDirectoryParameter({ name: "input_directory", kind: "file_out" }), true);
+  });
+
+  it("ignores a generic file parameter's description", () => {
     assert.equal(
-      isDirectoryParameter({ name: "input_dir", data_kind: "lidar", io_role: "input" }),
-      true,
+      isDirectoryParameter({
+        name: "input",
+        description: "If omitted, runs in batch mode over files in current directory.",
+        kind: "file_in",
+      }),
+      false,
+    );
+  });
+
+  it("does not read a flow-direction name as a folder", () => {
+    assert.equal(
+      isDirectoryParameter({
+        name: "flow_dir",
+        description: "Input D8 flow direction raster.",
+        kind: "raster_in",
+      }),
+      false,
     );
   });
 

@@ -55,21 +55,23 @@ export function isMultipleDatasetParameter(param: WhiteboxToolParameter): boolea
  * Whether a path parameter names a folder, so its browse button opens a folder
  * picker (desktop) and skips the read-a-file fallback (web).
  *
- * A typed dataset parameter (`raster_in`, `lidar_out`, …) is a file unless its
- * own name says otherwise. Its description is not consulted: many LiDAR inputs
- * read "If omitted, runs in batch mode over LiDAR files in current directory",
- * and matching that made every such browse button do nothing in the browser
- * (and open a folder picker on desktop). An untyped parameter has only its
- * wording to go on, so the description still counts there.
+ * A typed dataset parameter (`raster_in`, `file_out`, …) is a file unless a
+ * segment of its own name is `folder` or `directory` (`output_directory`). Its
+ * description is not consulted: many LiDAR inputs read "If omitted, runs in
+ * batch mode over LiDAR files in current directory", and matching that made
+ * every such browse button do nothing in the browser (and open a folder picker
+ * on desktop). The `dir` abbreviation is left out of the name rule because
+ * hydrology tools use it for flow *direction* (`flow_dir_output_path`). An
+ * untyped parameter has only its wording to go on, so the description still
+ * counts there.
  *
  * @param param - A tool parameter from either catalog.
  * @returns True when the parameter expects a directory path.
  */
 export function isDirectoryParameter(param: WhiteboxToolParameter): boolean {
-  const pattern = /\b(folder|directory|dir)\b/;
-  if (/^(raster|vector|lidar)_(in|out)$/.test(parameterKind(param))) {
-    return pattern.test(param.name.toLowerCase().replace(/_/g, " "));
+  if (/^(raster|vector|lidar|file)_(in|out)$/.test(parameterKind(param))) {
+    return /(^|_)(folder|directory)(_|$)/.test(param.name.toLowerCase());
   }
   const text = `${param.name} ${param.description ?? ""} ${param.type ?? ""}`.toLowerCase();
-  return pattern.test(text);
+  return /\b(folder|directory|dir)\b/.test(text);
 }
