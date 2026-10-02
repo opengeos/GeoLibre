@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isMultipleDatasetParameter } from "../apps/geolibre-desktop/src/lib/whitebox-param-kind";
+import {
+  isDirectoryParameter,
+  isMultipleDatasetParameter,
+} from "../apps/geolibre-desktop/src/lib/whitebox-param-kind";
 
 describe("isMultipleDatasetParameter", () => {
   it("uses explicit multiple cardinality", () => {
@@ -50,5 +53,45 @@ describe("isMultipleDatasetParameter", () => {
       }),
       false,
     );
+  });
+});
+
+describe("isDirectoryParameter", () => {
+  it("keeps a LiDAR input whose description mentions batch mode a file", () => {
+    // lidar_remove_outliers and most other LiDAR tools describe their input as
+    // "...runs in batch mode over LiDAR files in current directory".
+    assert.equal(
+      isDirectoryParameter({
+        name: "input",
+        description:
+          "Input LiDAR path or typed LiDAR object. If omitted, runs in batch mode over LiDAR files in current directory.",
+        data_kind: "lidar",
+        io_role: "input",
+      }),
+      false,
+    );
+  });
+
+  it("ignores a typed output's description", () => {
+    assert.equal(
+      isDirectoryParameter({
+        name: "output",
+        description: "Output raster, written to the working directory.",
+        kind: "raster_out",
+      }),
+      false,
+    );
+  });
+
+  it("still honours a typed dataset parameter named for a folder", () => {
+    assert.equal(
+      isDirectoryParameter({ name: "input_dir", data_kind: "lidar", io_role: "input" }),
+      true,
+    );
+  });
+
+  it("reads an untyped parameter's description", () => {
+    assert.equal(isDirectoryParameter({ name: "wd", description: "Working directory." }), true);
+    assert.equal(isDirectoryParameter({ name: "file_name", description: "Output file." }), false);
   });
 });

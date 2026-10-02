@@ -50,3 +50,26 @@ export function parameterKind(param: WhiteboxToolParameter): string {
 export function isMultipleDatasetParameter(param: WhiteboxToolParameter): boolean {
   return parameterKind(param).endsWith("_in") && isMultipleWhiteboxDatasetParameter(param);
 }
+
+/**
+ * Whether a path parameter names a folder, so its browse button opens a folder
+ * picker (desktop) and skips the read-a-file fallback (web).
+ *
+ * A typed dataset parameter (`raster_in`, `lidar_out`, …) is a file unless its
+ * own name says otherwise. Its description is not consulted: many LiDAR inputs
+ * read "If omitted, runs in batch mode over LiDAR files in current directory",
+ * and matching that made every such browse button do nothing in the browser
+ * (and open a folder picker on desktop). An untyped parameter has only its
+ * wording to go on, so the description still counts there.
+ *
+ * @param param - A tool parameter from either catalog.
+ * @returns True when the parameter expects a directory path.
+ */
+export function isDirectoryParameter(param: WhiteboxToolParameter): boolean {
+  const pattern = /\b(folder|directory|dir)\b/;
+  if (/^(raster|vector|lidar)_(in|out)$/.test(parameterKind(param))) {
+    return pattern.test(param.name.toLowerCase().replace(/_/g, " "));
+  }
+  const text = `${param.name} ${param.description ?? ""} ${param.type ?? ""}`.toLowerCase();
+  return pattern.test(text);
+}

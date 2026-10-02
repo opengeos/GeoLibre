@@ -75,7 +75,11 @@ import {
   wgs84VectorLayerIds,
   type DistanceUnit,
 } from "../../lib/whitebox-distance-params";
-import { isMultipleDatasetParameter, parameterKind } from "../../lib/whitebox-param-kind";
+import {
+  isDirectoryParameter,
+  isMultipleDatasetParameter,
+  parameterKind,
+} from "../../lib/whitebox-param-kind";
 import { isTiff } from "../../lib/scripting/binary-output";
 import {
   canUseLayerForParameter,
@@ -278,11 +282,6 @@ function isPathParameter(param: WhiteboxToolParameter): boolean {
   if (isDataInputParameter(param) || isOutputParameter(param)) return true;
   const text = `${param.name} ${param.description ?? ""} ${param.type ?? ""}`.toLowerCase();
   return /\b(path|file|folder|directory)\b/.test(text);
-}
-
-function isDirectoryParameter(param: WhiteboxToolParameter): boolean {
-  const text = `${param.name} ${param.description ?? ""} ${param.type ?? ""}`.toLowerCase();
-  return /\b(folder|directory|dir)\b/.test(text);
 }
 
 function pathFiltersForParameter(param: WhiteboxToolParameter): FileDialogFilter[] {
