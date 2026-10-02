@@ -15,7 +15,21 @@ import { spawnSync } from "node:child_process";
 // Severities that fail the build. Moderate/low are left to Dependabot PRs.
 const BLOCKING = new Set(["high", "critical"]);
 
-const ALLOWLIST = new Map();
+const ALLOWLIST = new Map([
+  [
+    "GHSA-86w9-cpqp-85rv",
+    "node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested " +
+      "DigestAlgorithm elements. No patched version exists — the advisory covers " +
+      "<=1.4.0, 1.4.0 is the latest release, and the GitHub advisory API reports " +
+      "first_patched_version: null. It reaches us only through " +
+      "maplibre-gl-earth-engine → @google/earthengine → googleapis → " +
+      "google-auth-library → gtoken → google-p12-pem, which gtoken lazily " +
+      "`require`s in Node to convert a `.p12` service-account key file to PEM. " +
+      "@google/earthengine's `browser` build does not pull in googleapis, the " +
+      "built web app contains no node-forge code, and google-p12-pem never " +
+      "verifies an RSA signature, so no GeoLibre runtime path reaches the flaw.",
+  ],
+]);
 
 const audit = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
   encoding: "utf8",
