@@ -789,6 +789,7 @@ function scopeAppToPlugin(
     !hasAssistantRegistration &&
     !register &&
     !registerContribution &&
+    !app.unregisterMenuContribution &&
     !onControlAdded &&
     !onRightPanelOpened &&
     !activatePlugin &&
