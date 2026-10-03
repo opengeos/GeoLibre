@@ -396,8 +396,15 @@ export function useLayerActions({
           setStatus({ type: "error", message: t("layers.exportStyleDataNotReady") });
           return;
         }
+        // Excluded fields still drive the style, so they are dropped from the
+        // model's names and attributes rather than from the features.
+        const excludedFields = new Set(
+          Object.entries(layer.fieldVisibility ?? {})
+            .filter(([, visibility]) => visibility === "excluded")
+            .map(([field]) => field),
+        );
         const model = geojson
-          ? buildExtrusionModel(geojson, layer.style, map?.getZoom() ?? 16)
+          ? buildExtrusionModel(geojson, layer.style, map?.getZoom() ?? 16, excludedFields)
           : null;
         if (!model || model.solids.length === 0) {
           setStatus({ type: "error", message: t("layers.export3dModelNoSolids") });

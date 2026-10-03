@@ -239,9 +239,9 @@ function appendPolygon(
   }
 }
 
-/** A readable, stable name for a feature's solid. */
-function solidName(feature: Feature, index: number): string {
-  const name = feature.properties?.name;
+/** A readable, stable name for a feature's solid, unless `name` is excluded. */
+function solidName(feature: Feature, index: number, excludedFields: ReadonlySet<string>): string {
+  const name = excludedFields.has("name") ? undefined : feature.properties?.name;
   if (typeof name === "string" && name.trim()) return name.trim();
   if (typeof name === "number") return String(name);
   if (feature.id !== undefined && feature.id !== null) return String(feature.id);
@@ -255,12 +255,15 @@ function solidName(feature: Feature, index: number): string {
  * @param geojson - The layer's features (non-polygon features are ignored).
  * @param style - The layer style holding the extrusion settings.
  * @param zoom - The zoom that zoom-dependent style expressions evaluate at.
+ * @param excludedFields - Attributes the layer excludes from export: styles
+ *   still read them, but they are left out of the solids' names and properties.
  * @returns The solids, the local origin and how many flat features were skipped.
  */
 export function buildExtrusionModel(
   geojson: FeatureCollection,
   style: LayerStyle,
   zoom = 16,
+  excludedFields: ReadonlySet<string> = new Set(),
 ): ExtrusionModel {
   const bounds = [Infinity, Infinity, -Infinity, -Infinity, Infinity, -Infinity];
   const featurePolygons = geojson.features.map((feature) => {
@@ -316,9 +319,11 @@ export function buildExtrusionModel(
       return;
     }
     const solid: ExtrudedSolid = {
-      name: solidName(feature, index),
+      name: solidName(feature, index, excludedFields),
       color: toLinear(readColor(feature)) ?? fallbackLinear ?? [0.05, 0.22, 0.91],
-      properties: { ...(feature.properties ?? {}) },
+      properties: Object.fromEntries(
+        Object.entries(feature.properties ?? {}).filter(([key]) => !excludedFields.has(key)),
+      ),
       positions: [],
       normals: [],
       indices: [],

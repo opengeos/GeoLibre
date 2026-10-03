@@ -141,6 +141,22 @@ describe("buildExtrusionModel", () => {
   });
 });
 
+describe("buildExtrusionModel with excluded fields", () => {
+  it("styles by an excluded field but leaves it out of names and attributes", () => {
+    const model = buildExtrusionModel(
+      collection(square(12, false, { name: "Secret", owner: "x" })),
+      style(),
+      16,
+      new Set(["name", "owner", "height"]),
+    );
+    assert.equal(model.solids.length, 1);
+    assert.equal(model.solids[0].name, "feature_1");
+    assert.deepEqual(model.solids[0].properties, {});
+    const zs = model.solids[0].positions.filter((_, i) => i % 3 === 2);
+    assert.equal(Math.max(...zs), 12);
+  });
+});
+
 describe("buildExtrusionModel across the antimeridian", () => {
   it("keeps a polygon straddling ±180° compact and centred on it", () => {
     const feature: Feature = {
