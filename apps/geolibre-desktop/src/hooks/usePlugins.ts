@@ -544,8 +544,14 @@ export function subscribeToExternalPluginLoads(listener: () => void): () => void
 export async function upgradeExternalPlugin(
   manifestUrl: string,
   mapControllerRef: RefObject<MapEngine | null>,
+  expectedVersion?: string,
 ): Promise<void> {
-  await reloadExternalUrlPlugin(manager, manifestUrl, createAppAPI(mapControllerRef));
+  await reloadExternalUrlPlugin(
+    manager,
+    manifestUrl,
+    createAppAPI(mapControllerRef),
+    expectedVersion,
+  );
   // A held-back bundle that just loaded is no longer a failure.
   if (externalPluginHeldBack.has(manifestUrl) || externalPluginLoadIssues.has(manifestUrl)) {
     externalPluginHeldBack = new Map(externalPluginHeldBack);

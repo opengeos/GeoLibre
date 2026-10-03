@@ -293,7 +293,9 @@ export function ManagePluginsDialog({
       setActionError(null);
       setBusyId(entry.id);
       try {
-        await upgradeExternalPlugin(entry.manifestUrl, mapControllerRef);
+        // A held-back bundle is consented to at the version the card showed.
+        const expectedVersion = isHeldBackUpdate(entry) ? entry.version : undefined;
+        await upgradeExternalPlugin(entry.manifestUrl, mapControllerRef, expectedVersion);
       } catch (error: unknown) {
         setActionError({
           id: entry.id,
@@ -303,7 +305,7 @@ export function ManagePluginsDialog({
         setBusyId(null);
       }
     },
-    [mapControllerRef],
+    [isHeldBackUpdate, mapControllerRef],
   );
 
   const addDirectory = useCallback(
@@ -632,7 +634,9 @@ export function ManagePluginsDialog({
                           <div className="flex items-center gap-2">
                             <span className="truncate text-sm font-medium">{displayName}</span>
                             <span className="shrink-0 text-xs text-muted-foreground">
-                              v{entry.version}
+                              {heldBackUpdate && heldBack.get(entry.manifestUrl)?.pinnedVersion
+                                ? `v${heldBack.get(entry.manifestUrl)?.pinnedVersion} → v${entry.version}`
+                                : `v${entry.version}`}
                             </span>
                             {entry.homepage ? (
                               <a

@@ -764,10 +764,16 @@ export function reloadExternalUrlPlugin(
   manager: PluginManager,
   manifestUrl: string,
   app: GeoLibreAppAPI,
+  expectedVersion?: string,
 ): Promise<GeoLibrePlugin> {
   const inFlight = inFlightUrlUpgrades.get(manifestUrl);
   if (inFlight) return inFlight;
-  const promise = reloadExternalUrlPluginUncoalesced(manager, manifestUrl, app).finally(() => {
+  const promise = reloadExternalUrlPluginUncoalesced(
+    manager,
+    manifestUrl,
+    app,
+    expectedVersion,
+  ).finally(() => {
     inFlightUrlUpgrades.delete(manifestUrl);
   });
   inFlightUrlUpgrades.set(manifestUrl, promise);
@@ -778,6 +784,7 @@ async function reloadExternalUrlPluginUncoalesced(
   manager: PluginManager,
   manifestUrl: string,
   app: GeoLibreAppAPI,
+  expectedVersion?: string,
 ): Promise<GeoLibrePlugin> {
   let existingId: string | null = null;
   for (const [id, source] of externallyLoadedPluginSources) {
@@ -797,6 +804,13 @@ async function reloadExternalUrlPluginUncoalesced(
   let plugin: GeoLibrePlugin;
   try {
     bundle = await loadPluginUrlBundle(manifestUrl, controller.signal);
+    // The user consented to a specific version; the URL may have moved on since
+    // the dialog offered it.
+    if (expectedVersion !== undefined && bundle.manifest.version !== expectedVersion) {
+      throw new Error(
+        `Cannot update plugin: expected version ${expectedVersion} but the registry now serves ${bundle.manifest.version}. Refresh the plugin list and try again.`,
+      );
+    }
     // The timeout only bounds the fetch/stream above; a dynamic import() of a
     // local blob URL can't be aborted, but it evaluates near-instantly so it is
     // not a practical hang risk.
@@ -815,9 +829,10 @@ async function reloadExternalUrlPluginUncoalesced(
         `Cannot update plugin: '${plugin.id}' does not match the held-back plugin '${heldBack.pluginId}' or is already registered. Reinstall it manually.`,
       );
     }
+    const newHash = await computePluginBundleHash(bundle);
     manager.register(plugin);
     externallyLoadedPluginSources.set(plugin.id, manifestUrl);
-    pinPluginBundle(manifestUrl, await computePluginBundleHash(bundle), bundle.manifest.version);
+    pinPluginBundle(manifestUrl, newHash, bundle.manifest.version);
     heldBackBundles.delete(manifestUrl);
     if (bundle.styleSource) {
       injectExternalPluginStyle(plugin.id, bundle.styleSource);
