@@ -3538,6 +3538,7 @@
       "webServices": "خدمات الويب",
       "installedPlugins": "المثبّتة",
       "managePlugins": "إدارة الإضافات…",
+      "showMenuInToolbar": "إظهار القائمة في شريط الأدوات",
       "dggs": "DGGS",
       "commandPalette": "لوحة الأوامر",
       "openProjectFromUrl": "فتح مشروع من عنوان URL",

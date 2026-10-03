@@ -3294,6 +3294,7 @@
       "webServices": "บริการเว็บ",
       "installedPlugins": "ติดตั้งแล้ว",
       "managePlugins": "จัดการปลั๊กอิน…",
+      "showMenuInToolbar": "แสดงเมนูในแถบเครื่องมือ",
       "dggs": "DGGS",
       "commandPalette": "พาเลตต์คำสั่ง",
       "openProjectFromUrl": "เปิดโปรเจกต์จาก URL",

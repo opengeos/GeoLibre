@@ -3294,6 +3294,7 @@
       "webServices": "Web サービス",
       "installedPlugins": "インストール済み",
       "managePlugins": "プラグインを管理…",
+      "showMenuInToolbar": "ツールバーにメニューを表示",
       "dggs": "DGGS",
       "commandPalette": "コマンドパレット",
       "openProjectFromUrl": "URL からプロジェクトを開く",

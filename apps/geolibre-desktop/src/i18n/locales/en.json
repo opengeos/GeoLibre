@@ -3355,6 +3355,7 @@
       "webServices": "Web Services",
       "installedPlugins": "Installed",
       "managePlugins": "Manage Plugins…",
+      "showMenuInToolbar": "Show menu in toolbar",
       "dggs": "DGGS",
       "commandPalette": "Command Palette",
       "openProjectFromUrl": "Open project from URL",

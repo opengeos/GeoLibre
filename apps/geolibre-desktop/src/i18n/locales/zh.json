@@ -3296,6 +3296,7 @@
       "webServices": "网络服务",
       "installedPlugins": "已安装",
       "managePlugins": "管理插件…",
+      "showMenuInToolbar": "在工具栏中显示菜单",
       "dggs": "DGGS",
       "commandPalette": "命令面板",
       "openProjectFromUrl": "从 URL 打开项目",

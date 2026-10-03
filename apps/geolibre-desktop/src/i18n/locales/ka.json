@@ -3343,6 +3343,7 @@
       "webServices": "ვებ-სერვისები",
       "installedPlugins": "დაინსტალირებული",
       "managePlugins": "პლაგინების მართვა…",
+      "showMenuInToolbar": "მენიუს ჩვენება ხელსაწყოთა ზოლში",
       "dggs": "DGGS",
       "commandPalette": "ბრძანებების პალიტრა",
       "openProjectFromUrl": "პროექტის გახსნა URL-იდან",

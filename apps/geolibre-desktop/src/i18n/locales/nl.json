@@ -3343,6 +3343,7 @@
       "webServices": "Webservices",
       "installedPlugins": "Geïnstalleerd",
       "managePlugins": "Plugins beheren…",
+      "showMenuInToolbar": "Menu in werkbalk tonen",
       "dggs": "DGGS",
       "commandPalette": "Opdrachtenpalet",
       "openProjectFromUrl": "Project openen vanuit URL",

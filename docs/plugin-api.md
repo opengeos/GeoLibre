@@ -1112,6 +1112,8 @@ Each item is an **action** (`onSelect`, the default when `type` is omitted), a *
 
 Menus from **external plugins** (loaded from a zip, a manifest URL, or a bundled drop-in) render at the end of the banner, after the Help menu, so third-party menus sit together past the built-in menus. Menus from built-in plugins render beside the built-in menus. The host decides placement from the menu's owning plugin, so you do not need to do anything special.
 
+The user decides whether an external plugin's menu occupies the banner. Each installed plugin that has registered a menu gets a **Show menu in toolbar** switch in its Plugins → Installed entry; turning it off moves the plugin's menus into that entry as submenus, with the same items. The choice is remembered per plugin on the device. Built-in plugin menus always stay in the banner. Since your menu may end up nested a level deeper, keep its top level short and consider [adding items to a built-in menu](#adding-items-to-built-in-menus) instead when you only have a few actions.
+
 Every `label` (the menu button's, a submenu trigger's, an action's) accepts a **getter function** as well as a plain string, the same way panel titles do:
 
 ```typescript

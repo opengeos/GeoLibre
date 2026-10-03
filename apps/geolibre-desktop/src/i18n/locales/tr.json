@@ -3343,6 +3343,7 @@
       "webServices": "Web Servisleri",
       "installedPlugins": "Kurulu",
       "managePlugins": "Eklentileri Yönet…",
+      "showMenuInToolbar": "Menüyü araç çubuğunda göster",
       "dggs": "DGGS",
       "commandPalette": "Komut Paleti",
       "openProjectFromUrl": "URL'den proje aç",

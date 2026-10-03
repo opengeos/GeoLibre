@@ -3343,6 +3343,7 @@
       "webServices": "वेब सेवाएं",
       "installedPlugins": "इंस्टॉल किए गए",
       "managePlugins": "प्लगइन प्रबंधित करें…",
+      "showMenuInToolbar": "टूलबार में मेनू दिखाएँ",
       "dggs": "DGGS",
       "commandPalette": "कमांड पैलेट",
       "openProjectFromUrl": "URL से प्रोजेक्ट खोलें",

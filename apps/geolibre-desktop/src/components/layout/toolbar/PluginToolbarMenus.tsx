@@ -16,6 +16,7 @@ import {
 } from "@geolibre/ui";
 import { Puzzle } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { useToolbarMenus } from "../../../hooks/usePluginUiSurfaces";
 import { isExternalPluginId } from "../../../lib/external-plugins";
 import { isImageSource } from "../../../lib/icon-source";
@@ -138,6 +139,9 @@ function PluginToolbarMenu({ menu, chrome }: { menu: GeoLibreToolbarMenu; chrome
  */
 export function PluginToolbarMenus({ chrome, placement }: PluginToolbarMenusProps) {
   const { entries } = useToolbarMenus();
+  const foldedPluginMenus = useDesktopSettingsStore(
+    (state) => state.desktopSettings.foldedPluginMenus,
+  );
   // Subscribed purely for its `languageChanged` re-render: a menu whose labels
   // are getters keeps them in step with the app language only if the host
   // re-reads the tree after a switch, and the registry itself has no i18n
@@ -154,7 +158,10 @@ export function PluginToolbarMenus({ chrome, placement }: PluginToolbarMenusProp
     // plugin (which removes its menu, re-rendering this list) before dropping
     // its source map entry, so a menu is never seen with a now-stale owner.
     const external = Boolean(entry.ownerPluginId && isExternalPluginId(entry.ownerPluginId));
-    return placement === "external" ? external : !external;
+    if (placement !== "external") return !external;
+    // The user moved this plugin's menus out of the banner; the Plugins menu
+    // renders them under Plugins → Installed instead (GeoLibre#2850).
+    return external && !foldedPluginMenus.includes(entry.ownerPluginId ?? "");
   });
   if (visible.length === 0) return null;
   return (

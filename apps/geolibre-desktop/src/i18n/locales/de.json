@@ -3343,6 +3343,7 @@
       "webServices": "Webdienste",
       "installedPlugins": "Installiert",
       "managePlugins": "Plugins verwalten…",
+      "showMenuInToolbar": "Menü in der Symbolleiste anzeigen",
       "dggs": "DGGS",
       "commandPalette": "Befehlspalette",
       "openProjectFromUrl": "Projekt von URL öffnen",

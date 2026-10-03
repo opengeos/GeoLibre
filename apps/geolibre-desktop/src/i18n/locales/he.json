@@ -3392,6 +3392,7 @@
       "webServices": "שירותי רשת",
       "installedPlugins": "מותקנים",
       "managePlugins": "ניהול תוספים…",
+      "showMenuInToolbar": "הצג את התפריט בסרגל הכלים",
       "dggs": "DGGS",
       "commandPalette": "לוח הפקודות",
       "openProjectFromUrl": "פתיחת פרויקט מכתובת URL",

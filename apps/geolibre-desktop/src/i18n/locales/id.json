@@ -3294,6 +3294,7 @@
       "webServices": "Layanan Web",
       "installedPlugins": "Terpasang",
       "managePlugins": "Kelola Plugin…",
+      "showMenuInToolbar": "Tampilkan menu di bilah alat",
       "dggs": "DGGS",
       "commandPalette": "Palet Perintah",
       "openProjectFromUrl": "Buka proyek dari URL",

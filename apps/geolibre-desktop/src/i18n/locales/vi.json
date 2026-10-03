@@ -3294,6 +3294,7 @@
       "webServices": "Dịch vụ web",
       "installedPlugins": "Đã cài đặt",
       "managePlugins": "Quản lý plugin…",
+      "showMenuInToolbar": "Hiển thị menu trên thanh công cụ",
       "dggs": "DGGS",
       "commandPalette": "Bảng lệnh",
       "openProjectFromUrl": "Mở dự án từ URL",
