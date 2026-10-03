@@ -50,7 +50,7 @@ export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
       defaultWidth: 340,
       deactivatePluginOnClose: true,
       render: (container) => {
-        const control = new EsriWaybackControl(ESRI_WAYBACK_OPTIONS);
+        const control = new EsriWaybackControl({ ...ESRI_WAYBACK_OPTIONS });
         attachStoreSync(control);
         const unmount = mountMapControlInPanel(app, control, container, () => {
           detachStoreSync(control);
