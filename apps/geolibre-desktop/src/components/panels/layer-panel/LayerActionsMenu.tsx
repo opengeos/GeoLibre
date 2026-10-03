@@ -10,6 +10,7 @@ import {
   isDuckDBQueryLayer,
   isStyleLibraryTargetLayer,
   resolveLayerCapabilities,
+  styleValue,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -204,6 +205,7 @@ export function LayerActionsMenuItems({
     handlePasteStyle,
     handleSaveToLibrary,
     handleExportLayer,
+    handleExportExtrusionModel,
     handleExportStyle,
     handleExportGeoLibreStyle,
     handleExportSldStyle,
@@ -269,6 +271,8 @@ export function LayerActionsMenuItems({
   // geojson-backed vector layers carry those features.
   const canExportLayer = layerCaps.export && layer.type === "geojson";
   const canExportPolyline = canExportLayer && layerSupportsPolylineExport(layer);
+  // A 3D model export needs the extrusion it meshes (discussion #2825).
+  const canExport3dModel = canExportLayer && styleValue(layer.style, "extrusionEnabled");
   // Importing a style (Mapbox GL or SLD) only writes the layer's
   // vector symbology, so it applies to any vector-styled layer (local
   // GeoJSON and vector tiles), not just the export-capable GeoJSON
@@ -822,6 +826,32 @@ export function LayerActionsMenuItems({
                   }}
                 >
                   {t("layers.exportPolyline", { precision: 6 })}
+                </DropdownMenuItem>
+              </>
+            )}
+            {canExport3dModel && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void handleExportExtrusionModel(layer, "glb");
+                  }}
+                >
+                  {t("layers.export3dModel", { format: "glTF (.glb)" })}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void handleExportExtrusionModel(layer, "obj");
+                  }}
+                >
+                  {t("layers.export3dModel", { format: "OBJ" })}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void handleExportExtrusionModel(layer, "stl");
+                  }}
+                >
+                  {t("layers.export3dModel", { format: "STL" })}
                 </DropdownMenuItem>
               </>
             )}
