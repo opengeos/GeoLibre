@@ -61,6 +61,7 @@ export class PluginManager {
     return scopeAppToPlugin(app, id, {
       ...options,
       pluginName: plugin?.name,
+      isLive: () => this.activating.has(id) || this.active.has(id),
       canAddControl: () =>
         this.plugins.get(id) === plugin &&
         (app.getMapRenderer?.() ?? "maplibre") === renderer &&
@@ -753,6 +754,13 @@ interface ScopeAppOptions {
    * the host can title the plugin's submenu without a registry lookup.
    */
   pluginName?: string;
+  /**
+   * Whether the plugin is active or activating. Menu contributions are only
+   * accepted then: a restore callback can run for a plugin that stays inactive
+   * (`applyProjectState`), and its contributions would otherwise linger, since
+   * cleanup runs on deactivation.
+   */
+  isLive?: () => boolean;
 }
 
 function scopeAppToPlugin(
@@ -766,6 +774,7 @@ function scopeAppToPlugin(
     assistantTools = false,
     canAddControl,
     pluginName,
+    isLive,
   } = options;
   const register = app.registerToolbarMenu;
   const registerContribution = app.registerMenuContribution;
@@ -850,7 +859,7 @@ function scopeAppToPlugin(
       ownerPluginName?: string,
     ) => () => void;
     scoped.registerMenuContribution = (contribution) =>
-      canAddControl?.() === false
+      canAddControl?.() === false || isLive?.() === false
         ? () => {}
         : registerContributionWithOwner(contribution, pluginId, pluginName);
   }

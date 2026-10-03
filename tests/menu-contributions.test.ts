@@ -165,6 +165,27 @@ describe("menu contribution ownership", () => {
   });
 });
 
+describe("menu contributions from inactive plugins", () => {
+  afterEach(() => __resetMenuContributionRegistryForTests());
+
+  it("ignores contributions registered while restoring state for an inactive plugin", () => {
+    const manager = new PluginManager();
+    const hostApp = { registerMenuContribution } as unknown as GeoLibreAppAPI;
+    manager.register({
+      id: "restorer",
+      name: "Restorer",
+      version: "0.1.0",
+      activate: () => undefined,
+      deactivate: () => undefined,
+      applyProjectState: (api) => {
+        api.registerMenuContribution?.(contribution("restorer-items"));
+      },
+    });
+    manager.applyPluginState("restorer", hostApp, {});
+    assert.equal(listMenuContributions().length, 0);
+  });
+});
+
 describe("groupMenuContributions", () => {
   afterEach(() => __resetMenuContributionRegistryForTests());
 
