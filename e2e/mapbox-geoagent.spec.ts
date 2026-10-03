@@ -24,7 +24,9 @@ const PROJECT = {
   },
 };
 
-test.use({ actionTimeout: 30_000 });
+// A service worker answers the GeoAgent chunk from its precache, out of reach of
+// the `page.route` that captureAgentControls relies on.
+test.use({ actionTimeout: 30_000, serviceWorkers: "block" });
 
 /**
  * The browser's own echo of a failed request. It carries no URL, so it says
@@ -68,13 +70,27 @@ function watchFailedRequests(page: Page, failures: string[]): void {
 }
 
 /**
- * Bind the live Mapbox engine and the GeoAgent control it hosts.
+ * Record every GeoAgent control the page constructs, as `window.agentControls`.
  *
- * The control is a plain `IControl`, and the Mapbox engine wraps it in an
- * adapter before handing it to `map.addControl`, so it is not on `map._controls`
- * under its own name — the engine's own `pluginControls` map is where the
- * original lives.
+ * The control is docked in GeoLibre's side panel, so it is on no map's control
+ * list and nothing in the page holds it where a test can reach it. Rather than
+ * ship a test seam, the GeoAgent chunk is rewritten on its way in so `onAdd`
+ * records `this` — the chunk is served unminified, with a single `onAdd`.
  */
+async function captureAgentControls(page: Page) {
+  await page.route(/\/assets\/maplibre-geoagent-[^/]+\.js$/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    const patched = body.replace(
+      /\bonAdd\((\w+)\)\s*\{/,
+      (match) => `${match} (globalThis.agentControls ??= []).push(this);`,
+    );
+    expect(patched, "the GeoAgent chunk still has the onAdd the spec hooks").not.toBe(body);
+    await route.fulfill({ response, body: patched });
+  });
+}
+
+/** Bind the live Mapbox map and the GeoAgent control mounted in the dock. */
 async function bindAgent(page: Page) {
   await page.waitForFunction(() => {
     const header = document.querySelector("header") as unknown as Record<string, unknown>;
@@ -88,9 +104,8 @@ async function bindAgent(page: Page) {
           if (engine?.kind === "mapbox" && engine.getMapboxMap?.()) {
             (window as any).agentMap = engine.getMapboxMap();
             (window as any).mapboxGl = engine.getMapboxGl();
-            engine.pluginControls?.forEach?.((_adapter: unknown, control: any) => {
-              if (control?.tools) (window as any).agentControl = control;
-            });
+            const controls = ((window as any).agentControls ?? []) as any[];
+            (window as any).agentControl = controls.filter((control) => control?.tools).pop();
             return !!(window as any).agentControl?.tools;
           }
           hook = hook.next;
@@ -151,6 +166,8 @@ for (const theme of ["light", "dark"] as const) {
       if (message.type() !== "error") return;
       // Skip the bare resource echo; watchFailedRequests has the URL.
       if (RESOURCE_FAILURE_ECHO.test(message.text())) return;
+      // Service workers are blocked on purpose (see test.use above).
+      if (message.text().includes("Service worker registration failed")) return;
       errors.push(`error: ${message.text()}`);
     });
     watchFailedRequests(page, failures);
@@ -164,16 +181,18 @@ for (const theme of ["light", "dark"] as const) {
     }
 
     async function run() {
+      await captureAgentControls(page);
       await openMapboxProject(page, info.project.use.baseURL!, theme);
 
-      // Plugins → GeoAgent → Activate. The entry was greyed out on this
-      // renderer before the plugin declared Mapbox.
+      // Plugins → GeoAgent docks the agent in the side panel. The entry was
+      // greyed out on this renderer before the plugin declared Mapbox.
       await page.getByRole("button", { name: "Plugins", exact: true }).click();
       const item = page.getByRole("menuitem", { name: "GeoAgent", exact: true });
       await expect(item).toBeEnabled();
-      await item.hover();
-      await page.getByRole("menuitem", { name: "Activate", exact: true }).click();
-      await expect(page.locator(".geoagent-control")).toBeVisible();
+      await item.click();
+      await expect(page.locator(".geolibre-docked-map-control .geoagent-panel")).toBeVisible();
+      // The dock replaces the floating shell: no toolbar button on the map.
+      await expect(page.locator(".geoagent-control")).toHaveCount(0);
       await bindAgent(page);
 
       // The tools were told which engine is drawing the map. Without this the

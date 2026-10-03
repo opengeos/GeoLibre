@@ -35,14 +35,28 @@ describe("maplibreGeoAgentPlugin", () => {
     );
   });
 
-  it("lets only the current activation build the shared control", () => {
-    // The module import is shared, and its continuations run in registration
-    // order — so without this check an activation superseded mid-import would
-    // construct the singleton first, with its stale engine baked in, and the
-    // activation that is actually current would mount that instance.
+  it("lets only the current activation open the panel", () => {
+    // The module import is shared, so an activation superseded mid-import (a
+    // renderer swap lands easily inside that window) would otherwise register
+    // and open a panel on top of the current one.
     assert.match(
       SOURCE,
-      /if \(!geoAgentActive \|\| activationGeneration !== geoAgentActivationGeneration\) return null;\s*\n\s*geoAgentControl \?\?= new GeoAgentControl/,
+      /if \(!geoAgentActive \|\| activationGeneration !== geoAgentActivationGeneration\) \{\s*\n\s*return false;\s*\n\s*\}\s*\n[\s\S]*?registerRightPanel\(/,
+    );
+  });
+
+  it("docks in the side panel instead of floating over the map", () => {
+    assert.match(SOURCE, /mountMapControlInPanel\(app, control, container/);
+    assert.doesNotMatch(SOURCE, /addMapControl\(/);
+    assert.doesNotMatch(SOURCE, /setMapControlPosition/);
+  });
+
+  it("builds the control per render, with the engine drawing the map now", () => {
+    // A cached control keeps the engine it was built with; the dock re-renders
+    // on every activation, so building it there follows a renderer swap.
+    assert.match(
+      SOURCE,
+      /render: \(container\) => \{[\s\S]*?new module\.GeoAgentControl\(getGeoAgentOptions\(app\)\)/,
     );
   });
 });
