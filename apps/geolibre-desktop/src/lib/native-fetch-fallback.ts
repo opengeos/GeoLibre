@@ -1,14 +1,15 @@
 /**
  * The desktop app's whole-file fetch tries the native client first (not subject
  * to webview CORS) and falls back to the webview's own `fetch` for what the
- * native client refuses or cannot reach (a loopback host the SSRF guard blocks,
- * a proxy or certificate only the system webview knows). This decides when that
- * fallback is worth making and which of the two errors the caller receives, so
- * a plugin is told what the server actually did (issue #2840).
+ * native client cannot reach (a proxy or certificate only the system webview
+ * knows). This decides when that fallback is worth making and which of the two
+ * errors the caller receives, so a plugin is told what the server actually did
+ * (issue #2840).
  */
 
 import { classifyFetchFailure } from "./fetch-error";
 import { tileErrorStatus } from "./tile-retry";
+import { isBlockedUrlError } from "./vector-url-fetch";
 
 /**
  * Statuses that depend on who asks. A WAF can refuse the native client's
@@ -48,6 +49,9 @@ export function asFetchError(error: unknown): Error {
  * Fetches through the native client, falling back to the webview only when the
  * server never answered the native request.
  *
+ * - The native SSRF guard refused the URL: thrown as is, since the webview is
+ *   not subject to that guard and retrying there would reach the very address
+ *   it blocked (the same rule as `fetchVectorUrlBytes`).
  * - The native client got an HTTP error status: the server has spoken, and
  *   asking again from the webview could only lose that status to CORS. Its
  *   error is thrown without a second request. 401 and 403 are the exception,
@@ -74,26 +78,34 @@ export async function fetchNativeWithWebviewFallback<T>(
   } catch (error) {
     nativeError = error;
   }
+  if (isBlockedUrlError(nativeError)) throw asFetchError(nativeError);
   const nativeStatus = tileErrorStatus(nativeError);
   if (nativeStatus !== null && !CLIENT_DEPENDENT_STATUSES.has(nativeStatus)) {
     throw asFetchError(nativeError);
   }
-  const signal = nativeCouldNotReachHost(nativeError)
-    ? AbortSignal.timeout(UNREACHABLE_WEBVIEW_BUDGET_MS)
+  // A controller and timer rather than `AbortSignal.timeout`, which the Mac
+  // App Store build's oldest webview (macOS 10.15, Safari 13) lacks.
+  const controller = nativeCouldNotReachHost(nativeError) ? new AbortController() : undefined;
+  const timer = controller
+    ? setTimeout(() => controller.abort(), UNREACHABLE_WEBVIEW_BUDGET_MS)
     : undefined;
   try {
-    return await fetchWebview(signal);
+    return await fetchWebview(controller?.signal);
   } catch (webviewError) {
     if (webviewError instanceof Error && WEBVIEW_HTTP_STATUS.test(webviewError.message)) {
       throw webviewError;
     }
     throw asFetchError(nativeError);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
 /**
  * Whether a native failure happened before any response: a timeout, a DNS or
- * connection failure. reqwest's top-level "error sending request" carries no
+ * connection failure. The `kind` comes from `classifyFetchFailure`, whose native
+ * keyword list therefore also decides which failures get the time budget.
+ * reqwest's top-level "error sending request" carries no
  * cause (the backend formats only the outer error), but it is only ever raised
  * before a response arrives, so it counts too.
  *

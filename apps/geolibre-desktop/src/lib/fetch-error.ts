@@ -32,7 +32,10 @@ const BROWSER_NETWORK_MESSAGES = ["failed to fetch", "load failed"];
 // narrowed to a network failure even though it never throws a browser
 // TypeError. Because the URL is removed before matching, a word appearing only
 // in the URL's path or query (e.g. a `/certificate` path or `?timeout=30`
-// param) cannot collide with these keywords.
+// param) cannot collide with these keywords. A failure classified "network"
+// here also caps the plugin fetch's webview retry at a short budget
+// (`nativeCouldNotReachHost` in `native-fetch-fallback.ts`), so a keyword added
+// for better hint wording changes that timing too.
 const NATIVE_NETWORK_KEYWORDS = [
   "certificate",
   "tls",

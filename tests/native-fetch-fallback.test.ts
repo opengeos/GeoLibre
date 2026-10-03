@@ -24,7 +24,10 @@ async function retrySignalFor(nativeError: string): Promise<AbortSignal | undefi
 const NATIVE_404 = "Request failed with status 404 Not Found";
 const NATIVE_TIMEOUT =
   "Request failed: error sending request for url (https://sdi.example.it/wms): operation timed out";
-const NATIVE_SSRF = "Requests to private or loopback addresses are blocked";
+// `SSRF_BLOCKED_MESSAGE` in `src-tauri/src/lib.rs`.
+const NATIVE_SSRF = "Refusing to fetch a link-local, unspecified, or multicast address";
+const NATIVE_TLS =
+  "Request failed: invalid peer certificate: UnknownIssuer (https://gis.example.org/)";
 const WEBVIEW_NETWORK = new TypeError("Failed to fetch");
 
 function counted<T>(outcome: () => Promise<T>) {
@@ -96,11 +99,24 @@ test("a 403 may be the native user agent being refused, so the webview tries", a
   );
 });
 
+test("a URL the native SSRF guard refused is never retried from the webview", async () => {
+  // The webview is not subject to the guard, so a retry would reach the very
+  // address it blocked.
+  const webview = counted(async () => "webview");
+  await assert.rejects(
+    fetchNativeWithWebviewFallback(async () => {
+      throw NATIVE_SSRF;
+    }, webview.run),
+    (error: unknown) => error instanceof Error && error.message === NATIVE_SSRF,
+  );
+  assert.equal(webview.calls(), 0);
+});
+
 test("a native failure without a status still falls back, and success wins", async () => {
-  // A loopback host the SSRF guard refuses is one the webview may reach.
+  // A certificate only the system trust store knows is one the webview may pass.
   const result = await fetchNativeWithWebviewFallback(
     async () => {
-      throw NATIVE_SSRF;
+      throw NATIVE_TLS;
     },
     async () => "webview",
   );
@@ -126,7 +142,7 @@ test("a webview HTTP status beats a native failure that never reached the server
   await assert.rejects(
     fetchNativeWithWebviewFallback(
       async () => {
-        throw NATIVE_SSRF;
+        throw NATIVE_TLS;
       },
       async () => {
         throw webview404;
@@ -156,7 +172,12 @@ test("the webview retry is time-boxed only when the native client never reached 
     const signal = await retrySignalFor(unreachable);
     assert.ok(signal instanceof AbortSignal, unreachable);
   }
-  // A loopback host the SSRF guard refused was never attempted natively, so
-  // the webview gets its full time.
-  assert.equal(await retrySignalFor(NATIVE_SSRF), undefined);
+  // A failure after the host answered is not an unreachable host, so the
+  // webview gets its full time.
+  assert.equal(
+    await retrySignalFor(
+      "Could not read response body: connection closed before message completed",
+    ),
+    undefined,
+  );
 });
