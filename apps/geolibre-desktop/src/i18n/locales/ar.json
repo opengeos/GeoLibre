@@ -3536,6 +3536,8 @@
       "activate": "تفعيل",
       "position": "الموضع",
       "webServices": "خدمات الويب",
+      "installedPlugins": "المثبّتة",
+      "managePlugins": "إدارة الإضافات…",
       "dggs": "DGGS",
       "commandPalette": "لوحة الأوامر",
       "openProjectFromUrl": "فتح مشروع من عنوان URL",

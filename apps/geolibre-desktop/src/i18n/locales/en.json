@@ -3353,6 +3353,8 @@
       "activate": "Activate",
       "position": "Position",
       "webServices": "Web Services",
+      "installedPlugins": "Installed",
+      "managePlugins": "Manage Plugins…",
       "dggs": "DGGS",
       "commandPalette": "Command Palette",
       "openProjectFromUrl": "Open project from URL",

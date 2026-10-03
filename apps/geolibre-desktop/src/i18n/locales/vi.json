@@ -3292,6 +3292,8 @@
       "activate": "Kích hoạt",
       "position": "Vị trí",
       "webServices": "Dịch vụ web",
+      "installedPlugins": "Đã cài đặt",
+      "managePlugins": "Quản lý plugin…",
       "dggs": "DGGS",
       "commandPalette": "Bảng lệnh",
       "openProjectFromUrl": "Mở dự án từ URL",

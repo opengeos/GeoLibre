@@ -3341,6 +3341,8 @@
       "activate": "Etkinleştir",
       "position": "Konum",
       "webServices": "Web Servisleri",
+      "installedPlugins": "Kurulu",
+      "managePlugins": "Eklentileri Yönet…",
       "dggs": "DGGS",
       "commandPalette": "Komut Paleti",
       "openProjectFromUrl": "URL'den proje aç",

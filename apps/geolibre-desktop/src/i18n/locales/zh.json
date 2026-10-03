@@ -3294,6 +3294,8 @@
       "activate": "激活",
       "position": "位置",
       "webServices": "网络服务",
+      "installedPlugins": "已安装",
+      "managePlugins": "管理插件…",
       "dggs": "DGGS",
       "commandPalette": "命令面板",
       "openProjectFromUrl": "从 URL 打开项目",

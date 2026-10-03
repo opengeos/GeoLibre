@@ -3292,6 +3292,8 @@
       "activate": "Aktifkan",
       "position": "Posisi",
       "webServices": "Layanan Web",
+      "installedPlugins": "Terpasang",
+      "managePlugins": "Kelola Plugin…",
       "dggs": "DGGS",
       "commandPalette": "Palet Perintah",
       "openProjectFromUrl": "Buka proyek dari URL",

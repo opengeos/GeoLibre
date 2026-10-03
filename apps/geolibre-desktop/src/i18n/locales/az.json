@@ -3341,6 +3341,8 @@
       "activate": "Aktivləşdir",
       "position": "Mövqe",
       "webServices": "Veb xidmətləri",
+      "installedPlugins": "Quraşdırılanlar",
+      "managePlugins": "Plaginləri idarə et…",
       "dggs": "DGGS",
       "commandPalette": "Əmrlər palitrası",
       "openProjectFromUrl": "Layihəni URL-dən aç",

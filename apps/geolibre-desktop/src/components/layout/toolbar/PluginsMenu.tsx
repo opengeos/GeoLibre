@@ -33,7 +33,8 @@ import {
 import { Puzzle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { usePluginRegistry } from "../../../hooks/usePlugins";
-import { pluginDisplayName } from "../../../lib/plugin-display-name";
+import { isExternalPluginId } from "../../../lib/external-plugins";
+import { pluginDisplayName, sortPluginsByDisplayName } from "../../../lib/plugin-display-name";
 import { type AppApi, PLUGIN_POSITION_ITEMS, type ToolbarChrome } from "./constants";
 
 type PluginRegistry = ReturnType<typeof usePluginRegistry>;
@@ -55,6 +56,11 @@ interface PluginsMenuProps {
   setMapControlPosition: PluginRegistry["setMapControlPosition"];
   /** Plugin ids hidden by the active UI profile (issue #500). */
   hiddenPluginIds: Set<string>;
+  /**
+   * Opens the Manage Plugins dialog from the end of the Installed submenu.
+   * Omitted where the host has no plugin marketplace (the Mac App Store build).
+   */
+  onOpenManagePlugins?: () => void;
 }
 
 /** The Plugins menu: one toggle per registered plugin, with position submenus. */
@@ -67,6 +73,7 @@ export function PluginsMenu({
   getMapControlPosition,
   setMapControlPosition,
   hiddenPluginIds,
+  onOpenManagePlugins,
 }: PluginsMenuProps) {
   const { t, i18n } = useTranslation();
   const primaryRenderer = useAppStore((state) => state.primaryRenderer);
@@ -146,11 +153,11 @@ export function PluginsMenu({
   // The Web Services submenu has grown long, so its entries sort alphabetically
   // by their translated names (in the active locale's collation) rather than
   // following registration order.
-  const webServicePlugins = plugins
-    .filter((p) => WEB_SERVICE_PLUGIN_ID_SET.has(p.id) && !hiddenPluginIds.has(p.id))
-    .map((p) => ({ plugin: p, name: pluginDisplayName(t, p) }))
-    .sort((a, b) => a.name.localeCompare(b.name, i18n.language, { sensitivity: "base" }))
-    .map(({ plugin }) => plugin);
+  const webServicePlugins = sortPluginsByDisplayName(
+    t,
+    plugins.filter((p) => WEB_SERVICE_PLUGIN_ID_SET.has(p.id) && !hiddenPluginIds.has(p.id)),
+    i18n.language,
+  );
   // The web service plugins render as one grouped submenu, placed where the
   // first of them appears in registration order (just above Historical Imagery).
   let webServicesRendered = false;
@@ -169,6 +176,16 @@ export function PluginsMenu({
   );
   const webServicesSupported = webServicePlugins.some(
     (p) => isPluginEngineSupported(p, primaryRenderer) || isActive(p.id),
+  );
+
+  // Externally loaded plugins (registry, zip, manifest URL, bundled drop-in)
+  // live in one alphabetical "Installed" submenu at the bottom of the menu
+  // instead of being appended to the flat list (GeoLibre#2850). It is always a
+  // submenu, even for a single plugin, so entries never jump between levels.
+  const installedPlugins = sortPluginsByDisplayName(
+    t,
+    plugins.filter((p) => isExternalPluginId(p.id) && !hiddenPluginIds.has(p.id)),
+    i18n.language,
   );
 
   return (
@@ -216,6 +233,10 @@ export function PluginsMenu({
           if (hiddenPluginIds.has(p.id)) {
             return null;
           }
+          // Rendered in the Installed submenu below.
+          if (isExternalPluginId(p.id)) {
+            return null;
+          }
           if (DGGS_PLUGIN_ID_SET.has(p.id)) {
             // Same one-shot pattern as the Web Services submenu below: the
             // submenu renders at the first visible DGGS plugin's position and
@@ -255,6 +276,30 @@ export function PluginsMenu({
             </DropdownMenuSub>
           );
         })}
+        {installedPlugins.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            {/* Never disabled: even when no installed plugin runs on the
+                active renderer, the submenu still leads to Manage Plugins. */}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                {t("toolbar.item.installedPlugins")}
+                {installedPlugins.some((plugin) => isActive(plugin.id)) ? " ✓" : ""}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {installedPlugins.map(renderPluginMenuItem)}
+                {onOpenManagePlugins ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onOpenManagePlugins}>
+                      {t("toolbar.item.managePlugins")}
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

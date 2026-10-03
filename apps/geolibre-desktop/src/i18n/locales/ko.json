@@ -3292,6 +3292,8 @@
       "activate": "활성화",
       "position": "위치",
       "webServices": "웹 서비스",
+      "installedPlugins": "설치됨",
+      "managePlugins": "플러그인 관리…",
       "dggs": "DGGS",
       "commandPalette": "명령 팔레트",
       "openProjectFromUrl": "URL에서 프로젝트 열기",

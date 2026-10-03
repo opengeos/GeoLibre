@@ -3341,6 +3341,8 @@
       "activate": "გააქტიურება",
       "position": "პოზიცია",
       "webServices": "ვებ-სერვისები",
+      "installedPlugins": "დაინსტალირებული",
+      "managePlugins": "პლაგინების მართვა…",
       "dggs": "DGGS",
       "commandPalette": "ბრძანებების პალიტრა",
       "openProjectFromUrl": "პროექტის გახსნა URL-იდან",

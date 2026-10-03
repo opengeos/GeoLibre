@@ -28,3 +28,22 @@ export function pluginDisplayName(t: TFunction, plugin: { id: string; name?: str
     defaultValue: fallback,
   });
 }
+
+/**
+ * Sort plugins alphabetically by their display names in the active locale.
+ *
+ * The long Plugins-menu submenus (Web Services, Installed) list their entries
+ * by translated name rather than registration order, so a user scanning for a
+ * plugin finds it where the alphabet says. Comparison uses the locale's
+ * collation, ignoring case and accents. The input array is not mutated.
+ */
+export function sortPluginsByDisplayName<T extends { id: string; name?: string }>(
+  t: TFunction,
+  plugins: readonly T[],
+  locale: string,
+): T[] {
+  return plugins
+    .map((plugin) => ({ plugin, name: pluginDisplayName(t, plugin) }))
+    .sort((a, b) => a.name.localeCompare(b.name, locale, { sensitivity: "base" }))
+    .map(({ plugin }) => plugin);
+}

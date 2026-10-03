@@ -3439,6 +3439,8 @@
       "activate": "Активировать",
       "position": "Положение",
       "webServices": "Веб-сервисы",
+      "installedPlugins": "Установленные",
+      "managePlugins": "Управление плагинами…",
       "dggs": "DGGS",
       "commandPalette": "Палитра команд",
       "openProjectFromUrl": "Открыть проект по URL",

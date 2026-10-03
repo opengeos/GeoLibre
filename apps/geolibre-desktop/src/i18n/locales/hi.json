@@ -3341,6 +3341,8 @@
       "activate": "सक्रिय करें",
       "position": "स्थिति",
       "webServices": "वेब सेवाएं",
+      "installedPlugins": "इंस्टॉल किए गए",
+      "managePlugins": "प्लगइन प्रबंधित करें…",
       "dggs": "DGGS",
       "commandPalette": "कमांड पैलेट",
       "openProjectFromUrl": "URL से प्रोजेक्ट खोलें",

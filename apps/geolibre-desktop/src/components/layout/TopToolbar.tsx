@@ -2512,6 +2512,7 @@ export function TopToolbar({
             getMapControlPosition={getMapControlPosition}
             setMapControlPosition={setMapControlPosition}
             hiddenPluginIds={hiddenPluginIds}
+            onOpenManagePlugins={IS_MAS_BUILD ? undefined : () => setManagePluginsOpen(true)}
           />
         )}
       {/* Top-level toolbar menus registered by built-in plugins via

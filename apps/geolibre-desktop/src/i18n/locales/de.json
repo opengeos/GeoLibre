@@ -3341,6 +3341,8 @@
       "activate": "Aktivieren",
       "position": "Position",
       "webServices": "Webdienste",
+      "installedPlugins": "Installiert",
+      "managePlugins": "Plugins verwalten…",
       "dggs": "DGGS",
       "commandPalette": "Befehlspalette",
       "openProjectFromUrl": "Projekt von URL öffnen",

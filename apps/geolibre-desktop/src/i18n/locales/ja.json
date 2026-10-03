@@ -3292,6 +3292,8 @@
       "activate": "有効化",
       "position": "位置",
       "webServices": "Web サービス",
+      "installedPlugins": "インストール済み",
+      "managePlugins": "プラグインを管理…",
       "dggs": "DGGS",
       "commandPalette": "コマンドパレット",
       "openProjectFromUrl": "URL からプロジェクトを開く",

@@ -1314,6 +1314,8 @@ The registry is JSON, fetched from `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or, by de
 
 Curate the registry and host plugin bundles in the [opengeos/geolibre-plugins](https://github.com/opengeos/geolibre-plugins) repo, which ships a `sample/` template.
 
+Externally loaded plugins (registry installs, zips, manifest URLs, and bundled drop-ins) are listed together in a **Plugins → Installed** submenu at the bottom of the Plugins menu, sorted alphabetically by display name, rather than mixed into the built-in entries. The submenu appears only when at least one external plugin is loaded and ends with a **Manage Plugins…** shortcut. A plugin that also registers its own top-level menu (see [Toolbar menus](#toolbar-menus)) keeps its Installed entry too.
+
 Uninstalling prompts for confirmation, then unregisters the plugin at runtime (deactivating any active map control) so the Plugins menu updates without a reload. When a registry entry advertises a newer `version` than the loaded plugin, the marketplace shows an Update action that re-fetches the manifest URL and re-registers the published version in place; the new version is fetched and validated before the old one is removed, so a failed update leaves the installed plugin intact.
 
 ## Assistant tools

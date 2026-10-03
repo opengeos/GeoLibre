@@ -3341,6 +3341,8 @@
       "activate": "فعال کردن",
       "position": "جایگاه",
       "webServices": "سرویس‌های وب",
+      "installedPlugins": "نصب‌شده",
+      "managePlugins": "مدیریت افزونه‌ها…",
       "dggs": "DGGS",
       "commandPalette": "پالت فرمان",
       "openProjectFromUrl": "باز کردن پروژه از نشانی",

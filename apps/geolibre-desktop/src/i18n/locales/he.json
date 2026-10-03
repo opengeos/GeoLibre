@@ -3390,6 +3390,8 @@
       "activate": "הפעל",
       "position": "מיקום",
       "webServices": "שירותי רשת",
+      "installedPlugins": "מותקנים",
+      "managePlugins": "ניהול תוספים…",
       "dggs": "DGGS",
       "commandPalette": "לוח הפקודות",
       "openProjectFromUrl": "פתיחת פרויקט מכתובת URL",

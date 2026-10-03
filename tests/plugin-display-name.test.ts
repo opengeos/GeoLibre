@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TFunction } from "i18next";
-import { pluginDisplayName } from "../apps/geolibre-desktop/src/lib/plugin-display-name";
+import {
+  pluginDisplayName,
+  sortPluginsByDisplayName,
+} from "../apps/geolibre-desktop/src/lib/plugin-display-name";
 
 /**
  * Stand-in for i18next's `t`: returns the catalog entry for a key, or the
@@ -49,5 +52,43 @@ describe("pluginDisplayName", () => {
     }) as unknown as TFunction;
     pluginDisplayName(t, { id: "maplibre-gl-basemaps", name: "Basemaps" });
     assert.deepEqual(seen, ["toolbar.plugin.maplibre-gl-basemaps"]);
+  });
+});
+
+describe("sortPluginsByDisplayName", () => {
+  it("orders by translated name, ignoring case, without mutating the input", () => {
+    const t = fakeT({ "toolbar.plugin.b": "alpha" });
+    const plugins = [
+      { id: "c", name: "Charlie" },
+      { id: "a", name: "Bravo" },
+      { id: "b", name: "Zulu" },
+    ];
+    const sorted = sortPluginsByDisplayName(t, plugins, "en");
+    assert.deepEqual(
+      sorted.map((p) => p.id),
+      ["b", "a", "c"],
+    );
+    assert.deepEqual(
+      plugins.map((p) => p.id),
+      ["c", "a", "b"],
+    );
+  });
+
+  it("uses the locale's collation", () => {
+    const t = fakeT({});
+    const plugins = [
+      { id: "z", name: "Zebra" },
+      { id: "o", name: "Öl" },
+      { id: "p", name: "Pfad" },
+    ];
+    // German sorts Ö with O; Swedish sorts it after Z.
+    assert.deepEqual(
+      sortPluginsByDisplayName(t, plugins, "de").map((p) => p.id),
+      ["o", "p", "z"],
+    );
+    assert.deepEqual(
+      sortPluginsByDisplayName(t, plugins, "sv").map((p) => p.id),
+      ["p", "z", "o"],
+    );
   });
 });
