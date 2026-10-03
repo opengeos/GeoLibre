@@ -8,10 +8,7 @@ import {
   maplibreBasemapControlPlugin as plugin,
 } from "../packages/plugins/src/plugins/maplibre-basemap-control";
 import { isPluginEngineSupported } from "../packages/plugins/src/types";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreRightPanelRegistration,
-} from "../packages/plugins/src/types";
+import type { GeoLibreAppAPI, GeoLibreRightPanelRegistration } from "../packages/plugins/src/types";
 
 // The docked panel mounts the control's real DOM, so give the plugin a
 // minimal document for the duration of this file.
@@ -19,7 +16,11 @@ const dom = parseHTML("<html><body></body></html>");
 const globals = globalThis as unknown as Record<string, unknown>;
 for (const key of ["document", "window", "HTMLElement", "Event"]) {
   if (globals[key] === undefined) {
-    globals[key] = key === "window" ? dom.window : (dom as unknown as Record<string, unknown>)[key] ?? (dom.window as unknown as Record<string, unknown>)[key];
+    globals[key] =
+      key === "window"
+        ? dom.window
+        : ((dom as unknown as Record<string, unknown>)[key] ??
+          (dom.window as unknown as Record<string, unknown>)[key]);
   }
 }
 // linkedom has no <select> value setter; the panel's filters use one.
