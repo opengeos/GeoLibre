@@ -14,10 +14,7 @@ import {
   NASA_GIBS_WELD_PROVIDER_ID,
   registerTimelapseProvider,
 } from "../packages/plugins/src/plugins/timelapse-providers";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreFloatingPanelRegistration,
-} from "../packages/plugins/src/types";
+import type { GeoLibreAppAPI, GeoLibreRightPanelRegistration } from "../packages/plugins/src/types";
 
 /** A recording fake of the MapLibre surface the plugin touches. */
 function fakeMap() {
@@ -61,12 +58,12 @@ function fakeMap() {
 type FakeMap = ReturnType<typeof fakeMap>;
 
 function fakeApp(map: FakeMap): GeoLibreAppAPI & {
-  registered: GeoLibreFloatingPanelRegistration[];
+  registered: GeoLibreRightPanelRegistration[];
   opened: string[];
   unregistered: number;
   basemapCallbacks: Array<() => void>;
 } {
-  const registered: GeoLibreFloatingPanelRegistration[] = [];
+  const registered: GeoLibreRightPanelRegistration[] = [];
   const opened: string[] = [];
   const basemapCallbacks: Array<() => void> = [];
   const self = {
@@ -75,17 +72,17 @@ function fakeApp(map: FakeMap): GeoLibreAppAPI & {
     unregistered: 0,
     basemapCallbacks,
     getMap: () => map as unknown as MapLibreMap,
-    registerFloatingPanel: (panel: GeoLibreFloatingPanelRegistration) => {
+    registerRightPanel: (panel: GeoLibreRightPanelRegistration) => {
       registered.push(panel);
       return () => {
         self.unregistered += 1;
       };
     },
-    openFloatingPanel: (id: string) => {
+    openRightPanel: (id: string) => {
       opened.push(id);
       return true;
     },
-    closeFloatingPanel: () => {},
+    closeRightPanel: () => {},
     getActiveBasemap: () => "https://tiles.openfreemap.org/styles/liberty",
     onBasemapChange: (callback: () => void) => {
       basemapCallbacks.push(callback);
@@ -160,31 +157,18 @@ describe("maplibreTimelapsePlugin", () => {
     );
   });
 
-  it("registers and opens the floating panel", () => {
+  it("registers and opens the dockable panel", () => {
     const map = fakeMap();
     const app = fakeApp(map);
     plugin.activate(app);
 
     assert.equal(app.registered.length, 1);
     assert.equal(app.registered[0].id, TIMELAPSE_PANEL_ID);
-    assert.ok(app.registered[0].title.length > 0);
+    const title = app.registered[0].title;
+    assert.ok((typeof title === "function" ? title() : title).length > 0);
+    assert.equal(app.registered[0].dock, "replace-style");
     assert.equal(typeof app.registered[0].render, "function");
     assert.deepEqual(app.opened, [TIMELAPSE_PANEL_ID]);
-  });
-
-  it("re-registers the panel when its opening corner changes", () => {
-    const map = fakeMap();
-    const app = fakeApp(map);
-    plugin.activate(app);
-
-    plugin.setMapControlPosition?.(app, "top-right");
-
-    assert.equal(plugin.getMapControlPosition?.(), "top-right");
-    assert.equal(app.registered.length, 2);
-    assert.equal(app.registered[1].position, "top-right");
-    // The stack and store layer are untouched by a reposition.
-    assert.equal(map.layers.size, FRAME_COUNT);
-    assert.ok(storeLayer());
   });
 
   it("switchProvider rebuilds the stack and store layer for the new provider", async () => {

@@ -23,12 +23,7 @@
 
 import { DEFAULT_LAYER_STYLE, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import type {
-  GeoLibreAppAPI,
-  GeoLibreFloatingPanelRegistration,
-  GeoLibreMapControlPosition,
-  GeoLibrePlugin,
-} from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   CANVAS_VIDEO_BITS_PER_SECOND,
   CANVAS_VIDEO_STOP_TIMEOUT_MS,
@@ -178,7 +173,6 @@ let labels: TimelapseLabels = { ...DEFAULT_TIMELAPSE_LABELS };
 export function setTimelapseLabels(next: Partial<TimelapseLabels>): void {
   labels = { ...labels, ...next };
   timelapseControl?.refreshLabels();
-  syncPanelRegistration();
 }
 
 /**
@@ -1325,7 +1319,6 @@ async function saveTimelapseRecording(
 // Plugin
 // ---------------------------------------------------------------------------
 
-let timelapsePosition: GeoLibreMapControlPosition = "top-left";
 let timelapseControl: TimelapseControl | null = null;
 let savedState: TimelapseProjectState | null = null;
 let unsubscribeStore: (() => void) | null = null;
@@ -1336,28 +1329,6 @@ let appRef: GeoLibreAppAPI | null = null;
 // resolving after a deactivate cannot wire up a control the plugin manager
 // already considers gone.
 let activationSession = 0;
-
-/**
- * The floating-panel registration. A single mutable object (the Mapillary
- * pattern): re-registering the same identity updates its title/position
- * without rebuilding an open card's body.
- */
-const floatingPanelRegistration: GeoLibreFloatingPanelRegistration = {
-  id: TIMELAPSE_PANEL_ID,
-  title: DEFAULT_TIMELAPSE_LABELS.title,
-  defaultWidth: 320,
-  position: timelapsePosition,
-  render: (container) => timelapseControl?.renderInto(container),
-};
-
-/** Push the current labels/position into the registration (and the host). */
-function syncPanelRegistration(): void {
-  floatingPanelRegistration.title = labels.title;
-  floatingPanelRegistration.position = timelapsePosition;
-  if (unregisterPanel && appRef) {
-    unregisterPanel = appRef.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
-  }
-}
 
 /** The live control, for tests and e2e hooks. */
 export function getActiveTimelapseControl(): TimelapseControl | null {
@@ -1407,10 +1378,16 @@ function activateWithFrames(
     if (map.isStyleLoaded?.()) rebuild();
     else map.once("style.load", rebuild);
   });
-  floatingPanelRegistration.title = labels.title;
-  floatingPanelRegistration.position = timelapsePosition;
-  unregisterPanel = app.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
-  app.openFloatingPanel?.(TIMELAPSE_PANEL_ID);
+  unregisterPanel =
+    app.registerRightPanel?.({
+      id: TIMELAPSE_PANEL_ID,
+      title: () => labels.title,
+      dock: "replace-style",
+      defaultWidth: 320,
+      deactivatePluginOnClose: true,
+      render: (container) => timelapseControl?.renderInto(container),
+    }) ?? null;
+  app.openRightPanel?.(TIMELAPSE_PANEL_ID);
 }
 
 export const maplibreTimelapsePlugin: GeoLibrePlugin = {
@@ -1454,13 +1431,6 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
       removeTimelapseStoreLayers();
       timelapseControl = null;
     }
-  },
-  // The floating card is freely draggable; the position submenu in the
-  // Plugins menu just picks which corner it opens at.
-  getMapControlPosition: () => timelapsePosition,
-  setMapControlPosition: (_app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    timelapsePosition = position;
-    syncPanelRegistration();
   },
   getProjectState: () => timelapseControl?.getState() ?? savedState ?? undefined,
   applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {

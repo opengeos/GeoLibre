@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { parseHTML } from "linkedom";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   BASEMAP_CONTROL_PLUGIN_ID,
@@ -7,7 +8,45 @@ import {
   maplibreBasemapControlPlugin as plugin,
 } from "../packages/plugins/src/plugins/maplibre-basemap-control";
 import { isPluginEngineSupported } from "../packages/plugins/src/types";
-import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreRightPanelRegistration,
+} from "../packages/plugins/src/types";
+
+// The docked panel mounts the control's real DOM, so give the plugin a
+// minimal document for the duration of this file.
+const dom = parseHTML("<html><body></body></html>");
+const globals = globalThis as unknown as Record<string, unknown>;
+for (const key of ["document", "window", "HTMLElement", "Event"]) {
+  if (globals[key] === undefined) {
+    globals[key] = key === "window" ? dom.window : (dom as unknown as Record<string, unknown>)[key] ?? (dom.window as unknown as Record<string, unknown>)[key];
+  }
+}
+// linkedom has no <select> value setter; the panel's filters use one.
+const selectProto = (dom.window as unknown as { HTMLSelectElement: { prototype: object } })
+  .HTMLSelectElement.prototype;
+Object.defineProperty(selectProto, "value", {
+  configurable: true,
+  get(this: Element) {
+    return this.getAttribute("data-test-value") ?? "";
+  },
+  set(this: Element, value: unknown) {
+    this.setAttribute("data-test-value", String(value));
+  },
+});
+globals.requestAnimationFrame ??= (callback: () => void) => setTimeout(callback, 0);
+globals.MutationObserver ??= class {
+  observe() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+};
+globals.ResizeObserver ??= class {
+  observe() {}
+  disconnect() {}
+  unobserve() {}
+};
 
 /** A raster basemap layer as the control leaves it in the store when stacked. */
 function stackedRasterBasemap(basemapId: string): GeoLibreLayer {
@@ -29,10 +68,30 @@ function stackedRasterBasemap(basemapId: string): GeoLibreLayer {
  * deactivate wiped the stacked basemaps or left them alone.
  */
 function fakeApp(unregistered: string[]): GeoLibreAppAPI {
+  const container = dom.document.createElement("div");
+  const map = {
+    getContainer: () => container,
+    on: () => {},
+    off: () => {},
+    once: () => {},
+  };
+  const panels = new Map<string, GeoLibreRightPanelRegistration>();
+  const cleanups = new Map<string, () => void>();
   return {
-    getMap: () => ({}),
-    addMapControl: () => true,
-    removeMapControl: () => {},
+    getMap: () => map,
+    registerRightPanel: (registration: GeoLibreRightPanelRegistration) => {
+      panels.set(registration.id, registration);
+      return () => panels.delete(registration.id);
+    },
+    openRightPanel: (id: string) => {
+      const cleanup = panels.get(id)?.render(dom.document.createElement("div"));
+      if (typeof cleanup === "function") cleanups.set(id, cleanup);
+      return panels.has(id);
+    },
+    closeRightPanel: (id: string) => {
+      cleanups.get(id)?.();
+      cleanups.delete(id);
+    },
     getActiveBasemap: () => "https://tiles.openfreemap.org/styles/liberty",
     unregisterExternalNativeLayer: (id: string) => {
       unregistered.push(id);
@@ -96,8 +155,10 @@ describe("Mapbox basemap control", () => {
   it("supports Mapbox and restores its native style selection", () => {
     assert.equal(isPluginEngineSupported(plugin, "mapbox"), true);
     const app = fakeApp([]);
-    app.getMapboxMap = () =>
-      ({}) as NonNullable<ReturnType<NonNullable<GeoLibreAppAPI["getMapboxMap"]>>>;
+    const mapboxMap = app.getMap() as unknown as NonNullable<
+      ReturnType<NonNullable<GeoLibreAppAPI["getMapboxMap"]>>
+    >;
+    app.getMapboxMap = () => mapboxMap;
     app.getActiveBasemap = () => "mapbox://styles/mapbox/satellite-v9";
     try {
       plugin.activate(app);

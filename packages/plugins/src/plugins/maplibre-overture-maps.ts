@@ -18,11 +18,16 @@ import {
   type OvertureThemeState,
   type OvertureTheme,
 } from "maplibre-gl-overture-maps";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getControlMap } from "./style-map";
 
-let overturePosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "overture-maps-panel";
 
 const OVERTURE_OPTIONS = {
+  // Not used for layout (the dock owns placement); the control still reads it
+  // when it builds its hidden toggle.
+  position: "top-left",
   collapsed: false,
   title: "Overture Maps",
   panelWidth: 340,
@@ -32,12 +37,13 @@ const OVERTURE_OPTIONS = {
   // source layers) shown, instead of the upstream default that also enables
   // transportation and places.
   visibleThemes: ["buildings"],
-} satisfies Omit<OvertureMapsControlOptions, "position">;
+} satisfies OvertureMapsControlOptions;
 
 /** metadata.sourceKind for store layers that mirror an Overture source layer. */
 const SOURCE_KIND = "overture-maps";
 
 let overtureControl: OvertureMapsControl | null = null;
+let unregisterPanel: (() => void) | null = null;
 // Holds the panel state while the control is detached so re-activating or
 // repositioning it restores the user's release, visibility, and opacity.
 let pendingState: RestorableOvertureState | null = null;
@@ -79,7 +85,6 @@ function createOvertureControl(app: GeoLibreAppAPI): OvertureMapsControl | null 
   const control = new OvertureMapsControl({
     ...OVERTURE_OPTIONS,
     ...engineOptions,
-    position: overturePosition,
     // Route the layer GeoJSON export through the host so it works in desktop
     // webviews (Tauri), where the control's built-in anchor download is a
     // no-op. Falls back to the control's browser download when the host has
@@ -330,6 +335,18 @@ function applyOvertureMapsState(control: OvertureMapsControl, patch: OvertureSta
   return true;
 }
 
+/**
+ * Detach the live control from the store sync and the docked panel, keeping its
+ * state so re-activating restores the user's release, visibility, and opacity.
+ */
+function releaseControl(): void {
+  if (!overtureControl) return;
+  detachStoreSync();
+  pendingState = restorableOvertureState(overtureControl.getState());
+  unmountMapControlFromPanel(overtureControl);
+  overtureControl = null;
+}
+
 export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-overture-maps",
   name: "Overture Maps",
@@ -341,45 +358,45 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
   // `engineOvertureOptions`).
   engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
-    if (!overtureControl) {
-      const control = createOvertureControl(app);
-      if (!control) return false;
-      overtureControl = control;
-      attachStoreSync(overtureControl);
-    }
-    const added = app.addMapControl(overtureControl, overturePosition);
-    if (!added) {
-      detachStoreSync();
-      overtureControl = null;
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
+    // A Mapbox host without the mapbox-gl namespace cannot build the control.
+    if (!engineOvertureOptions(app)) return false;
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: "Overture Maps",
+      dock: "replace-style",
+      defaultWidth: 340,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const control = createOvertureControl(app);
+        if (!control) return;
+        const unmount = mountMapControlInPanel(app, control, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        // The dock owns collapsing: the control's click-outside handler would
+        // otherwise collapse it whenever the map is clicked.
+        control.collapse = () => {};
+        overtureControl = control;
+        attachStoreSync(control);
+        control.expand();
+        return () => {
+          releaseControl();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
       return false;
     }
-    // Open the panel on activation. Deferring past the current click avoids
-    // the menu click that activated the plugin being treated as a
-    // click-outside that immediately re-collapses the panel.
-    setTimeout(() => overtureControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
-    if (!overtureControl) return;
-    detachStoreSync();
-    pendingState = restorableOvertureState(overtureControl.getState());
-    app.removeMapControl(overtureControl);
-    overtureControl = null;
-  },
-  getMapControlPosition: () => overturePosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    overturePosition = position;
-    if (!overtureControl) return;
-    // Snapshot before detaching from the map so a failed re-add still keeps
-    // the latest state, mirroring the ordering used in deactivate.
-    pendingState = restorableOvertureState(overtureControl.getState());
-    app.removeMapControl(overtureControl);
-    const added = app.addMapControl(overtureControl, overturePosition);
-    if (!added) {
-      detachStoreSync();
-      overtureControl = null;
-      return false;
-    }
-    setTimeout(() => overtureControl?.expand(), 0);
+    releaseControl();
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
   },
   getProjectState: () => overtureControl?.getState() ?? pendingState ?? undefined,
   applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {

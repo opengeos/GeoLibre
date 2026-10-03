@@ -546,7 +546,6 @@ describe("Web Services and service browsers on the Mapbox renderer", () => {
     });
     assert.equal(isPluginEngineSupported(maplibreOvertureMapsPlugin, "mapbox"), true);
     assert.notEqual(maplibreOvertureMapsPlugin.activate(app), false);
-    assert.equal(controls.length, 1, "the control is mounted on the Mapbox map");
     // The release list is fetched (and fails here), then the fallback release
     // is applied, which adds the theme sources and layers.
     const deadline = Date.now() + 5000;

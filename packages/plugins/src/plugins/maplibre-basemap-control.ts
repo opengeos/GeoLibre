@@ -13,8 +13,10 @@ import {
   type BasemapControlOptions,
   type ManagedRasterBasemap,
 } from "maplibre-gl-basemap-control";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { installBasemapThumbnails } from "./basemap-thumbnails";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getControlMap } from "./style-map";
 
 const basemapEnv = (
   import.meta as ImportMeta & {
@@ -106,7 +108,8 @@ function getStyleProviderCredentials(): {
   };
 }
 
-let basemapControlPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "basemaps-panel";
+let unregisterPanel: (() => void) | null = null;
 let removeRuntimeEnvListener: (() => void) | null = null;
 
 /**
@@ -167,85 +170,96 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   version: "0.3.0",
   engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
-    if (!basemapControl) {
-      basemapControl = new BasemapControl(getBasemapControlOptions(app));
-      basemapControl.on("basemapchange", (event) => {
-        handleBasemapChange(app, event);
-      });
-      basemapControl.on("basemapremove", (event) => {
-        handleBasemapRemove(app, event);
-      });
-      basemapControl.on("error", (event) => {
-        handleBasemapError(app, event);
-      });
-      addRuntimeEnvListener();
-    }
-
-    const added = app.addMapControl(basemapControl, basemapControlPosition);
-    if (!added) {
-      // Tear the listener down too, or it outlives the nulled control: deactivate
-      // bails on `!basemapControl`, so it would never be cleaned up otherwise.
-      cleanupRuntimeEnvListener();
-      basemapControl = null;
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: "Basemaps",
+      dock: "replace-style",
+      defaultWidth: 340,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        const control = new BasemapControl(getBasemapControlOptions(app));
+        control.on("basemapchange", (event) => {
+          handleBasemapChange(app, event);
+        });
+        control.on("basemapremove", (event) => {
+          handleBasemapRemove(app, event);
+        });
+        control.on("error", (event) => {
+          handleBasemapError(app, event);
+        });
+        const unmount = mountMapControlInPanel(app, control, container, () =>
+          app.closeRightPanel?.(PANEL_ID),
+        );
+        if (!unmount) return;
+        basemapControl = control;
+        addRuntimeEnvListener();
+        // Re-link raster basemap layers restored from a reopened project (or kept
+        // from a previous activation in this session) so that a later switch to a
+        // style basemap or a removal can unregister them (the module state does not
+        // survive a new session).
+        relinkRestoredRasterBasemaps();
+        thumbnails?.dispose();
+        thumbnails = installBasemapThumbnails(control);
+        // Seed the fresh control instance with every basemap already on the map —
+        // the active style basemap plus any stacked rasters we just relinked — so
+        // the reopened panel highlights them as active and a re-click on a stacked
+        // raster removes it. Without the raster ids the new instance only knows the
+        // style basemap and shows restored overlays as inactive. When rasters are
+        // stacked the map is in overlay mode, so restore that too.
+        const activeStyleId = getBasemapIdForStyleUrl(app.getActiveBasemap());
+        const stackedRasterIds = [...registeredRasterLayers.keys()];
+        const activeBasemapIds = [
+          ...new Set(
+            [activeStyleId, ...stackedRasterIds].filter(
+              (id): id is string => typeof id === "string",
+            ),
+          ),
+        ];
+        control.setState({
+          activeBasemapId: activeStyleId,
+          activeBasemapIds,
+          ...(stackedRasterIds.length > 0 ? { allowMultiple: true } : {}),
+        });
+        control.expand();
+        return () => {
+          releaseControl();
+          unmount();
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
       return false;
     }
-    // Re-link raster basemap layers restored from a reopened project (or kept
-    // from a previous activation in this session) so that a later switch to a
-    // style basemap or a removal can unregister them (the module state does not
-    // survive a new session).
-    relinkRestoredRasterBasemaps();
-    thumbnails?.dispose();
-    thumbnails = installBasemapThumbnails(basemapControl);
-    // Seed the fresh control instance with every basemap already on the map —
-    // the active style basemap plus any stacked rasters we just relinked — so
-    // the reopened panel highlights them as active and a re-click on a stacked
-    // raster removes it. Without the raster ids the new instance only knows the
-    // style basemap and shows restored overlays as inactive. When rasters are
-    // stacked the map is in overlay mode, so restore that too.
-    const activeStyleId = getBasemapIdForStyleUrl(app.getActiveBasemap());
-    const stackedRasterIds = [...registeredRasterLayers.keys()];
-    const activeBasemapIds = [
-      ...new Set(
-        [activeStyleId, ...stackedRasterIds].filter((id): id is string => typeof id === "string"),
-      ),
-    ];
-    basemapControl.setState({
-      activeBasemapId: activeStyleId,
-      activeBasemapIds,
-      ...(stackedRasterIds.length > 0 ? { allowMultiple: true } : {}),
-    });
-    setTimeout(() => basemapControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
-    if (!basemapControl) return;
-    cleanupRuntimeEnvListener();
-    // Closing the control must not throw away the stacked raster basemaps the
-    // user assembled — they are real layers in the Layers panel. Keep them in
-    // the store and only drop the module-level link tracking; a later
-    // reactivation relinks them from the store via relinkRestoredRasterBasemaps
-    // (the same path a reopened project takes). See #1113 follow-up.
-    registeredRasterLayers.clear();
-    thumbnails?.dispose();
-    thumbnails = null;
-    app.removeMapControl(basemapControl);
-    basemapControl = null;
-    // Drop any pending style-failure fallback so a later reactivation cannot
-    // act on it against a fresh control instance.
-    styleChangeFallback = null;
-  },
-  getMapControlPosition: () => basemapControlPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    basemapControlPosition = position;
-    if (!basemapControl) return;
-    app.removeMapControl(basemapControl);
-    const added = app.addMapControl(basemapControl, basemapControlPosition);
-    if (!added) return false;
-    basemapControl.setState({
-      activeBasemapId: getBasemapIdForStyleUrl(app.getActiveBasemap()),
-    });
-    setTimeout(() => basemapControl?.expand(), 0);
+    releaseControl();
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
   },
 };
+
+/** Detach the live control from the docked panel and drop its module state. */
+function releaseControl(): void {
+  if (!basemapControl) return;
+  cleanupRuntimeEnvListener();
+  // Closing the control must not throw away the stacked raster basemaps the
+  // user assembled — they are real layers in the Layers panel. Keep them in
+  // the store and only drop the module-level link tracking; a later
+  // reactivation relinks them from the store via relinkRestoredRasterBasemaps
+  // (the same path a reopened project takes). See #1113 follow-up.
+  registeredRasterLayers.clear();
+  thumbnails?.dispose();
+  thumbnails = null;
+  unmountMapControlFromPanel(basemapControl);
+  basemapControl = null;
+  // Drop any pending style-failure fallback so a later reactivation cannot
+  // act on it against a fresh control instance.
+  styleChangeFallback = null;
+}
 
 function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
   return {
@@ -266,7 +280,9 @@ function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
         }
       : {}),
     collapsed: false,
-    position: basemapControlPosition,
+    // Not used for layout (the dock owns placement); the control still reads it
+    // when it builds its hidden toggle.
+    position: "top-left",
     title: "Basemaps",
     // Provider basemaps that need a key (the Google/TomTom/HERE traffic overlays
     // and the Amazon Location styles) authenticate with the user's own
