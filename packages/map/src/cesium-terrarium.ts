@@ -9,20 +9,22 @@ import type {
 type CesiumNs = typeof import("@cesium/engine");
 type TileReader = (z: number, x: number, y: number) => Promise<Uint8ClampedArray>;
 const GRID = 65;
-const SIZE = 256;
 
 /** Decode shared edge samples from the adjacent tiles as well as the interior. */
 export function terrariumHeightmap(
   tiles: readonly Uint8ClampedArray[],
   clampSouth = false,
+  tileSize = 256,
 ): Float32Array {
   const heights = new Float32Array(GRID * GRID);
+  const step = tileSize / (GRID - 1);
   for (let row = 0; row < GRID; row++) {
     for (let col = 0; col < GRID; col++) {
-      const x = col * 4;
-      const y = clampSouth && row === GRID - 1 ? SIZE - 1 : row * 4;
-      const tile = tiles[(y === SIZE ? 2 : 0) + (x === SIZE ? 1 : 0)];
-      const offset = ((y % SIZE) * SIZE + (x % SIZE)) * 4;
+      const x = Math.min(Math.round(col * step), tileSize);
+      const y =
+        clampSouth && row === GRID - 1 ? tileSize - 1 : Math.min(Math.round(row * step), tileSize);
+      const tile = tiles[(y === tileSize ? 2 : 0) + (x === tileSize ? 1 : 0)];
+      const offset = ((y % tileSize) * tileSize + (x % tileSize)) * 4;
       heights[row * GRID + col] = tile[offset + 3]
         ? tile[offset] * 256 + tile[offset + 1] + tile[offset + 2] / 256 - 32768
         : 0;
@@ -39,6 +41,8 @@ export class TerrariumTerrainProvider {
   readonly availability: TileAvailability;
   readonly hasWaterMask = false;
   readonly hasVertexNormals = false;
+  readonly tileSize: number;
+  private readonly urlTemplate: string;
   private readonly levelZeroError: number;
   private readonly cache = new Map<string, Promise<Uint8ClampedArray>>();
   private readonly abort = new AbortController();
@@ -48,14 +52,27 @@ export class TerrariumTerrainProvider {
     private readonly Cesium: CesiumNs,
     private readonly readTile?: TileReader,
     private readonly maxLevel = 15,
+    private readonly provider: "mapterhorn" | "aws-terrarium" = "mapterhorn",
   ) {
     this.tilingScheme = new Cesium.WebMercatorTilingScheme();
     this.errorEvent = new Cesium.Event();
-    this.credit = new Cesium.Credit(
-      readTile
-        ? "Elevation from user-provided Cloud Optimized GeoTIFF"
-        : '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md">Mapzen terrain tiles</a>',
-    );
+    if (readTile) {
+      this.tileSize = 256;
+      this.urlTemplate = "";
+      this.credit = new Cesium.Credit("Elevation from user-provided Cloud Optimized GeoTIFF");
+    } else if (provider === "aws-terrarium") {
+      this.tileSize = 256;
+      this.urlTemplate = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${key}.png";
+      this.credit = new Cesium.Credit(
+        'Elevation tiles by <a href="https://registry.opendata.aws/terrain-tiles/">AWS Open Data Terrain Tiles</a>',
+      );
+    } else {
+      this.tileSize = 512;
+      this.urlTemplate = "https://tiles.mapterhorn.com/${key}.webp";
+      this.credit = new Cesium.Credit(
+        '<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>',
+      );
+    }
     this.availability = new Cesium.TileAvailability(this.tilingScheme, maxLevel);
     for (let level = 0; level <= maxLevel; level++) {
       const end = 2 ** level - 1;
@@ -103,7 +120,7 @@ export class TerrariumTerrainProvider {
       .then((tiles) => {
         this.abort.signal.throwIfAborted();
         return new this.Cesium.HeightmapTerrainData({
-          buffer: terrariumHeightmap(tiles, y === n - 1),
+          buffer: terrariumHeightmap(tiles, y === n - 1, this.tileSize),
           width: GRID,
           height: GRID,
           childTileMask: level < this.maxLevel ? 15 : 0,
@@ -130,19 +147,17 @@ export class TerrariumTerrainProvider {
   }
 
   private async fetchTile(key: string): Promise<Uint8ClampedArray> {
-    const response = await fetch(
-      `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${key}.png`,
-      { signal: this.abort.signal },
-    );
+    const url = this.urlTemplate.replace("${key}", key);
+    const response = await fetch(url, { signal: this.abort.signal });
     if (!response.ok) throw new Error(`Terrain tile ${key}: HTTP ${response.status}`);
     const bitmap = await createImageBitmap(await response.blob());
     try {
       const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = SIZE;
+      canvas.width = canvas.height = this.tileSize;
       const context = canvas.getContext("2d", { willReadFrequently: true });
       if (!context) throw new Error("Could not decode terrain tile");
-      context.drawImage(bitmap, 0, 0, SIZE, SIZE);
-      return context.getImageData(0, 0, SIZE, SIZE).data;
+      context.drawImage(bitmap, 0, 0, this.tileSize, this.tileSize);
+      return context.getImageData(0, 0, this.tileSize, this.tileSize).data;
     } finally {
       bitmap.close();
     }

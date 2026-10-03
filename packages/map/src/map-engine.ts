@@ -215,6 +215,10 @@ export interface MapEngine {
   getTerrainCogSource(): string | null;
   hasCustomTerrainSource(): boolean;
   setTerrainCogSource(source: string | Blob | null, band?: number): Promise<boolean>;
+  /** Keyless global terrain provider ("mapterhorn" | "aws-terrarium"). */
+  getTerrainProvider?(): import("@geolibre/core").GlobalTerrainProvider;
+  /** Select the keyless global terrain provider. */
+  setTerrainProvider?(provider: import("@geolibre/core").GlobalTerrainProvider): boolean;
   /** Translated tooltip for the on-map terrain control. */
   setTerrainLabel(label: string): void;
 

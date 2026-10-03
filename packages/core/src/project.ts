@@ -28,6 +28,7 @@ import {
   type MapGridLayout,
   type MapRendererKind,
   type MapScaleUnit,
+  type GlobalTerrainProvider,
   type MapViewState,
   MAX_PROCESSING_HISTORY,
   type ModelGraphEdge,
@@ -1364,6 +1365,9 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         (map as Partial<ProjectPreferences["map"]>).terrainEnabled,
         DEFAULT_PROJECT_PREFERENCES.map.terrainEnabled,
       ),
+      terrainProvider: normalizeTerrainProvider(
+        (map as Partial<ProjectPreferences["map"]>).terrainProvider,
+      ),
       // Kept as a free string here; the app coerces an unknown notation to
       // decimal degrees when it renders, so a hand-edited project cannot break
       // the readout.
@@ -1461,6 +1465,10 @@ function clampCoordinate(value: number, min: number, max: number): number {
 
 function normalizeBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+export function normalizeTerrainProvider(value: unknown): GlobalTerrainProvider {
+  return value === "aws-terrarium" ? "aws-terrarium" : "mapterhorn";
 }
 
 const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;

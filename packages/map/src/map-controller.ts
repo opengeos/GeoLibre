@@ -15,6 +15,7 @@ import {
 } from "@geolibre/core";
 import type {
   GeoLibreLayer,
+  GlobalTerrainProvider,
   LayerStyle,
   MapPreferences,
   MapProjection,
@@ -170,7 +171,15 @@ function storyPaintOpacity(
   return opacity * Math.min(1, Math.max(0, generatorOpacity));
 }
 const TERRAIN_SOURCE_ID = "geolibre-terrain-dem";
-const DEFAULT_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
+export const MAPTERHORN_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
+  type: "raster-dem",
+  tiles: ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"],
+  tileSize: 512,
+  maxzoom: 16,
+  encoding: "terrarium",
+  attribution: '<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>',
+};
+export const AWS_TERRARIUM_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   type: "raster-dem",
   tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
   tileSize: 256,
@@ -179,6 +188,13 @@ const DEFAULT_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   attribution:
     'Elevation tiles by <a href="https://registry.opendata.aws/terrain-tiles/">AWS Open Data Terrain Tiles</a>',
 };
+const DEFAULT_TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = MAPTERHORN_TERRAIN_SOURCE;
+
+export function defaultTerrainSource(
+  provider: GlobalTerrainProvider,
+): maplibregl.RasterDEMSourceSpecification {
+  return provider === "aws-terrarium" ? AWS_TERRARIUM_TERRAIN_SOURCE : MAPTERHORN_TERRAIN_SOURCE;
+}
 /**
  * Window event dispatched when the terrain control is double-clicked, so the
  * React layer can open the vertical-exaggeration dialog. The controller lives
@@ -404,6 +420,7 @@ export class MapController implements MapEngine {
   private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: TerrainControl | null = null;
+  private terrainProviderKind: GlobalTerrainProvider = "mapterhorn";
   private terrainSource: maplibregl.RasterDEMSourceSpecification = DEFAULT_TERRAIN_SOURCE;
   private cogDemRegistration: CogDemSourceRegistration | null = null;
   private cogDemUrl: string | null = null;
@@ -501,6 +518,10 @@ export class MapController implements MapEngine {
     const maxZoom = Math.max(minZoom, clampNumber(mapPreferences.maxZoom, 0, 24));
     const maxPitch = clampNumber(mapPreferences.maxPitch, 0, DEFAULT_MAX_PITCH);
     this.mapPreferences = mapPreferences;
+    if (mapPreferences.terrainProvider) {
+      this.terrainProviderKind = mapPreferences.terrainProvider;
+      this.terrainSource = defaultTerrainSource(mapPreferences.terrainProvider);
+    }
     this.basemapStyleUrl = options.styleUrl ?? DEFAULT_BASEMAP;
     // A Mapbox descriptor has to be fetched and rewritten before MapLibre will
     // take it (see applyStyleToMap), which the Map constructor cannot wait for.
@@ -1150,6 +1171,9 @@ export class MapController implements MapEngine {
   applyMapPreferences(preferences: MapPreferences): void {
     if (!this.map) return;
     this.mapPreferences = preferences;
+    if (preferences.terrainProvider && preferences.terrainProvider !== this.terrainProviderKind) {
+      this.setTerrainProvider(preferences.terrainProvider);
+    }
 
     const requestedMinZoom = clampNumber(preferences.minZoom, 0, 24);
     const minZoom = effectiveMinZoomForPreferences(preferences, this.map, requestedMinZoom);
@@ -2568,6 +2592,37 @@ export class MapController implements MapEngine {
     return this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID;
   }
 
+  /** The current keyless global terrain provider ("mapterhorn" | "aws-terrarium"). */
+  getTerrainProvider(): GlobalTerrainProvider {
+    return this.terrainProviderKind;
+  }
+
+  /**
+   * Switch the global keyless terrain provider. When no custom COG DEM is active,
+   * this immediately updates the terrain source and re-enables terrain if active.
+   */
+  setTerrainProvider(provider: GlobalTerrainProvider): boolean {
+    if (this.terrainProviderKind === provider) return false;
+    this.terrainProviderKind = provider;
+    if (this.hasCustomTerrainSource()) {
+      return true;
+    }
+    this.terrainSource = defaultTerrainSource(provider);
+    if (!this.map || !this.isStyleReady()) return true;
+
+    const wasEnabled = this.isTerrainEnabled();
+    if (wasEnabled) {
+      if (this.terrainControl) this.terrainControl.setEnabled(false);
+      else this.map.setTerrain(null);
+    }
+    if (this.map.getSource(TERRAIN_SOURCE_ID)) this.map.removeSource(TERRAIN_SOURCE_ID);
+    this.addTerrainSource();
+    if (wasEnabled && !this.setTerrainEnabled(true) && this.terrainControl) {
+      this.terrainEnablePending = true;
+    }
+    return true;
+  }
+
   /** The custom HTTP COG DEM URL, or null for a local file / built-in terrain. */
   getTerrainCogSource(): string | null {
     return this.cogDemUrl;
@@ -2629,7 +2684,7 @@ export class MapController implements MapEngine {
           ...(registration.bounds ? { bounds: registration.bounds } : {}),
           attribution: "Elevation from user-provided Cloud Optimized GeoTIFF",
         }
-      : DEFAULT_TERRAIN_SOURCE;
+      : defaultTerrainSource(this.terrainProviderKind);
     previous?.dispose();
 
     if (this.map && this.isStyleReady()) this.addTerrainSource();

@@ -47,3 +47,33 @@ it("shares edge tile reads, bounds availability, and disposes pending requests",
   await assert.rejects(pending, { name: "AbortError" });
   assert.equal(provider.requestTileGeometry(0, 0, 0), undefined);
 });
+
+function tile512(height: number) {
+  const data = new Uint8ClampedArray(512 * 512 * 4);
+  const value = height + 32768;
+  for (let i = 0; i < data.length; i += 4)
+    data.set(
+      [Math.floor(value / 256), Math.floor(value % 256), Math.round((value % 1) * 256), 255],
+      i,
+    );
+  return data;
+}
+
+it("decodes 512px Mapterhorn tiles correctly", () => {
+  const tiles = [tile512(456.5), tile512(500), tile512(600), tile512(700)];
+  const result = terrariumHeightmap(tiles, false, 512);
+  assert.equal(result[0], 456.5);
+  assert.equal(result[64], 500);
+  assert.equal(result[64 * 65], 600);
+  assert.equal(result[65 * 65 - 1], 700);
+});
+
+it("configures Mapterhorn by default and AWS Terrarium when requested", () => {
+  const mapterhornProvider = new TerrariumTerrainProvider(Cesium);
+  assert.equal(mapterhornProvider.tileSize, 512);
+  assert.ok(mapterhornProvider.credit.html.includes("Mapterhorn"));
+
+  const awsProvider = new TerrariumTerrainProvider(Cesium, undefined, 15, "aws-terrarium");
+  assert.equal(awsProvider.tileSize, 256);
+  assert.ok(awsProvider.credit.html.includes("AWS Open Data"));
+});

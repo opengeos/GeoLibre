@@ -304,6 +304,32 @@ describe("project parsing", () => {
     }
   });
 
+  it("round-trips terrainProvider and defaults legacy or invalid values to mapterhorn", () => {
+    const base = createEmptyProject("TerrainProvider");
+    assert.equal(base.preferences.map.terrainProvider, "mapterhorn");
+
+    const aws = {
+      ...base,
+      preferences: {
+        ...base.preferences,
+        map: { ...base.preferences.map, terrainProvider: "aws-terrarium" as const },
+      },
+    };
+    assert.equal(
+      parseProject(serializeProject(aws)).preferences.map.terrainProvider,
+      "aws-terrarium",
+    );
+
+    const invalid = structuredClone(base) as unknown as {
+      preferences: { map: Record<string, unknown> };
+    };
+    invalid.preferences.map.terrainProvider = "unknown-dem";
+    assert.equal(
+      parseProject(JSON.stringify(invalid)).preferences.map.terrainProvider,
+      "mapterhorn",
+    );
+  });
+
   it("round-trips the scale unit preference and defaults unknown values to metric", () => {
     const base = createEmptyProject("Scale");
     assert.equal(base.preferences.map.scaleUnit, "metric");

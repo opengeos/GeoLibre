@@ -15,7 +15,7 @@ These are the standard MapLibre controls that sit in the map corners:
 | **Fullscreen** | Expand the map to fill the screen. |
 | **Geolocate** | Center the map on your current location. |
 | **Globe** | Switch between the flat map and a 3D globe projection. |
-| **Terrain** | Toggle terrain (3D elevation) rendering. Double-click the control to set the vertical exaggeration. |
+| **Terrain** | Toggle terrain (3D elevation) rendering. Double-click the control to set the vertical exaggeration, choose the global terrain provider (Mapterhorn or AWS Terrarium), or supply a custom COG DEM. |
 | **Scale** | Show a scale bar, in the units set by [Scale bar units](settings.md#map-preferences). |
 | **Elevation** | Report the ground elevation under the pointer in the status bar. Off by default — see [Elevation readout](interface.md#elevation-readout). |
 | **Attribution** | Show data attributions. |

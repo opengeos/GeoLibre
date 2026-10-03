@@ -2,6 +2,7 @@ import { SEARCH_HIGHLIGHT_COLOR } from "./map-engine";
 import {
   useAppStore,
   type GeoLibreLayer,
+  type GlobalTerrainProvider,
   type MapPreferences,
   type MapProjection,
   type MapViewState,
@@ -350,6 +351,7 @@ export class CesiumEngine implements MapEngine {
 
   private readonly worldTerrainAvailable: boolean;
   private terrainEnabled = false;
+  private terrainProviderKind: GlobalTerrainProvider = "mapterhorn";
   private terrainRequest = 0;
   private terrainExaggeration = 1;
   private terrainProvider: TerrariumTerrainProvider | null = null;
@@ -641,6 +643,9 @@ export class CesiumEngine implements MapEngine {
     if (!viewer) return;
 
     this.applyProjection(preferences.projection);
+    if (preferences.terrainProvider && preferences.terrainProvider !== this.terrainProviderKind) {
+      this.setTerrainProvider(preferences.terrainProvider);
+    }
 
     // MapLibre's min/max zoom become camera distance limits, which is the
     // closest Cesium analogue. The latitude the conversion needs is the camera's
@@ -1288,6 +1293,7 @@ export class CesiumEngine implements MapEngine {
               this.Cesium,
               this.cogTerrain?.renderTile,
               this.cogTerrain ? 22 : 15,
+              this.terrainProviderKind,
             ))
           : await this.Cesium.createWorldTerrainAsync();
       const viewer = this.live();
@@ -1315,6 +1321,23 @@ export class CesiumEngine implements MapEngine {
 
   getTerrainCogSource(): string | null {
     return this.cogTerrainUrl;
+  }
+
+  getTerrainProvider(): GlobalTerrainProvider {
+    return this.terrainProviderKind;
+  }
+
+  setTerrainProvider(provider: GlobalTerrainProvider): boolean {
+    if (this.terrainProviderKind === provider) return false;
+    this.terrainProviderKind = provider;
+    if (this.hasCustomTerrainSource()) return true;
+    const previous = this.terrainProvider;
+    this.terrainProvider = null;
+    previous?.destroy();
+    if (this.terrainEnabled) {
+      void this.enableWorldTerrain();
+    }
+    return true;
   }
 
   hasCustomTerrainSource(): boolean {

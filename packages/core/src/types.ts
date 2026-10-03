@@ -1601,6 +1601,13 @@ export type MapProjection = "globe" | "mercator";
  */
 export type MapScaleUnit = "metric" | "imperial" | "nautical";
 
+/**
+ * Keyless global terrain provider when no custom COG DEM is configured.
+ * `"mapterhorn"` is modern high-resolution Copernicus DEM tiles in 512px WebP format;
+ * `"aws-terrarium"` is the legacy AWS Open Data terrain service in 256px PNG format.
+ */
+export type GlobalTerrainProvider = "mapterhorn" | "aws-terrarium";
+
 export interface MapPreferences {
   restrictBounds: boolean;
   bounds: [number, number, number, number];
@@ -1630,6 +1637,12 @@ export interface MapPreferences {
   showPointerElevation: boolean;
   /** Whether the built-in 3D terrain control and terrain surface are enabled. */
   terrainEnabled: boolean;
+  /**
+   * Global keyless terrain provider for 2D/3D renderers when no custom COG DEM
+   * is selected: `"mapterhorn"` (default, high-resolution Copernicus DEM 512px WebP)
+   * or `"aws-terrarium"` (legacy 256px Mapzen/AWS Open Data).
+   */
+  terrainProvider?: GlobalTerrainProvider;
   /** Mapbox-only style. New projects use Streets; absent follows the shared basemap. */
   mapboxStyleUrl?: string;
   /**
@@ -1732,6 +1745,7 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     // elevation service, which should be an explicit choice.
     showPointerElevation: false,
     terrainEnabled: false,
+    terrainProvider: "mapterhorn",
     coordinateFormat: "dd",
     zoomToNewLayers: true,
     mapboxStyleUrl: "mapbox://styles/mapbox/standard",

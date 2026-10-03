@@ -2574,7 +2574,27 @@ describe("COG DEM terrain source", () => {
     assert.equal(registration.disposed, true);
     assert.equal(controller.hasCustomTerrainSource(), false);
     assert.equal(controller.getTerrainCogSource(), null);
+    assert.ok(internal.terrainSource.tiles?.[0].includes("mapterhorn.com"));
+    controller.destroy();
+  });
+
+  it("switches terrain provider between mapterhorn and aws-terrarium", () => {
+    const { controller } = terrainController();
+    const internal = controller as unknown as TerrainInternals;
+
+    assert.equal(controller.getTerrainProvider(), "mapterhorn");
+    assert.ok(internal.terrainSource.tiles?.[0].includes("mapterhorn.com"));
+
+    assert.equal(controller.setTerrainProvider("aws-terrarium"), true);
+    assert.equal(controller.getTerrainProvider(), "aws-terrarium");
     assert.ok(internal.terrainSource.tiles?.[0].includes("elevation-tiles-prod"));
+
+    // Setting same provider returns false
+    assert.equal(controller.setTerrainProvider("aws-terrarium"), false);
+
+    assert.equal(controller.setTerrainProvider("mapterhorn"), true);
+    assert.equal(controller.getTerrainProvider(), "mapterhorn");
+    assert.ok(internal.terrainSource.tiles?.[0].includes("mapterhorn.com"));
     controller.destroy();
   });
 

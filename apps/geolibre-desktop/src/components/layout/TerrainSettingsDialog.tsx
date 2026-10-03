@@ -1,4 +1,4 @@
-import { useAppStore, useLayersWhen } from "@geolibre/core";
+import { useAppStore, useLayersWhen, type GlobalTerrainProvider } from "@geolibre/core";
 import {
   CogDemError,
   DEFAULT_TERRAIN_EXAGGERATION,
@@ -62,6 +62,7 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
   // quietly; the exaggeration slider above still applies.
   const { terrainSource: terrainSourceSupported } = useMapCapabilities(mapControllerRef);
   const [open, setOpen] = useState(false);
+  const terrainProvider = useAppStore((s) => s.preferences.map.terrainProvider ?? "mapterhorn");
   const [exaggeration, setExaggeration] = useState(DEFAULT_EXAGGERATION);
   const [terrainUrl, setTerrainUrl] = useState("");
   const [rasterLayerId, setRasterLayerId] = useState("");
@@ -280,6 +281,31 @@ export function TerrainSettingsDialog({ mapControllerRef }: TerrainSettingsDialo
             )}
             {terrainSourceSupported && (
               <>
+                <div className="space-y-1">
+                  <Label htmlFor="terrain-provider">{t("terrainSettings.providerLabel")}</Label>
+                  <Select
+                    id="terrain-provider"
+                    value={terrainProvider}
+                    disabled={!!sourceLoading || !mapControllerRef.current}
+                    onChange={(event) => {
+                      const nextProvider = event.target.value as GlobalTerrainProvider;
+                      const store = useAppStore.getState();
+                      store.setPreferences({
+                        ...store.preferences,
+                        map: { ...store.preferences.map, terrainProvider: nextProvider },
+                      });
+                      mapControllerRef.current?.setTerrainProvider?.(nextProvider);
+                    }}
+                  >
+                    <option value="mapterhorn">{t("terrainSettings.providerMapterhorn")}</option>
+                    <option value="aws-terrarium">
+                      {t("terrainSettings.providerAwsTerrarium")}
+                    </option>
+                  </Select>
+                  <p className="text-muted-foreground text-xs">
+                    {t("terrainSettings.providerDescription")}
+                  </p>
+                </div>
                 <Label htmlFor="terrain-cog-url">{t("terrainSettings.sourceLabel")}</Label>
                 <p className="text-muted-foreground text-sm">
                   {t("terrainSettings.sourceDescription")}
