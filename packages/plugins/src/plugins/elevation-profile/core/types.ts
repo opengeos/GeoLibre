@@ -39,6 +39,13 @@ export type ExportTextFile = (
 export interface ElevationProfileControlOptions {
   /** Optional native renderer for profile geometry and terrain sampling. */
   nativeMap?: NativeProfileMap;
+  /**
+   * Hand the panel to a host dock instead of floating it over the map: the
+   * panel is built but never appended to the map container (read it with
+   * `getPanel()`), the toolbar button is hidden, and the floating header,
+   * click-outside collapse and anchoring are skipped. @default false
+   */
+  docked?: boolean;
   /** Start collapsed (toggle button only). @default true */
   collapsed?: boolean;
   /** Title shown in the panel header. @default 'Elevation Profile' */

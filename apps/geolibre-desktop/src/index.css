@@ -4596,6 +4596,35 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   direction: ltr;
 }
 
+/* Docked in the side panel: the dock opens and closes it, so the toolbar
+   button is hidden and the panel fills the dock's width instead of floating.
+   The chart keeps a fixed height rather than stretching down a tall dock. */
+.maplibregl-ctrl-group.elevation-profile--docked {
+  display: none;
+}
+
+.elevation-profile-panel.elevation-profile-panel--docked {
+  position: static;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  min-height: 0;
+  resize: none;
+  overflow: visible;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 12px;
+  z-index: auto;
+}
+
+.elevation-profile-panel--docked .elevation-profile-chart {
+  flex: 0 0 auto;
+  height: 220px;
+}
+
 .elevation-profile-header {
   display: flex;
   align-items: center;
