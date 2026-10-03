@@ -863,6 +863,14 @@ function scopeAppToPlugin(
         ? () => {}
         : registerContributionWithOwner(contribution, pluginId, pluginName);
   }
+  if (app.unregisterMenuContribution) {
+    // Scoped too, so a plugin can only remove contributions it owns.
+    const unregisterContribution = app.unregisterMenuContribution as (
+      id: string,
+      ownerPluginId: string,
+    ) => void;
+    scoped.unregisterMenuContribution = (id) => unregisterContribution(id, pluginId);
+  }
 
   if (registerRightPanel) {
     scoped.registerRightPanel = (panel) =>

@@ -114,9 +114,18 @@ export function registerMenuContribution(
   };
 }
 
-/** Remove a previously registered menu contribution. */
-export function unregisterMenuContribution(id: string): void {
-  if (!registry.delete(id)) return;
+/**
+ * Remove a previously registered menu contribution.
+ *
+ * `ownerPluginId` is injected by the host when a plugin calls this through its
+ * scoped app API: the contribution is then removed only if that plugin owns it,
+ * so one plugin cannot take another plugin's menu items away.
+ */
+export function unregisterMenuContribution(id: string, ownerPluginId?: string): void {
+  const entry = registry.get(id);
+  if (!entry) return;
+  if (ownerPluginId !== undefined && entry.ownerPluginId !== ownerPluginId) return;
+  registry.delete(id);
   emit();
 }
 

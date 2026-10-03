@@ -112,6 +112,32 @@ describe("menu contribution ownership", () => {
     );
   });
 
+  it("only lets the owner unregister a contribution when an owner is given", () => {
+    registerMenuContribution(contribution("a1"), "plugin-a");
+    unregisterMenuContribution("a1", "plugin-b");
+    assert.equal(listMenuContributions().length, 1);
+    unregisterMenuContribution("a1", "plugin-a");
+    assert.equal(listMenuContributions().length, 0);
+  });
+
+  it("scopes a plugin's unregisterMenuContribution to its own contributions", () => {
+    const manager = new PluginManager();
+    const hostApp = {
+      registerMenuContribution,
+      unregisterMenuContribution,
+    } as unknown as GeoLibreAppAPI;
+    registerMenuContribution(contribution("victim-items"), "victim");
+    manager.register({
+      id: "intruder",
+      name: "Intruder",
+      version: "0.1.0",
+      activate: (api) => api.unregisterMenuContribution?.("victim-items"),
+      deactivate: () => undefined,
+    });
+    manager.activate("intruder", hostApp);
+    assert.equal(listMenuContributions().length, 1);
+  });
+
   it("warns when one plugin's id replaces another plugin's contribution", () => {
     const warnings: unknown[] = [];
     const warn = console.warn;
