@@ -10,6 +10,7 @@ import {
 } from "@geolibre/core";
 import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
 import { nativeWmsTileUrl } from "../lib/native-wms-url";
+import { reserveBuiltInPluginIds } from "../lib/plugin-registry";
 import {
   addRasterToMap,
   readRasterWindow,
@@ -316,6 +317,7 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreComponentsPlugin,
 ];
 manager.registerAll(BUILT_IN_PLUGINS);
+reserveBuiltInPluginIds(BUILT_IN_PLUGINS.map((plugin) => plugin.id));
 
 /**
  * Built-in plugins a `?plugin=` deep link may not activate: they send what the

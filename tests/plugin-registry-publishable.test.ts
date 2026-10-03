@@ -5,7 +5,10 @@ import {
   redactProjectCredentials,
   setRegistryPublishableSettings,
 } from "@geolibre/core";
-import { fetchPluginRegistry } from "../apps/geolibre-desktop/src/lib/plugin-registry";
+import {
+  fetchPluginRegistry,
+  reserveBuiltInPluginIds,
+} from "../apps/geolibre-desktop/src/lib/plugin-registry";
 
 const realFetch = globalThis.fetch;
 
@@ -56,5 +59,23 @@ describe("registry publishableSettings", () => {
     };
     const { project: out } = redactProjectCredentials(project);
     assert.deepEqual(out.plugins!.settings.ext, { search: "idrografia" });
+  });
+
+  it("ignores a declaration for a built-in plugin id", async () => {
+    reserveBuiltInPluginIds(["builtin-x"]);
+    try {
+      stubRegistry([entry("builtin-x", { publishableSettings: true })]);
+      await fetchPluginRegistry("https://example.com/registry.json");
+      const project = createEmptyProject("Built-in");
+      project.plugins = {
+        manifestUrls: [],
+        activePluginIds: [],
+        settings: { "builtin-x": { a: 1 } },
+      };
+      const { project: out } = redactProjectCredentials(project);
+      assert.equal(out.plugins!.settings["builtin-x"], undefined);
+    } finally {
+      reserveBuiltInPluginIds([]);
+    }
   });
 });

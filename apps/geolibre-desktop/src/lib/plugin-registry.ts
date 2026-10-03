@@ -155,11 +155,26 @@ async function readBodyWithCap(response: Response, maxBytes: number): Promise<st
   return new TextDecoder().decode(merged);
 }
 
+// Ids of the plugins that ship with the app. A registry entry may not declare
+// publishable settings for them, because the static allowlist in core is the
+// reviewed source of truth for first-party plugin state.
+let builtInPluginIds: ReadonlySet<string> = new Set();
+
+/**
+ * Record the ids of the built-in plugins so registry entries cannot declare
+ * publishable settings for them.
+ *
+ * @param ids Ids of every plugin that ships with the app.
+ */
+export function reserveBuiltInPluginIds(ids: Iterable<string>): void {
+  builtInPluginIds = new Set(ids);
+}
+
 /** Hand the registry-declared publishable settings to the credential redaction. */
 function publishRegistrySettings(entries: PluginRegistryEntry[]): void {
   setRegistryPublishableSettings(
     entries
-      .filter((entry) => entry.publishableSettings !== undefined)
+      .filter((entry) => entry.publishableSettings !== undefined && !builtInPluginIds.has(entry.id))
       .map((entry) => [entry.id, entry.publishableSettings ?? null] as const),
   );
 }

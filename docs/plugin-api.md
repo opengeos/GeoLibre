@@ -1231,7 +1231,9 @@ Plugin project settings are treated as sensitive at the project egress
 boundary. GeoLibre keeps them in a trusted local save only when the user
 explicitly chooses to retain credentials, and removes the entire
 `plugins.settings` object from shares, standalone HTML exports, embed
-snapshots, and collaboration snapshots. Store portable, non-secret identifiers
+snapshots, and collaboration snapshots. The exception is state a plugin's
+registry entry declares publishable (see `publishableSettings` under "Plugin
+marketplace"), which is kept and still scrubbed for credentials. Store portable, non-secret identifiers
 such as broker references in layer source or metadata instead when recipients
 need them.
 
