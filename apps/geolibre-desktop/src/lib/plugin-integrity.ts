@@ -46,21 +46,38 @@ export async function computePluginBundleHash(bundle: PluginBundleForHashing): P
     .join("");
 }
 
-function readPins(): Record<string, string> {
+interface PinRecord {
+  hash: string;
+  /** Manifest version at the time of pinning; absent on pins written before versions were recorded. */
+  version?: string;
+}
+
+function readPins(): Record<string, PinRecord> {
+  const pins: Record<string, PinRecord> = {};
   try {
     const raw = localStorage.getItem(PIN_STORAGE_KEY);
-    if (!raw) return {};
+    if (!raw) return pins;
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, string>;
+      for (const [url, value] of Object.entries(parsed as Record<string, unknown>)) {
+        // Legacy pins are a bare hash string.
+        if (typeof value === "string") {
+          pins[url] = { hash: value };
+        } else if (value && typeof value === "object") {
+          const { hash, version } = value as Partial<PinRecord>;
+          if (typeof hash === "string") {
+            pins[url] = typeof version === "string" ? { hash, version } : { hash };
+          }
+        }
+      }
     }
   } catch {
     // Malformed or unavailable storage: treat as no pins.
   }
-  return {};
+  return pins;
 }
 
-function writePins(pins: Record<string, string>): void {
+function writePins(pins: Record<string, PinRecord>): void {
   try {
     localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pins));
   } catch {
@@ -70,7 +87,12 @@ function writePins(pins: Record<string, string>): void {
 
 /** The trusted hash pinned for a URL, or null if it has never been pinned. */
 export function getPluginBundlePin(url: string): string | null {
-  return readPins()[url] ?? null;
+  return readPins()[url]?.hash ?? null;
+}
+
+/** The manifest version recorded with a URL's pin, or null when none was recorded. */
+export function getPluginBundlePinVersion(url: string): string | null {
+  return readPins()[url]?.version ?? null;
 }
 
 /**
@@ -79,10 +101,12 @@ export function getPluginBundlePin(url: string): string | null {
  *
  * @param url - The plugin manifest URL.
  * @param hash - The bundle hash to trust from now on.
+ * @param version - The manifest version of the pinned bundle, kept so a later
+ *   registry release can be offered as an update instead of a failure.
  */
-export function pinPluginBundle(url: string, hash: string): void {
+export function pinPluginBundle(url: string, hash: string, version?: string): void {
   const pins = readPins();
-  pins[url] = hash;
+  pins[url] = version === undefined ? { hash } : { hash, version };
   writePins(pins);
 }
 
@@ -105,7 +129,13 @@ export type PluginBundleIntegrity =
   /** Hash matches the pin; allowed. */
   | { status: "unchanged" }
   /** Hash differs from the pin; blocked until the user reloads it. */
-  | { status: "changed"; pinnedHash: string; currentHash: string };
+  | {
+      status: "changed";
+      pinnedHash: string;
+      currentHash: string;
+      /** Version recorded with the pin, or null for a legacy pin. */
+      pinnedVersion: string | null;
+    };
 
 /**
  * Verify a freshly-fetched URL bundle against its pinned hash.
@@ -117,20 +147,32 @@ export type PluginBundleIntegrity =
  *
  * @param url - The plugin manifest URL that produced the bundle.
  * @param bundle - The fetched entry/style sources.
+ * @param version - The bundle's manifest version, recorded with the pin.
  * @returns The integrity verdict.
  */
 export async function verifyPluginBundleIntegrity(
   url: string,
   bundle: PluginBundleForHashing,
+  version?: string,
 ): Promise<PluginBundleIntegrity> {
   const currentHash = await computePluginBundleHash(bundle);
-  const pinnedHash = getPluginBundlePin(url);
-  if (pinnedHash === null) {
-    pinPluginBundle(url, currentHash);
+  const pin = readPins()[url];
+  if (!pin) {
+    pinPluginBundle(url, currentHash, version);
     return { status: "pinned-first-use" };
   }
-  if (pinnedHash === currentHash) {
+  if (pin.hash === currentHash) {
+    // Backfill the version on a legacy pin so a later release can be offered
+    // as an update.
+    if (pin.version === undefined && version !== undefined) {
+      pinPluginBundle(url, currentHash, version);
+    }
     return { status: "unchanged" };
   }
-  return { status: "changed", pinnedHash, currentHash };
+  return {
+    status: "changed",
+    pinnedHash: pin.hash,
+    currentHash,
+    pinnedVersion: pin.version ?? null,
+  };
 }

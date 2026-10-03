@@ -139,6 +139,30 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     );
   });
 
+  it("reports a held-back release and loads it through the update action", async () => {
+    // Pinned at 0.9.0 with a different hash; the URL now serves 1.0.0.
+    integrity.pinPluginBundle(MANIFEST_URL, "0".repeat(64), "0.9.0");
+
+    const blocked = await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    assert.deepEqual(blocked.loadedPluginIds, []);
+    assert.deepEqual(blocked.issues[0].heldBack, {
+      pluginId: "pin-demo",
+      pinnedVersion: "0.9.0",
+      version: "1.0.0",
+    });
+
+    const plugin = await externalPlugins.reloadExternalUrlPlugin(manager, MANIFEST_URL, app);
+    assert.equal(plugin.id, "pin-demo");
+    assert.equal(manager.list().length, 1);
+    assert.equal(integrity.getPluginBundlePinVersion(MANIFEST_URL), "1.0.0");
+
+    // The next launch matches the new pin and loads without a block.
+    externalPlugins.unloadRemovedUrlPlugins(manager, [MANIFEST_URL], app);
+    manager = new PluginManagerCtor();
+    const next = await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    assert.deepEqual(next.issues, []);
+  });
+
   it("still clears the pin and unregisters when the plugin did load", async () => {
     const loaded = await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
     assert.deepEqual(loaded.loadedPluginIds, ["pin-demo"]);

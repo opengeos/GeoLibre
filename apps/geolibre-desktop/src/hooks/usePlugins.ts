@@ -160,6 +160,7 @@ import {
   uninstallWebPlugin,
   unloadFilesystemPlugin,
   unloadRemovedUrlPlugins,
+  type HeldBackPluginBundle,
   type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
@@ -513,6 +514,7 @@ let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
 let externalPluginsLoadKey: string | null = null;
 let externalPluginLoadIssues = new Map<string, string>();
+let externalPluginHeldBack = new Map<string, HeldBackPluginBundle>();
 const externalPluginsListeners = new Set<() => void>();
 const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
 
@@ -522,6 +524,11 @@ export function getPluginManager(): PluginManager {
 
 export function getExternalPluginLoadIssues(): ReadonlyMap<string, string> {
   return externalPluginLoadIssues;
+}
+
+/** Bundles the SHA-256 pin held back, by manifest URL (see HeldBackPluginBundle). */
+export function getExternalPluginHeldBack(): ReadonlyMap<string, HeldBackPluginBundle> {
+  return externalPluginHeldBack;
 }
 
 export function subscribeToExternalPluginLoads(listener: () => void): () => void {
@@ -539,6 +546,14 @@ export async function upgradeExternalPlugin(
   mapControllerRef: RefObject<MapEngine | null>,
 ): Promise<void> {
   await reloadExternalUrlPlugin(manager, manifestUrl, createAppAPI(mapControllerRef));
+  // A held-back bundle that just loaded is no longer a failure.
+  if (externalPluginHeldBack.has(manifestUrl) || externalPluginLoadIssues.has(manifestUrl)) {
+    externalPluginHeldBack = new Map(externalPluginHeldBack);
+    externalPluginHeldBack.delete(manifestUrl);
+    externalPluginLoadIssues = new Map(externalPluginLoadIssues);
+    externalPluginLoadIssues.delete(manifestUrl);
+    notifyExternalPluginsListeners();
+  }
 }
 
 // Install a plugin from a local `.zip` archive (desktop only). The Rust backend
@@ -871,6 +886,7 @@ function ensureExternalPluginsLoadedWithSettings(
   }
 
   externalPluginLoadIssues = new Map();
+  externalPluginHeldBack = new Map();
   notifyExternalPluginsListeners();
   setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
@@ -902,6 +918,11 @@ function ensureExternalPluginsLoadedWithSettings(
     .then((result) => {
       externalPluginLoadIssues = new Map(
         result.issues.map((issue) => [issue.sourceUrl ?? issue.archiveName, issue.message]),
+      );
+      externalPluginHeldBack = new Map(
+        result.issues.flatMap((issue) =>
+          issue.heldBack && issue.sourceUrl ? [[issue.sourceUrl, issue.heldBack] as const] : [],
+        ),
       );
       notifyExternalPluginsListeners();
       if (result.loadedPluginIds.length) {

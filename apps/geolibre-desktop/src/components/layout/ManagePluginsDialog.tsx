@@ -37,6 +37,7 @@ import {
 import { Trans, useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import {
+  getExternalPluginHeldBack,
   getExternalPluginLoadIssues,
   getPluginManager,
   installPluginArchive,
@@ -201,6 +202,12 @@ export function ManagePluginsDialog({
     getExternalPluginLoadIssues,
   );
 
+  const heldBack = useSyncExternalStore(
+    subscribeToExternalPluginLoads,
+    getExternalPluginHeldBack,
+    getExternalPluginHeldBack,
+  );
+
   const installedSet = useMemo(
     () => new Set(desktopSettings.pluginManifestUrls.map((url) => url.trim())),
     [desktopSettings.pluginManifestUrls],
@@ -215,8 +222,26 @@ export function ManagePluginsDialog({
   // An update is available only when the registry version is strictly newer
   // than the loaded one (directional, not any mismatch). isNewerVersion orders
   // a pre-release below its release, so an rc user is offered the GA build.
+  // A bundle the SHA-256 pin held back is also an update when the registry
+  // announces exactly the version now served and it is newer than the pinned one
+  // (a pin written before versions were recorded has none to compare, so the
+  // match with the registry stands in). Any other change stays a failure.
+  const isHeldBackUpdate = useCallback(
+    (entry: PluginRegistryEntry) => {
+      const held = heldBack.get(entry.manifestUrl);
+      return (
+        isInstalled(entry) &&
+        held !== undefined &&
+        held.pluginId === entry.id &&
+        held.version === entry.version &&
+        (held.pinnedVersion === null || isNewerVersion(entry.version, held.pinnedVersion))
+      );
+    },
+    [heldBack, isInstalled],
+  );
   const isUpgradeable = useCallback(
     (entry: PluginRegistryEntry) => {
+      if (isHeldBackUpdate(entry)) return true;
       const loaded = loadedVersions.get(entry.id);
       const ownsLoadedPlugin = pluginManifestUrlsForIds([entry.id]).includes(entry.manifestUrl);
       return (
@@ -226,7 +251,7 @@ export function ManagePluginsDialog({
         isNewerVersion(entry.version, loaded)
       );
     },
-    [isInstalled, loadedVersions],
+    [isHeldBackUpdate, isInstalled, loadedVersions],
   );
 
   // True when the entry is in settings (so the badge reads "Installed") but the
@@ -588,7 +613,11 @@ export function ManagePluginsDialog({
                     const compatible = satisfiesMinVersion(APP_VERSION, entry.minGeoLibreVersion);
                     const updateAvailable = isUpgradeable(entry);
                     const loadPending = isLoadPending(entry);
-                    const loadIssue = externalLoadIssues.get(entry.manifestUrl);
+                    const heldBackUpdate = isHeldBackUpdate(entry);
+                    // A release the registry announces is an update, not a failure.
+                    const loadIssue = heldBackUpdate
+                      ? undefined
+                      : externalLoadIssues.get(entry.manifestUrl);
                     // One resolution per card: the visible title and every
                     // accessible label must announce the same string, or a
                     // screen reader reads the plugin's English name over a
@@ -727,7 +756,7 @@ export function ManagePluginsDialog({
                                   <AlertTriangle className="h-3.5 w-3.5" />
                                   {t("managePlugins.failed")}
                                 </span>
-                              ) : loadPending ? (
+                              ) : heldBackUpdate ? null : loadPending ? (
                                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   {t("managePlugins.loading")}
