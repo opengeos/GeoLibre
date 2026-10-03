@@ -361,11 +361,17 @@ export function DesktopShell({
   // plugins declared their project state publishable, so a save made before the
   // Manage Plugins dialog is ever opened still keeps that state. A failed fetch
   // only leaves the conservative default of dropping external plugin state.
+  const canInstallPlugins = useAppStore((state) =>
+    state.deploymentCapabilities.has("plugins:install"),
+  );
   useEffect(() => {
+    // Same gate as the marketplace: a deployment that disables plugin
+    // installation has no registry plugins, so there is nothing to declare.
+    if (!canInstallPlugins) return;
     const controller = new AbortController();
     fetchPluginRegistry(undefined, controller.signal).catch(() => {});
     return () => controller.abort();
-  }, []);
+  }, [canInstallPlugins]);
   usePluginStateRestore({
     mapControllerRef,
     enforceViewerPlugins,

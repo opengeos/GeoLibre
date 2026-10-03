@@ -342,7 +342,9 @@ function countLeafValues(value: unknown): number {
  * Settings keys that registry-listed external plugins declared publishable,
  * keyed by plugin id. `null` keeps the whole blob. Populated at runtime by the
  * host from the curated plugin registry, never from the project file itself,
- * so a project cannot vouch for its own state.
+ * so a project cannot vouch for its own state. The Python mirror in
+ * `python/src/geolibre/project.py` only knows the static built-in list, so a
+ * project redacted there still drops these plugins' state.
  */
 const registryPublishableSettings = new Map<string, readonly string[] | null>();
 
