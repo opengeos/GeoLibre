@@ -187,16 +187,14 @@ for (const theme of ["light", "dark"] as const) {
     async function run() {
       await openMapboxProject(page, info.project.use.baseURL!, theme);
 
-      // Plugins → Overture Maps → Activate mounts the control on the Mapbox
-      // map, in the same corner it uses on MapLibre, with its panel open.
+      // Plugins → Overture Maps docks the control's panel in the right side
+      // panel (it has no Activate/Position submenu since #2814).
       await page.getByRole("button", { name: "Plugins", exact: true }).click();
       const item = page.getByRole("menuitem", { name: "Overture Maps", exact: true });
       await expect(item).toBeEnabled();
-      await item.hover();
-      await page.getByRole("menuitem", { name: "Activate", exact: true }).click();
-      await expect(page.locator(".mapboxgl-ctrl-top-left .overture-control")).toBeVisible();
-      const panel = page.locator(".overture-control-panel");
-      await expect(panel).toHaveClass(/expanded/);
+      await item.click();
+      const panel = page.locator(".geolibre-docked-map-control .overture-control-panel");
+      await expect(panel).toBeVisible();
 
       // The buildings theme is added as a plain https archive URL (no
       // `pmtiles://` prefix) that mapbox-gl reads through its own provider.
@@ -215,8 +213,6 @@ for (const theme of ["light", "dark"] as const) {
 
       // Clicking a rendered building opens the inspection popup, which is a
       // mapbox-gl popup built through the control's `createPopup` option.
-      await panel.locator(".overture-control-close, .overture-control-toggle").first().click();
-      await expect(panel).not.toHaveClass(/expanded/);
       const point = await renderedBuildingPoint(page);
       expect(point, "a rendered building under bare canvas").not.toBeNull();
       await page.mouse.click(point!.x, point!.y);
@@ -238,13 +234,15 @@ for (const theme of ["light", "dark"] as const) {
       // The plugin declares both 2D engines, so the manager re-activates it on
       // each swap and the control switches between the protocol URL MapLibre
       // needs and the plain archive URL Mapbox reads.
+      // A restore re-activates the plugin with its docked panel collapsed to
+      // the rail (#952), so the map state and Layers rows are what to check.
       await switchRenderer(page, "MapLibre");
-      await expect(page.locator(".maplibregl-ctrl-top-left .overture-control")).toBeVisible();
+      await expect(layerRow(page, "Overture Building")).toBeVisible();
       await expect
         .poll(async () => (await overtureMapState(page)).sourceUrl)
         .toMatch(/^pmtiles:\/\/https:\/\//);
       await switchRenderer(page, "Mapbox");
-      await expect(page.locator(".mapboxgl-ctrl-top-left .overture-control")).toBeVisible();
+      await expect(layerRow(page, "Overture Building")).toBeVisible();
       await expect
         .poll(async () => (await overtureMapState(page)).sourceUrl)
         .toMatch(/^https:\/\/.+\/buildings\.pmtiles$/);

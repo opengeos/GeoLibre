@@ -826,7 +826,15 @@ function scopeAppToPlugin(
                     try {
                       panel.onExplicitClose?.();
                     } finally {
-                      if (deactivatePlugin) setTimeout(() => deactivatePlugin(pluginId), 0);
+                      // A plugin's own deactivate() closes its panel too, and a
+                      // renderer swap re-activates it before this timer fires.
+                      // That deactivation's scope has gone stale by then, so
+                      // only a close of the live activation deactivates.
+                      if (deactivatePlugin)
+                        setTimeout(() => {
+                          if (canAddControl?.() === false) return;
+                          deactivatePlugin(pluginId);
+                        }, 0);
                     }
                   },
                 }

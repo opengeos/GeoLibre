@@ -65,12 +65,20 @@ export function mountMapControlInPanel(
   container.replaceChildren(...contentElements);
 
   let removed = false;
-  const cleanup = () => {
+  const cleanup = (event?: unknown) => {
     if (removed) return;
     removed = true;
     if (mountedControlCleanup.get(control) === cleanup) mountedControlCleanup.delete(control);
     map.off("remove", cleanup);
-    control.onRemove(map as MapLibreMap);
+    try {
+      control.onRemove(map as MapLibreMap);
+    } catch (error) {
+      // A "remove" event fires after the engine has torn the map down (a
+      // renderer swap), so a control that touches the canvas in onRemove
+      // throws. That must not abort the map's own destroy; a panel close
+      // keeps the map alive, so there a throw is a real bug and propagates.
+      if (!event) throw error;
+    }
     container.replaceChildren();
     container.classList.remove("geolibre-docked-map-control");
   };
