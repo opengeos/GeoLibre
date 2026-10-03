@@ -1358,6 +1358,7 @@ function activateWithFrames(
   frames: TimelapseFrame[],
 ): boolean | void {
   if (frames.length === 0) return false;
+  if (!app.registerRightPanel || !app.openRightPanel) return false;
   appRef = app;
   const control = new TimelapseControl({
     map: getStyleMap(app),
@@ -1378,16 +1379,19 @@ function activateWithFrames(
     if (map.isStyleLoaded?.()) rebuild();
     else map.once("style.load", rebuild);
   });
-  unregisterPanel =
-    app.registerRightPanel?.({
-      id: TIMELAPSE_PANEL_ID,
-      title: () => labels.title,
-      dock: "replace-style",
-      defaultWidth: 320,
-      deactivatePluginOnClose: true,
-      render: (container) => timelapseControl?.renderInto(container),
-    }) ?? null;
-  app.openRightPanel?.(TIMELAPSE_PANEL_ID);
+  unregisterPanel = app.registerRightPanel({
+    id: TIMELAPSE_PANEL_ID,
+    title: () => labels.title,
+    dock: "replace-style",
+    defaultWidth: 320,
+    deactivatePluginOnClose: true,
+    render: (container) => timelapseControl?.renderInto(container),
+  });
+  if (!app.openRightPanel(TIMELAPSE_PANEL_ID)) {
+    // No panel means no UI to control or close the plugin: undo the setup.
+    maplibreTimelapsePlugin.deactivate?.(app);
+    return false;
+  }
 }
 
 export const maplibreTimelapsePlugin: GeoLibrePlugin = {
