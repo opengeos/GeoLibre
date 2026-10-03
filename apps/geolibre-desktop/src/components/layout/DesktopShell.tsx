@@ -9,7 +9,15 @@ import {
   openRasterLayerPanel,
   subscribeGeometryEdit,
 } from "@geolibre/plugins";
-import { Suspense, useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createPortal } from "react-dom";
 import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
 import { COMMENTS_PANEL_ID, useRegisterCommentsPanel } from "../../hooks/useRegisterCommentsPanel";
@@ -141,6 +149,7 @@ import { useMapFullscreenAttribute } from "../../hooks/desktop-shell/useMapFulls
 import { useNativeProjectOpenListener } from "../../hooks/desktop-shell/useNativeProjectOpenListener";
 import { usePanelResize } from "../../hooks/desktop-shell/usePanelResize";
 import { usePluginStateRestore } from "../../hooks/desktop-shell/usePluginStateRestore";
+import { fetchPluginRegistry } from "../../lib/plugin-registry";
 import { usePluginDeepLink } from "../../hooks/desktop-shell/usePluginDeepLink";
 import { useRasterFileHandlers } from "../../hooks/desktop-shell/useRasterFileHandlers";
 import { useRasterSubsetLayer } from "../../hooks/desktop-shell/useRasterSubsetLayer";
@@ -348,6 +357,15 @@ export function DesktopShell({
     });
   useTileProtocols();
   useRasterFileHandlers(mapControllerRef, t);
+  // Fetching the registry also tells the credential redaction which external
+  // plugins declared their project state publishable, so a save made before the
+  // Manage Plugins dialog is ever opened still keeps that state. A failed fetch
+  // only leaves the conservative default of dropping external plugin state.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchPluginRegistry(undefined, controller.signal).catch(() => {});
+    return () => controller.abort();
+  }, []);
   usePluginStateRestore({
     mapControllerRef,
     enforceViewerPlugins,

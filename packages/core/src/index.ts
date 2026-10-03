@@ -227,6 +227,7 @@ export {
   redactCredentials,
   redactProjectCredentials,
   redactUrlCredentials,
+  setRegistryPublishableSettings,
   type CredentialRedactionResult,
 } from "./credentials";
 export { excludeHiddenFieldsFromGeojson, excludeHiddenFieldsFromProject } from "./visibility";

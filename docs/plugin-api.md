@@ -1260,13 +1260,16 @@ The registry is JSON, fetched from `VITE_GEOLIBRE_PLUGIN_REGISTRY_URL` or, by de
       "homepage": "https://github.com/example/example-plugin",
       "manifestUrl": "https://example.com/example-plugin/plugin.json",
       "categories": ["Example"],
-      "minGeoLibreVersion": "1.0.0"
+      "minGeoLibreVersion": "1.0.0",
+      "publishableSettings": ["search"]
     }
   ]
 }
 ```
 
-`id`, `name`, `version`, and `manifestUrl` are required; the rest are optional. A relative `manifestUrl` is resolved against the registry location, so a plugin hosted alongside the registry (e.g. `sample/plugin.json`) can be listed with a relative path. `minGeoLibreVersion` gates installation against the running app version. Curate the registry and host plugin bundles in the [opengeos/geolibre-plugins](https://github.com/opengeos/geolibre-plugins) repo, which ships a `sample/` template.
+`id`, `name`, `version`, and `manifestUrl` are required; the rest are optional. A relative `manifestUrl` is resolved against the registry location, so a plugin hosted alongside the registry (e.g. `sample/plugin.json`) can be listed with a relative path. `minGeoLibreVersion` gates installation against the running app version. `publishableSettings` is optional and lets a plugin's project state (`getProjectState()`) survive "Strip credentials" and shared or exported projects. By default an external plugin's whole state is dropped there and counted as credential-bearing, because it can hold anything. List the top-level state keys that are safe to publish (`["search", "filters"]`), or use `true` to keep the whole state. The declaration is reviewed with the registry entry and is never read from a project file. What is kept is still scrubbed for credential-named fields and credentialed URLs, and a registry entry cannot widen a built-in plugin's list. Keep secrets out of those keys; use `app.credentials` for them.
+
+Curate the registry and host plugin bundles in the [opengeos/geolibre-plugins](https://github.com/opengeos/geolibre-plugins) repo, which ships a `sample/` template.
 
 Uninstalling prompts for confirmation, then unregisters the plugin at runtime (deactivating any active map control) so the Plugins menu updates without a reload. When a registry entry advertises a newer `version` than the loaded plugin, the marketplace shows an Update action that re-fetches the manifest URL and re-registers the published version in place; the new version is fetched and validated before the old one is removed, so a failed update leaves the installed plugin intact.
 

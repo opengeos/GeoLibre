@@ -339,6 +339,47 @@ function countLeafValues(value: unknown): number {
 }
 
 /**
+ * Settings keys that registry-listed external plugins declared publishable,
+ * keyed by plugin id. `null` keeps the whole blob. Populated at runtime by the
+ * host from the curated plugin registry, never from the project file itself,
+ * so a project cannot vouch for its own state.
+ */
+const registryPublishableSettings = new Map<string, readonly string[] | null>();
+
+/**
+ * Replace the registry-declared publishable plugin settings.
+ *
+ * Built-in ids in {@link PUBLISHABLE_PLUGIN_SETTINGS} always win, so a registry
+ * entry cannot widen a first-party plugin's allowlist.
+ *
+ * @param entries Plugin ids mapped to the settings keys to keep, or `null` to
+ *   keep the whole blob. Ids that declare nothing should be omitted.
+ */
+export function setRegistryPublishableSettings(
+  entries: Iterable<readonly [string, readonly string[] | null]>,
+): void {
+  registryPublishableSettings.clear();
+  for (const [id, keys] of entries) {
+    if (Object.prototype.hasOwnProperty.call(PUBLISHABLE_PLUGIN_SETTINGS, id)) continue;
+    registryPublishableSettings.set(id, keys);
+  }
+}
+
+/**
+ * Look up the publishable settings for a plugin id.
+ *
+ * @param id Plugin id.
+ * @returns `undefined` when nothing is publishable, `null` to keep the whole
+ *   blob, otherwise the list of keys to keep.
+ */
+function publishableSettingsFor(id: string): readonly string[] | null | undefined {
+  if (Object.prototype.hasOwnProperty.call(PUBLISHABLE_PLUGIN_SETTINGS, id)) {
+    return PUBLISHABLE_PLUGIN_SETTINGS[id];
+  }
+  return registryPublishableSettings.get(id);
+}
+
+/**
  * Return a detached project safe for any external egress.
  *
  * Environment variables and geocoder keys are always removed. Layer
@@ -350,7 +391,9 @@ function countLeafValues(value: unknown): number {
  * and carries no credentials, and dropping it stripped the legend, colorbar,
  * and swipe from the exported map. Manifest URLs, activation, and control
  * positions stay intact so recipients can still load and configure the plugin
- * themselves.
+ * themselves. A registry-listed external plugin can opt in through the
+ * `publishableSettings` field of its registry entry (see
+ * {@link setRegistryPublishableSettings}); what it keeps is still swept below.
  */
 export function redactProjectCredentials(project: GeoLibreProject): CredentialRedactionResult {
   const accumulator: RedactionAccumulator = {
@@ -492,9 +535,7 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
     const kept: Record<string, unknown> = {};
     const dropped: Record<string, unknown> = {};
     for (const [id, value] of Object.entries(settings)) {
-      const allowed = Object.prototype.hasOwnProperty.call(PUBLISHABLE_PLUGIN_SETTINGS, id)
-        ? PUBLISHABLE_PLUGIN_SETTINGS[id]
-        : undefined;
+      const allowed = publishableSettingsFor(id);
       if (allowed === undefined) {
         dropped[id] = value;
         continue;

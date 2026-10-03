@@ -6,6 +6,7 @@ import {
   redactCredentials,
   redactProjectCredentials,
   serializeProject,
+  setRegistryPublishableSettings,
 } from "@geolibre/core";
 
 function credentialProject() {
@@ -420,5 +421,64 @@ describe("project credential redaction", () => {
     const result = redactProjectCredentials(project);
     assert.ok(!serializeProject(result.project).includes("too-deep-secret"));
     assert.ok(result.redactedPaths.includes(`layers[0].source${".child".repeat(12)}`));
+  });
+});
+
+describe("registry-declared publishable plugin settings", () => {
+  function withState(state: Record<string, unknown>) {
+    const project = createEmptyProject("External plugin state");
+    project.plugins = {
+      manifestUrls: [],
+      activePluginIds: ["ext-plugin"],
+      settings: { "ext-plugin": state },
+    };
+    return project;
+  }
+
+  it("drops an undeclared external plugin's state", () => {
+    setRegistryPublishableSettings([]);
+    const { project, redactedPaths } = redactProjectCredentials(withState({ search: "rivers" }));
+    assert.ok(redactedPaths.includes("plugins.settings"));
+    assert.equal(project.plugins!.settings["ext-plugin"], undefined);
+  });
+
+  it("keeps the declared keys and drops the rest", () => {
+    setRegistryPublishableSettings([["ext-plugin", ["search"]]]);
+    try {
+      const { project } = redactProjectCredentials(withState({ search: "rivers", token: "x" }));
+      assert.deepEqual(project.plugins!.settings["ext-plugin"], { search: "rivers" });
+    } finally {
+      setRegistryPublishableSettings([]);
+    }
+  });
+
+  it("keeps the whole blob when declared null, still sweeping credentials", () => {
+    setRegistryPublishableSettings([["ext-plugin", null]]);
+    try {
+      const { project, redactedPaths } = redactProjectCredentials(
+        withState({ search: "rivers", apiKey: "secret" }),
+      );
+      assert.equal(project.plugins!.settings["ext-plugin"].search, "rivers");
+      assert.ok(!serializeProject(project).includes("secret"));
+      assert.ok(redactedPaths.some((path) => path.startsWith("plugins.settings")));
+    } finally {
+      setRegistryPublishableSettings([]);
+    }
+  });
+
+  it("cannot widen a built-in plugin's allowlist", () => {
+    setRegistryPublishableSettings([["maplibre-gl-components", null]]);
+    try {
+      const project = createEmptyProject("Built-in");
+      project.plugins = {
+        manifestUrls: [],
+        activePluginIds: [],
+        settings: { "maplibre-gl-components": { html: "<b>x</b>", legend: {} } },
+      };
+      const { project: out } = redactProjectCredentials(project);
+      assert.equal(out.plugins!.settings["maplibre-gl-components"].html, undefined);
+    } finally {
+      setRegistryPublishableSettings([]);
+    }
   });
 });
