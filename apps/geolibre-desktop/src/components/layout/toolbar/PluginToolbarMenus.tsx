@@ -60,10 +60,15 @@ export function renderItems(
     return null;
   }
   return items.map((item, index) => {
+    // Plugins are untyped at runtime, so a malformed entry (null, a submenu
+    // without an items array) is skipped rather than throwing and taking the
+    // whole menu down with it.
+    if (!item || typeof item !== "object") return null;
     if (item.type === "separator") {
       return <DropdownMenuSeparator key={item.id ?? `sep-${menuId}-${index}`} />;
     }
     if (item.type === "submenu") {
+      if (!Array.isArray(item.items)) return null;
       return (
         <DropdownMenuSub key={item.id}>
           <DropdownMenuSubTrigger>

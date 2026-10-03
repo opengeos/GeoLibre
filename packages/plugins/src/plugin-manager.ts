@@ -3,6 +3,7 @@ import {
   getAssistantToolOwnerScope,
   unregisterAssistantToolsByOwner,
 } from "./assistant-tool-registry";
+import { unregisterMenuContributionsByOwner } from "./menu-contribution-registry";
 import type { MapRendererKind, ProjectPluginState } from "@geolibre/core";
 import type { IControl } from "maplibre-gl";
 import type {
@@ -13,6 +14,17 @@ import type {
   GeoLibreMenuContribution,
   GeoLibreToolbarMenu,
 } from "./types";
+
+/**
+ * Drop the host-side registrations a plugin owns once it stops being active
+ * (deactivated, unregistered, or a failed activation). Assistant tools and
+ * built-in menu contributions are both keyed by owner, so a plugin that forgets
+ * to dispose of them in `deactivate` cannot leave stale entries behind.
+ */
+function releaseOwnedRegistrations(id: string): void {
+  unregisterAssistantToolsByOwner(id);
+  unregisterMenuContributionsByOwner(id);
+}
 
 export class PluginManager {
   private renderer: MapRendererKind | null = null;
@@ -135,7 +147,7 @@ export class PluginManager {
       }
       this.active.delete(id);
     }
-    unregisterAssistantToolsByOwner(id);
+    releaseOwnedRegistrations(id);
     this.plugins.delete(id);
     this.deferredActive.delete(id);
     this.defaultActive.delete(id);
@@ -264,14 +276,14 @@ export class PluginManager {
     try {
       activated = plugin.activate(scopedApp);
     } catch (error) {
-      unregisterAssistantToolsByOwner(id);
+      releaseOwnedRegistrations(id);
       restoreDisplaced();
       throw error;
     } finally {
       this.activating.delete(id);
     }
     if (activated === false) {
-      unregisterAssistantToolsByOwner(id);
+      releaseOwnedRegistrations(id);
       restoreDisplaced();
       return false;
     }
@@ -357,7 +369,7 @@ export class PluginManager {
         console.warn(`Plugin '${id}' threw while reverting a failed activation.`, deactivateError);
       }
     }
-    unregisterAssistantToolsByOwner(id);
+    releaseOwnedRegistrations(id);
     this.notify();
     return true;
   }
@@ -375,7 +387,7 @@ export class PluginManager {
     try {
       plugin.deactivate(this.scopeAppToPlugin(app, id));
     } finally {
-      unregisterAssistantToolsByOwner(id);
+      releaseOwnedRegistrations(id);
       this.active.delete(id);
       this.nextActivationGeneration(id);
       this.activationResults.delete(id);
@@ -666,13 +678,13 @@ export class PluginManager {
       try {
         activated = plugin.activate(scopedApp);
       } catch (error) {
-        unregisterAssistantToolsByOwner(id);
+        releaseOwnedRegistrations(id);
         throw error;
       } finally {
         this.activating.delete(id);
       }
       if (activated === false) {
-        unregisterAssistantToolsByOwner(id);
+        releaseOwnedRegistrations(id);
         continue;
       }
       this.active.add(id);

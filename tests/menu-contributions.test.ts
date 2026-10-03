@@ -7,8 +7,11 @@ import {
   registerMenuContribution,
   subscribeMenuContributions,
   unregisterMenuContribution,
+  unregisterMenuContributionsByOwner,
 } from "../packages/plugins/src/menu-contribution-registry";
+import { PluginManager } from "../packages/plugins/src/plugin-manager";
 import type {
+  GeoLibreAppAPI,
   GeoLibreMenuContribution,
   GeoLibreMenuContributionTarget,
 } from "../packages/plugins/src/types";
@@ -92,6 +95,73 @@ describe("menu-contribution registry", () => {
     }
     assert.equal(listMenuContributions().length, 0);
     assert.equal(warnings.length, 1);
+  });
+});
+
+describe("menu contribution ownership", () => {
+  afterEach(() => __resetMenuContributionRegistryForTests());
+
+  it("removes only the given owner's contributions", () => {
+    registerMenuContribution(contribution("a1"), "plugin-a");
+    registerMenuContribution(contribution("a2", "controls"), "plugin-a");
+    registerMenuContribution(contribution("b1"), "plugin-b");
+    unregisterMenuContributionsByOwner("plugin-a");
+    assert.deepEqual(
+      listMenuContributions().map((e) => e.contribution.id),
+      ["b1"],
+    );
+  });
+
+  it("warns when one plugin's id replaces another plugin's contribution", () => {
+    const warnings: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args);
+    try {
+      registerMenuContribution(contribution("shared"), "plugin-a");
+      registerMenuContribution(contribution("shared"), "plugin-a");
+      assert.equal(warnings.length, 0);
+      registerMenuContribution(contribution("shared"), "plugin-b");
+      assert.equal(warnings.length, 1);
+    } finally {
+      console.warn = warn;
+    }
+  });
+
+  // The real registry stands in for the host's registrar, as in the app.
+  const hostApp = { registerMenuContribution } as unknown as GeoLibreAppAPI;
+
+  function plugin(activate: (api: GeoLibreAppAPI) => boolean | void) {
+    return {
+      id: "leaky",
+      name: "Leaky",
+      version: "0.1.0",
+      activate,
+      // Deliberately does not dispose of its contribution.
+      deactivate: () => undefined,
+    };
+  }
+
+  it("drops a plugin's contributions when it deactivates without disposing them", () => {
+    const manager = new PluginManager();
+    manager.register(
+      plugin((api) => void api.registerMenuContribution?.(contribution("leaky-items"))),
+    );
+    manager.activate("leaky", hostApp);
+    assert.equal(listMenuContributions().length, 1);
+    manager.deactivate("leaky", hostApp);
+    assert.equal(listMenuContributions().length, 0);
+  });
+
+  it("drops contributions registered by an activation that fails", () => {
+    const manager = new PluginManager();
+    manager.register(
+      plugin((api) => {
+        api.registerMenuContribution?.(contribution("leaky-items"));
+        return false;
+      }),
+    );
+    assert.equal(manager.activate("leaky", hostApp), false);
+    assert.equal(listMenuContributions().length, 0);
   });
 });
 

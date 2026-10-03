@@ -98,6 +98,15 @@ export function registerMenuContribution(
   // this exact registration is current, so a stale disposer cannot evict a
   // newer contribution that reused the id.
   const entry: MenuContributionEntry = { contribution, ownerPluginId, ownerPluginName };
+  // Ids are global, like toolbar menu ids. Replacing another plugin's
+  // contribution is almost certainly an accidental collision, so say so.
+  const previous = registry.get(contribution.id);
+  if (previous && previous.ownerPluginId !== ownerPluginId) {
+    console.warn(
+      `Menu contribution "${contribution.id}" from "${ownerPluginId ?? "the host"}" replaces one ` +
+        `registered by "${previous.ownerPluginId ?? "the host"}"; prefix contribution ids with your plugin id.`,
+    );
+  }
   registry.set(contribution.id, entry);
   emit();
   return () => {
@@ -109,6 +118,22 @@ export function registerMenuContribution(
 export function unregisterMenuContribution(id: string): void {
   if (!registry.delete(id)) return;
   emit();
+}
+
+/**
+ * Remove every contribution a plugin registered. The PluginManager calls this
+ * when the plugin is deactivated or its activation fails, so a plugin that
+ * forgets to dispose of its contributions does not leave stale menu items.
+ */
+export function unregisterMenuContributionsByOwner(ownerPluginId: string): void {
+  let changed = false;
+  for (const [id, entry] of registry) {
+    if (entry.ownerPluginId === ownerPluginId) {
+      registry.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) emit();
 }
 
 /** All registered contributions, in registration order. */
