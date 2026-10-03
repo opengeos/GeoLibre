@@ -733,18 +733,21 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     else panel.style.width = `${this._options.panelWidth}px`;
 
     // Header (a docked panel shows the dock's own title and close button)
-    const header = document.createElement("div");
-    header.className = "elevation-profile-header";
-    const title = document.createElement("span");
-    title.className = "elevation-profile-title";
-    title.textContent = this._options.title;
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "elevation-profile-close";
-    close.setAttribute("aria-label", "Close panel");
-    close.innerHTML = "&times;";
-    close.addEventListener("click", () => this.collapse());
-    header.append(title, close);
+    if (!this._options.docked) {
+      const header = document.createElement("div");
+      header.className = "elevation-profile-header";
+      const title = document.createElement("span");
+      title.className = "elevation-profile-title";
+      title.textContent = this._options.title;
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "elevation-profile-close";
+      close.setAttribute("aria-label", "Close panel");
+      close.innerHTML = "&times;";
+      close.addEventListener("click", () => this.collapse());
+      header.append(title, close);
+      panel.append(header);
+    }
 
     // Actions
     const actions = document.createElement("div");
@@ -823,7 +826,6 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     exportRow.append(exportLabel, csvButton, svgButton);
     this._exportEl = exportRow;
 
-    if (!this._options.docked) panel.append(header);
     panel.append(actions, status, stats, chart, readout, exportRow);
 
     // Re-render the chart at the new pixel size whenever the panel is resized.

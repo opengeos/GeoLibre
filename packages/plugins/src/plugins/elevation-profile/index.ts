@@ -1,3 +1,4 @@
+import { getActiveRightPanel, isRightPanelCollapsed } from "../../right-panel-registry";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../../types";
 import { ElevationProfileControl } from "./core/ElevationProfileControl";
 import { cesiumProfileMap } from "./cesium";
@@ -82,11 +83,18 @@ function registerPanel(app: GeoLibreAppAPI): void {
           container.classList.remove("geolibre-docked-map-control");
         };
       },
-      // Mirror the dock's rail state into the control so the saved project
-      // records whether the panel was open.
-      onOpen: () => control?.expand(),
+      // Collapsing to the rail hides the Finish button, so end any drawing.
+      // The saved `collapsed` flag is read from the dock itself (see
+      // isDockCollapsed): the registry fires onOpen only when the panel takes
+      // the dock, not when it re-expands from its rail, so mirroring the two
+      // hooks into the control would leave it stale.
       onCollapse: () => control?.collapse(),
     }) ?? null;
+}
+
+/** Whether the dock is showing this plugin's panel collapsed to its rail. */
+function isDockCollapsed(): boolean {
+  return getActiveRightPanel() === PANEL_ID && isRightPanelCollapsed();
 }
 
 /** Open or collapse the dock to match a restored `collapsed` flag. */
@@ -206,7 +214,8 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
   },
 
   getProjectState() {
-    return control?.getState() ?? pendingState ?? undefined;
+    if (control) return { ...control.getState(), collapsed: isDockCollapsed() };
+    return pendingState ?? undefined;
   },
 
   applyProjectState(app, state) {

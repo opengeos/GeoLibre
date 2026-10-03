@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import { maplibreElevationProfilePlugin as plugin } from "../packages/plugins/src/plugins/elevation-profile";
-import type { GeoLibreAppAPI, GeoLibreRightPanelRegistration } from "../packages/plugins/src/types";
+import {
+  __resetRightPanelRegistryForTests,
+  closeRightPanel,
+  collapseRightPanel,
+  getRightPanel,
+  openRightPanel,
+  registerRightPanel,
+} from "../packages/plugins/src/right-panel-registry";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 const originalDocument = globalThis.document;
 const originalHTMLElement = globalThis.HTMLElement;
@@ -25,14 +33,15 @@ function fakeHost(document: Document, withDock = true) {
     getSource: () => undefined,
   };
   const controls: Array<{ onAdd(map: unknown): HTMLElement; onRemove(): void }> = [];
+  // The dock operations go through the real registry (the one the app's
+  // sidebars drive), so its hook timing is what the plugin sees.
   const calls: string[] = [];
-  let panel: GeoLibreRightPanelRegistration | null = null;
   const host = {
     mapContainer,
     controls,
     calls,
     get panel() {
-      return panel;
+      return getRightPanel("elevation-profile-panel") ?? null;
     },
     addMapControl: (control: (typeof controls)[number]) => {
       mapContainer.appendChild(control.onAdd(map));
@@ -45,18 +54,19 @@ function fakeHost(document: Document, withDock = true) {
     },
     ...(withDock
       ? {
-          registerRightPanel: (registration: GeoLibreRightPanelRegistration) => {
-            panel = registration;
-            return () => {
-              panel = null;
-            };
-          },
+          registerRightPanel,
           openRightPanel: (id: string) => {
             calls.push(`open:${id}`);
-            return true;
+            return openRightPanel(id);
           },
-          collapseRightPanel: (id: string) => calls.push(`collapse:${id}`),
-          closeRightPanel: (id: string) => calls.push(`close:${id}`),
+          collapseRightPanel: (id: string) => {
+            calls.push(`collapse:${id}`);
+            collapseRightPanel(id);
+          },
+          closeRightPanel: (id: string) => {
+            calls.push(`close:${id}`);
+            closeRightPanel(id);
+          },
         }
       : {}),
   };
@@ -64,6 +74,7 @@ function fakeHost(document: Document, withDock = true) {
 }
 
 afterEach(() => {
+  __resetRightPanelRegistryForTests();
   Object.assign(globalThis, {
     document: originalDocument,
     HTMLElement: originalHTMLElement,
@@ -116,12 +127,15 @@ describe("Elevation Profile docked panel", () => {
         "open:elevation-profile-panel",
         "collapse:elevation-profile-panel",
       ]);
-      host.panel!.onCollapse?.();
       assert.equal((plugin.getProjectState?.() as { collapsed: boolean }).collapsed, true);
-      host.panel!.onOpen?.();
+      // Re-expanding from the rail fires no onOpen (the panel already owns the
+      // dock), so the saved state has to come from the dock itself.
+      openRightPanel("elevation-profile-panel");
       const state = plugin.getProjectState?.() as { collapsed: boolean; unitSystem: string };
       assert.equal(state.collapsed, false);
       assert.equal(state.unitSystem, "imperial");
+      collapseRightPanel("elevation-profile-panel");
+      assert.equal((plugin.getProjectState?.() as { collapsed: boolean }).collapsed, true);
     } finally {
       plugin.deactivate(host);
       plugin.applyProjectState?.(host, undefined);
