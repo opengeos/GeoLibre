@@ -168,6 +168,7 @@ import { appendDiagnostic } from "../lib/diagnostics";
 import { pickZarrDirectory, zarrDirectoryPickerSupported } from "../lib/zarr-directory-picker";
 import { openExternalLink } from "../lib/open-external";
 import { fetchUrlBytes } from "../lib/native-http";
+import { fetchNativeWithWebviewFallback } from "../lib/native-fetch-fallback";
 import {
   dedupeVectorUrlFetch,
   fetchBrowserShapefileZip,
@@ -1673,23 +1674,27 @@ export async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> 
   }
 
   if (isTauriRuntime()) {
-    try {
-      const bytes = await fetchUrlBytes(url, { context: "plugin resource" });
-      return normalizeBytes(bytes);
-    } catch {
-      // Fall back to browser fetch for web builds and during local development.
-    }
+    // The webview runs only when the server never answered the native request,
+    // and a double failure reports the native reason (issue #2840).
+    return fetchNativeWithWebviewFallback(
+      async () => normalizeBytes(await fetchUrlBytes(url, { context: "plugin resource" })),
+      (signal) => fetchWebviewArrayBuffer(url, signal),
+    );
   }
+  return fetchWebviewArrayBuffer(url);
+}
 
+/** The webview's own fetch, through the dev raster proxy in local development. */
+async function fetchWebviewArrayBuffer(url: string, signal?: AbortSignal): Promise<ArrayBuffer> {
   if (isLocalDevHost() && shouldUseDevRasterProxy(url)) {
-    return fetchDevRasterProxy(url);
+    return fetchDevRasterProxy(url, signal);
   }
 
   try {
-    return await fetchArrayBuffer(url);
+    return await fetchArrayBuffer(url, signal);
   } catch (error) {
     if (!isLocalDevHost()) throw error;
-    return fetchDevRasterProxy(url);
+    return fetchDevRasterProxy(url, signal);
   }
 }
 
@@ -1754,12 +1759,12 @@ function localPathFromReference(value: string): string {
   return decodeURIComponent(new URL(value).pathname);
 }
 
-function fetchDevRasterProxy(url: string): Promise<ArrayBuffer> {
-  return fetchArrayBuffer(`${RASTER_PROXY_PATH}?url=${encodeURIComponent(url)}`);
+function fetchDevRasterProxy(url: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+  return fetchArrayBuffer(`${RASTER_PROXY_PATH}?url=${encodeURIComponent(url)}`, signal);
 }
 
-async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url);
+async function fetchArrayBuffer(url: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+  const response = await fetch(url, signal ? { signal } : undefined);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} ${response.statusText}`);
   }
@@ -1815,8 +1820,18 @@ function notifyExternalPluginsListeners(): void {
   for (const listener of externalPluginsListeners) listener();
 }
 
+/**
+ * Whether the dev raster proxy is there to use. It is served only by the Vite
+ * dev server (`configureServer` in `vite.config.ts`), so the hostname alone is
+ * not enough: the packaged desktop app on Linux and macOS also runs at
+ * `tauri://localhost`, where the proxy path falls through to the SPA's
+ * `index.html` and a failed request would "succeed" with the page's HTML
+ * (issue #2840).
+ *
+ * @returns True on a local Vite dev server, including `tauri dev`.
+ */
 function isLocalDevHost(): boolean {
-  if (typeof window === "undefined") return false;
+  if (!import.meta.env.DEV || typeof window === "undefined") return false;
   return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 
