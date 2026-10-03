@@ -144,6 +144,19 @@ describe("useWindowCloseGuard", () => {
     assert.ok(!destroyed());
   });
 
+  it("does not rebind an open prompt when the window is closed again", async () => {
+    useAppStore.setState({ isDirty: true });
+    const guard = renderGuard(async () => true);
+    await requestClose();
+    // A dirty project replaces the one the prompt asked about, then X again.
+    act(() => {
+      useAppStore.setState((s) => ({ projectGeneration: s.projectGeneration + 1 }));
+    });
+    await requestClose();
+    await act(() => guard.current.resolveWindowClosePrompt("discard"));
+    assert.ok(!destroyed());
+  });
+
   it("keeps the window when the save is cancelled or fails, and asks on the next close", async () => {
     useAppStore.setState({ isDirty: true });
     const guard = renderGuard(async () => false);

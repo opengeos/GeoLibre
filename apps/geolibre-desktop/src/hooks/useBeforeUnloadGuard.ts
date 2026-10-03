@@ -11,9 +11,8 @@ import { isTauri } from "../lib/is-tauri";
  *
  * Mount once at the app root. The guard is a no-op under Tauri (a desktop
  * window close raises no useful web prompt; `useWindowCloseGuard` asks there
- * instead) and
- * in the Jupyter/embedded build (the host owns the page lifecycle, and a
- * confirm dialog inside an iframe is undesirable).
+ * instead) and in the Jupyter/embedded build (the host owns the page
+ * lifecycle, and a confirm dialog inside an iframe is undesirable).
  */
 export function useBeforeUnloadGuard(): void {
   useEffect(() => {

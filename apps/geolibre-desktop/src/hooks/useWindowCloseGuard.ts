@@ -50,6 +50,9 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
   // is up (Open from URL, a dropped file), and Discard must not then throw that
   // one away unasked.
   const promptGenerationRef = useRef<number | null>(null);
+  // Mirrors the prompt state for the once-registered listener, so a second
+  // close while the prompt is up cannot rebind it to a replacement project.
+  const promptOpenRef = useRef(false);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -61,7 +64,8 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
           // Not prevented: the API destroys the window after this returns.
           if (!useAppStore.getState().isDirty) return;
           event.preventDefault();
-          if (savingRef.current) return;
+          if (savingRef.current || promptOpenRef.current) return;
+          promptOpenRef.current = true;
           promptGenerationRef.current = useAppStore.getState().projectGeneration;
           setWindowClosePromptOpen(true);
         }),
@@ -81,6 +85,7 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
 
   const resolveWindowClosePrompt = useCallback(async (choice: WindowCloseChoice) => {
     if (savingRef.current) return;
+    promptOpenRef.current = false;
     setWindowClosePromptOpen(false);
     const promptGeneration = promptGenerationRef.current;
     promptGenerationRef.current = null;
