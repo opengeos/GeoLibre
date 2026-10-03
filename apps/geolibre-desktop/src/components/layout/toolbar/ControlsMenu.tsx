@@ -12,6 +12,7 @@ import {
   flightSimulatorPlugin,
   isPluginEngineSupported,
   maplibreDirectionsPlugin,
+  maplibreLayerControlPlugin,
   maplibreEffectsPlugin,
   maplibreGraticulePlugin,
   maplibreReverseGeocodePlugin,
@@ -150,6 +151,7 @@ export function ControlsMenu({
   // that stays empty). One already on stays reachable so it can be turned off.
   const unsupported = (plugin: Parameters<typeof isPluginEngineSupported>[0], active: boolean) =>
     !isPluginEngineSupported(plugin, primaryRenderer) && !active;
+  const layerControlDisabled = unsupported(maplibreLayerControlPlugin, layerControlActive);
   const sunDisabled = unsupported(maplibreSunPlugin, panels.sun.visible);
   const routeAnimationDisabled = unsupported(
     maplibreRouteAnimationPlugin,
@@ -256,7 +258,12 @@ export function ControlsMenu({
           <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {show("controls.layerControl") && (
-            <DropdownMenuItem onClick={onToggleLayerControl}>
+            <DropdownMenuItem
+              disabled={layerControlDisabled}
+              className={REASON_ON_HOVER}
+              title={layerControlDisabled ? t("renderer.pluginUnsupported") : undefined}
+              onClick={onToggleLayerControl}
+            >
               {t("toolbar.plugin.maplibre-layer-control")}
               {layerControlActive ? " ✓" : ""}
             </DropdownMenuItem>
