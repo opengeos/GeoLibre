@@ -141,6 +141,7 @@ export function buildWmsLayer(params: WmsLayerParams): GeoLibreLayer {
   const layers = params.layers.trim();
   const styles = params.styles.trim();
   const tileSize = toTileSize(params.tileSize);
+  const crs = normalizeWmsCrs(params.crs || undefined, version);
   const tileUrl = createWmsTileUrl({
     endpoint,
     layers,
@@ -149,7 +150,7 @@ export function buildWmsLayer(params: WmsLayerParams): GeoLibreLayer {
     transparent: params.transparent,
     tileSize,
     version,
-    crs: normalizeWmsCrs(params.crs || undefined, version),
+    crs,
   });
   const attribution = attributionForTileUrl(tileUrl);
   return createBaseLayer(
@@ -165,6 +166,7 @@ export function buildWmsLayer(params: WmsLayerParams): GeoLibreLayer {
       format: params.format,
       transparent: params.transparent,
       version,
+      crs,
       ...(attribution ? { attribution } : {}),
     },
     { service: "wms" },

@@ -1,6 +1,6 @@
 import { isArcGISWritableLayer } from "@geolibre/plugins";
 import type { ParseKeys, TFunction } from "i18next";
-import { NETCDF_IMAGE_SOURCE_KIND } from "@geolibre/core";
+import { NETCDF_IMAGE_SOURCE_KIND, redactConfigurationCredentials } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { MIN_REFRESH_INTERVAL_MS } from "../../../lib/layer-refresh";
 import { rasterExportUrl } from "../../../lib/raster-export";
@@ -163,11 +163,15 @@ export function layerMetadataPayload(
   rasterInfo?: RasterInfo | null,
 ): Record<string, unknown> {
   const videoSourceUrls = sourceUrlsFromLayer(layer);
-  return {
+  const source = layerSourceSummary(layer);
+  // The dialog offers Copy, so the payload is what a user pastes into an email
+  // or a report: scrub credentials the way a saved project does (#2855).
+  return redactConfigurationCredentials({
     ...(rasterInfo ? { raster: rasterInfo } : {}),
     ...layer.metadata,
     layerName: layer.name,
     layerType: layer.type,
+    ...(source ? { source } : {}),
     ...(videoSourceUrls.length > 0
       ? {
           sourceUrl: videoSourceUrls[0],
@@ -175,7 +179,57 @@ export function layerMetadataPayload(
         }
       : {}),
     sourcePath: layer.sourcePath,
-  };
+  });
+}
+
+/**
+ * Layer types whose `source` describes a remote service or tile archive (the
+ * service address and request fields), so the Metadata dialog shows it.
+ * GeoJSON-like layers are left out: their source is the data itself, or the
+ * `sourcePath` the payload already reports.
+ */
+const SOURCE_SUMMARY_LAYER_TYPES: ReadonlySet<GeoLibreLayer["type"]> = new Set([
+  "wms",
+  "wmts",
+  "xyz",
+  "vector-tiles",
+  "arcgis",
+  "pmtiles",
+  "mbtiles",
+  "raster",
+  "cog",
+  "zarr",
+  "3d-tiles",
+  "gaussian-splat",
+  "lidar",
+  "flatgeobuf",
+  "geoparquet",
+]);
+
+/**
+ * Source keys that carry data rather than a description of where the data
+ * lives: inlined payloads that would bury the service fields in the dialog.
+ */
+const SOURCE_SUMMARY_OMITTED_KEYS = new Set(["data", "geojson", "kerchunkRefs"]);
+
+/**
+ * The part of a service or tile layer's `source` worth showing in its Metadata
+ * dialog: the service address and the request fields (layers, styles, format,
+ * version, CRS, ...) GeoLibre keeps to rebuild the layer. Credentials are
+ * removed by the caller.
+ *
+ * @param layer - The layer whose source to summarize.
+ * @returns The source fields, or null for a layer type without a service source.
+ */
+function layerSourceSummary(layer: GeoLibreLayer): Record<string, unknown> | null {
+  if (!SOURCE_SUMMARY_LAYER_TYPES.has(layer.type)) return null;
+  const summary: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(layer.source ?? {})) {
+    if (value === undefined) continue;
+    if (SOURCE_SUMMARY_OMITTED_KEYS.has(key) && typeof value !== "string") continue;
+    summary[key] = value;
+  }
+  return Object.keys(summary).length > 0 ? summary : null;
 }
 
 /**

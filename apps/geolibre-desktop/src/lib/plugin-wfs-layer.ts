@@ -3,6 +3,7 @@ import type { GeoLibreWfsLayerOptions } from "@geolibre/plugins";
 import { buildWfsGeoJsonLayer } from "../components/layout/add-data/apply-service";
 import { stripOgcOperationParams } from "../components/layout/add-data/helpers";
 import { fetchWfsGeoJson } from "./layer-refresh";
+import { pluginLayerMetadata } from "./plugin-layer-metadata";
 
 function validateBbox(
   value: unknown,
@@ -46,6 +47,7 @@ export async function addPluginWfsLayer(
         : "";
   if (!version) throw new Error("addWfsLayer: options.version must be a non-empty string.");
   validateBbox(options?.bbox);
+  const metadata = pluginLayerMetadata("addWfsLayer", options?.metadata);
 
   const projectGeneration = useAppStore.getState().projectGeneration;
   // A fragment would swallow the GetFeature parameters appended below it — the
@@ -79,6 +81,7 @@ export async function addPluginWfsLayer(
     outputFormat: result.outputFormat,
     srsName: "EPSG:4326",
   });
+  if (metadata) layer.metadata = { ...metadata, ...layer.metadata };
   useAppStore.getState().addLayer(layer);
   return layer.id;
 }

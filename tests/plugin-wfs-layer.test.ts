@@ -49,6 +49,26 @@ describe("addPluginWfsLayer", () => {
     assert.equal(request.searchParams.get("typeNames"), "ns:roads");
   });
 
+  it("merges plugin metadata under GeoLibre's own keys (#2855)", async () => {
+    globalThis.fetch = (async () => new Response(JSON.stringify(JSON_FEATURES))) as typeof fetch;
+    const id = await addPluginWfsLayer("Catalogued", {
+      url: "https://8.8.8.8/wfs",
+      typeName: "ns:roads",
+      metadata: { catalogRecordId: "rndt:1", sourceKind: "spoofed" },
+    });
+    const layer = useAppStore.getState().layers.find((candidate) => candidate.id === id)!;
+    assert.equal(layer.metadata.catalogRecordId, "rndt:1");
+    assert.equal(layer.metadata.sourceKind, "wfs-getfeature");
+    await assert.rejects(
+      addPluginWfsLayer("bad", {
+        url: "https://8.8.8.8/wfs",
+        typeName: "ns:roads",
+        metadata: "nope" as never,
+      }),
+      /options.metadata must be a plain object/,
+    );
+  });
+
   it("uses the shared GML fallback and reprojection parser", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = new URL(typeof input === "string" ? input : input.toString());

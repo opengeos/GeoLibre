@@ -612,6 +612,26 @@ export function redactProjectCredentials(project: GeoLibreProject): CredentialRe
   };
 }
 
+/**
+ * Remove credentials from a single configuration value (a layer `source`,
+ * `metadata`, or `sourcePath`) with the same rules the project redaction pass
+ * applies to layer configuration: credential-named fields and non-reference
+ * header values are dropped, and credential URL parameters are stripped from
+ * every URL-shaped string.
+ *
+ * @param value - The configuration value to scrub. Not mutated.
+ * @returns A detached, redacted copy.
+ */
+export function redactConfigurationCredentials<T>(value: T): T {
+  const accumulator: RedactionAccumulator = {
+    paths: [],
+    fingerprints: [],
+    count: 0,
+    unfingerprintable: false,
+  };
+  return redactConfigurationValue(value, "", accumulator) as T;
+}
+
 /** Convenience wrapper for callers that only need the safe project. */
 export function redactCredentials(project: GeoLibreProject): GeoLibreProject {
   return redactProjectCredentials(project).project;

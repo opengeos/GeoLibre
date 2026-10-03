@@ -107,6 +107,15 @@ export interface GeoLibreTileLayerOptions {
   opacity?: number;
   /** Insert the new layer directly beneath the layer with this id. */
   beforeLayerId?: string;
+  /**
+   * Provenance fields merged into the new layer's `metadata`, e.g. the
+   * catalogue record id, a link to its metadata page, the publisher, or the
+   * licence. Shown in the layer's Metadata dialog and saved with the project,
+   * so the layer keeps the trace of where it was found. Must be a plain
+   * JSON-serializable object. Credential-named fields (`token`, `apiKey`, ...)
+   * are stripped when the project is shared or exported.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -155,6 +164,12 @@ export interface GeoLibreWfsLayerOptions {
    * `east` throws instead of being read as a Pacific-spanning box.
    */
   bbox?: [number, number, number, number];
+  /**
+   * Provenance fields merged into the new layer's `metadata`, as for
+   * {@link GeoLibreTileLayerOptions.metadata}. GeoLibre's own WFS request keys
+   * win over a field of the same name.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**

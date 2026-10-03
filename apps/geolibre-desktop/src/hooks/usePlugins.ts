@@ -1,4 +1,5 @@
 import { addPluginWfsLayer } from "../lib/plugin-wfs-layer";
+import { pluginLayerMetadata } from "../lib/plugin-layer-metadata";
 import type * as Proj4 from "proj4";
 import {
   clearExternalNativePaintBridge,
@@ -219,10 +220,11 @@ const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
  * The remaining keys mix source-level fields (tileSize, bounds, ...) and
  * layer-level ones (visible, opacity); the store reads each by name.
  */
-function tileLayerStoreOptions(options?: GeoLibreTileLayerOptions) {
+function tileLayerStoreOptions(method: string, options?: GeoLibreTileLayerOptions) {
   if (!options) return {};
-  const { beforeLayerId: _beforeLayerId, ...rest } = options;
-  return rest;
+  const { beforeLayerId: _beforeLayerId, metadata, ...rest } = options;
+  const validMetadata = pluginLayerMetadata(method, metadata);
+  return validMetadata ? { ...rest, metadata: validMetadata } : rest;
 }
 
 /** Records a plugin failure in the diagnostics panel without crashing the app. */
@@ -1229,7 +1231,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
     addTileLayer: (name: string, url: string, options?: GeoLibreTileLayerOptions) =>
       store.addTileLayer(
         name,
-        { type: "xyz", tiles: [url], url, ...tileLayerStoreOptions(options) },
+        { type: "xyz", tiles: [url], url, ...tileLayerStoreOptions("addTileLayer", options) },
         options?.beforeLayerId ?? null,
       ),
     // Intentionally identical to addTileLayer except for the layer `type`.
@@ -1239,7 +1241,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
     addWmtsLayer: (name: string, url: string, options?: GeoLibreTileLayerOptions) =>
       store.addTileLayer(
         name,
-        { type: "wmts", tiles: [url], url, ...tileLayerStoreOptions(options) },
+        { type: "wmts", tiles: [url], url, ...tileLayerStoreOptions("addWmtsLayer", options) },
         options?.beforeLayerId ?? null,
       ),
     addWmsLayer: (name: string, options: GeoLibreWmsLayerOptions) => {
@@ -1252,6 +1254,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
         transparent,
         version,
         crs,
+        metadata,
         ...tileOptions
       } = options;
       // TypeScript enforces these, but an untyped JS plugin can pass "" — an
@@ -1264,6 +1267,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
       if (!layers) {
         throw new Error("addWmsLayer: options.layers must be a non-empty string.");
       }
+      const validMetadata = pluginLayerMetadata("addWmsLayer", metadata);
       const tileSize = tileOptions.tileSize ?? 256;
       const resolvedStyles = styles ?? "";
       const resolvedFormat = format ?? "image/png";
@@ -1308,8 +1312,10 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
             format: resolvedFormat,
             transparent: resolvedTransparent,
             version: resolvedVersion,
+            crs: resolvedCrs,
           },
           ...tileOptions,
+          ...(validMetadata ? { metadata: validMetadata } : {}),
         },
         beforeLayerId ?? null,
       );
