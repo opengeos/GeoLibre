@@ -95,11 +95,18 @@ const BASEMAP_SELECT_FIXES = `
 }
 
 /* Dark theme: retarget the light literals above onto the app's design tokens.
-   The menu is appended to <body>, so it is matched by .dark on <html>. */
-.dark .basemap-control-panel .basemap-control-select,
-.dark .basemap-control-panel .basemap-control-select option {
+   The menu is appended to <body>, so it is matched by .dark on <html>. The
+   select rules restate index.css's .dark .basemap-control-select tokens because
+   the light select rules above tie its specificity and are injected later. */
+.dark .basemap-control-panel .basemap-control-select {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
+  color-scheme: dark;
+}
+
+.dark .basemap-control-panel .basemap-control-select option {
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
   color-scheme: dark;
 }
 
