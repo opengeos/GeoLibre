@@ -150,7 +150,7 @@ When a polygon layer's **Visualization** is set to **3D extrusion** in the Style
 - **OBJ** keeps one object per feature and stores colors on the vertices.
 - **STL** writes one uncolored mesh, for 3D printing and CAD tools.
 
-Coordinates are in meters around the center of the layer. glTF and OBJ use Y as the up axis, and STL uses Z. The glTF file stores the longitude and latitude of that center on its root object. Features whose height is not above the extrusion base are skipped, and a notice says how many.
+Coordinates are in meters around the center of the layer. glTF and OBJ use Y as the up axis, and STL uses Z. The glTF file stores the longitude and latitude of that center on its root object. Features whose height is not above the extrusion base, or that have no area, are skipped, and a notice says how many.
 
 ## Layer groups
 

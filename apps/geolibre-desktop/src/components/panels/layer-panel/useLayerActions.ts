@@ -426,10 +426,10 @@ export function useLayerActions({
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath === null) return;
         setStatus(
-          model.skippedFlat > 0
+          model.skipped > 0
             ? {
                 type: "warning",
-                message: t("layers.export3dModelSkippedFlat", { count: model.skippedFlat }),
+                message: t("layers.export3dModelSkipped", { count: model.skipped }),
               }
             : { type: "success", message: t("layers.exported") },
         );

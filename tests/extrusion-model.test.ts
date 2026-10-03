@@ -120,7 +120,7 @@ describe("buildExtrusionModel", () => {
       }),
     );
     assert.equal(model.solids.length, 1);
-    assert.equal(model.skippedFlat, 1);
+    assert.equal(model.skipped, 1);
     const zs = model.solids[0].positions.filter((_, i) => i % 3 === 2);
     assert.equal(Math.min(...zs), 10);
     assert.deepEqual(model.solids[0].color, [0, 1, 0]);
@@ -141,9 +141,41 @@ describe("buildExtrusionModel", () => {
   });
 });
 
+describe("buildExtrusionModel across the antimeridian", () => {
+  it("keeps a polygon straddling ±180° compact and centred on it", () => {
+    const feature: Feature = {
+      type: "Feature",
+      properties: { height: 10 },
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [
+          [[[179.9999, 0], [180, 0], [180, 0.0001], [179.9999, 0.0001], [179.9999, 0]]],
+          [[[-180, 0], [-179.9999, 0], [-179.9999, 0.0001], [-180, 0.0001], [-180, 0]]],
+        ],
+      },
+    };
+    const model = buildExtrusionModel(collection(feature), style());
+    assert.ok(Math.abs(Math.abs(model.origin[0]) - 180) < 1e-9, `origin ${model.origin[0]}`);
+    const xs = model.solids[0].positions.filter((_, i) => i % 3 === 0);
+    // ~22 m wide, not ~40,000 km.
+    assert.ok(Math.max(...xs) - Math.min(...xs) < 30);
+  });
+
+  it("counts features with no extrudable area as skipped", () => {
+    const sliver: Feature = {
+      type: "Feature",
+      properties: { height: 10 },
+      geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [2, 0], [0, 0]]] },
+    };
+    const model = buildExtrusionModel(collection(sliver, square(5)), style());
+    assert.equal(model.solids.length, 1);
+    assert.equal(model.skipped, 1);
+  });
+});
+
 describe("model encoders", () => {
   const model = buildExtrusionModel(
-    collection(square(20, false, { name: "A b" }), square(12, true)),
+    collection(square(20, false, { name: "A b#c" }), square(12, true)),
     style(),
   );
 
@@ -157,7 +189,7 @@ describe("model encoders", () => {
     const gltf = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLength)));
     assert.equal(gltf.meshes.length, 2);
     assert.equal(gltf.nodes.at(-1).name, "Buildings");
-    assert.equal(gltf.nodes[0].extras.name, "A b");
+    assert.equal(gltf.nodes[0].extras.name, "A b#c");
     const binLength = view.getUint32(20 + jsonLength, true);
     assert.equal(binLength, gltf.buffers[0].byteLength);
     assert.equal(binLength % 4, 0);
@@ -172,7 +204,7 @@ describe("model encoders", () => {
 
   it("writes OBJ objects and faces with vertex colours", () => {
     const obj = encodeObj(model, "Buildings");
-    assert.match(obj, /^o A_b$/m);
+    assert.match(obj, /^o A_b_c$/m);
     assert.match(obj, /^v \S+ \S+ \S+ 1\.0000 0 0$/m);
     const vertexCount = obj.match(/^v /gm)?.length ?? 0;
     const faces = obj.match(/^f .*$/gm) ?? [];

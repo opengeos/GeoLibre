@@ -48,8 +48,11 @@ export interface ExtrusionModel {
   solids: ExtrudedSolid[];
   /** The [lon, lat] of the local origin, so the model can be georeferenced. */
   origin: [number, number];
-  /** Polygon features left out because their top was not above their base. */
-  skippedFlat: number;
+  /**
+   * Polygon features left out: their top was not above their base, or no
+   * ring had an area to extrude.
+   */
+  skipped: number;
 }
 
 const EARTH_RADIUS = 6378137;
@@ -104,7 +107,11 @@ function polygonsOf(geometry: Geometry | null): Position[][][] {
   }
 }
 
-/** Extend a [minLon, minLat, maxLon, maxLat] box by every polygon vertex. */
+/**
+ * Extend a [minLon, minLat, maxLon, maxLat, minLon360, maxLon360] box by every
+ * polygon vertex. The last two track longitudes in 0..360, whose span is the
+ * narrower one for data straddling the antimeridian.
+ */
 function extendBounds(bounds: number[], polygons: Position[][][]): void {
   for (const polygon of polygons) {
     for (const ring of polygon) {
@@ -114,6 +121,9 @@ function extendBounds(bounds: number[], polygons: Position[][][]): void {
         bounds[1] = Math.min(bounds[1], lat);
         bounds[2] = Math.max(bounds[2], lon);
         bounds[3] = Math.max(bounds[3], lat);
+        const lon360 = lon < 0 ? lon + 360 : lon;
+        bounds[4] = Math.min(bounds[4], lon360);
+        bounds[5] = Math.max(bounds[5], lon360);
       }
     }
   }
@@ -252,19 +262,26 @@ export function buildExtrusionModel(
   style: LayerStyle,
   zoom = 16,
 ): ExtrusionModel {
-  const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+  const bounds = [Infinity, Infinity, -Infinity, -Infinity, Infinity, -Infinity];
   const featurePolygons = geojson.features.map((feature) => {
     const polygons = polygonsOf(feature.geometry);
     extendBounds(bounds, polygons);
     return polygons;
   });
-  if (!Number.isFinite(bounds[0])) return { solids: [], origin: [0, 0], skippedFlat: 0 };
+  if (!Number.isFinite(bounds[0])) return { solids: [], origin: [0, 0], skipped: 0 };
 
-  const origin: [number, number] = [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2];
+  // Centre on the narrower longitude span, so a layer straddling ±180° is
+  // centred on the antimeridian rather than on the far side of the globe.
+  const crossesAntimeridian = bounds[5] - bounds[4] < bounds[2] - bounds[0];
+  const centreLon = crossesAntimeridian
+    ? (((bounds[4] + bounds[5]) / 2 + 180) % 360) - 180
+    : (bounds[0] + bounds[2]) / 2;
+  const origin: [number, number] = [centreLon, (bounds[1] + bounds[3]) / 2];
   const metresPerLon = EARTH_RADIUS * DEG * Math.cos(origin[1] * DEG);
   const metresPerLat = EARTH_RADIUS * DEG;
   const project = (lon: number, lat: number): [number, number] => [
-    (lon - origin[0]) * metresPerLon,
+    // Wrap the offset into -180..180 so both sides of ±180° stay adjacent.
+    ((((lon - origin[0]) % 360) + 540) % 360 - 180) * metresPerLon,
     (lat - origin[1]) * metresPerLat,
   ];
 
@@ -288,14 +305,14 @@ export function buildExtrusionModel(
   );
 
   const solids: ExtrudedSolid[] = [];
-  let skippedFlat = 0;
+  let skipped = 0;
   geojson.features.forEach((feature, index) => {
     const polygons = featurePolygons[index];
     if (polygons.length === 0) return;
     const height = Number(readHeight(feature));
     const top = Number.isFinite(height) ? height : 0;
     if (!(top > base)) {
-      skippedFlat += 1;
+      skipped += 1;
       return;
     }
     const solid: ExtrudedSolid = {
@@ -308,8 +325,9 @@ export function buildExtrusionModel(
     };
     for (const polygon of polygons) appendPolygon(solid, polygon, base, top, project);
     if (solid.indices.length > 0) solids.push(solid);
+    else skipped += 1;
   });
-  return { solids, origin, skippedFlat };
+  return { solids, origin, skipped };
 }
 
 /** Rotate a Z-up vector into the Y-up frame glTF and OBJ use. */
@@ -491,9 +509,13 @@ export function encodeGlb(model: ExtrusionModel, layerName: string): Uint8Array 
   return out;
 }
 
-/** An OBJ-safe object name: no whitespace, which would split the statement. */
+/**
+ * An OBJ-safe object name: whitespace would split the statement, `#` starts a
+ * comment, and control characters confuse line-based parsers.
+ */
 function objName(name: string): string {
-  return name.replace(/\s+/g, "_") || "feature";
+  // eslint-disable-next-line no-control-regex
+  return name.replace(/[\s#\u0000-\u001f\u007f]+/g, "_") || "feature";
 }
 
 /** Format a number to fixed digits, writing a rounded-to-zero value as "0". */

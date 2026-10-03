@@ -8027,8 +8027,8 @@
     "exportLayerError": "Could not export this layer.",
     "export3dModel": "3D model: {{format}}",
     "export3dModelNoSolids": "No extruded polygons to export. Give the layer polygons with a height above the extrusion base.",
-    "export3dModelSkippedFlat_one": "3D model exported. {{count}} feature with no height above the base was left out.",
-    "export3dModelSkippedFlat_other": "3D model exported. {{count}} features with no height above the base were left out.",
+    "export3dModelSkipped_one": "3D model exported. {{count}} feature with no height above the base or no area was left out.",
+    "export3dModelSkipped_other": "3D model exported. {{count}} features with no height above the base or no area were left out.",
     "exportPolyline": "Encoded Polyline (precision {{precision}})",
     "refreshIntervals": {
       "off": "Off",
