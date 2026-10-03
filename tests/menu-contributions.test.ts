@@ -205,6 +205,16 @@ describe("groupMenuContributions", () => {
     );
   });
 
+  it("skips contributions with nothing renderable", () => {
+    const junk = {
+      id: "junk",
+      menu: "processing",
+      items: [null, { type: "separator" }, { type: "submenu", id: "s", label: "s" }],
+    } as unknown as GeoLibreMenuContribution;
+    registerMenuContribution(junk, "plugin-a");
+    assert.deepEqual(groupMenuContributions(listMenuContributions(), "processing"), []);
+  });
+
   it("skips empty contributions and groups unowned ones by their own id", () => {
     registerMenuContribution(contribution("empty", "addData", []), "plugin-a");
     registerMenuContribution(contribution("host-only", "addData"));
