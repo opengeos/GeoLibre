@@ -83,6 +83,22 @@ describe("layerMetadataPayload (#2855)", () => {
       url: "https://example.com/a.zarr",
     });
     assert.equal("source" in layerMetadataPayload(geojsonLayer()), false);
+    const inline = tileLayer({
+      type: "flatgeobuf",
+      source: { type: "x", data: '{"type":"FeatureCollection"}', geojson: "https://x.test/a.json" },
+    });
+    assert.deepEqual(layerMetadataPayload(inline).source, {
+      type: "x",
+      geojson: "https://x.test/a.json",
+    });
+  });
+
+  it("redacts the source even when the metadata has a GeoJSON type", () => {
+    const layer = tileLayer({
+      source: { type: "raster", url: "https://x.test/?token=secret" },
+      metadata: { type: "FeatureCollection" },
+    });
+    assert.doesNotMatch(JSON.stringify(layerMetadataPayload(layer)), /secret/);
   });
 
   it("does not mutate the layer", () => {
@@ -117,6 +133,10 @@ describe("pluginLayerMetadata", () => {
     for (const value of ["text", 1, ["a"], new Date(), new Map()]) {
       assert.throws(() => pluginLayerMetadata("addTileLayer", value), /plain object/);
     }
+    assert.throws(
+      () => pluginLayerMetadata("addTileLayer", { toJSON: () => ["a"] }),
+      /serialize to a plain object/,
+    );
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
     assert.throws(() => pluginLayerMetadata("addTileLayer", cyclic), /JSON-serializable/);

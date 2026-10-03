@@ -162,24 +162,26 @@ export function layerMetadataPayload(
   layer: GeoLibreLayer,
   rasterInfo?: RasterInfo | null,
 ): Record<string, unknown> {
-  const videoSourceUrls = sourceUrlsFromLayer(layer);
-  const source = layerSourceSummary(layer);
   // The dialog offers Copy, so the payload is what a user pastes into an email
-  // or a report: scrub credentials the way a saved project does (#2855).
-  return redactConfigurationCredentials({
+  // or a report: scrub credentials the way a saved project does (#2855). Each
+  // part is scrubbed on its own, as the project pass does, so a `type` in the
+  // metadata that reads as GeoJSON cannot make the whole payload skip redaction.
+  const source = redactConfigurationCredentials(layerSourceSummary(layer));
+  const sourceUrls = redactConfigurationCredentials(sourceUrlsFromLayer(layer));
+  return {
     ...(rasterInfo ? { raster: rasterInfo } : {}),
-    ...layer.metadata,
+    ...redactConfigurationCredentials(layer.metadata),
     layerName: layer.name,
     layerType: layer.type,
     ...(source ? { source } : {}),
-    ...(videoSourceUrls.length > 0
+    ...(sourceUrls.length > 0
       ? {
-          sourceUrl: videoSourceUrls[0],
-          ...(videoSourceUrls[1] ? { fallbackSourceUrl: videoSourceUrls[1] } : {}),
+          sourceUrl: sourceUrls[0],
+          ...(sourceUrls[1] ? { fallbackSourceUrl: sourceUrls[1] } : {}),
         }
       : {}),
-    sourcePath: layer.sourcePath,
-  });
+    sourcePath: redactConfigurationCredentials(layer.sourcePath),
+  };
 }
 
 /**
@@ -207,10 +209,15 @@ const SOURCE_SUMMARY_LAYER_TYPES: ReadonlySet<GeoLibreLayer["type"]> = new Set([
 ]);
 
 /**
- * Source keys that carry data rather than a description of where the data
+ * Source keys that may carry data rather than a description of where the data
  * lives: inlined payloads that would bury the service fields in the dialog.
+ * An HTTP(S) URL under one of them is a reference and is kept; anything else
+ * (an object, or inline text such as a stringified collection) is omitted.
  */
-const SOURCE_SUMMARY_OMITTED_KEYS = new Set(["data", "geojson", "kerchunkRefs"]);
+const SOURCE_SUMMARY_DATA_KEYS = new Set(["data", "geojson"]);
+
+/** Source keys never shown: `kerchunkRefs` is a chunk reference map, not an address. */
+const SOURCE_SUMMARY_OMITTED_KEYS = new Set(["kerchunkRefs"]);
 
 /**
  * The part of a service or tile layer's `source` worth showing in its Metadata
@@ -226,7 +233,13 @@ function layerSourceSummary(layer: GeoLibreLayer): Record<string, unknown> | nul
   const summary: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(layer.source ?? {})) {
     if (value === undefined) continue;
-    if (SOURCE_SUMMARY_OMITTED_KEYS.has(key) && typeof value !== "string") continue;
+    if (SOURCE_SUMMARY_OMITTED_KEYS.has(key)) continue;
+    if (
+      SOURCE_SUMMARY_DATA_KEYS.has(key) &&
+      (typeof value !== "string" || !/^https?:\/\//i.test(value))
+    ) {
+      continue;
+    }
     summary[key] = value;
   }
   return Object.keys(summary).length > 0 ? summary : null;

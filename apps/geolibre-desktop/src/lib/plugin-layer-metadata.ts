@@ -21,9 +21,15 @@ export function pluginLayerMetadata(
   if (prototype !== Object.prototype && prototype !== null) {
     throw new Error(`${method}: options.metadata must be a plain object.`);
   }
+  let parsed: unknown;
   try {
-    return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+    parsed = JSON.parse(JSON.stringify(value));
   } catch {
     throw new Error(`${method}: options.metadata must be JSON-serializable.`);
   }
+  // A custom `toJSON()` can turn a plain object into an array, a string or null.
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${method}: options.metadata must serialize to a plain object.`);
+  }
+  return parsed as Record<string, unknown>;
 }
