@@ -43,6 +43,16 @@ export {
   type ToolbarMenuEntry,
 } from "./toolbar-menu-registry";
 export {
+  registerMenuContribution,
+  unregisterMenuContribution,
+  listMenuContributions,
+  getMenuContributionsSnapshot,
+  subscribeMenuContributions,
+  isMenuContributionTarget,
+  type MenuContributionsSnapshot,
+  type MenuContributionEntry,
+} from "./menu-contribution-registry";
+export {
   registerFloatingPanel,
   unregisterFloatingPanel,
   openFloatingPanel,

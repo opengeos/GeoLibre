@@ -43,8 +43,16 @@ function MenuIcon({ icon, className }: { icon?: string; className: string }) {
 // from a plugin cannot blow the stack; deeper levels are dropped.
 const MAX_MENU_DEPTH = 8;
 
-/** Render a plugin menu item tree (actions, submenus, separators) recursively. */
-function renderItems(items: GeoLibreToolbarMenuItem[], menuId: string, depth = 0): React.ReactNode {
+/**
+ * Render a plugin menu item tree (actions, submenus, separators) recursively.
+ * Shared with the built-in menus' plugin contributions
+ * (`PluginMenuContributions`), which take the same item shape.
+ */
+export function renderItems(
+  items: GeoLibreToolbarMenuItem[],
+  menuId: string,
+  depth = 0,
+): React.ReactNode {
   if (depth > MAX_MENU_DEPTH) {
     console.warn(
       `Toolbar menu "${menuId}" exceeds the maximum submenu depth (${MAX_MENU_DEPTH}); deeper items are not rendered.`,

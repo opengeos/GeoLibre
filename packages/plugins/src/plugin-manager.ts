@@ -10,6 +10,7 @@ import type {
   GeoLibreCredentialLocation,
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
+  GeoLibreMenuContribution,
   GeoLibreToolbarMenu,
 } from "./types";
 
@@ -47,6 +48,7 @@ export class PluginManager {
     });
     return scopeAppToPlugin(app, id, {
       ...options,
+      pluginName: plugin?.name,
       canAddControl: () =>
         this.plugins.get(id) === plugin &&
         (app.getMapRenderer?.() ?? "maplibre") === renderer &&
@@ -734,6 +736,11 @@ interface ScopeAppOptions {
    * callable by the assistant until the plugin is unregistered.
    */
   assistantTools?: boolean;
+  /**
+   * The plugin's registered name, injected into `registerMenuContribution` so
+   * the host can title the plugin's submenu without a registry lookup.
+   */
+  pluginName?: string;
 }
 
 function scopeAppToPlugin(
@@ -741,8 +748,15 @@ function scopeAppToPlugin(
   pluginId: string,
   options: ScopeAppOptions = {},
 ): GeoLibreAppAPI {
-  const { onControlAdded, onRightPanelOpened, assistantTools = false, canAddControl } = options;
+  const {
+    onControlAdded,
+    onRightPanelOpened,
+    assistantTools = false,
+    canAddControl,
+    pluginName,
+  } = options;
   const register = app.registerToolbarMenu;
+  const registerContribution = app.registerMenuContribution;
   const registerRightPanel = app.registerRightPanel;
   const activatePlugin = app.activatePlugin;
   const deactivatePlugin = app.deactivatePlugin;
@@ -753,6 +767,7 @@ function scopeAppToPlugin(
     !canAddControl &&
     !hasAssistantRegistration &&
     !register &&
+    !registerContribution &&
     !onControlAdded &&
     !onRightPanelOpened &&
     !activatePlugin &&
@@ -812,6 +827,20 @@ function scopeAppToPlugin(
     ) => () => void;
     scoped.registerToolbarMenu = (menu) =>
       canAddControl?.() === false ? () => {} : registerWithOwner(menu, pluginId);
+  }
+
+  if (registerContribution) {
+    // Same host-side owner injection as registerToolbarMenu, plus the plugin's
+    // name so the host can title the submenu it nests the items under.
+    const registerContributionWithOwner = registerContribution as (
+      contribution: GeoLibreMenuContribution,
+      ownerPluginId: string,
+      ownerPluginName?: string,
+    ) => () => void;
+    scoped.registerMenuContribution = (contribution) =>
+      canAddControl?.() === false
+        ? () => {}
+        : registerContributionWithOwner(contribution, pluginId, pluginName);
   }
 
   if (registerRightPanel) {

@@ -24,6 +24,7 @@ import {
   isDataSourceVisible,
 } from "../../../lib/ui-profile";
 import type { AddLayerHandlers, ToolbarChrome } from "./constants";
+import { PluginMenuContributions } from "./PluginMenuContributions";
 
 interface AddDataMenuProps {
   chrome: ToolbarChrome;
@@ -201,6 +202,7 @@ export function AddDataMenu({
             })}
           </Fragment>
         ))}
+        <PluginMenuContributions target="addData" />
       </DropdownMenuContent>
     </DropdownMenu>
   );

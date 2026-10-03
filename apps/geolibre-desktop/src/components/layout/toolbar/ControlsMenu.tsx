@@ -60,6 +60,7 @@ import {
   type ToolbarMapControl,
 } from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
+import { PluginMenuContributions } from "./PluginMenuContributions";
 
 /**
  * Controls-menu entries that write to the project rather than only changing
@@ -494,6 +495,9 @@ export function ControlsMenu({
               {t("toolbar.item.recordVideo")}
             </DropdownMenuItem>
           )}
+          {/* Plugins are authoring chrome, hidden from the read-only viewer
+              like plugin-registered toolbar menus. */}
+          {!viewer && <PluginMenuContributions target="controls" />}
         </DropdownMenuContent>
       </DropdownMenu>
       <Dialog

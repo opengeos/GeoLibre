@@ -27,6 +27,7 @@ import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import type { ToolbarChrome } from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
+import { PluginMenuContributions } from "./PluginMenuContributions";
 
 // aria-describedby targets for the "your role does not allow this" explanations.
 // One per privilege rather than one per item: several denied entries share a
@@ -811,6 +812,7 @@ export function ProcessingMenu({
         {(show("processing.planetaryComputer") || showEarthEngine) && (
           <CapabilityNotice id={ADD_REMOTE_DENIED_ID} capability={addRemoteCap} />
         )}
+        <PluginMenuContributions target="processing" />
         {/* One reason line for the whole menu, at its foot: the entries
             `processing:run` disables are spread across the toolbox block and
             the workspaces block, and each points here with aria-describedby. */}

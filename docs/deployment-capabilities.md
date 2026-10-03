@@ -48,7 +48,7 @@ withheld is never on offer, whatever the profile says.
 | `data:add` | Bringing data in: the whole Add Data menu, dragging a file onto the map (browser and desktop), and the embed API's `addLayer` and `addData`. |
 | `processing:run` | The whole Processing menu — Whitebox, SQL, Python, the AI assistant, geocoding, Model Builder, conversion/vector/raster tools — and the embed API's `openTool`. |
 | `export:data` | Getting data or a rendering back out: Share, Export HTML, Print, Print Layout, Offline Basemap, and the embed API's `exportImage`. |
-| `plugins:install` | The Plugins menu, plugin-registered toolbar menus, activating or deactivating a plugin, and the plugin marketplace ("Manage plugins"). |
+| `plugins:install` | The Plugins menu, plugin-registered toolbar menus, plugin items in the built-in menus, activating or deactivating a plugin, and the plugin marketplace ("Manage plugins"). |
 | `settings:manage` | The Settings dialog and the Style Manager. |
 
 Anything not listed is unprivileged and stays available in every configuration:

@@ -747,6 +747,34 @@ describe("PluginManager toolbar menu scoping", () => {
     assert.deepEqual(seen, ["menu-plugin"]);
   });
 
+  it("tags registerMenuContribution with the activating plugin's id and name", () => {
+    const manager = new PluginManager();
+    const seen: Array<[string | undefined, string | undefined]> = [];
+    // Only the contribution registrar: a scope must still be built for it.
+    const mockApp = {
+      registerMenuContribution: (_c: unknown, ownerPluginId?: string, ownerName?: string) => {
+        seen.push([ownerPluginId, ownerName]);
+        return () => undefined;
+      },
+    } as unknown as GeoLibreAppAPI;
+
+    manager.register(
+      testPlugin({
+        id: "contrib-plugin",
+        name: "Contrib Plugin",
+        activate: (api) =>
+          void api.registerMenuContribution?.({
+            id: "contrib-plugin-processing",
+            menu: "processing",
+            items: [],
+          }),
+      }),
+    );
+    manager.activate("contrib-plugin", mockApp);
+
+    assert.deepEqual(seen, [["contrib-plugin", "Contrib Plugin"]]);
+  });
+
   it("tags app.credentials calls with the calling plugin's id", () => {
     const manager = new PluginManager();
     const seen: Array<[string, string | undefined]> = [];

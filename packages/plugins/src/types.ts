@@ -1043,6 +1043,18 @@ export interface GeoLibreAppAPI {
   /** Remove a previously registered toolbar menu. */
   unregisterToolbarMenu?: (id: string) => void;
   /**
+   * Add items to one of the built-in toolbar menus (Add Data, Processing,
+   * Controls), the way a QGIS plugin adds itself to the Vector or Raster menu.
+   * The host nests the items under a submenu named after the plugin, after the
+   * built-in entries. Returns an unregister function (call it from
+   * `deactivate`). Re-registering the same id replaces the contribution. An
+   * unknown `menu` warns and is ignored rather than throwing. Typed optional
+   * for forward-compatibility, so call it with optional chaining.
+   */
+  registerMenuContribution?: (contribution: GeoLibreMenuContribution) => () => void;
+  /** Remove a previously registered menu contribution. */
+  unregisterMenuContribution?: (id: string) => void;
+  /**
    * Register a plugin-owned floating panel: a draggable, closeable card the
    * host overlays on the map's top-left corner. Returns an unregister function
    * (call it from `deactivate`). The panel is not shown until
@@ -1123,6 +1135,27 @@ export interface GeoLibreToolbarMenu {
   /** Optional icon: a URL or `data:` URI rendered as an image. */
   icon?: string;
   /** Top-level items (actions, separators, or submenus). */
+  items: GeoLibreToolbarMenuItem[];
+}
+
+/** The built-in toolbar menus a plugin can add items to. */
+export const GEOLIBRE_MENU_CONTRIBUTION_TARGETS = ["addData", "processing", "controls"] as const;
+
+/** A built-in toolbar menu that accepts plugin contributions. */
+export type GeoLibreMenuContributionTarget = (typeof GEOLIBRE_MENU_CONTRIBUTION_TARGETS)[number];
+
+/**
+ * Items a plugin adds to a built-in toolbar menu. The host renders them inside
+ * a submenu named after the plugin at the end of {@link menu}; contributions
+ * from the same plugin to the same menu share that submenu, separated by a
+ * divider.
+ */
+export interface GeoLibreMenuContribution {
+  /** Stable unique id used to unregister the contribution. */
+  id: string;
+  /** The built-in menu to add the items to. */
+  menu: GeoLibreMenuContributionTarget;
+  /** The items (actions, separators, or submenus), same shape as toolbar menus. */
   items: GeoLibreToolbarMenuItem[];
 }
 

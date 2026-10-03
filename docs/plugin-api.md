@@ -262,6 +262,11 @@ export interface GeoLibreAppAPI {
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
+  // Items in the built-in menus (see "Adding items to built-in menus" below).
+  registerMenuContribution?: (
+    contribution: GeoLibreMenuContribution
+  ) => () => void;
+  unregisterMenuContribution?: (id: string) => void;
   // Floating panels (see "Floating panels" below).
   registerFloatingPanel?: (
     panel: GeoLibreFloatingPanelRegistration
@@ -296,6 +301,12 @@ export type GeoLibreToolbarMenuItem =
       items: GeoLibreToolbarMenuItem[];
     }
   | { type: "separator"; id?: string };
+
+export interface GeoLibreMenuContribution {
+  id: string;
+  menu: "addData" | "processing" | "controls";
+  items: GeoLibreToolbarMenuItem[];
+}
 
 export interface GeoLibreFloatingPanelRegistration {
   id: string;
@@ -1121,6 +1132,28 @@ app.registerToolbarMenu?.({
 ```
 
 The host re-reads every label each time it renders the menu tree, and it re-renders on a language change, so a getter follows the app language without your plugin re-registering its menu. A plain string is frozen at registration time. A getter that throws or returns nothing usable degrades to the item's id path and warns once, so a broken label cannot make the menu disappear.
+
+## Adding items to built-in menus
+
+Most plugins do not need a top-level menu of their own. Like a QGIS plugin that adds itself to the Vector or Raster menu, a plugin can add items to one of GeoLibre's built-in menus instead:
+
+```typescript
+const unregister = app.registerMenuContribution?.({
+  id: "my-plugin-processing",
+  menu: "processing", // "addData" | "processing" | "controls"
+  items: [
+    {
+      id: "run",
+      label: "Run analysis…",
+      onSelect: () => app.openRightPanel?.("my-workbench"),
+    },
+  ],
+});
+```
+
+The host always nests the items under a submenu named after your plugin, placed after a separator at the end of the target menu, and sorts plugin submenus alphabetically. A plugin cannot insert loose items between the built-in entries or reorder them. Several contributions from the same plugin to the same menu share one submenu, with a separator between them. Contributions with no items are not shown.
+
+Items use the same shape as [toolbar menus](#toolbar-menus): actions, submenus and separators, with optional icons and label getters that follow the app language. Register in `activate` and call the returned function (or `app.unregisterMenuContribution?.(id)`) in `deactivate`; re-registering the same `id` replaces the contribution. A `menu` the host does not recognize (for example, one added in a newer GeoLibre) logs a warning and is ignored rather than failing your activation. Like toolbar menus, contributions are hidden in the read-only viewer and when a deployment does not grant `plugins:install`.
 
 ## Following the app language
 
