@@ -170,7 +170,7 @@ export function layerMetadataPayload(
   const sourceUrls = redactConfigurationCredentials(sourceUrlsFromLayer(layer));
   return {
     ...(rasterInfo ? { raster: rasterInfo } : {}),
-    ...redactConfigurationCredentials(layer.metadata),
+    ...redactLayerMetadata(layer.metadata),
     layerName: layer.name,
     layerType: layer.type,
     ...(source ? { source } : {}),
@@ -181,6 +181,24 @@ export function layerMetadataPayload(
         }
       : {}),
     sourcePath: redactConfigurationCredentials(layer.sourcePath),
+  };
+}
+
+/**
+ * Scrub a layer's metadata for the Metadata dialog. The redaction pass copies a
+ * GeoJSON-shaped object verbatim, and it recognizes one by a `type` of
+ * `Feature`/`FeatureCollection`, so the top-level `type` is set aside first:
+ * otherwise a metadata record that happens to carry such a `type` would skip
+ * redaction entirely. Nested collections (`embeddedGeoJSON`) still copy as is.
+ *
+ * @param metadata - The layer's metadata.
+ * @returns A redacted copy.
+ */
+function redactLayerMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+  const { type, ...rest } = metadata ?? {};
+  return {
+    ...(type !== undefined ? { type: redactConfigurationCredentials(type) } : {}),
+    ...redactConfigurationCredentials(rest),
   };
 }
 

@@ -96,9 +96,16 @@ describe("layerMetadataPayload (#2855)", () => {
   it("redacts the source even when the metadata has a GeoJSON type", () => {
     const layer = tileLayer({
       source: { type: "raster", url: "https://x.test/?token=secret" },
-      metadata: { type: "FeatureCollection" },
+      metadata: {
+        type: "FeatureCollection",
+        token: "secret",
+        link: "https://x.test/?apikey=secret",
+      },
     });
-    assert.doesNotMatch(JSON.stringify(layerMetadataPayload(layer)), /secret/);
+    const payload = layerMetadataPayload(layer);
+    assert.doesNotMatch(JSON.stringify(payload), /secret/);
+    assert.equal(payload.type, "FeatureCollection");
+    assert.equal(payload.link, "https://x.test/");
   });
 
   it("does not mutate the layer", () => {
