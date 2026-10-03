@@ -664,6 +664,19 @@ export interface GeoLibreAppAPI {
   onLayersChanged?: (callback: (layerIds: string[]) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
   /**
+   * A `fetch` that runs through the desktop app's native HTTP client: any
+   * method, no CORS, and a cookie jar kept for the app session. Desktop only;
+   * undefined in the browser and Jupyter builds.
+   *
+   * Use it for a service that signs in with a session cookie. The webview runs
+   * at `tauri://localhost`, so a cookie set by the service is third-party and
+   * the webview drops it: the login succeeds and the next request gets a 401.
+   * Cookies stay in the native jar and Set-Cookie headers are not exposed to
+   * JavaScript; the jar is shared by every plugin and cleared on restart.
+   * Requests to link-local and cloud-metadata addresses are refused.
+   */
+  nativeFetch?: typeof globalThis.fetch;
+  /**
    * Resolve a fetchable URL for an asset shipped alongside an external
    * plugin's manifest (e.g. sample data bundled in the plugin folder). The
    * host resolves `relativePath` against the plugin's own directory. Returns

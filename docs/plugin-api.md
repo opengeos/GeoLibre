@@ -189,6 +189,8 @@ export interface GeoLibreAppAPI {
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
+  // Desktop only: fetch through the native client (see "Signing in with a session cookie").
+  nativeFetch?: typeof globalThis.fetch;
   fitBounds?: (bounds: [number, number, number, number]) => void;
   // The extent the primary map currently shows, [west, south, east, north] in
   // degrees, on either renderer. The engine-neutral replacement for
@@ -1165,6 +1167,23 @@ const where = app.credentials?.location(); // "keychain" | "browser", for UI cop
 - **This is storage, not isolation.** Plugins run as trusted code in the app window, so a plugin can still read another plugin's values from memory or by wrapping `fetch`. The id prefix keeps well-behaved plugins apart; it is not a security boundary.
 - **Never put secrets in `getProjectState`.** Plugin settings are saved in project files and shared or exported with them.
 - **Built-in plugins use it too.** The Hugging Face, Mapillary and God's Eye View tokens moved from their own `localStorage` keys to `app.credentials`; the host migrates an existing plaintext value on first launch and removes it only after the new write succeeds.
+
+## Signing in with a session cookie
+
+A service that signs users in with a session cookie does not work from the desktop app's webview. The page runs at `tauri://localhost`, so a cookie the service sets is third-party, and WebKit (macOS, Linux) drops it: the login request returns 200 and the next request returns 401. On the desktop, `app.nativeFetch` sends requests through the app's native HTTP client instead. It has the `fetch` signature, takes any method and body, is not subject to CORS, and keeps cookies in a jar that lasts the app session.
+
+```typescript
+const http = app.nativeFetch ?? fetch; // undefined in the browser and Jupyter builds
+await http(`${server}/api/v1/auth/access-token`, {
+  method: "POST",
+  body: new URLSearchParams({ username: email, password }),
+});
+const user = await (await http(`${server}/api/v1/users/current`)).json(); // sends the cookie
+```
+
+- **Cookies stay native.** Set-Cookie headers are not exposed to JavaScript, and `credentials` has no effect: every request sends whatever the jar holds for that host.
+- **One jar for the session.** It is shared by every plugin and cleared when the app restarts, so a plugin should be ready to sign in again.
+- **Limits:** request and response bodies up to 64 MiB, a 120 second timeout, and no link-local or cloud-metadata addresses. `AbortSignal` cancels the native request.
 
 ## Floating panels
 

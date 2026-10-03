@@ -9,10 +9,7 @@ use std::{
 use reqwest::{redirect::Policy, Url};
 use serde::Serialize;
 
-use super::{
-    client_identity, extra_ca_certificates, url_is_fetchable, ClientIdentity, GuardedDnsResolver,
-    MAX_HTTP_REDIRECTS,
-};
+use super::{guarded_async_client_builder, url_is_fetchable, MAX_HTTP_REDIRECTS};
 
 const MAX_ARCGIS_BODY_BYTES: usize = 64 * 1024 * 1024;
 const BODY_TOO_LARGE: &str =
@@ -52,37 +49,26 @@ fn client() -> Result<reqwest::Client, String> {
         std::sync::OnceLock::new();
     CLIENT
         .get_or_init(|| {
-            let mut builder = reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(super::REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-                .dns_resolver(Arc::new(GuardedDnsResolver))
-                .user_agent("GeoLibre Desktop")
-                .redirect(Policy::custom(|attempt| {
-                    if attempt.previous().iter().any(|url| url.path().ends_with("/applyEdits")) {
-                        return attempt.error("ArcGIS write redirects are not allowed.");
-                    }
-                    if attempt.previous().len() >= MAX_HTTP_REDIRECTS {
-                        return attempt.error("Too many ArcGIS redirects.");
-                    }
-                    match validate_redirect(attempt.previous(), attempt.url()) {
-                        Ok(()) => attempt.follow(),
-                        Err(error) => attempt.error(error),
-                    }
-                }));
-            // Match the native download client's enterprise CA and mTLS settings.
-            for certificate in extra_ca_certificates()? {
-                builder = builder.add_root_certificate(certificate);
-            }
-            builder = match client_identity()? {
-                #[cfg(not(target_os = "android"))]
-                Some(ClientIdentity::Pkcs12(identity)) => {
-                    builder.use_native_tls().identity(identity)
+            // The shared builder carries the SSRF guard and the native download
+            // client's enterprise CA and mTLS settings.
+            guarded_async_client_builder(Policy::custom(|attempt| {
+                if attempt
+                    .previous()
+                    .iter()
+                    .any(|url| url.path().ends_with("/applyEdits"))
+                {
+                    return attempt.error("ArcGIS write redirects are not allowed.");
                 }
-                Some(ClientIdentity::Pem(identity)) => builder.use_rustls_tls().identity(identity),
-                None => builder.use_rustls_tls(),
-            };
-            builder
-                .build()
-                .map_err(|error| format!("Could not create ArcGIS HTTP client: {error}"))
+                if attempt.previous().len() >= MAX_HTTP_REDIRECTS {
+                    return attempt.error("Too many ArcGIS redirects.");
+                }
+                match validate_redirect(attempt.previous(), attempt.url()) {
+                    Ok(()) => attempt.follow(),
+                    Err(error) => attempt.error(error),
+                }
+            }))?
+            .build()
+            .map_err(|error| format!("Could not create ArcGIS HTTP client: {error}"))
         })
         .clone()
 }
@@ -152,7 +138,10 @@ async fn request(url: String, body: Option<String>) -> Result<ArcGISResponse, St
     if body.is_some() && (url.scheme() != "https" || !url.path().ends_with("/applyEdits")) {
         return Err("ArcGIS writes require an HTTPS applyEdits endpoint.".into());
     }
-    if body.as_ref().is_some_and(|value| value.len() > MAX_ARCGIS_BODY_BYTES) {
+    if body
+        .as_ref()
+        .is_some_and(|value| value.len() > MAX_ARCGIS_BODY_BYTES)
+    {
         return Err("ArcGIS edit request exceeds the 64 MiB limit.".into());
     }
     let checked = url.clone();
@@ -161,7 +150,10 @@ async fn request(url: String, body: Option<String>) -> Result<ArcGISResponse, St
         .map_err(|error| format!("ArcGIS validation failed: {error}"))??;
     let client = client()?;
     let request = if let Some(body) = body {
-        client.post(url).header("Content-Type", "application/x-www-form-urlencoded").body(body)
+        client
+            .post(url)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
     } else {
         client.get(url)
     };

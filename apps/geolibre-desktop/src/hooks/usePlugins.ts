@@ -151,7 +151,7 @@ import type {
   GeoLibreRasterWindowOptions,
 } from "@geolibre/plugins";
 import { cogEngineDefaults } from "../lib/cog-render-engine";
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import type { RefObject } from "react";
@@ -171,6 +171,7 @@ import {
   PluginPolicyError,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
+import { createPluginHttpSend, createPluginNativeFetch } from "../lib/plugin-native-fetch";
 import { pickZarrDirectory, zarrDirectoryPickerSupported } from "../lib/zarr-directory-picker";
 import { openExternalLink } from "../lib/open-external";
 import { fetchUrlBytes } from "../lib/native-http";
@@ -1409,6 +1410,7 @@ export function createAppAPI(mapControllerRef?: RefObject<MapEngine | null>) {
         }
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
+    nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
     resolvePluginAssetUrl: resolvePluginAssetUrlForLoadedPlugin,
     activatePlugin: async (pluginId: string, state?: unknown) => {
       const activated = await manager.activate(pluginId, api);
@@ -1878,6 +1880,17 @@ async function fetchArrayBuffer(url: string, signal?: AbortSignal): Promise<Arra
     throw new Error(`HTTP ${response.status} ${response.statusText}`);
   }
   return response.arrayBuffer();
+}
+
+let cachedPluginNativeFetch: typeof globalThis.fetch | null = null;
+
+/** The desktop's native plugin fetch (lib/plugin-native-fetch.ts), built once. */
+function pluginNativeFetch(): typeof globalThis.fetch {
+  cachedPluginNativeFetch ??= createPluginNativeFetch(
+    createPluginHttpSend(invoke, () => new Channel<void>()),
+    appendDiagnostic,
+  );
+  return cachedPluginNativeFetch;
 }
 
 function isTauriRuntime(): boolean {

@@ -1,6 +1,7 @@
 mod arcgis_http;
 mod aws_credentials;
 mod aws_sts;
+mod plugin_http;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
 // a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
 // inbound connection requires the `com.apple.security.network.server`
@@ -413,6 +414,7 @@ pub fn run() {
         .manage(pending_project_paths)
         .manage(SelectedImagePaths::default())
         .manage(arcgis_http::ArcGISRequests::default())
+        .manage(plugin_http::PluginHttpRequests::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         // Runs before persisted-scope's setup hook so legacy photo grants are
@@ -478,6 +480,8 @@ pub fn run() {
             fetch_url_response,
             arcgis_http::fetch_arcgis_response,
             arcgis_http::cancel_arcgis_request,
+            plugin_http::plugin_http_request,
+            plugin_http::cancel_plugin_http_request,
             aws_credentials::aws_list_profiles,
             aws_credentials::aws_resolve_credentials,
             aws_credentials::aws_sso_login_start,
@@ -1636,6 +1640,29 @@ fn guarded_http_client() -> Result<reqwest::blocking::Client, String> {
     static CLIENT: std::sync::OnceLock<Result<reqwest::blocking::Client, String>> =
         std::sync::OnceLock::new();
     CLIENT.get_or_init(build_guarded_http_client).clone()
+}
+
+/// An async `reqwest` client builder with the same SSRF guard, enterprise CAs
+/// and mTLS identity as [`build_guarded_http_client_with_redirects`]. The async
+/// transports (ArcGIS, plugin requests) add their own redirect policy and any
+/// extra settings, then build and cache the client themselves.
+fn guarded_async_client_builder(
+    redirects: reqwest::redirect::Policy,
+) -> Result<reqwest::ClientBuilder, String> {
+    let mut builder = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
+        .dns_resolver(std::sync::Arc::new(GuardedDnsResolver))
+        .user_agent("GeoLibre Desktop")
+        .redirect(redirects);
+    for certificate in extra_ca_certificates()? {
+        builder = builder.add_root_certificate(certificate);
+    }
+    Ok(match client_identity()? {
+        #[cfg(not(target_os = "android"))]
+        Some(ClientIdentity::Pkcs12(identity)) => builder.use_native_tls().identity(identity),
+        Some(ClientIdentity::Pem(identity)) => builder.use_rustls_tls().identity(identity),
+        None => builder.use_rustls_tls(),
+    })
 }
 
 fn build_guarded_http_client() -> Result<reqwest::blocking::Client, String> {

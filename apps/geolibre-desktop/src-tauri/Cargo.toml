@@ -58,9 +58,12 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 # the NDK.
 reqwest = { version = "0.12", default-features = false, features = [
   "blocking",
+  "cookies",
   "rustls-tls",
   "rustls-tls-native-roots",
 ] }
+# Base64 carries plugin HTTP bodies (plugin_http.rs) across the IPC boundary.
+base64 = "0.22"
 flate2 = "1"
 tar = "0.4"
 zip = { version = "8", default-features = false, features = ["deflate"] }
