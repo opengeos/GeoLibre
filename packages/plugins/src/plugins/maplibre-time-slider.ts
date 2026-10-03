@@ -127,7 +127,9 @@ function stopThemeSync(): void {
   themeObserver = null;
 }
 
-let timeSliderPosition: GeoLibreMapControlPosition = "bottom-left";
+// The control is a dock pinned to the bottom of the map, so its corner is fixed
+// and the Plugins menu offers no Position submenu.
+const TIME_SLIDER_POSITION: GeoLibreMapControlPosition = "bottom-left";
 let timeSliderControl: TimeSliderControl | null = null;
 // The host the control was activated on, so the source reconciliation can ask
 // which renderer draws the map (see enforceEngineSupport).
@@ -179,7 +181,7 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     timeSliderControl = control;
     attachStoreSync(control);
 
-    const added = app.addMapControl(control, timeSliderPosition);
+    const added = app.addMapControl(control, TIME_SLIDER_POSITION);
     if (!added) {
       detachStoreSync?.();
       timeSliderControl = null;
@@ -198,32 +200,6 @@ export const maplibreTimeSliderPlugin: GeoLibrePlugin = {
     app.removeMapControl(timeSliderControl);
     timeSliderControl = null;
     removeAllTimeSliderStoreLayers();
-  },
-  getMapControlPosition: () => timeSliderPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    timeSliderPosition = position;
-    if (!timeSliderControl) return;
-    // The library's onRemove destroys all adapters/layers and clears event
-    // handlers, so capture the full config first and rebuild a fresh control
-    // at the new position to preserve user-added layers.
-    const config = timeSliderControl.getConfig();
-    detachStoreSync?.();
-    app.removeMapControl(timeSliderControl);
-    const control = rememberConfigOnRemove(controlFromConfig(config));
-    timeSliderControl = control;
-    attachStoreSync(control);
-    const added = app.addMapControl(control, timeSliderPosition);
-    if (!added) {
-      detachStoreSync?.();
-      timeSliderControl = null;
-      // Preserve the captured config so a later activate() restores the user's
-      // layers, and drop the now-orphaned store layers (the previous control's
-      // map layers were already removed above).
-      savedConfig = config;
-      removeAllTimeSliderStoreLayers();
-      return false;
-    }
-    setTimeout(() => syncStoreLayers(control), 0);
   },
   getProjectState: () => {
     // A control its map already removed reports no sources; use its snapshot.

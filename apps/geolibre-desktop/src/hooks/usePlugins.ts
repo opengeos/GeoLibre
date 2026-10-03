@@ -244,7 +244,6 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreGeoEditorPlugin,
   maplibreAnnotationsPlugin,
   maplibreDimensionsPlugin,
-  maplibreBasemapControlPlugin,
   // The web service plugins (WEB_SERVICE_PLUGIN_IDS) are grouped into the
   // "Web Services" submenu, rendered where the first of them appears in this
   // order.
@@ -278,6 +277,7 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreFieldsOfTheWorldPlugin,
   maplibreOceanDataPlatformPlugin,
   maplibreGeoLensPlugin,
+  maplibreBasemapControlPlugin,
   maplibreEsriWaybackPlugin,
   maplibreTimeSliderPlugin,
   maplibreTimelapsePlugin,
