@@ -281,7 +281,7 @@ export function buildExtrusionModel(
   const metresPerLat = EARTH_RADIUS * DEG;
   const project = (lon: number, lat: number): [number, number] => [
     // Wrap the offset into -180..180 so both sides of ±180° stay adjacent.
-    ((((lon - origin[0]) % 360) + 540) % 360 - 180) * metresPerLon,
+    (((((lon - origin[0]) % 360) + 540) % 360) - 180) * metresPerLon,
     (lat - origin[1]) * metresPerLat,
   ];
 

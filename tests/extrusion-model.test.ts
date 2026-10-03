@@ -149,8 +149,24 @@ describe("buildExtrusionModel across the antimeridian", () => {
       geometry: {
         type: "MultiPolygon",
         coordinates: [
-          [[[179.9999, 0], [180, 0], [180, 0.0001], [179.9999, 0.0001], [179.9999, 0]]],
-          [[[-180, 0], [-179.9999, 0], [-179.9999, 0.0001], [-180, 0.0001], [-180, 0]]],
+          [
+            [
+              [179.9999, 0],
+              [180, 0],
+              [180, 0.0001],
+              [179.9999, 0.0001],
+              [179.9999, 0],
+            ],
+          ],
+          [
+            [
+              [-180, 0],
+              [-179.9999, 0],
+              [-179.9999, 0.0001],
+              [-180, 0.0001],
+              [-180, 0],
+            ],
+          ],
         ],
       },
     };
@@ -165,7 +181,17 @@ describe("buildExtrusionModel across the antimeridian", () => {
     const sliver: Feature = {
       type: "Feature",
       properties: { height: 10 },
-      geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [2, 0], [0, 0]]] },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [2, 0],
+            [0, 0],
+          ],
+        ],
+      },
     };
     const model = buildExtrusionModel(collection(sliver, square(5)), style());
     assert.equal(model.solids.length, 1);
