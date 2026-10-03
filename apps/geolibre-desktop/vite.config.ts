@@ -10,7 +10,6 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
-import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 import {
   proxyAircraftRequestGuarded,
@@ -1476,7 +1475,6 @@ export default defineConfig({
       path.resolve(__dirname, "../../backend/geolibre_server/geolibre_server/vector_ops.py"),
       path.resolve(__dirname, "src/lib/pyodide/vector_ops.generated.py"),
     ),
-    copyRtlText(path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js")),
     copyCesiumAssets(path.resolve(__dirname, "public/cesium")),
     react(),
     wmsProxyPlugin(),
