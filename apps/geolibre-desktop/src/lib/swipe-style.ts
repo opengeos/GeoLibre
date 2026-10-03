@@ -130,6 +130,54 @@ const SWIPE_SELECT_FIXES = `
   background-repeat: no-repeat;
   background-size: 10px 10px;
 }
+
+/* Dark theme: retarget the light literals above onto the app's design tokens.
+   The menu is appended to <body>, so it is matched by .dark on <html>. */
+.dark .swipe-control-panel .swipe-control-select {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  color-scheme: dark;
+}
+
+.dark .swipe-control-panel .swipe-control-select option {
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  color-scheme: dark;
+}
+
+.dark .swipe-control-panel .swipe-select-proxy {
+  background-color: hsl(var(--background));
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%23cbd5e1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .swipe-select-menu {
+  background: hsl(var(--popover));
+  border-color: hsl(var(--border));
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.45);
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .swipe-select-menu button {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .swipe-select-menu button:hover,
+.dark .swipe-select-menu button.is-active {
+  background: hsl(var(--accent));
+}
+
+.dark .swipe-select-menu button.is-selected {
+  background: #4a90d9;
+  color: #fff;
+}
+
+.dark .swipe-control-panel .swipe-layer-item input[type="checkbox"]:not(:checked) {
+  background-color: hsl(var(--background));
+  border-color: hsl(var(--input));
+}
 `;
 
 if (typeof document !== "undefined" && !document.getElementById(SWIPE_STYLE_ID)) {

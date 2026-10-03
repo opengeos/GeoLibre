@@ -19,7 +19,9 @@ function documentedLinkNames(): string[] {
 
 test("?plugin= activates a built-in plugin", async ({ page }) => {
   await waitForMap(page, "/?plugin=swipe");
-  await expect(page.locator(".swipe-control")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".geolibre-docked-map-control .swipe-control-panel")).toBeVisible({
+    timeout: 30_000,
+  });
 });
 
 /**

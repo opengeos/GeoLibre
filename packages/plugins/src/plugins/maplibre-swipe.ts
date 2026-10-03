@@ -9,7 +9,7 @@ import {
   type SwipeLayerSide,
   type SwipeState,
 } from "maplibre-gl-swipe";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getStyleMap } from "./style-map";
 import { resolveSwipeSideIds, type SwipeStyleLayer } from "./swipe-layer-ids";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
@@ -23,6 +23,7 @@ import { SwipeCogMirror } from "./swipe-cog-mirror";
 import { getRasterMainVisibility, setRasterMainVisibility } from "./maplibre-raster";
 import { setTransientRasterVisibility } from "./raster-layer-sync";
 import { SwipeRasterMirror } from "./swipe-raster-mirror";
+import { resolveDocumentTheme } from "./components/shared";
 
 /**
  * Plugin id for the Layer Swipe control. Exported so the app can coordinate it
@@ -30,11 +31,128 @@ import { SwipeRasterMirror } from "./swipe-raster-mirror";
  */
 export const SWIPE_PLUGIN_ID = "maplibre-gl-swipe";
 
-let swipeControlPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "layer-swipe-panel";
+// The control's own toolbar button is hidden (the dock owns opening and
+// closing), so its corner is irrelevant; it only has to be a valid position.
+const SWIPE_CONTROL_POSITION = "top-left";
+/** Marks the control's toolbar button so index.css can hide it. */
+const SWIPE_CONTROL_CLASS = "geolibre-swipe-control";
 
 let swipeControl: SwipeControl | null = null;
 let savedSwipeState: SwipeState | null = null;
 let unsubscribeBasemap: (() => void) | null = null;
+
+// --- Docked panel -----------------------------------------------------------
+// Only the control's settings panel docks. The slider and the clipped
+// comparison map are map overlays and stay in the map container, and the
+// control itself stays mounted on the map for as long as the plugin is active:
+// another docked panel displacing this one runs its render cleanup, and that
+// must not stop the swipe. So the dock adopts the panel element while it shows
+// it and lets go of it when displaced; it never owns the control.
+
+let unregisterPanel: (() => void) | null = null;
+/** The dock body while it is showing the swipe panel, or null otherwise. */
+let dockContainer: HTMLElement | null = null;
+/** The live control's panel element, once the control has built it. */
+let swipePanel: HTMLElement | null = null;
+let panelObserver: MutationObserver | null = null;
+
+function stopWatchingSwipePanel(): void {
+  panelObserver?.disconnect();
+  panelObserver = null;
+}
+
+/**
+ * Take the panel the control appended to the map container: into the dock when
+ * it is showing, otherwise out of the DOM until the dock shows it again.
+ *
+ * @returns Whether the panel was found.
+ */
+function takeSwipePanel(mapContainer: HTMLElement): boolean {
+  const panel = mapContainer.querySelector<HTMLElement>(":scope > .swipe-control-panel");
+  if (!panel) return false;
+  swipePanel = panel;
+  if (dockContainer) dockContainer.replaceChildren(panel);
+  else panel.remove();
+  return true;
+}
+
+/**
+ * Move the newly mounted control's panel out of the map container. The control
+ * builds its panel only after fetching a basemap style it has no layer ids
+ * for, so when it is not there yet, watch for it.
+ */
+function adoptSwipePanel(app: GeoLibreAppAPI): void {
+  stopWatchingSwipePanel();
+  swipePanel = null;
+  const mapContainer = getStyleMap(app)?.getContainer();
+  if (!mapContainer || takeSwipePanel(mapContainer)) return;
+  panelObserver = new MutationObserver(() => {
+    if (takeSwipePanel(mapContainer)) stopWatchingSwipePanel();
+  });
+  panelObserver.observe(mapContainer, { childList: true });
+}
+
+/**
+ * Mount a control on the map and hand its panel to the dock.
+ *
+ * @returns Whether the host accepted the control.
+ */
+function mountSwipeControl(app: GeoLibreAppAPI, control: SwipeControl): boolean {
+  if (!app.addMapControl(control, SWIPE_CONTROL_POSITION)) return false;
+  // The dock owns collapsing and closing; collapsing the control would leave an
+  // empty dock open.
+  control.collapse = () => {};
+  adoptSwipePanel(app);
+  return true;
+}
+
+// Keeps the control's color scheme on the in-app theme rather than the system
+// `prefers-color-scheme`, which can differ. Late-bound to `swipeControl` so a
+// rebuilt control is covered too; a rebuild also reads the theme afresh.
+let themeObserver: MutationObserver | null = null;
+
+function startThemeSync(): void {
+  if (themeObserver || typeof MutationObserver === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  // The observer fires on any `class` change of <html>; only act on a flip.
+  let lastTheme = resolveDocumentTheme();
+  themeObserver = new MutationObserver(() => {
+    const next = resolveDocumentTheme();
+    if (next === lastTheme) return;
+    lastTheme = next;
+    swipeControl?.setTheme(next);
+  });
+  themeObserver.observe(document.documentElement, { attributeFilter: ["class"] });
+}
+
+function stopThemeSync(): void {
+  themeObserver?.disconnect();
+  themeObserver = null;
+}
+
+function registerSwipePanel(app: GeoLibreAppAPI): void {
+  unregisterPanel?.();
+  unregisterPanel =
+    app.registerRightPanel?.({
+      id: PANEL_ID,
+      title: "Layer Swipe",
+      dock: "replace-style",
+      defaultWidth: 320,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        dockContainer = container;
+        container.classList.add("geolibre-docked-map-control");
+        if (swipePanel) container.replaceChildren(swipePanel);
+        return () => {
+          if (dockContainer === container) dockContainer = null;
+          swipePanel?.remove();
+          container.classList.remove("geolibre-docked-map-control");
+        };
+      },
+    }) ?? null;
+}
 
 // --- COG raster swipe integration ------------------------------------------
 // GeoLibre renders COG rasters on a deck.gl overlay, so they are MapLibre custom
@@ -292,15 +410,12 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
   // provider stays MapLibre-only (supportsRasterProvider).
   engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
-    swipeControl = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
-
-    const added = app.addMapControl(swipeControl, swipeControlPosition);
-    if (!added) {
-      swipeControl = null;
-      return false;
-    }
-    expandSwipeControl(savedSwipeState ?? undefined);
+    if (!app.registerRightPanel || !app.openRightPanel) return false;
+    const control = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
+    if (!mountSwipeControl(app, control)) return false;
+    swipeControl = control;
     startSwipeIdResolution(app);
+    startThemeSync();
 
     // Keep the swipe panel's COG raster rows and comparison-map mirror in sync
     // as rasters are added, removed, or restyled while the swipe is active.
@@ -334,37 +449,15 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
       }
       rebuildOnStyleLoad(app);
     });
-  },
-  deactivate: (app: GeoLibreAppAPI) => {
-    unsubscribeBasemap?.();
-    unsubscribeBasemap = null;
-    cancelPendingStyleLoadRebuild();
-    stopSwipeIdResolution();
-    unsubscribeCogRasterChanges?.();
-    unsubscribeCogRasterChanges = null;
-    // Restore any main-map raster this provider hid; removeMapControl's
-    // detachComparison also tears the mirror down, but that only runs when a
-    // comparison map exists.
-    teardownCogSwipe();
-    if (!swipeControl) return;
-    savedSwipeState = swipeControl.getState();
-    app.removeMapControl(swipeControl);
-    swipeControl = null;
-  },
-  getMapControlPosition: () => swipeControlPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    swipeControlPosition = position;
-    if (!swipeControl) return;
-    const currentState = swipeControl.getState();
-    savedSwipeState = currentState;
-    app.removeMapControl(swipeControl);
-    const added = app.addMapControl(swipeControl, swipeControlPosition);
-    if (!added) {
-      stopSwipeIdResolution();
-      swipeControl = null;
+
+    registerSwipePanel(app);
+    if (!app.openRightPanel(PANEL_ID)) {
+      teardownSwipe(app);
       return false;
     }
-    expandSwipeControl(currentState);
+  },
+  deactivate: (app: GeoLibreAppAPI) => {
+    teardownSwipe(app);
   },
   getProjectState: () => swipeControl?.getState() ?? savedSwipeState ?? undefined,
   applyProjectState: (app: GeoLibreAppAPI, state: unknown) => {
@@ -380,16 +473,39 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
 
     app.removeMapControl(swipeControl);
     swipeControl = new SwipeControl(getSwipeControlOptions(app, savedSwipeState ?? undefined));
-    const added = app.addMapControl(swipeControl, swipeControlPosition);
-    if (!added) {
+    if (!mountSwipeControl(app, swipeControl)) {
       stopSwipeIdResolution();
       swipeControl = null;
       return false;
     }
-    expandSwipeControl(savedSwipeState ?? undefined);
     startSwipeIdResolution(app);
   },
 };
+
+/** Remove the control, its subscriptions and its docked panel. */
+function teardownSwipe(app: GeoLibreAppAPI): void {
+  unsubscribeBasemap?.();
+  unsubscribeBasemap = null;
+  cancelPendingStyleLoadRebuild();
+  stopSwipeIdResolution();
+  stopWatchingSwipePanel();
+  stopThemeSync();
+  unsubscribeCogRasterChanges?.();
+  unsubscribeCogRasterChanges = null;
+  // Restore any main-map raster this provider hid; removeMapControl's
+  // detachComparison also tears the mirror down, but that only runs when a
+  // comparison map exists.
+  teardownCogSwipe();
+  if (swipeControl) {
+    savedSwipeState = swipeControl.getState();
+    app.removeMapControl(swipeControl);
+    swipeControl = null;
+  }
+  swipePanel = null;
+  app.closeRightPanel?.(PANEL_ID);
+  unregisterPanel?.();
+  unregisterPanel = null;
+}
 
 /**
  * Apply the camera the comparison map is handed unchanged.
@@ -481,7 +597,11 @@ export function getSwipeControlOptions(
     orientation: previousState?.orientation ?? "vertical",
     position: previousState?.position ?? 50,
     showPanel: true,
-    collapsed: previousState?.collapsed ?? false,
+    // Always expanded: the panel lives in the dock, which owns collapsing.
+    collapsed: false,
+    className: SWIPE_CONTROL_CLASS,
+    // Follow the in-app theme, not the system one; kept in sync by startThemeSync.
+    theme: resolveDocumentTheme(),
     title: "Layer Swipe",
     panelWidth: 300,
     // Upper bound only; the control also shrinks the panel to the available map height.
@@ -531,8 +651,7 @@ function rebuildSwipeControl(app: GeoLibreAppAPI): void {
   app.removeMapControl(swipeControl);
 
   const control = new SwipeControl(getSwipeControlOptions(app, previousState));
-  const added = app.addMapControl(control, swipeControlPosition);
-  if (!added) {
+  if (!mountSwipeControl(app, control)) {
     // The host refused the add. That is not a transient failure: the app this
     // subscription closed over belongs to one activation, and the host stops
     // serving it once a later activation supersedes it. Publishing the refused
@@ -547,7 +666,6 @@ function rebuildSwipeControl(app: GeoLibreAppAPI): void {
   }
 
   swipeControl = control;
-  expandSwipeControl(previousState);
   // The new style has its own layer set, so any side id still unresolved gets
   // another chance against it.
   startSwipeIdResolution(app);
@@ -596,11 +714,6 @@ export function rebuildOnStyleLoad(app: GeoLibreAppAPI): void {
   };
   pendingStyleLoadRebuild = () => map.off("style.load", handler);
   map.on("style.load", handler);
-}
-
-function expandSwipeControl(state?: SwipeState): void {
-  if (state?.collapsed === true) return;
-  setTimeout(() => swipeControl?.expand(), 0);
 }
 
 function normalizeSwipeProjectState(state: unknown): SwipeState | null {

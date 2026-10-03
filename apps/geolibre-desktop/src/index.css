@@ -3850,6 +3850,54 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   display: none !important;
 }
 
+/* Layer Swipe docks only its settings panel; the slider and comparison map stay
+   on the map. The dock owns opening and closing, so the control's toolbar
+   button is hidden, and its header (title + close) duplicates the dock's. */
+.swipe-control.geolibre-swipe-control {
+  display: none !important;
+}
+
+.geolibre-docked-map-control .swipe-control-panel {
+  position: static !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  display: flex !important;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.geolibre-docked-map-control .swipe-control-header {
+  display: none !important;
+}
+
+/* The swipe control follows the in-app theme (setTheme) and draws from
+   --swipe-* variables; in dark mode point them at the app's design tokens so
+   the docked panel matches the other side panels. The select proxy, its menu
+   and the checkboxes are GeoLibre's own and are themed in swipe-style.ts. */
+.dark .swipe-control-panel.swipe-theme-dark {
+  --swipe-bg: transparent;
+  --swipe-header-bg: hsl(var(--muted));
+  --swipe-fg: hsl(var(--foreground));
+  --swipe-text: hsl(var(--foreground));
+  --swipe-label: hsl(var(--muted-foreground));
+  --swipe-muted: hsl(var(--muted-foreground));
+  --swipe-border: hsl(var(--border));
+  --swipe-border-subtle: hsl(var(--border));
+  --swipe-input-bg: hsl(var(--background));
+  --swipe-input-border: hsl(var(--border));
+  --swipe-input-border-hover: hsl(var(--ring));
+  --swipe-list-bg: hsl(var(--muted));
+  --swipe-hover: hsl(var(--accent));
+  --swipe-item-hover: hsl(var(--accent));
+  --swipe-track: hsl(var(--input));
+  --swipe-scrollbar: hsl(var(--border));
+  --swipe-scrollbar-hover: hsl(var(--muted-foreground));
+}
+
 .geolibre-docked-map-control .vantor-panel__table-container {
   max-height: none;
 }

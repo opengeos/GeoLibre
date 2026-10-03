@@ -270,16 +270,16 @@ for (const theme of ["light", "dark"] as const) {
     async function run() {
       await openMapboxProject(page, info.project.use.baseURL!, theme);
 
-      // Plugins → Layer Swipe → Activate. The entry was greyed out on this
-      // renderer before the plugin declared Mapbox.
+      // Plugins → Layer Swipe. The entry was greyed out on this renderer
+      // before the plugin declared Mapbox.
       await page.getByRole("button", { name: "Plugins", exact: true }).click();
       const item = page.getByRole("menuitem", { name: "Layer Swipe", exact: true });
       await expect(item).toBeEnabled();
-      await item.hover();
-      await page.getByRole("menuitem", { name: "Activate", exact: true }).click();
+      await item.click();
 
-      await expect(page.locator(".swipe-control")).toBeVisible();
-      const panel = page.locator(".swipe-control-panel");
+      // The settings panel opens in the dock; the slider stays on the map.
+      const panel = page.locator(".geolibre-docked-map-control .swipe-control-panel");
+      await expect(panel).toBeVisible();
       await expect(panel).toHaveClass(/expanded/);
 
       // The comparison pane is a mapbox-gl map: a MapLibre one cannot be
@@ -448,9 +448,7 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
   await openMapboxProject(page, info.project.use.baseURL!, "light");
 
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
-  const item = page.getByRole("menuitem", { name: "Layer Swipe", exact: true });
-  await item.hover();
-  await page.getByRole("menuitem", { name: "Activate", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Layer Swipe", exact: true }).click();
   await expect(page.locator(".swipe-comparison-map .mapboxgl-canvas")).toBeAttached();
 
   // Put East on the right side only, so each rebuild has a non-default
@@ -475,9 +473,8 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
     "geolibre-mapbox-East-geojson-fill",
   );
 
-  // Collapse the swipe panel: it and the Basemaps panel share the top-left
-  // corner, and the picker has to be clickable.
-  await page.locator(".swipe-control-close").click();
+  // Opening Basemaps displaces the docked swipe panel, which must not stop the
+  // swipe itself.
   await page.getByRole("button", { name: "Basemaps", exact: true }).click();
 
   // Only a `STYLE` basemap replaces the map's style; a raster one is added as
@@ -500,7 +497,8 @@ test("keeps one comparison pane across basemap changes", async ({ page }, info) 
     await expect(page.locator(".swipe-comparison-map")).toHaveCount(1);
     await expect(page.locator(".swipe-clip-container")).toHaveCount(1);
     await expect(page.locator(".swipe-slider")).toHaveCount(1);
-    // The throw left the control unmounted, so its button went missing too.
+    // The throw left the control unmounted, so its (hidden) button went
+    // missing too.
     await expect(page.locator(".swipe-control")).toHaveCount(1);
 
     // And the rebuilt control carries the old one's sides. Counts alone would
