@@ -116,6 +116,31 @@ describe("createPluginNativeFetch", () => {
     await assert.rejects(pending, { name: "AbortError" });
   });
 
+  it("leaves no unhandled rejection when the native request settles after an abort", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      let rejectNative!: (error: Error) => void;
+      const fetchImpl = createPluginNativeFetch(
+        () =>
+          new Promise((_, reject) => {
+            rejectNative = reject;
+          }),
+      );
+      const controller = new AbortController();
+      const pending = fetchImpl("https://d2s.example/slow", { signal: controller.signal });
+      controller.abort();
+      await assert.rejects(pending, { name: "AbortError" });
+      // Rust answers the cancellation by rejecting the invoke.
+      rejectNative(new Error("Request cancelled."));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.deepEqual(unhandled, []);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("does not start a pre-aborted request", async () => {
     const fetchImpl = createPluginNativeFetch(async () => assert.fail("must not send"));
     await assert.rejects(fetchImpl("https://d2s.example", { signal: AbortSignal.abort() }), {

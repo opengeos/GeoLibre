@@ -31,8 +31,11 @@ const BODY_TOO_LARGE: &str = "Response exceeds the 64 MiB limit.";
 const REQUEST_TIMEOUT_SECS: u64 = 120;
 
 /// Request headers the transport sets itself. A plugin-supplied value would
-/// either be ignored or contradict the body reqwest actually sends.
+/// either be ignored or contradict the body reqwest actually sends. `cookie`
+/// belongs to the jar: reqwest skips the jar when a request already carries a
+/// Cookie header, and `fetch` forbids setting one too.
 const MANAGED_REQUEST_HEADERS: &[&str] = &[
+    "cookie",
     "host",
     "content-length",
     "connection",
@@ -299,6 +302,7 @@ mod tests {
             ("Content-Type".into(), "application/json".into()),
             ("Host".into(), "evil.example".into()),
             ("Content-Length".into(), "1".into()),
+            ("Cookie".into(), "access_token=stale".into()),
         ])
         .unwrap();
         assert_eq!(headers.len(), 1);
