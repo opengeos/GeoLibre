@@ -4,7 +4,7 @@
 // external-plugin loader then fetches and registers - the registry adds no new
 // trust path. See docs/plugin-api.md and docs/roadmap.md.
 
-import { isAllowedPluginManifestUrl } from "@geolibre/core";
+import { isAllowedPluginManifestUrl, setRegistryPublishableSettings } from "@geolibre/core";
 import { getDeploymentPolicy } from "./deployment-env";
 
 /** A single curated plugin in the marketplace registry. */
@@ -20,6 +20,11 @@ export interface PluginRegistryEntry {
   categories?: string[];
   /** Minimum GeoLibre app version this plugin supports, e.g. "1.0.0". */
   minGeoLibreVersion?: string;
+  /**
+   * Project-state keys that survive "Strip credentials" and shared exports.
+   * `null` keeps the plugin's whole state. Absent means nothing is kept.
+   */
+  publishableSettings?: string[] | null;
 }
 
 export interface PluginRegistry {
@@ -93,6 +98,7 @@ export async function fetchPluginRegistry(
     const entries = rawEntries
       .map((entry) => normalizeEntry(entry, registryUrl))
       .filter((entry): entry is PluginRegistryEntry => entry !== null);
+    publishRegistrySettings(entries);
     return { entries, registryUrl };
   } finally {
     clearTimeout(timeout);
@@ -149,6 +155,45 @@ async function readBodyWithCap(response: Response, maxBytes: number): Promise<st
   return new TextDecoder().decode(merged);
 }
 
+// Ids of the plugins that ship with the app. A registry entry may not declare
+// publishable settings for them, because the static allowlist in core is the
+// reviewed source of truth for first-party plugin state.
+let builtInPluginIds: ReadonlySet<string> = new Set();
+
+/**
+ * Record the ids of the built-in plugins so registry entries cannot declare
+ * publishable settings for them.
+ *
+ * @param ids Ids of every plugin that ships with the app.
+ */
+export function reserveBuiltInPluginIds(ids: Iterable<string>): void {
+  builtInPluginIds = new Set(ids);
+}
+
+/** Hand the registry-declared publishable settings to the credential redaction. */
+function publishRegistrySettings(entries: PluginRegistryEntry[]): void {
+  setRegistryPublishableSettings(
+    entries
+      .filter((entry) => entry.publishableSettings !== undefined && !builtInPluginIds.has(entry.id))
+      .map((entry) => [entry.id, entry.publishableSettings ?? null] as const),
+  );
+}
+
+/**
+ * Read an entry's `publishableSettings`: `true` keeps the whole state, a string
+ * array keeps those keys, anything else keeps nothing (`undefined`).
+ */
+function normalizePublishableSettings(value: unknown): string[] | null | undefined {
+  if (value === true) return null;
+  if (!Array.isArray(value)) return undefined;
+  const keys = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim().slice(0, 128))
+    .filter((item) => item.length > 0)
+    .slice(0, 64);
+  return keys.length ? keys : undefined;
+}
+
 /** Accept either a bare array or `{ plugins: [...] }` / `{ entries: [...] }`. */
 function extractEntries(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
@@ -196,6 +241,7 @@ function normalizeEntry(value: unknown, registryUrl: string): PluginRegistryEntr
     homepage: httpUrlOrUndefined(trimmedString(record.homepage, 2048)),
     categories: stringArray(record.categories),
     minGeoLibreVersion: trimmedString(record.minGeoLibreVersion, 64) || undefined,
+    publishableSettings: normalizePublishableSettings(record.publishableSettings),
   };
 }
 

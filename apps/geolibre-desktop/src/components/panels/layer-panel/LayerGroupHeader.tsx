@@ -1,4 +1,4 @@
-import { type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@geolibre/core";
 import type { LayerGroup } from "@geolibre/core";
@@ -55,8 +55,6 @@ interface LayerGroupHeaderProps {
     | "commitGroupRename"
     | "cancelGroupRename"
   >;
-  onDragOver: (event: ReactDragEvent<HTMLDivElement>, groupId: string) => void;
-  onDrop: (event: ReactDragEvent<HTMLDivElement>, groupId: string) => void;
 }
 
 /** A group (folder) header row in the layer list, with its actions menu. */
@@ -69,8 +67,6 @@ export function LayerGroupHeader({
   moveTargets,
   addDataGroupSources,
   rename,
-  onDragOver,
-  onDrop,
 }: LayerGroupHeaderProps) {
   const { i18n, t } = useTranslation();
   const removeLayerGroup = useAppStore((s) => s.removeLayerGroup);
@@ -93,6 +89,7 @@ export function LayerGroupHeader({
       data-group-header=""
       data-testid="layer-group-header"
       data-group-name={group.name}
+      data-group-id={group.id}
       className={`w-full min-w-0 max-w-full rounded-md border p-2 transition-colors ${
         isDropTarget
           ? "border-primary bg-primary/10"
@@ -102,8 +99,6 @@ export function LayerGroupHeader({
         marginInlineStart: `${depth}rem`,
         width: `calc(100% - ${depth}rem)`,
       }}
-      onDragOver={(e) => onDragOver(e, group.id)}
-      onDrop={(e) => onDrop(e, group.id)}
     >
       <div className="flex min-w-0 items-center gap-1">
         <button

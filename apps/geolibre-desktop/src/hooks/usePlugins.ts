@@ -10,6 +10,7 @@ import {
 } from "@geolibre/core";
 import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
 import { nativeWmsTileUrl } from "../lib/native-wms-url";
+import { reserveBuiltInPluginIds } from "../lib/plugin-registry";
 import {
   addRasterToMap,
   readRasterWindow,
@@ -160,6 +161,7 @@ import {
   uninstallWebPlugin,
   unloadFilesystemPlugin,
   unloadRemovedUrlPlugins,
+  type HeldBackPluginBundle,
   type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
@@ -316,6 +318,7 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreComponentsPlugin,
 ];
 manager.registerAll(BUILT_IN_PLUGINS);
+reserveBuiltInPluginIds(BUILT_IN_PLUGINS.map((plugin) => plugin.id));
 
 /**
  * Built-in plugins a `?plugin=` deep link may not activate: they send what the
@@ -513,6 +516,7 @@ let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
 let externalPluginsLoadKey: string | null = null;
 let externalPluginLoadIssues = new Map<string, string>();
+let externalPluginHeldBack = new Map<string, HeldBackPluginBundle>();
 const externalPluginsListeners = new Set<() => void>();
 const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
 
@@ -522,6 +526,11 @@ export function getPluginManager(): PluginManager {
 
 export function getExternalPluginLoadIssues(): ReadonlyMap<string, string> {
   return externalPluginLoadIssues;
+}
+
+/** Bundles the SHA-256 pin held back, by manifest URL (see HeldBackPluginBundle). */
+export function getExternalPluginHeldBack(): ReadonlyMap<string, HeldBackPluginBundle> {
+  return externalPluginHeldBack;
 }
 
 export function subscribeToExternalPluginLoads(listener: () => void): () => void {
@@ -537,8 +546,22 @@ export function subscribeToExternalPluginLoads(listener: () => void): () => void
 export async function upgradeExternalPlugin(
   manifestUrl: string,
   mapControllerRef: RefObject<MapEngine | null>,
+  expectedVersion?: string,
 ): Promise<void> {
-  await reloadExternalUrlPlugin(manager, manifestUrl, createAppAPI(mapControllerRef));
+  await reloadExternalUrlPlugin(
+    manager,
+    manifestUrl,
+    createAppAPI(mapControllerRef),
+    expectedVersion,
+  );
+  // A held-back bundle that just loaded is no longer a failure.
+  if (externalPluginHeldBack.has(manifestUrl) || externalPluginLoadIssues.has(manifestUrl)) {
+    externalPluginHeldBack = new Map(externalPluginHeldBack);
+    externalPluginHeldBack.delete(manifestUrl);
+    externalPluginLoadIssues = new Map(externalPluginLoadIssues);
+    externalPluginLoadIssues.delete(manifestUrl);
+    notifyExternalPluginsListeners();
+  }
 }
 
 // Install a plugin from a local `.zip` archive (desktop only). The Rust backend
@@ -871,6 +894,7 @@ function ensureExternalPluginsLoadedWithSettings(
   }
 
   externalPluginLoadIssues = new Map();
+  externalPluginHeldBack = new Map();
   notifyExternalPluginsListeners();
   setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
@@ -902,6 +926,11 @@ function ensureExternalPluginsLoadedWithSettings(
     .then((result) => {
       externalPluginLoadIssues = new Map(
         result.issues.map((issue) => [issue.sourceUrl ?? issue.archiveName, issue.message]),
+      );
+      externalPluginHeldBack = new Map(
+        result.issues.flatMap((issue) =>
+          issue.heldBack && issue.sourceUrl ? [[issue.sourceUrl, issue.heldBack] as const] : [],
+        ),
       );
       notifyExternalPluginsListeners();
       if (result.loadedPluginIds.length) {

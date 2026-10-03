@@ -1,4 +1,4 @@
-import { type DragEvent as ReactDragEvent, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useRef, useState } from "react";
 import { useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer } from "@geolibre/core";
 
@@ -14,12 +14,12 @@ interface UseLayerDragAndDropOptions {
   selectOnlyLayer: (layerId: string) => void;
 }
 
+type DropTarget = { kind: "layer" | "group"; id: string };
+
 /**
- * Drag-and-drop of layer rows: reordering within a group, moving across group
- * boundaries, and dropping onto a group header.
- *
- * @param options - The layers and the current row selection.
- * @returns The drag/drop-target state and the row and group-header handlers.
+ * Pointer-captured layer dragging keeps reordering inside the webview. HTML
+ * drag-and-drop starts a native drag on macOS, where Tauri's file-drop handler
+ * intercepts it. Keep that handler enabled for actual files from Finder.
  */
 export function useLayerDragAndDrop({
   layers,
@@ -32,102 +32,100 @@ export function useLayerDragAndDrop({
   const moveLayersRelative = useAppStore((s) => s.moveLayersRelative);
   const moveLayersToGroup = useAppStore((s) => s.moveLayersToGroup);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
-  const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(null);
-  const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const gesture = useRef<{
+    pointerId: number;
+    layerId: string;
+    x: number;
+    y: number;
+    active: boolean;
+  } | null>(null);
 
   const draggedDisplayIndex = draggedLayerId
     ? visibleLayers.findIndex((layer) => layer.id === draggedLayerId)
     : -1;
 
   const resetDragState = () => {
+    gesture.current = null;
     setDraggedLayerId(null);
-    setDropTargetLayerId(null);
-    setDropTargetGroupId(null);
+    setDropTarget(null);
   };
 
-  const handleLayerDragStart = (event: ReactDragEvent<HTMLElement>, layerId: string) => {
-    event.stopPropagation();
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", layerId);
-    if (!selectedLayerIds.has(layerId)) {
-      selectOnlyLayer(layerId);
-    }
-    setDraggedLayerId(layerId);
+  const targetAtPointer = (event: ReactPointerEvent<HTMLElement>): DropTarget | null => {
+    const list = event.currentTarget.closest("[data-layer-list]");
+    const hit = event.currentTarget.ownerDocument.elementFromPoint(event.clientX, event.clientY);
+    if (!hit || !list?.contains(hit)) return null;
+    const row = hit.closest<HTMLElement>("[data-layer-id]");
+    if (row?.dataset.layerId) return { kind: "layer", id: row.dataset.layerId };
+    const group = hit.closest<HTMLElement>("[data-group-id]");
+    return group?.dataset.groupId ? { kind: "group", id: group.dataset.groupId } : null;
   };
 
-  const handleLayerDragOver = (event: ReactDragEvent<HTMLDivElement>, layerId: string) => {
-    if (!draggedLayerId || draggedLayerId === layerId) return;
+  const handlePointerDown = (event: ReactPointerEvent<HTMLElement>, layerId: string) => {
+    if (!event.isPrimary || event.button !== 0 || gesture.current) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = "move";
-    setDropTargetLayerId(layerId);
-    setDropTargetGroupId(null);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    if (!selectedLayerIds.has(layerId)) selectOnlyLayer(layerId);
+    gesture.current = {
+      pointerId: event.pointerId,
+      layerId,
+      x: event.clientX,
+      y: event.clientY,
+      active: false,
+    };
   };
 
-  const handleLayerDrop = (
-    event: ReactDragEvent<HTMLDivElement>,
-    layerId: string,
-    displayIndex: number,
-  ) => {
-    if (!draggedLayerId || draggedLayerId === layerId) {
-      resetDragState();
-      return;
+  const handlePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const current = gesture.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    if (!current.active) {
+      if (Math.hypot(event.clientX - current.x, event.clientY - current.y) < 4) return;
+      current.active = true;
+      setDraggedLayerId(current.layerId);
     }
     event.preventDefault();
-    event.stopPropagation();
-    const dragged = layers.find((l) => l.id === draggedLayerId);
-    const target = layers.find((l) => l.id === layerId);
-    const draggedGroupId = dragged?.groupId ?? null;
-    const targetGroupId = target?.groupId ?? null;
-    if (draggedGroupId === targetGroupId) {
-      const moveIds = selectedMoveIds(draggedLayerId);
-      if (moveIds.length > 1) {
-        moveLayersRelative(
-          moveIds,
-          layerId,
-          draggedDisplayIndex > displayIndex ? "above" : "below",
-        );
-      } else {
-        // Same group (or both top-level): a plain reorder keeps contiguity.
-        moveLayer(draggedLayerId, layers.length - 1 - displayIndex);
+    const target = targetAtPointer(event);
+    setDropTarget(target?.kind === "layer" && target.id === current.layerId ? null : target);
+  };
+
+  const handlePointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const current = gesture.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const target = current.active ? targetAtPointer(event) : null;
+    if (target?.kind === "group") {
+      moveLayersToGroup(selectedMoveIds(current.layerId), target.id);
+    } else if (target && target.id !== current.layerId) {
+      const dragged = layers.find((layer) => layer.id === current.layerId);
+      const destination = layers.find((layer) => layer.id === target.id);
+      const displayIndex = visibleLayers.findIndex((layer) => layer.id === target.id);
+      if (dragged && destination && displayIndex >= 0) {
+        const targetGroupId = destination.groupId ?? null;
+        const moveIds = selectedMoveIds(current.layerId);
+        if ((dragged.groupId ?? null) !== targetGroupId) {
+          moveLayersToGroup(moveIds, targetGroupId, target.id);
+        } else if (moveIds.length > 1) {
+          const sourceIndex = visibleLayers.findIndex((layer) => layer.id === current.layerId);
+          moveLayersRelative(moveIds, target.id, sourceIndex > displayIndex ? "above" : "below");
+        } else {
+          moveLayer(current.layerId, layers.length - 1 - displayIndex);
+        }
       }
-    } else {
-      // Crossing a group boundary: adopt the target's group and land next to it.
-      moveLayersToGroup(selectedMoveIds(draggedLayerId), targetGroupId, layerId);
     }
     resetDragState();
-  };
-
-  const handleGroupHeaderDragOver = (event: ReactDragEvent<HTMLDivElement>, groupId: string) => {
-    if (!draggedLayerId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "move";
-    setDropTargetGroupId(groupId);
-    setDropTargetLayerId(null);
-  };
-
-  const handleGroupHeaderDrop = (event: ReactDragEvent<HTMLDivElement>, groupId: string) => {
-    if (!draggedLayerId) {
-      resetDragState();
-      return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    event.preventDefault();
-    event.stopPropagation();
-    moveLayersToGroup(selectedMoveIds(draggedLayerId), groupId);
-    resetDragState();
   };
 
   return {
     draggedLayerId,
     draggedDisplayIndex,
-    dropTargetLayerId,
-    dropTargetGroupId,
+    dropTargetLayerId: dropTarget?.kind === "layer" ? dropTarget.id : null,
+    dropTargetGroupId: dropTarget?.kind === "group" ? dropTarget.id : null,
     resetDragState,
-    handleLayerDragStart,
-    handleLayerDragOver,
-    handleLayerDrop,
-    handleGroupHeaderDragOver,
-    handleGroupHeaderDrop,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
   };
 }

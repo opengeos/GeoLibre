@@ -9,7 +9,7 @@ The on-map **Layer Control** also lists project layers, including ones currently
 ## Layer order and visibility
 
 - **Visibility**: click the eye button to show or hide a layer. The **Hide all layers** button at the top of the panel hides every layer at once.
-- **Order**: drag a layer to reorder it, or use the move up and move down actions. Layers higher in the list draw on top. The basemap (**Background**) always stays at the bottom.
+- **Order**: drag the grip handle beside a layer's name onto another layer to reorder it, or use the move up and move down actions. Layers higher in the list draw on top. The basemap (**Background**) always stays at the bottom. Layer-handle drags stay inside the panel; dropping files from Finder into the desktop app remains a separate data-import action.
 - **Opacity**: each layer has an opacity slider from 0 to 100 percent.
 
 ## Hover tooltips

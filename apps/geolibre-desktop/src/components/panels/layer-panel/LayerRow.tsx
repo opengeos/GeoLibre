@@ -1,4 +1,4 @@
-import { type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   IDENTIFY_ALL_LAYERS_ID,
@@ -67,10 +67,10 @@ interface LayerRowProps {
   dropTarget: boolean;
   /** Panel index of the dragged row, or -1 when nothing is dragged. */
   draggedDisplayIndex: number;
-  onDragStart: (event: ReactDragEvent<HTMLElement>, layerId: string) => void;
-  onDragOver: (event: ReactDragEvent<HTMLDivElement>, layerId: string) => void;
-  onDrop: (event: ReactDragEvent<HTMLDivElement>, layerId: string, displayIndex: number) => void;
-  onDragEnd: () => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLElement>, layerId: string) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerCancel: () => void;
   onSelect: (event: ReactMouseEvent<HTMLDivElement>, layerId: string) => void;
   selectOnlyLayer: (layerId: string) => void;
   /** Whether this row's name is open for inline rename. */
@@ -108,10 +108,10 @@ export function LayerRow({
   dragged,
   dropTarget,
   draggedDisplayIndex,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
   onSelect,
   selectOnlyLayer,
   editing,
@@ -243,6 +243,7 @@ export function LayerRow({
       data-layer-card=""
       data-testid="layer-row"
       data-layer-name={layer.name}
+      data-layer-id={layer.id}
       className={`relative min-w-0 max-w-full rounded-md border p-2 transition-colors ${
         selected
           ? "border-primary bg-primary/5"
@@ -260,9 +261,6 @@ export function LayerRow({
             }
           : undefined
       }
-      onDragOver={(e) => onDragOver(e, layer.id)}
-      onDrop={(e) => onDrop(e, layer.id, displayIndex)}
-      onDragEnd={onDragEnd}
       aria-pressed={selected}
       onClick={(e) => onSelect(e, layer.id)}
       onKeyDown={(e) => {
@@ -288,14 +286,17 @@ export function LayerRow({
         <span
           role="button"
           tabIndex={0}
-          draggable
           title={t("layers.dragToReorder")}
           aria-label={t("layers.dragNamedToReorder", {
             name: layer.name,
           })}
-          className="cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+          className="touch-none select-none cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
-          onDragStart={(e) => onDragStart(e, layer.id)}
+          onPointerDown={(e) => onPointerDown(e, layer.id)}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
+          onLostPointerCapture={onPointerCancel}
         >
           <GripVertical className="h-3.5 w-3.5" />
         </span>
