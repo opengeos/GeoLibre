@@ -98,6 +98,7 @@ import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
 import { FileNamePromptDialog } from "./FileNamePromptDialog";
 import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
+import { RegistryPluginTrustDialog } from "./RegistryPluginTrustDialog";
 import { ProjectHistoryDialog } from "./ProjectHistoryDialog";
 import { ProjectRecoveryDialog } from "./ProjectRecoveryDialog";
 import { StatusBar } from "./StatusBar";
@@ -356,7 +357,7 @@ export function DesktopShell({
   });
   // After the restore above, so a `?url=` project's plugin state cannot close
   // what the link opened.
-  usePluginDeepLink({
+  const registryPluginLink = usePluginDeepLink({
     mapControllerRef,
     enforceViewerPlugins,
     viewer: layoutOptions.viewer,
@@ -1055,6 +1056,9 @@ export function DesktopShell({
       {/* Trust prompt for plugin URLs carried by an opened project (#1062);
           inert unless the project references an untrusted plugin URL. */}
       <ProjectPluginTrustDialog trust={projectPluginTrust} />
+      {/* Trust prompt for a `?plugin=<registry id>` link to a plugin that is
+          not installed yet; inert otherwise. */}
+      <RegistryPluginTrustDialog link={registryPluginLink} />
       <MountWhenOpened isOpen={(ui) => ui.processingOpen}>
         <Suspense fallback={null}>
           <ProcessingDialog

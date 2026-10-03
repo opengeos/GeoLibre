@@ -146,7 +146,12 @@ with a shared project and the read-only viewer.
 
 Directions and reverse geocoding are not listed: they send what you click to a
 public server, so they only open from the menu, after their one-time notice.
-Plugins installed from **Manage Plugins** can't be opened from a link.
+A plugin from the [plugin registry](#manage-plugins) opens from a link by its
+full registry id, for example `?plugin=openrndt-geolibre`. If it is already
+installed it activates like a built-in one. If not, GeoLibre first asks whether
+to install it, showing the name, author, description, and homepage the registry
+lists, and installs and activates it only after **Trust and load**. The prompt is
+skipped in the read-only `layout=viewer`, which never installs plugins.
 
 ## Manage Plugins
 

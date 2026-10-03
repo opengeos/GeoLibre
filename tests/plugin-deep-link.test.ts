@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   PLUGIN_DEEP_LINK_PARAM,
+  matchRegistryDeepLinkNames,
   pluginDeepLinkFromSearch,
   pluginDeepLinkNames,
 } from "../apps/geolibre-desktop/src/lib/plugin-deep-link";
@@ -116,6 +117,31 @@ describe("?plugin= alongside a ?tool= deep link", () => {
   it("is not forwarded to the Whitebox tool as a parameter", () => {
     assert.deepEqual(whiteboxToolFromSearch("?tool=slope&plugin=swipe&z_factor=2")?.parameters, {
       z_factor: "2",
+    });
+  });
+});
+
+describe("matchRegistryDeepLinkNames", () => {
+  const entries = [{ id: "openrndt-geolibre" }, { id: "Geolibre-NetCDF" }];
+
+  it("matches a registry id without regard to case, in link order", () => {
+    assert.deepEqual(
+      matchRegistryDeepLinkNames(["geolibre-netcdf", "OpenRNDT-GeoLibre"], entries),
+      { entries: [entries[1], entries[0]], unknown: [] },
+    );
+  });
+
+  it("drops duplicates and reports names that match nothing", () => {
+    assert.deepEqual(
+      matchRegistryDeepLinkNames(["openrndt-geolibre", "openrndt-geolibre", "nope"], entries),
+      { entries: [entries[0]], unknown: ["nope"] },
+    );
+  });
+
+  it("does not resolve short names", () => {
+    assert.deepEqual(matchRegistryDeepLinkNames(["openrndt"], entries), {
+      entries: [],
+      unknown: ["openrndt"],
     });
   });
 });

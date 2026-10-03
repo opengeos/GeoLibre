@@ -113,6 +113,10 @@ top of the plugins the project itself turns on.
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&plugin=swipe
 ```
 
+A plugin from the official plugin registry works too, by its registry id
+(`?plugin=openrndt-geolibre`). One that is not installed yet is never loaded
+silently: the app asks first and installs it only after **Trust and load**.
+
 Unknown names are ignored. A plugin that does not support the current renderer
 does not activate. Directions and reverse geocoding send what you click to a
 public server, so they only open from the menu, after their one-time notice. The

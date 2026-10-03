@@ -1,8 +1,27 @@
 import type { MapEngine } from "@geolibre/map";
 import { VIEWER_BLOCKED_PLUGIN_IDS } from "@geolibre/plugins";
-import { useEffect, useMemo, useRef, type RefObject } from "react";
-import { pluginDeepLinkFromSearch, pluginDeepLinkNames } from "../../lib/plugin-deep-link";
-import { activateDeepLinkedPlugin, DEEP_LINKABLE_PLUGIN_IDS } from "../usePlugins";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
+import {
+  matchRegistryDeepLinkNames,
+  pluginDeepLinkFromSearch,
+  pluginDeepLinkNames,
+} from "../../lib/plugin-deep-link";
+import { fetchPluginRegistry, type PluginRegistryEntry } from "../../lib/plugin-registry";
+import { mergeStringLists } from "../../lib/string-lists";
+import {
+  activateDeepLinkedPlugin,
+  DEEP_LINKABLE_PLUGIN_IDS,
+  getPluginManager,
+} from "../usePlugins";
+import { useDesktopSettingsStore } from "../useDesktopSettings";
 
 interface PluginDeepLinkOptions {
   mapControllerRef: RefObject<MapEngine | null>;
@@ -19,6 +38,19 @@ interface PluginDeepLinkOptions {
   projectUrlSettled: boolean;
 }
 
+/** Registry plugins a `?plugin=` link names that await the user's trust decision. */
+export interface RegistryPluginDeepLinkState {
+  /** Registry entries not yet installed, shown in the trust prompt. */
+  pending: PluginRegistryEntry[];
+  /** Install the pending plugins (their manifest URLs) and activate them. */
+  trust: () => void;
+  /** Dismiss the prompt for this page load without installing anything. */
+  dismiss: () => void;
+}
+
+const subscribeToPluginManager = (listener: () => void) => getPluginManager().subscribe(listener);
+const getPluginManagerVersion = () => getPluginManager().getVersion();
+
 /**
  * Activates the built-in plugins a `?plugin=<id>` deep link names, once per
  * page load, e.g. `…/?plugin=swipe` or `…/?plugin=maplibre-gl-time-slider`.
@@ -31,7 +63,15 @@ interface PluginDeepLinkOptions {
  * editing plugins `layout=viewer` blocks; the viewer guard is still re-asserted
  * afterwards.
  *
+ * A name that is no built-in plugin is looked up in the official plugin registry
+ * by id. A registry plugin that is already installed is activated like a
+ * built-in one; one that is not is never loaded silently: it is returned in
+ * `pending` for a trust prompt, and only "Trust and load" installs and
+ * activates it. Registry plugins are skipped in the read-only viewer, which
+ * has no place to prompt.
+ *
  * @param options - The map engine, the viewer guard, and the readiness signals.
+ * @returns The registry plugins awaiting the user's decision.
  */
 export function usePluginDeepLink({
   mapControllerRef,
@@ -40,7 +80,7 @@ export function usePluginDeepLink({
   externalPluginsReady,
   mapReadyGeneration,
   projectUrlSettled,
-}: PluginDeepLinkOptions): void {
+}: PluginDeepLinkOptions): RegistryPluginDeepLinkState {
   const targets = useMemo(
     () =>
       typeof window === "undefined"
@@ -50,6 +90,14 @@ export function usePluginDeepLink({
   );
   const handled = useRef(false);
   const projectSettled = useRef(false);
+  const [pending, setPending] = useState<PluginRegistryEntry[]>([]);
+  // Ids of registry plugins the user trusted, activated as each one loads.
+  const [awaiting, setAwaiting] = useState<string[]>([]);
+  const managerVersion = useSyncExternalStore(
+    subscribeToPluginManager,
+    getPluginManagerVersion,
+    getPluginManagerVersion,
+  );
 
   useEffect(() => {
     if (projectUrlSettled) projectSettled.current = true;
@@ -58,14 +106,6 @@ export function usePluginDeepLink({
     if (!mapControllerRef.current) return;
     handled.current = true;
 
-    if (targets.unknown.length > 0) {
-      // The valid names go last, after a fixed label: the docs check in
-      // e2e/plugin-deep-link.spec.ts reads them from this message.
-      console.warn(
-        `[GeoLibre] Ignoring unknown plugin(s) in the ?plugin= link: ${targets.unknown.join(", ")}. ` +
-          `Valid names: ${pluginDeepLinkNames(DEEP_LINKABLE_PLUGIN_IDS).join(", ")}`,
-      );
-    }
     void (async () => {
       // One at a time so plugins sharing an exclusive group resolve in link
       // order (the last one wins), as they would clicked from the menu.
@@ -82,7 +122,63 @@ export function usePluginDeepLink({
           console.error(`[GeoLibre] Could not activate the plugin "${id}"`, error);
         }
       }
+      await resolveRegistryNames(targets.unknown);
     })().finally(enforceViewerPlugins);
+
+    /**
+     * Resolves the names no built-in plugin claimed against the registry:
+     * activates the installed ones, queues the rest for the trust prompt, and
+     * warns about names that match nothing.
+     */
+    async function resolveRegistryNames(names: string[]): Promise<void> {
+      if (names.length === 0) return;
+      let unknown = names;
+      if (!viewer) {
+        try {
+          const registry = await fetchPluginRegistry();
+          const matches = matchRegistryDeepLinkNames(names, registry.entries);
+          unknown = matches.unknown;
+          const installedUrls = new Set(
+            useDesktopSettingsStore
+              .getState()
+              .desktopSettings.pluginManifestUrls.map((url) => url.trim()),
+          );
+          const toPrompt: PluginRegistryEntry[] = [];
+          for (const entry of matches.entries) {
+            const loaded = getPluginManager()
+              .list()
+              .some((plugin) => plugin.id === entry.id);
+            if (installedUrls.has(entry.manifestUrl)) {
+              if (loaded && (await activateDeepLinkedPlugin(entry.id, mapControllerRef))) continue;
+              console.warn(
+                `[GeoLibre] The plugin "${entry.id}" from the ?plugin= link did not activate.`,
+              );
+            } else if (loaded) {
+              // The id belongs to a plugin this entry would not replace.
+              console.warn(
+                `[GeoLibre] Ignoring "${entry.id}" in the ?plugin= link: a plugin with that id is already loaded.`,
+              );
+            } else {
+              toPrompt.push(entry);
+            }
+          }
+          setPending(toPrompt);
+        } catch (error) {
+          console.warn(
+            "[GeoLibre] Could not look up the ?plugin= link in the plugin registry",
+            error,
+          );
+        }
+      }
+      if (unknown.length > 0) {
+        // The valid names go last, after a fixed label: the docs check in
+        // e2e/plugin-deep-link.spec.ts reads them from this message.
+        console.warn(
+          `[GeoLibre] Ignoring unknown plugin(s) in the ?plugin= link: ${unknown.join(", ")}. ` +
+            `Valid names: ${pluginDeepLinkNames(DEEP_LINKABLE_PLUGIN_IDS).join(", ")}`,
+        );
+      }
+    }
   }, [
     targets,
     enforceViewerPlugins,
@@ -92,4 +188,47 @@ export function usePluginDeepLink({
     projectUrlSettled,
     mapControllerRef,
   ]);
+
+  // Once a trusted plugin's manifest has loaded (installing re-runs the external
+  // plugin scan), open it as a built-in link target would be.
+  useEffect(() => {
+    if (awaiting.length === 0) return;
+    const loadedIds = new Set(
+      getPluginManager()
+        .list()
+        .map((plugin) => plugin.id),
+    );
+    const ready = awaiting.filter((id) => loadedIds.has(id));
+    if (ready.length === 0) return;
+    setAwaiting((ids) => ids.filter((id) => !ready.includes(id)));
+    void (async () => {
+      for (const id of ready) {
+        try {
+          if (!(await activateDeepLinkedPlugin(id, mapControllerRef))) {
+            console.warn(`[GeoLibre] The plugin "${id}" from the ?plugin= link did not activate.`);
+          }
+        } catch (error) {
+          console.error(`[GeoLibre] Could not activate the plugin "${id}"`, error);
+        }
+      }
+    })();
+  }, [awaiting, managerVersion, mapControllerRef]);
+
+  const trust = useCallback(() => {
+    if (pending.length === 0) return;
+    const current = useDesktopSettingsStore.getState().desktopSettings;
+    useDesktopSettingsStore.getState().setDesktopSettings({
+      ...current,
+      pluginManifestUrls: mergeStringLists(
+        current.pluginManifestUrls,
+        pending.map((entry) => entry.manifestUrl),
+      ),
+    });
+    setAwaiting((ids) => [...ids, ...pending.map((entry) => entry.id)]);
+    setPending([]);
+  }, [pending]);
+
+  const dismiss = useCallback(() => setPending([]), []);
+
+  return { pending, trust, dismiss };
 }

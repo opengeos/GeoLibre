@@ -130,6 +130,13 @@
       "trustButton": "Trust and load",
       "dismissButton": "Don't load"
     },
+    "registryTrust": {
+      "title_one": "Install this plugin?",
+      "title_other": "Install these plugins?",
+      "description_one": "This link opens a plugin from the official GeoLibre plugin registry that is not installed yet. Installing it adds it to your plugins and activates it.",
+      "description_other": "This link opens {{count}} plugins from the official GeoLibre plugin registry that are not installed yet. Installing them adds them to your plugins and activates them.",
+      "by": "by {{author}}"
+    },
     "title": "Manage Plugins",
     "searchAria": "Search plugins",
     "searchPlaceholder": "Search plugins",

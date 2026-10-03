@@ -110,3 +110,43 @@ export function pluginDeepLinkFromSearch(
   }
   return { pluginIds, unknown };
 }
+
+/** The result of matching unresolved `?plugin=` names against registry entries. */
+export interface RegistryDeepLinkMatches<T extends { id: string }> {
+  /** Registry entries the names resolve to, deduplicated, in link order. */
+  entries: T[];
+  /** Names that match no registry entry, as written in the link. */
+  unknown: string[];
+}
+
+/**
+ * Matches the names a `?plugin=` link left unresolved against the plugin
+ * registry. A registry plugin is named by its full id only, compared without
+ * regard to case, since registry ids are not under GeoLibre's naming control and
+ * so have no short names.
+ *
+ * @param names - Link names that matched no built-in plugin.
+ * @param registryEntries - The entries of the official plugin registry.
+ * @returns The matched entries and the names that matched nothing.
+ */
+export function matchRegistryDeepLinkNames<T extends { id: string }>(
+  names: readonly string[],
+  registryEntries: readonly T[],
+): RegistryDeepLinkMatches<T> {
+  const byId = new Map<string, T>();
+  for (const entry of registryEntries) {
+    const key = entry.id.toLowerCase();
+    if (!byId.has(key)) byId.set(key, entry);
+  }
+  const entries: T[] = [];
+  const unknown: string[] = [];
+  for (const name of names) {
+    const entry = byId.get(name.toLowerCase());
+    if (!entry) {
+      unknown.push(name);
+      continue;
+    }
+    if (!entries.includes(entry)) entries.push(entry);
+  }
+  return { entries, unknown };
+}
