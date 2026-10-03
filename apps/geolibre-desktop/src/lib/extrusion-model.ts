@@ -380,6 +380,9 @@ export function encodeGlb(model: ExtrusionModel, layerName: string): Uint8Array 
       materials.push({
         name: `color_${material + 1}`,
         pbrMetallicRoughness: {
+          // Opaque on purpose: the map's extrusion opacity (0.8 by default)
+          // is a display setting, and a translucent solid is rarely wanted
+          // in a modelling or printing tool.
           baseColorFactor: [...solid.color, 1],
           metallicFactor: 0,
           roughnessFactor: 0.9,

@@ -390,6 +390,12 @@ export function useLayerActions({
           await import("../../../lib/extrusion-model");
         const map = mapControllerRef.current?.getMap() ?? undefined;
         const geojson = await resolveLayerGeojson(layer, map);
+        if (!geojson && geojsonVectorSourceId(layer) !== null) {
+          // As in handleExportLayer: an unreadable map source is not yet
+          // ready, which is not the same as a layer with nothing to extrude.
+          setStatus({ type: "error", message: t("layers.exportStyleDataNotReady") });
+          return;
+        }
         const model = geojson
           ? buildExtrusionModel(geojson, layer.style, map?.getZoom() ?? 16)
           : null;
