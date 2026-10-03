@@ -14,7 +14,12 @@ import {
   pluginDeepLinkFromSearch,
   pluginDeepLinkNames,
 } from "../../lib/plugin-deep-link";
-import { fetchPluginRegistry, type PluginRegistryEntry } from "../../lib/plugin-registry";
+import { pluginManifestUrlsForIds } from "../../lib/external-plugins";
+import {
+  fetchPluginRegistry,
+  satisfiesMinVersion,
+  type PluginRegistryEntry,
+} from "../../lib/plugin-registry";
 import { mergeStringLists } from "../../lib/string-lists";
 import {
   activateDeepLinkedPlugin,
@@ -57,6 +62,13 @@ function canonicalUrl(url: string): string {
   } catch {
     return url.trim();
   }
+}
+
+/** Whether the plugin with the entry's id was loaded from the entry's own manifest. */
+function isLoadedFromEntry(entry: PluginRegistryEntry): boolean {
+  return pluginManifestUrlsForIds([entry.id]).some(
+    (url) => canonicalUrl(url) === canonicalUrl(entry.manifestUrl),
+  );
 }
 
 const subscribeToPluginManager = (listener: () => void) => getPluginManager().subscribe(listener);
@@ -149,47 +161,62 @@ export function usePluginDeepLink({
     async function resolveRegistryNames(names: string[]): Promise<void> {
       if (names.length === 0) return;
       let unknown = names;
-      if (!viewer) {
-        try {
-          const registry = await fetchPluginRegistry();
-          const matches = matchRegistryDeepLinkNames(names, registry.entries);
-          unknown = matches.unknown;
-          const installedUrls = new Set(
-            useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls.map(canonicalUrl),
-          );
-          const toPrompt: PluginRegistryEntry[] = [];
-          for (const entry of matches.entries) {
-            const loaded = getPluginManager()
-              .list()
-              .some((plugin) => plugin.id === entry.id);
-            if (installedUrls.has(entry.manifestUrl)) {
-              // Contained per entry so one throwing plugin neither hides the
-              // others nor drops the ones still waiting for the trust prompt.
-              try {
-                if (loaded && (await activateDeepLinkedPlugin(entry.id, mapControllerRef)))
-                  continue;
-                console.warn(
-                  `[GeoLibre] The plugin "${entry.id}" from the ?plugin= link did not activate.`,
-                );
-              } catch (error) {
-                console.error(`[GeoLibre] Could not activate the plugin "${entry.id}"`, error);
+      if (viewer) {
+        // Registry plugins are never installed here, so a name that might be one
+        // is not reported as unknown.
+        console.warn(
+          `[GeoLibre] Ignoring ${names.join(", ")} in the ?plugin= link: only built-in plugins open in layout=viewer.`,
+        );
+        return;
+      }
+      try {
+        const registry = await fetchPluginRegistry();
+        const matches = matchRegistryDeepLinkNames(names, registry.entries);
+        unknown = matches.unknown;
+        const installedUrls = new Set(
+          useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls.map(canonicalUrl),
+        );
+        const toPrompt: PluginRegistryEntry[] = [];
+        for (const entry of matches.entries) {
+          const loaded = getPluginManager()
+            .list()
+            .some((plugin) => plugin.id === entry.id);
+          if (installedUrls.has(entry.manifestUrl)) {
+            // Contained per entry so one throwing plugin neither hides the
+            // others nor drops the ones still waiting for the trust prompt.
+            try {
+              if (
+                loaded &&
+                isLoadedFromEntry(entry) &&
+                (await activateDeepLinkedPlugin(entry.id, mapControllerRef))
+              ) {
+                continue;
               }
-            } else if (loaded) {
-              // The id belongs to a plugin this entry would not replace.
               console.warn(
-                `[GeoLibre] Ignoring "${entry.id}" in the ?plugin= link: a plugin with that id is already loaded.`,
+                `[GeoLibre] The plugin "${entry.id}" from the ?plugin= link did not activate.`,
               );
-            } else {
-              toPrompt.push(entry);
+            } catch (error) {
+              console.error(`[GeoLibre] Could not activate the plugin "${entry.id}"`, error);
             }
+          } else if (loaded) {
+            // The id belongs to a plugin this entry would not replace.
+            console.warn(
+              `[GeoLibre] Ignoring "${entry.id}" in the ?plugin= link: a plugin with that id is already loaded.`,
+            );
+          } else if (!satisfiesMinVersion(__GEOLIBRE_VERSION__, entry.minGeoLibreVersion)) {
+            console.warn(
+              `[GeoLibre] Ignoring "${entry.id}" in the ?plugin= link: it needs GeoLibre ${entry.minGeoLibreVersion} or newer.`,
+            );
+          } else {
+            toPrompt.push(entry);
           }
-          setPending(toPrompt);
-        } catch (error) {
-          console.warn(
-            "[GeoLibre] Could not look up the ?plugin= link in the plugin registry",
-            error,
-          );
         }
+        setPending(toPrompt);
+      } catch (error) {
+        console.warn(
+          "[GeoLibre] Could not look up the ?plugin= link in the plugin registry",
+          error,
+        );
       }
       if (unknown.length > 0) {
         // The valid names go last, after a fixed label: the docs check in
@@ -220,7 +247,7 @@ export function usePluginDeepLink({
         .list()
         .map((plugin) => plugin.id),
     );
-    const ready = awaiting.filter((entry) => loadedIds.has(entry.id));
+    const ready = awaiting.filter((entry) => loadedIds.has(entry.id) && isLoadedFromEntry(entry));
     const failed = awaiting.filter(
       (entry) => !loadedIds.has(entry.id) && loadIssues.has(entry.manifestUrl),
     );
