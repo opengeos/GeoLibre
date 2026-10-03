@@ -92,6 +92,8 @@ function removeDepIndexLayer(): void {
 }
 
 const USGS_LIDAR_OPTIONS = {
+  // Not used for layout (the dock owns placement); the control still reads it
+  // for its hidden toggle and the internal LidarControl it registers.
   position: "top-left",
   title: "USGS LiDAR",
   collapsed: false,
