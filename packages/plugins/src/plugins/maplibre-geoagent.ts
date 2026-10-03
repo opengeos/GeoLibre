@@ -71,8 +71,6 @@ const GEOAGENT_OPTIONS = {
     projectId: projectValue(importMetaEnv().VITE_GEE_PROJECT_ID),
     includeCommunityCatalog: true,
   },
-  // Not used for layout (the dock owns placement); the control still reads it.
-  position: "top-left",
 } satisfies GeoAgentControlOptions;
 
 let geoAgentControl: GeoAgentControl | null = null;
@@ -166,8 +164,19 @@ async function openGeoAgentPanel(
       // drawing the map when it is constructed and cannot be re-pointed, and a
       // renderer swap re-activates the plugin and so re-renders the panel.
       const control = new module.GeoAgentControl(getGeoAgentOptions(app));
-      const unmount = mountMapControlInPanel(app, control, container, () =>
-        app.closeRightPanel?.(PANEL_ID),
+      // The map's own removal unmounts the control without closing the panel,
+      // and a swap to an engine that never mounts (Mapbox with no token) does
+      // not re-activate the plugin either; release the store sync and layer
+      // rows then too.
+      const release = () => {
+        if (geoAgentControl === control) releaseGeoAgentControl();
+      };
+      const unmount = mountMapControlInPanel(
+        app,
+        control,
+        container,
+        () => app.closeRightPanel?.(PANEL_ID),
+        release,
       );
       if (!unmount) return;
       // The dock owns collapsing and closing; the control's own close button
@@ -182,7 +191,7 @@ async function openGeoAgentPanel(
         // Unmounting runs the control's onRemove, which clears its overlays
         // from the map; drop the matching store entries with them.
         unmount();
-        if (geoAgentControl === control) releaseGeoAgentControl();
+        release();
       };
     },
   });

@@ -285,7 +285,6 @@ body,
   color-scheme: dark;
 }
 
-.dark .geoagent-panel-title,
 .dark .geoagent-settings > summary,
 .dark .geoagent-earth-engine summary,
 .dark .geoagent-model-suggestion {
@@ -3817,7 +3816,9 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 
 /* GeoAgent fills the dock: the dock's header already carries the title and the
    close/collapse buttons, so hide the control's own and its corner resize
-   handles, and keep its status pill. */
+   handles, and keep its status pill. The header's only icon button is the
+   close button today; recheck this selector if an upstream bump adds another
+   header action. */
 .geolibre-docked-map-control .geoagent-panel {
   position: static !important;
   inset: auto !important;

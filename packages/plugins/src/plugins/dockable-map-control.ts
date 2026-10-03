@@ -22,12 +22,18 @@ export function unmountMapControlFromPanel(control: IControl): void {
  * Mapbox renderer without a second mount path. On ArcGIS the control gets the
  * host's facade, whose style is recorded but not drawn: a plugin docked there
  * must mirror what it draws into the store, as the Web Services catalogs do.
+ *
+ * @param onMapRemove - Called after the bridge unmounts because the map itself
+ *   was removed (not on a panel close). A renderer swap with no replacement
+ *   engine re-renders nothing, so a plugin that keeps state outside the control
+ *   releases it here.
  */
 export function mountMapControlInPanel(
   app: GeoLibreAppAPI,
   control: IControl,
   container: HTMLElement,
   onMountFailure?: () => void,
+  onMapRemove?: () => void,
 ): (() => void) | null {
   const map = getControlMap(app);
   if (!map) {
@@ -81,6 +87,7 @@ export function mountMapControlInPanel(
     }
     container.replaceChildren();
     container.classList.remove("geolibre-docked-map-control");
+    if (event) onMapRemove?.();
   };
   // Unlike a floating control this bridge is not in MapLibre's internal
   // control list, so explicitly participate in map teardown as well as panel

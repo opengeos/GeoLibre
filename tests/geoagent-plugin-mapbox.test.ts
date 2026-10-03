@@ -46,7 +46,7 @@ describe("maplibreGeoAgentPlugin", () => {
   });
 
   it("docks in the side panel instead of floating over the map", () => {
-    assert.match(SOURCE, /mountMapControlInPanel\(app, control, container/);
+    assert.match(SOURCE, /mountMapControlInPanel\(\s*app,\s*control,\s*container/);
     assert.doesNotMatch(SOURCE, /addMapControl\(/);
     assert.doesNotMatch(SOURCE, /setMapControlPosition/);
   });
