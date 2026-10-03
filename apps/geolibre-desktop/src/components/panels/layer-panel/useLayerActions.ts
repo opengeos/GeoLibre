@@ -390,10 +390,16 @@ export function useLayerActions({
           await import("../../../lib/extrusion-model");
         const map = mapControllerRef.current?.getMap() ?? undefined;
         const geojson = await resolveLayerGeojson(layer, map);
-        if (!geojson && geojsonVectorSourceId(layer) !== null) {
+        if (!geojson) {
           // As in handleExportLayer: an unreadable map source is not yet
-          // ready, which is not the same as a layer with nothing to extrude.
-          setStatus({ type: "error", message: t("layers.exportStyleDataNotReady") });
+          // ready, which is not the same as a layer without features.
+          setStatus({
+            type: "error",
+            message:
+              geojsonVectorSourceId(layer) !== null
+                ? t("layers.exportStyleDataNotReady")
+                : t("layers.exportNeedsFeatures"),
+          });
           return;
         }
         // Excluded fields still drive the style, so they are dropped from the
@@ -403,10 +409,13 @@ export function useLayerActions({
             .filter(([, visibility]) => visibility === "excluded")
             .map(([field]) => field),
         );
-        const model = geojson
-          ? buildExtrusionModel(geojson, layer.style, map?.getZoom() ?? 16, excludedFields)
-          : null;
-        if (!model || model.solids.length === 0) {
+        const model = buildExtrusionModel(
+          geojson,
+          layer.style,
+          map?.getZoom() ?? 16,
+          excludedFields,
+        );
+        if (model.solids.length === 0) {
           setStatus({ type: "error", message: t("layers.export3dModelNoSolids") });
           return;
         }
