@@ -6,9 +6,11 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { UsgsLidarControl, UsgsLidarControlOptions } from "maplibre-gl-usgs-lidar";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
+import { getControlMap } from "./style-map";
 
-let usgsLidarPosition: GeoLibreMapControlPosition = "top-left";
+const PANEL_ID = "usgs-lidar-panel";
 
 // The deck.gl point-cloud overlay only renders correctly under the Mercator
 // projection: the streaming loader's viewport math breaks under GeoLibre's
@@ -90,6 +92,7 @@ function removeDepIndexLayer(): void {
 }
 
 const USGS_LIDAR_OPTIONS = {
+  position: "top-left",
   title: "USGS LiDAR",
   collapsed: false,
   panelWidth: 380,
@@ -107,111 +110,89 @@ const USGS_LIDAR_OPTIONS = {
     // handlers on every tile (avoids interaction jank and stray tooltips).
     pickable: false,
   },
-} satisfies Omit<UsgsLidarControlOptions, "position">;
+} satisfies UsgsLidarControlOptions;
 
 let usgsLidarControl: UsgsLidarControl | null = null;
+let unregisterPanel: (() => void) | null = null;
 let pluginActive = false;
-
-const mountUsgsLidarControl = (app: GeoLibreAppAPI): boolean => {
-  if (!usgsLidarControl) return false;
-  const added = app.addMapControl(usgsLidarControl, usgsLidarPosition);
-  if (!added) {
-    usgsLidarControl = null;
-    return false;
-  }
-  setTimeout(() => usgsLidarControl?.expand(), 0);
-  return true;
-};
 
 /**
  * Standalone USGS 3DEP LiDAR plugin. Wraps the same `UsgsLidarControl` that the
- * Components plugin surfaces via its `usgsLidar` default control, exposing it as
- * a top-level Plugins-menu entry.
+ * Components plugin surfaces via its `usgsLidar` default control, hosting its
+ * panel in GeoLibre's dockable side panel (listed under Plugins > Web Services).
  */
 export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-usgs-lidar",
   name: "USGS LiDAR",
-  version: "0.11.5",
+  version: "0.12.0",
   // The point clouds stream through a deck.gl overlay (`lidar-url` layers are
   // plugin-owned on Mapbox) and the 3DEP coverage index is a raster tile
   // layer the engine adopts under its native ids.
   engines: ["maplibre", "mapbox"],
   activate: (app: GeoLibreAppAPI) => {
+    if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     pluginActive = true;
 
-    // Defensive re-activation path for callers that invoke the plugin API
-    // directly (the PluginManager guards against double-activate, so it does not
-    // reach this — deactivate always nulls the control first). If a control
-    // instance somehow still exists, apply the side effects only after it
-    // re-mounts so a failed mount can't strand the projection.
-    if (usgsLidarControl) {
-      if (!mountUsgsLidarControl(app)) {
-        pluginActive = false;
-        return false;
-      }
-      forceMercatorProjection();
-      addDepIndexLayer();
-      return;
-    }
-
-    // First activation: the plugin manager marks it active as soon as activate
-    // returns (undefined), so deactivate is always reachable to undo these even
-    // if the async control load below fails — apply them up front.
+    // Apply the side effects up front: the plugin manager marks the plugin
+    // active as soon as activate returns, so deactivate is always reachable to
+    // undo them, and the control below loads asynchronously.
     forceMercatorProjection();
     addDepIndexLayer();
 
-    // Defer the heavy deck.gl/loaders.gl dependency tree until the user first
-    // enables the viewer, so it stays out of the startup bundle.
-    void import("maplibre-gl-usgs-lidar")
-      .then(({ UsgsLidarControl: UsgsLidarControlClass }) => {
-        if (!pluginActive || usgsLidarControl) return;
-        usgsLidarControl = new UsgsLidarControlClass(getUsgsLidarOptions());
-        if (!mountUsgsLidarControl(app)) {
-          console.warn(
-            "[maplibre-usgs-lidar] control failed to mount; deactivate the plugin to restore the projection.",
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        console.error("[maplibre-usgs-lidar] failed to load control:", error);
-        // Roll back the side effects applied before the import so a failed load
-        // (chunk/network error) doesn't strand the map in Mercator with an
-        // orphaned coverage layer and no control to interact with.
-        if (pluginActive) {
-          pluginActive = false;
-          restoreProjection();
-          removeDepIndexLayer();
-        }
-      });
+    unregisterPanel = app.registerRightPanel({
+      id: PANEL_ID,
+      title: "USGS LiDAR",
+      dock: "replace-style",
+      defaultWidth: 380,
+      deactivatePluginOnClose: true,
+      render: (container) => {
+        let unmount: (() => void) | null = null;
+        let disposed = false;
+        // Defer the heavy deck.gl/loaders.gl dependency tree until the user
+        // first enables the viewer, so it stays out of the startup bundle.
+        void import("maplibre-gl-usgs-lidar")
+          .then(({ UsgsLidarControl: UsgsLidarControlClass }) => {
+            if (disposed || !pluginActive) return;
+            const control = new UsgsLidarControlClass(USGS_LIDAR_OPTIONS);
+            const mounted = mountMapControlInPanel(app, control, container, () =>
+              app.closeRightPanel?.(PANEL_ID),
+            );
+            if (!mounted) return;
+            usgsLidarControl = control;
+            unmount = mounted;
+            control.expand();
+          })
+          .catch((error: unknown) => {
+            console.error("[maplibre-usgs-lidar] failed to load control:", error);
+            // Closing the panel deactivates the plugin, which restores the
+            // projection and removes the coverage layer applied above.
+            app.closeRightPanel?.(PANEL_ID);
+          });
+        return () => {
+          disposed = true;
+          unmount?.();
+          unmount = null;
+          usgsLidarControl = null;
+        };
+      },
+    });
+    if (!app.openRightPanel(PANEL_ID)) {
+      unregisterPanel();
+      unregisterPanel = null;
+      pluginActive = false;
+      restoreProjection();
+      removeDepIndexLayer();
+      return false;
+    }
   },
   deactivate: (app: GeoLibreAppAPI) => {
     pluginActive = false;
     restoreProjection();
     removeDepIndexLayer();
-    if (!usgsLidarControl) return;
-    app.removeMapControl(usgsLidarControl);
+    if (usgsLidarControl) unmountMapControlFromPanel(usgsLidarControl);
+    app.closeRightPanel?.(PANEL_ID);
+    unregisterPanel?.();
+    unregisterPanel = null;
     usgsLidarControl = null;
   },
-  getMapControlPosition: () => usgsLidarPosition,
-  setMapControlPosition: (app: GeoLibreAppAPI, position: GeoLibreMapControlPosition) => {
-    usgsLidarPosition = position;
-    if (!usgsLidarControl) return;
-    app.removeMapControl(usgsLidarControl);
-    const added = app.addMapControl(usgsLidarControl, usgsLidarPosition);
-    if (!added) {
-      // The control is now detached; drop the stale reference so a later
-      // deactivate doesn't call removeMapControl on an already-removed control
-      // (matches mountUsgsLidarControl's failure handling).
-      usgsLidarControl = null;
-      return false;
-    }
-    setTimeout(() => usgsLidarControl?.expand(), 0);
-  },
 };
-
-function getUsgsLidarOptions(): UsgsLidarControlOptions {
-  return {
-    ...USGS_LIDAR_OPTIONS,
-    position: usgsLidarPosition,
-  };
-}

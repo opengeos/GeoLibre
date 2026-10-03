@@ -3608,6 +3608,23 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   box-shadow: none;
 }
 
+.geolibre-docked-map-control .usgs-lidar-control-panel {
+  position: static !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  display: flex !important;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.geolibre-docked-map-control .usgs-lidar-control-header,
+.geolibre-docked-map-control .usgs-lidar-resize-handle {
+  display: none !important;
+}
+
 .geolibre-docked-map-control .vantor-panel__table-container {
   max-height: none;
 }

@@ -29,6 +29,16 @@ const ALLOWLIST = new Map([
       "built web app contains no node-forge code, and google-p12-pem never " +
       "verifies an RSA signature, so no GeoLibre runtime path reaches the flaw.",
   ],
+  [
+    "GHSA-vfj7-8cjw-p6xm",
+    "braces stack-exhaustion denial of service through deeply nested patterns. " +
+      "No patched version exists — the advisory covers <=3.0.3 and 3.0.3 is the " +
+      "latest release. It reaches us only through glob-matching dependencies " +
+      "(patch-package → find-yarn-workspace-root → micromatch, and the " +
+      "fast-glob/globby chains) that expand patterns from local build-time " +
+      "configuration, never from user input. None of that code is bundled into " +
+      "the web or desktop app, so no GeoLibre runtime path reaches the flaw.",
+  ],
 ]);
 
 const audit = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
