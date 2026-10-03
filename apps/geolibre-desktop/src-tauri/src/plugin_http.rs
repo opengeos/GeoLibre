@@ -21,7 +21,10 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{guarded_async_client_builder, url_is_fetchable, MAX_HTTP_REDIRECTS};
+use super::{
+    guarded_async_client_builder, is_disallowed_ip, url_is_fetchable, MAX_HTTP_REDIRECTS,
+    SSRF_BLOCKED_MESSAGE,
+};
 
 const MAX_BODY_BYTES: usize = 64 * 1024 * 1024;
 const BODY_TOO_LARGE: &str = "Response exceeds the 64 MiB limit.";
@@ -61,17 +64,33 @@ pub(crate) struct PluginHttpResponse {
     body: String,
 }
 
+/// Any method token `fetch` accepts, except the ones it forbids. `CONNECT`
+/// would tunnel and `TRACE` echoes request headers back to the caller.
 fn method(name: &str) -> Result<Method, String> {
-    match name.to_ascii_uppercase().as_str() {
-        "GET" => Ok(Method::GET),
-        "HEAD" => Ok(Method::HEAD),
-        "POST" => Ok(Method::POST),
-        "PUT" => Ok(Method::PUT),
-        "PATCH" => Ok(Method::PATCH),
-        "DELETE" => Ok(Method::DELETE),
-        "OPTIONS" => Ok(Method::OPTIONS),
-        other => Err(format!("Unsupported HTTP method: {other}")),
+    let method = Method::from_bytes(name.to_ascii_uppercase().as_bytes())
+        .map_err(|_| format!("Invalid HTTP method: {name}"))?;
+    if method == Method::CONNECT || method == Method::TRACE {
+        return Err(format!("Unsupported HTTP method: {method}"));
     }
+    Ok(method)
+}
+
+/// Check a redirect hop. A hostname is re-checked by the guarded DNS resolver
+/// when reqwest connects, but a literal IP never reaches a resolver, so check
+/// it here; otherwise a redirect to `169.254.169.254` would be followed.
+fn redirect_target_allowed(url: &Url) -> Result<(), String> {
+    match url.scheme() {
+        "http" | "https" => {}
+        other => return Err(format!("Unsupported redirect scheme: {other}")),
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| "Redirect target has no host.".to_string())?;
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    if bare.parse::<std::net::IpAddr>().is_ok_and(is_disallowed_ip) {
+        return Err(SSRF_BLOCKED_MESSAGE.into());
+    }
+    Ok(())
 }
 
 fn request_headers(headers: Vec<(String, String)>) -> Result<HeaderMap, String> {
@@ -107,16 +126,13 @@ fn client() -> Result<reqwest::Client, String> {
         std::sync::OnceLock::new();
     CLIENT
         .get_or_init(|| {
-            // The guarded DNS resolver re-checks every redirect hop's address,
-            // so the policy only has to cap the hops and the scheme.
             guarded_async_client_builder(Policy::custom(|attempt| {
                 if attempt.previous().len() >= MAX_HTTP_REDIRECTS {
                     return attempt.error("Too many redirects.");
                 }
-                let scheme = attempt.url().scheme().to_string();
-                match scheme.as_str() {
-                    "http" | "https" => attempt.follow(),
-                    _ => attempt.error(format!("Unsupported redirect scheme: {scheme}")),
+                match redirect_target_allowed(attempt.url()) {
+                    Ok(()) => attempt.follow(),
+                    Err(error) => attempt.error(error),
                 }
             }))?
             .cookie_store(true)
@@ -256,11 +272,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn accepts_standard_methods_case_insensitively() {
+    fn accepts_fetch_methods_case_insensitively() {
         assert_eq!(method("post").unwrap(), Method::POST);
         assert_eq!(method("DELETE").unwrap(), Method::DELETE);
+        assert_eq!(method("propfind").unwrap().as_str(), "PROPFIND");
         assert!(method("CONNECT").is_err());
-        assert!(method("TRACE").is_err());
+        assert!(method("trace").is_err());
+        assert!(method("BAD METHOD").is_err());
+    }
+
+    #[test]
+    fn refuses_redirects_to_blocked_ip_literals() {
+        let check = |url: &str| redirect_target_allowed(&Url::parse(url).unwrap());
+        assert!(check("http://169.254.169.254/latest/meta-data/").is_err());
+        assert!(check("http://[::ffff:169.254.169.254]/").is_err());
+        assert!(check("http://[fe80::1]/").is_err());
+        assert!(check("ftp://example.com/").is_err());
+        // Hostnames are left to the guarded resolver; LAN servers stay reachable.
+        assert!(check("https://d2s.example/api").is_ok());
+        assert!(check("http://192.168.1.20:8000/api").is_ok());
     }
 
     #[test]
