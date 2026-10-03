@@ -68,7 +68,7 @@ export function PluginsMenu({
   setMapControlPosition,
   hiddenPluginIds,
 }: PluginsMenuProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const primaryRenderer = useAppStore((state) => state.primaryRenderer);
 
   const renderPluginMenuItem = (p: RegisteredPlugin) => {
@@ -143,9 +143,14 @@ export function PluginsMenu({
     );
   };
 
-  const webServicePlugins = plugins.filter(
-    (p) => WEB_SERVICE_PLUGIN_ID_SET.has(p.id) && !hiddenPluginIds.has(p.id),
-  );
+  // The Web Services submenu has grown long, so its entries sort alphabetically
+  // by their translated names (in the active locale's collation) rather than
+  // following registration order.
+  const webServicePlugins = plugins
+    .filter((p) => WEB_SERVICE_PLUGIN_ID_SET.has(p.id) && !hiddenPluginIds.has(p.id))
+    .map((p) => ({ plugin: p, name: pluginDisplayName(t, p) }))
+    .sort((a, b) => a.name.localeCompare(b.name, i18n.language, { sensitivity: "base" }))
+    .map(({ plugin }) => plugin);
   // The web service plugins render as one grouped submenu, placed where the
   // first of them appears in registration order (just above Historical Imagery).
   let webServicesRendered = false;
