@@ -33,6 +33,8 @@ test("the Plugins page lists every ?plugin= link name", async ({ page }) => {
     predicate: (message) => message.text().includes("in the ?plugin= link"),
     timeout: 60_000,
   });
+  // Keep the registry lookup an unknown name triggers off the network.
+  await page.route("https://plugins.geolibre.app/**", (route) => route.abort());
   await waitForMap(page, "/?plugin=not-a-real-plugin");
   const text = (await warning).text();
   const match = /Valid names: (.+)$/.exec(text);

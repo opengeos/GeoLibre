@@ -19,7 +19,9 @@ import { mergeStringLists } from "../../lib/string-lists";
 import {
   activateDeepLinkedPlugin,
   DEEP_LINKABLE_PLUGIN_IDS,
+  getExternalPluginLoadIssues,
   getPluginManager,
+  subscribeToExternalPluginLoads,
 } from "../usePlugins";
 import { useDesktopSettingsStore } from "../useDesktopSettings";
 
@@ -46,6 +48,15 @@ export interface RegistryPluginDeepLinkState {
   trust: () => void;
   /** Dismiss the prompt for this page load without installing anything. */
   dismiss: () => void;
+}
+
+/** A manifest URL in the spelling the registry uses, so stored URLs compare equal. */
+function canonicalUrl(url: string): string {
+  try {
+    return new URL(url.trim()).href;
+  } catch {
+    return url.trim();
+  }
 }
 
 const subscribeToPluginManager = (listener: () => void) => getPluginManager().subscribe(listener);
@@ -91,8 +102,13 @@ export function usePluginDeepLink({
   const handled = useRef(false);
   const projectSettled = useRef(false);
   const [pending, setPending] = useState<PluginRegistryEntry[]>([]);
-  // Ids of registry plugins the user trusted, activated as each one loads.
-  const [awaiting, setAwaiting] = useState<string[]>([]);
+  // Registry plugins the user trusted, activated as each one loads.
+  const [awaiting, setAwaiting] = useState<PluginRegistryEntry[]>([]);
+  const loadIssues = useSyncExternalStore(
+    subscribeToExternalPluginLoads,
+    getExternalPluginLoadIssues,
+    getExternalPluginLoadIssues,
+  );
   const managerVersion = useSyncExternalStore(
     subscribeToPluginManager,
     getPluginManagerVersion,
@@ -139,9 +155,7 @@ export function usePluginDeepLink({
           const matches = matchRegistryDeepLinkNames(names, registry.entries);
           unknown = matches.unknown;
           const installedUrls = new Set(
-            useDesktopSettingsStore
-              .getState()
-              .desktopSettings.pluginManifestUrls.map((url) => url.trim()),
+            useDesktopSettingsStore.getState().desktopSettings.pluginManifestUrls.map(canonicalUrl),
           );
           const toPrompt: PluginRegistryEntry[] = [];
           for (const entry of matches.entries) {
@@ -149,10 +163,17 @@ export function usePluginDeepLink({
               .list()
               .some((plugin) => plugin.id === entry.id);
             if (installedUrls.has(entry.manifestUrl)) {
-              if (loaded && (await activateDeepLinkedPlugin(entry.id, mapControllerRef))) continue;
-              console.warn(
-                `[GeoLibre] The plugin "${entry.id}" from the ?plugin= link did not activate.`,
-              );
+              // Contained per entry so one throwing plugin neither hides the
+              // others nor drops the ones still waiting for the trust prompt.
+              try {
+                if (loaded && (await activateDeepLinkedPlugin(entry.id, mapControllerRef)))
+                  continue;
+                console.warn(
+                  `[GeoLibre] The plugin "${entry.id}" from the ?plugin= link did not activate.`,
+                );
+              } catch (error) {
+                console.error(`[GeoLibre] Could not activate the plugin "${entry.id}"`, error);
+              }
             } else if (loaded) {
               // The id belongs to a plugin this entry would not replace.
               console.warn(
@@ -190,7 +211,8 @@ export function usePluginDeepLink({
   ]);
 
   // Once a trusted plugin's manifest has loaded (installing re-runs the external
-  // plugin scan), open it as a built-in link target would be.
+  // plugin scan), open it as a built-in link target would be. One whose manifest
+  // failed to load is dropped with a warning, since the dialog is already closed.
   useEffect(() => {
     if (awaiting.length === 0) return;
     const loadedIds = new Set(
@@ -198,11 +220,21 @@ export function usePluginDeepLink({
         .list()
         .map((plugin) => plugin.id),
     );
-    const ready = awaiting.filter((id) => loadedIds.has(id));
-    if (ready.length === 0) return;
-    setAwaiting((ids) => ids.filter((id) => !ready.includes(id)));
+    const ready = awaiting.filter((entry) => loadedIds.has(entry.id));
+    const failed = awaiting.filter(
+      (entry) => !loadedIds.has(entry.id) && loadIssues.has(entry.manifestUrl),
+    );
+    if (ready.length === 0 && failed.length === 0) return;
+    setAwaiting((entries) =>
+      entries.filter((entry) => !ready.includes(entry) && !failed.includes(entry)),
+    );
+    for (const entry of failed) {
+      console.warn(
+        `[GeoLibre] The plugin "${entry.id}" from the ?plugin= link did not load: ${loadIssues.get(entry.manifestUrl)}`,
+      );
+    }
     void (async () => {
-      for (const id of ready) {
+      for (const { id } of ready) {
         try {
           if (!(await activateDeepLinkedPlugin(id, mapControllerRef))) {
             console.warn(`[GeoLibre] The plugin "${id}" from the ?plugin= link did not activate.`);
@@ -212,7 +244,7 @@ export function usePluginDeepLink({
         }
       }
     })();
-  }, [awaiting, managerVersion, mapControllerRef]);
+  }, [awaiting, managerVersion, loadIssues, mapControllerRef]);
 
   const trust = useCallback(() => {
     if (pending.length === 0) return;
@@ -224,7 +256,7 @@ export function usePluginDeepLink({
         pending.map((entry) => entry.manifestUrl),
       ),
     });
-    setAwaiting((ids) => [...ids, ...pending.map((entry) => entry.id)]);
+    setAwaiting((entries) => [...entries, ...pending]);
     setPending([]);
   }, [pending]);
 

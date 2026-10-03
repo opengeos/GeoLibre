@@ -56,7 +56,7 @@ export function RegistryPluginTrustDialog({ link }: RegistryPluginTrustDialogPro
               <span className="ms-2 text-xs text-muted-foreground">v{entry.version}</span>
               {entry.author ? (
                 <span className="block text-xs text-muted-foreground">
-                  {t("managePlugins.registryTrust.by", { author: entry.author })}
+                  {t("managePlugins.byAuthor", { author: entry.author })}
                 </span>
               ) : null}
               {entry.description ? <p className="mt-1">{entry.description}</p> : null}
