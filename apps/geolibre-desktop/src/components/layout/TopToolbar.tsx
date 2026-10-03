@@ -73,6 +73,7 @@ import {
   setTimelapseLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
+  LAYER_CONTROL_PLUGIN_ID,
   GRATICULE_PLUGIN_ID,
   CLOUDS_PLUGIN_ID,
   PRECIPITATION_PLUGIN_ID,
@@ -2475,12 +2476,14 @@ export function TopToolbar({
           controlsVisible={controlsVisible}
           panels={panels}
           effectsActive={isActive(EFFECTS_PLUGIN_ID)}
+          layerControlActive={isActive(LAYER_CONTROL_PLUGIN_ID)}
           directionsActive={isActive(DIRECTIONS_PLUGIN_ID)}
           reverseGeocodeActive={isActive(REVERSE_GEOCODE_PLUGIN_ID)}
           graticuleActive={isActive(GRATICULE_PLUGIN_ID)}
           cloudsActive={isActive(CLOUDS_PLUGIN_ID)}
           precipitationActive={isActive(PRECIPITATION_PLUGIN_ID)}
           onToggleMapControl={toggleMapControl}
+          onToggleLayerControl={() => toggle(LAYER_CONTROL_PLUGIN_ID, appApi)}
           onToggleEffects={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
           getEffectsSettings={getEffectsSettings}
           onPreviewEffectsSettings={previewEffectsSettings}

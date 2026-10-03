@@ -1,9 +1,11 @@
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
 
+export const LAYER_CONTROL_PLUGIN_ID = "maplibre-layer-control";
+
 let layerControlPosition: GeoLibreMapControlPosition = "top-right";
 
 export const maplibreLayerControlPlugin: GeoLibrePlugin = {
-  id: "maplibre-layer-control",
+  id: LAYER_CONTROL_PLUGIN_ID,
   name: "Layer Control",
   version: "0.16.0",
   // GL engines share LayerControlHost; ArcGIS hosts its native LayerList.

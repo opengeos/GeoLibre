@@ -596,6 +596,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   },
   // Controls — built-in map controls
   {
+    id: "controls.layerControl",
+    menuId: "controls",
+    labelKey: "toolbar.plugin.maplibre-layer-control",
+    tier: "basic",
+  },
+  {
     id: "controls.mapControl.navigation",
     menuId: "controls",
     labelKey: "toolbar.mapControl.navigation",

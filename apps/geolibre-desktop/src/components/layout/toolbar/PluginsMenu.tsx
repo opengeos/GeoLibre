@@ -5,6 +5,7 @@ import {
   DIRECTIONS_PLUGIN_ID,
   type GeoLibreMapControlPosition,
   GRATICULE_PLUGIN_ID,
+  LAYER_CONTROL_PLUGIN_ID,
   CLOUDS_PLUGIN_ID,
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
@@ -183,7 +184,7 @@ export function PluginsMenu({
         <DropdownMenuSeparator />
         {plugins.map((p) => {
           // Atmospheric Effects, Directions, Reverse Geocode, Gridlines, and the
-          // Weather overlays (Clouds, Precipitation) are toggled from the
+          // Weather overlays (Clouds, Precipitation) and Layer Control are toggled from the
           // Controls menu instead, so they are omitted here to avoid a duplicate
           // toggle. The deck.gl viz overlay is an internal renderer driven by the
           // Add Data → "Deck.gl Layer" dialog, not a
@@ -201,6 +202,7 @@ export function PluginsMenu({
             p.id === CLOUDS_PLUGIN_ID ||
             p.id === PRECIPITATION_PLUGIN_ID ||
             p.id === DECK_VIZ_PLUGIN_ID ||
+            p.id === LAYER_CONTROL_PLUGIN_ID ||
             p.id === COMPONENTS_PLUGIN_ID
           ) {
             return null;

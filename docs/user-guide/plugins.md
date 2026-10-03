@@ -12,7 +12,7 @@ The built-in plugins are:
 
 | Plugin | What it adds |
 | --- | --- |
-| **Layer Control** | The on-map layer list. On by default. |
+| **Layer Control** | The on-map layer list. On by default; toggle it from **Controls → Layer Control**. |
 | **GeoEditor** | Drawing, vertex editing, and deletion tools for GeoJSON layers. |
 | **Annotations** | The map-annotation toolbar and Elements panel. See [Annotations](map-controls.md#annotations-and-the-elements-panel). |
 | **Basemaps** | A basemap gallery for switching the background map, from the same catalog as the [Change basemap dialog](adding-data.md#basemaps). |

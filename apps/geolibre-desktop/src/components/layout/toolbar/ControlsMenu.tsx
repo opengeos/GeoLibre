@@ -75,12 +75,14 @@ interface ControlsMenuProps {
   controlsVisible: Record<ToolbarMapControl, boolean>;
   panels: ToolbarPanels;
   effectsActive: boolean;
+  layerControlActive: boolean;
   directionsActive: boolean;
   reverseGeocodeActive: boolean;
   graticuleActive: boolean;
   cloudsActive: boolean;
   precipitationActive: boolean;
   onToggleMapControl: (control: ToolbarMapControl) => void;
+  onToggleLayerControl: () => void;
   onToggleEffects: () => void;
   getEffectsSettings: () => EffectsSettings;
   onPreviewEffectsSettings: (next: Partial<EffectsSettings>) => void;
@@ -111,12 +113,14 @@ export function ControlsMenu({
   controlsVisible,
   panels,
   effectsActive,
+  layerControlActive,
   directionsActive,
   reverseGeocodeActive,
   graticuleActive,
   cloudsActive,
   precipitationActive,
   onToggleMapControl,
+  onToggleLayerControl,
   onToggleEffects,
   getEffectsSettings,
   onPreviewEffectsSettings,
@@ -208,6 +212,7 @@ export function ControlsMenu({
   // Whether the first group (built-in controls + atmosphere/routing toggles) has
   // any visible item, so the separator below it isn't left orphaned.
   const anyTopControls =
+    show("controls.layerControl") ||
     MAP_CONTROL_ITEMS.some((control) => show(`controls.mapControl.${control.id}`)) ||
     show("controls.atmosphereEffects") ||
     show("controls.clouds") ||
@@ -250,6 +255,12 @@ export function ControlsMenu({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {show("controls.layerControl") && (
+            <DropdownMenuItem onClick={onToggleLayerControl}>
+              {t("toolbar.plugin.maplibre-layer-control")}
+              {layerControlActive ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
           {MAP_CONTROL_ITEMS.filter(
             (control) =>
               !LOGO_CONTROL_IDS.has(control.id) && show(`controls.mapControl.${control.id}`),

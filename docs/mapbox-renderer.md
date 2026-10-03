@@ -69,7 +69,7 @@ come from Environment variables or the basemap control's API keys panel.
   engines drive it through one host (`packages/map/src/layer-control-host.ts`);
   a `mapbox://` style cannot be fetched by the control, so the engine seeds it
   with the loaded style's own layers to tell basemap from project layers.
-  Toggle and reposition it from **Plugins → Layer Control**, as on MapLibre.
+  Toggle it from **Controls → Layer Control**, as on MapLibre.
   Split panes never mount a second control.
 
 ## Plugins
