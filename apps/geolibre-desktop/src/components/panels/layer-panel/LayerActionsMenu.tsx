@@ -101,7 +101,6 @@ import { canWriteEditsToSource, isPostgisEditableLayer } from "./layer-panel-uti
 import type { LayerActions } from "./useLayerActions";
 import type { LayerRefresh } from "./useLayerRefresh";
 import type { TimeSliderBinding } from "./useTimeSliderBinding";
-import { getGeometryFlags } from "../style-panel/layer-capabilities";
 
 /**
  * What every row's actions menu shares: the panel-wide state the menu items
@@ -272,12 +271,10 @@ export function LayerActionsMenuItems({
   // geojson-backed vector layers carry those features.
   const canExportLayer = layerCaps.export && layer.type === "geojson";
   const canExportPolyline = canExportLayer && layerSupportsPolylineExport(layer);
-  // A 3D model export needs the extrusion it meshes (discussion #2825), and
-  // polygons to extrude (assumed present when the geometry is not in memory).
-  const canExport3dModel =
-    canExportLayer &&
-    styleValue(layer.style, "extrusionEnabled") &&
-    getGeometryFlags(layer).hasPolygon;
+  // A 3D model export needs the extrusion it meshes (discussion #2825). The
+  // polygons are checked on export, which scans every feature (a menu-time
+  // sample could miss late or GeometryCollection polygons).
+  const canExport3dModel = canExportLayer && styleValue(layer.style, "extrusionEnabled");
   // Importing a style (Mapbox GL or SLD) only writes the layer's
   // vector symbology, so it applies to any vector-styled layer (local
   // GeoJSON and vector tiles), not just the export-capable GeoJSON
