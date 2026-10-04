@@ -230,6 +230,7 @@
     "description": "外部の GeoLibre プラグインを閲覧、インストール、更新、削除します。プラグインは <registryLink>GeoLibre プラグインレジストリ</registryLink>に掲載されています。",
     "policySideloadDisabled": "デプロイポリシーにより、プラグインのサイドロードは無効になっています。",
     "policyBlocked": "プラグイン「{{pluginId}}」はデプロイポリシーによってブロックされています。",
+    "policyBlocklisted": "プラグイン「{{pluginId}}」はプラグインレジストリによってブロックされました: {{reason}}",
     "policyNotAllowed": "プラグイン「{{pluginId}}」はデプロイポリシーで許可されていません。"
   },
   "viewState": {
@@ -5139,6 +5140,8 @@
         "projectedHint": "対象のCRSでダウンロードフォルダに保存されます。マップにはEPSG:4326のみ表示されるため、投影された結果はレイヤーとして追加されません。"
       },
       "filterBySource": "ソースで絞り込み",
+      "filterByCategory": "カテゴリで絞り込む",
+      "layerFor": "{{name}} のレイヤー",
       "allSources": "すべてのソース",
       "geolibreTools": "GeoLibreツール",
       "whiteboxTools": "Whiteboxツール",

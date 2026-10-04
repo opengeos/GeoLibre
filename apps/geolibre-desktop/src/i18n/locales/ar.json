@@ -260,6 +260,7 @@
     "description": "تصفّح إضافات GeoLibre الخارجية وثبّتها وحدّثها وأزلها. الإضافات مُدرَجة في <registryLink>سجل إضافات GeoLibre</registryLink>.",
     "policySideloadDisabled": "تثبيت الإضافات من خارج السجل معطّل بموجب سياسة النشر.",
     "policyBlocked": "الإضافة «{{pluginId}}» محظورة بموجب سياسة النشر.",
+    "policyBlocklisted": "حظر سجل الإضافات الإضافة «{{pluginId}}»: {{reason}}",
     "policyNotAllowed": "الإضافة «{{pluginId}}» غير مسموح بها بموجب سياسة النشر."
   },
   "viewState": {
@@ -5533,6 +5534,8 @@
         "projectedHint": "يُحفظ في التنزيلات لديك بنظام CRS الهدف. لا تعرض الخريطة سوى EPSG:4326، لذا لا تُضاف النتيجة المُسقَطة كطبقة."
       },
       "filterBySource": "التصفية حسب المصدر",
+      "filterByCategory": "التصفية حسب الفئة",
+      "layerFor": "طبقة {{name}}",
       "allSources": "جميع المصادر",
       "geolibreTools": "أدوات GeoLibre",
       "whiteboxTools": "أدوات Whitebox",

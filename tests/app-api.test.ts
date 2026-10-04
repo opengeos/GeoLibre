@@ -280,6 +280,19 @@ describe("plugin app API layers", () => {
     assert.equal("beforeLayerId" in (layer ?? {}), false);
   });
 
+  it("keeps queryable: false on a WMS layer and leaves it out otherwise (#2887)", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const options = { url: "https://example.com/wms", layers: "buildings" };
+    const off = api.addWmsLayer("Off", { ...options, queryable: false });
+    const on = api.addWmsLayer("On", { ...options, queryable: true });
+    const unset = api.addWmsLayer("Unset", options);
+    const source = (id: string) =>
+      useAppStore.getState().layers.find((item) => item.id === id)?.source ?? {};
+    assert.equal(source(off).queryable, false);
+    assert.equal("queryable" in source(on), false);
+    assert.equal("queryable" in source(unset), false);
+  });
+
   it("rejects a WMS layer without an endpoint or layer names", () => {
     const api = createAppAPI(undefined, fakeHost().host);
     assert.throws(() => api.addWmsLayer("WMS", { url: "", layers: "a" }), /options\.url/);

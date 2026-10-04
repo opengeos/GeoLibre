@@ -236,6 +236,7 @@
     "description": "Navegue, instale, atualize e remova plugins externos do GeoLibre. Os plugins estão listados no <registryLink>registro de plugins do GeoLibre</registryLink>.",
     "policySideloadDisabled": "O carregamento manual de plugins está desativado pela política de implantação.",
     "policyBlocked": "O plugin “{{pluginId}}” está bloqueado pela política de implantação.",
+    "policyBlocklisted": "O plugin “{{pluginId}}” foi bloqueado pelo registro de plugins: {{reason}}",
     "policyNotAllowed": "O plugin “{{pluginId}}” não é permitido pela política de implantação."
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "Salvo em seus downloads no CRS de destino. O mapa exibe apenas EPSG:4326, então um resultado projetado não é adicionado como camada."
       },
       "filterBySource": "Filtrar por origem",
+      "filterByCategory": "Filtrar por categoria",
+      "layerFor": "Camada para {{name}}",
       "allSources": "Todas as origens",
       "geolibreTools": "Ferramentas GeoLibre",
       "whiteboxTools": "Ferramentas Whitebox",

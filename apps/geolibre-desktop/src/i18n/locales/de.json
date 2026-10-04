@@ -236,6 +236,7 @@
     "description": "Externe GeoLibre-Plugins durchsuchen, installieren, aktualisieren und entfernen. Plugins sind in der <registryLink>GeoLibre-Plugin-Registry</registryLink> aufgeführt.",
     "policySideloadDisabled": "Das manuelle Installieren von Plugins (Sideloading) ist durch die Bereitstellungsrichtlinie deaktiviert.",
     "policyBlocked": "Das Plugin „{{pluginId}}“ ist durch die Bereitstellungsrichtlinie blockiert.",
+    "policyBlocklisted": "Das Plugin „{{pluginId}}“ wurde von der Plugin-Registry blockiert: {{reason}}",
     "policyNotAllowed": "Das Plugin „{{pluginId}}“ ist durch die Bereitstellungsrichtlinie nicht zugelassen."
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "In Ihren Downloads im Ziel-CRS gespeichert. Die Karte zeigt nur EPSG:4326 an, daher wird ein projiziertes Ergebnis nicht als Ebene hinzugefügt."
       },
       "filterBySource": "Nach Quelle filtern",
+      "filterByCategory": "Nach Kategorie filtern",
+      "layerFor": "Layer für {{name}}",
       "allSources": "Alle Quellen",
       "geolibreTools": "GeoLibre-Werkzeuge",
       "whiteboxTools": "Whitebox-Werkzeuge",

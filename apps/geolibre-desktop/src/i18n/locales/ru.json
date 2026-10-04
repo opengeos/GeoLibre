@@ -248,6 +248,7 @@
     "description": "Просматривайте, устанавливайте, обновляйте и удаляйте внешние плагины GeoLibre. Плагины перечислены в <registryLink>реестре плагинов GeoLibre</registryLink>.",
     "policySideloadDisabled": "Установка плагинов из сторонних источников отключена политикой развёртывания.",
     "policyBlocked": "Плагин «{{pluginId}}» заблокирован политикой развёртывания.",
+    "policyBlocklisted": "Плагин «{{pluginId}}» заблокирован реестром плагинов: {{reason}}",
     "policyNotAllowed": "Плагин «{{pluginId}}» не разрешён политикой развёртывания."
   },
   "viewState": {
@@ -5376,6 +5377,8 @@
         "projectedHint": "Сохранено в папку загрузок в целевой СК. Карта отображает только EPSG:4326, поэтому спроецированный результат не добавляется как слой."
       },
       "filterBySource": "Фильтр по источнику",
+      "filterByCategory": "Фильтр по категории",
+      "layerFor": "Слой для {{name}}",
       "allSources": "Все источники",
       "geolibreTools": "Инструменты GeoLibre",
       "whiteboxTools": "Инструменты Whitebox",

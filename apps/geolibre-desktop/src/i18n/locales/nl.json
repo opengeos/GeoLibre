@@ -236,6 +236,7 @@
     "description": "Blader door externe GeoLibre-plugins en installeer, werk bij of verwijder ze. Plugins staan in het <registryLink>GeoLibre-pluginregister</registryLink>.",
     "policySideloadDisabled": "Het handmatig installeren van plugins (sideloading) is uitgeschakeld door het implementatiebeleid.",
     "policyBlocked": "Plugin ‘{{pluginId}}’ is geblokkeerd door het implementatiebeleid.",
+    "policyBlocklisted": "De plug-in ‘{{pluginId}}’ is geblokkeerd door het plug-inregister: {{reason}}",
     "policyNotAllowed": "Plugin ‘{{pluginId}}’ is niet toegestaan door het implementatiebeleid."
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "Opgeslagen in uw downloads in het doel-CRS. De kaart toont alleen EPSG:4326, dus een geprojecteerd resultaat wordt niet als laag toegevoegd."
       },
       "filterBySource": "Filteren op bron",
+      "filterByCategory": "Filteren op categorie",
+      "layerFor": "Laag voor {{name}}",
       "allSources": "Alle bronnen",
       "geolibreTools": "GeoLibre-hulpmiddelen",
       "whiteboxTools": "Whitebox-hulpmiddelen",

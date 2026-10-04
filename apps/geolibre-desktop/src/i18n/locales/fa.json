@@ -236,6 +236,7 @@
     "description": "افزونه‌های خارجی GeoLibre را مرور، نصب، به‌روز و حذف کنید. افزونه‌ها در <registryLink>فهرست افزونه‌های GeoLibre</registryLink> سیاهه شده‌اند.",
     "policySideloadDisabled": "نصب افزونه از بیرون فهرست رسمی با سیاست استقرار غیرفعال شده است.",
     "policyBlocked": "افزونهٔ «{{pluginId}}» با سیاست استقرار مسدود شده است.",
+    "policyBlocklisted": "افزونه «{{pluginId}}» توسط رجیستری افزونه‌ها مسدود شد: {{reason}}",
     "policyNotAllowed": "افزونهٔ «{{pluginId}}» طبق سیاست استقرار مجاز نیست."
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "در پوشهٔ دانلودهای شما با سیستم مختصات مقصد ذخیره شد. نقشه تنها EPSG:4326 را نمایش می‌دهد، پس نتیجهٔ تصویرشده به‌عنوان لایه افزوده نمی‌شود."
       },
       "filterBySource": "فیلتر بر پایهٔ منبع",
+      "filterByCategory": "فیلتر بر اساس دسته",
+      "layerFor": "لایه برای {{name}}",
       "allSources": "همهٔ منابع",
       "geolibreTools": "ابزارهای GeoLibre",
       "whiteboxTools": "ابزارهای Whitebox",

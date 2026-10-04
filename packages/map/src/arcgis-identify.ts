@@ -22,6 +22,7 @@ import {
   isAbortError,
   isPixelIdentifyLayer,
   isWmsLayer,
+  isWmsQueryable,
   pixelIdentifyProperties,
   timeSliderBridge,
 } from "./identify-sources";
@@ -164,7 +165,7 @@ export function createArcgisIdentify(host: ArcgisIdentifyHost): {
     };
     const asyncLayers = eligibleLayers.filter(
       (candidate) =>
-        isWmsLayer(candidate) ||
+        (isWmsLayer(candidate) && isWmsQueryable(candidate)) ||
         isPixelIdentifyLayer(candidate) ||
         candidate.type === "cog" ||
         candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
@@ -297,6 +298,13 @@ export function createArcgisIdentify(host: ArcgisIdentifyHost): {
           return () => host.showPopup(lngLat, message(text), maxWidth);
         }
       });
+      return true;
+    }
+    if (isWmsLayer(layer) && !isWmsQueryable(layer)) {
+      // The capabilities say this layer answers no GetFeatureInfo (#2887).
+      pending?.abort();
+      clearSelection();
+      host.showPopup(lngLat, message(labels.wmsNotQueryable), maxWidth);
       return true;
     }
     if (isWmsLayer(layer)) {
