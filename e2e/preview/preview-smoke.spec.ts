@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../test";
 import { collectPageProblems, waitForMapLoaded } from "../helpers";
 
 test("the deployed app renders the map with a clean console", async ({ page }, testInfo) => {

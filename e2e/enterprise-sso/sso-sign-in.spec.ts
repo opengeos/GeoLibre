@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../test";
 import { waitForMap } from "../helpers";
 
 // Services started by the `enterprise-sso` job in .github/workflows/e2e-full.yml.
