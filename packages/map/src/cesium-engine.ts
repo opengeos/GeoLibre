@@ -396,6 +396,7 @@ export class CesiumEngine implements MapEngine {
     this.layerSync = new CesiumLayerSync(Cesium, viewer, undefined, {
       onTilesetFields: publishTilesetFields,
       onFlyTo: () => this.startFlight(),
+      onFlyToComplete: () => this.settleStillFlight(),
       onLayerError: ({ layerId, layerName, message }) =>
         onDiagnostic?.({ message: `${layerName}: ${message}`, source: "cesium", layerId }),
       onTileFailure: ({ layerId, layerName, message, status, loaded, failed }) =>
@@ -599,6 +600,7 @@ export class CesiumEngine implements MapEngine {
     viewer.camera.flyTo({
       destination: this.Cesium.Rectangle.fromDegrees(west, south, east, north),
       duration: FLY_SECONDS,
+      complete: () => this.settleStillFlight(),
     });
   }
 
@@ -1045,6 +1047,7 @@ export class CesiumEngine implements MapEngine {
   }
   stopCamera(): void {
     this.live()?.camera.cancelFlight();
+    this.settleStillFlight();
   }
   suspendNavigation(): () => void {
     const viewer = this.live();
@@ -1473,6 +1476,22 @@ export class CesiumEngine implements MapEngine {
   }
 
   /**
+   * End a flight that finished, or was stopped, without moving the camera.
+   *
+   * The `moveEnd` handler lands a flight that moved. One that did not (a zoom
+   * in already at the project's max zoom, a reset north on a north-up globe, a
+   * stop before the first frame) gets no `moveEnd`: Cesium completes a flight
+   * with nowhere to go at once, and raises `moveStart`/`moveEnd` only for real
+   * camera motion. Without this the terrain correction would stay off until
+   * the next `applyView`. A flight that is still moving is left to `moveEnd`.
+   */
+  private settleStillFlight(): void {
+    if (!this.flightPending || this.cameraMoving) return;
+    this.flightPending = false;
+    if (!this.userMoved) this.adoptLandedFlight();
+  }
+
+  /**
    * Animate the camera to `view`. Never marks the project dirty.
    *
    * This matches the 2D map exactly, and the match is the point. `MapController`
@@ -1532,6 +1551,7 @@ export class CesiumEngine implements MapEngine {
           range,
         ),
         duration: seconds ?? EASE_SECONDS,
+        complete: () => this.settleStillFlight(),
       },
     );
   }

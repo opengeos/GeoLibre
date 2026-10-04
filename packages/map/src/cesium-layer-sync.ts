@@ -948,6 +948,8 @@ export interface CesiumLayerSyncDeps {
    * once the camera is really leaving its placement.
    */
   onFlyTo?: () => void;
+  /** Called when a flight started by `onFlyTo` completes (not when cancelled). */
+  onFlyToComplete?: () => void;
   /**
    * Reports a layer that failed to load, so the app can show it the way the 2D
    * renderers show theirs (the Diagnostics panel). Without this a failure is
@@ -2038,14 +2040,23 @@ export class CesiumLayerSync {
     const extent = (handle as { extent?: Rectangle }).extent;
     this.deps.onFlyTo?.();
     if (extent) {
-      viewer.camera.flyTo({ destination: extent, duration: ZOOM_TO_LAYER_SECONDS });
+      viewer.camera.flyTo({
+        destination: extent,
+        duration: ZOOM_TO_LAYER_SECONDS,
+        complete: () => this.deps.onFlyToComplete?.(),
+      });
       return true;
     }
     void Promise.resolve(
       viewer.flyTo(handle as ImageryLayer | DataSource | Cesium3DTileset, {
         duration: ZOOM_TO_LAYER_SECONDS,
       }),
-    ).catch(() => {});
+    )
+      // Resolves false when the flight was cancelled.
+      .then((completed) => {
+        if (completed) this.deps.onFlyToComplete?.();
+      })
+      .catch(() => {});
     return true;
   }
 
