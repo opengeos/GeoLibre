@@ -98,6 +98,11 @@ interface NewProjectDialogProps {
    * When omitted, the Examples section is hidden.
    */
   onOpenExample?: (projectUrl: string, signal: AbortSignal) => Promise<void>;
+  /**
+   * Open with the Examples section expanded and scrolled into view (the
+   * "Open Starter Examples" command). Read when the section mounts.
+   */
+  showExamples?: boolean;
 }
 
 export function NewProjectDialog({
@@ -106,6 +111,7 @@ export function NewProjectDialog({
   onSaveCurrentProject,
   onProjectCreated,
   onOpenExample,
+  showExamples = false,
 }: NewProjectDialogProps) {
   const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
@@ -393,6 +399,7 @@ export function NewProjectDialog({
 
               {onOpenExample ? (
                 <StarterProjectsSection
+                  expanded={showExamples}
                   onOpenExample={openExample}
                   onOpened={handleExampleOpened}
                 />

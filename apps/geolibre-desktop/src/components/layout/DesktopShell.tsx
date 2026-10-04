@@ -1120,6 +1120,7 @@ export function DesktopShell({
         <SectionErrorBoundary label="Status bar" displayName={t("shell.section.statusBar")}>
           <StatusBar
             autosavePaused={projectHistory.autosavePaused}
+            autosaveUnavailable={projectHistory.autosaveUnavailable}
             compact={layoutOptions.compact}
             diagnosticsErrorCount={diagnostics.errorCount}
             diagnosticsWarningCount={diagnostics.warningCount}

@@ -232,6 +232,9 @@ describe("command-profile-gates", () => {
     assert.equal(commandMenuItem("control.gps-tracking"), "controls.gpsTracking");
     assert.equal(commandMenuItem("proc.georeferencer"), "processing.raster");
     assert.equal(commandMenuItem("settings.simplify-interface"), undefined);
+    assert.equal(commandMenuItem("project.examples"), "project.new");
+    assert.equal(commandMenuItem("view.color-vision.protanopia"), "view.colorVision");
+    assert.equal(commandMenuItem("view.color-vision.off"), "view.colorVision");
   });
 
   it("hides commands for hidden menus, items, data sources, and plugins", () => {

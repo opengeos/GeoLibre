@@ -10,7 +10,7 @@ import {
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
 } from "@geolibre/plugins";
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { openSettingsSection } from "../../components/layout/SettingsDialog";
 import { EARTH_ENGINE_AVAILABLE } from "../../components/layout/toolbar/ProcessingMenu";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../../components/layout/toolbar/toolbar-commands";
 import { supportsAddDataRenderer } from "../../lib/add-data-renderer";
 import type { Command } from "../../lib/commands";
+import { createLatestProxy } from "../../lib/latest-proxy";
 import {
   filterCommandsByCapabilities,
   filterCommandsByPrivileges,
@@ -114,7 +115,7 @@ export function useToolbarCommands(options: UseToolbarCommandsOptions): Command[
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const setCollaborateDialogOpen = useAppStore((s) => s.setCollaborateDialogOpen);
 
-  const commands = buildToolbarCommands({
+  const context: ToolbarCommandContext = {
     ...options,
     paletteExcludedPluginIds: PALETTE_EXCLUDED_PLUGIN_IDS,
     effectsPluginId: EFFECTS_PLUGIN_ID,
@@ -137,7 +138,53 @@ export function useToolbarCommands(options: UseToolbarCommandsOptions): Command[
     setVectorToolOpen,
     setRasterToolOpen,
     setStyleManagerOpen,
+  };
+
+  // Most of the context is handlers rebuilt on every toolbar render, so building
+  // straight from it produced a new list each time and every memo downstream
+  // (gating, the palette's filtering, the shortcut layer) recomputed (#2877).
+  // The list's shape and labels depend only on the values below; the build reads
+  // everything else through a view of the newest context, so a memoized command
+  // still runs the current handler. `buildingContext` pins the view to this
+  // render's context while the builder reads its labels.
+  const latestContextRef = useRef(context);
+  useLayoutEffect(() => {
+    latestContextRef.current = context;
   });
+  const { t, themeMode, shareAvailable, plugins, isActive } = options;
+  const collaborationEnabled = options.collaboration.enabled;
+  const nativeMapInstance = capabilities.nativeMapInstance;
+  // `plugins` is a fresh array and `isActive` a fresh closure on every render;
+  // this key changes only when what the plugin commands show does.
+  const pluginKey = plugins
+    .map((plugin) =>
+      [plugin.id, plugin.name, (plugin.engines ?? []).join(","), isActive(plugin.id) ? 1 : 0].join(
+        "\u0001",
+      ),
+    )
+    .join("\u0002");
+  const commands = useMemo(
+    () => {
+      let buildingContext: ToolbarCommandContext | null = context;
+      const built = buildToolbarCommands(
+        createLatestProxy(() => buildingContext ?? latestContextRef.current),
+      );
+      buildingContext = null;
+      return built;
+    },
+    // Deliberately keyed on what the builder reads at build time rather than on
+    // `context`, which is new on every render (see above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      t,
+      themeMode,
+      shareAvailable,
+      collaborationEnabled,
+      nativeMapInstance,
+      primaryRenderer,
+      pluginKey,
+    ],
+  );
 
   // The viewer preset hides every authoring menu, so the surfaces that reach
   // those commands without a menu go with them: the command palette

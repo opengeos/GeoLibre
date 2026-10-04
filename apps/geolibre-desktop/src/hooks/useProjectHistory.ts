@@ -18,6 +18,7 @@ import {
   addProjectSnapshot,
   deleteProjectSnapshot,
   listProjectSnapshots,
+  probeProjectHistoryStorage,
   type ProjectHistorySnapshot,
 } from "../lib/project-history-store";
 import {
@@ -46,6 +47,19 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
   // to keep, so the UI can say so instead of crash recovery going silently
   // stale (GeoLibre#2858).
   const [autosavePaused, setAutosavePaused] = useState(false);
+  // True when the browser refuses IndexedDB (some private windows, blocked site
+  // data), so autosave can never keep a snapshot. Distinct from the size pause:
+  // nothing the user does to the project will bring it back (GeoLibre#2860).
+  const [autosaveUnavailable, setAutosaveUnavailable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void probeProjectHistoryStorage().then((ok) => {
+      if (!cancelled) setAutosaveUnavailable(!ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const timerRef = useRef<number | null>(null);
   // Each layer's serialized text, reused while the store keeps the same layer
   // record. Without it a camera move re-stringified every embedded GeoJSON
@@ -252,6 +266,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
 
   return {
     autosavePaused,
+    autosaveUnavailable,
     snapshots,
     recoverySnapshot,
     restoreError,

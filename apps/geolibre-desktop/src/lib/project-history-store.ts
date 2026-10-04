@@ -45,6 +45,9 @@ function available(): boolean {
   return typeof indexedDB !== "undefined";
 }
 
+/** Another tab holds an older version of the database open. Transient. */
+class ProjectHistoryBlockedError extends Error {}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -87,7 +90,7 @@ function openDatabase(): Promise<IDBDatabase> {
       rejectOnce(request.error ?? new Error("Could not open project history."));
     request.onblocked = () =>
       rejectOnce(
-        new Error(
+        new ProjectHistoryBlockedError(
           "Project history is blocked by another GeoLibre tab. Close or reload other tabs and try again.",
         ),
       );
@@ -109,6 +112,29 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
     transaction.onabort = () =>
       reject(transaction.error ?? new Error("Project history transaction was aborted."));
   });
+}
+
+/**
+ * Whether this browser lets the app keep project history at all.
+ *
+ * False when IndexedDB is missing or refuses to open — a private window in some
+ * browsers, site data blocked by policy, a storage failure — in which case
+ * autosave can never write a snapshot and crash recovery has nothing to offer.
+ * A database merely blocked by another tab's upgrade counts as available: that
+ * clears once the other tab closes.
+ *
+ * Returns:
+ *   Whether the project history database can be opened.
+ */
+export async function probeProjectHistoryStorage(): Promise<boolean> {
+  if (!available()) return false;
+  try {
+    const db = await openDatabase();
+    db.close();
+    return true;
+  } catch (error) {
+    return error instanceof ProjectHistoryBlockedError;
+  }
 }
 
 export async function listProjectSnapshots(projectKey?: string): Promise<ProjectHistorySnapshot[]> {

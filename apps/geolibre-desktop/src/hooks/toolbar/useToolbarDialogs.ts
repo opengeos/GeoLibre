@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 /**
  * Open state for the dialogs the top toolbar owns and opens from its menus,
@@ -14,6 +14,17 @@ import { useState } from "react";
 export function useToolbarDialogs() {
   const [netcdfDialogOpen, setNetcdfDialogOpen] = useState(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
+  // Whether New Project opens with its Examples section expanded: set by the
+  // "Open Starter Examples" command, cleared whenever the dialog closes.
+  const [newProjectShowExamples, setNewProjectShowExamples] = useState(false);
+  const openStarterExamples = useCallback(() => {
+    setNewProjectShowExamples(true);
+    setNewProjectDialogOpen(true);
+  }, []);
+  const handleNewProjectDialogOpenChange = useCallback((open: boolean) => {
+    setNewProjectDialogOpen(open);
+    if (!open) setNewProjectShowExamples(false);
+  }, []);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [galleryDialogOpen, setGalleryDialogOpen] = useState(false);
@@ -36,6 +47,9 @@ export function useToolbarDialogs() {
     setNetcdfDialogOpen,
     newProjectDialogOpen,
     setNewProjectDialogOpen,
+    newProjectShowExamples,
+    openStarterExamples,
+    handleNewProjectDialogOpenChange,
     managePluginsOpen,
     setManagePluginsOpen,
     shareDialogOpen,

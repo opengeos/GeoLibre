@@ -5,6 +5,7 @@ import {
   type ToolbarCommandContext,
 } from "../apps/geolibre-desktop/src/components/layout/toolbar/toolbar-commands";
 import { IS_MAS_BUILD } from "../apps/geolibre-desktop/src/lib/build-flags";
+import { useCvdPreviewStore } from "../apps/geolibre-desktop/src/lib/cvd-preview-store";
 import { IS_STORE_BUILD } from "../apps/geolibre-desktop/src/lib/updates";
 
 const noop = () => {};
@@ -52,9 +53,11 @@ const ids = (overrides?: Partial<ToolbarCommandContext>) =>
 // it moved here (#2858). A change to this list changes the command palette,
 // the cheat sheet, and the global shortcuts, so it must be deliberate. Since
 // captured it has only gained the Georeferencer, Field Collection, GPS
-// Tracking, Simplify Interface, and Line of Sight commands.
+// Tracking, Simplify Interface, Line of Sight, Starter Examples, and Color
+// Vision Preview commands.
 const FULL_REGISTRY_IDS = [
   "project.new",
+  "project.examples",
   "project.open-file",
   "project.open-url",
   "project.save",
@@ -187,6 +190,11 @@ const FULL_REGISTRY_IDS = [
   "view.set-view",
   "view.comments",
   "view.theme",
+  "view.color-vision.protanopia",
+  "view.color-vision.deuteranopia",
+  "view.color-vision.tritanopia",
+  "view.color-vision.achromatopsia",
+  "view.color-vision.off",
   "help.shortcuts",
   "help.website",
   "help.github",
@@ -297,6 +305,30 @@ describe("buildToolbarCommands", () => {
       "gpsTracking:true",
       "simplifyInterface",
     ]);
+  });
+
+  it("opens the starter examples and switches the color vision preview", () => {
+    let examplesOpened = 0;
+    const commands = buildToolbarCommands(
+      context({ openStarterExamples: () => (examplesOpened += 1) }),
+    );
+    const run = (id: string) => {
+      const command = commands.find((entry) => entry.id === id);
+      assert.ok(command, `${id} should exist`);
+      command.run();
+    };
+    run("project.examples");
+    assert.equal(examplesOpened, 1);
+    try {
+      run("view.color-vision.deuteranopia");
+      assert.equal(useCvdPreviewStore.getState().mode, "deuteranopia");
+      run("view.color-vision.achromatopsia");
+      assert.equal(useCvdPreviewStore.getState().mode, "achromatopsia");
+      run("view.color-vision.off");
+      assert.equal(useCvdPreviewStore.getState().mode, null);
+    } finally {
+      useCvdPreviewStore.getState().setMode(null);
+    }
   });
 
   it("explains why a plugin cannot run on the live renderer", () => {

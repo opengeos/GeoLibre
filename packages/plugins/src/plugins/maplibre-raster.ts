@@ -49,6 +49,7 @@ import { isNonTiledRasterError } from "./non-tiled-raster-error";
 import { convertTiffYCbCrToRgb } from "./tiff-ycbcr";
 import { readableStacLayerHref } from "./stac-signing";
 import { configureMapboxRasterEngine } from "./raster-mapbox-compat";
+import { focusPanel, restorePanelFocus } from "./panel-focus";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
@@ -231,6 +232,13 @@ let rasterControlMounted = false;
 // call that carries it (the browse-button interception) can still add layers.
 let rasterHostApp: GeoLibreAppAPI | null = null;
 let restorePanelExpandTimeout: number | null = null;
+/**
+ * The `projectGeneration` in which the user last opened the panel, or null once
+ * it is closed. A restore pass for that same project (the map finishing its
+ * first style load, a basemap swap) must not apply the project's saved panel
+ * state over the user's newer choice (#2895, as for the vector panel).
+ */
+let panelOpenedInGeneration: number | null = null;
 let rasterControlInterleaved = true;
 // Unsubscribes the web raster overlay proxy from the shared Deck's device
 // notifications when the control's overlay is torn down (see
@@ -345,6 +353,7 @@ export function setLocalRasterPicker(picker: LocalRasterPicker | null): void {
  * @param app - The GeoLibre app API.
  */
 export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
+  panelOpenedInGeneration = useAppStore.getState().projectGeneration;
   void (async () => {
     const control = await ensureRasterControl(app);
     if (!control) return;
@@ -363,6 +372,8 @@ export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
         wireRasterCloseButton(control);
         wireRasterBrowseButton(control);
         applyRasterPanelClass(control);
+        // Take keyboard focus off the menu trigger and into the panel (#2895).
+        focusPanel((control as unknown as RasterControlInternals)._panel, RASTER_CLOSE_SELECTOR);
       } catch (error) {
         console.error("[GeoLibre] Failed to open the raster layer panel", error);
       }
@@ -637,6 +648,7 @@ export function getRasterLoadState(layerId: string) {
 }
 
 export function closeRasterLayerPanel(app: GeoLibreAppAPI): void {
+  panelOpenedInGeneration = null;
   if (restorePanelExpandTimeout !== null) {
     window.clearTimeout(restorePanelExpandTimeout);
     restorePanelExpandTimeout = null;
@@ -798,7 +810,11 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
       // Isolated so a DOM error from the panel-state restore cannot abort
       // the raster replay below.
       try {
-        applyRestoredRasterPanelState(control, panelCollapsed);
+        // The user opened the panel after this project loaded, so their choice
+        // is newer than the saved state; leave the panel as they left it.
+        if (panelOpenedInGeneration !== useAppStore.getState().projectGeneration) {
+          applyRestoredRasterPanelState(control, panelCollapsed);
+        }
       } catch (error) {
         console.error("[GeoLibre] Failed to restore raster panel state", error);
       }
@@ -1561,18 +1577,24 @@ function applyRasterPanelClass(control: RasterControl): void {
   internals._panel?.classList.add(RASTER_PANEL_CLASS);
 }
 
+const RASTER_CLOSE_SELECTOR = ".mlr-control-close";
+
 // The upstream close button only collapses the panel, leaving the map
 // button visible. Hide the whole control too so closing the panel restores
 // the pre-open map, like dismissing the dialog it replaces. Loaded rasters
 // keep rendering; the layer panel still manages them.
 function wireRasterCloseButton(control: RasterControl): void {
   const panel = (control as unknown as RasterControlInternals)._panel;
-  const closeButton = panel?.querySelector<HTMLElement>(".mlr-control-close");
+  const closeButton = panel?.querySelector<HTMLElement>(RASTER_CLOSE_SELECTOR);
   if (!closeButton || closeButton.dataset.geolibreCloseWired === "true") {
     return;
   }
   closeButton.dataset.geolibreCloseWired = "true";
-  closeButton.addEventListener("click", () => hideRasterControl(control));
+  closeButton.addEventListener("click", () => {
+    panelOpenedInGeneration = null;
+    restorePanelFocus(panel);
+    hideRasterControl(control);
+  });
 }
 
 // The panel's "click to browse" drop zone opens a hidden <input type="file">,

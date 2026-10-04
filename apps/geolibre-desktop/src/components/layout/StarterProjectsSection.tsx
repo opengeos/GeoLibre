@@ -1,5 +1,5 @@
 import { ImageOff, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { STARTER_PROJECTS, type StarterProject } from "../../lib/starter-projects";
 import { CollapsibleSection } from "../CollapsibleSection";
@@ -21,8 +21,9 @@ function StarterProjectCard({ example, loading, disabled, onOpen }: StarterProje
       disabled={disabled}
       aria-busy={loading}
       onClick={() => onOpen(example)}
-      className="flex items-start gap-2.5 rounded-md border p-2 text-start transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+      className="flex items-start gap-2.5 rounded-md border p-2 text-start transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
       data-testid={`starter-project-${example.id}`}
+      data-starter-project=""
     >
       <div className="relative flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
         {thumbnailFailed ? (
@@ -59,6 +60,11 @@ interface StarterProjectsSectionProps {
   onOpenExample: (projectUrl: string) => Promise<boolean>;
   /** Called once an example has loaded, so the dialog can close. */
   onOpened: () => void;
+  /**
+   * Mount expanded, scrolled into view, with the first example focused (the
+   * "Open Starter Examples" command). Only read on mount.
+   */
+  expanded?: boolean;
 }
 
 /**
@@ -66,10 +72,29 @@ interface StarterProjectsSectionProps {
  * projects as thumbnail cards. Owns the per-open loading and error state; the
  * dialog unmounts it on close, which resets both.
  */
-export function StarterProjectsSection({ onOpenExample, onOpened }: StarterProjectsSectionProps) {
+export function StarterProjectsSection({
+  onOpenExample,
+  onOpened,
+  expanded = false,
+}: StarterProjectsSectionProps) {
   const { t } = useTranslation();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<{ title: string; detail: string } | null>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
+  // Read once: the section is remounted on every dialog open.
+  const [expandOnMount] = useState(expanded);
+  useEffect(() => {
+    if (!expandOnMount) return;
+    // Wait a frame so the dialog's own open auto-focus has run; otherwise it
+    // would move focus straight back to the first field.
+    const frame = requestAnimationFrame(() => {
+      const section = sectionRef.current;
+      if (!section) return;
+      section.scrollIntoView({ block: "start" });
+      section.querySelector<HTMLButtonElement>("button[data-starter-project]")?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [expandOnMount]);
 
   if (STARTER_PROJECTS.length === 0) return null;
 
@@ -93,25 +118,29 @@ export function StarterProjectsSection({ onOpenExample, onOpened }: StarterProje
   };
 
   return (
-    <CollapsibleSection title={t("newProject.examples")}>
-      <p className="text-xs text-muted-foreground">{t("newProject.examplesDescription")}</p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {STARTER_PROJECTS.map((example) => (
-          <StarterProjectCard
-            key={example.id}
-            example={example}
-            loading={loadingId === example.id}
-            disabled={loadingId !== null}
-            onOpen={(item) => void handleOpen(item)}
-          />
-        ))}
-      </div>
-      {error ? (
-        <div role="alert" className="space-y-0.5 text-xs text-destructive">
-          <p className="font-medium">{t("newProject.exampleOpenFailed", { title: error.title })}</p>
-          <p className="break-words">{error.detail}</p>
+    <div ref={sectionRef}>
+      <CollapsibleSection title={t("newProject.examples")} defaultOpen={expandOnMount}>
+        <p className="text-xs text-muted-foreground">{t("newProject.examplesDescription")}</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {STARTER_PROJECTS.map((example) => (
+            <StarterProjectCard
+              key={example.id}
+              example={example}
+              loading={loadingId === example.id}
+              disabled={loadingId !== null}
+              onOpen={(item) => void handleOpen(item)}
+            />
+          ))}
         </div>
-      ) : null}
-    </CollapsibleSection>
+        {error ? (
+          <div role="alert" className="space-y-0.5 text-xs text-destructive">
+            <p className="font-medium">
+              {t("newProject.exampleOpenFailed", { title: error.title })}
+            </p>
+            <p className="break-words">{error.detail}</p>
+          </div>
+        ) : null}
+      </CollapsibleSection>
+    </div>
   );
 }

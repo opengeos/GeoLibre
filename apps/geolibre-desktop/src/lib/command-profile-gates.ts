@@ -42,6 +42,8 @@ const COMMAND_MENU_PREFIXES: ReadonlyArray<readonly [string, TopLevelMenuId]> = 
  */
 const COMMAND_MENU_ITEMS: ReadonlyArray<readonly [string, string]> = [
   ["project.new", "project.new"],
+  // The starter examples open inside the New Project dialog.
+  ["project.examples", "project.new"],
   ["project.open-file", "project.openFrom"],
   ["project.open-url", "project.openFrom"],
   ["project.save-as", "project.saveAs"],
@@ -92,6 +94,7 @@ const COMMAND_MENU_ITEMS: ReadonlyArray<readonly [string, string]> = [
   ["view.reset-pitch-bearing", "view.resetPitchBearing"],
   ["view.reset-pitch", "view.resetPitch"],
   ["view.set-view", "view.setView"],
+  ["view.color-vision.", "view.colorVision"],
   ["help.shortcuts", "help.keyboardShortcuts"],
   ["help.website", "help.website"],
   ["help.github", "help.github"],

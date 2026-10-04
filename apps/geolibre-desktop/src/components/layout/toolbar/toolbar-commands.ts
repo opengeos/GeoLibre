@@ -11,6 +11,7 @@ import {
   Crosshair,
   Database,
   Eye,
+  EyeOff,
   FilePen,
   FilePlus2,
   FolderGit2,
@@ -19,6 +20,7 @@ import {
   Grid2x2,
   Info,
   Keyboard,
+  LayoutTemplate,
   Layers,
   Link2,
   LocateFixed,
@@ -47,6 +49,8 @@ import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import type { Command } from "../../../lib/commands";
+import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../../../lib/cvd-preview-store";
+import { CVD_MODES } from "../../../lib/cvd-simulation";
 import { useLineOfSightTool } from "../../../lib/line-of-sight-store";
 import { masHidesDataSource } from "../../../lib/mas-build";
 import { pluginDisplayName } from "../../../lib/plugin-display-name";
@@ -120,6 +124,8 @@ export interface ToolbarCommandContext {
   onOpenDiagnostics: () => void;
   onToggleThemeMode: () => void;
   setNewProjectDialogOpen: SetOpen;
+  /** Open New Project with its Examples (starter projects) section expanded. */
+  openStarterExamples: () => void;
   setShareDialogOpen: SetOpen;
   setPrintLayoutOpen: SetOpen;
   setGeoreferencerOpen: SetOpen;
@@ -190,6 +196,7 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
     onOpenDiagnostics,
     onToggleThemeMode,
     setNewProjectDialogOpen,
+    openStarterExamples,
     setShareDialogOpen,
     setPrintLayoutOpen,
     setGeoreferencerOpen,
@@ -233,6 +240,16 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       icon: FilePlus2,
       shortcut: { key: "n", mod: true, shift: false },
       run: () => setNewProjectDialogOpen(true),
+    },
+    // The starter projects sit in a collapsed section of the New Project
+    // dialog; this opens it already expanded (#2884).
+    {
+      id: "project.examples",
+      title: t("toolbar.command.projectStarterExamples"),
+      group: t("toolbar.commandGroup.project"),
+      keywords: "examples starter sample demo template projects gallery",
+      icon: LayoutTemplate,
+      run: openStarterExamples,
     },
     {
       id: "project.open-file",
@@ -744,6 +761,24 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       keywords: "theme dark light appearance",
       icon: themeMode === "dark" ? Sun : Moon,
       run: onToggleThemeMode,
+    },
+    // View → Color vision preview, one command per simulated deficiency plus
+    // one to turn it off (#2884).
+    ...CVD_MODES.map((mode) => ({
+      id: `view.color-vision.${mode}`,
+      title: t("toolbar.command.colorVisionPreviewMode", { mode: t(CVD_MODE_LABEL_KEYS[mode]) }),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "color colour vision deficiency blindness simulate accessibility cvd",
+      icon: Eye,
+      run: () => useCvdPreviewStore.getState().setMode(mode),
+    })),
+    {
+      id: "view.color-vision.off",
+      title: t("toolbar.command.colorVisionPreviewOff"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "color colour vision deficiency blindness simulate accessibility cvd",
+      icon: EyeOff,
+      run: () => useCvdPreviewStore.getState().setMode(null),
     },
     // Help
     {

@@ -38,7 +38,7 @@ import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
 import { isMenuItemVisible, isMenuVisible } from "../../../lib/ui-profile";
 import type { ToolbarChrome } from "./constants";
-import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../CvdPreview";
+import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../../../lib/cvd-preview-store";
 import { CVD_MODES, isCvdMode } from "../../../lib/cvd-simulation";
 
 /** Selectable map-grid presets offered in the Split View submenu. */

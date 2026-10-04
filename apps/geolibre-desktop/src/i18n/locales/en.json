@@ -270,7 +270,9 @@
       "epsg": "Projected (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch.",
-    "autosavePaused": "Autosave paused"
+    "autosavePaused": "Autosave paused",
+    "autosaveUnavailable": "Autosave off",
+    "autosaveUnavailableDetail": "Autosave is off: this browser is blocking local storage (IndexedDB), as some private windows do, so no project history or crash recovery is kept. Save the project to disk to keep your work."
   },
   "fileNamePrompt": {
     "title": "Save file as",
@@ -2998,6 +3000,7 @@
     },
     "command": {
       "projectNew": "New Project",
+      "projectStarterExamples": "Open Starter Examples",
       "projectOpenFile": "Open Project from File",
       "projectOpenUrl": "Open Project from URL",
       "projectSave": "Save Project",
@@ -3056,6 +3059,8 @@
       "zoomOut": "Zoom Out",
       "switchToLight": "Switch to Light Mode",
       "switchToDark": "Switch to Dark Mode",
+      "colorVisionPreviewMode": "Color Vision Preview: {{mode}}",
+      "colorVisionPreviewOff": "Turn Off Color Vision Preview",
       "keyboardShortcuts": "Keyboard Shortcuts",
       "website": "Website",
       "githubRepository": "GitHub repository",

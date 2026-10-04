@@ -68,7 +68,7 @@ import {
   isMenuItemVisible,
   presetHiddenSets,
 } from "../../lib/ui-profile";
-import { scopeOsEnvToProject, type RuntimeEnv } from "../../lib/assistant/provider";
+import type { RuntimeEnv } from "../../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../../lib/assistant/os-env";
 import { normalizeS3DefaultLocation } from "../../lib/s3-connections";
 import {
@@ -332,41 +332,10 @@ export function SettingsDialog({
     }
     const storePreferences = overlayStoredPreferenceCredentials(useAppStore.getState().preferences);
     seededCredentialPreferencesRef.current = storePreferences;
-    const seededPreferences = clonePreferences(storePreferences);
-    setDraftPreferences(seededPreferences);
+    setDraftPreferences(clonePreferences(storePreferences));
     setDraftDesktopSettings(
       cloneDesktopSettings(useDesktopSettingsStore.getState().desktopSettings, storePreferences),
     );
-    // Land the AI section on the first profile's provider, or the first
-    // available provider if no profiles exist, so the user sees something
-    // relevant without extra clicks.
-    const storeSettings = useDesktopSettingsStore.getState().desktopSettings;
-    const seededProfiles = storeSettings.aiProfiles.map((p) => ({
-      ...p,
-      fieldValues: { ...p.fieldValues },
-    }));
-    const seededProjectEnv: Record<string, string> = {};
-    for (const variable of seededPreferences.environmentVariables) {
-      const key = variable.key.trim();
-      if (variable.enabled && key) seededProjectEnv[key] = variable.value;
-    }
-    // Build a flat env from all profile field values for determining
-    // available providers during seeding.
-    const seededAiEnv: Record<string, string> = {};
-    for (const profile of seededProfiles) {
-      for (const [key, value] of Object.entries(profile.fieldValues)) {
-        const name = key.trim();
-        if (name && value) seededAiEnv[name] = value;
-      }
-    }
-    const seededEnv = {
-      ...scopeOsEnvToProject(
-        readOsEnv(),
-        new Set([...Object.keys(seededProjectEnv), ...Object.keys(seededAiEnv)]),
-      ),
-      ...seededAiEnv,
-      ...seededProjectEnv,
-    };
     // Show the profile list by default (do not auto-select a profile for editing).
     setEditingProfileId(null);
     setIsCreatingProfile(false);

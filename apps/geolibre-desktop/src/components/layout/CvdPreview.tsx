@@ -2,38 +2,13 @@ import { Button } from "@geolibre/ui";
 import { Eye, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { ParseKeys } from "i18next";
-import { create } from "zustand";
 import {
   CVD_MODES,
   cvdColorMatrixValues,
   cvdFilterId,
   type CvdMode,
 } from "../../lib/cvd-simulation";
-
-interface CvdPreviewState {
-  /** The simulated deficiency, or null when the preview is off. */
-  mode: CvdMode | null;
-  setMode: (mode: CvdMode | null) => void;
-}
-
-/**
- * Session-only state for View → Color vision preview. Deliberately not part of
- * the project or desktop settings: it is a checking aid, and a map that
- * silently reopened grey or red-green-shifted would read as broken.
- */
-export const useCvdPreviewStore = create<CvdPreviewState>((set) => ({
-  mode: null,
-  setMode: (mode) => set({ mode }),
-}));
-
-/** Catalog keys for each mode's display name. */
-export const CVD_MODE_LABEL_KEYS: Readonly<Record<CvdMode, ParseKeys>> = {
-  protanopia: "toolbar.item.cvdProtanopia",
-  deuteranopia: "toolbar.item.cvdDeuteranopia",
-  tritanopia: "toolbar.item.cvdTritanopia",
-  achromatopsia: "toolbar.item.cvdAchromatopsia",
-};
+import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../../lib/cvd-preview-store";
 
 /**
  * Hidden SVG holding one `feColorMatrix` filter per CVD mode. Always mounted

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FEET_PER_METER,
   formatCameraAltitude,
@@ -14,7 +14,7 @@ import {
   type ProjectedReadout,
 } from "../../lib/coordinate-format";
 import { cn } from "@geolibre/ui";
-import { Bug, TriangleAlert } from "lucide-react";
+import { Bug, DatabaseZap, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
 import { autosavePausedMessage } from "../../lib/autosave-status";
@@ -35,6 +35,11 @@ export function formatPointerElevation(meters: number, unit: MapScaleUnit): stri
 interface StatusBarProps {
   /** True while autosave is skipping snapshots because the project is too large. */
   autosavePaused?: boolean;
+  /**
+   * True when the browser refuses IndexedDB, so autosave cannot keep any
+   * snapshot at all. Takes precedence over `autosavePaused`.
+   */
+  autosaveUnavailable?: boolean;
   compact?: boolean;
   diagnosticsErrorCount: number;
   diagnosticsWarningCount: number;
@@ -43,6 +48,7 @@ interface StatusBarProps {
 
 export function StatusBar({
   autosavePaused = false,
+  autosaveUnavailable = false,
   compact = false,
   diagnosticsErrorCount,
   diagnosticsWarningCount,
@@ -63,6 +69,25 @@ export function StatusBar({
   const gpsStatus = useAppStore((s) => s.gpsStatus);
   const mapView = useAppStore((s) => s.mapView);
   const diagnosticsCount = diagnosticsErrorCount + diagnosticsWarningCount;
+  // The pointer readout re-renders this bar on every mouse move; build the
+  // autosave notice only when its inputs change (#2860).
+  const autosaveNotice = useMemo(() => {
+    if (autosaveUnavailable) {
+      return {
+        label: t("statusBar.autosaveUnavailable"),
+        detail: t("statusBar.autosaveUnavailableDetail"),
+        unavailable: true,
+      };
+    }
+    if (autosavePaused) {
+      return {
+        label: t("statusBar.autosavePaused"),
+        detail: autosavePausedMessage(t, i18n.language),
+        unavailable: false,
+      };
+    }
+    return null;
+  }, [autosaveUnavailable, autosavePaused, t, i18n.language]);
 
   // Re-render every few seconds while a GPS fix is shown so its age stays live.
   const [, setGpsTick] = useState(0);
@@ -174,23 +199,28 @@ export function StatusBar({
           with the full explanation (the visible label's tooltip is not
           keyboard-reachable). */}
       <span role="status" className="sr-only">
-        {autosavePaused ? autosavePausedMessage(t, i18n.language) : ""}
+        {autosaveNotice?.detail ?? ""}
       </span>
-      {autosavePaused ? (
+      {autosaveNotice ? (
         <span
           aria-hidden="true"
           className="ms-auto inline-flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-300"
-          title={autosavePausedMessage(t, i18n.language)}
+          title={autosaveNotice.detail}
+          data-testid={autosaveNotice.unavailable ? "autosave-unavailable" : "autosave-paused"}
         >
-          <TriangleAlert className="h-3 w-3" />
-          {t("statusBar.autosavePaused")}
+          {autosaveNotice.unavailable ? (
+            <DatabaseZap className="h-3 w-3" />
+          ) : (
+            <TriangleAlert className="h-3 w-3" />
+          )}
+          {autosaveNotice.label}
         </span>
       ) : null}
       <button
         type="button"
         className={cn(
           "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
-          !autosavePaused && "ms-auto",
+          !autosaveNotice && "ms-auto",
           diagnosticsErrorCount > 0 && "text-red-700 dark:text-red-300",
           diagnosticsErrorCount === 0 &&
             diagnosticsWarningCount > 0 &&

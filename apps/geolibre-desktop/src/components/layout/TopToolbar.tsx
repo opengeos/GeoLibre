@@ -404,7 +404,8 @@ export function TopToolbar({
       <MountWhenOpened open={dialogs.newProjectDialogOpen}>
         <NewProjectDialog
           open={dialogs.newProjectDialogOpen}
-          onOpenChange={dialogs.setNewProjectDialogOpen}
+          onOpenChange={dialogs.handleNewProjectDialogOpenChange}
+          showExamples={dialogs.newProjectShowExamples}
           onSaveCurrentProject={projectFiles.handleSave}
           onProjectCreated={handleNewProjectCreated}
           onOpenExample={(url, signal) =>
