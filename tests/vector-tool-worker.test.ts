@@ -48,6 +48,14 @@ class FakeWorker {
 
   constructor() {
     spawned += 1;
+    // The real worker announces itself once its module has loaded.
+    setImmediate(() => this.emit({ type: "ready" }));
+  }
+
+  /** Deliver a worker-side message to the main thread's listeners. */
+  emit(data: unknown, type = "message") {
+    if (this.terminated) return;
+    for (const listener of this.listeners.get(type) ?? []) listener({ data } as MessageEvent);
   }
 
   addEventListener(type: string, listener: (event: MessageEvent) => void) {
@@ -370,6 +378,35 @@ describe("runAlgorithmInBackground", () => {
     assert.equal(terminated, 1);
   });
 
+  it("falls back inline when the worker cannot be constructed", async () => {
+    globalThis.Worker = class {
+      constructor() {
+        throw new Error("blocked by CSP");
+      }
+    } as unknown as typeof Worker;
+    const { ctx, calls } = recordingContext({ layer: "polys" });
+    await runAlgorithmInBackground(getVectorTool("centroids")!, ctx);
+    assert.equal(calls.filter(([kind]) => kind === "addResultLayer").length, 1);
+  });
+
+  it("falls back inline when the worker fails to load before it is ready", async () => {
+    globalThis.Worker = class extends FakeWorker {
+      override emit(data: unknown, type = "message") {
+        // The module never loads: an `error` arrives in place of `ready`.
+        if (type === "message" && (data as { type?: string }).type === "ready") {
+          super.emit(undefined, "error");
+          return;
+        }
+        super.emit(data, type);
+      }
+    } as unknown as typeof Worker;
+    const { ctx, calls } = recordingContext({ layer: "polys" });
+    await runAlgorithmInBackground(getVectorTool("centroids")!, ctx);
+    assert.equal(calls.filter(([kind]) => kind === "addResultLayer").length, 1);
+    assert.equal(toWorker.length, 0, "nothing is posted before the worker is ready");
+    assert.equal(terminated, 1);
+  });
+
   it("is what runAlgorithmCapture uses", async () => {
     installFakeWorker();
     const output = await runAlgorithmCapture(
@@ -383,6 +420,14 @@ describe("runAlgorithmInBackground", () => {
 });
 
 describe("createVectorToolSession", () => {
+  it("reports a malformed layer message as an error instead of going silent", async () => {
+    const posted: VectorToolWorkerMessage[] = [];
+    const handle = createVectorToolSession((message) => posted.push(message));
+    await handle({ type: "layer", layer: null } as unknown as VectorToolWorkerRequest);
+    assert.equal(posted.length, 1);
+    assert.equal(posted[0].type, "error");
+  });
+
   it("reports an unknown tool as an error message", async () => {
     const posted: VectorToolWorkerMessage[] = [];
     const handle = createVectorToolSession((message) => posted.push(message));

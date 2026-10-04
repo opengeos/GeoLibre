@@ -3,7 +3,11 @@
 // points, so a buffer or overlay over a large layer held the UI for the whole
 // run. One run per worker: vector-tool-runner.ts spawns this for a run and
 // terminates it afterwards (or on abort), so no state carries over.
-import { createVectorToolSession, type VectorToolWorkerRequest } from "./vector-tool-protocol";
+import {
+  createVectorToolSession,
+  type VectorToolWorkerMessage,
+  type VectorToolWorkerRequest,
+} from "./vector-tool-protocol";
 
 const worker = self as unknown as DedicatedWorkerGlobalScope;
 const handle = createVectorToolSession((message) => worker.postMessage(message));
@@ -11,3 +15,7 @@ const handle = createVectorToolSession((message) => worker.postMessage(message))
 worker.addEventListener("message", (event: MessageEvent<VectorToolWorkerRequest>) => {
   void handle(event.data);
 });
+
+// Nothing is sent until this arrives, so a module that failed to load can fall
+// back to an inline run without any doubt about whether the tool started.
+worker.postMessage({ type: "ready" } satisfies VectorToolWorkerMessage);

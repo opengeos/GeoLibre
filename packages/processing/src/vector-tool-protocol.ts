@@ -55,11 +55,14 @@ export type VectorToolWorkerRequest =
   | ({ type: "run" } & VectorToolRunRequest);
 
 /**
- * Worker → main thread, in the order the tool produced it: any number of `log`,
+ * Worker → main thread: `ready` once the worker has loaded, then, in the order
+ * the tool produced it: any number of `log`,
  * `fit-bounds` and results (a `result-start`, its features in `result-features`
  * chunks, then `result-end`), then exactly one `done` or `error`.
  */
 export type VectorToolWorkerMessage =
+  /** Posted once when the worker's module has loaded, before any request. */
+  | { type: "ready" }
   | { type: "log"; message: string }
   | {
       type: "result-start";
@@ -117,16 +120,18 @@ export function createVectorToolSession(
   };
 
   return async (request) => {
-    if (request.type === "layer") {
-      layers.set(request.layer.id, request.layer);
-      return;
-    }
-    if (request.type === "layer-features") {
-      const features = layers.get(request.layerId)?.geojson?.features;
-      if (features) for (const feature of request.features) features.push(feature);
-      return;
-    }
+    // Everything inside the try: a request that throws must still post an
+    // `error`, or the main thread would wait for a `done` that never comes.
     try {
+      if (request.type === "layer") {
+        layers.set(request.layer.id, request.layer);
+        return;
+      }
+      if (request.type === "layer-features") {
+        const features = layers.get(request.layerId)?.geojson?.features;
+        if (features) for (const feature of request.features) features.push(feature);
+        return;
+      }
       const tool = getVectorTool(request.toolId);
       if (!tool) throw new Error(`Unknown tool "${request.toolId}"`);
       setActiveEllipsoidId(request.ellipsoidId);

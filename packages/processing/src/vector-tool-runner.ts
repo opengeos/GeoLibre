@@ -117,6 +117,10 @@ function abortError(): Error {
  * Resolve on a later task. `scheduler.yield` where it exists; otherwise a
  * MessageChannel round trip, which unlike `setTimeout(0)` is not clamped to
  * 4 ms once nested, so yielding after each of a hundred chunks stays cheap.
+ *
+ * The app's duckdb-feature-batches.ts has a simpler twin that falls back to
+ * `setTimeout` directly: it yields only when a batch overruns its budget, so
+ * the clamp never compounds there the way it would after every chunk here.
  */
 function yieldToEventLoop(): Promise<void> {
   const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
@@ -147,9 +151,12 @@ function layerMessages(layer: VectorToolWorkerLayer): VectorToolWorkerRequest[] 
 /**
  * Post one run to a fresh worker and replay its messages onto `ctx`.
  *
- * Resolves `"post-failed"` without the tool having run when a message cannot be
- * posted (a parameter or layer that will not structured-clone), so the caller
- * can fall back to running inline.
+ * Resolves `"post-failed"` without the tool having run when the worker cannot
+ * start (construction throws, or its module fails to load before it reports
+ * `ready`) or a message cannot be posted (a parameter or layer that will not
+ * structured-clone), so the caller can fall back to running inline. Nothing is
+ * posted until the worker is ready, so an error before then cannot mean the
+ * tool had started.
  */
 async function runOnWorker(
   layers: VectorToolWorkerLayer[],
@@ -157,8 +164,18 @@ async function runOnWorker(
   ctx: ProcessingContext,
   toolName: string,
 ): Promise<"done" | "post-failed"> {
-  const worker = spawnWorker();
+  let worker: Worker;
+  try {
+    worker = spawnWorker();
+  } catch {
+    return "post-failed";
+  }
   let settled = false;
+  let workerReady = false;
+  let resolveReady: (ready: boolean) => void = () => {};
+  const ready = new Promise<boolean>((resolve) => {
+    resolveReady = resolve;
+  });
   let settle: (outcome: { value?: "done" | "post-failed"; error?: unknown }) => void = () => {};
   const outcome = new Promise<"done" | "post-failed">((resolve, reject) => {
     settle = ({ value, error }) => {
@@ -169,6 +186,7 @@ async function runOnWorker(
       worker.removeEventListener("messageerror", onMessageError);
       ctx.signal?.removeEventListener("abort", onAbort);
       worker.terminate();
+      resolveReady(false);
       if (error !== undefined) reject(error);
       else resolve(value ?? "done");
     };
@@ -192,6 +210,10 @@ async function runOnWorker(
     // throw would have propagated out of `tool.run`.
     try {
       switch (message.type) {
+        case "ready":
+          workerReady = true;
+          resolveReady(true);
+          return;
         case "log":
           ctx.log(message.message);
           return;
@@ -230,7 +252,10 @@ async function runOnWorker(
     }
   };
   const onError = (event: ErrorEvent) => {
-    settle({ error: new Error(event.message || `The ${toolName} worker failed.`) });
+    // Before `ready` the worker never received the run: its module failed to
+    // load (a missing chunk, a CSP refusal), so run inline instead.
+    if (!workerReady) settle({ value: "post-failed" });
+    else settle({ error: new Error(event.message || `The ${toolName} worker failed.`) });
   };
   // `error` does not fire for a message that cannot be deserialized, which
   // would otherwise leave the run pending forever.
@@ -244,6 +269,7 @@ async function runOnWorker(
   worker.addEventListener("messageerror", onMessageError);
   ctx.signal?.addEventListener("abort", onAbort, { once: true });
 
+  if (!(await ready)) return outcome;
   try {
     for (const layer of layers) {
       for (const message of layerMessages(layer)) {

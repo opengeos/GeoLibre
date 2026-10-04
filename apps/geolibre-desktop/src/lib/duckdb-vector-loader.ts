@@ -592,8 +592,10 @@ async function queryFeatureCollection(
   } catch (error) {
     // A stream that failed part-way may still be pending on the connection;
     // cancel it so the caller's fallback (or close) starts from a clean slate.
-    // Best-effort: there is nothing to cancel when `send` itself rejected.
-    await connection.cancelSent().catch(() => undefined);
+    // Best-effort and not awaited, so a cancel that never settles cannot hold
+    // back the original error; the worker handles requests in order, so it
+    // still lands before the caller's close.
+    void connection.cancelSent().catch(() => undefined);
     throw error;
   }
 }
