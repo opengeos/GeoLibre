@@ -410,8 +410,11 @@ export interface FetchDeploymentPolicyOptions {
 }
 
 function defaultPolicyUrl(): string {
-  const meta = import.meta as ImportMeta & { env?: { BASE_URL?: string } };
-  return `${meta.env?.BASE_URL ?? "/"}deployment.json`;
+  // Read `import.meta.env` inline: Vite only rewrites that exact expression, so
+  // an alias (`const meta = import.meta`) reaches the browser unreplaced and
+  // every subpath deployment fetched the policy from the site root.
+  const base = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL;
+  return `${base ?? "/"}deployment.json`;
 }
 
 /**
