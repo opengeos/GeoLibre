@@ -2,6 +2,7 @@ import {
   diffProjects,
   parseProject,
   useAppStore,
+  type AppState,
   type GeoLibreProject,
   type LayerDiff,
   type ProjectDiff,
@@ -9,8 +10,9 @@ import {
 } from "@geolibre/core";
 import { Button, Label, Select } from "@geolibre/ui";
 import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { projectChanged } from "../../lib/project-broadcast-changed";
 import type { ProjectHistorySnapshot } from "../../lib/project-history-store";
 
 /** `targetId` value meaning "the live project". */
@@ -45,6 +47,21 @@ type DiffResult =
   | { ok: false; error: "snapshot" | "current" };
 
 /**
+ * Whether a store change touches a field the current-project snapshot reads:
+ * the autosave trigger set plus the fields it leaves to other channels.
+ */
+function snapshotInputsChanged(state: AppState, previous: AppState): boolean {
+  return (
+    projectChanged(state, previous) ||
+    state.mapView !== previous.mapView ||
+    state.comments !== previous.comments ||
+    state.printLayout !== previous.printLayout ||
+    state.projectPlugins !== previous.projectPlugins ||
+    state.projectInteraction !== previous.projectInteraction
+  );
+}
+
+/**
  * Grouped, collapsible summary of what changed between a snapshot and the
  * current project (or a second snapshot), with per-layer restore.
  */
@@ -72,15 +89,20 @@ export function ProjectSnapshotDiff({
   // Parsed projects are kept across target switches so the differ's per-feature
   // hash cache (keyed by feature object) hits instead of re-hashing every
   // embedded feature. The live project is re-read after a layer restore or
-  // whenever the store's layers change (an Undo, a sync edit), so the diff and
-  // its restore buttons never describe a stale project.
-  const liveLayers = useAppStore((state) =>
-    targetId === CURRENT_PROJECT_TARGET ? state.layers : null,
-  );
+  // whenever a persisted project field changes in the store (an Undo, a
+  // basemap switch, a sync edit), so the diff and its restore buttons never
+  // describe a stale project.
+  const [liveRevision, setLiveRevision] = useState(0);
+  useEffect(() => {
+    if (targetId !== CURRENT_PROJECT_TARGET) return;
+    return useAppStore.subscribe((state, previous) => {
+      if (snapshotInputsChanged(state, previous)) setLiveRevision((value) => value + 1);
+    });
+  }, [targetId]);
   const parsedSnapshots = useRef(new Map<string, GeoLibreProject>());
   const currentCache = useRef<{
     revision: number;
-    layers: typeof liveLayers;
+    liveRevision: number;
     project: GeoLibreProject;
   } | null>(null);
 
@@ -105,9 +127,9 @@ export function ProjectSnapshotDiff({
       try {
         if (
           currentCache.current?.revision !== revision ||
-          currentCache.current.layers !== liveLayers
+          currentCache.current.liveRevision !== liveRevision
         ) {
-          currentCache.current = { revision, layers: liveLayers, project: getCurrentProject() };
+          currentCache.current = { revision, liveRevision, project: getCurrentProject() };
         }
         current = currentCache.current.project;
       } catch (error) {
@@ -140,7 +162,7 @@ export function ProjectSnapshotDiff({
       console.error("Could not compare the project snapshots.", error);
       return { ok: false, error: "snapshot" };
     }
-  }, [base, snapshots, targetId, getCurrentProject, formatDate, t, revision, liveLayers]);
+  }, [base, snapshots, targetId, getCurrentProject, formatDate, t, revision, liveRevision]);
 
   const restoreLayer =
     result.ok && result.againstCurrent && onRestoreLayer

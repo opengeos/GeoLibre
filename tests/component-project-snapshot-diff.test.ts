@@ -149,6 +149,27 @@ describe("ProjectHistoryDialog compare", () => {
     assert.ok(within(view).getByText("No differences."));
   });
 
+  it("re-reads the current project after a non-layer edit such as a basemap switch", () => {
+    let current = project([layer("roads")]);
+    render(
+      createElement(ProjectHistoryDialog, {
+        open: true,
+        onOpenChange: () => {},
+        snapshots: [older],
+        restoreError: null,
+        onRestore: () => true,
+        getCurrentProject: () => current,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Compare the snapshot/ }));
+    const view = screen.getByTestId("project-snapshot-diff");
+    assert.ok(within(view).getByText("No differences."));
+
+    current = { ...current, basemapStyleUrl: "https://example.com/style.json" };
+    act(() => useAppStore.setState({ basemapStyleUrl: "https://example.com/style.json" }));
+    assert.ok(within(view).getByText("basemapStyleUrl"));
+  });
+
   it("returns to the snapshot list", () => {
     renderDialog(project([layer("roads")]));
     fireEvent.click(screen.getAllByRole("button", { name: /Compare the snapshot/ })[1]);

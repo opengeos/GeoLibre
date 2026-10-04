@@ -260,6 +260,8 @@ describe("diffProjects", () => {
       added: ["https://b/plugin.json"],
       removed: ["https://a/plugin.json"],
     });
+    // swipe counts its two changes, minimap and legend one each, plus two manifests.
+    assert.equal(diff.changeCount, 6);
   });
 
   it("reports title, description and other metadata, description first", () => {
@@ -406,5 +408,15 @@ describe("helpers", () => {
     assert.ok(preview.startsWith("[0,1,2"));
     assert.equal(previewValue(undefined), undefined);
     assert.equal(previewValue({ a: undefined, b: 1 }), '{"b":1}');
+  });
+
+  it("previewValue truncates a long string nested in an object", () => {
+    const preview = previewValue(
+      { icon: { data: `data:image/png;base64,${"A".repeat(100_000)}` } },
+      40,
+    )!;
+    assert.equal(preview.length, 40);
+    assert.ok(preview.startsWith('{"icon":{"data":"data:image/png'));
+    assert.ok(preview.endsWith("…"));
   });
 });

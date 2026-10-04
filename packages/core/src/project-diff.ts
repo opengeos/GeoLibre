@@ -234,6 +234,11 @@ export function previewValue(
   const walk = (v: unknown): boolean => {
     if (v === null || typeof v !== "object") {
       if (typeof v === "number" && !Number.isFinite(v)) return emit("null");
+      // A long string can never fit, so quote only the part that could show
+      // instead of serializing a nested blob (a data URI, say) in full.
+      if (typeof v === "string" && v.length > maxLength) {
+        return emit(JSON.stringify(v.slice(0, maxLength)));
+      }
       const text = typeof v === "bigint" ? v.toString() : JSON.stringify(v);
       return emit(text ?? "null");
     }
@@ -832,7 +837,9 @@ export function diffProjects(
     basemap.length +
     projection.length +
     preferences.length +
-    plugins.length +
+    // A plugin counts each changed setting, like a layer counts each key; a
+    // bare enable/disable counts once.
+    plugins.reduce((sum, plugin) => sum + Math.max(1, plugin.changes.length), 0) +
     manifests.added.length +
     manifests.removed.length +
     metadata.length +
