@@ -31,8 +31,6 @@ interface AddDataMenuProps {
   addLayer: AddLayerHandlers;
   osmPbfBusy: boolean;
   disabled?: boolean;
-  /** Whether the 3D globe is the primary renderer (gates the Cesium-only sources). */
-  cesiumPrimary?: boolean;
   onSetAddDataKind: (kind: AddDataKind) => void;
   onAddGltfModel: () => void;
   onOpenOsmPbfDialog: () => void;
@@ -44,6 +42,7 @@ interface AddDataItem {
 }
 
 function unsupportedTitleKey(renderer: MapRendererKind, id: string) {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- the message names the engine
   if (renderer !== "arcgis") return "renderer.layerMapboxUnsupported";
   return requiresArcgisDeckOverlay(id)
     ? "renderer.layerArcgisViewUnsupported"
@@ -56,7 +55,6 @@ export function AddDataMenu({
   addLayer,
   osmPbfBusy,
   disabled = false,
-  cesiumPrimary = false,
   onSetAddDataKind,
   onAddGltfModel,
   onOpenOsmPbfDialog,
@@ -111,20 +109,19 @@ export function AddDataMenu({
     pmtiles: { onSelect: addLayer.pmtiles },
     zarr: { onSelect: addLayer.zarr },
     netcdf: { onSelect: addLayer.netcdf },
-    lidar: {
-      onSelect: addLayer.lidar,
-      disabled: renderer === "arcgis" && !capabilities.deckOverlay,
-    },
+    // On an ArcGIS view without the deck.gl overlay, LiDAR and 3D Tiles are
+    // disabled by `supportsAddDataRenderer` below (`requiresArcgisDeckOverlay`).
+    lidar: { onSelect: addLayer.lidar },
     splatting: { onSelect: addLayer.splatting },
-    "3d-tiles": {
-      onSelect: addLayer.threeDTiles,
-      disabled: renderer === "arcgis" && !capabilities.deckOverlay,
-    },
+    "3d-tiles": { onSelect: addLayer.threeDTiles },
     // Ion assets load through Cesium only (issue #2290); on the 2D map the
     // entry stays visible but disabled so the capability is discoverable.
-    "cesium-ion": { onSelect: () => onSetAddDataKind("cesium-ion"), disabled: !cesiumPrimary },
+    "cesium-ion": {
+      onSelect: () => onSetAddDataKind("cesium-ion"),
+      disabled: !capabilities.nativeDataSources,
+    },
     // CZML dynamic 3D scenes load through Cesium only (issue #2290).
-    czml: { onSelect: () => onSetAddDataKind("czml"), disabled: !cesiumPrimary },
+    czml: { onSelect: () => onSetAddDataKind("czml"), disabled: !capabilities.nativeDataSources },
     // KML/KMZ loads natively on the globe and through the host KML importer
     // (the drag-and-drop path) on the 2D renderers, so it is never gated.
     kml: { onSelect: () => onSetAddDataKind("kml") },

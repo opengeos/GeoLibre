@@ -257,6 +257,7 @@ async function openStandaloneLidarControl(
   // way; a freshly created control is hidden so it does not pop open on load.
   const reveal = options.reveal ?? true;
   if (
+    // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
     app.getMapRenderer?.() === "arcgis" &&
     !(await import("../arcgis-deck/control-adapter")).installArcgisDeckControls(app)
   )
@@ -421,6 +422,7 @@ function createLidarControl(
     ...LIDAR_OPTIONS,
     theme: resolveDocumentTheme(),
   });
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "arcgis") {
     // The SDK owns terrain; do not install the plugin's MapLibre DEM source.
     control.setTerrain = (enabled: boolean) => {

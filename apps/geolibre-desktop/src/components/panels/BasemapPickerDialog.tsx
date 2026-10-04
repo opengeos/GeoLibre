@@ -122,14 +122,19 @@ export function BasemapPickerDialog({ open, onOpenChange }: BasemapPickerDialogP
   const { t } = useTranslation();
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const basemapStyleUrl = useAppStore((s) =>
+    // eslint-disable-next-line local/no-renderer-kind-checks -- Mapbox keeps its own persisted style URL
     s.primaryRenderer === "mapbox"
       ? (s.preferences.map.mapboxStyleUrl ?? s.basemapStyleUrl)
       : s.basemapStyleUrl,
   );
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
   const setPreferences = useAppStore((s) => s.setPreferences);
+  // Each engine has its own basemap catalog, credentials and persisted choice.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine basemap catalog
   const isArcgis = primaryRenderer === "arcgis";
+  // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine basemap catalog
   const isCesium = primaryRenderer === "cesium";
+  // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine basemap catalog
   const isMapbox = primaryRenderer === "mapbox";
   const arcgisBasemap = useAppStore((s) => s.preferences.map.arcgisBasemap);
   const cesiumBasemap = useAppStore((s) => s.preferences.map.cesiumBasemap);

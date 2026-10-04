@@ -368,6 +368,7 @@ export function identifyDuckDBLayerAtPoint(
 
 async function openStandaloneDuckDBControl(app: GeoLibreAppAPI): Promise<boolean> {
   if (
+    // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
     app.getMapRenderer?.() === "arcgis" &&
     !(await import("./arcgis-deck/control-adapter")).installArcgisDeckControls(app)
   )

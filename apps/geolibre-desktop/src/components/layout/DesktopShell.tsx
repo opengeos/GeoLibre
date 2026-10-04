@@ -1,7 +1,7 @@
 // @refresh reset
 import { useAppStore } from "@geolibre/core";
 import type { MapDiagnosticEvent, MapEngine } from "@geolibre/map";
-import { MapCanvas } from "@geolibre/map";
+import { MapCanvas, rendererCapabilities } from "@geolibre/map";
 import { useTranslation } from "react-i18next";
 import {
   addRasterToMap,
@@ -437,14 +437,20 @@ export function DesktopShell({
    * selected.
    */
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
   const cesiumPrimary = primaryRenderer === "cesium";
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
+  const mapboxPrimary = primaryRenderer === "mapbox";
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
+  const arcgisPrimary = primaryRenderer === "arcgis";
   useScreenshotReadiness(
     mapControllerRef,
     mapReadyGeneration,
     externalPluginsReady,
     projectUrlLoadState?.status === "loading" || dataUrlLoadState?.status === "loading",
     projectUrlLoadState?.error ?? dataUrlLoadState?.error ?? null,
-    primaryRenderer !== "maplibre",
+    // No MapLibre map to poll for loaded tiles; readiness waits on the engine.
+    !rendererCapabilities(primaryRenderer).nativeMapInstance,
   );
   useRendererHandoff({
     primaryRenderer,
@@ -703,7 +709,7 @@ export function DesktopShell({
                   where `PrimaryCesiumCanvas` explains the absence. Renderer-
                   neutral, store-driven overlays sit outside the branch and are
                   available under either engine. */}
-              {primaryRenderer === "mapbox" ? (
+              {mapboxPrimary ? (
                 <PrimaryMapboxCanvas
                   canUseRemoteElevation={hasElevationConsent}
                   engineRef={mapControllerRef}
@@ -712,7 +718,7 @@ export function DesktopShell({
                   onEngineReady={handleMapControllerReady}
                   onMapDiagnosticEvent={handleMapDiagnosticEvent}
                 />
-              ) : primaryRenderer === "arcgis" ? (
+              ) : arcgisPrimary ? (
                 <PrimaryArcgisCanvas
                   canUseRemoteElevation={hasElevationConsent}
                   engineRef={mapControllerRef}

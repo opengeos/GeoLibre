@@ -403,6 +403,7 @@ export async function addRasterToMap(
     zoomTo?: boolean;
   } = {},
 ): Promise<string> {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "arcgis") {
     const { addArcgisRaster } = await import("./arcgis-raster-import");
     return addArcgisRaster(app, source, options);
@@ -726,6 +727,7 @@ export function readRasterWindow(
  * @param app - The GeoLibre app API.
  */
 export function restoreRasterLayers(app: GeoLibreAppAPI): void {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "arcgis") {
     void import("./arcgis-raster-import")
       .then(({ restoreArcgisRasterFiles }) => restoreArcgisRasterFiles(localRasterFileReader))

@@ -15,6 +15,7 @@ import {
 } from "@geolibre/core";
 import {
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
+  rendererCapabilities,
   resetPrimaryCesiumBuiltInControlState,
   type MapEngine,
 } from "@geolibre/map";
@@ -1301,9 +1302,8 @@ export function TopToolbar({
   // mount and their open requests would be lost. mapReadyGeneration rerenders
   // this toolbar when the engine is published.
   const addDataReady =
-    (primaryRenderer !== "mapbox" && primaryRenderer !== "arcgis") ||
+    !rendererCapabilities(primaryRenderer).deferredEngineReady ||
     mapControllerRef.current?.kind === primaryRenderer;
-  const cesiumPrimary = primaryRenderer === "cesium";
   const capabilities = useMapCapabilities(mapControllerRef);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setLoadEditorFeaturesOpen = useAppStore((s) => s.setLoadEditorFeaturesOpen);
@@ -1566,7 +1566,7 @@ export function TopToolbar({
   const addLayer: AddLayerHandlers = {
     vector: () => openVectorLayerPanel(appApi),
     raster: () =>
-      appApi.getMapRenderer?.() === "arcgis"
+      !rendererCapabilities(appApi.getMapRenderer?.() ?? "maplibre").controlLayerPanels
         ? openAddDataKind("raster")
         : openRasterLayerPanel(appApi),
     stac: () => {
@@ -1575,13 +1575,13 @@ export function TopToolbar({
     },
     flatGeobuf: () => openFlatGeobufAddVectorLayerPanel(appApi),
     pmtiles: () =>
-      appApi.getMapRenderer?.() === "arcgis"
+      !rendererCapabilities(appApi.getMapRenderer?.() ?? "maplibre").controlLayerPanels
         ? openAddDataKind("pmtiles")
         : openPMTilesLayerPanel(appApi),
     // The ArcGIS view and the globe draw Zarr natively and have no Zarr control
     // to open, so they take the Add Data form instead.
     zarr: () =>
-      appApi.getMapRenderer?.() === "arcgis" || appApi.getMapRenderer?.() === "cesium"
+      rendererCapabilities(appApi.getMapRenderer?.() ?? "maplibre").nativeZarr
         ? openAddDataKind("zarr")
         : openZarrLayerPanel(appApi),
     netcdf: () => setNetcdfDialogOpen(true),
@@ -2386,6 +2386,7 @@ export function TopToolbar({
           renderer (the Cesium globe or Mapbox) would strand the user there with
           no path back to MapLibre, so the menu stays mounted and renders only
           the Rendering engine submenu (#2217 review). */}
+      {/* eslint-disable-next-line local/no-renderer-kind-checks -- the renderer picker's way back to MapLibre */}
       {(isMenuVisible(uiProfile, "view") || primaryRenderer !== "maplibre") && (
         <ViewMenu
           chrome={chrome}
@@ -2449,7 +2450,6 @@ export function TopToolbar({
           chrome={chrome}
           addLayer={addLayer}
           osmPbfBusy={osmPbf.busy}
-          cesiumPrimary={cesiumPrimary}
           onSetAddDataKind={openAddDataKind}
           onAddGltfModel={() => {
             setAddDataDeckVizKind("scenegraph");

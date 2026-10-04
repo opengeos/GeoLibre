@@ -28,7 +28,9 @@ export function supportsAddDataRenderer(
   renderer: MapRendererKind,
   deckOverlay = true,
 ): boolean {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine Add Data support table
   if (renderer === "mapbox") return !MAPBOX_UNSUPPORTED_SOURCES.has(id);
+  // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine Add Data support table
   if (renderer === "arcgis")
     return !ARCGIS_UNSUPPORTED_SOURCES.has(id) && (deckOverlay || !requiresArcgisDeckOverlay(id));
   return true;

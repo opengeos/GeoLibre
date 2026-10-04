@@ -260,7 +260,10 @@ export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   // Google and I3S alike, so there is nothing to bind to a renderer here, and
   // the control's facade map has neither the style layers the MapLibre restore
   // queries nor the deck overlay the Google/I3S restores need (issue #2505).
+  // Each engine restores 3D Tiles through its own path.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (renderer === "cesium") return;
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (renderer === "arcgis") {
     if (useAppStore.getState().layers.some(isMapboxTilesLayer))
       void restoreMapboxTiles(app).catch(console.error);
@@ -268,6 +271,7 @@ export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   }
   restoreGooglePhotorealisticTilesLayers(app);
   restoreArcgisI3sTilesLayers(app);
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (renderer === "mapbox") {
     if (useAppStore.getState().layers.some(isMapboxTilesLayer))
       void restoreMapboxTiles(app).catch(console.error);
@@ -816,6 +820,7 @@ function activeThreeDTilesRenderer(): string {
  * out of the way and let the store record reach the globe (issue #2505).
  */
 function isGlobeThreeDTilesRenderer(): boolean {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- the globe's facade map has no style layers
   return activeThreeDTilesRenderer() === "cesium";
 }
 
@@ -825,6 +830,7 @@ function isGlobeThreeDTilesRenderer(): boolean {
  * through deck.gl, Cesium through its own tileset primitives.
  */
 function isStoreDrivenThreeDTilesRenderer(): boolean {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   return ["mapbox", "arcgis", "cesium"].includes(activeThreeDTilesRenderer());
 }
 
@@ -955,6 +961,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
         return;
       }
       if (
+        // eslint-disable-next-line local/no-renderer-kind-checks -- the ArcGIS deck bridge has no Google or I3S tiles
         activeThreeDTilesRenderer() === "arcgis" &&
         (isGooglePhotorealisticTilesetUrl(url) || isArcgisI3sSceneLayerUrl(url))
       ) {
@@ -972,6 +979,7 @@ function installGooglePhotorealisticTilesPanelHandlers(
       if (
         url &&
         activeThreeDTilesApp &&
+        // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
         ["mapbox", "arcgis"].includes(activeThreeDTilesRenderer()) &&
         !isGooglePhotorealisticTilesetUrl(url) &&
         !isArcgisI3sSceneLayerUrl(url)

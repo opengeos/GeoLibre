@@ -96,6 +96,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     const engine = source.shell.mapControllerRef.current;
     ensureMercatorProjection(
       engine?.getMap() ??
+        // eslint-disable-next-line local/no-renderer-kind-checks -- reaches the Mapbox engine's own map handle
         (engine?.kind === "mapbox" ? (engine as MapboxEngine).getMapboxMap() : null),
     );
     // Mount-only: switch the projection once when the dialog opens.

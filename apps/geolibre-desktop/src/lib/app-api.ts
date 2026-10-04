@@ -183,6 +183,7 @@ interface TauriRuntimeWindow extends Window {
 function effectiveBasemapUrl(
   state: Pick<AppState, "primaryRenderer" | "preferences" | "basemapStyleUrl">,
 ): string {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- Mapbox keeps its own persisted style URL
   return state.primaryRenderer === "mapbox"
     ? (state.preferences.map.mapboxStyleUrl ?? state.basemapStyleUrl)
     : state.basemapStyleUrl;
@@ -212,6 +213,7 @@ export function createAppAPI(
   const api = {
     setBasemap: (url: string) => {
       const state = useAppStore.getState();
+      // eslint-disable-next-line local/no-renderer-kind-checks -- Mapbox keeps its own persisted style URL
       if (state.primaryRenderer === "mapbox") {
         state.setPreferences({
           ...state.preferences,
@@ -453,6 +455,7 @@ export function createAppAPI(
     getMapRenderer: () => useAppStore.getState().primaryRenderer,
     getArcgisView: () => {
       const engine = mapControllerRef?.current;
+      // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle
       return engine?.kind === "arcgis" &&
         "getView" in engine &&
         typeof engine.getView === "function"
@@ -461,6 +464,7 @@ export function createAppAPI(
     },
     getArcgisControlMap: () => {
       const engine = mapControllerRef?.current;
+      // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle
       return engine?.kind === "arcgis" &&
         "getControlMap" in engine &&
         typeof engine.getControlMap === "function"
@@ -469,6 +473,7 @@ export function createAppAPI(
     },
     getMapboxMap: () => {
       const engine = mapControllerRef?.current;
+      // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle
       return engine?.kind === "mapbox" &&
         "getMapboxMap" in engine &&
         typeof engine.getMapboxMap === "function"
@@ -477,6 +482,7 @@ export function createAppAPI(
     },
     getMapboxGl: () => {
       const engine = mapControllerRef?.current;
+      // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle
       return engine?.kind === "mapbox" &&
         "getMapboxGl" in engine &&
         typeof engine.getMapboxGl === "function"
@@ -485,6 +491,7 @@ export function createAppAPI(
     },
     getMapboxAccessToken: () => {
       const engine = mapControllerRef?.current;
+      // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle
       return engine?.kind === "mapbox" &&
         "getMapboxAccessToken" in engine &&
         typeof engine.getMapboxAccessToken === "function"

@@ -65,7 +65,11 @@ const zarrControlPosition: GeoLibreMapControlPosition = "top-left";
  * (opengeos/GeoLibre#2261). Neither mounts the control, so their layers are
  * added, restored, and time-stepped through the record alone.
  */
-function isNativeZarrRenderer(renderer: string | undefined): boolean {
+export function isNativeZarrRenderer(renderer: string | undefined): boolean {
+  // This package's components load in node tests that cannot import the
+  // @geolibre/map index, so these are the renderers whose `nativeZarr` is set;
+  // tests/renderer-capabilities.test.ts keeps the two in step.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- see above
   return renderer === "arcgis" || renderer === "cesium";
 }
 

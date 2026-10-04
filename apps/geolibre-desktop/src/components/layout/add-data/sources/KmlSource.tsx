@@ -1,4 +1,5 @@
 import { createCesiumKmlLayer, useAppStore } from "@geolibre/core";
+import { rendererCapabilities } from "@geolibre/map";
 import { routeKmlFileSelection } from "@geolibre/plugins";
 import { Button, Input, Label } from "@geolibre/ui";
 import { useState } from "react";
@@ -83,7 +84,9 @@ async function fetchKmlImportFile(url: string, t: TFunction): Promise<File> {
  */
 export function KmlSource({ initialUrl }: { initialUrl?: string }) {
   const { t } = useTranslation();
-  const nativeGlobe = useAppStore((state) => state.primaryRenderer === "cesium");
+  const nativeGlobe = useAppStore(
+    (state) => rendererCapabilities(state.primaryRenderer).nativeDataSources,
+  );
   const [defaultName] = useState(() => t("addData.kml.defaultName"));
   const source = useAddDataSource(defaultName);
   const [url, setUrl] = useState(initialUrl ?? "");

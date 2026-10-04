@@ -266,6 +266,7 @@ function FlightSimulatorCard() {
             {/* mapbox-gl has no roll axis at all, so the setting is kept (it
                 applies again on MapLibre or the globe) but says so here rather
                 than reading as a dead checkbox. */}
+            {/* eslint-disable-next-line local/no-renderer-kind-checks -- the note names Mapbox */}
             {renderer === "mapbox" && settings.bankCamera && (
               <p className="ps-5.5 text-[11px] leading-snug text-muted-foreground/80">
                 {t("toolbar.flightSim.bankCameraMapbox")}

@@ -23,6 +23,8 @@ import type { AppState, SliceCreator } from "./types";
 
 /** An explicit background choice replaces the active renderer's override. */
 function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.map.ellipsoidId) {
+  // Each engine keeps its own persisted basemap override, so this names them.
+  /* eslint-disable local/no-renderer-kind-checks -- per-engine persisted basemap settings */
   const clearMapbox =
     state.primaryRenderer === "mapbox" && state.preferences.map.mapboxStyleUrl !== undefined;
   // Any Cesium or ArcGIS pane, not only a primary one: split panes pick the
@@ -36,6 +38,7 @@ function preferencesForBasemap(state: AppState, ellipsoidId = state.preferences.
     state.preferences.map.arcgisBasemap !== undefined &&
     (state.primaryRenderer === "arcgis" ||
       state.secondaryMapViews.some((pane) => pane.viewKind === "arcgis"));
+  /* eslint-enable local/no-renderer-kind-checks */
   if (
     !clearMapbox &&
     !clearCesium &&

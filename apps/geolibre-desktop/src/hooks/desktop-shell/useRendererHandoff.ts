@@ -1,8 +1,9 @@
-import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer, type MapRendererKind } from "@geolibre/core";
+import { rendererCapabilities } from "@geolibre/map";
 import { type Dispatch, type SetStateAction, useEffect } from "react";
 
 interface RendererHandoffOptions {
-  primaryRenderer: string;
+  primaryRenderer: MapRendererKind;
   setMapReadyGeneration: Dispatch<SetStateAction<number>>;
   setRasterSubsetLayer: Dispatch<SetStateAction<GeoLibreLayer | null>>;
   setBasemapExtractOpen: Dispatch<SetStateAction<boolean>>;
@@ -35,7 +36,7 @@ export function useRendererHandoff({
   // globe and the panel springs back the moment the user returns to 2D, long
   // after they meant to dismiss it (#2217 review).
   useEffect(() => {
-    if (primaryRenderer === "maplibre") return;
+    if (rendererCapabilities(primaryRenderer).nativeMapInstance) return;
     // Bump the readiness generation on the hand-off. It is no longer *reset*
     // (that is what left every consumer pointing at nothing on the globe), but
     // the reset did do one useful thing: it forced the generation-gated effects

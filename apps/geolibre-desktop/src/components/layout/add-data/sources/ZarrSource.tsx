@@ -21,6 +21,7 @@ export function ZarrSource() {
   const [sample, setSample] = useState<ZarrSample | null>(null);
   // The samples are the stores the globe's zarr-cesium provider was checked
   // against; the ArcGIS view reads Zarr through its own, stricter grid reader.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- the samples were verified against the Cesium provider
   const nativeGlobe = useAppStore((s) => s.primaryRenderer === "cesium");
   const selectSample = (next: ZarrSample) => {
     setSample(next);

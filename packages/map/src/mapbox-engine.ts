@@ -84,6 +84,12 @@ export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   // mapbox-gl has no `raster-dem` source a COG can back, so the terrain
   // source controls stay hidden here (#2475).
   terrainSource: false,
+  nativeZarr: false,
+  nativeDataSources: false,
+  // The engine is published after the initial style loads.
+  deferredEngineReady: true,
+  measureTool: true,
+  controlLayerPanels: true,
 });
 
 const BLANK_BACKGROUND_LAYER_ID = "geolibre-blank-background";

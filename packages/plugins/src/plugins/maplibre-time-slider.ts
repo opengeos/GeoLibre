@@ -1095,6 +1095,7 @@ const COG_SOURCE_FIELDS = [
 export function enforceEngineSupport(
   control: Pick<TimeSliderControl, "getSources" | "removeSource" | "addSource">,
 ): void {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- applies the Mapbox source support table
   if (activeHost?.getMapRenderer?.() !== "mapbox") return;
   // Snapshot: the loop removes and re-adds sources on the control it iterates.
   for (const spec of [...control.getSources()]) {

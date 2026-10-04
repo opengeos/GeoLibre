@@ -40,6 +40,7 @@ export function geoAgentMapEngine(
   // `primaryRenderer` first and the outgoing engine is cleared after, so a
   // `getMapboxGl()` that still answers would otherwise hand a MapLibre host a
   // Mapbox descriptor — the same wrong-engine failure, in the other direction.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- builds the Mapbox engine descriptor
   const mapbox = renderer ? renderer === "mapbox" : !!app?.getMapboxGl?.();
   if (!mapbox) return undefined;
   return {

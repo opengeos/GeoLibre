@@ -125,6 +125,7 @@ function styleMapCamera(
         return;
       }
       showAtlasFeatureMask(map, feature, containMap ? graticuleLabelLayerId : undefined, {
+        // eslint-disable-next-line local/no-renderer-kind-checks -- the mask is written in that engine's style dialect
         mapbox: engine.kind === "mapbox",
       });
     },

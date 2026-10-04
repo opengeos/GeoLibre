@@ -105,9 +105,11 @@ export function StylePanel({
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   // The Mapbox compiler draws only part of the symbology below; see
   // `mapboxUnsupportedStyleSettings`.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- selects the engine's style support table
   const mapboxPrimary = useAppStore((s) => s.primaryRenderer === "mapbox");
   // Likewise for ArcGIS, whose 3D SceneView (the globe, or any view with
   // terrain) draws a different subset from its flat MapView.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- selects the engine's style support table
   const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const arcgisScene = useAppStore(

@@ -70,6 +70,7 @@ export function PrintExtentEditor({
         </div>
       )}
       <p className="text-xs text-muted-foreground">
+        {/* eslint-disable-next-line local/no-renderer-kind-checks -- the globe's own extent tool has different gestures */}
         {t(renderer === "cesium" ? "rasterSubset.drawHint" : "printLayout.extent.hint")}
       </p>
     </div>

@@ -108,6 +108,7 @@ export function streetViewMarkerFactory(
   app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapRenderer"> | null,
 ): CreateStreetViewMarker | undefined {
   const renderer = app?.getMapRenderer?.();
+  // eslint-disable-next-line local/no-renderer-kind-checks -- builds the Mapbox marker factory
   const mapbox = renderer === undefined ? !!app?.getMapboxGl?.() : renderer === "mapbox";
   if (!mapbox) return undefined;
   return (options) => {

@@ -15,6 +15,7 @@ import type { MapEngine } from "@geolibre/map";
 export function engineStyleMap(engine: MapEngine | null | undefined): maplibregl.Map | null {
   const map = engine?.getMap();
   if (map) return map;
+  // eslint-disable-next-line local/no-renderer-kind-checks -- reaches the Mapbox engine's own map handle
   return engine?.kind === "mapbox" &&
     "getMapboxMap" in engine &&
     typeof engine.getMapboxMap === "function"
@@ -94,6 +95,7 @@ export function createEnginePopup(
   engine: MapEngine | null | undefined,
   options: maplibregl.PopupOptions,
 ): maplibregl.Popup {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- reaches the Mapbox engine's own namespace
   if (engine?.kind === "mapbox" && "getMapboxGl" in engine) {
     const gl = (
       engine as unknown as { getMapboxGl(): { Popup: new (options: unknown) => unknown } }

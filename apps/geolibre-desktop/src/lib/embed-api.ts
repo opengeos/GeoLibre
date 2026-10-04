@@ -518,12 +518,14 @@ export function parseEmbedRequest(
     case "getRenderer":
       return { command: { type: "getRenderer" }, requestId };
     case "setRenderer":
+      /* eslint-disable local/no-renderer-kind-checks -- validates a renderer name */
       if (
         payload.renderer !== "maplibre" &&
         payload.renderer !== "cesium" &&
         payload.renderer !== "mapbox" &&
         payload.renderer !== "arcgis"
       )
+        /* eslint-enable local/no-renderer-kind-checks */
         return fail("setRenderer: renderer must be maplibre, cesium, mapbox, or arcgis");
       return { command: { type: "setRenderer", renderer: payload.renderer }, requestId };
     case "setView": {

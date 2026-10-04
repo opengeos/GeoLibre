@@ -78,6 +78,13 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   screenOverlays: false,
   flatProjection: false,
   terrainSource: true,
+  // Zarr cubes, KML/KMZ, CZML and ion assets load through the globe's own
+  // imagery and data-source loaders.
+  nativeZarr: true,
+  nativeDataSources: true,
+  deferredEngineReady: false,
+  measureTool: true,
+  controlLayerPanels: true,
 });
 
 /**

@@ -148,6 +148,7 @@ export function ViewMenu({
   // Always offered while the globe owns the primary map, whatever the UI
   // profile says: this submenu is the only way back to the 2D map, and hiding
   // it there would strand a user on a renderer whose tools are all disabled.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- the renderer picker's way back to MapLibre
   const showRenderingEngine = show("view.renderingEngine") || primaryRenderer !== "maplibre";
   // Zoom, viewport history, orientation, Set View, and the Google Maps/Earth
   // hand-offs read or animate the camera — which every engine has. They were

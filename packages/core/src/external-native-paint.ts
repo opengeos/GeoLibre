@@ -122,6 +122,9 @@ export function rendererAppliesOpacity(
   layer: { type: string },
   renderer: string | undefined,
 ): boolean {
+  // @geolibre/core sits below @geolibre/map and cannot read its capabilities;
+  // these are the renderers whose `nativeZarr` is set, which a test pins.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- see above
   return (renderer === "arcgis" || renderer === "cesium") && layer.type === "zarr";
 }
 

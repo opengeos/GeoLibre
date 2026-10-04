@@ -165,7 +165,7 @@ export function ControlsMenu({
   const graticuleDisabled = unsupported(maplibreGraticulePlugin, graticuleActive);
   // The measure control draws its sketch through the MapLibre/Mapbox style
   // API, which the ArcGIS view has no equivalent of.
-  const measureDisabled = primaryRenderer === "arcgis" && !panels.measure.visible;
+  const measureDisabled = !capabilities.measureTool && !panels.measure.visible;
   const effectsSupported = isPluginEngineSupported(maplibreEffectsPlugin, primaryRenderer);
   const reverseGeocodeDisabled = !reverseGeocodeSupported && !reverseGeocodeActive;
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);

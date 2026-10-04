@@ -1,5 +1,5 @@
 import { useAppStore, useLayersWhen } from "@geolibre/core";
-import type { MapEngine } from "@geolibre/map";
+import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@geolibre/ui";
 import { Database } from "lucide-react";
 import { useCallback, useMemo, useState, type RefObject } from "react";
@@ -180,7 +180,7 @@ export function AddDataDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const martin = useMartinConnection();
 
-  const nativeGlobe = useAppStore((s) => s.primaryRenderer === "cesium");
+  const nativeGlobe = useAppStore((s) => rendererCapabilities(s.primaryRenderer).nativeDataSources);
 
   const title =
     kind === "raster"

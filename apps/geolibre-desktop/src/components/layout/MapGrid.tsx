@@ -131,13 +131,18 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
   const renderer = useAppStore(
     (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.viewKind ?? "maplibre",
   );
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
   const is3d = renderer === "cesium";
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
+  const mapboxPane = renderer === "mapbox";
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks which engine's canvas to mount
+  const arcgisPane = renderer === "arcgis";
 
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
-      {renderer === "mapbox" ? (
+      {mapboxPane ? (
         <PrimaryMapboxCanvas viewId={viewId} />
-      ) : renderer === "arcgis" ? (
+      ) : arcgisPane ? (
         <PrimaryArcgisCanvas viewId={viewId} />
       ) : is3d ? (
         // Key on the token so changing the Cesium Ion token in Settings remounts
@@ -224,6 +229,7 @@ interface PaneLayerToggleProps {
  */
 function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
   const { t } = useTranslation();
+  // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
   const is3d = renderer === "cesium";
   const layers = useAppStore((s) => s.layers);
   const layerVisibility = useAppStore(
@@ -262,7 +268,9 @@ function PaneLayerToggle({ viewId, index, renderer }: PaneLayerToggleProps) {
             const visible = override === undefined ? layer.visible : override;
             const only2d = is3d && !isCesiumSupportedLayerType(layer);
             const only3d = !is3d && isCesiumOnlyLayer(layer);
+            // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
             const noMapbox = renderer === "mapbox" && !isMapboxSupportedLayer(layer);
+            // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine layer support table
             const noArcgis = renderer === "arcgis" && !isArcgisSupportedLayer(layer, false);
             return (
               <DropdownMenuCheckboxItem

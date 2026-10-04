@@ -585,6 +585,7 @@ function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string
   // engine-audit-allow: getMap-mapbox
   const map = app.getMap?.();
   if (!map) {
+    // eslint-disable-next-line local/no-renderer-kind-checks -- the private-raster protocol is MapLibre's
     if (app.getMapboxMap?.() || app.getMapRenderer?.() === "arcgis")
       throw new Error(labels.privateRasterNeedsMapLibre);
     return;

@@ -32,6 +32,7 @@ let flatGeobufStoreUnsubscribe: (() => void) | null = null;
 
 export function openFlatGeobufAddVectorLayerPanel(app: GeoLibreAppAPI): void {
   const renderer = app.getMapRenderer?.();
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (renderer === "mapbox" || renderer === "arcgis") {
     // The vector importer materializes FlatGeobuf into the shared layer store.
     // The standalone control owns MapLibre layers outside that bridge.

@@ -204,6 +204,7 @@ type AddTileToMapResult = "added" | "duplicate" | "unsupported-renderer" | "no-d
  * refused until it is known to draw them.
  */
 function drawsPointClouds(renderer: string): boolean {
+  // eslint-disable-next-line local/no-renderer-kind-checks -- an allowlist of engines known to draw lidar-url layers
   return renderer === "maplibre" || renderer === "mapbox" || renderer === "arcgis";
 }
 

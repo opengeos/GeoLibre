@@ -30,6 +30,7 @@ interface TileFeatureMap {
 export function vectorTileMap(engine: MapEngine | null | undefined): TileFeatureMap | null {
   const map = engine?.getMap();
   if (map) return map;
+  // eslint-disable-next-line local/no-renderer-kind-checks -- reaches the Mapbox engine's own map handle
   return engine?.kind === "mapbox" &&
     "getMapboxMap" in engine &&
     typeof engine.getMapboxMap === "function"
@@ -76,6 +77,7 @@ export function loadedVectorTileFeatures(
   try {
     return map
       .querySourceFeatures(
+        // eslint-disable-next-line local/no-renderer-kind-checks -- each engine names its sources its own way
         renderer === "mapbox" ? mapboxSourceId(layer.id) : liveSourceId(layer),
         sourceLayer ? { sourceLayer } : undefined,
       )

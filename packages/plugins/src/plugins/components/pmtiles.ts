@@ -131,6 +131,7 @@ export async function addPMTilesLayerFromUrl(
   // `s3://` archives and private-bucket URLs: the control reads a presigned
   // URL, and the store sync maps it back to `normalizedUrl`.
   const readableUrl = await resolveReadableUrl(normalizedUrl);
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "arcgis") {
     const info = await readRemotePMTilesInfo(normalizedUrl);
     if (info.encoding === "mlt")
@@ -259,6 +260,7 @@ function createPMTilesControl(
   app: GeoLibreAppAPI,
 ): PMTilesLayerControl {
   const control = new PMTilesLayerControlClass(PMTILES_OPTIONS);
+  // eslint-disable-next-line local/no-renderer-kind-checks -- picks the engine's own adapter
   if (app.getMapRenderer?.() === "mapbox") adaptMapboxPMTilesControl(control, app);
   const removeHandler = createPMTilesLayerRemoveHandler();
   const onRemove = control.onRemove.bind(control);

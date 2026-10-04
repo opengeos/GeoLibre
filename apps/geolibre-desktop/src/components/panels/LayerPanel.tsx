@@ -24,7 +24,7 @@ import {
 } from "@geolibre/core";
 import type { EllipsoidId, GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import { getTemporalLayersVersion, subscribeTemporalLayers } from "@geolibre/plugins";
-import type { MapEngine } from "@geolibre/map";
+import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { usePluginRegistry } from "../../hooks/usePlugins";
@@ -141,27 +141,36 @@ export function LayerPanel({
   // and the mobile-only postgres rule); the user agent is stable for the
   // session, so evaluate it once.
   const mobile = useMemo(() => isMobile(), []);
-  const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
+  // PMTiles, raster and Zarr are added through their own panels where those
+  // can mount, so the Add Data group lists their forms only where they cannot.
+  const controlLayerPanels = useAppStore(
+    (s) => rendererCapabilities(s.primaryRenderer).controlLayerPanels,
+  );
   const addDataGroupSources = useMemo(
     () =>
       ADD_DATA_DIALOG_SOURCES.filter(
         (entry) =>
           isDataSourceVisible(uiProfile, entry.id) &&
-          (!["pmtiles", "raster", "zarr"].includes(entry.id) || arcgisPrimary) &&
+          (!["pmtiles", "raster", "zarr"].includes(entry.id) || !controlLayerPanels) &&
           !(entry.id === "postgres" && mobile) &&
           !masHidesDataSource(entry.id),
       ),
-    [uiProfile, mobile, arcgisPrimary],
+    [uiProfile, mobile, controlLayerPanels],
   );
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
   // The 3D globe draws a subset of the layer kinds MapLibre does, so rows it
   // cannot render are flagged while it owns the primary map area (#2217).
+  // eslint-disable-next-line local/no-renderer-kind-checks -- selects the engine's layer support table
   const cesiumPrimary = useAppStore((s) => s.primaryRenderer === "cesium");
   // Likewise the Mapbox engine only compiles native Mapbox sources, so a layer
   // it rejects (a MapLibre custom protocol, deck.gl, COG, ...) is flagged here
   // rather than only reported by the map's error banner once it is visible.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- selects the engine's layer support table
   const mapboxPrimary = useAppStore((s) => s.primaryRenderer === "mapbox");
+  // Same for the ArcGIS view's support table.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- selects the engine's layer support table
+  const arcgisPrimary = useAppStore((s) => s.primaryRenderer === "arcgis");
   // The subset panel draws its extract box on the map surface, so it needs an
   // engine the user can draw on — not merely "not the globe".
   const capabilities = useMapCapabilities(mapControllerRef);
@@ -179,6 +188,7 @@ export function LayerPanel({
   const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
   const restoreEarthBasemap = useAppStore((s) => s.restoreEarthBasemap);
   const basemapStyleUrl = useAppStore((s) =>
+    // eslint-disable-next-line local/no-renderer-kind-checks -- Mapbox keeps its own persisted style URL
     s.primaryRenderer === "mapbox"
       ? (s.preferences.map.mapboxStyleUrl ?? s.basemapStyleUrl)
       : s.basemapStyleUrl,

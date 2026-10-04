@@ -130,6 +130,22 @@ export default [
     },
   },
   {
+    // UI and plugins gate on MapEngineCapabilities, not on the renderer's name;
+    // see eslint-rules/no-renderer-kind-checks.mjs. packages/map hosts the
+    // engines and is where a name legitimately maps to behaviour. An error, so
+    // a new check either uses a capability or states why it is about the kind.
+    files: ["apps/*/src/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}"],
+    ignores: [
+      "packages/map/**",
+      // The place-search camera branch moves with in-flight place-search work
+      // (#2858); annotate or convert it there.
+      "apps/geolibre-desktop/src/components/panels/LayerPanelPlaceSearch.tsx",
+    ],
+    rules: {
+      "local/no-renderer-kind-checks": "error",
+    },
+  },
+  {
     files: TYPED_SOURCES,
     languageOptions: {
       parserOptions: {

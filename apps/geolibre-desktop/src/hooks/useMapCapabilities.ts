@@ -1,12 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import {
-  ARCGIS_CAPABILITIES,
-  ARCGIS_DECK_CAPABILITIES,
-  CESIUM_CAPABILITIES,
-  MAPBOX_CAPABILITIES,
-  MAPLIBRE_CAPABILITIES,
-  type MapEngineCapabilities,
-} from "@geolibre/map";
+import { rendererCapabilities, type MapEngineCapabilities } from "@geolibre/map";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
 
 /**
@@ -23,7 +16,8 @@ import type { MapControllerRef } from "../components/layout/toolbar/constants";
  * capabilities change, and between swaps they are constant. The renderer is
  * also the fallback for the window before a canvas has published its engine —
  * the only place the engine's *name* is still consulted, and it answers with
- * that engine's own frozen capability object rather than a hand-written guess.
+ * that engine's own frozen capability object (`rendererCapabilities`) rather
+ * than a hand-written guess.
  *
  * The ref is optional because some menus never receive it. They get the same
  * answer through the fallback, which is why this hook — not each call site — is
@@ -32,16 +26,7 @@ import type { MapControllerRef } from "../components/layout/toolbar/constants";
 export function useMapCapabilities(mapControllerRef?: MapControllerRef): MapEngineCapabilities {
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const projection = useAppStore((s) => s.preferences.map.projection);
-  const fallback =
-    primaryRenderer === "cesium"
-      ? CESIUM_CAPABILITIES
-      : primaryRenderer === "mapbox"
-        ? MAPBOX_CAPABILITIES
-        : primaryRenderer === "arcgis"
-          ? projection === "globe"
-            ? ARCGIS_CAPABILITIES
-            : ARCGIS_DECK_CAPABILITIES
-          : MAPLIBRE_CAPABILITIES;
+  const fallback = rendererCapabilities(primaryRenderer, projection);
   const engine = mapControllerRef?.current;
   // Trust the ref only while it agrees with the store about which renderer is
   // live. The store flips `primaryRenderer` during render; the canvases publish
@@ -53,6 +38,7 @@ export function useMapCapabilities(mapControllerRef?: MapControllerRef): MapEngi
   // ArcGIS projection changes rebuild the view without changing engine.kind.
   // The ref can still point to the outgoing view until its replacement is ready;
   // follow the subscribed projection so menus update during that transition too.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- engine identity, not a feature gate
   if (primaryRenderer === "arcgis") return fallback;
   return engine && engine.kind === primaryRenderer ? engine.capabilities : fallback;
 }

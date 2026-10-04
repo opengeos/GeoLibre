@@ -1043,6 +1043,7 @@ export function normalizeSecondaryMapViews(value: unknown): SecondaryMapView[] |
     const label = normalizeString(candidate.label);
     // Only the known engine ids survive; an absent/unknown value is omitted so
     // the pane defaults to the 2D map (back-compat with pre-globe projects).
+    /* eslint-disable local/no-renderer-kind-checks -- validates a renderer name */
     const viewKind =
       candidate.viewKind === "cesium" ||
       candidate.viewKind === "maplibre" ||
@@ -1050,6 +1051,7 @@ export function normalizeSecondaryMapViews(value: unknown): SecondaryMapView[] |
       candidate.viewKind === "arcgis"
         ? candidate.viewKind
         : undefined;
+    /* eslint-enable local/no-renderer-kind-checks */
     views.push({
       id,
       view: normalizeMapViewState(candidate.view),

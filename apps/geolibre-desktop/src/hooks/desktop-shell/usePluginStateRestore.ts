@@ -175,7 +175,9 @@ export function usePluginStateRestore({
     reattachFlightSimulator(appAPI);
     // VectorControl has a Cesium bridge and must restore on either engine.
     restoreVectorLayers(appAPI);
-    if (engine.kind === "mapbox" || (engine.kind === "arcgis" && engine.capabilities.deckOverlay)) {
+    // Engines that host the deck.gl overlay without a MapLibre map restore these
+    // here; MapLibre restores them on the native path below.
+    if (engine.capabilities.deckOverlay && !engine.capabilities.nativeMapInstance) {
       restoreThreeDTilesLayers(appAPI);
       void restoreLidarLayers(appAPI).catch(console.error);
     }
@@ -198,10 +200,11 @@ export function usePluginStateRestore({
     // Reattach only — the per-feed toggles come from its applyProjectState.
     reattachGodsEyeView(appAPI);
     if (!engine.capabilities.nativeMapInstance) {
+      // eslint-disable-next-line local/no-renderer-kind-checks -- the globe draws COGs from the record; the 2D engines restore through the raster plugin's own per-engine path
       if (engine.kind === "mapbox" || engine.kind === "arcgis") restoreRasterLayers(appAPI);
       // Both draw Zarr from the layer record, so only the Time Slider binding
       // needs restoring (opengeos/GeoLibre#2261).
-      if (engine.kind === "arcgis" || engine.kind === "cesium") restoreArcgisZarrLayers();
+      if (engine.capabilities.nativeZarr) restoreArcgisZarrLayers();
       void restoreLocalFileLayers();
       // Same cleanup as the native path: this branch also starts an async
       // handleUrlParameters above, so an older completion must not publish its
