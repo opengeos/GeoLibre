@@ -8,6 +8,7 @@ import {
   usableWmsCrs,
   wmsCrsChoices,
   wmsLayersAdvertiseCrs,
+  wmsLayersQueryable,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/helpers";
 
 globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
@@ -47,6 +48,48 @@ const CAPABILITIES_111 = `<?xml version="1.0"?>
     </Layer>
   </Capability>
 </WMT_MS_Capabilities>`;
+
+// queryable on a group is inherited by the layers that do not set their own.
+const CAPABILITIES_QUERYABLE = `<?xml version="1.0"?>
+<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms">
+  <Capability>
+    <Layer>
+      <Title>Root</Title>
+      <Layer queryable="1"><Name>parcels</Name><Title>Parcels</Title></Layer>
+      <Layer queryable="0"><Name>buildings</Name><Title>Buildings</Title></Layer>
+      <Layer queryable="0">
+        <Name>labels</Name>
+        <Title>Labels</Title>
+        <Layer><Name>labels_numbers</Name><Title>Numbers</Title></Layer>
+        <Layer queryable="1"><Name>labels_names</Name><Title>Names</Title></Layer>
+      </Layer>
+      <Layer><Name>roads</Name><Title>Roads</Title></Layer>
+    </Layer>
+  </Capability>
+</WMS_Capabilities>`;
+
+describe("WMS capabilities queryable (#2887)", () => {
+  const { layers } = parseWmsCapabilities(CAPABILITIES_QUERYABLE);
+  const queryable = (name: string) => layers.find((layer) => layer.name === name)?.queryable;
+
+  it("reads each layer's queryable attribute, inherited when unset", () => {
+    assert.equal(queryable("parcels"), true);
+    assert.equal(queryable("buildings"), false);
+    assert.equal(queryable("labels_numbers"), false);
+    assert.equal(queryable("labels_names"), true);
+    assert.equal(queryable("roads"), undefined);
+    assert.equal("queryable" in layers.find((layer) => layer.name === "roads")!, false);
+  });
+
+  it("marks a selection not queryable only when every layer is known not to be", () => {
+    assert.equal(wmsLayersQueryable(layers, "buildings"), false);
+    assert.equal(wmsLayersQueryable(layers, "buildings, labels_numbers"), false);
+    assert.equal(wmsLayersQueryable(layers, "buildings,parcels"), undefined);
+    assert.equal(wmsLayersQueryable(layers, "roads"), undefined);
+    assert.equal(wmsLayersQueryable(layers, "typed_by_hand"), undefined);
+    assert.equal(wmsLayersQueryable(layers, ""), undefined);
+  });
+});
 
 describe("WMS capabilities CRS", () => {
   it("reads each layer's CRS codes, inherited ones included", () => {

@@ -121,6 +121,23 @@ describe("buildWmsLayer", () => {
     assert.equal((layer.metadata as Record<string, unknown>).service, "wms");
   });
 
+  it("marks the layer not queryable only when asked (#2887)", () => {
+    const params = {
+      name: "WMS",
+      endpoint: "https://example.com/wms",
+      layers: "buildings",
+      styles: "",
+      format: "image/png",
+      transparent: true,
+      tileSize: "256",
+      version: "1.3.0",
+    };
+    const off = buildWmsLayer({ ...params, queryable: false }).source as Record<string, unknown>;
+    assert.equal(off.queryable, false);
+    const unset = buildWmsLayer(params).source as Record<string, unknown>;
+    assert.equal("queryable" in unset, false);
+  });
+
   it("attaches the GEBCO attribution for a GEBCO endpoint", () => {
     const layer = buildWmsLayer({
       name: "GEBCO",

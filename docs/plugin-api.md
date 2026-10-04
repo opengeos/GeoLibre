@@ -730,6 +730,7 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
   transparent?: boolean; // default true
   version?: string; // "1.1.1" (default) or "1.3.0" (sends CRS instead of SRS)
   crs?: string; // "EPSG:3857" (default), "EPSG:4326", "CRS:84" (1.3.0 only), any "EPSG:<code>"
+  queryable?: boolean; // false when the capabilities mark the layers queryable="0": identify skips it
 }
 
 export interface GeoLibreWfsLayerOptions {
@@ -785,6 +786,13 @@ app.addWmsLayer?.("Cadastral parcels", {
   crs: "EPSG:6706",
 });
 
+// The capabilities mark the layer queryable="0": identify skips it.
+app.addWmsLayer?.("Buildings", {
+  url: "https://wms.example.it/wms",
+  layers: "buildings",
+  queryable: false,
+});
+
 // A layer found in a catalogue: keep its provenance with it.
 app.addWmsLayer?.("Bathymetry", {
   url: "https://wms.example.org/wms",
@@ -805,7 +813,7 @@ const cogId = await app.addCogLayer?.(
 );
 ```
 
-`addTileLayer`, `addWmtsLayer`, `addWmsLayer`, and `addWfsLayer` take an optional `metadata` object, merged into the new layer's `metadata`. Use it to leave a catalogue layer's provenance with it (the record id, a link to its metadata page, the publisher, the licence): it is shown in the layer's Metadata dialog and saved with the project. It must be a plain, JSON-serializable object, or the call throws (`addWfsLayer` rejects). GeoLibre's own keys win over a field of the same name, and credential-named fields (`token`, `apiKey`, ...) are stripped when the project is shared or exported. The Metadata dialog also shows the service address and request fields GeoLibre keeps on a service or tile layer's `source` (for WMS: `url`, `layers`, `styles`, `format`, `version`, `crs`), with credentials removed.
+`addTileLayer`, `addWmtsLayer`, `addWmsLayer`, and `addWfsLayer` take an optional `metadata` object, merged into the new layer's `metadata`. Use it to leave a catalogue layer's provenance with it (the record id, a link to its metadata page, the publisher, the licence): it is shown in the layer's Metadata dialog and saved with the project. It must be a plain, JSON-serializable object, or the call throws (`addWfsLayer` rejects). GeoLibre's own keys win over a field of the same name, and credential-named fields (`token`, `apiKey`, ...) are stripped when the project is shared or exported. The Metadata dialog also shows the service address and request fields GeoLibre keeps on a service or tile layer's `source` (for WMS: `url`, `layers`, `styles`, `format`, `version`, `crs`, and `queryable` when false), with credentials removed.
 
 WFS layers use the host's GetFeature loader, including GeoJSON/GML fallback, reprojection, desktop native HTTP, and refresh. `addWfsLayer` resolves with the new layer id and rejects if loading fails or the service returns no features. Saved projects normally keep the request URL rather than embedding the downloaded collection, and reopening fetches it again. Exception: if saving strips credentials from the URL, the fetched collection is embedded so the layer remains visible without storing the secret; it is not refetched from the sanitized URL. The optional bbox is WGS84 `[west, south, east, north]` and must not cross the antimeridian (`west` must not exceed `east` — a Pacific-spanning box throws); the host applies the existing 1,000-feature limit.
 

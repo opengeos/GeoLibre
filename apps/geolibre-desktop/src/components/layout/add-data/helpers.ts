@@ -617,6 +617,12 @@ export interface WmsLayerOption {
    * its own plus those inherited from its parent layers, upper-cased.
    */
   crs?: string[];
+  /**
+   * False when the capabilities mark the layer `queryable="0"`, on the layer
+   * or, by WMS inheritance, on its nearest ancestor that sets the attribute.
+   * Undefined when none does.
+   */
+  queryable?: boolean;
 }
 
 /**
@@ -697,13 +703,44 @@ export function parseWmsCapabilities(xmlText: string): WmsCapabilities {
     const name = directChildText(layer, "Name");
     if (!name || seen.has(name)) continue;
     seen.add(name);
+    const queryable = layerQueryable(layer);
     layers.push({
       name,
       title: directChildText(layer, "Title") || name,
       crs: layerCrsCodes(layer),
+      ...(queryable === undefined ? {} : { queryable }),
     });
   }
   return { layers, version: root.getAttribute("version") };
+}
+
+/**
+ * A `<Layer>`'s `queryable` attribute, or its nearest ancestor's: WMS child
+ * layers inherit it unless they set their own.
+ */
+function layerQueryable(layer: Element): boolean | undefined {
+  for (let node: Element | null = layer; node?.localName === "Layer"; node = node.parentElement) {
+    const value = node.getAttribute("queryable")?.trim();
+    if (value === "1" || value === "true") return true;
+    if (value === "0" || value === "false") return false;
+  }
+  return undefined;
+}
+
+/**
+ * False when every layer of a comma-separated LAYERS value is among `options`
+ * and marked not queryable: GetFeatureInfo on them cannot succeed. Undefined
+ * otherwise, including layers typed by hand, which identify keeps querying.
+ */
+export function wmsLayersQueryable(options: WmsLayerOption[], layers: string): false | undefined {
+  const names = layers
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  const notQueryable =
+    names.length > 0 &&
+    names.every((name) => options.find((option) => option.name === name)?.queryable === false);
+  return notQueryable ? false : undefined;
 }
 
 /**
