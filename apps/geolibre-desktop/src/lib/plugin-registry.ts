@@ -269,15 +269,20 @@ function normalizeEntry(value: unknown, registryUrl: string): PluginRegistryEntr
     categories: stringArray(record.categories),
     minGeoLibreVersion: trimmedString(record.minGeoLibreVersion, 64) || undefined,
     publishableSettings: normalizePublishableSettings(record.publishableSettings),
-    bundleSha256: bundleHashOrUndefined(record.bundleSha256),
+    bundleSha256: bundleHashOrUndefined(record.bundleSha256, id),
   };
 }
 
 // A bundle hash is a lowercase hex SHA-256. Anything else is ignored, so the
 // entry falls back to trust-on-first-use rather than pinning a value no bundle
-// can ever match.
-function bundleHashOrUndefined(value: unknown): string | undefined {
-  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value) ? value : undefined;
+// can ever match. That silently weakens the check, so say so in the console.
+function bundleHashOrUndefined(value: unknown, id: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "string" && /^[0-9a-f]{64}$/.test(value)) return value;
+  console.warn(
+    `[GeoLibre] Ignoring the registry's bundleSha256 for "${id}": expected 64 lowercase hex characters. Installing it falls back to trust-on-first-use.`,
+  );
+  return undefined;
 }
 
 /**

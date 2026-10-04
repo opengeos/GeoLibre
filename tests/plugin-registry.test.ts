@@ -91,7 +91,15 @@ describe("fetchPluginRegistryShared", () => {
         ),
       )) as typeof fetch;
 
-    const registry = await fetchPluginRegistryShared("https://example.com/hash-registry.json");
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (message: string) => void warnings.push(message);
+    let registry;
+    try {
+      registry = await fetchPluginRegistryShared("https://example.com/hash-registry.json");
+    } finally {
+      console.warn = originalWarn;
+    }
     assert.deepEqual(
       registry.entries.map((e) => [e.id, e.bundleSha256]),
       [
@@ -101,5 +109,7 @@ describe("fetchPluginRegistryShared", () => {
         ["not-a-string", undefined],
       ],
     );
+    assert.equal(warnings.length, 3);
+    assert.match(warnings[0], /"uppercase"/);
   });
 });
