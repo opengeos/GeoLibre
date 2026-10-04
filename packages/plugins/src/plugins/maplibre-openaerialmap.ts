@@ -7,6 +7,7 @@ import type {
   MapLayerMouseEvent,
   MapMouseEvent,
 } from "maplibre-gl";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getControlMap } from "./style-map";
 import {
@@ -1343,7 +1344,7 @@ export const maplibreOpenAerialMapPlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: "OpenAerialMap",
+        title: pluginDisplayTitle(app, OPENAERIALMAP_PLUGIN_ID, "OpenAerialMap"),
         dock: "replace-style",
         defaultWidth: 340,
         render: (container) => {

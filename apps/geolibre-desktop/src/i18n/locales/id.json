@@ -179,6 +179,10 @@
       "trustButton": "Percayai dan muat",
       "dismissButton": "Jangan muat"
     },
+    "registryTrust": {
+      "title_other": "Pasang plugin ini?",
+      "description_other": "Tautan ini membuka {{count}} plugin dari registri plugin resmi GeoLibre yang belum terpasang. Memasangnya akan menambahkannya ke plugin Anda dan mengaktifkannya."
+    },
     "title": "Kelola Plugin",
     "searchAria": "Cari plugin",
     "searchPlaceholder": "Cari plugin",
@@ -223,7 +227,10 @@
     "errorDirectoryPicker": "Tidak dapat membuka pemilih direktori.",
     "errorInstall": "Tidak dapat memasang plugin.",
     "errorUninstall": "Tidak dapat mencopot plugin.",
-    "description": "Jelajahi, pasang, perbarui, dan hapus plugin GeoLibre eksternal. Plugin terdaftar di <registryLink>registri plugin GeoLibre</registryLink>."
+    "description": "Jelajahi, pasang, perbarui, dan hapus plugin GeoLibre eksternal. Plugin terdaftar di <registryLink>registri plugin GeoLibre</registryLink>.",
+    "policySideloadDisabled": "Pemasangan plugin secara manual (sideload) dinonaktifkan oleh kebijakan penerapan.",
+    "policyBlocked": "Plugin \"{{pluginId}}\" diblokir oleh kebijakan penerapan.",
+    "policyNotAllowed": "Plugin \"{{pluginId}}\" tidak diizinkan oleh kebijakan penerapan."
   },
   "viewState": {
     "panelTitle": "Info"
@@ -2738,16 +2745,19 @@
       "apiKeys": {
         "title": "Kunci API",
         "description": "Kunci hanya disimpan di browser ini dan tidak pernah disimpan bersama proyek.",
+        "descriptionKeychain": "Kunci disimpan di keychain sistem Anda dan tidak pernah disimpan bersama proyek.",
         "tomtom": "TomTom (arus langsung lalu lintas jalan)",
         "aisstream": "AISStream (kapal AIS langsung)",
         "placeholder": "Tempel kunci API",
         "save": "Simpan",
         "clear": "Bersihkan",
         "fromPanel": "Tersimpan di browser ini",
+        "fromPanelKeychain": "Tersimpan di keychain sistem Anda",
         "fromEnvironment": "Menggunakan kunci dari lingkungan",
         "notSet": "Belum diatur",
         "getKey": "Dapatkan kunci gratis",
-        "saveFailed": "Tidak dapat menyimpan kunci di browser ini."
+        "saveFailed": "Tidak dapat menyimpan kunci di browser ini.",
+        "saveFailedKeychain": "Tidak dapat menyimpan kunci di keychain sistem Anda. Kunci tetap berfungsi hingga GeoLibre ditutup."
       }
     }
   },
@@ -3027,7 +3037,7 @@
       "zoomRangeError": "Tingkat zoom harus memenuhi 0 ≤ min ≤ maks ≤ {{max}}.",
       "colormap": "Peta warna",
       "resampling": "Resampling",
-      "colormapDefault": "Default (viridis)",
+      "colormapDefault": "Bawaan (viridis)",
       "zoomNative": "asli",
       "rasterToPmtilesDesc": "Render raster menjadi satu arsip PMTiles berisi ubin PNG Web Mercator, siap untuk penyajian cloud-native. Satu band dirender melalui peta warna, sehingga citra multi-band tidak digambar dalam warna aslinya. Berjalan sepenuhnya dalam WebAssembly, sehingga tidak memerlukan sidecar baik di aplikasi web maupun desktop.",
       "cogBrowserNote": "Di browser, raster 8-bit mempertahankan tipenya dan lainnya (DEM Int16, Float64, …) ditulis sebagai Float32. Aplikasi desktop mempertahankan tipe aslinya.",
@@ -3527,6 +3537,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Data Terbuka Vantor",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "Garis Kisi",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -3776,7 +3787,7 @@
     "controlTitle": "Pengaturan garis kisi",
     "gridType": "Jenis grid",
     "typeGeographic": "Geografis (lat/long)",
-    "typeUtm": "UTM (easting/northing)",
+    "typeUtm": "UTM (timur/utara)",
     "spacing": "Jarak",
     "spacingAuto": "Otomatis (berdasarkan zoom)",
     "spacingFixed": "Interval tetap",
@@ -4471,6 +4482,7 @@
     "tooLargeToOpen": "File ini {{size}} — terlalu besar untuk dibuka browser (batas {{limit}}). Unduh, atau gunakan versi terpartisi dari dataset ini.",
     "tokenLabel": "Token akses",
     "tokenHint": "Membuat repo dataset dan mengunggah file memerlukan token akses Hugging Face dengan izin tulis. Token disimpan hanya di browser ini dan dikirim hanya ke huggingface.co.",
+    "tokenHintKeychain": "Membuat repo dataset dan mengunggah file memerlukan token akses Hugging Face dengan izin tulis. Token disimpan di keychain sistem Anda dan hanya dikirim ke huggingface.co.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "Simpan token",
     "tokenClear": "Bersihkan",
@@ -4575,7 +4587,12 @@
     "cancel": "Batal",
     "saveElement": "Simpan Elemen",
     "atPoint": "Pada Titik",
-    "pinnedToExtent": "Disematkan ke Cakupan"
+    "pinnedToExtent": "Disematkan ke Cakupan",
+    "editorColor": "Warna",
+    "noElements": "Belum ada elemen peta.",
+    "moveUp": "Pindahkan ke Atas",
+    "moveDown": "Pindahkan ke Bawah",
+    "deleteElement": "Hapus"
   },
   "dimensions": {
     "toolbar": "Alat dimensi",
@@ -6572,7 +6589,7 @@
               "label": "Metode",
               "options": {
                 "idw": "Pembobotan jarak terbalik (IDW)",
-                "kriging": "Ordinary kriging"
+                "kriging": "Kriging biasa"
               }
             },
             "resolution": {
@@ -7942,6 +7959,9 @@
     "exportedWithWarnings": "Layer berhasil diekspor. {{warnings}}",
     "exported": "Layer berhasil diekspor.",
     "exportLayerError": "Tidak dapat mengekspor layer ini.",
+    "export3dModel": "Model 3D: {{format}}",
+    "export3dModelNoSolids": "Tidak ada poligon terekstrusi untuk diekspor. Berikan layer poligon dengan ketinggian di atas dasar ekstrusi.",
+    "export3dModelSkipped_other": "Model 3D diekspor. {{count}} fitur tanpa ketinggian di atas dasar atau tanpa luas tidak disertakan.",
     "exportPolyline": "Polyline Terenkode (presisi {{precision}})",
     "refreshIntervals": {
       "off": "Mati",
@@ -8232,7 +8252,7 @@
   "diagnostics": {
     "title": "Diagnostik",
     "description": "Permintaan jaringan terbaru, kesalahan MapLibre, peringatan konsol, dan pengecualian runtime.",
-    "countTotal_other": "{{count}} total",
+    "countTotal_other": "Total {{count}}",
     "countErrors_other": "{{count}} kesalahan",
     "countWarnings_other": "{{count}} peringatan",
     "countNetwork_other": "{{count}} jaringan",
@@ -8580,12 +8600,56 @@
     "catalogNmwdiSt": "Situs air New Mexico",
     "catalogFlowlines": "Garis aliran NHDPlus"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "Cari dan muat Model Elevasi Digital USGS 3DEP ke peta.",
+    "search": "Cari DEM",
+    "searching": "Mencari di USGS API...",
+    "noResults": "Tidak ditemukan model elevasi untuk area yang dipilih.",
+    "showing": "Menampilkan {{shown}} dari {{total}} model elevasi",
+    "searchError": "Pencarian gagal: {{message}}",
+    "add": "Muat ke Peta",
+    "adding": "Memuat...",
+    "download": "Unduh",
+    "zoom": "Zoom",
+    "modeView": "Tampilan Saat Ini",
+    "modeDraw": "Gambar BBox",
+    "modeBbox": "Koordinat",
+    "modeQuad": "Kuadrangel 24K",
+    "drawHint": "Klik dan seret di peta untuk menggambar kotak pembatas pencarian.",
+    "drawStart": "Gambar Kotak",
+    "drawCancel": "Batalkan Gambar",
+    "drawnBox": "BBox yang digambar: {{box}}",
+    "coordWest": "Barat",
+    "coordSouth": "Selatan",
+    "coordEast": "Timur",
+    "coordNorth": "Utara",
+    "quadName": "Nama Kuadrangel (mis. Mount St. Helens)",
+    "stateName": "Negara Bagian (mis. WA)",
+    "quadSearchHint": "Cari cakupan kuadrangel topografi standar USGS skala 1:24.000.",
+    "datasets": "Dataset Elevasi",
+    "format": "Format",
+    "filterRedundant": "Kecualikan ubin parsial yang berlebih",
+    "footprintsLayer": "Jejak USGS 3DEP",
+    "exportGeoJson": "Ekspor GeoJSON",
+    "errorNoBounds": "Tidak dapat menentukan batas peta saat ini.",
+    "errorNoDrawnBox": "Gambar kotak pembatas di peta terlebih dahulu.",
+    "errorInvalidCoords": "Masukkan koordinat numerik yang valid untuk Barat, Selatan, Timur, dan Utara.",
+    "errorQuadInputs": "Masukkan Nama Kuadrangel dan Negara Bagian.",
+    "errorQuadNotFound": "Tidak dapat menemukan Kuadrangel Topografi 24K \"{{quad}}\" di negara bagian \"{{state}}\".",
+    "loadError": "Gagal memuat DEM: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Gunakan URL tileset.json 3D Tiles pada tampilan ArcGIS ini. Ubin Google Photorealistic dan I3S memerlukan mesin perender lain.",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles memerlukan kunci API Google Maps di Pengaturan agar dapat dimuat di globe.",
       "headersHint": "Satu per baris dalam format Nama: Nilai. Gunakan ${NAME} untuk menyisipkan variabel lingkungan dari Pengaturan → Lingkungan; nilainya tidak disimpan bersama layer.",
-      "insecureHeaders": "Header permintaan hanya dikirim ke URL tileset HTTPS (atau localhost)."
+      "insecureHeaders": "Header permintaan hanya dikirim ke URL tileset HTTPS (atau localhost).",
+      "showKey": "Tampilkan kunci",
+      "hideKey": "Sembunyikan kunci",
+      "showKeyAria": "Tampilkan kunci API Google Maps",
+      "hideKeyAria": "Sembunyikan kunci API Google Maps",
+      "toggleLayerAria": "Alihkan {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "OSM Downloader",
@@ -9019,6 +9083,36 @@
         "17": "Lantai jembatan",
         "18": "Derau tinggi"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Profil Ketinggian",
+      "drawHint": "Klik di peta untuk menambahkan titik. Klik dua kali atau tekan Enter untuk menyelesaikan.",
+      "drawCancelled": "Penggambaran dibatalkan.",
+      "needTwoPoints": "Diperlukan setidaknya dua titik untuk membuat profil.",
+      "selectLineHint": "Pilih fitur garis untuk membuat profil ketinggiannya.",
+      "sampling": "Mengambil sampel elevasi…",
+      "loadError": "Tidak dapat memuat data elevasi.",
+      "closePanel": "Tutup panel",
+      "drawLine": "Gambar garis",
+      "finish": "Selesai",
+      "clear": "Bersihkan",
+      "useSelected": "Gunakan pilihan",
+      "useSelectedTitle": "Buat profil dari fitur garis yang dipilih",
+      "selectLineFirst": "Pilih fitur garis terlebih dahulu",
+      "exportLabel": "Ekspor:",
+      "exportCsv": "Unduh profil sebagai CSV",
+      "exportSvg": "Simpan grafik sebagai gambar SVG",
+      "statDistance": "Jarak",
+      "statMin": "Min",
+      "statMax": "Maks",
+      "statAscent": "Naik ↑",
+      "statDescent": "Turun ↓",
+      "unitsTitle": "Satuan: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Masuk",
+      "signInOpening": "Membuka halaman masuk Google...",
+      "signInComplete": "Berhasil masuk ke Earth Engine."
     }
   }
 }

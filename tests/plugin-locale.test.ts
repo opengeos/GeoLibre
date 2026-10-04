@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import i18next from "i18next";
 import {
   createPluginLocaleApi,
   type PluginLocaleI18n,
@@ -118,5 +119,92 @@ describe("createPluginLocaleApi", () => {
     i18n.t = (() => ({ nested: "object" })) as unknown as PluginLocaleI18n["t"];
     const api = createPluginLocaleApi(i18n);
     assert.equal(api.translate("plugin.demo.branch", "Fallback"), "Fallback");
+  });
+});
+
+describe("registerTranslations", () => {
+  /** A real i18next instance configured like the app's (en fallback, sync init). */
+  async function realI18n(catalogs: Record<string, Record<string, unknown>>) {
+    const instance = i18next.createInstance();
+    await instance.init({
+      lng: "en",
+      fallbackLng: "en",
+      resources: Object.fromEntries(
+        Object.entries(catalogs).map(([lng, translation]) => [lng, { translation }]),
+      ),
+      interpolation: { escapeValue: false },
+      returnNull: false,
+    });
+    return instance;
+  }
+
+  it("lets a plugin ship translations that translate() then resolves", async () => {
+    const i18n = await realI18n({ en: {} });
+    const api = createPluginLocaleApi(i18n as unknown as PluginLocaleI18n);
+    api.registerTranslations({
+      de: { "plugin.demo.title": "Werkbank", "plugin.demo.count": "{{n}} Objekte" },
+    });
+    assert.equal(api.translate("plugin.demo.title", "Workbench"), "Workbench");
+    await i18n.changeLanguage("de");
+    assert.equal(api.translate("plugin.demo.title", "Workbench"), "Werkbank");
+    assert.equal(api.translate("plugin.demo.count", "{{n}} features", { n: 2 }), "2 Objekte");
+  });
+
+  it("never overrides a key the host catalog already ships", async () => {
+    const i18n = await realI18n({ en: {}, de: { plugin: { demo: { title: "Host" } } } });
+    const api = createPluginLocaleApi(i18n as unknown as PluginLocaleI18n);
+    api.registerTranslations({ de: { "plugin.demo.title": "Plugin" } });
+    await i18n.changeLanguage("de");
+    assert.equal(api.translate("plugin.demo.title", "Workbench"), "Host");
+  });
+
+  it("keeps a host catalog that lazy-loads later in charge of shared keys", async () => {
+    const i18n = await realI18n({ en: {} });
+    const api = createPluginLocaleApi(i18n as unknown as PluginLocaleI18n);
+    api.registerTranslations({
+      fr: { "plugin.demo.title": "Plugin", "plugin.demo.only": "Seulement" },
+    });
+    // The app lazy-loads a locale with a deep, overwriting merge (i18n/index.ts).
+    i18n.addResourceBundle(
+      "fr",
+      "translation",
+      { plugin: { demo: { title: "Hôte" } } },
+      true,
+      true,
+    );
+    await i18n.changeLanguage("fr");
+    assert.equal(api.translate("plugin.demo.title", "Workbench"), "Hôte");
+    assert.equal(api.translate("plugin.demo.only", "Only"), "Seulement");
+  });
+
+  it("rejects keys outside plugin.<id>. and non-string values", async () => {
+    const i18n = await realI18n({ en: { common: { cancel: "Cancel" } } });
+    const api = createPluginLocaleApi(i18n as unknown as PluginLocaleI18n);
+    const warn = console.warn;
+    const warnings: unknown[] = [];
+    console.warn = (...args: unknown[]) => warnings.push(args);
+    try {
+      api.registerTranslations({
+        en: {
+          "common.cancel": "Hijacked",
+          "plugin.x": "too shallow",
+          "plugin.demo.__proto__.polluted": "nope",
+          "plugin.demo.ok": "Fine",
+          "plugin.demo.bad": 42 as unknown as string,
+        },
+      });
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.equal(api.translate("common.cancel", "x"), "Cancel");
+    assert.equal(api.translate("plugin.demo.ok", "x"), "Fine");
+    assert.equal(({} as Record<string, unknown>).polluted, undefined);
+  });
+
+  it("is a no-op on a host without addResourceBundle", () => {
+    const api = createPluginLocaleApi(fakeI18n());
+    api.registerTranslations({ de: { "plugin.demo.title": "Werkbank" } });
+    assert.equal(api.translate("plugin.demo.title", "Workbench"), "Workbench");
   });
 });

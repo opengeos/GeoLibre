@@ -7,6 +7,7 @@ import {
   type NasaEarthdataEventHandler,
 } from "maplibre-gl-nasa-earthdata";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
@@ -169,7 +170,7 @@ export const maplibreNasaEarthdataPlugin: GeoLibrePlugin = {
     const activeControl = nasaEarthdataControl;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "NASA Earthdata",
+      title: pluginDisplayTitle(app, "maplibre-gl-nasa-earthdata", "NASA Earthdata"),
       dock: "replace-style",
       defaultWidth: 360,
       deactivatePluginOnClose: true,

@@ -183,6 +183,12 @@
       "trustButton": "Etibar et və yüklə",
       "dismissButton": "Yükləmə"
     },
+    "registryTrust": {
+      "title_one": "Bu plagin quraşdırılsın?",
+      "title_other": "Bu plaginlər quraşdırılsın?",
+      "description_one": "Bu keçid rəsmi GeoLibre plagin reyestrindən hələ quraşdırılmamış bir plagini açır. Quraşdırdıqda o, plaginlərinizə əlavə olunur və aktivləşdirilir.",
+      "description_other": "Bu keçid rəsmi GeoLibre plagin reyestrindən hələ quraşdırılmamış {{count}} plagini açır. Quraşdırdıqda onlar plaginlərinizə əlavə olunur və aktivləşdirilir."
+    },
     "title": "Plaginləri idarə et",
     "searchAria": "Plaginlərdə axtar",
     "searchPlaceholder": "Plaginlərdə axtar",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "Qovluq seçimini açmaq mümkün olmadı.",
     "errorInstall": "Plagini quraşdırmaq mümkün olmadı.",
     "errorUninstall": "Plagini silmək mümkün olmadı.",
-    "description": "Xarici GeoLibre plaginlərinə baxın, onları quraşdırın, yeniləyin və silin. Plaginlər <registryLink>GeoLibre plagin reyestrində</registryLink> göstərilir."
+    "description": "Xarici GeoLibre plaginlərinə baxın, onları quraşdırın, yeniləyin və silin. Plaginlər <registryLink>GeoLibre plagin reyestrində</registryLink> göstərilir.",
+    "policySideloadDisabled": "Plaginlərin kənar mənbədən quraşdırılması (sideloading) yerləşdirmə siyasəti ilə söndürülüb.",
+    "policyBlocked": "“{{pluginId}}” plagini yerləşdirmə siyasəti ilə bloklanıb.",
+    "policyNotAllowed": "“{{pluginId}}” plagininə yerləşdirmə siyasəti ilə icazə verilmir."
   },
   "viewState": {
     "panelTitle": "Məlumat"
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "API açarları",
         "description": "Açarlar yalnız bu brauzerdə saxlanılır və heç vaxt layihə ilə birlikdə saxlanılmır.",
+        "descriptionKeychain": "Açarlar sistem açar anbarında saxlanılır və heç vaxt layihə ilə birlikdə saxlanılmır.",
         "tomtom": "TomTom (yol hərəkətinin canlı axını)",
         "aisstream": "AISStream (canlı AIS gəmiləri)",
         "placeholder": "API açarını yapışdırın",
         "save": "Yadda saxla",
         "clear": "Təmizlə",
         "fromPanel": "Bu brauzerdə saxlanılıb",
+        "fromPanelKeychain": "Sistem açar anbarında saxlanılıb",
         "fromEnvironment": "Mühit dəyişənindəki açar istifadə olunur",
         "notSet": "Təyin edilməyib",
         "getKey": "Pulsuz açar əldə et",
-        "saveFailed": "Açarı bu brauzerdə yadda saxlamaq mümkün olmadı."
+        "saveFailed": "Açarı bu brauzerdə yadda saxlamaq mümkün olmadı.",
+        "saveFailedKeychain": "Açarı sistem açar anbarında saxlamaq mümkün olmadı. O, GeoLibre bağlanana qədər işləyəcək."
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Vantor Open Data",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "Koordinat toru xətləri",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4601,6 +4614,7 @@
     "tooLargeToOpen": "Bu faylın ölçüsü {{size}}-dır — brauzerdə açmaq üçün çox böyükdür (hədd: {{limit}}). Onu endirin və ya bu verilənlər dəstinin bölmələrə ayrılmış versiyasından istifadə edin.",
     "tokenLabel": "Giriş tokeni",
     "tokenHint": "Verilənlər dəsti repozitoriyası yaratmaq və faylları yükləmək üçün yazma icazəsi olan Hugging Face giriş tokeni lazımdır. Token yalnız bu brauzerdə saxlanılır və yalnız huggingface.co saytına göndərilir.",
+    "tokenHintKeychain": "Verilənlər dəsti repozitoriyası yaratmaq və fayl yükləmək üçün yazma icazəsi olan Hugging Face giriş tokeni lazımdır. O, sistem açar anbarında saxlanılır və yalnız huggingface.co-ya göndərilir.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "Tokeni yadda saxla",
     "tokenClear": "Təmizlə",
@@ -4709,7 +4723,12 @@
     "cancel": "Ləğv et",
     "saveElement": "Elementi yadda saxla",
     "atPoint": "Nöqtədə",
-    "pinnedToExtent": "Ərazi hüdudlarına bərkidilib"
+    "pinnedToExtent": "Ərazi hüdudlarına bərkidilib",
+    "editorColor": "Rəng",
+    "noElements": "Hələ xəritə elementi yoxdur.",
+    "moveUp": "Yuxarı köçür",
+    "moveDown": "Aşağı köçür",
+    "deleteElement": "Sil"
   },
   "dimensions": {
     "toolbar": "Ölçü alətləri",
@@ -8092,6 +8111,10 @@
     "exportedWithWarnings": "Lay ixrac edildi. {{warnings}}",
     "exported": "Lay ixrac edildi.",
     "exportLayerError": "Bu layı ixrac etmək mümkün olmadı.",
+    "export3dModel": "3D model: {{format}}",
+    "export3dModelNoSolids": "İxrac ediləcək ekstruziya olunmuş poliqon yoxdur. Laya hündürlüyü ekstruziya əsasından yuxarı olan poliqonlar əlavə edin.",
+    "export3dModelSkipped_one": "3D model ixrac edildi. Əsasdan yuxarı hündürlüyü və ya sahəsi olmayan {{count}} obyekt nəzərə alınmadı.",
+    "export3dModelSkipped_other": "3D model ixrac edildi. Əsasdan yuxarı hündürlüyü və ya sahəsi olmayan {{count}} obyekt nəzərə alınmadı.",
     "exportPolyline": "Kodlaşdırılmış Polyline (dəqiqlik {{precision}})",
     "refreshIntervals": {
       "off": "Söndürülüb",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "Nyu-Meksiko su məntəqələri",
     "catalogFlowlines": "NHDPlus axın xətləri"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "USGS 3DEP rəqəmsal yüksəklik modellərini axtarın və xəritəyə yükləyin.",
+    "search": "DEM-ləri axtar",
+    "searching": "USGS API-də axtarılır...",
+    "noResults": "Seçilmiş ərazi üçün yüksəklik modeli tapılmadı.",
+    "showing": "{{total}} yüksəklik modelindən {{shown}} göstərilir",
+    "searchError": "Axtarış uğursuz oldu: {{message}}",
+    "add": "Xəritəyə yüklə",
+    "adding": "Yüklənir...",
+    "download": "Endir",
+    "zoom": "Yaxınlaşdır",
+    "modeView": "Cari görünüş",
+    "modeDraw": "BBox çək",
+    "modeBbox": "Koordinatlar",
+    "modeQuad": "24K vərəq",
+    "drawHint": "Axtarış üçün əhatə çərçivəsi çəkmək məqsədilə xəritəyə klikləyib sürükləyin.",
+    "drawStart": "Çərçivə çək",
+    "drawCancel": "Çəkməni ləğv et",
+    "drawnBox": "Çəkilmiş bbox: {{box}}",
+    "coordWest": "Qərb",
+    "coordSouth": "Cənub",
+    "coordEast": "Şərq",
+    "coordNorth": "Şimal",
+    "quadName": "Vərəqin adı (məs., Mount St. Helens)",
+    "stateName": "Ştat (məs., WA)",
+    "quadSearchHint": "Standart USGS 1:24,000 topoqrafik xəritə vərəqinin (quadrangle) sərhədlərini tapın.",
+    "datasets": "Yüksəklik verilənlər dəstləri",
+    "format": "Format",
+    "filterRedundant": "Artıq qismən taylları istisna et",
+    "footprintsLayer": "USGS 3DEP əhatə konturları",
+    "exportGeoJson": "GeoJSON kimi ixrac et",
+    "errorNoBounds": "Cari xəritə sərhədlərini müəyyən etmək mümkün olmadı.",
+    "errorNoDrawnBox": "Əvvəlcə xəritədə əhatə çərçivəsi çəkin.",
+    "errorInvalidCoords": "Qərb, Cənub, Şərq və Şimal üçün düzgün rəqəmsal koordinatlar daxil edin.",
+    "errorQuadInputs": "Həm vərəqin adını, həm də ştatı daxil edin.",
+    "errorQuadNotFound": "“{{state}}” ştatında “{{quad}}” 24K topoqrafik vərəqi tapılmadı.",
+    "loadError": "DEM-i yükləmək mümkün olmadı: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Bu ArcGIS görünüşündə 3D Tiles tileset.json URL-sindən istifadə edin. Google Photorealistic və I3S taylları üçün başqa render mühərriki lazımdır.",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles tayllarını qlobusda yükləmək üçün Parametrlərdə Google Maps API açarı lazımdır.",
       "headersHint": "Hər sətirdə bir başlıq, Ad: Dəyər formatında. Parametrlər → Mühit bölməsindəki mühit dəyişənini daxil etmək üçün ${NAME} istifadə edin; dəyər layla birlikdə yadda saxlanılmır.",
-      "insecureHeaders": "Sorğu başlıqları yalnız HTTPS tileset URL-inə (və ya localhost-a) göndərilir."
+      "insecureHeaders": "Sorğu başlıqları yalnız HTTPS tileset URL-inə (və ya localhost-a) göndərilir.",
+      "showKey": "Açarı göstər",
+      "hideKey": "Açarı gizlət",
+      "showKeyAria": "Google Maps API açarını göstər",
+      "hideKeyAria": "Google Maps API açarını gizlət",
+      "toggleLayerAria": "{{name}} layını aç və ya bağla"
     },
     "geolibre-osm-downloader": {
       "title": "OSM yükləyicisi",
@@ -9112,6 +9179,36 @@
         "17": "Körpü örtüyü",
         "18": "Yüksək küy"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Yüksəklik profili",
+      "drawHint": "Nöqtə əlavə etmək üçün xəritəyə klikləyin. Bitirmək üçün iki dəfə klikləyin və ya Enter düyməsini basın.",
+      "drawCancelled": "Çəkmə ləğv edildi.",
+      "needTwoPoints": "Profil qurmaq üçün ən azı iki nöqtə lazımdır.",
+      "selectLineHint": "Yüksəklik profilini qurmaq üçün xətti obyekt seçin.",
+      "sampling": "Yüksəklik nümunələri götürülür…",
+      "loadError": "Yüksəklik verilənlərini yükləmək mümkün olmadı.",
+      "closePanel": "Paneli bağla",
+      "drawLine": "Xətt çək",
+      "finish": "Bitir",
+      "clear": "Təmizlə",
+      "useSelected": "Seçiləndən istifadə et",
+      "useSelectedTitle": "Seçilmiş xətti obyektdən profil qur",
+      "selectLineFirst": "Əvvəlcə xətti obyekt seçin",
+      "exportLabel": "İxrac:",
+      "exportCsv": "Profili CSV kimi endir",
+      "exportSvg": "Diaqramı SVG təsviri kimi saxla",
+      "statDistance": "Məsafə",
+      "statMin": "Min",
+      "statMax": "Maks",
+      "statAscent": "Qalxma ↑",
+      "statDescent": "Enmə ↓",
+      "unitsTitle": "Ölçü vahidləri: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Daxil ol",
+      "signInOpening": "Google girişi açılır...",
+      "signInComplete": "Earth Engine girişi tamamlandı."
     }
   }
 }

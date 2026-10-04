@@ -183,6 +183,12 @@
       "trustButton": "Güven ve yükle",
       "dismissButton": "Yükleme"
     },
+    "registryTrust": {
+      "title_one": "Bu eklenti yüklensin mi?",
+      "title_other": "Bu eklentiler yüklensin mi?",
+      "description_one": "Bu bağlantı, resmi GeoLibre eklenti kayıt defterinden henüz yüklenmemiş bir eklentiyi açar. Yüklediğinizde eklenti, eklentilerinize eklenir ve etkinleştirilir.",
+      "description_other": "Bu bağlantı, resmi GeoLibre eklenti kayıt defterinden henüz yüklenmemiş {{count}} eklentiyi açar. Yüklediğinizde bu eklentiler, eklentilerinize eklenir ve etkinleştirilir."
+    },
     "title": "Eklentileri Yönet",
     "searchAria": "Eklentilerde ara",
     "searchPlaceholder": "Eklentilerde ara",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "Dizin seçici açılamadı.",
     "errorInstall": "Eklenti kurulamadı.",
     "errorUninstall": "Eklenti kaldırılamadı.",
-    "description": "Harici GeoLibre eklentilerine göz atın, kurun, güncelleyin ve kaldırın. Eklentiler <registryLink>GeoLibre eklenti kayıt defterinde</registryLink> listelenir."
+    "description": "Harici GeoLibre eklentilerine göz atın, kurun, güncelleyin ve kaldırın. Eklentiler <registryLink>GeoLibre eklenti kayıt defterinde</registryLink> listelenir.",
+    "policySideloadDisabled": "Eklentilerin harici olarak yüklenmesi dağıtım ilkesi tarafından devre dışı bırakıldı.",
+    "policyBlocked": "\"{{pluginId}}\" eklentisi dağıtım ilkesi tarafından engellendi.",
+    "policyNotAllowed": "\"{{pluginId}}\" eklentisine dağıtım ilkesi tarafından izin verilmiyor."
   },
   "viewState": {
     "panelTitle": "Bilgi"
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "API anahtarları",
         "description": "Anahtarlar yalnızca bu tarayıcıda tutulur ve asla projeyle birlikte kaydedilmez.",
+        "descriptionKeychain": "Anahtarlar sistem anahtar zincirinizde tutulur ve asla projeyle birlikte kaydedilmez.",
         "tomtom": "TomTom (sokak trafiği canlı akışı)",
         "aisstream": "AISStream (canlı AIS gemileri)",
         "placeholder": "API anahtarını yapıştırın",
         "save": "Kaydet",
         "clear": "Temizle",
         "fromPanel": "Bu tarayıcıya kaydedildi",
+        "fromPanelKeychain": "Sistem anahtar zincirinize kaydedildi",
         "fromEnvironment": "Ortamdaki anahtar kullanılıyor",
         "notSet": "Ayarlanmadı",
         "getKey": "Ücretsiz anahtar alın",
-        "saveFailed": "Anahtar bu tarayıcıya kaydedilemedi."
+        "saveFailed": "Anahtar bu tarayıcıya kaydedilemedi.",
+        "saveFailedKeychain": "Anahtar sistem anahtar zincirinize kaydedilemedi. GeoLibre kapanana kadar çalışır."
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Vantor Açık Verileri",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "Kılavuz Çizgileri",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4537,6 +4550,7 @@
     "tooLargeToOpen": "Bu dosya {{size}} — tarayıcının açması için çok büyük ({{limit}} sınırı). İndirin veya bu veri kümesinin bölümlenmiş bir sürümünü kullanın.",
     "tokenLabel": "Erişim belirteci",
     "tokenHint": "Veri kümesi deposu oluşturmak ve dosya yüklemek için yazma erişimi olan bir Hugging Face erişim belirteci gerekir. Yalnızca bu tarayıcıda saklanır ve sadece huggingface.co'ya gönderilir.",
+    "tokenHintKeychain": "Veri kümesi deposu oluşturmak ve dosya yüklemek için yazma erişimine sahip bir Hugging Face erişim belirteci gerekir. Belirteç sistem anahtar zincirinizde saklanır ve yalnızca huggingface.co adresine gönderilir.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "Belirteci kaydet",
     "tokenClear": "Temizle",
@@ -4645,7 +4659,12 @@
     "cancel": "İptal",
     "saveElement": "Ögeyi Kaydet",
     "atPoint": "Noktada",
-    "pinnedToExtent": "Kapsama Sabitlendi"
+    "pinnedToExtent": "Kapsama Sabitlendi",
+    "editorColor": "Renk",
+    "noElements": "Henüz harita ögesi yok.",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "deleteElement": "Sil"
   },
   "dimensions": {
     "toolbar": "Ölçülendirme araçları",
@@ -8028,6 +8047,10 @@
     "exportedWithWarnings": "Katman dışa aktarıldı. {{warnings}}",
     "exported": "Katman dışa aktarıldı.",
     "exportLayerError": "Bu katman dışa aktarılamadı.",
+    "export3dModel": "3B model: {{format}}",
+    "export3dModelNoSolids": "Dışa aktarılacak yükseltilmiş çokgen yok. Katmandaki çokgenlere yükseltme tabanının üzerinde bir yükseklik verin.",
+    "export3dModelSkipped_one": "3B model dışa aktarıldı. Taban üzerinde yüksekliği veya alanı olmayan {{count}} detay dahil edilmedi.",
+    "export3dModelSkipped_other": "3B model dışa aktarıldı. Taban üzerinde yüksekliği veya alanı olmayan {{count}} detay dahil edilmedi.",
     "exportPolyline": "Kodlanmış Çoklu Çizgi (hassasiyet {{precision}})",
     "refreshIntervals": {
       "off": "Kapalı",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "New Mexico su istasyonları",
     "catalogFlowlines": "NHDPlus akış hatları"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "USGS 3DEP Sayısal Yükseklik Modellerini (DEM) sorgulayın ve haritaya yükleyin.",
+    "search": "DEM ara",
+    "searching": "USGS API'sinde aranıyor...",
+    "noResults": "Seçilen alan için yükseklik modeli bulunamadı.",
+    "showing": "{{total}} yükseklik modelinden {{shown}} tanesi gösteriliyor",
+    "searchError": "Arama başarısız oldu: {{message}}",
+    "add": "Haritaya yükle",
+    "adding": "Yükleniyor...",
+    "download": "İndir",
+    "zoom": "Yakınlaştır",
+    "modeView": "Geçerli görünüm",
+    "modeDraw": "Sınırlayıcı kutu çiz",
+    "modeBbox": "Koordinatlar",
+    "modeQuad": "24K pafta",
+    "drawHint": "Bir arama sınırlayıcı kutusu çizmek için haritaya tıklayıp sürükleyin.",
+    "drawStart": "Kutu çiz",
+    "drawCancel": "Çizimi iptal et",
+    "drawnBox": "Çizilen kutu: {{box}}",
+    "coordWest": "Batı",
+    "coordSouth": "Güney",
+    "coordEast": "Doğu",
+    "coordNorth": "Kuzey",
+    "quadName": "Pafta adı (ör. Mount St. Helens)",
+    "stateName": "Eyalet (ör. WA)",
+    "quadSearchHint": "Standart bir USGS 1:24.000 topografik paftasının kapsamını bulun.",
+    "datasets": "Yükseklik veri kümeleri",
+    "format": "Biçim",
+    "filterRedundant": "Gereksiz kısmi karoları hariç tut",
+    "footprintsLayer": "USGS 3DEP sınırları",
+    "exportGeoJson": "GeoJSON olarak dışa aktar",
+    "errorNoBounds": "Geçerli harita sınırları belirlenemedi.",
+    "errorNoDrawnBox": "Lütfen önce haritada bir sınırlayıcı kutu çizin.",
+    "errorInvalidCoords": "Lütfen Batı, Güney, Doğu ve Kuzey için geçerli sayısal koordinatlar girin.",
+    "errorQuadInputs": "Lütfen hem pafta adını hem de eyaleti girin.",
+    "errorQuadNotFound": "\"{{state}}\" eyaletinde \"{{quad}}\" 24K topografik paftası bulunamadı.",
+    "loadError": "DEM yüklenemedi: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Bu ArcGIS görünümünde bir 3D Tiles tileset.json URL’si kullanın. Google Photorealistic ve I3S karoları başka bir işleme motoru gerektirir.",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles’in küre üzerinde yüklenmesi için Ayarlar’da bir Google Maps API anahtarı gerekir.",
       "headersHint": "Her satıra bir tane, Ad: Değer biçiminde. Ayarlar → Ortam bölümündeki bir ortam değişkenini eklemek için ${NAME} kullanın; değer katmanla birlikte kaydedilmez.",
-      "insecureHeaders": "İstek üstbilgileri yalnızca HTTPS tileset URL'sine (veya localhost'a) gönderilir."
+      "insecureHeaders": "İstek üstbilgileri yalnızca HTTPS tileset URL'sine (veya localhost'a) gönderilir.",
+      "showKey": "Anahtarı göster",
+      "hideKey": "Anahtarı gizle",
+      "showKeyAria": "Google Maps API anahtarını göster",
+      "hideKeyAria": "Google Maps API anahtarını gizle",
+      "toggleLayerAria": "{{name}} katmanını aç/kapat"
     },
     "geolibre-osm-downloader": {
       "title": "OSM İndirici",
@@ -9112,6 +9179,36 @@
         "17": "Köprü tabliyesi",
         "18": "Yüksek gürültü"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Yükseklik Profili",
+      "drawHint": "Nokta eklemek için haritaya tıklayın. Bitirmek için çift tıklayın veya Enter tuşuna basın.",
+      "drawCancelled": "Çizim iptal edildi.",
+      "needTwoPoints": "Profil oluşturmak için en az iki nokta gerekir.",
+      "selectLineHint": "Yükseklik profilini oluşturmak için bir çizgi detayı seçin.",
+      "sampling": "Yükseklik örnekleniyor…",
+      "loadError": "Yükseklik verileri yüklenemedi.",
+      "closePanel": "Paneli kapat",
+      "drawLine": "Çizgi çiz",
+      "finish": "Bitir",
+      "clear": "Temizle",
+      "useSelected": "Seçileni kullan",
+      "useSelectedTitle": "Seçili çizgi detayından profil oluştur",
+      "selectLineFirst": "Önce bir çizgi detayı seçin",
+      "exportLabel": "Dışa aktar:",
+      "exportCsv": "Profili CSV olarak indir",
+      "exportSvg": "Grafiği SVG görüntüsü olarak kaydet",
+      "statDistance": "Mesafe",
+      "statMin": "Min",
+      "statMax": "Maks",
+      "statAscent": "Tırmanış ↑",
+      "statDescent": "İniş ↓",
+      "unitsTitle": "Birimler: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Oturum aç",
+      "signInOpening": "Google oturum açma sayfası açılıyor...",
+      "signInComplete": "Earth Engine oturumu açıldı."
     }
   }
 }

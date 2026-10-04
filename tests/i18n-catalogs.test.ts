@@ -112,6 +112,27 @@ describe("i18n catalogs", () => {
     }
   });
 
+  // Every bundled locale must carry every English key, so a feature that adds
+  // UI strings ships their translations in the same change instead of leaving
+  // them to fall back to English silently. Plural suffixes are normalized: a
+  // locale needs the base key in whatever plural forms its language uses (zh
+  // drops `_one`, ru adds `_few`/`_many`), not en's exact `_one`/`_other` pair.
+  // The runtime fallback to English still exists for external language packs
+  // and plugin keys; this guards only the catalogs shipped in the repo.
+  for (const code of localeCodes.filter((c) => c !== "en")) {
+    it(`${code}: translates every key in the English catalog`, () => {
+      const have = new Set(leafKeys(loadCatalog(code)).map(normalizePluralKey));
+      const missing = [...enBaseKeys].filter((k) => !have.has(k));
+      assert.deepEqual(
+        missing,
+        [],
+        `${code}.json is missing ${missing.length} key(s) present in en.json. Add translations ` +
+          `(see docs/i18n.md, "Keeping catalogs complete"): ${missing.slice(0, 20).join(", ")}` +
+          (missing.length > 20 ? ", …" : ""),
+      );
+    });
+  }
+
   for (const code of localeCodes.filter((c) => c !== "en")) {
     it(`${code}: preserves interpolation placeholders for translated keys`, () => {
       const strings = flatStrings(loadCatalog(code));
@@ -134,21 +155,4 @@ describe("i18n catalogs", () => {
       assert.deepEqual(mismatches, [], mismatches.join("\n"));
     });
   }
-
-  // Non-English catalogs may be partial (missing keys fall back to en at
-  // runtime), so this reports coverage rather than asserting parity — it lets a
-  // reviewer see how complete each translation is without failing CI.
-  it("reports per-locale coverage vs the English baseline", () => {
-    const enBaseList = [...enBaseKeys];
-    for (const code of localeCodes.filter((c) => c !== "en")) {
-      const have = new Set(leafKeys(loadCatalog(code)).map(normalizePluralKey));
-      const missing = enBaseList.filter((k) => !have.has(k));
-      const pct = Math.round((1 - missing.length / enBaseList.length) * 100);
-      console.log(
-        `  ${code}: ${pct}% (${enBaseList.length - missing.length}/${enBaseList.length})` +
-          (missing.length ? ` — missing: ${missing.join(", ")}` : ""),
-      );
-    }
-    assert.ok(true);
-  });
 });

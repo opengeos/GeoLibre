@@ -9,6 +9,7 @@ import {
   type SwipeLayerSide,
   type SwipeState,
 } from "maplibre-gl-swipe";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getStyleMap } from "./style-map";
 import { resolveSwipeSideIds, type SwipeStyleLayer } from "./swipe-layer-ids";
@@ -137,7 +138,7 @@ function registerSwipePanel(app: GeoLibreAppAPI): void {
   unregisterPanel =
     app.registerRightPanel?.({
       id: PANEL_ID,
-      title: "Layer Swipe",
+      title: pluginDisplayTitle(app, SWIPE_PLUGIN_ID, "Layer Swipe"),
       dock: "replace-style",
       defaultWidth: 320,
       deactivatePluginOnClose: true,

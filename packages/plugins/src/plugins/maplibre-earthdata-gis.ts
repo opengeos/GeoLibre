@@ -38,6 +38,7 @@ import {
   webMapLayerAsItem,
 } from "./earthdata-gis-api";
 import { layerTypeForTiles } from "./web-service-sync";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { getStyleMap } from "./style-map";
 
@@ -1548,7 +1549,7 @@ export const maplibreEarthdataGisPlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: "Earthdata GIS",
+        title: pluginDisplayTitle(app, EARTHDATA_GIS_PLUGIN_ID, "Earthdata GIS"),
         dock: "replace-style",
         defaultWidth: 340,
         render: (container) => {

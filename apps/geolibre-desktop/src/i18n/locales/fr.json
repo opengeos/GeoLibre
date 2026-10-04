@@ -183,6 +183,12 @@
       "trustButton": "Faire confiance et charger",
       "dismissButton": "Ne pas charger"
     },
+    "registryTrust": {
+      "title_one": "Installer cette extension ?",
+      "title_other": "Installer ces extensions ?",
+      "description_one": "Ce lien ouvre une extension du registre officiel des extensions GeoLibre qui n'est pas encore installée. L'installer l'ajoute à vos extensions et l'active.",
+      "description_other": "Ce lien ouvre {{count}} extensions du registre officiel des extensions GeoLibre qui ne sont pas encore installées. Les installer les ajoute à vos extensions et les active."
+    },
     "title": "Gérer les extensions",
     "searchAria": "Rechercher des extensions",
     "searchPlaceholder": "Rechercher des extensions",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "Impossible d'ouvrir le sélecteur de répertoire.",
     "errorInstall": "Impossible d'installer l'extension.",
     "errorUninstall": "Impossible de désinstaller l'extension.",
-    "description": "Parcourez, installez, mettez à jour et supprimez des extensions GeoLibre externes. Les extensions sont répertoriées dans le <registryLink>registre des extensions GeoLibre</registryLink>."
+    "description": "Parcourez, installez, mettez à jour et supprimez des extensions GeoLibre externes. Les extensions sont répertoriées dans le <registryLink>registre des extensions GeoLibre</registryLink>.",
+    "policySideloadDisabled": "L'installation manuelle d'extensions (sideloading) est désactivée par la stratégie de déploiement.",
+    "policyBlocked": "L'extension « {{pluginId}} » est bloquée par la stratégie de déploiement.",
+    "policyNotAllowed": "L'extension « {{pluginId}} » n'est pas autorisée par la stratégie de déploiement."
   },
   "viewState": {
     "panelTitle": "Info"
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "Clés API",
         "description": "Les clés sont conservées uniquement dans ce navigateur et ne sont jamais enregistrées avec le projet.",
+        "descriptionKeychain": "Les clés sont conservées dans le trousseau de votre système et ne sont jamais enregistrées avec le projet.",
         "tomtom": "TomTom (flux en direct du trafic routier)",
         "aisstream": "AISStream (navires AIS en direct)",
         "placeholder": "Collez la clé API",
         "save": "Enregistrer",
         "clear": "Effacer",
         "fromPanel": "Enregistrée dans ce navigateur",
+        "fromPanelKeychain": "Enregistrée dans le trousseau de votre système",
         "fromEnvironment": "Utilise la clé de l’environnement",
         "notSet": "Non définie",
         "getKey": "Obtenir une clé gratuite",
-        "saveFailed": "Impossible d’enregistrer la clé dans ce navigateur."
+        "saveFailed": "Impossible d’enregistrer la clé dans ce navigateur.",
+        "saveFailedKeychain": "Impossible d'enregistrer la clé dans le trousseau de votre système. Elle fonctionnera jusqu'à la fermeture de GeoLibre."
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Données ouvertes Vantor",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "Quadrillage",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4537,6 +4550,7 @@
     "tooLargeToOpen": "Ce fichier fait {{size}} — trop volumineux pour être ouvert par le navigateur (limite de {{limit}}). Téléchargez-le, ou utilisez une version partitionnée de ce jeu de données.",
     "tokenLabel": "Jeton d'accès",
     "tokenHint": "Créer un dépôt de jeu de données et téléverser des fichiers nécessite un jeton d'accès Hugging Face avec accès en écriture. Il est stocké uniquement dans ce navigateur et envoyé à huggingface.co seulement.",
+    "tokenHintKeychain": "La création d'un dépôt de jeu de données et le téléversement de fichiers nécessitent un jeton d'accès Hugging Face avec droits d'écriture. Il est stocké dans le trousseau de votre système et envoyé uniquement à huggingface.co.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "Enregistrer le jeton",
     "tokenClear": "Effacer",
@@ -4645,7 +4659,12 @@
     "cancel": "Annuler",
     "saveElement": "Enregistrer l'élément",
     "atPoint": "Au point",
-    "pinnedToExtent": "Ancré à l'emprise"
+    "pinnedToExtent": "Ancré à l'emprise",
+    "editorColor": "Couleur",
+    "noElements": "Aucun élément de carte pour l'instant.",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "deleteElement": "Supprimer"
   },
   "dimensions": {
     "toolbar": "Outils de cotation",
@@ -8028,6 +8047,10 @@
     "exportedWithWarnings": "Couche exportée. {{warnings}}",
     "exported": "Couche exportée.",
     "exportLayerError": "Impossible d'exporter cette couche.",
+    "export3dModel": "Modèle 3D : {{format}}",
+    "export3dModelNoSolids": "Aucun polygone extrudé à exporter. Donnez à la couche des polygones dont la hauteur dépasse la base d'extrusion.",
+    "export3dModelSkipped_one": "Modèle 3D exporté. {{count}} entité sans hauteur au-dessus de la base ou sans surface a été ignorée.",
+    "export3dModelSkipped_other": "Modèle 3D exporté. {{count}} entités sans hauteur au-dessus de la base ou sans surface ont été ignorées.",
     "exportPolyline": "Polyligne encodée (précision {{precision}})",
     "refreshIntervals": {
       "off": "Désactivé",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "Stations hydrologiques du Nouveau-Mexique",
     "catalogFlowlines": "Tronçons hydrographiques NHDPlus"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "Rechercher et charger sur la carte des modèles numériques d'élévation USGS 3DEP.",
+    "search": "Rechercher des DEM",
+    "searching": "Recherche dans l'API USGS...",
+    "noResults": "Aucun modèle d'élévation trouvé pour la zone sélectionnée.",
+    "showing": "Affichage de {{shown}} modèles d'élévation sur {{total}}",
+    "searchError": "Échec de la recherche : {{message}}",
+    "add": "Charger sur la carte",
+    "adding": "Chargement...",
+    "download": "Télécharger",
+    "zoom": "Zoomer",
+    "modeView": "Vue actuelle",
+    "modeDraw": "Dessiner une emprise",
+    "modeBbox": "Coordonnées",
+    "modeQuad": "Quadrangle 24K",
+    "drawHint": "Cliquez et faites glisser sur la carte pour dessiner une boîte englobante de recherche.",
+    "drawStart": "Dessiner le rectangle",
+    "drawCancel": "Annuler le dessin",
+    "drawnBox": "Emprise dessinée : {{box}}",
+    "coordWest": "Ouest",
+    "coordSouth": "Sud",
+    "coordEast": "Est",
+    "coordNorth": "Nord",
+    "quadName": "Nom du quadrangle (p. ex. Mount St. Helens)",
+    "stateName": "État (p. ex. WA)",
+    "quadSearchHint": "Rechercher l'étendue d'un quadrangle topographique standard USGS au 1:24 000.",
+    "datasets": "Jeux de données d'élévation",
+    "format": "Format",
+    "filterRedundant": "Exclure les tuiles partielles redondantes",
+    "footprintsLayer": "Emprises USGS 3DEP",
+    "exportGeoJson": "Exporter en GeoJSON",
+    "errorNoBounds": "Impossible de déterminer les limites actuelles de la carte.",
+    "errorNoDrawnBox": "Veuillez d'abord dessiner une boîte englobante sur la carte.",
+    "errorInvalidCoords": "Veuillez saisir des coordonnées numériques valides pour Ouest, Sud, Est et Nord.",
+    "errorQuadInputs": "Veuillez saisir à la fois le nom du quadrangle et l'État.",
+    "errorQuadNotFound": "Impossible de trouver le quadrangle topographique 24K « {{quad}} » dans l'État « {{state}} ».",
+    "loadError": "Échec du chargement du DEM : {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Utilisez une URL tileset.json de 3D Tiles dans cette vue ArcGIS. Les tuiles Google Photorealistic et I3S nécessitent un autre moteur de rendu.",
       "globeGoogleKeyRequired": "Les tuiles Google Photorealistic 3D Tiles nécessitent une clé API Google Maps dans les Paramètres pour se charger sur le globe.",
       "headersHint": "Un par ligne, sous la forme Nom: Valeur. Utilisez ${NAME} pour insérer une variable d'environnement définie dans Paramètres → Environnement ; la valeur n'est pas enregistrée avec la couche.",
-      "insecureHeaders": "Les en-têtes de requête ne sont envoyés qu'à une URL de tileset HTTPS (ou localhost)."
+      "insecureHeaders": "Les en-têtes de requête ne sont envoyés qu'à une URL de tileset HTTPS (ou localhost).",
+      "showKey": "Afficher la clé",
+      "hideKey": "Masquer la clé",
+      "showKeyAria": "Afficher la clé API Google Maps",
+      "hideKeyAria": "Masquer la clé API Google Maps",
+      "toggleLayerAria": "Basculer {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "Téléchargeur OSM",
@@ -9112,6 +9179,36 @@
         "17": "Tablier de pont",
         "18": "Bruit élevé"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Profil d'élévation",
+      "drawHint": "Cliquez sur la carte pour ajouter des points. Double-cliquez ou appuyez sur Entrée pour terminer.",
+      "drawCancelled": "Dessin annulé.",
+      "needTwoPoints": "Au moins deux points sont nécessaires pour créer un profil.",
+      "selectLineHint": "Sélectionnez une entité linéaire pour créer son profil d'élévation.",
+      "sampling": "Échantillonnage de l'élévation…",
+      "loadError": "Impossible de charger les données d'élévation.",
+      "closePanel": "Fermer le panneau",
+      "drawLine": "Dessiner une ligne",
+      "finish": "Terminer",
+      "clear": "Effacer",
+      "useSelected": "Utiliser la sélection",
+      "useSelectedTitle": "Créer un profil à partir de l'entité linéaire sélectionnée",
+      "selectLineFirst": "Sélectionnez d'abord une entité linéaire",
+      "exportLabel": "Exporter :",
+      "exportCsv": "Télécharger le profil au format CSV",
+      "exportSvg": "Enregistrer le graphique en image SVG",
+      "statDistance": "Distance",
+      "statMin": "Min",
+      "statMax": "Max",
+      "statAscent": "Dénivelé positif ↑",
+      "statDescent": "Dénivelé négatif ↓",
+      "unitsTitle": "Unités : {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Se connecter",
+      "signInOpening": "Ouverture de la connexion Google...",
+      "signInComplete": "Connexion à Earth Engine terminée."
     }
   }
 }

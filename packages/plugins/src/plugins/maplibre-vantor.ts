@@ -1,4 +1,5 @@
 import { VantorControl } from "./vantor/control";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
@@ -50,7 +51,7 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
     const activeControl = control;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "Vantor Open Data",
+      title: pluginDisplayTitle(app, VANTOR_PLUGIN_ID, "Vantor Open Data"),
       dock: "replace-style",
       defaultWidth: 380,
       deactivatePluginOnClose: true,

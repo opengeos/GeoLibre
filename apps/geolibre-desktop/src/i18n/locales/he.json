@@ -187,6 +187,14 @@
       "dismissButton": "אל תטען",
       "description_two": "הפרויקט הזה מבקש לטעון {{count}} תוספים חיצוניים מכתובות URL שלא התקנת. תוספים מריצים קוד עם גישה מלאה לאפליקציה."
     },
+    "registryTrust": {
+      "title_one": "להתקין את התוסף הזה?",
+      "title_two": "להתקין את התוספים האלה?",
+      "title_other": "להתקין את התוספים האלה?",
+      "description_one": "קישור זה פותח תוסף ממרשם התוספים הרשמי של GeoLibre שעדיין לא הותקן. התקנתו תוסיף אותו לתוספים שלך ותפעיל אותו.",
+      "description_two": "קישור זה פותח {{count}} תוספים ממרשם התוספים הרשמי של GeoLibre שעדיין לא הותקנו. התקנתם תוסיף אותם לתוספים שלך ותפעיל אותם.",
+      "description_other": "קישור זה פותח {{count}} תוספים ממרשם התוספים הרשמי של GeoLibre שעדיין לא הותקנו. התקנתם תוסיף אותם לתוספים שלך ותפעיל אותם."
+    },
     "title": "ניהול תוספים",
     "searchAria": "חיפוש תוספים",
     "searchPlaceholder": "חיפוש תוספים",
@@ -231,7 +239,10 @@
     "errorDirectoryPicker": "לא ניתן לפתוח את בורר התיקיות.",
     "errorInstall": "לא ניתן להתקין את התוסף.",
     "errorUninstall": "לא ניתן להסיר את התקנת התוסף.",
-    "description": "עיון, התקנה, עדכון והסרה של תוספים חיצוניים של GeoLibre. התוספים מופיעים ב<registryLink>מרשם התוספים של GeoLibre</registryLink>."
+    "description": "עיון, התקנה, עדכון והסרה של תוספים חיצוניים של GeoLibre. התוספים מופיעים ב<registryLink>מרשם התוספים של GeoLibre</registryLink>.",
+    "policySideloadDisabled": "התקנת תוספים שלא מהמרשם מושבתת על ידי מדיניות הפריסה.",
+    "policyBlocked": "התוסף „{{pluginId}}” חסום על ידי מדיניות הפריסה.",
+    "policyNotAllowed": "התוסף „{{pluginId}}” אינו מותר לפי מדיניות הפריסה."
   },
   "viewState": {
     "panelTitle": "מידע"
@@ -2840,16 +2851,19 @@
       "apiKeys": {
         "title": "מפתחות API",
         "description": "המפתחות נשמרים בדפדפן זה בלבד ולעולם אינם נשמרים עם הפרויקט.",
+        "descriptionKeychain": "המפתחות נשמרים במחזיק המפתחות של המערכת ולעולם אינם נשמרים עם הפרויקט.",
         "tomtom": "TomTom (זרימה חיה של תנועת רחוב)",
         "aisstream": "AISStream (כלי שיט AIS חיים)",
         "placeholder": "הדבק מפתח API",
         "save": "שמור",
         "clear": "נקה",
         "fromPanel": "נשמר בדפדפן זה",
+        "fromPanelKeychain": "נשמר במחזיק המפתחות של המערכת",
         "fromEnvironment": "משתמש במפתח מהסביבה",
         "notSet": "לא מוגדר",
         "getKey": "קבל מפתח חינם",
-        "saveFailed": "לא ניתן היה לשמור את המפתח בדפדפן זה."
+        "saveFailed": "לא ניתן היה לשמור את המפתח בדפדפן זה.",
+        "saveFailedKeychain": "לא ניתן היה לשמור את המפתח במחזיק המפתחות של המערכת. הוא יפעל עד ש-GeoLibre ייסגר."
       }
     }
   },
@@ -3639,6 +3653,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Vantor Open Data",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "קווי רשת",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4666,6 +4681,7 @@
     "tooLargeToOpen": "גודל הקובץ הוא {{size}} — גדול מדי לפתיחה בדפדפן (מגבלה של {{limit}}). יש להוריד אותו, או להשתמש בגרסה מחולקת של מערך נתונים זה.",
     "tokenLabel": "אסימון גישה",
     "tokenHint": "יצירת מאגר מערך נתונים והעלאת קבצים דורשות אסימון גישה של Hugging Face עם הרשאות כתיבה. הוא נשמר בדפדפן זה בלבד ונשלח אל huggingface.co בלבד.",
+    "tokenHintKeychain": "יצירת מאגר מערך נתונים והעלאת קבצים דורשות אסימון גישה של Hugging Face עם הרשאת כתיבה. האסימון נשמר במחזיק המפתחות של המערכת ונשלח אל huggingface.co בלבד.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "שמור אסימון",
     "tokenClear": "נקה",
@@ -4779,7 +4795,12 @@
     "cancel": "ביטול",
     "saveElement": "שמור רכיב",
     "atPoint": "בנקודה",
-    "pinnedToExtent": "מוצמד לתיחום"
+    "pinnedToExtent": "מוצמד לתיחום",
+    "editorColor": "צבע",
+    "noElements": "אין עדיין רכיבי מפה.",
+    "moveUp": "הזז למעלה",
+    "moveDown": "הזז למטה",
+    "deleteElement": "מחק"
   },
   "dimensions": {
     "toolbar": "כלי מידות",
@@ -8178,6 +8199,11 @@
     "exportedWithWarnings": "השכבה יוצאה. {{warnings}}",
     "exported": "השכבה יוצאה.",
     "exportLayerError": "לא ניתן לייצא את השכבה הזו.",
+    "export3dModel": "מודל תלת-ממדי: {{format}}",
+    "export3dModelNoSolids": "אין פוליגונים מובלטים לייצוא. יש לתת לפוליגונים של השכבה גובה מעל בסיס ההבלטה.",
+    "export3dModelSkipped_one": "המודל התלת-ממדי יוצא. {{count}} ישות ללא גובה מעל הבסיס או ללא שטח הושמטה.",
+    "export3dModelSkipped_two": "המודל התלת-ממדי יוצא. {{count}} ישויות ללא גובה מעל הבסיס או ללא שטח הושמטו.",
+    "export3dModelSkipped_other": "המודל התלת-ממדי יוצא. {{count}} ישויות ללא גובה מעל הבסיס או ללא שטח הושמטו.",
     "exportPolyline": "Encoded Polyline (דיוק {{precision}})",
     "refreshIntervals": {
       "off": "כבוי",
@@ -8766,12 +8792,56 @@
     "catalogFlowlines": "קווי זרימה של NHDPlus",
     "layersAdded_two": "נוספו {{count}} שכבות NLDI לקבוצה אחת “תוצאות USGS NLDI”."
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "חיפוש וטעינה של מודלי גובה דיגיטליים של USGS 3DEP על המפה.",
+    "search": "חפש DEM",
+    "searching": "מחפש ב-USGS API...",
+    "noResults": "לא נמצאו מודלי גובה עבור האזור שנבחר.",
+    "showing": "מוצגים {{shown}} מתוך {{total}} מודלי גובה",
+    "searchError": "החיפוש נכשל: {{message}}",
+    "add": "טען על המפה",
+    "adding": "טוען...",
+    "download": "הורד",
+    "zoom": "זום",
+    "modeView": "תצוגה נוכחית",
+    "modeDraw": "שרטוט תיבה",
+    "modeBbox": "קואורדינטות",
+    "modeQuad": "גיליון 24K",
+    "drawHint": "יש ללחוץ ולגרור על המפה כדי לשרטט תיבה תוחמת לחיפוש.",
+    "drawStart": "שרטט תיבה",
+    "drawCancel": "בטל שרטוט",
+    "drawnBox": "תיבה משורטטת: {{box}}",
+    "coordWest": "מערב",
+    "coordSouth": "דרום",
+    "coordEast": "מזרח",
+    "coordNorth": "צפון",
+    "quadName": "שם הגיליון (למשל Mount St. Helens)",
+    "stateName": "מדינה (למשל WA)",
+    "quadSearchHint": "איתור התיחום של גיליון טופוגרפי סטנדרטי של USGS בקנה מידה 1:24,000.",
+    "datasets": "מערכי נתוני גובה",
+    "format": "פורמט",
+    "filterRedundant": "החרג אריחים חלקיים מיותרים",
+    "footprintsLayer": "טביעות רגל של USGS 3DEP",
+    "exportGeoJson": "ייצא GeoJSON",
+    "errorNoBounds": "לא ניתן לקבוע את גבולות המפה הנוכחיים.",
+    "errorNoDrawnBox": "יש לשרטט תחילה תיבה תוחמת על המפה.",
+    "errorInvalidCoords": "יש להזין קואורדינטות מספריות תקינות עבור מערב, דרום, מזרח וצפון.",
+    "errorQuadInputs": "יש להזין גם את שם הגיליון וגם את המדינה.",
+    "errorQuadNotFound": "לא נמצא הגיליון הטופוגרפי 24K „{{quad}}” במדינה „{{state}}”.",
+    "loadError": "טעינת ה-DEM נכשלה: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "יש להשתמש בכתובת URL של tileset.json של 3D Tiles בתצוגת ArcGIS זו. אריחי Google Photorealistic ו-I3S דורשים מנוע רינדור אחר.",
       "globeGoogleKeyRequired": "אריחי Google Photorealistic 3D Tiles דורשים מפתח API של Google Maps בהגדרות כדי להיטען בגלובוס.",
       "headersHint": "כותרת אחת בכל שורה בתבנית Name: Value. השתמש ב-${NAME} כדי להוסיף משתנה סביבה מהגדרות ← סביבה; הערך אינו נשמר עם השכבה.",
-      "insecureHeaders": "כותרות הבקשה נשלחות רק לכתובת URL של ערכת אריחים ב-HTTPS (או localhost)."
+      "insecureHeaders": "כותרות הבקשה נשלחות רק לכתובת URL של ערכת אריחים ב-HTTPS (או localhost).",
+      "showKey": "הצג מפתח",
+      "hideKey": "הסתר מפתח",
+      "showKeyAria": "הצג את מפתח ה-API של Google Maps",
+      "hideKeyAria": "הסתר את מפתח ה-API של Google Maps",
+      "toggleLayerAria": "החלף מצב {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "מוריד OSM",
@@ -9205,6 +9275,36 @@
         "17": "משטח גשר",
         "18": "רעש גבוה"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "חתך גבהים",
+      "drawHint": "יש ללחוץ על המפה כדי להוסיף נקודות. לחיצה כפולה או Enter לסיום.",
+      "drawCancelled": "השרטוט בוטל.",
+      "needTwoPoints": "נדרשות לפחות שתי נקודות כדי לבנות חתך.",
+      "selectLineHint": "יש לבחור ישות קו כדי לבנות את חתך הגבהים שלה.",
+      "sampling": "דוגם גבהים…",
+      "loadError": "לא ניתן היה לטעון נתוני גובה.",
+      "closePanel": "סגור חלונית",
+      "drawLine": "שרטט קו",
+      "finish": "סיים",
+      "clear": "נקה",
+      "useSelected": "השתמש בנבחר",
+      "useSelectedTitle": "בנה חתך מישות הקו שנבחרה",
+      "selectLineFirst": "יש לבחור תחילה ישות קו",
+      "exportLabel": "ייצוא:",
+      "exportCsv": "הורד את החתך כ-CSV",
+      "exportSvg": "שמור את התרשים כתמונת SVG",
+      "statDistance": "מרחק",
+      "statMin": "מינימום",
+      "statMax": "מקסימום",
+      "statAscent": "עלייה ↑",
+      "statDescent": "ירידה ↓",
+      "unitsTitle": "יחידות: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "התחבר",
+      "signInOpening": "פותח התחברות עם Google...",
+      "signInComplete": "ההתחברות ל-Earth Engine הושלמה."
     }
   }
 }

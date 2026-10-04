@@ -148,4 +148,59 @@ describe("Elevation Profile docked panel", () => {
     assert.equal(plugin.activate(host), false);
     assert.equal(host.controls.length, 0);
   });
+
+  it("renders its panel in the app language and re-labels on a language change", () => {
+    const document = installDom();
+    const catalogs: Record<string, Record<string, string>> = {
+      en: {},
+      de: {
+        "toolbar.plugin.geolibre-elevation-profile": "Höhenprofil",
+        "plugin.geolibre-elevation-profile.drawLine": "Linie zeichnen",
+        "plugin.geolibre-elevation-profile.clear": "Leeren",
+        "plugin.geolibre-elevation-profile.unitsTitle": "Einheiten: {{units}}",
+      },
+    };
+    let locale = "en";
+    const listeners = new Set<(next: string) => void>();
+    const host = Object.assign(fakeHost(document), {
+      translate: (key: string, fallback: string, params?: Record<string, string | number>) =>
+        (catalogs[locale][key] ?? fallback).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+          String(params?.[name] ?? ""),
+        ),
+      onLocaleChange: (listener: (next: string) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    });
+    // An earlier test's deactivate leaves the panel cached as expanded, and an
+    // expanded control positions itself on the next frame.
+    const originalRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = () => 0;
+    try {
+      assert.notEqual(plugin.activate(host), false);
+      // The registry re-runs the title getter on every read.
+      const title = () => host.panel!.title;
+      assert.equal(title(), "Elevation Profile");
+      const dock = document.createElement("div");
+      host.panel!.render(dock);
+      const buttons = () =>
+        [...dock.querySelectorAll<HTMLButtonElement>(".elevation-profile-button")].map(
+          (button) => button.textContent,
+        );
+      assert.equal(buttons()[0], "Draw line");
+
+      locale = "de";
+      for (const listener of listeners) listener("de");
+      assert.equal(title(), "Höhenprofil");
+      assert.equal(buttons()[0], "Linie zeichnen");
+      assert.ok(buttons().includes("Leeren"));
+      const unit = dock.querySelector<HTMLButtonElement>(".elevation-profile-unit")!;
+      assert.match(unit.title, /^Einheiten: /);
+    } finally {
+      plugin.deactivate(host);
+      plugin.applyProjectState?.(host, undefined);
+      globalThis.requestAnimationFrame = originalRaf;
+    }
+    assert.equal(listeners.size, 0, "deactivate stops following the language");
+  });
 });

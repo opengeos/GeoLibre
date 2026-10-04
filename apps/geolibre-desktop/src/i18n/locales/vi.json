@@ -179,6 +179,10 @@
       "trustButton": "Tin tưởng và tải",
       "dismissButton": "Không tải"
     },
+    "registryTrust": {
+      "title_other": "Cài đặt plugin?",
+      "description_other": "Liên kết này mở {{count}} plugin chưa được cài đặt từ sổ đăng ký plugin chính thức của GeoLibre. Khi cài đặt, chúng sẽ được thêm vào danh sách plugin của bạn và được kích hoạt."
+    },
     "title": "Quản lý plugin",
     "searchAria": "Tìm kiếm plugin",
     "searchPlaceholder": "Tìm kiếm plugin",
@@ -223,7 +227,10 @@
     "errorDirectoryPicker": "Không thể mở bộ chọn thư mục.",
     "errorInstall": "Không thể cài đặt plugin.",
     "errorUninstall": "Không thể gỡ cài đặt plugin.",
-    "description": "Duyệt, cài đặt, cập nhật và xóa các plugin GeoLibre bên ngoài. Các plugin được liệt kê trong sổ đăng ký plugin <registryLink>GeoLibre</registryLink>."
+    "description": "Duyệt, cài đặt, cập nhật và xóa các plugin GeoLibre bên ngoài. Các plugin được liệt kê trong sổ đăng ký plugin <registryLink>GeoLibre</registryLink>.",
+    "policySideloadDisabled": "Việc cài đặt plugin thủ công (sideload) đã bị tắt theo chính sách triển khai.",
+    "policyBlocked": "Plugin “{{pluginId}}” bị chặn theo chính sách triển khai.",
+    "policyNotAllowed": "Plugin “{{pluginId}}” không được phép theo chính sách triển khai."
   },
   "viewState": {
     "panelTitle": "Thông tin"
@@ -2738,16 +2745,19 @@
       "apiKeys": {
         "title": "Khóa API",
         "description": "Khóa chỉ được lưu trong trình duyệt này và không bao giờ được lưu cùng dự án.",
+        "descriptionKeychain": "Khóa được lưu trong chuỗi khóa hệ thống và không bao giờ được lưu cùng dự án.",
         "tomtom": "TomTom (lưu lượng giao thông đường phố trực tiếp)",
         "aisstream": "AISStream (tàu AIS trực tiếp)",
         "placeholder": "Dán khóa API",
         "save": "Lưu",
         "clear": "Xóa",
         "fromPanel": "Đã lưu trong trình duyệt này",
+        "fromPanelKeychain": "Đã lưu trong chuỗi khóa hệ thống",
         "fromEnvironment": "Đang dùng khóa từ môi trường",
         "notSet": "Chưa đặt",
         "getKey": "Nhận khóa miễn phí",
-        "saveFailed": "Không thể lưu khóa trong trình duyệt này."
+        "saveFailed": "Không thể lưu khóa trong trình duyệt này.",
+        "saveFailedKeychain": "Không thể lưu khóa vào chuỗi khóa hệ thống. Khóa vẫn hoạt động cho đến khi đóng GeoLibre."
       }
     }
   },
@@ -3544,7 +3554,8 @@
       "maplibre-gl-annotations": "Chú thích",
       "maplibre-gl-streetview": "Chế độ xem phố",
       "maplibre-gl-time-slider": "Thanh trượt thời gian",
-      "maplibre-gl-vantor": "Dữ liệu mở Vantor"
+      "maplibre-gl-vantor": "Dữ liệu mở Vantor",
+      "maplibre-gl-usgs-dem": "USGS 3DEP"
     },
     "fileDrop": {
       "addedRasterLayers_other": "Đã thêm các lớp raster {{count}} vào bảng điều khiển Lớp.",
@@ -4461,6 +4472,7 @@
     "tooLargeToOpen": "Tệp này là {{size}} — quá lớn để trình duyệt có thể mở được (giới hạn {{limit}}). Tải xuống hoặc sử dụng phiên bản được phân vùng của tập dữ liệu này.",
     "tokenLabel": "Mã thông báo truy cập",
     "tokenHint": "Việc tạo kho lưu trữ tập dữ liệu và tải tệp lên cần có mã thông báo truy cập Ôm mặt có quyền ghi. Nó chỉ được lưu trữ trong trình duyệt này và được gửi đến ômface.co một mình.",
+    "tokenHintKeychain": "Việc tạo kho bộ dữ liệu và tải tệp lên cần mã thông báo truy cập Hugging Face có quyền ghi. Mã này được lưu trong chuỗi khóa hệ thống và chỉ được gửi đến huggingface.co.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "Lưu mã thông báo",
     "tokenClear": "Thông thoáng",
@@ -4568,6 +4580,11 @@
     "saveElement": "Lưu phần tử",
     "atPoint": "Tại điểm",
     "pinnedToExtent": "Đã ghim vào phạm vi",
+    "editorColor": "Màu",
+    "noElements": "Chưa có yếu tố bản đồ nào.",
+    "moveUp": "Di chuyển lên",
+    "moveDown": "Di chuyển xuống",
+    "deleteElement": "Xóa",
     "color": "Màu chú thích",
     "width": "Chiều rộng đường",
     "widthOptions": {
@@ -7728,7 +7745,7 @@
     "invalidKmlCoordinatesById": "Xuất KML không thể ghi ID tính năng {{id}} vì nó có tọa độ không hợp lệ."
   },
   "layers": {
-    "panelCollapsedLabel": "Trình tạo biểu thức mở",
+    "panelCollapsedLabel": "Lớp (đã thu gọn)",
     "expand": "Mở rộng các lớp",
     "collapse": "Thu gọn các lớp",
     "resizePanel": "Thay đổi kích thước bảng điều khiển Lớp",
@@ -7942,6 +7959,9 @@
     "exportedWithWarnings": "Đã xuất lớp. {{warnings}}",
     "exported": "Đã xuất lớp.",
     "exportLayerError": "Không thể xuất lớp này.",
+    "export3dModel": "Mô hình 3D: {{format}}",
+    "export3dModelNoSolids": "Không có đa giác đùn nào để xuất. Hãy cung cấp cho lớp các đa giác có chiều cao lớn hơn mặt đáy đùn.",
+    "export3dModelSkipped_other": "Đã xuất mô hình 3D. Đã bỏ qua {{count}} đối tượng không có chiều cao trên mặt đáy hoặc không có diện tích.",
     "exportPolyline": "Polyline mã hóa (độ chính xác {{precision}})",
     "refreshIntervals": {
       "off": "Tắt",
@@ -8580,12 +8600,56 @@
     "catalogNmwdiSt": "Trạm quan trắc nước New Mexico",
     "catalogFlowlines": "Đường dòng chảy NHDPlus"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "Truy vấn và tải Mô hình số độ cao USGS 3DEP lên bản đồ.",
+    "search": "Tìm DEM",
+    "searching": "Đang tìm kiếm qua USGS API...",
+    "noResults": "Không tìm thấy mô hình độ cao nào cho khu vực đã chọn.",
+    "showing": "Đang hiển thị {{shown}} trên {{total}} mô hình độ cao",
+    "searchError": "Tìm kiếm thất bại: {{message}}",
+    "add": "Tải lên bản đồ",
+    "adding": "Đang tải...",
+    "download": "Tải xuống",
+    "zoom": "Thu phóng",
+    "modeView": "Chế độ xem hiện tại",
+    "modeDraw": "Vẽ BBox",
+    "modeBbox": "Tọa độ",
+    "modeQuad": "Mảnh bản đồ 24K",
+    "drawHint": "Nhấp và kéo trên bản đồ để vẽ hộp giới hạn tìm kiếm.",
+    "drawStart": "Vẽ hộp",
+    "drawCancel": "Hủy vẽ",
+    "drawnBox": "Hộp giới hạn đã vẽ: {{box}}",
+    "coordWest": "Tây",
+    "coordSouth": "Nam",
+    "coordEast": "Đông",
+    "coordNorth": "Bắc",
+    "quadName": "Tên mảnh bản đồ (vd: Mount St. Helens)",
+    "stateName": "Bang (vd: WA)",
+    "quadSearchHint": "Tra cứu phạm vi của một mảnh bản đồ địa hình USGS tiêu chuẩn tỷ lệ 1:24.000.",
+    "datasets": "Bộ dữ liệu độ cao",
+    "format": "Định dạng",
+    "filterRedundant": "Loại bỏ các ô một phần bị trùng lặp",
+    "footprintsLayer": "Phạm vi phủ USGS 3DEP",
+    "exportGeoJson": "Xuất GeoJSON",
+    "errorNoBounds": "Không thể xác định phạm vi bản đồ hiện tại.",
+    "errorNoDrawnBox": "Vui lòng vẽ hộp giới hạn trên bản đồ trước.",
+    "errorInvalidCoords": "Vui lòng nhập tọa độ số hợp lệ cho Tây, Nam, Đông và Bắc.",
+    "errorQuadInputs": "Vui lòng nhập cả Tên mảnh bản đồ và Bang.",
+    "errorQuadNotFound": "Không tìm thấy mảnh bản đồ địa hình 24K “{{quad}}” ở bang “{{state}}”.",
+    "loadError": "Không tải được DEM: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Sử dụng URL tileset.json của 3D Tiles trong chế độ xem ArcGIS này. Các ô Google Photorealistic và I3S cần một bộ kết xuất khác.",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles cần khóa API Google Maps trong Cài đặt để tải trên quả địa cầu.",
       "headersHint": "Mỗi dòng một mục theo dạng Tên: Giá trị. Dùng ${NAME} để chèn một biến môi trường từ Cài đặt → Môi trường; giá trị không được lưu cùng lớp.",
-      "insecureHeaders": "Tiêu đề yêu cầu chỉ được gửi đến URL tileset HTTPS (hoặc localhost)."
+      "insecureHeaders": "Tiêu đề yêu cầu chỉ được gửi đến URL tileset HTTPS (hoặc localhost).",
+      "showKey": "Hiện khóa",
+      "hideKey": "Ẩn khóa",
+      "showKeyAria": "Hiện khóa API Google Maps",
+      "hideKeyAria": "Ẩn khóa API Google Maps",
+      "toggleLayerAria": "Chuyển đổi {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "Trình tải xuống OSM",
@@ -9019,6 +9083,36 @@
         "17": "Mặt cầu",
         "18": "Nhiễu cao"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Hồ sơ độ cao",
+      "drawHint": "Nhấp vào bản đồ để thêm điểm. Nhấp đúp hoặc nhấn Enter để hoàn tất.",
+      "drawCancelled": "Đã hủy vẽ.",
+      "needTwoPoints": "Cần ít nhất hai điểm để tạo hồ sơ.",
+      "selectLineHint": "Chọn một đối tượng dạng đường để tạo hồ sơ độ cao của nó.",
+      "sampling": "Đang lấy mẫu độ cao…",
+      "loadError": "Không thể tải dữ liệu độ cao.",
+      "closePanel": "Đóng bảng",
+      "drawLine": "Vẽ đường",
+      "finish": "Hoàn tất",
+      "clear": "Xóa",
+      "useSelected": "Dùng đối tượng đã chọn",
+      "useSelectedTitle": "Tạo hồ sơ từ đối tượng dạng đường đã chọn",
+      "selectLineFirst": "Hãy chọn một đối tượng dạng đường trước",
+      "exportLabel": "Xuất:",
+      "exportCsv": "Tải hồ sơ xuống dưới dạng CSV",
+      "exportSvg": "Lưu biểu đồ dưới dạng ảnh SVG",
+      "statDistance": "Khoảng cách",
+      "statMin": "Thấp nhất",
+      "statMax": "Cao nhất",
+      "statAscent": "Tổng độ lên ↑",
+      "statDescent": "Tổng độ xuống ↓",
+      "unitsTitle": "Đơn vị: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Đăng nhập",
+      "signInOpening": "Đang mở trang đăng nhập Google...",
+      "signInComplete": "Đã đăng nhập Earth Engine."
     }
   }
 }

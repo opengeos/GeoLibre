@@ -183,6 +183,12 @@
       "trustButton": "Vertrouwen en laden",
       "dismissButton": "Niet laden"
     },
+    "registryTrust": {
+      "title_one": "Deze plugin installeren?",
+      "title_other": "Deze plugins installeren?",
+      "description_one": "Deze link opent een plugin uit het officiële GeoLibre-pluginregister die nog niet is geïnstalleerd. Bij installatie wordt deze aan uw plugins toegevoegd en geactiveerd.",
+      "description_other": "Deze link opent {{count}} plugins uit het officiële GeoLibre-pluginregister die nog niet zijn geïnstalleerd. Bij installatie worden ze aan uw plugins toegevoegd en geactiveerd."
+    },
     "title": "Plugins beheren",
     "searchAria": "Plugins zoeken",
     "searchPlaceholder": "Plugins zoeken",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "Kon de mapkiezer niet openen.",
     "errorInstall": "Kon de plugin niet installeren.",
     "errorUninstall": "Kon de plugin niet verwijderen.",
-    "description": "Blader door externe GeoLibre-plugins en installeer, werk bij of verwijder ze. Plugins staan in het <registryLink>GeoLibre-pluginregister</registryLink>."
+    "description": "Blader door externe GeoLibre-plugins en installeer, werk bij of verwijder ze. Plugins staan in het <registryLink>GeoLibre-pluginregister</registryLink>.",
+    "policySideloadDisabled": "Het handmatig installeren van plugins (sideloading) is uitgeschakeld door het implementatiebeleid.",
+    "policyBlocked": "Plugin ‘{{pluginId}}’ is geblokkeerd door het implementatiebeleid.",
+    "policyNotAllowed": "Plugin ‘{{pluginId}}’ is niet toegestaan door het implementatiebeleid."
   },
   "viewState": {
     "panelTitle": "Info"
@@ -753,7 +762,7 @@
       "layer": "CAD-laag",
       "layerPlaceholder": "Kies eerst een CAD-bestand",
       "readingLayers": "Bezig met lezen van lagen...",
-      "layerOption": "{{name}} ({{type}}, {{count}} features)",
+      "layerOption": "{{name}} ({{type}}, {{count}} objecten)",
       "crs": "Bron-CRS",
       "crsPlaceholder": "bijv. EPSG:26915",
       "crsPresetLabel": "Veelgebruikte coördinatenstelsels...",
@@ -770,10 +779,10 @@
       "defaultName": "Geodatabase-laag",
       "chooseFolder": ".gdb-map kiezen...",
       "noFolderSelected": "Geen geodatabase geselecteerd",
-      "layer": "Feature class",
+      "layer": "Objectklasse",
       "layerPlaceholder": "Kies eerst een geodatabase",
       "readingLayers": "Lagen lezen...",
-      "layerOption": "{{name}} ({{type}}, {{count}} features)",
+      "layerOption": "{{name}} ({{type}}, {{count}} objecten)",
       "help": "Tabellen met alleen attributen worden niet weergegeven. De geselecteerde feature class wordt geladen via de lokale GeoLibre-server en geherprojecteerd naar WGS84.",
       "desktopOnly": "File Geodatabase-lagen zijn alleen beschikbaar in GeoLibre Desktop. Deze functie leest een lokale .gdb-map via de lokale GeoLibre-server, waar de webapp geen toegang toe heeft.",
       "readError": "Kan deze File Geodatabase niet lezen.",
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "API-sleutels",
         "description": "Sleutels worden alleen in deze browser bewaard en nooit met het project opgeslagen.",
+        "descriptionKeychain": "Sleutels worden bewaard in de sleutelhanger van uw systeem en nooit met het project opgeslagen.",
         "tomtom": "TomTom (live doorstroming van straatverkeer)",
         "aisstream": "AISStream (live AIS-schepen)",
         "placeholder": "API-sleutel plakken",
         "save": "Opslaan",
         "clear": "Wissen",
         "fromPanel": "Opgeslagen in deze browser",
+        "fromPanelKeychain": "Opgeslagen in de sleutelhanger van uw systeem",
         "fromEnvironment": "Sleutel uit de omgeving wordt gebruikt",
         "notSet": "Niet ingesteld",
         "getKey": "Gratis sleutel aanvragen",
-        "saveFailed": "De sleutel kon niet in deze browser worden opgeslagen."
+        "saveFailed": "De sleutel kon niet in deze browser worden opgeslagen.",
+        "saveFailedKeychain": "Kan de sleutel niet opslaan in de sleutelhanger van uw systeem. Hij werkt totdat GeoLibre wordt gesloten."
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Open data van Vantor",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "Rasterlijnen",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -3840,7 +3853,7 @@
     "controlTitle": "Instellingen rasterlijnen",
     "gridType": "Rastertype",
     "typeGeographic": "Geografisch (lat/lon)",
-    "typeUtm": "UTM (easting/northing)",
+    "typeUtm": "UTM (oost/noord)",
     "spacing": "Afstand",
     "spacingAuto": "Automatisch (op basis van zoom)",
     "spacingFixed": "Vast interval",
@@ -4537,6 +4550,7 @@
     "tooLargeToOpen": "Dit bestand is {{size}} — te groot voor de browser om te openen (limiet van {{limit}}). Download het, of gebruik een gepartitioneerde versie van deze dataset.",
     "tokenLabel": "Toegangstoken",
     "tokenHint": "Voor het aanmaken van een dataset-repo en het uploaden van bestanden is een Hugging Face-toegangstoken met schrijfrechten nodig. Het wordt alleen in deze browser bewaard en uitsluitend naar huggingface.co verstuurd.",
+    "tokenHintKeychain": "Voor het aanmaken van een dataset-repo en het uploaden van bestanden is een Hugging Face-toegangstoken met schrijfrechten nodig. Dit wordt bewaard in de sleutelhanger van uw systeem en alleen naar huggingface.co verzonden.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "Token opslaan",
     "tokenClear": "Wissen",
@@ -4563,8 +4577,8 @@
     "chooseLayer": "Laag kiezen",
     "chooseLayerTitle": "De features van een kaartlaag als GeoJSON-bestand uploaden",
     "layerPickerHeading": "Een laag als GeoJSON uploaden",
-    "layerFeatures_one": "{{count}} feature",
-    "layerFeatures_other": "{{count}} features",
+    "layerFeatures_one": "{{count}} object",
+    "layerFeatures_other": "{{count}} objecten",
     "layerOriginalFile": "Oorspronkelijk bestand",
     "layerUnavailable": "{{name}} is niet langer beschikbaar om te uploaden.",
     "remoteRasterNote": "Rasters die vanaf een URL zijn geladen, staan er niet bij: hun data zit niet in de browser, en ze hebben al een link die u kunt delen. Alleen lokaal geopende bestanden kunnen worden geüpload.",
@@ -4645,7 +4659,12 @@
     "cancel": "Annuleren",
     "saveElement": "Element opslaan",
     "atPoint": "Op punt",
-    "pinnedToExtent": "Vastgezet op bereik"
+    "pinnedToExtent": "Vastgezet op bereik",
+    "editorColor": "Kleur",
+    "noElements": "Nog geen kaartelementen.",
+    "moveUp": "Omhoog verplaatsen",
+    "moveDown": "Omlaag verplaatsen",
+    "deleteElement": "Verwijderen"
   },
   "dimensions": {
     "toolbar": "Maatvoeringsgereedschap",
@@ -6650,7 +6669,7 @@
               "label": "Methode",
               "options": {
                 "idw": "Inverse-afstandsweging (IDW)",
-                "kriging": "Ordinary kriging"
+                "kriging": "Gewone kriging"
               }
             },
             "resolution": {
@@ -7007,8 +7026,8 @@
     "searchPlaceholder": "Attributen zoeken...",
     "searchAria": "Attributen zoeken",
     "clearSelectedFeature": "Geselecteerd object wissen",
-    "statusFeatures_one": "{{count}} feature",
-    "statusFeatures_other": "{{count}} features",
+    "statusFeatures_one": "{{count}} object",
+    "statusFeatures_other": "{{count}} objecten",
     "statusShown_one": "{{count}} getoond",
     "statusShown_other": "{{count}} getoond",
     "statusSelected_one": "{{count}} geselecteerd",
@@ -8028,6 +8047,10 @@
     "exportedWithWarnings": "Laag geëxporteerd. {{warnings}}",
     "exported": "Laag geëxporteerd.",
     "exportLayerError": "Kon deze laag niet exporteren.",
+    "export3dModel": "3D-model: {{format}}",
+    "export3dModelNoSolids": "Geen geëxtrudeerde polygonen om te exporteren. Geef de laag polygonen met een hoogte boven de extrusiebasis.",
+    "export3dModelSkipped_one": "3D-model geëxporteerd. {{count}} object zonder hoogte boven de basis of zonder oppervlakte is weggelaten.",
+    "export3dModelSkipped_other": "3D-model geëxporteerd. {{count}} objecten zonder hoogte boven de basis of zonder oppervlakte zijn weggelaten.",
     "exportPolyline": "Gecodeerde polylijn (precisie {{precision}})",
     "refreshIntervals": {
       "off": "Uit",
@@ -8430,7 +8453,7 @@
     "typeText": "Tekst",
     "completenessTitle": "{{populated}} ingevuld, {{nulls}} null",
     "populated": "{{total}} ingevuld",
-    "null": "{{total}} null",
+    "null": "{{total}} null-waarden",
     "unique": "{{total}} uniek",
     "min": "Min",
     "mean": "Gemiddelde",
@@ -8484,7 +8507,7 @@
     "markResolved": "Markeren als opgelost",
     "reopenThread": "Opmerkingenreeks heropenen",
     "deleteThread": "Opmerkingenreeks verwijderen",
-    "anchorFeature": "Feature #{{id}} ({{layer}})",
+    "anchorFeature": "Object #{{id}} ({{layer}})",
     "anchorPoint": "Punt ({{coords}})",
     "anchorMap": "Kaart",
     "anchoredToFeature": "Verankerd aan feature #{{id}} ({{layer}})",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "Waterlocaties in New Mexico",
     "catalogFlowlines": "NHDPlus-stroomlijnen"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "Digitale hoogtemodellen van USGS 3DEP opvragen en op de kaart laden.",
+    "search": "DEM's zoeken",
+    "searching": "USGS API doorzoeken...",
+    "noResults": "Geen hoogtemodellen gevonden voor het geselecteerde gebied.",
+    "showing": "{{shown}} van {{total}} hoogtemodellen weergegeven",
+    "searchError": "Zoeken mislukt: {{message}}",
+    "add": "Op kaart laden",
+    "adding": "Laden...",
+    "download": "Downloaden",
+    "zoom": "Zoomen",
+    "modeView": "Huidige weergave",
+    "modeDraw": "BBox tekenen",
+    "modeBbox": "Coördinaten",
+    "modeQuad": "24K-kaartblad",
+    "drawHint": "Klik en sleep op de kaart om een begrenzingskader voor de zoekopdracht te tekenen.",
+    "drawStart": "Kader tekenen",
+    "drawCancel": "Tekenen annuleren",
+    "drawnBox": "Getekende bbox: {{box}}",
+    "coordWest": "West",
+    "coordSouth": "Zuid",
+    "coordEast": "Oost",
+    "coordNorth": "Noord",
+    "quadName": "Naam kaartblad (bijv. Mount St. Helens)",
+    "stateName": "Staat (bijv. WA)",
+    "quadSearchHint": "Zoek de omvang op van een standaard topografisch USGS-kaartblad op schaal 1:24.000.",
+    "datasets": "Hoogtedatasets",
+    "format": "Formaat",
+    "filterRedundant": "Overbodige gedeeltelijke tegels uitsluiten",
+    "footprintsLayer": "USGS 3DEP-footprints",
+    "exportGeoJson": "GeoJSON exporteren",
+    "errorNoBounds": "Kan de huidige kaartgrenzen niet bepalen.",
+    "errorNoDrawnBox": "Teken eerst een begrenzingskader op de kaart.",
+    "errorInvalidCoords": "Voer geldige numerieke coördinaten in voor West, Zuid, Oost en Noord.",
+    "errorQuadInputs": "Voer zowel de naam van het kaartblad als de staat in.",
+    "errorQuadNotFound": "Kan topografisch 24K-kaartblad ‘{{quad}}’ niet vinden in staat ‘{{state}}’.",
+    "loadError": "Laden van DEM mislukt: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Gebruik een 3D Tiles-URL voor tileset.json in deze ArcGIS-weergave. Google Photorealistic- en I3S-tegels vereisen een andere renderer.",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles hebben een Google Maps API-sleutel in Instellingen nodig om op de globe te laden.",
       "headersHint": "Eén per regel als Naam: Waarde. Gebruik ${NAME} om een omgevingsvariabele uit Instellingen → Omgeving in te voegen; de waarde wordt niet met de laag opgeslagen.",
-      "insecureHeaders": "Aanvraagheaders worden alleen verzonden naar een HTTPS-tileset-URL (of localhost)."
+      "insecureHeaders": "Aanvraagheaders worden alleen verzonden naar een HTTPS-tileset-URL (of localhost).",
+      "showKey": "Sleutel tonen",
+      "hideKey": "Sleutel verbergen",
+      "showKeyAria": "Google Maps API-sleutel tonen",
+      "hideKeyAria": "Google Maps API-sleutel verbergen",
+      "toggleLayerAria": "{{name}} in-/uitschakelen"
     },
     "geolibre-osm-downloader": {
       "title": "OSM-downloader",
@@ -9112,6 +9179,36 @@
         "17": "Brugdek",
         "18": "Hoge ruis"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Hoogteprofiel",
+      "drawHint": "Klik op de kaart om punten toe te voegen. Dubbelklik of druk op Enter om te voltooien.",
+      "drawCancelled": "Tekenen geannuleerd.",
+      "needTwoPoints": "Er zijn minstens twee punten nodig om een profiel te maken.",
+      "selectLineHint": "Selecteer een lijnobject om het hoogteprofiel ervan te maken.",
+      "sampling": "Hoogte bemonsteren…",
+      "loadError": "Kan hoogtegegevens niet laden.",
+      "closePanel": "Paneel sluiten",
+      "drawLine": "Lijn tekenen",
+      "finish": "Voltooien",
+      "clear": "Wissen",
+      "useSelected": "Selectie gebruiken",
+      "useSelectedTitle": "Een profiel maken van het geselecteerde lijnobject",
+      "selectLineFirst": "Selecteer eerst een lijnobject",
+      "exportLabel": "Exporteren:",
+      "exportCsv": "Het profiel downloaden als CSV",
+      "exportSvg": "De grafiek opslaan als SVG-afbeelding",
+      "statDistance": "Afstand",
+      "statMin": "Min.",
+      "statMax": "Max.",
+      "statAscent": "Stijging ↑",
+      "statDescent": "Daling ↓",
+      "unitsTitle": "Eenheden: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Aanmelden",
+      "signInOpening": "Google-aanmelding openen...",
+      "signInComplete": "Aanmelden bij Earth Engine voltooid."
     }
   }
 }

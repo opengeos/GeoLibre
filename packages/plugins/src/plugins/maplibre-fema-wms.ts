@@ -5,6 +5,7 @@ import {
   type FemaWmsEventHandler,
 } from "maplibre-gl-fema-wms";
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
@@ -131,7 +132,7 @@ export const maplibreFemaWmsPlugin: GeoLibrePlugin = {
     const activeControl = femaWmsControl;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "FEMA NFHL",
+      title: pluginDisplayTitle(app, "maplibre-gl-fema-wms", "FEMA NFHL"),
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,

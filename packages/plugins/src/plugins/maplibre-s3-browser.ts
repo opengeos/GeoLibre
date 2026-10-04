@@ -15,6 +15,7 @@
  */
 
 import { explainS3ReadError, getS3UrlSigner, s3ObjectHttpsUrl, useAppStore } from "@geolibre/core";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { addLidarLayerFromUrl, addPMTilesLayerFromUrl } from "./maplibre-components";
 import { addRasterToMap } from "./maplibre-raster";
@@ -675,7 +676,7 @@ function createS3BrowserPlugin(): GeoLibrePlugin {
       unregisterPanel =
         app.registerRightPanel?.({
           id: S3_BROWSER_PLUGIN_ID,
-          title: "S3 Browser",
+          title: pluginDisplayTitle(app, S3_BROWSER_PLUGIN_ID, "S3 Browser"),
           dock: "replace-style",
           defaultWidth: 360,
           render: (container) => {

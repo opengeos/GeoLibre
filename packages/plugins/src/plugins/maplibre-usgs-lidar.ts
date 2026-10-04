@@ -6,6 +6,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { UsgsLidarControl, UsgsLidarControlOptions } from "maplibre-gl-usgs-lidar";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
@@ -143,7 +144,7 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
 
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "USGS LiDAR",
+      title: pluginDisplayTitle(app, "maplibre-gl-usgs-lidar", "USGS LiDAR"),
       dock: "replace-style",
       defaultWidth: 380,
       deactivatePluginOnClose: true,

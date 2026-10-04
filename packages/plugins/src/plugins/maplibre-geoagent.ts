@@ -3,6 +3,7 @@
 import type { GeoAgentControl, GeoAgentControlOptions } from "maplibre-gl-geoagent";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { VisualizeOptions } from "maplibre-gl-earth-engine";
+import { createPluginTranslator, pluginDisplayTitle, type PluginTranslate } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import {
@@ -155,7 +156,7 @@ async function openGeoAgentPanel(
   unregisterPanel?.();
   unregisterPanel = app.registerRightPanel({
     id: PANEL_ID,
-    title: "GeoAgent",
+    title: pluginDisplayTitle(app, GEOAGENT_PLUGIN_ID, "GeoAgent"),
     dock: "replace-style",
     defaultWidth: 400,
     deactivatePluginOnClose: true,
@@ -185,7 +186,7 @@ async function openGeoAgentPanel(
       geoAgentControl = control;
       patchGeoAgentToolRunner(control);
       control.expand();
-      enhanceEarthEngineSignIn(container);
+      enhanceEarthEngineSignIn(container, createPluginTranslator(app, GEOAGENT_PLUGIN_ID));
       preloadEarthEngineAuthLibrary();
       return () => {
         // Unmounting runs the control's onRemove, which clears its overlays
@@ -411,7 +412,7 @@ function projectValue(envValue: unknown): string {
   return earthEngineProjectValue(envValue, STORAGE_PREFIX);
 }
 
-function enhanceEarthEngineSignIn(root: ParentNode): void {
+function enhanceEarthEngineSignIn(root: ParentNode, tr: PluginTranslate): void {
   const details = root.querySelector<HTMLElement>(".geoagent-earth-engine");
   const status = details?.querySelector<HTMLElement>(".geoagent-earth-engine-status");
   const clientIdInput = details?.querySelector<HTMLInputElement>(".geoagent-ee-client-id");
@@ -438,17 +439,17 @@ function enhanceEarthEngineSignIn(root: ParentNode): void {
   const button = document.createElement("button");
   button.className = "geolibre-ee-sign-in secondary";
   button.type = "button";
-  button.textContent = "Sign in";
+  button.textContent = tr("signIn", "Sign in");
   button.addEventListener("click", async () => {
     const oauthClientId = oauthClientIdValue(clientIdInput.value);
     clientIdInput.value = oauthClientId;
     button.disabled = true;
-    status.textContent = "Opening Google sign-in...";
+    status.textContent = tr("signInOpening", "Opening Google sign-in...");
     try {
       await authenticateEarthEngine(oauthClientId);
       await applyEarthEngineAccessToken(oauthClientId, projectValue(projectIdInput.value));
       void closeTauriOauthPopups();
-      status.textContent = "Earth Engine sign-in complete.";
+      status.textContent = tr("signInComplete", "Earth Engine sign-in complete.");
     } catch (error) {
       status.textContent = errorMessage(error);
     } finally {

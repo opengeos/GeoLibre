@@ -199,6 +199,20 @@
       "trustButton": "الوثوق والتحميل",
       "dismissButton": "عدم التحميل"
     },
+    "registryTrust": {
+      "title_zero": "هل تريد تثبيت هذه الإضافات؟",
+      "title_one": "هل تريد تثبيت هذه الإضافة؟",
+      "title_two": "هل تريد تثبيت هاتين الإضافتين؟",
+      "title_few": "هل تريد تثبيت هذه الإضافات؟",
+      "title_many": "هل تريد تثبيت هذه الإضافات؟",
+      "title_other": "هل تريد تثبيت هذه الإضافات؟",
+      "description_zero": "يفتح هذا الرابط {{count}} من الإضافات من السجل الرسمي لإضافات GeoLibre لم تُثبَّت بعد. يؤدي تثبيتها إلى ضمّها إلى إضافاتك وتفعيلها.",
+      "description_one": "يفتح هذا الرابط إضافة واحدة من السجل الرسمي لإضافات GeoLibre لم تُثبَّت بعد. يؤدي تثبيتها إلى ضمّها إلى إضافاتك وتفعيلها.",
+      "description_two": "يفتح هذا الرابط {{count}} من الإضافات من السجل الرسمي لإضافات GeoLibre لم تُثبَّتا بعد. يؤدي تثبيتهما إلى ضمّهما إلى إضافاتك وتفعيلهما.",
+      "description_few": "يفتح هذا الرابط {{count}} إضافات من السجل الرسمي لإضافات GeoLibre لم تُثبَّت بعد. يؤدي تثبيتها إلى ضمّها إلى إضافاتك وتفعيلها.",
+      "description_many": "يفتح هذا الرابط {{count}} إضافةً من السجل الرسمي لإضافات GeoLibre لم تُثبَّت بعد. يؤدي تثبيتها إلى ضمّها إلى إضافاتك وتفعيلها.",
+      "description_other": "يفتح هذا الرابط {{count}} إضافة من السجل الرسمي لإضافات GeoLibre لم تُثبَّت بعد. يؤدي تثبيتها إلى ضمّها إلى إضافاتك وتفعيلها."
+    },
     "title": "إدارة الإضافات",
     "searchAria": "البحث في الإضافات",
     "searchPlaceholder": "البحث في الإضافات",
@@ -243,7 +257,10 @@
     "errorDirectoryPicker": "تعذّر فتح أداة اختيار المجلد.",
     "errorInstall": "تعذّر تثبيت الإضافة.",
     "errorUninstall": "تعذّر إلغاء تثبيت الإضافة.",
-    "description": "تصفّح إضافات GeoLibre الخارجية وثبّتها وحدّثها وأزلها. الإضافات مُدرَجة في <registryLink>سجل إضافات GeoLibre</registryLink>."
+    "description": "تصفّح إضافات GeoLibre الخارجية وثبّتها وحدّثها وأزلها. الإضافات مُدرَجة في <registryLink>سجل إضافات GeoLibre</registryLink>.",
+    "policySideloadDisabled": "تثبيت الإضافات من خارج السجل معطّل بموجب سياسة النشر.",
+    "policyBlocked": "الإضافة «{{pluginId}}» محظورة بموجب سياسة النشر.",
+    "policyNotAllowed": "الإضافة «{{pluginId}}» غير مسموح بها بموجب سياسة النشر."
   },
   "viewState": {
     "panelTitle": "معلومات"
@@ -2992,16 +3009,19 @@
       "apiKeys": {
         "title": "مفاتيح API",
         "description": "تُحفظ المفاتيح في هذا المتصفح فقط ولا تُحفظ مع المشروع أبدًا.",
+        "descriptionKeychain": "تُحفظ المفاتيح في سلسلة مفاتيح نظامك ولا تُحفظ مع المشروع أبدًا.",
         "tomtom": "TomTom (التدفق المباشر لحركة الشوارع)",
         "aisstream": "AISStream (سفن AIS المباشرة)",
         "placeholder": "الصق مفتاح API",
         "save": "حفظ",
         "clear": "مسح",
         "fromPanel": "محفوظ في هذا المتصفح",
+        "fromPanelKeychain": "محفوظ في سلسلة مفاتيح نظامك",
         "fromEnvironment": "يُستخدم المفتاح من متغيرات البيئة",
         "notSet": "غير معيّن",
         "getKey": "احصل على مفتاح مجاني",
-        "saveFailed": "تعذّر حفظ المفتاح في هذا المتصفح."
+        "saveFailed": "تعذّر حفظ المفتاح في هذا المتصفح.",
+        "saveFailedKeychain": "تعذّر حفظ المفتاح في سلسلة مفاتيح نظامك. سيعمل حتى يُغلق GeoLibre."
       }
     }
   },
@@ -3806,6 +3826,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "بيانات Vantor المفتوحة",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "شبكة الإحداثيات",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4800,6 +4821,7 @@
     "tooLargeToOpen": "حجم هذا الملف {{size}} — أكبر من أن يفتحه المتصفح (الحد {{limit}}). نزّله، أو استخدم نسخة مقسّمة من هذه المجموعة.",
     "tokenLabel": "رمز الوصول",
     "tokenHint": "يتطلب إنشاء مستودع لمجموعة بيانات ورفع الملفات رمز وصول Hugging Face بصلاحية الكتابة. ويُخزَّن في هذا المتصفح فقط ويُرسَل إلى huggingface.co وحدها.",
+    "tokenHintKeychain": "يتطلب إنشاء مستودع مجموعة بيانات ورفع الملفات رمز وصول Hugging Face بصلاحية الكتابة. يُخزَّن الرمز في سلسلة مفاتيح نظامك ولا يُرسل إلا إلى huggingface.co.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "حفظ رمز الوصول",
     "tokenClear": "مسح",
@@ -4924,7 +4946,12 @@
     "cancel": "إلغاء",
     "saveElement": "حفظ العنصر",
     "atPoint": "عند نقطة",
-    "pinnedToExtent": "مثبت على النطاق"
+    "pinnedToExtent": "مثبت على النطاق",
+    "editorColor": "اللون",
+    "noElements": "لا توجد عناصر خريطة بعد.",
+    "moveUp": "نقل لأعلى",
+    "moveDown": "نقل لأسفل",
+    "deleteElement": "حذف"
   },
   "dimensions": {
     "toolbar": "أدوات الأبعاد",
@@ -8371,6 +8398,14 @@
     "exportedWithWarnings": "تم تصدير الطبقة. {{warnings}}",
     "exported": "تم تصدير الطبقة.",
     "exportLayerError": "تعذر تصدير هذه الطبقة.",
+    "export3dModel": "نموذج ثلاثي الأبعاد: {{format}}",
+    "export3dModelNoSolids": "لا توجد مضلعات مبثوقة للتصدير. اجعل لمضلعات الطبقة ارتفاعًا فوق قاعدة البثق.",
+    "export3dModelSkipped_zero": "تم تصدير النموذج ثلاثي الأبعاد. استُبعد {{count}} من المعالم ليس لها ارتفاع فوق القاعدة أو لا مساحة لها.",
+    "export3dModelSkipped_one": "تم تصدير النموذج ثلاثي الأبعاد. استُبعد {{count}} معلم ليس له ارتفاع فوق القاعدة أو لا مساحة له.",
+    "export3dModelSkipped_two": "تم تصدير النموذج ثلاثي الأبعاد. استُبعد {{count}} من المعالم ليس لهما ارتفاع فوق القاعدة أو لا مساحة لهما.",
+    "export3dModelSkipped_few": "تم تصدير النموذج ثلاثي الأبعاد. استُبعدت {{count}} معالم ليس لها ارتفاع فوق القاعدة أو لا مساحة لها.",
+    "export3dModelSkipped_many": "تم تصدير النموذج ثلاثي الأبعاد. استُبعد {{count}} معلمًا ليس له ارتفاع فوق القاعدة أو لا مساحة له.",
+    "export3dModelSkipped_other": "تم تصدير النموذج ثلاثي الأبعاد. استُبعد {{count}} معلم ليس له ارتفاع فوق القاعدة أو لا مساحة له.",
     "exportPolyline": "خط متعدد مشفر (الدقة {{precision}})",
     "refreshIntervals": {
       "off": "إيقاف",
@@ -9044,12 +9079,56 @@
     "catalogNmwdiSt": "مواقع المياه في نيومكسيكو",
     "catalogFlowlines": "خطوط مجاري NHDPlus"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "ابحث عن نماذج الارتفاع الرقمية من USGS 3DEP وحمّلها على الخريطة.",
+    "search": "البحث عن DEM",
+    "searching": "جارٍ البحث في USGS API...",
+    "noResults": "لم يُعثر على نماذج ارتفاع للمنطقة المحددة.",
+    "showing": "يتم عرض {{shown}} من أصل {{total}} من نماذج الارتفاع",
+    "searchError": "فشل البحث: {{message}}",
+    "add": "تحميل على الخريطة",
+    "adding": "جارٍ التحميل...",
+    "download": "تنزيل",
+    "zoom": "تكبير",
+    "modeView": "العرض الحالي",
+    "modeDraw": "رسم مربع",
+    "modeBbox": "الإحداثيات",
+    "modeQuad": "لوحة 24K",
+    "drawHint": "انقر واسحب على الخريطة لرسم مربع إحاطة للبحث.",
+    "drawStart": "رسم مربع",
+    "drawCancel": "إلغاء الرسم",
+    "drawnBox": "المربع المرسوم: {{box}}",
+    "coordWest": "الغرب",
+    "coordSouth": "الجنوب",
+    "coordEast": "الشرق",
+    "coordNorth": "الشمال",
+    "quadName": "اسم اللوحة (مثل Mount St. Helens)",
+    "stateName": "الولاية (مثل WA)",
+    "quadSearchHint": "ابحث عن امتداد لوحة طبوغرافية قياسية من USGS بمقياس 1:24,000.",
+    "datasets": "مجموعات بيانات الارتفاع",
+    "format": "الصيغة",
+    "filterRedundant": "استبعاد البلاطات الجزئية المكررة",
+    "footprintsLayer": "حدود تغطية USGS 3DEP",
+    "exportGeoJson": "تصدير GeoJSON",
+    "errorNoBounds": "تعذّر تحديد حدود الخريطة الحالية.",
+    "errorNoDrawnBox": "يُرجى رسم مربع إحاطة على الخريطة أولًا.",
+    "errorInvalidCoords": "يُرجى إدخال إحداثيات رقمية صالحة للغرب والجنوب والشرق والشمال.",
+    "errorQuadInputs": "يُرجى إدخال اسم اللوحة والولاية كليهما.",
+    "errorQuadNotFound": "تعذّر العثور على اللوحة الطبوغرافية 24K «{{quad}}» في الولاية «{{state}}».",
+    "loadError": "فشل تحميل DEM: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "استخدم رابط tileset.json لبيانات 3D Tiles في عرض ArcGIS هذا. تتطلب بلاطات Google Photorealistic وI3S محرك عرض آخر.",
       "globeGoogleKeyRequired": "تحتاج بلاطات Google Photorealistic 3D Tiles إلى مفتاح Google Maps API في الإعدادات كي تُحمَّل على الكرة الأرضية.",
       "headersHint": "سطر لكل ترويسة بالصيغة Name: Value. استخدم ${NAME} لإدراج متغير بيئة من الإعدادات ← البيئة؛ لا تُحفظ القيمة مع الطبقة.",
-      "insecureHeaders": "لا تُرسل ترويسات الطلب إلا إلى عنوان URL لمجموعة بلاطات عبر HTTPS (أو localhost)."
+      "insecureHeaders": "لا تُرسل ترويسات الطلب إلا إلى عنوان URL لمجموعة بلاطات عبر HTTPS (أو localhost).",
+      "showKey": "إظهار المفتاح",
+      "hideKey": "إخفاء المفتاح",
+      "showKeyAria": "إظهار مفتاح Google Maps API",
+      "hideKeyAria": "إخفاء مفتاح Google Maps API",
+      "toggleLayerAria": "تبديل {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "مُنزِّل OSM",
@@ -9483,6 +9562,36 @@
         "17": "سطح الجسر",
         "18": "ضوضاء عالية"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "مقطع الارتفاع",
+      "drawHint": "انقر على الخريطة لإضافة نقاط. انقر نقرًا مزدوجًا أو اضغط Enter للإنهاء.",
+      "drawCancelled": "تم إلغاء الرسم.",
+      "needTwoPoints": "يلزم وجود نقطتين على الأقل لإنشاء مقطع.",
+      "selectLineHint": "حدّد معلمًا خطيًا لإنشاء مقطع الارتفاع الخاص به.",
+      "sampling": "جارٍ أخذ عينات الارتفاع…",
+      "loadError": "تعذّر تحميل بيانات الارتفاع.",
+      "closePanel": "إغلاق اللوحة",
+      "drawLine": "رسم خط",
+      "finish": "إنهاء",
+      "clear": "مسح",
+      "useSelected": "استخدام المحدد",
+      "useSelectedTitle": "إنشاء مقطع من المعلم الخطي المحدد",
+      "selectLineFirst": "حدّد معلمًا خطيًا أولًا",
+      "exportLabel": "تصدير:",
+      "exportCsv": "تنزيل المقطع بصيغة CSV",
+      "exportSvg": "حفظ المخطط كصورة SVG",
+      "statDistance": "المسافة",
+      "statMin": "الأدنى",
+      "statMax": "الأقصى",
+      "statAscent": "الصعود ↑",
+      "statDescent": "الهبوط ↓",
+      "unitsTitle": "الوحدات: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "تسجيل الدخول",
+      "signInOpening": "جارٍ فتح تسجيل الدخول عبر Google...",
+      "signInComplete": "اكتمل تسجيل الدخول إلى Earth Engine."
     }
   }
 }

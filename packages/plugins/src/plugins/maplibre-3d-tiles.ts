@@ -25,6 +25,7 @@ import type {
   ThreeDTilesItemState,
   ThreeDTilesLayer,
 } from "maplibre-gl-3d-tiles";
+import { createPluginTranslator } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibreDeckGL, GeoLibreMapControlPosition } from "../types";
 import {
   acquireMercatorProjectionLock,
@@ -146,6 +147,8 @@ let threeDTilesStoreUnsubscribe: (() => void) | null = null;
 let threeDTilesStoreSyncSuspended = 0;
 let threeDTilesRuntimeEnvUnsubscribe: (() => void) | null = null;
 let activeThreeDTilesApp: GeoLibreAppAPI | null = null;
+/** Resolves `plugin.3d-tiles.*` keys through the active app, falling back to English. */
+const tr = createPluginTranslator(() => activeThreeDTilesApp, "3d-tiles");
 const pendingThreeDTilesStyleRestores = new WeakSet<MapLibreMap>();
 
 // The Google tiles render through the shared interleaved deck overlay
@@ -1306,9 +1309,8 @@ function installGooglePhotorealisticHeadersToggle(
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "geolibre-google-tiles-key-toggle three-d-tiles-small-button";
-  toggle.textContent = "Show key";
-  toggle.setAttribute("aria-label", "Show Google Maps API key");
   toggle.setAttribute("aria-pressed", "false");
+  updateGooglePhotorealisticHeadersToggle(toggle, false);
   toggle.hidden = true;
 
   toggle.addEventListener("click", () => {
@@ -1339,10 +1341,12 @@ function updateGooglePhotorealisticHeadersToggle(
   toggle: HTMLButtonElement,
   visible: boolean,
 ): void {
-  toggle.textContent = visible ? "Hide key" : "Show key";
+  toggle.textContent = visible ? tr("hideKey", "Hide key") : tr("showKey", "Show key");
   toggle.setAttribute(
     "aria-label",
-    visible ? "Hide Google Maps API key" : "Show Google Maps API key",
+    visible
+      ? tr("hideKeyAria", "Hide Google Maps API key")
+      : tr("showKeyAria", "Show Google Maps API key"),
   );
   toggle.setAttribute("aria-pressed", visible ? "true" : "false");
 }
@@ -1691,7 +1695,12 @@ function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
   const visible = document.createElement("input");
   visible.type = "checkbox";
   visible.checked = layer.visible;
-  visible.setAttribute("aria-label", `Toggle ${layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL}`);
+  visible.setAttribute(
+    "aria-label",
+    tr("toggleLayerAria", "Toggle {{name}}", {
+      name: layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL,
+    }),
+  );
   visible.addEventListener("change", () => {
     useAppStore.getState().updateLayer(layer.id, { visible: visible.checked });
   });

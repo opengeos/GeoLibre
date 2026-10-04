@@ -1,3 +1,4 @@
+import { createPluginTranslator } from "../../plugin-i18n";
 import { getActiveRightPanel, isRightPanelCollapsed } from "../../right-panel-registry";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../../types";
 import { ElevationProfileControl } from "./core/ElevationProfileControl";
@@ -36,6 +37,8 @@ const CONTROL_POSITION = "top-left";
 let control: ElevationProfileControl | null = null;
 let pendingState: Partial<ElevationProfileState> | null = null;
 let unregisterPanel: (() => void) | null = null;
+/** Stops re-labelling the control on language changes. */
+let stopLocaleSync: (() => void) | null = null;
 
 function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
   const globe = app.getCesiumScene?.();
@@ -50,6 +53,7 @@ function createControl(app: GeoLibreAppAPI): ElevationProfileControl {
       ? (filename, content, options) => app.exportTextFile?.(filename, content, options)
       : undefined,
     getSelectedFeatures: app.getSelectedFeatures,
+    translate: createPluginTranslator(app, ELEVATION_PROFILE_PLUGIN_ID),
     onSelectionChange: app.onSelectionChange
       ? (callback) => app.onSelectionChange?.(() => callback()) ?? (() => undefined)
       : undefined,
@@ -70,7 +74,10 @@ function registerPanel(app: GeoLibreAppAPI): void {
   unregisterPanel =
     app.registerRightPanel?.({
       id: PANEL_ID,
-      title: "Elevation Profile",
+      // The plugin's display name is already translated in every catalog.
+      title: () =>
+        app.translate?.(`toolbar.plugin.${ELEVATION_PROFILE_PLUGIN_ID}`, "Elevation Profile") ??
+        "Elevation Profile",
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,
@@ -116,6 +123,8 @@ function teardown(app: GeoLibreAppAPI): void {
   app.closeRightPanel?.(PANEL_ID);
   unregisterPanel?.();
   unregisterPanel = null;
+  stopLocaleSync?.();
+  stopLocaleSync = null;
 }
 
 function isLngLatArray(value: unknown): value is LngLat[] {
@@ -192,6 +201,8 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
       return false;
     }
     registerPanel(app);
+    stopLocaleSync?.();
+    stopLocaleSync = app.onLocaleChange?.(() => control?.refreshLabels()) ?? null;
     if (!app.openRightPanel(PANEL_ID)) {
       teardown(app);
       return false;

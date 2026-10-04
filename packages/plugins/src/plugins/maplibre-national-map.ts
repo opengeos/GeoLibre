@@ -5,6 +5,7 @@ import {
   type NationalMapControlOptions,
 } from "maplibre-gl-national-map";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
@@ -142,7 +143,7 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
     const activeControl = nationalMapControl;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "USGS National Map",
+      title: pluginDisplayTitle(app, "maplibre-gl-national-map", "USGS National Map"),
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,

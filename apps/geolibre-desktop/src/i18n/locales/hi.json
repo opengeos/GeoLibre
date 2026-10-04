@@ -183,6 +183,12 @@
       "trustButton": "भरोसा करें और लोड करें",
       "dismissButton": "लोड न करें"
     },
+    "registryTrust": {
+      "title_one": "यह प्लगइन इंस्टॉल करें?",
+      "title_other": "ये प्लगइन इंस्टॉल करें?",
+      "description_one": "यह लिंक आधिकारिक GeoLibre प्लगइन रजिस्ट्री से एक ऐसा प्लगइन खोलता है जो अभी इंस्टॉल नहीं है। इसे इंस्टॉल करने पर यह आपके प्लगइन में जुड़ जाएगा और सक्रिय हो जाएगा।",
+      "description_other": "यह लिंक आधिकारिक GeoLibre प्लगइन रजिस्ट्री से {{count}} ऐसे प्लगइन खोलता है जो अभी इंस्टॉल नहीं हैं। इन्हें इंस्टॉल करने पर ये आपके प्लगइन में जुड़ जाएंगे और सक्रिय हो जाएंगे।"
+    },
     "title": "प्लगइन प्रबंधित करें",
     "searchAria": "प्लगइन खोजें",
     "searchPlaceholder": "प्लगइन खोजें",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "डायरेक्टरी चयनकर्ता नहीं खोला जा सका।",
     "errorInstall": "प्लगइन इंस्टॉल नहीं किया जा सका।",
     "errorUninstall": "प्लगइन अनइंस्टॉल नहीं किया जा सका।",
-    "description": "बाहरी GeoLibre प्लगइन ब्राउज़ करें, इंस्टॉल करें, अपडेट करें और हटाएँ। प्लगइन <registryLink>GeoLibre प्लगइन रजिस्ट्री</registryLink> में सूचीबद्ध हैं।"
+    "description": "बाहरी GeoLibre प्लगइन ब्राउज़ करें, इंस्टॉल करें, अपडेट करें और हटाएँ। प्लगइन <registryLink>GeoLibre प्लगइन रजिस्ट्री</registryLink> में सूचीबद्ध हैं।",
+    "policySideloadDisabled": "डिप्लॉयमेंट नीति के कारण प्लगइन साइडलोडिंग अक्षम है।",
+    "policyBlocked": "प्लगइन “{{pluginId}}” डिप्लॉयमेंट नीति द्वारा ब्लॉक किया गया है।",
+    "policyNotAllowed": "डिप्लॉयमेंट नीति प्लगइन “{{pluginId}}” की अनुमति नहीं देती।"
   },
   "viewState": {
     "panelTitle": "जानकारी"
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "API कुंजियाँ",
         "description": "कुंजियाँ केवल इसी ब्राउज़र में रखी जाती हैं और कभी भी प्रोजेक्ट के साथ सहेजी नहीं जातीं।",
+        "descriptionKeychain": "कुंजियाँ आपके सिस्टम कीचेन में रखी जाती हैं और कभी भी प्रोजेक्ट के साथ सहेजी नहीं जातीं।",
         "tomtom": "TomTom (सड़क ट्रैफ़िक का लाइव प्रवाह)",
         "aisstream": "AISStream (लाइव AIS जहाज़)",
         "placeholder": "API कुंजी चिपकाएँ",
         "save": "सहेजें",
         "clear": "साफ़ करें",
         "fromPanel": "इस ब्राउज़र में सहेजी गई",
+        "fromPanelKeychain": "आपके सिस्टम कीचेन में सहेजी गई",
         "fromEnvironment": "परिवेश की कुंजी का उपयोग हो रहा है",
         "notSet": "सेट नहीं है",
         "getKey": "मुफ़्त कुंजी प्राप्त करें",
-        "saveFailed": "इस ब्राउज़र में कुंजी सहेजी नहीं जा सकी।"
+        "saveFailed": "इस ब्राउज़र में कुंजी सहेजी नहीं जा सकी।",
+        "saveFailedKeychain": "कुंजी को आपके सिस्टम कीचेन में सहेजा नहीं जा सका। यह GeoLibre बंद होने तक काम करेगी।"
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Vantor खुला डेटा",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "ग्रिडलाइन्स",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4537,6 +4550,7 @@
     "tooLargeToOpen": "यह फ़ाइल {{size}} है — ब्राउज़र में खोलने के लिए बहुत बड़ी ({{limit}} सीमा)। इसे डाउनलोड करें, या इस डेटासेट का विभाजित संस्करण उपयोग करें।",
     "tokenLabel": "एक्सेस टोकन",
     "tokenHint": "डेटासेट रेपो बनाने और फ़ाइलें अपलोड करने के लिए लेखन अनुमति वाला Hugging Face एक्सेस टोकन चाहिए। यह केवल इसी ब्राउज़र में संग्रहीत होता है और सिर्फ़ huggingface.co को भेजा जाता है।",
+    "tokenHintKeychain": "डेटासेट रेपो बनाने और फ़ाइलें अपलोड करने के लिए लिखने की अनुमति वाले Hugging Face एक्सेस टोकन की आवश्यकता है। यह आपके सिस्टम कीचेन में संग्रहीत होता है और केवल huggingface.co को भेजा जाता है।",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "टोकन सहेजें",
     "tokenClear": "साफ़ करें",
@@ -4645,7 +4659,12 @@
     "cancel": "रद्द करें",
     "saveElement": "तत्व सहेजें",
     "atPoint": "बिंदु पर",
-    "pinnedToExtent": "विस्तार से संलग्न"
+    "pinnedToExtent": "विस्तार से संलग्न",
+    "editorColor": "रंग",
+    "noElements": "अभी तक कोई मानचित्र तत्व नहीं।",
+    "moveUp": "ऊपर ले जाएं",
+    "moveDown": "नीचे ले जाएं",
+    "deleteElement": "हटाएँ"
   },
   "dimensions": {
     "toolbar": "विमांकन टूल्स",
@@ -8028,6 +8047,10 @@
     "exportedWithWarnings": "लेयर निर्यात की गई। {{warnings}}",
     "exported": "लेयर निर्यात की गई।",
     "exportLayerError": "इस लेयर को निर्यात नहीं किया जा सका।",
+    "export3dModel": "3D मॉडल: {{format}}",
+    "export3dModelNoSolids": "निर्यात करने के लिए कोई एक्सट्रूडेड पॉलीगॉन नहीं है। लेयर में ऐसे पॉलीगॉन रखें जिनकी ऊँचाई एक्सट्रूज़न आधार से अधिक हो।",
+    "export3dModelSkipped_one": "3D मॉडल निर्यात किया गया। आधार से ऊपर ऊँचाई या क्षेत्रफल न होने वाला {{count}} फ़ीचर छोड़ दिया गया।",
+    "export3dModelSkipped_other": "3D मॉडल निर्यात किया गया। आधार से ऊपर ऊँचाई या क्षेत्रफल न होने वाले {{count}} फ़ीचर छोड़ दिए गए।",
     "exportPolyline": "एन्कोडेड पॉलीलाइन (परिशुद्धता {{precision}})",
     "refreshIntervals": {
       "off": "बंद",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "न्यू मैक्सिको जल स्थल",
     "catalogFlowlines": "NHDPlus प्रवाह-रेखाएँ"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "USGS 3DEP डिजिटल एलिवेशन मॉडल खोजें और उन्हें मानचित्र पर लोड करें।",
+    "search": "DEM खोजें",
+    "searching": "USGS API में खोजा जा रहा है...",
+    "noResults": "चयनित क्षेत्र के लिए कोई एलिवेशन मॉडल नहीं मिला।",
+    "showing": "{{total}} में से {{shown}} एलिवेशन मॉडल दिखाए जा रहे हैं",
+    "searchError": "खोज विफल: {{message}}",
+    "add": "मानचित्र पर लोड करें",
+    "adding": "लोड हो रहा है...",
+    "download": "डाउनलोड करें",
+    "zoom": "ज़ूम",
+    "modeView": "वर्तमान दृश्य",
+    "modeDraw": "BBox खींचें",
+    "modeBbox": "निर्देशांक",
+    "modeQuad": "24K क्वाड",
+    "drawHint": "खोज के लिए बाउंडिंग बॉक्स खींचने हेतु मानचित्र पर क्लिक करके ड्रैग करें।",
+    "drawStart": "बॉक्स खींचें",
+    "drawCancel": "खींचना रद्द करें",
+    "drawnBox": "खींचा गया bbox: {{box}}",
+    "coordWest": "पश्चिम",
+    "coordSouth": "दक्षिण",
+    "coordEast": "पूर्व",
+    "coordNorth": "उत्तर",
+    "quadName": "क्वाड का नाम (जैसे Mount St. Helens)",
+    "stateName": "राज्य (जैसे WA)",
+    "quadSearchHint": "किसी मानक USGS 1:24,000 स्थलाकृतिक क्वाड्रैंगल का विस्तार खोजें।",
+    "datasets": "एलिवेशन डेटासेट",
+    "format": "फ़ॉर्मेट",
+    "filterRedundant": "अनावश्यक आंशिक टाइलें बाहर रखें",
+    "footprintsLayer": "USGS 3DEP फ़ुटप्रिंट",
+    "exportGeoJson": "GeoJSON निर्यात करें",
+    "errorNoBounds": "वर्तमान मानचित्र की सीमाएँ निर्धारित नहीं की जा सकीं।",
+    "errorNoDrawnBox": "कृपया पहले मानचित्र पर एक बाउंडिंग बॉक्स खींचें।",
+    "errorInvalidCoords": "कृपया पश्चिम, दक्षिण, पूर्व और उत्तर के लिए मान्य संख्यात्मक निर्देशांक दर्ज करें।",
+    "errorQuadInputs": "कृपया क्वाड का नाम और राज्य दोनों दर्ज करें।",
+    "errorQuadNotFound": "राज्य “{{state}}” में 24K टोपो क्वाड “{{quad}}” नहीं मिला।",
+    "loadError": "DEM लोड करने में विफल: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "इस ArcGIS दृश्य में 3D Tiles की tileset.json URL का उपयोग करें। Google Photorealistic और I3S टाइलों के लिए दूसरा रेंडरिंग इंजन आवश्यक है।",
       "globeGoogleKeyRequired": "ग्लोब पर Google Photorealistic 3D Tiles लोड करने के लिए सेटिंग्स में Google Maps API कुंजी आवश्यक है।",
       "headersHint": "प्रति पंक्ति एक, Name: Value के रूप में। सेटिंग्स → एनवायरनमेंट से एनवायरनमेंट वेरिएबल डालने के लिए ${NAME} का उपयोग करें; मान लेयर के साथ सहेजा नहीं जाता।",
-      "insecureHeaders": "अनुरोध हेडर केवल HTTPS टाइलसेट URL (या localhost) पर भेजे जाते हैं।"
+      "insecureHeaders": "अनुरोध हेडर केवल HTTPS टाइलसेट URL (या localhost) पर भेजे जाते हैं।",
+      "showKey": "कुंजी दिखाएँ",
+      "hideKey": "कुंजी छिपाएँ",
+      "showKeyAria": "Google Maps API कुंजी दिखाएँ",
+      "hideKeyAria": "Google Maps API कुंजी छिपाएँ",
+      "toggleLayerAria": "{{name}} टॉगल करें"
     },
     "geolibre-osm-downloader": {
       "title": "ओएसएम डाउनलोडर",
@@ -9112,6 +9179,36 @@
         "17": "पुल का डेक",
         "18": "उच्च शोर"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "ऊँचाई प्रोफ़ाइल",
+      "drawHint": "बिंदु जोड़ने के लिए मानचित्र पर क्लिक करें। समाप्त करने के लिए डबल-क्लिक करें या Enter दबाएँ।",
+      "drawCancelled": "ड्रॉइंग रद्द की गई।",
+      "needTwoPoints": "प्रोफ़ाइल बनाने के लिए कम से कम दो बिंदु चाहिए।",
+      "selectLineHint": "ऊँचाई प्रोफ़ाइल बनाने के लिए एक लाइन फ़ीचर चुनें।",
+      "sampling": "ऊँचाई का नमूना लिया जा रहा है…",
+      "loadError": "ऊँचाई डेटा लोड नहीं किया जा सका।",
+      "closePanel": "पैनल बंद करें",
+      "drawLine": "लाइन खींचें",
+      "finish": "समाप्त करें",
+      "clear": "साफ़ करें",
+      "useSelected": "चयनित का उपयोग करें",
+      "useSelectedTitle": "चयनित लाइन फ़ीचर से प्रोफ़ाइल बनाएँ",
+      "selectLineFirst": "पहले एक लाइन फ़ीचर चुनें",
+      "exportLabel": "निर्यात:",
+      "exportCsv": "प्रोफ़ाइल को CSV के रूप में डाउनलोड करें",
+      "exportSvg": "चार्ट को SVG छवि के रूप में सहेजें",
+      "statDistance": "दूरी",
+      "statMin": "न्यूनतम",
+      "statMax": "अधिकतम",
+      "statAscent": "चढ़ाई ↑",
+      "statDescent": "उतराई ↓",
+      "unitsTitle": "इकाइयाँ: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "साइन इन करें",
+      "signInOpening": "Google साइन-इन खोला जा रहा है...",
+      "signInComplete": "Earth Engine साइन-इन पूरा हुआ।"
     }
   }
 }

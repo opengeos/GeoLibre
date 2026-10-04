@@ -179,6 +179,10 @@
       "trustButton": "信頼して読み込む",
       "dismissButton": "読み込まない"
     },
+    "registryTrust": {
+      "title_other": "プラグインをインストールしますか?",
+      "description_other": "このリンクは、公式 GeoLibre プラグインレジストリにある未インストールのプラグイン {{count}} 件を開きます。インストールすると、プラグインに追加されて有効になります。"
+    },
     "title": "プラグインの管理",
     "searchAria": "プラグインを検索",
     "searchPlaceholder": "プラグインを検索",
@@ -223,7 +227,10 @@
     "errorDirectoryPicker": "ディレクトリ選択ダイアログを開けませんでした。",
     "errorInstall": "プラグインをインストールできませんでした。",
     "errorUninstall": "プラグインをアンインストールできませんでした。",
-    "description": "外部の GeoLibre プラグインを閲覧、インストール、更新、削除します。プラグインは <registryLink>GeoLibre プラグインレジストリ</registryLink>に掲載されています。"
+    "description": "外部の GeoLibre プラグインを閲覧、インストール、更新、削除します。プラグインは <registryLink>GeoLibre プラグインレジストリ</registryLink>に掲載されています。",
+    "policySideloadDisabled": "デプロイポリシーにより、プラグインのサイドロードは無効になっています。",
+    "policyBlocked": "プラグイン「{{pluginId}}」はデプロイポリシーによってブロックされています。",
+    "policyNotAllowed": "プラグイン「{{pluginId}}」はデプロイポリシーで許可されていません。"
   },
   "viewState": {
     "panelTitle": "情報"
@@ -2738,16 +2745,19 @@
       "apiKeys": {
         "title": "APIキー",
         "description": "キーはこのブラウザーにのみ保存され、プロジェクトと一緒に保存されることはありません。",
+        "descriptionKeychain": "キーはシステムのキーチェーンに保存され、プロジェクトと一緒に保存されることはありません。",
         "tomtom": "TomTom(道路交通のライブ交通流)",
         "aisstream": "AISStream(ライブAIS船舶)",
         "placeholder": "APIキーを貼り付け",
         "save": "保存",
         "clear": "クリア",
         "fromPanel": "このブラウザーに保存済み",
+        "fromPanelKeychain": "システムのキーチェーンに保存済み",
         "fromEnvironment": "環境変数のキーを使用中",
         "notSet": "未設定",
         "getKey": "無料のキーを取得",
-        "saveFailed": "このブラウザーにキーを保存できませんでした。"
+        "saveFailed": "このブラウザーにキーを保存できませんでした。",
+        "saveFailedKeychain": "キーをシステムのキーチェーンに保存できませんでした。GeoLibre を閉じるまでは使用できます。"
       }
     }
   },
@@ -3527,6 +3537,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Vantor オープンデータ",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "グリッド線",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4471,6 +4482,7 @@
     "tooLargeToOpen": "このファイルは {{size}} で、ブラウザで開くには大きすぎます({{limit}} の上限)。ダウンロードするか、このデータセットの分割版を使用してください。",
     "tokenLabel": "アクセストークン",
     "tokenHint": "データセットリポジトリの作成とファイルのアップロードには、書き込み権限のある Hugging Face アクセストークンが必要です。トークンはこのブラウザにのみ保存され、huggingface.co にのみ送信されます。",
+    "tokenHintKeychain": "データセットリポジトリの作成とファイルのアップロードには、書き込み権限のある Hugging Face アクセストークンが必要です。トークンはシステムのキーチェーンに保存され、huggingface.co にのみ送信されます。",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "トークンを保存",
     "tokenClear": "クリア",
@@ -4575,7 +4587,12 @@
     "cancel": "キャンセル",
     "saveElement": "要素を保存",
     "atPoint": "地点に固定",
-    "pinnedToExtent": "範囲に固定"
+    "pinnedToExtent": "範囲に固定",
+    "editorColor": "色",
+    "noElements": "まだ地図要素がありません。",
+    "moveUp": "上に移動",
+    "moveDown": "下に移動",
+    "deleteElement": "削除"
   },
   "dimensions": {
     "toolbar": "寸法ツール",
@@ -7942,6 +7959,9 @@
     "exportedWithWarnings": "レイヤーをエクスポートしました。{{warnings}}",
     "exported": "レイヤーをエクスポートしました。",
     "exportLayerError": "このレイヤーをエクスポートできませんでした。",
+    "export3dModel": "3D モデル: {{format}}",
+    "export3dModelNoSolids": "エクスポートする押し出しポリゴンがありません。押し出しの基準面より高いポリゴンをレイヤーに含めてください。",
+    "export3dModelSkipped_other": "3D モデルをエクスポートしました。基準面より高さがない、または面積のない {{count}} 件のフィーチャーは除外されました。",
     "exportPolyline": "エンコードポリライン（精度 {{precision}}）",
     "refreshIntervals": {
       "off": "オフ",
@@ -8580,12 +8600,56 @@
     "catalogNmwdiSt": "ニューメキシコ州の水文観測地点",
     "catalogFlowlines": "NHDPlus流路"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "USGS 3DEP の数値標高モデルを検索して地図に読み込みます。",
+    "search": "DEM を検索",
+    "searching": "USGS API を検索中...",
+    "noResults": "選択した範囲に標高モデルが見つかりません。",
+    "showing": "{{total}} 件中 {{shown}} 件の標高モデルを表示",
+    "searchError": "検索に失敗しました: {{message}}",
+    "add": "地図に読み込む",
+    "adding": "読み込み中...",
+    "download": "ダウンロード",
+    "zoom": "ズーム",
+    "modeView": "現在の表示範囲",
+    "modeDraw": "BBox を描画",
+    "modeBbox": "座標",
+    "modeQuad": "24K 図郭",
+    "drawHint": "地図上でクリックしてドラッグし、検索用のバウンディングボックスを描画します。",
+    "drawStart": "ボックスを描画",
+    "drawCancel": "描画をキャンセル",
+    "drawnBox": "描画したバウンディングボックス: {{box}}",
+    "coordWest": "西",
+    "coordSouth": "南",
+    "coordEast": "東",
+    "coordNorth": "北",
+    "quadName": "図郭名 (例: Mount St. Helens)",
+    "stateName": "州 (例: WA)",
+    "quadSearchHint": "USGS の標準 1:24,000 地形図郭の範囲を検索します。",
+    "datasets": "標高データセット",
+    "format": "形式",
+    "filterRedundant": "重複する部分タイルを除外",
+    "footprintsLayer": "USGS 3DEP フットプリント",
+    "exportGeoJson": "GeoJSON をエクスポート",
+    "errorNoBounds": "現在の地図範囲を特定できませんでした。",
+    "errorNoDrawnBox": "先に地図上でバウンディングボックスを描画してください。",
+    "errorInvalidCoords": "西、南、東、北に有効な数値座標を入力してください。",
+    "errorQuadInputs": "図郭名と州の両方を入力してください。",
+    "errorQuadNotFound": "州「{{state}}」で 24K 地形図郭「{{quad}}」が見つかりませんでした。",
+    "loadError": "DEM の読み込みに失敗しました: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "この ArcGIS ビューでは 3D Tiles の tileset.json URL を使用してください。Google Photorealistic と I3S のタイルには別のレンダラーが必要です。",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles を地球儀上で読み込むには、設定で Google Maps API キーを指定する必要があります。",
       "headersHint": "1 行に 1 つ、Name: Value の形式で入力します。${NAME} を使うと 設定 → 環境変数 の環境変数を挿入できます。その値はレイヤーと一緒に保存されません。",
-      "insecureHeaders": "リクエストヘッダーは HTTPS のタイルセット URL (または localhost) にのみ送信されます。"
+      "insecureHeaders": "リクエストヘッダーは HTTPS のタイルセット URL (または localhost) にのみ送信されます。",
+      "showKey": "キーを表示",
+      "hideKey": "キーを非表示",
+      "showKeyAria": "Google Maps API キーを表示",
+      "hideKeyAria": "Google Maps API キーを非表示",
+      "toggleLayerAria": "{{name}}の表示切替"
     },
     "geolibre-osm-downloader": {
       "title": "OSMダウンローダー",
@@ -9019,6 +9083,36 @@
         "17": "橋床",
         "18": "高ノイズ"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "標高プロファイル",
+      "drawHint": "地図をクリックしてポイントを追加します。ダブルクリックするか Enter キーを押すと終了します。",
+      "drawCancelled": "描画をキャンセルしました。",
+      "needTwoPoints": "プロファイルを作成するには少なくとも 2 つのポイントが必要です。",
+      "selectLineHint": "標高プロファイルを作成するラインフィーチャーを選択してください。",
+      "sampling": "標高をサンプリング中…",
+      "loadError": "標高データを読み込めませんでした。",
+      "closePanel": "パネルを閉じる",
+      "drawLine": "ラインを描画",
+      "finish": "終了",
+      "clear": "クリア",
+      "useSelected": "選択を使用",
+      "useSelectedTitle": "選択したラインフィーチャーからプロファイルを作成",
+      "selectLineFirst": "先にラインフィーチャーを選択してください",
+      "exportLabel": "エクスポート:",
+      "exportCsv": "プロファイルを CSV としてダウンロード",
+      "exportSvg": "グラフを SVG 画像として保存",
+      "statDistance": "距離",
+      "statMin": "最小",
+      "statMax": "最大",
+      "statAscent": "累積上昇 ↑",
+      "statDescent": "累積下降 ↓",
+      "unitsTitle": "単位: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "サインイン",
+      "signInOpening": "Google サインインを開いています...",
+      "signInComplete": "Earth Engine へのサインインが完了しました。"
     }
   }
 }

@@ -231,6 +231,13 @@ export interface AnnotationLabels {
   saveElement: string;
   atPoint: string;
   pinnedToExtent: string;
+  /** Label of the color picker in the element editor. */
+  editorColor: string;
+  /** Empty state of the Elements panel. */
+  noElements: string;
+  moveUp: string;
+  moveDown: string;
+  deleteElement: string;
 }
 
 let labels: AnnotationLabels = {
@@ -267,6 +274,11 @@ let labels: AnnotationLabels = {
   saveElement: "Save Element",
   atPoint: "At Point",
   pinnedToExtent: "Pinned to Extent",
+  editorColor: "Color",
+  noElements: "No map elements yet.",
+  moveUp: "Move Up",
+  moveDown: "Move Down",
+  deleteElement: "Delete",
 };
 
 /**
@@ -1276,7 +1288,7 @@ function openElementDialog(
   const colorLabel = document.createElement("span");
   colorLabel.style.cssText =
     "font-size: 11px; font-weight: 500; color: var(--geolibre-fg-muted, #6b7280);";
-  colorLabel.textContent = "Color";
+  colorLabel.textContent = labels.editorColor;
   colorRow.appendChild(colorLabel);
 
   const colorInput = document.createElement("input");
@@ -2259,7 +2271,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
     if (elements.length === 0) {
       const empty = document.createElement("div");
       empty.style.cssText = "color: #9ca3af; text-align: center; padding: 24px 0;";
-      empty.textContent = "No map elements yet.";
+      empty.textContent = labels.noElements;
       container.appendChild(empty);
       return;
     }
@@ -2412,7 +2424,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
       const up = document.createElement("button");
       up.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>`;
-      up.title = "Move Up";
+      up.title = labels.moveUp;
       up.style.cssText = actionButtonStyle;
       up.disabled = index === 0;
       up.addEventListener("click", (e) => {
@@ -2423,7 +2435,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
       const down = document.createElement("button");
       down.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
-      down.title = "Move Down";
+      down.title = labels.moveDown;
       down.style.cssText = actionButtonStyle;
       down.disabled = index === elements.length - 1;
       down.addEventListener("click", (e) => {
@@ -2492,7 +2504,7 @@ export function renderElementsPanel(container: HTMLElement): () => void {
 
       const del = document.createElement("button");
       del.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
-      del.title = "Delete";
+      del.title = labels.deleteElement;
       del.style.cssText = `${actionButtonStyle} color:#ef4444;`;
       del.addEventListener("click", (e) => {
         e.stopPropagation();

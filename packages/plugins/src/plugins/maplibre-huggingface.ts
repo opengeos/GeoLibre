@@ -25,6 +25,7 @@
  */
 
 import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isVectorLayerSelectionCancelled } from "maplibre-gl-vector/errors";
 import { addPMTilesLayerFromUrl } from "./maplibre-components";
@@ -2189,7 +2190,7 @@ export const maplibreHuggingFacePlugin: GeoLibrePlugin = (() => {
       unregisterPanel =
         app.registerRightPanel?.({
           id: HUGGINGFACE_PLUGIN_ID,
-          title: "Hugging Face",
+          title: pluginDisplayTitle(app, HUGGINGFACE_PLUGIN_ID, "Hugging Face"),
           dock: "replace-style",
           defaultWidth: 340,
           render: (container) => {

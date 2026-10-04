@@ -25,6 +25,7 @@ import type {
   ControlPosition,
   ElevationProfileControlOptions,
   ElevationProfileState,
+  ElevationProfileTranslate,
   ExportFileOptions,
   ExportTextFile,
 } from "./types";
@@ -55,7 +56,7 @@ const MAX_CHART_POINTS = 2000;
 const DEFAULT_OPTIONS: Required<
   Omit<
     ElevationProfileControlOptions,
-    "exportTextFile" | "getSelectedFeatures" | "onSelectionChange" | "nativeMap"
+    "exportTextFile" | "getSelectedFeatures" | "onSelectionChange" | "nativeMap" | "translate"
   >
 > = {
   docked: false,
@@ -101,9 +102,16 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _options: Required<
     Omit<
       ElevationProfileControlOptions,
-      "exportTextFile" | "getSelectedFeatures" | "onSelectionChange" | "nativeMap"
+      "exportTextFile" | "getSelectedFeatures" | "onSelectionChange" | "nativeMap" | "translate"
     >
   >;
+  private _translate?: ElevationProfileTranslate;
+  /** Whether the caller supplied its own title (which is then never translated). */
+  private _customTitle = false;
+  /** Resolves the current status line, re-run when the language changes. */
+  private _status: () => string = () => "";
+  /** Re-apply static labels after a language change (see refreshLabels). */
+  private _labelUpdaters: Array<() => void> = [];
   private _nativeMap?: NativeProfileMap;
   private _exportTextFile?: ExportTextFile;
   private _getSelectedFeatures?: ElevationProfileControlOptions["getSelectedFeatures"];
@@ -154,8 +162,16 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
    * @param options - Optional configuration overrides
    */
   constructor(options?: Partial<ElevationProfileControlOptions>) {
-    const { nativeMap, exportTextFile, getSelectedFeatures, onSelectionChange, ...visual } =
-      options ?? {};
+    const {
+      nativeMap,
+      exportTextFile,
+      getSelectedFeatures,
+      onSelectionChange,
+      translate,
+      ...visual
+    } = options ?? {};
+    this._translate = translate;
+    this._customTitle = visual.title !== undefined;
     this._nativeMap = nativeMap;
     this._exportTextFile = exportTextFile;
     this._getSelectedFeatures = getSelectedFeatures;
@@ -179,6 +195,8 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   onAdd(map: MapLibreMap): HTMLElement {
     this._map = map;
     this._mapContainer = map.getContainer();
+    // A re-add rebuilds the DOM; drop the updaters bound to the old elements.
+    this._labelUpdaters = [];
     this._container = this._createContainer();
     this._panel = this._createPanel();
     // A docked panel waits for the host to adopt it through getPanel().
@@ -351,7 +369,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._map.on("click", this._onMapClick);
     this._map.on("dblclick", this._onMapDblClick);
     document.addEventListener("keydown", this._onKeyDown);
-    this._setStatus("Click on the map to add points. Double-click or press Enter to finish.");
+    this._setStatus(() =>
+      this._t("drawHint", "Click on the map to add points. Double-click or press Enter to finish."),
+    );
     this._syncButtons();
   }
 
@@ -405,7 +425,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _cancelDrawing(): void {
     this._exitDrawing();
     this._clearProfile();
-    this._setStatus("Drawing cancelled.");
+    this._setStatus(() => this._t("drawCancelled", "Drawing cancelled."));
   }
 
   private _finishDrawing(): void {
@@ -413,7 +433,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._exitDrawing();
     if (vertices.length < 2) {
       this._clearProfile();
-      this._setStatus("Need at least two points to build a profile.");
+      this._setStatus(() =>
+        this._t("needTwoPoints", "Need at least two points to build a profile."),
+      );
       return;
     }
     void this._profileLine(vertices, { fit: false }, null);
@@ -422,7 +444,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _profileSelection(): void {
     const selected = selectedProfileLine(this._getSelectedFeatures?.());
     if (!selected) {
-      this._setStatus("Select a line feature to build its elevation profile.");
+      this._setStatus(() =>
+        this._t("selectLineHint", "Select a line feature to build its elevation profile."),
+      );
       this._syncSelectedButton();
       return;
     }
@@ -448,7 +472,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     if (opts.fit) this._fitToLine(coords);
 
     const token = ++this._requestToken;
-    this._setStatus("Sampling elevation…");
+    this._setStatus(() => this._t("sampling", "Sampling elevation…"));
     this._setBusy(true);
 
     if (this._state.elevations) {
@@ -498,10 +522,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       const message =
         error instanceof ElevationFetchError || (this._nativeMap && error instanceof Error)
           ? error.message
-          : "Could not load elevation data.";
+          : null;
       this._stats = null;
       this._profilePoints = [];
-      this._setStatus(message);
+      this._setStatus(message ?? (() => this._t("loadError", "Could not load elevation data.")));
       this._renderProfile();
     } finally {
       if (token === this._requestToken) this._setBusy(false);
@@ -698,8 +722,10 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "elevation-profile-toggle";
-    toggle.setAttribute("aria-label", this._options.title);
-    toggle.title = this._options.title;
+    this._label(() => {
+      toggle.setAttribute("aria-label", this._title());
+      toggle.title = this._title();
+    });
     toggle.appendChild(this._createMountainIcon());
     toggle.addEventListener("click", () => this.toggle());
 
@@ -738,11 +764,11 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       header.className = "elevation-profile-header";
       const title = document.createElement("span");
       title.className = "elevation-profile-title";
-      title.textContent = this._options.title;
+      this._label(() => (title.textContent = this._title()));
       const close = document.createElement("button");
       close.type = "button";
       close.className = "elevation-profile-close";
-      close.setAttribute("aria-label", "Close panel");
+      this._label(() => close.setAttribute("aria-label", this._t("closePanel", "Close panel")));
       close.innerHTML = "&times;";
       close.addEventListener("click", () => this.collapse());
       header.append(title, close);
@@ -756,7 +782,6 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     const draw = document.createElement("button");
     draw.type = "button";
     draw.className = "elevation-profile-button elevation-profile-primary";
-    draw.textContent = "Draw line";
     draw.addEventListener("click", () => {
       if (this._drawing) this._finishDrawing();
       else this._startDrawing();
@@ -766,14 +791,14 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     const clear = document.createElement("button");
     clear.type = "button";
     clear.className = "elevation-profile-button";
-    clear.textContent = "Clear";
+    this._label(() => (clear.textContent = this._t("clear", "Clear")));
     clear.addEventListener("click", () => this._clearProfile());
     this._clearButton = clear;
 
     const selected = document.createElement("button");
     selected.type = "button";
     selected.className = "elevation-profile-button";
-    selected.textContent = "Use selected";
+    this._label(() => (selected.textContent = this._t("useSelected", "Use selected")));
     selected.addEventListener("click", () => this._profileSelection());
     this._selectedButton = selected;
 
@@ -810,18 +835,18 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     exportRow.className = "elevation-profile-export";
     const exportLabel = document.createElement("span");
     exportLabel.className = "elevation-profile-export-label";
-    exportLabel.textContent = "Export:";
+    this._label(() => (exportLabel.textContent = this._t("exportLabel", "Export:")));
     const csvButton = document.createElement("button");
     csvButton.type = "button";
     csvButton.className = "elevation-profile-button elevation-profile-button-sm";
     csvButton.textContent = "CSV";
-    csvButton.title = "Download the profile as CSV";
+    this._label(() => (csvButton.title = this._t("exportCsv", "Download the profile as CSV")));
     csvButton.addEventListener("click", () => this._exportCsv());
     const svgButton = document.createElement("button");
     svgButton.type = "button";
     svgButton.className = "elevation-profile-button elevation-profile-button-sm";
     svgButton.textContent = "SVG";
-    svgButton.title = "Save the chart as an SVG image";
+    this._label(() => (svgButton.title = this._t("exportSvg", "Save the chart as an SVG image")));
     svgButton.addEventListener("click", () => this._exportSvg());
     exportRow.append(exportLabel, csvButton, svgButton);
     this._exportEl = exportRow;
@@ -881,11 +906,11 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._statsEl.classList.add("has-data");
     const system = this._state.unitSystem;
     const items: Array<[string, string]> = [
-      ["Distance", formatDistance(this._stats.totalDistance, system)],
-      ["Min", formatElevation(this._stats.min, system)],
-      ["Max", formatElevation(this._stats.max, system)],
-      ["Ascent ↑", formatElevation(this._stats.gain, system)],
-      ["Descent ↓", formatElevation(this._stats.loss, system)],
+      [this._t("statDistance", "Distance"), formatDistance(this._stats.totalDistance, system)],
+      [this._t("statMin", "Min"), formatElevation(this._stats.min, system)],
+      [this._t("statMax", "Max"), formatElevation(this._stats.max, system)],
+      [this._t("statAscent", "Ascent ↑"), formatElevation(this._stats.gain, system)],
+      [this._t("statDescent", "Descent ↓"), formatElevation(this._stats.loss, system)],
     ];
     for (const [label, value] of items) {
       const cell = document.createElement("div");
@@ -1161,13 +1186,17 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _syncUnitButton(): void {
     if (this._unitButton) {
       this._unitButton.textContent = unitSystemLabel(this._state.unitSystem);
-      this._unitButton.title = `Units: ${unitSystemLabel(this._state.unitSystem)}`;
+      this._unitButton.title = this._t("unitsTitle", "Units: {{units}}", {
+        units: unitSystemLabel(this._state.unitSystem),
+      });
     }
   }
 
   private _syncButtons(): void {
     if (this._drawButton) {
-      this._drawButton.textContent = this._drawing ? "Finish" : "Draw line";
+      this._drawButton.textContent = this._drawing
+        ? this._t("finish", "Finish")
+        : this._t("drawLine", "Draw line");
       this._drawButton.classList.toggle("is-active", this._drawing);
     }
     if (this._clearButton) {
@@ -1181,8 +1210,8 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     const hasSelectedLine = Boolean(selectedProfileLine(this._getSelectedFeatures?.()));
     this._selectedButton.disabled = this._busy || this._drawing || !hasSelectedLine;
     this._selectedButton.title = hasSelectedLine
-      ? "Build a profile from the selected line feature"
-      : "Select a line feature first";
+      ? this._t("useSelectedTitle", "Build a profile from the selected line feature")
+      : this._t("selectLineFirst", "Select a line feature first");
   }
 
   private _setBusy(busy: boolean): void {
@@ -1191,8 +1220,46 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._syncSelectedButton();
   }
 
-  private _setStatus(message: string): void {
-    if (this._statusEl) this._statusEl.textContent = message;
+  /**
+   * Show a status line. Pass a resolver for host-authored text so a language
+   * change re-renders it; a plain string (an error the API returned) is shown
+   * as-is.
+   */
+  private _setStatus(message: string | (() => string)): void {
+    this._status = typeof message === "function" ? message : () => message;
+    if (this._statusEl) this._statusEl.textContent = this._status();
+  }
+
+  /** Resolves a UI string through the host translator, or the English text. */
+  private _t(key: string, fallback: string, params?: Record<string, string | number>): string {
+    const text = this._translate?.(key, fallback, params);
+    if (typeof text === "string") return text;
+    return params
+      ? fallback.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params[name] ?? ""))
+      : fallback;
+  }
+
+  /** The panel title: the caller's own, else the translated default. */
+  private _title(): string {
+    return this._customTitle ? this._options.title : this._t("title", this._options.title);
+  }
+
+  /** Apply a static label now and again on every {@link refreshLabels}. */
+  private _label(apply: () => void): void {
+    apply();
+    this._labelUpdaters.push(apply);
+  }
+
+  /**
+   * Re-render every piece of UI text, e.g. after the host language changed.
+   * Safe to call before the control is added (it then does nothing).
+   */
+  refreshLabels(): void {
+    for (const apply of this._labelUpdaters) apply();
+    this._syncUnitButton();
+    this._syncButtons();
+    this._renderStats();
+    if (this._statusEl) this._statusEl.textContent = this._status();
   }
 
   // --- Panel positioning (floating dropdown) ----------------------------

@@ -10,6 +10,7 @@ import {
   type EsriWaybackRelease,
 } from "maplibre-gl-esri-wayback";
 import type { LayerSpecification } from "maplibre-gl";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
@@ -45,7 +46,7 @@ export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "Historical Imagery",
+      title: pluginDisplayTitle(app, "maplibre-gl-esri-wayback", "Historical Imagery"),
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,

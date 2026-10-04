@@ -18,6 +18,7 @@ import {
   type OvertureThemeState,
   type OvertureTheme,
 } from "maplibre-gl-overture-maps";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
@@ -363,7 +364,7 @@ export const maplibreOvertureMapsPlugin: GeoLibrePlugin = {
     if (!engineOvertureOptions(app)) return false;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "Overture Maps",
+      title: pluginDisplayTitle(app, "maplibre-gl-overture-maps", "Overture Maps"),
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,

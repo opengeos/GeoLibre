@@ -102,6 +102,11 @@ export function usePluginLabelSync(): void {
       saveElement: t("annotations.saveElement"),
       atPoint: t("annotations.atPoint"),
       pinnedToExtent: t("annotations.pinnedToExtent"),
+      editorColor: t("annotations.editorColor"),
+      noElements: t("annotations.noElements"),
+      moveUp: t("annotations.moveUp"),
+      moveDown: t("annotations.moveDown"),
+      deleteElement: t("annotations.deleteElement"),
     });
     setDimensionLabels({
       toolbar: t("dimensions.toolbar"),

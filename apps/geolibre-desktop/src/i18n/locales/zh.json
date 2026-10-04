@@ -179,6 +179,10 @@
       "trustButton": "信任并加载",
       "dismissButton": "不加载"
     },
+    "registryTrust": {
+      "title_other": "安装插件？",
+      "description_other": "此链接将打开官方 GeoLibre 插件注册表中 {{count}} 个尚未安装的插件。安装后会将其添加到您的插件中并激活。"
+    },
     "title": "管理插件",
     "searchAria": "搜索插件",
     "searchPlaceholder": "搜索插件",
@@ -2741,16 +2745,19 @@
       "apiKeys": {
         "title": "API 密钥",
         "description": "密钥仅保存在此浏览器中，绝不会随项目一起保存。",
+        "descriptionKeychain": "密钥保存在系统钥匙串中，绝不会随项目一起保存。",
         "tomtom": "TomTom（街道交通实时路况）",
         "aisstream": "AISStream（实时 AIS 船舶）",
         "placeholder": "粘贴 API 密钥",
         "save": "保存",
         "clear": "清除",
         "fromPanel": "已保存在此浏览器中",
+        "fromPanelKeychain": "已保存在系统钥匙串中",
         "fromEnvironment": "正在使用环境变量中的密钥",
         "notSet": "未设置",
         "getKey": "获取免费密钥",
-        "saveFailed": "无法在此浏览器中保存该密钥。"
+        "saveFailed": "无法在此浏览器中保存该密钥。",
+        "saveFailedKeychain": "无法将密钥保存到系统钥匙串。该密钥在 GeoLibre 关闭前仍可使用。"
       }
     }
   },
@@ -3530,6 +3537,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Vantor 开放数据",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "经纬网",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4474,6 +4482,7 @@
     "tooLargeToOpen": "文件大小为 {{size}} — 超出浏览器可打开的上限（{{limit}}）。请下载，或使用该数据集的分区版本。",
     "tokenLabel": "访问令牌",
     "tokenHint": "创建数据集仓库和上传文件需要具有写入权限的 Hugging Face 访问令牌。令牌仅保存在本浏览器中，且只发送给 huggingface.co。",
+    "tokenHintKeychain": "创建数据集仓库和上传文件需要具有写入权限的 Hugging Face 访问令牌。该令牌保存在系统钥匙串中，并且只会发送到 huggingface.co。",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "保存令牌",
     "tokenClear": "清空",
@@ -4578,7 +4587,12 @@
     "cancel": "取消",
     "saveElement": "保存元素",
     "atPoint": "位于点",
-    "pinnedToExtent": "固定到范围"
+    "pinnedToExtent": "固定到范围",
+    "editorColor": "颜色",
+    "noElements": "暂无地图元素。",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "deleteElement": "删除"
   },
   "dimensions": {
     "toolbar": "尺寸标注工具",
@@ -7945,6 +7959,9 @@
     "exportedWithWarnings": "图层已导出。{{warnings}}",
     "exported": "图层已导出。",
     "exportLayerError": "无法导出此图层。",
+    "export3dModel": "3D 模型：{{format}}",
+    "export3dModelNoSolids": "没有可导出的拉伸多边形。请为图层提供高度高于拉伸基准面的多边形。",
+    "export3dModelSkipped_other": "3D 模型已导出。已忽略 {{count}} 个高度未超过基准面或面积为零的要素。",
     "exportPolyline": "编码折线（精度 {{precision}}）",
     "refreshIntervals": {
       "off": "关闭",
@@ -8583,12 +8600,56 @@
     "catalogNmwdiSt": "新墨西哥州水文站点",
     "catalogFlowlines": "NHDPlus 河段"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "查询 USGS 3DEP 数字高程模型并将其加载到地图上。",
+    "search": "搜索 DEM",
+    "searching": "正在搜索 USGS API...",
+    "noResults": "所选区域内未找到高程模型。",
+    "showing": "显示 {{shown}} / {{total}} 个高程模型",
+    "searchError": "搜索失败：{{message}}",
+    "add": "加载到地图",
+    "adding": "正在加载...",
+    "download": "下载",
+    "zoom": "缩放",
+    "modeView": "当前视图",
+    "modeDraw": "绘制边界框",
+    "modeBbox": "坐标",
+    "modeQuad": "24K 图幅",
+    "drawHint": "在地图上单击并拖动以绘制搜索边界框。",
+    "drawStart": "绘制框",
+    "drawCancel": "取消绘制",
+    "drawnBox": "已绘制的边界框：{{box}}",
+    "coordWest": "西",
+    "coordSouth": "南",
+    "coordEast": "东",
+    "coordNorth": "北",
+    "quadName": "图幅名称（例如 Mount St. Helens）",
+    "stateName": "州（例如 WA）",
+    "quadSearchHint": "查找标准 USGS 1:24,000 地形图幅的范围。",
+    "datasets": "高程数据集",
+    "format": "格式",
+    "filterRedundant": "排除冗余的部分瓦片",
+    "footprintsLayer": "USGS 3DEP 覆盖范围",
+    "exportGeoJson": "导出 GeoJSON",
+    "errorNoBounds": "无法确定当前地图范围。",
+    "errorNoDrawnBox": "请先在地图上绘制边界框。",
+    "errorInvalidCoords": "请输入有效的西、南、东、北数值坐标。",
+    "errorQuadInputs": "请同时输入图幅名称和州。",
+    "errorQuadNotFound": "在州“{{state}}”中找不到 24K 地形图幅“{{quad}}”。",
+    "loadError": "加载 DEM 失败：{{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "请在此 ArcGIS 视图中使用 3D Tiles 的 tileset.json URL。Google Photorealistic 和 I3S 瓦片需要其他渲染引擎。",
       "globeGoogleKeyRequired": "在地球视图中加载 Google Photorealistic 3D Tiles 需要在“设置”中配置 Google Maps API 密钥。",
       "headersHint": "每行一个，格式为 Name: Value。使用 ${NAME} 插入“设置 → 环境变量”中的环境变量；该值不会随图层保存。",
-      "insecureHeaders": "请求标头仅发送到 HTTPS 瓦片集 URL（或 localhost）。"
+      "insecureHeaders": "请求标头仅发送到 HTTPS 瓦片集 URL（或 localhost）。",
+      "showKey": "显示密钥",
+      "hideKey": "隐藏密钥",
+      "showKeyAria": "显示 Google Maps API 密钥",
+      "hideKeyAria": "隐藏 Google Maps API 密钥",
+      "toggleLayerAria": "切换 {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "OSM 下载器",
@@ -9022,6 +9083,36 @@
         "17": "桥面",
         "18": "高噪声"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "高程剖面",
+      "drawHint": "在地图上单击以添加点。双击或按 Enter 键完成。",
+      "drawCancelled": "已取消绘制。",
+      "needTwoPoints": "至少需要两个点才能生成剖面。",
+      "selectLineHint": "选择一个线要素以生成其高程剖面。",
+      "sampling": "正在采样高程…",
+      "loadError": "无法加载高程数据。",
+      "closePanel": "关闭面板",
+      "drawLine": "绘制线",
+      "finish": "完成",
+      "clear": "清除",
+      "useSelected": "使用所选要素",
+      "useSelectedTitle": "根据所选线要素生成剖面",
+      "selectLineFirst": "请先选择一个线要素",
+      "exportLabel": "导出：",
+      "exportCsv": "将剖面下载为 CSV",
+      "exportSvg": "将图表保存为 SVG 图像",
+      "statDistance": "距离",
+      "statMin": "最小值",
+      "statMax": "最大值",
+      "statAscent": "累计爬升 ↑",
+      "statDescent": "累计下降 ↓",
+      "unitsTitle": "单位：{{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "登录",
+      "signInOpening": "正在打开 Google 登录...",
+      "signInComplete": "Earth Engine 登录完成。"
     }
   }
 }

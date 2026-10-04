@@ -1174,6 +1174,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI): () => void {
   const renderLabels = () => {
     renderCustomClasses();
     setup.heading.textContent = tr(app, "pointCloud", "Point cloud");
+    cloudSelect.setAttribute("aria-label", tr(app, "pointCloud", "Point cloud"));
     openLidarButton.textContent = tr(app, "openLidar", "Open LiDAR panel");
     fullDetailButton.textContent = tr(app, "fullDetail", "Full detail in view");
     fullDetailButton.title = tr(

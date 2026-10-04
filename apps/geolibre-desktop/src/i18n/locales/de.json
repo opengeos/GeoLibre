@@ -183,6 +183,12 @@
       "trustButton": "Vertrauen und laden",
       "dismissButton": "Nicht laden"
     },
+    "registryTrust": {
+      "title_one": "Dieses Plugin installieren?",
+      "title_other": "Diese Plugins installieren?",
+      "description_one": "Dieser Link öffnet ein Plugin aus der offiziellen GeoLibre-Plugin-Registry, das noch nicht installiert ist. Bei der Installation wird es zu Ihren Plugins hinzugefügt und aktiviert.",
+      "description_other": "Dieser Link öffnet {{count}} Plugins aus der offiziellen GeoLibre-Plugin-Registry, die noch nicht installiert sind. Bei der Installation werden sie zu Ihren Plugins hinzugefügt und aktiviert."
+    },
     "title": "Plugins verwalten",
     "searchAria": "Plugins suchen",
     "searchPlaceholder": "Plugins suchen",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "Die Verzeichnisauswahl konnte nicht geöffnet werden.",
     "errorInstall": "Das Plugin konnte nicht installiert werden.",
     "errorUninstall": "Das Plugin konnte nicht deinstalliert werden.",
-    "description": "Externe GeoLibre-Plugins durchsuchen, installieren, aktualisieren und entfernen. Plugins sind in der <registryLink>GeoLibre-Plugin-Registry</registryLink> aufgeführt."
+    "description": "Externe GeoLibre-Plugins durchsuchen, installieren, aktualisieren und entfernen. Plugins sind in der <registryLink>GeoLibre-Plugin-Registry</registryLink> aufgeführt.",
+    "policySideloadDisabled": "Das manuelle Installieren von Plugins (Sideloading) ist durch die Bereitstellungsrichtlinie deaktiviert.",
+    "policyBlocked": "Das Plugin „{{pluginId}}“ ist durch die Bereitstellungsrichtlinie blockiert.",
+    "policyNotAllowed": "Das Plugin „{{pluginId}}“ ist durch die Bereitstellungsrichtlinie nicht zugelassen."
   },
   "viewState": {
     "panelTitle": "Info"
@@ -980,7 +989,7 @@
       "delimCustom": "Benutzerdefiniertes Trennzeichen",
       "customDelimPlaceholder": "Benutzerdefiniertes Trennzeichen (z. B. | oder ---)",
       "outputGeometryLabel": "Ausgabegeometrie",
-      "separateLines": "Separate LineStrings",
+      "separateLines": "Getrennte LineStrings",
       "multiLineString": "Einzelner MultiLineString",
       "textLabel": "Kodierte Polyline-Zeichenfolge(n)",
       "placeholder": "Kodierte Polyline-Zeichenfolge einfügen (z. B. _p~iF~ps|U_ulLnnqC_mqNvxq`@) …",
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "API-Schlüssel",
         "description": "Schlüssel werden nur in diesem Browser gespeichert und nie mit dem Projekt gesichert.",
+        "descriptionKeychain": "Schlüssel werden im Schlüsselbund Ihres Systems aufbewahrt und nie mit dem Projekt gespeichert.",
         "tomtom": "TomTom (Live-Verkehrsfluss für Straßenverkehr)",
         "aisstream": "AISStream (Live-AIS-Schiffe)",
         "placeholder": "API-Schlüssel einfügen",
         "save": "Speichern",
         "clear": "Löschen",
         "fromPanel": "In diesem Browser gespeichert",
+        "fromPanelKeychain": "Im Schlüsselbund Ihres Systems gespeichert",
         "fromEnvironment": "Schlüssel aus der Umgebung wird verwendet",
         "notSet": "Nicht festgelegt",
         "getKey": "Kostenlosen Schlüssel erhalten",
-        "saveFailed": "Der Schlüssel konnte in diesem Browser nicht gespeichert werden."
+        "saveFailed": "Der Schlüssel konnte in diesem Browser nicht gespeichert werden.",
+        "saveFailedKeychain": "Der Schlüssel konnte nicht im Schlüsselbund Ihres Systems gespeichert werden. Er funktioniert, bis GeoLibre geschlossen wird."
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Offene Daten von Vantor",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "Gitternetzlinien",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4537,6 +4550,7 @@
     "tooLargeToOpen": "Diese Datei ist {{size}} groß — zu groß, um sie im Browser zu öffnen (Limit {{limit}}). Laden Sie sie herunter oder verwenden Sie eine partitionierte Version dieses Datensatzes.",
     "tokenLabel": "Zugriffstoken",
     "tokenHint": "Zum Erstellen eines Dataset-Repos und Hochladen von Dateien wird ein Hugging-Face-Zugriffstoken mit Schreibzugriff benötigt. Es wird nur in diesem Browser gespeichert und ausschließlich an huggingface.co gesendet.",
+    "tokenHintKeychain": "Zum Erstellen eines Dataset-Repos und Hochladen von Dateien ist ein Hugging Face-Zugriffstoken mit Schreibrechten erforderlich. Es wird im Schlüsselbund Ihres Systems gespeichert und ausschließlich an huggingface.co gesendet.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "Token speichern",
     "tokenClear": "Leeren",
@@ -4645,7 +4659,12 @@
     "cancel": "Abbrechen",
     "saveElement": "Element speichern",
     "atPoint": "Am Punkt",
-    "pinnedToExtent": "An Ausdehnung geheftet"
+    "pinnedToExtent": "An Ausdehnung geheftet",
+    "editorColor": "Farbe",
+    "noElements": "Noch keine Kartenelemente.",
+    "moveUp": "Nach oben verschieben",
+    "moveDown": "Nach unten verschieben",
+    "deleteElement": "Löschen"
   },
   "dimensions": {
     "toolbar": "Bemaßungswerkzeuge",
@@ -8028,6 +8047,10 @@
     "exportedWithWarnings": "Ebene exportiert. {{warnings}}",
     "exported": "Ebene exportiert.",
     "exportLayerError": "Diese Ebene konnte nicht exportiert werden.",
+    "export3dModel": "3D-Modell: {{format}}",
+    "export3dModelNoSolids": "Keine extrudierten Polygone zum Exportieren. Geben Sie der Ebene Polygone mit einer Höhe über der Extrusionsbasis.",
+    "export3dModelSkipped_one": "3D-Modell exportiert. {{count}} Objekt ohne Höhe über der Basis oder ohne Fläche wurde ausgelassen.",
+    "export3dModelSkipped_other": "3D-Modell exportiert. {{count}} Objekte ohne Höhe über der Basis oder ohne Fläche wurden ausgelassen.",
     "exportPolyline": "Kodierte Polyline (Genauigkeit {{precision}})",
     "refreshIntervals": {
       "off": "Aus",
@@ -8430,7 +8453,7 @@
     "typeText": "Text",
     "completenessTitle": "{{populated}} belegt, {{nulls}} null",
     "populated": "{{total}} belegt",
-    "null": "{{total}} null",
+    "null": "{{total}} Nullwerte",
     "unique": "{{total}} eindeutig",
     "min": "Min",
     "mean": "Mittelwert",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "Wassermessstellen in New Mexico",
     "catalogFlowlines": "NHDPlus-Gewässerlinien"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "USGS 3DEP Digitale Höhenmodelle abfragen und auf die Karte laden.",
+    "search": "DEMs suchen",
+    "searching": "USGS API wird durchsucht...",
+    "noResults": "Für den ausgewählten Bereich wurden keine Höhenmodelle gefunden.",
+    "showing": "{{shown}} von {{total}} Höhenmodellen werden angezeigt",
+    "searchError": "Suche fehlgeschlagen: {{message}}",
+    "add": "Auf Karte laden",
+    "adding": "Wird geladen...",
+    "download": "Herunterladen",
+    "zoom": "Zoomen",
+    "modeView": "Aktuelle Ansicht",
+    "modeDraw": "BBox zeichnen",
+    "modeBbox": "Koordinaten",
+    "modeQuad": "24K-Kartenblatt",
+    "drawHint": "Klicken und ziehen Sie auf der Karte, um einen Begrenzungsrahmen für die Suche zu zeichnen.",
+    "drawStart": "Rahmen zeichnen",
+    "drawCancel": "Zeichnen abbrechen",
+    "drawnBox": "Gezeichnete BBox: {{box}}",
+    "coordWest": "West",
+    "coordSouth": "Süd",
+    "coordEast": "Ost",
+    "coordNorth": "Nord",
+    "quadName": "Kartenblattname (z. B. Mount St. Helens)",
+    "stateName": "Bundesstaat (z. B. WA)",
+    "quadSearchHint": "Die Ausdehnung eines standardmäßigen topografischen USGS-Kartenblatts im Maßstab 1:24.000 nachschlagen.",
+    "datasets": "Höhendatensätze",
+    "format": "Format",
+    "filterRedundant": "Redundante Teilkacheln ausschließen",
+    "footprintsLayer": "USGS 3DEP-Umrisse",
+    "exportGeoJson": "GeoJSON exportieren",
+    "errorNoBounds": "Die aktuellen Kartengrenzen konnten nicht ermittelt werden.",
+    "errorNoDrawnBox": "Bitte zeichnen Sie zuerst einen Begrenzungsrahmen auf der Karte.",
+    "errorInvalidCoords": "Bitte geben Sie gültige numerische Koordinaten für West, Süd, Ost und Nord ein.",
+    "errorQuadInputs": "Bitte geben Sie sowohl den Kartenblattnamen als auch den Bundesstaat ein.",
+    "errorQuadNotFound": "Das topografische 24K-Kartenblatt „{{quad}}“ wurde im Bundesstaat „{{state}}“ nicht gefunden.",
+    "loadError": "DEM konnte nicht geladen werden: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Verwenden Sie in dieser ArcGIS-Ansicht eine 3D-Tiles-URL für tileset.json. Google Photorealistic- und I3S-Kacheln benötigen eine andere Render-Engine.",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles benötigen einen Google-Maps-API-Schlüssel in den Einstellungen, um auf dem Globus zu laden.",
       "headersHint": "Eine pro Zeile im Format Name: Wert. Verwenden Sie ${NAME}, um eine Umgebungsvariable aus Einstellungen → Umgebung einzufügen; der Wert wird nicht mit der Ebene gespeichert.",
-      "insecureHeaders": "Anfrage-Header werden nur an eine HTTPS-Tileset-URL (oder localhost) gesendet."
+      "insecureHeaders": "Anfrage-Header werden nur an eine HTTPS-Tileset-URL (oder localhost) gesendet.",
+      "showKey": "Schlüssel anzeigen",
+      "hideKey": "Schlüssel ausblenden",
+      "showKeyAria": "Google-Maps-API-Schlüssel anzeigen",
+      "hideKeyAria": "Google-Maps-API-Schlüssel ausblenden",
+      "toggleLayerAria": "{{name}} umschalten"
     },
     "geolibre-osm-downloader": {
       "title": "OSM Downloader",
@@ -9112,6 +9179,36 @@
         "17": "Brückendeck",
         "18": "Starkes Rauschen"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Höhenprofil",
+      "drawHint": "Klicken Sie auf die Karte, um Punkte hinzuzufügen. Doppelklicken oder drücken Sie die Eingabetaste, um abzuschließen.",
+      "drawCancelled": "Zeichnen abgebrochen.",
+      "needTwoPoints": "Für ein Profil sind mindestens zwei Punkte erforderlich.",
+      "selectLineHint": "Wählen Sie ein Linienobjekt aus, um dessen Höhenprofil zu erstellen.",
+      "sampling": "Höhenwerte werden abgetastet…",
+      "loadError": "Höhendaten konnten nicht geladen werden.",
+      "closePanel": "Panel schließen",
+      "drawLine": "Linie zeichnen",
+      "finish": "Fertig",
+      "clear": "Leeren",
+      "useSelected": "Auswahl verwenden",
+      "useSelectedTitle": "Ein Profil aus dem ausgewählten Linienobjekt erstellen",
+      "selectLineFirst": "Wählen Sie zuerst ein Linienobjekt aus",
+      "exportLabel": "Export:",
+      "exportCsv": "Profil als CSV herunterladen",
+      "exportSvg": "Diagramm als SVG-Bild speichern",
+      "statDistance": "Distanz",
+      "statMin": "Min.",
+      "statMax": "Max.",
+      "statAscent": "Anstieg ↑",
+      "statDescent": "Abstieg ↓",
+      "unitsTitle": "Einheiten: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Anmelden",
+      "signInOpening": "Google-Anmeldung wird geöffnet...",
+      "signInComplete": "Earth Engine-Anmeldung abgeschlossen."
     }
   }
 }

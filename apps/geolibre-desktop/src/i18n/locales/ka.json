@@ -183,6 +183,12 @@
       "trustButton": "ნდობა და ჩატვირთვა",
       "dismissButton": "არ ჩატვირთო"
     },
+    "registryTrust": {
+      "title_one": "დავაინსტალიროთ ეს მოდული?",
+      "title_other": "დავაინსტალიროთ ეს მოდულები?",
+      "description_one": "ეს ბმული ხსნის მოდულს GeoLibre-ის ოფიციალური მოდულების რეესტრიდან, რომელიც ჯერ არ არის დაინსტალირებული. ინსტალაციის შემდეგ ის დაემატება თქვენს მოდულებს და გააქტიურდება.",
+      "description_other": "ეს ბმული ხსნის {{count}} მოდულს GeoLibre-ის ოფიციალური მოდულების რეესტრიდან, რომლებიც ჯერ არ არის დაინსტალირებული. ინსტალაციის შემდეგ ისინი დაემატება თქვენს მოდულებს და გააქტიურდება."
+    },
     "title": "მოდულების მართვა",
     "searchAria": "მოდულების ძებნა",
     "searchPlaceholder": "მოდულების ძებნა",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "საქაღალდის ამრჩევის გახსნა ვერ მოხერხდა.",
     "errorInstall": "მოდულის ინსტალაცია ვერ მოხერხდა.",
     "errorUninstall": "მოდულის დეინსტალაცია ვერ მოხერხდა.",
-    "description": "დაათვალიერეთ, დააინსტალირეთ, განაახლეთ და წაშალეთ GeoLibre-ის გარე მოდულები. მოდულები ჩამოთვლილია <registryLink>GeoLibre-ის მოდულების რეესტრში</registryLink>."
+    "description": "დაათვალიერეთ, დააინსტალირეთ, განაახლეთ და წაშალეთ GeoLibre-ის გარე მოდულები. მოდულები ჩამოთვლილია <registryLink>GeoLibre-ის მოდულების რეესტრში</registryLink>.",
+    "policySideloadDisabled": "მოდულების გარე წყაროდან ინსტალაცია (sideloading) გამორთულია განთავსების პოლიტიკით.",
+    "policyBlocked": "მოდული „{{pluginId}}“ დაბლოკილია განთავსების პოლიტიკით.",
+    "policyNotAllowed": "მოდული „{{pluginId}}“ არ არის დაშვებული განთავსების პოლიტიკით."
   },
   "viewState": {
     "panelTitle": "ინფორმაცია"
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "API-გასაღებები",
         "description": "გასაღებები ინახება მხოლოდ ამ ბრაუზერში და არასოდეს ინახება პროექტთან ერთად.",
+        "descriptionKeychain": "გასაღებები ინახება თქვენი სისტემის გასაღებების საცავში და არასოდეს ინახება პროექტთან ერთად.",
         "tomtom": "TomTom (ქუჩის მოძრაობის რეალური ნაკადი)",
         "aisstream": "AISStream (AIS გემები რეალურ დროში)",
         "placeholder": "ჩასვით API-გასაღები",
         "save": "შენახვა",
         "clear": "გასუფთავება",
         "fromPanel": "შენახულია ამ ბრაუზერში",
+        "fromPanelKeychain": "შენახულია თქვენი სისტემის გასაღებების საცავში",
         "fromEnvironment": "გამოიყენება გარემოს გასაღები",
         "notSet": "არ არის მითითებული",
         "getKey": "მიიღეთ უფასო გასაღები",
-        "saveFailed": "გასაღების ამ ბრაუზერში შენახვა ვერ მოხერხდა."
+        "saveFailed": "გასაღების ამ ბრაუზერში შენახვა ვერ მოხერხდა.",
+        "saveFailedKeychain": "გასაღების შენახვა თქვენი სისტემის გასაღებების საცავში ვერ მოხერხდა. ის იმუშავებს GeoLibre-ის დახურვამდე."
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Vantor-ის ღია მონაცემები",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "ბადე",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4537,6 +4550,7 @@
     "tooLargeToOpen": "ეს ფაილი {{size}}-ია — მეტისმეტად დიდი ბრაუზერში გასახსნელად ({{limit}} ლიმიტი). ჩამოტვირთეთ ის, ან გამოიყენეთ ამ მონაცემთა ნაკრების დაყოფილი ვერსია.",
     "tokenLabel": "წვდომის token",
     "tokenHint": "მონაცემთა ნაკრების რეპოზიტორიის შექმნასა და ფაილების ატვირთვას სჭირდება Hugging Face-ის წვდომის token ჩაწერის უფლებით. ის ინახება მხოლოდ ამ ბრაუზერში და იგზავნება მხოლოდ huggingface.co-ზე.",
+    "tokenHintKeychain": "მონაცემთა ნაკრების რეპოზიტორიის შესაქმნელად და ფაილების ასატვირთად საჭიროა Hugging Face-ის წვდომის token ჩაწერის უფლებით. ის ინახება თქვენი სისტემის გასაღებების საცავში და იგზავნება მხოლოდ huggingface.co-ზე.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "token-ის შენახვა",
     "tokenClear": "გასუფთავება",
@@ -4645,7 +4659,12 @@
     "cancel": "გაუქმება",
     "saveElement": "ელემენტის შენახვა",
     "atPoint": "წერტილზე",
-    "pinnedToExtent": "მიმაგრებულია არეზე"
+    "pinnedToExtent": "მიმაგრებულია არეზე",
+    "editorColor": "ფერი",
+    "noElements": "რუკის ელემენტები ჯერ არ არის.",
+    "moveUp": "ზემოთ გადატანა",
+    "moveDown": "ქვემოთ გადატანა",
+    "deleteElement": "წაშლა"
   },
   "dimensions": {
     "toolbar": "ზომების ხელსაწყოები",
@@ -8028,6 +8047,10 @@
     "exportedWithWarnings": "შრე ექსპორტირდა. {{warnings}}",
     "exported": "შრე ექსპორტირდა.",
     "exportLayerError": "ამ შრის ექსპორტი ვერ მოხერხდა.",
+    "export3dModel": "3D მოდელი: {{format}}",
+    "export3dModelNoSolids": "ექსპორტისთვის ამოწეული პოლიგონები არ არის. დაამატეთ შრეს პოლიგონები, რომელთა სიმაღლე აღემატება ამოწევის ფუძეს.",
+    "export3dModelSkipped_one": "3D მოდელის ექსპორტი დასრულდა. გამოტოვებულია {{count}} ობიექტი, რომელსაც არ აქვს სიმაღლე ფუძის ზემოთ ან ფართობი.",
+    "export3dModelSkipped_other": "3D მოდელის ექსპორტი დასრულდა. გამოტოვებულია {{count}} ობიექტი, რომლებსაც არ აქვთ სიმაღლე ფუძის ზემოთ ან ფართობი.",
     "exportPolyline": "დაშიფრული პოლიხაზი (სიზუსტე {{precision}})",
     "refreshIntervals": {
       "off": "გამორთული",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "ნიუ-მექსიკოს წყლის პუნქტები",
     "catalogFlowlines": "NHDPlus ნაკადის ხაზები"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "მოძებნეთ USGS 3DEP-ის რელიეფის ციფრული მოდელები და ჩატვირთეთ ისინი რუკაზე.",
+    "search": "DEM-ების ძებნა",
+    "searching": "მიმდინარეობს ძებნა USGS API-ში...",
+    "noResults": "არჩეული ტერიტორიისთვის სიმაღლის მოდელები ვერ მოიძებნა.",
+    "showing": "ნაჩვენებია {{shown}} სიმაღლის მოდელი {{total}}-დან",
+    "searchError": "ძებნა ვერ მოხერხდა: {{message}}",
+    "add": "რუკაზე ჩატვირთვა",
+    "adding": "იტვირთება...",
+    "download": "ჩამოტვირთვა",
+    "zoom": "მიახლოება",
+    "modeView": "მიმდინარე ხედი",
+    "modeDraw": "BBox-ის დახაზვა",
+    "modeBbox": "კოორდინატები",
+    "modeQuad": "24K ფურცელი",
+    "drawHint": "დააწკაპუნეთ და გადაათრიეთ რუკაზე საძიებო შემომსაზღვრელი მართკუთხედის დასახაზად.",
+    "drawStart": "მართკუთხედის დახაზვა",
+    "drawCancel": "დახაზვის გაუქმება",
+    "drawnBox": "დახაზული bbox: {{box}}",
+    "coordWest": "დასავლეთი",
+    "coordSouth": "სამხრეთი",
+    "coordEast": "აღმოსავლეთი",
+    "coordNorth": "ჩრდილოეთი",
+    "quadName": "ფურცლის სახელი (მაგ. Mount St. Helens)",
+    "stateName": "შტატი (მაგ. WA)",
+    "quadSearchHint": "მოძებნეთ USGS-ის სტანდარტული 1:24,000 ტოპოგრაფიული ფურცლის (quadrangle) საზღვრები.",
+    "datasets": "სიმაღლის მონაცემთა ნაკრებები",
+    "format": "ფორმატი",
+    "filterRedundant": "ზედმეტი ნაწილობრივი ფილების გამორიცხვა",
+    "footprintsLayer": "USGS 3DEP-ის დაფარვის კონტურები",
+    "exportGeoJson": "GeoJSON-ის ექსპორტი",
+    "errorNoBounds": "რუკის მიმდინარე საზღვრების დადგენა ვერ მოხერხდა.",
+    "errorNoDrawnBox": "ჯერ დახაზეთ შემომსაზღვრელი მართკუთხედი რუკაზე.",
+    "errorInvalidCoords": "შეიყვანეთ სწორი რიცხვითი კოორდინატები დასავლეთისთვის, სამხრეთისთვის, აღმოსავლეთისთვის და ჩრდილოეთისთვის.",
+    "errorQuadInputs": "შეიყვანეთ როგორც ფურცლის სახელი, ისე შტატი.",
+    "errorQuadNotFound": "24K ტოპოგრაფიული ფურცელი „{{quad}}“ შტატში „{{state}}“ ვერ მოიძებნა.",
+    "loadError": "DEM-ის ჩატვირთვა ვერ მოხერხდა: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "ArcGIS-ის ამ ხედში გამოიყენეთ 3D Tiles-ის tileset.json URL. Google Photorealistic და I3S ფილებისთვის საჭიროა სხვა რენდერის ძრავა.",
       "globeGoogleKeyRequired": "გლობუსზე Google Photorealistic 3D Tiles-ის ჩასატვირთად საჭიროა Google Maps API-ის გასაღები პარამეტრებში.",
       "headersHint": "თითო სტრიქონზე ერთი, ფორმატით Name: Value. გამოიყენეთ ${NAME} გარემოს ცვლადის ჩასასმელად პარამეტრები → გარემოდან; მნიშვნელობა შრესთან ერთად არ ინახება.",
-      "insecureHeaders": "მოთხოვნის სათაურები იგზავნება მხოლოდ HTTPS ფილების ნაკრების URL-ზე (ან localhost-ზე)."
+      "insecureHeaders": "მოთხოვნის სათაურები იგზავნება მხოლოდ HTTPS ფილების ნაკრების URL-ზე (ან localhost-ზე).",
+      "showKey": "გასაღების ჩვენება",
+      "hideKey": "გასაღების დამალვა",
+      "showKeyAria": "Google Maps API-ის გასაღების ჩვენება",
+      "hideKeyAria": "Google Maps API-ის გასაღების დამალვა",
+      "toggleLayerAria": "{{name}}-ის გადართვა"
     },
     "geolibre-osm-downloader": {
       "title": "OSM ჩამოტვირთვა",
@@ -9112,6 +9179,36 @@
         "17": "ხიდის საფარი",
         "18": "მაღალი ხმაური"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "სიმაღლის პროფილი",
+      "drawHint": "წერტილების დასამატებლად დააწკაპუნეთ რუკაზე. დასასრულებლად ორჯერ დააწკაპუნეთ ან დააჭირეთ Enter-ს.",
+      "drawCancelled": "ხაზვა გაუქმდა.",
+      "needTwoPoints": "პროფილის ასაგებად საჭიროა მინიმუმ ორი წერტილი.",
+      "selectLineHint": "აირჩიეთ ხაზოვანი ობიექტი მისი სიმაღლის პროფილის ასაგებად.",
+      "sampling": "სიმაღლის ნიმუშების აღება…",
+      "loadError": "სიმაღლის მონაცემების ჩატვირთვა ვერ მოხერხდა.",
+      "closePanel": "პანელის დახურვა",
+      "drawLine": "ხაზის დახაზვა",
+      "finish": "დასრულება",
+      "clear": "გასუფთავება",
+      "useSelected": "არჩეულის გამოყენება",
+      "useSelectedTitle": "პროფილის აგება არჩეული ხაზოვანი ობიექტიდან",
+      "selectLineFirst": "ჯერ აირჩიეთ ხაზოვანი ობიექტი",
+      "exportLabel": "ექსპორტი:",
+      "exportCsv": "პროფილის ჩამოტვირთვა CSV ფორმატში",
+      "exportSvg": "დიაგრამის შენახვა SVG გამოსახულებად",
+      "statDistance": "მანძილი",
+      "statMin": "მინ",
+      "statMax": "მაქს",
+      "statAscent": "ასვლა ↑",
+      "statDescent": "დაშვება ↓",
+      "unitsTitle": "ერთეულები: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "შესვლა",
+      "signInOpening": "იხსნება Google-ით შესვლა...",
+      "signInComplete": "Earth Engine-ში შესვლა დასრულდა."
     }
   }
 }

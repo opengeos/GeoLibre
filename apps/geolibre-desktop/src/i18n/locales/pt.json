@@ -183,6 +183,12 @@
       "trustButton": "Confiar e carregar",
       "dismissButton": "Não carregar"
     },
+    "registryTrust": {
+      "title_one": "Instalar este plugin?",
+      "title_other": "Instalar estes plugins?",
+      "description_one": "Este link abre um plugin do registro oficial de plugins do GeoLibre que ainda não está instalado. Ao instalá-lo, ele é adicionado aos seus plugins e ativado.",
+      "description_other": "Este link abre {{count}} plugins do registro oficial de plugins do GeoLibre que ainda não estão instalados. Ao instalá-los, eles são adicionados aos seus plugins e ativados."
+    },
     "title": "Gerenciar plugins",
     "searchAria": "Pesquisar plugins",
     "searchPlaceholder": "Pesquisar plugins",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "Não foi possível abrir o seletor de diretórios.",
     "errorInstall": "Não foi possível instalar o plugin.",
     "errorUninstall": "Não foi possível desinstalar o plugin.",
-    "description": "Navegue, instale, atualize e remova plugins externos do GeoLibre. Os plugins estão listados no <registryLink>registro de plugins do GeoLibre</registryLink>."
+    "description": "Navegue, instale, atualize e remova plugins externos do GeoLibre. Os plugins estão listados no <registryLink>registro de plugins do GeoLibre</registryLink>.",
+    "policySideloadDisabled": "O carregamento manual de plugins está desativado pela política de implantação.",
+    "policyBlocked": "O plugin “{{pluginId}}” está bloqueado pela política de implantação.",
+    "policyNotAllowed": "O plugin “{{pluginId}}” não é permitido pela política de implantação."
   },
   "viewState": {
     "panelTitle": "Informações"
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "Chaves de API",
         "description": "As chaves ficam apenas neste navegador e nunca são salvas com o projeto.",
+        "descriptionKeychain": "As chaves ficam no chaveiro do sistema e nunca são salvas com o projeto.",
         "tomtom": "TomTom (fluxo em tempo real do tráfego urbano)",
         "aisstream": "AISStream (embarcações AIS em tempo real)",
         "placeholder": "Cole a chave de API",
         "save": "Salvar",
         "clear": "Limpar",
         "fromPanel": "Salva neste navegador",
+        "fromPanelKeychain": "Salva no chaveiro do sistema",
         "fromEnvironment": "Usando a chave do ambiente",
         "notSet": "Não definida",
         "getKey": "Obter uma chave gratuita",
-        "saveFailed": "Não foi possível salvar a chave neste navegador."
+        "saveFailed": "Não foi possível salvar a chave neste navegador.",
+        "saveFailedKeychain": "Não foi possível salvar a chave no chaveiro do sistema. Ela funciona até o GeoLibre ser fechado."
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Dados Abertos Vantor",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "Linhas de grade",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4537,6 +4550,7 @@
     "tooLargeToOpen": "Este arquivo tem {{size}} — grande demais para o navegador abrir (limite de {{limit}}). Baixe-o ou use uma versão particionada deste conjunto de dados.",
     "tokenLabel": "Token de acesso",
     "tokenHint": "Criar um repositório de conjunto de dados e enviar arquivos exige um token de acesso do Hugging Face com permissão de escrita. Ele é armazenado apenas neste navegador e enviado somente para huggingface.co.",
+    "tokenHintKeychain": "Criar um repositório de conjunto de dados e enviar arquivos requer um token de acesso do Hugging Face com permissão de escrita. Ele é armazenado no chaveiro do sistema e enviado somente para huggingface.co.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "Salvar token",
     "tokenClear": "Limpar",
@@ -4645,7 +4659,12 @@
     "cancel": "Cancelar",
     "saveElement": "Salvar elemento",
     "atPoint": "No ponto",
-    "pinnedToExtent": "Fixado à extensão"
+    "pinnedToExtent": "Fixado à extensão",
+    "editorColor": "Cor",
+    "noElements": "Ainda não há elementos no mapa.",
+    "moveUp": "Mover para cima",
+    "moveDown": "Mover para baixo",
+    "deleteElement": "Excluir"
   },
   "dimensions": {
     "toolbar": "Ferramentas de cotagem",
@@ -8028,6 +8047,10 @@
     "exportedWithWarnings": "Camada exportada. {{warnings}}",
     "exported": "Camada exportada.",
     "exportLayerError": "Não foi possível exportar esta camada.",
+    "export3dModel": "Modelo 3D: {{format}}",
+    "export3dModelNoSolids": "Não há polígonos extrudados para exportar. Atribua aos polígonos da camada uma altura acima da base de extrusão.",
+    "export3dModelSkipped_one": "Modelo 3D exportado. {{count}} feição sem altura acima da base ou sem área foi omitida.",
+    "export3dModelSkipped_other": "Modelo 3D exportado. {{count}} feições sem altura acima da base ou sem área foram omitidas.",
     "exportPolyline": "Polilinha codificada (precisão {{precision}})",
     "refreshIntervals": {
       "off": "Desativado",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "Estações hídricas do Novo México",
     "catalogFlowlines": "Linhas de fluxo NHDPlus"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "Consulte e carregue no mapa modelos digitais de elevação (DEM) do USGS 3DEP.",
+    "search": "Pesquisar DEMs",
+    "searching": "Pesquisando na API do USGS...",
+    "noResults": "Nenhum modelo de elevação encontrado para a área selecionada.",
+    "showing": "Mostrando {{shown}} de {{total}} modelos de elevação",
+    "searchError": "Falha na pesquisa: {{message}}",
+    "add": "Carregar no mapa",
+    "adding": "Carregando...",
+    "download": "Baixar",
+    "zoom": "Zoom",
+    "modeView": "Visualização atual",
+    "modeDraw": "Desenhar caixa delimitadora",
+    "modeBbox": "Coordenadas",
+    "modeQuad": "Quadrícula 24K",
+    "drawHint": "Clique e arraste no mapa para desenhar uma caixa delimitadora de busca.",
+    "drawStart": "Desenhar caixa",
+    "drawCancel": "Cancelar desenho",
+    "drawnBox": "Caixa desenhada: {{box}}",
+    "coordWest": "Oeste",
+    "coordSouth": "Sul",
+    "coordEast": "Leste",
+    "coordNorth": "Norte",
+    "quadName": "Nome da quadrícula (ex.: Mount St. Helens)",
+    "stateName": "Estado (ex.: WA)",
+    "quadSearchHint": "Consulte a extensão de uma quadrícula topográfica padrão do USGS na escala 1:24.000.",
+    "datasets": "Conjuntos de dados de elevação",
+    "format": "Formato",
+    "filterRedundant": "Excluir blocos parciais redundantes",
+    "footprintsLayer": "Contornos do USGS 3DEP",
+    "exportGeoJson": "Exportar GeoJSON",
+    "errorNoBounds": "Não foi possível determinar os limites atuais do mapa.",
+    "errorNoDrawnBox": "Desenhe primeiro uma caixa delimitadora no mapa.",
+    "errorInvalidCoords": "Informe coordenadas numéricas válidas para Oeste, Sul, Leste e Norte.",
+    "errorQuadInputs": "Informe o nome da quadrícula e o estado.",
+    "errorQuadNotFound": "Não foi possível encontrar a quadrícula topográfica 24K “{{quad}}” no estado “{{state}}”.",
+    "loadError": "Falha ao carregar o DEM: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "Use uma URL tileset.json de 3D Tiles nesta visualização do ArcGIS. Os blocos Google Photorealistic e I3S exigem outro renderizador.",
       "globeGoogleKeyRequired": "Os blocos Google Photorealistic 3D Tiles precisam de uma chave de API do Google Maps nas Configurações para carregar no globo.",
       "headersHint": "Um por linha no formato Nome: Valor. Use ${NAME} para inserir uma variável de ambiente de Configurações → Ambiente; o valor não é salvo com a camada.",
-      "insecureHeaders": "Os cabeçalhos de requisição só são enviados para uma URL de tileset HTTPS (ou localhost)."
+      "insecureHeaders": "Os cabeçalhos de requisição só são enviados para uma URL de tileset HTTPS (ou localhost).",
+      "showKey": "Mostrar chave",
+      "hideKey": "Ocultar chave",
+      "showKeyAria": "Mostrar a chave de API do Google Maps",
+      "hideKeyAria": "Ocultar a chave de API do Google Maps",
+      "toggleLayerAria": "Alternar {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "OSM Downloader",
@@ -9112,6 +9179,36 @@
         "17": "Tabuleiro de ponte",
         "18": "Ruído alto"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Perfil de elevação",
+      "drawHint": "Clique no mapa para adicionar pontos. Clique duas vezes ou pressione Enter para concluir.",
+      "drawCancelled": "Desenho cancelado.",
+      "needTwoPoints": "São necessários pelo menos dois pontos para criar um perfil.",
+      "selectLineHint": "Selecione uma feição de linha para criar o perfil de elevação dela.",
+      "sampling": "Amostrando a elevação…",
+      "loadError": "Não foi possível carregar os dados de elevação.",
+      "closePanel": "Fechar painel",
+      "drawLine": "Desenhar linha",
+      "finish": "Concluir",
+      "clear": "Limpar",
+      "useSelected": "Usar seleção",
+      "useSelectedTitle": "Criar um perfil a partir da feição de linha selecionada",
+      "selectLineFirst": "Selecione primeiro uma feição de linha",
+      "exportLabel": "Exportar:",
+      "exportCsv": "Baixar o perfil como CSV",
+      "exportSvg": "Salvar o gráfico como imagem SVG",
+      "statDistance": "Distância",
+      "statMin": "Mín",
+      "statMax": "Máx",
+      "statAscent": "Subida ↑",
+      "statDescent": "Descida ↓",
+      "unitsTitle": "Unidades: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Entrar",
+      "signInOpening": "Abrindo o login do Google...",
+      "signInComplete": "Login no Earth Engine concluído."
     }
   }
 }

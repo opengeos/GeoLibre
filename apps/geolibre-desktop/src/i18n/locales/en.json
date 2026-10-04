@@ -4723,7 +4723,12 @@
     "cancel": "Cancel",
     "saveElement": "Save Element",
     "atPoint": "At Point",
-    "pinnedToExtent": "Pinned to Extent"
+    "pinnedToExtent": "Pinned to Extent",
+    "editorColor": "Color",
+    "noElements": "No map elements yet.",
+    "moveUp": "Move Up",
+    "moveDown": "Move Down",
+    "deleteElement": "Delete"
   },
   "dimensions": {
     "toolbar": "Dimension tools",
@@ -8735,7 +8740,12 @@
       "arcgisSourceUnsupported": "Use a 3D Tiles tileset.json URL in this ArcGIS view. Google Photorealistic and I3S tiles require another renderer.",
       "globeGoogleKeyRequired": "Google Photorealistic 3D Tiles need a Google Maps API key in Settings to load on the globe.",
       "headersHint": "One per line as Name: Value. Use ${NAME} to insert an environment variable from Settings → Environment; the value is not saved with the layer.",
-      "insecureHeaders": "Request headers are only sent to an HTTPS tileset URL (or localhost)."
+      "insecureHeaders": "Request headers are only sent to an HTTPS tileset URL (or localhost).",
+      "showKey": "Show key",
+      "hideKey": "Hide key",
+      "showKeyAria": "Show Google Maps API key",
+      "hideKeyAria": "Hide Google Maps API key",
+      "toggleLayerAria": "Toggle {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "OSM Downloader",
@@ -9169,6 +9179,36 @@
         "17": "Bridge deck",
         "18": "High noise"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "Elevation Profile",
+      "drawHint": "Click on the map to add points. Double-click or press Enter to finish.",
+      "drawCancelled": "Drawing cancelled.",
+      "needTwoPoints": "Need at least two points to build a profile.",
+      "selectLineHint": "Select a line feature to build its elevation profile.",
+      "sampling": "Sampling elevation…",
+      "loadError": "Could not load elevation data.",
+      "closePanel": "Close panel",
+      "drawLine": "Draw line",
+      "finish": "Finish",
+      "clear": "Clear",
+      "useSelected": "Use selected",
+      "useSelectedTitle": "Build a profile from the selected line feature",
+      "selectLineFirst": "Select a line feature first",
+      "exportLabel": "Export:",
+      "exportCsv": "Download the profile as CSV",
+      "exportSvg": "Save the chart as an SVG image",
+      "statDistance": "Distance",
+      "statMin": "Min",
+      "statMax": "Max",
+      "statAscent": "Ascent ↑",
+      "statDescent": "Descent ↓",
+      "unitsTitle": "Units: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "Sign in",
+      "signInOpening": "Opening Google sign-in...",
+      "signInComplete": "Earth Engine sign-in complete."
     }
   }
 }

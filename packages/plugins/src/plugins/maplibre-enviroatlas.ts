@@ -7,6 +7,7 @@ import {
   type ServiceRef,
 } from "maplibre-gl-enviroatlas";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
@@ -160,7 +161,7 @@ export const maplibreEnviroAtlasPlugin: GeoLibrePlugin = {
     const activeControl = enviroAtlasControl;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "US EPA EnviroAtlas",
+      title: pluginDisplayTitle(app, "maplibre-gl-enviroatlas", "US EPA EnviroAtlas"),
       dock: "replace-style",
       defaultWidth: 360,
       deactivatePluginOnClose: true,

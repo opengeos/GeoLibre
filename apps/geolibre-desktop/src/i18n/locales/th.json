@@ -179,6 +179,10 @@
       "trustButton": "เชื่อถือและโหลด",
       "dismissButton": "ไม่โหลด"
     },
+    "registryTrust": {
+      "title_other": "ติดตั้งปลั๊กอินเหล่านี้หรือไม่",
+      "description_other": "ลิงก์นี้เปิดปลั๊กอิน {{count}} รายการจากรีจิสทรีปลั๊กอินอย่างเป็นทางการของ GeoLibre ที่ยังไม่ได้ติดตั้ง การติดตั้งจะเพิ่มปลั๊กอินเหล่านี้ลงในปลั๊กอินของคุณและเปิดใช้งาน"
+    },
     "title": "จัดการปลั๊กอิน",
     "searchAria": "ค้นหาปลั๊กอิน",
     "searchPlaceholder": "ค้นหาปลั๊กอิน",
@@ -223,7 +227,10 @@
     "errorDirectoryPicker": "ไม่สามารถเปิดตัวเลือกไดเรกทอรีได้",
     "errorInstall": "ไม่สามารถติดตั้งปลั๊กอินได้",
     "errorUninstall": "ไม่สามารถถอนการติดตั้งปลั๊กอินได้",
-    "description": "เรียกดู ติดตั้ง อัปเดต และนำปลั๊กอินภายนอกของ GeoLibre ออก ปลั๊กอินทั้งหมดแสดงอยู่ใน<registryLink>รีจิสทรีปลั๊กอินของ GeoLibre</registryLink>"
+    "description": "เรียกดู ติดตั้ง อัปเดต และนำปลั๊กอินภายนอกของ GeoLibre ออก ปลั๊กอินทั้งหมดแสดงอยู่ใน<registryLink>รีจิสทรีปลั๊กอินของ GeoLibre</registryLink>",
+    "policySideloadDisabled": "การติดตั้งปลั๊กอินจากภายนอก (sideload) ถูกปิดใช้งานโดยนโยบายการปรับใช้",
+    "policyBlocked": "ปลั๊กอิน “{{pluginId}}” ถูกบล็อกโดยนโยบายการปรับใช้",
+    "policyNotAllowed": "นโยบายการปรับใช้ไม่อนุญาตปลั๊กอิน “{{pluginId}}”"
   },
   "viewState": {
     "panelTitle": "ข้อมูล"
@@ -2738,16 +2745,19 @@
       "apiKeys": {
         "title": "คีย์ API",
         "description": "คีย์จะถูกเก็บไว้ในเบราว์เซอร์นี้เท่านั้น และจะไม่ถูกบันทึกไปกับโปรเจกต์",
+        "descriptionKeychain": "คีย์จะถูกเก็บไว้ในพวงกุญแจของระบบ และจะไม่ถูกบันทึกไปกับโปรเจกต์",
         "tomtom": "TomTom (การไหลของการจราจรบนถนนแบบสด)",
         "aisstream": "AISStream (เรือ AIS แบบสด)",
         "placeholder": "วางคีย์ API",
         "save": "บันทึก",
         "clear": "ล้าง",
         "fromPanel": "บันทึกไว้ในเบราว์เซอร์นี้",
+        "fromPanelKeychain": "บันทึกไว้ในพวงกุญแจของระบบแล้ว",
         "fromEnvironment": "กำลังใช้คีย์จากตัวแปรสภาพแวดล้อม",
         "notSet": "ยังไม่ได้ตั้งค่า",
         "getKey": "รับคีย์ฟรี",
-        "saveFailed": "ไม่สามารถบันทึกคีย์ในเบราว์เซอร์นี้ได้"
+        "saveFailed": "ไม่สามารถบันทึกคีย์ในเบราว์เซอร์นี้ได้",
+        "saveFailedKeychain": "ไม่สามารถบันทึกคีย์ลงในพวงกุญแจของระบบได้ คีย์จะใช้งานได้จนกว่าจะปิด GeoLibre"
       }
     }
   },
@@ -3527,6 +3537,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "ข้อมูลเปิดของ Vantor",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "เส้นกริด",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4471,6 +4482,7 @@
     "tooLargeToOpen": "ไฟล์นี้มีขนาด {{size}} ซึ่งใหญ่เกินกว่าที่เบราว์เซอร์จะเปิดได้ (ขีดจำกัด {{limit}}) กรุณาดาวน์โหลด หรือใช้ชุดข้อมูลนี้เวอร์ชันที่แบ่งพาร์ทิชันแล้ว",
     "tokenLabel": "โทเค็นการเข้าถึง",
     "tokenHint": "การสร้างที่เก็บชุดข้อมูลและการอัปโหลดไฟล์ต้องใช้โทเค็นการเข้าถึงของ Hugging Face ที่มีสิทธิ์เขียน โทเค็นจะถูกเก็บไว้ในเบราว์เซอร์นี้เท่านั้น และส่งไปยัง huggingface.co เพียงแห่งเดียว",
+    "tokenHintKeychain": "การสร้างที่เก็บชุดข้อมูลและอัปโหลดไฟล์ต้องใช้โทเค็นการเข้าถึง Hugging Face ที่มีสิทธิ์เขียน โทเค็นจะจัดเก็บในพวงกุญแจของระบบและส่งไปยัง huggingface.co เท่านั้น",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "บันทึกโทเค็น",
     "tokenClear": "ล้าง",
@@ -4575,7 +4587,12 @@
     "cancel": "ยกเลิก",
     "saveElement": "บันทึกองค์ประกอบ",
     "atPoint": "ที่จุด",
-    "pinnedToExtent": "ตรึงกับขอบเขต"
+    "pinnedToExtent": "ตรึงกับขอบเขต",
+    "editorColor": "สี",
+    "noElements": "ยังไม่มีองค์ประกอบแผนที่",
+    "moveUp": "เลื่อนขึ้น",
+    "moveDown": "เลื่อนลง",
+    "deleteElement": "ลบ"
   },
   "dimensions": {
     "toolbar": "เครื่องมือเส้นบอกขนาด",
@@ -7942,6 +7959,9 @@
     "exportedWithWarnings": "ส่งออกเลเยอร์แล้ว {{warnings}}",
     "exported": "ส่งออกเลเยอร์แล้ว",
     "exportLayerError": "ไม่สามารถส่งออกเลเยอร์นี้ได้",
+    "export3dModel": "โมเดล 3D: {{format}}",
+    "export3dModelNoSolids": "ไม่มีรูปหลายเหลี่ยมแบบยกสูงให้ส่งออก ให้เลเยอร์มีรูปหลายเหลี่ยมที่มีความสูงเกินฐานการยกสูง",
+    "export3dModelSkipped_other": "ส่งออกโมเดล 3D แล้ว ข้ามฟีเจอร์ {{count}} รายการที่ไม่มีความสูงเหนือฐานหรือไม่มีพื้นที่",
     "exportPolyline": "โพลีไลน์ที่เข้ารหัส (ความละเอียด {{precision}})",
     "refreshIntervals": {
       "off": "ปิด",
@@ -8580,12 +8600,56 @@
     "catalogNmwdiSt": "สถานีตรวจวัดน้ำในรัฐนิวเม็กซิโก",
     "catalogFlowlines": "เส้นทางน้ำ NHDPlus"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "ค้นหาและโหลดแบบจำลองความสูงเชิงเลข (DEM) ของ USGS 3DEP ลงบนแผนที่",
+    "search": "ค้นหา DEM",
+    "searching": "กำลังค้นหาใน USGS API...",
+    "noResults": "ไม่พบแบบจำลองความสูงสำหรับพื้นที่ที่เลือก",
+    "showing": "แสดงแบบจำลองความสูง {{shown}} จาก {{total}} รายการ",
+    "searchError": "การค้นหาล้มเหลว: {{message}}",
+    "add": "โหลดบนแผนที่",
+    "adding": "กำลังโหลด...",
+    "download": "ดาวน์โหลด",
+    "zoom": "ซูม",
+    "modeView": "มุมมองปัจจุบัน",
+    "modeDraw": "วาด BBox",
+    "modeBbox": "พิกัด",
+    "modeQuad": "ระวาง 24K",
+    "drawHint": "คลิกแล้วลากบนแผนที่เพื่อวาดกรอบขอบเขตสำหรับค้นหา",
+    "drawStart": "วาดกรอบ",
+    "drawCancel": "ยกเลิกการวาด",
+    "drawnBox": "bbox ที่วาด: {{box}}",
+    "coordWest": "ตะวันตก",
+    "coordSouth": "ใต้",
+    "coordEast": "ตะวันออก",
+    "coordNorth": "เหนือ",
+    "quadName": "ชื่อระวาง (เช่น Mount St. Helens)",
+    "stateName": "รัฐ (เช่น WA)",
+    "quadSearchHint": "ค้นหาขอบเขตของระวางแผนที่ภูมิประเทศมาตรฐาน USGS 1:24,000",
+    "datasets": "ชุดข้อมูลความสูง",
+    "format": "รูปแบบ",
+    "filterRedundant": "ไม่รวมไทล์บางส่วนที่ซ้ำซ้อน",
+    "footprintsLayer": "ขอบเขตข้อมูล USGS 3DEP",
+    "exportGeoJson": "ส่งออก GeoJSON",
+    "errorNoBounds": "ไม่สามารถระบุขอบเขตแผนที่ปัจจุบันได้",
+    "errorNoDrawnBox": "โปรดวาดกรอบขอบเขตบนแผนที่ก่อน",
+    "errorInvalidCoords": "โปรดป้อนพิกัดตัวเลขที่ถูกต้องสำหรับตะวันตก ใต้ ตะวันออก และเหนือ",
+    "errorQuadInputs": "โปรดป้อนทั้งชื่อระวางและรัฐ",
+    "errorQuadNotFound": "ไม่พบระวางแผนที่ภูมิประเทศ 24K “{{quad}}” ในรัฐ “{{state}}”",
+    "loadError": "โหลด DEM ไม่สำเร็จ: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "ใช้ URL tileset.json ของ 3D Tiles ในมุมมอง ArcGIS นี้ ไทล์ Google Photorealistic และ I3S ต้องใช้เอนจินเรนเดอร์อื่น",
       "globeGoogleKeyRequired": "การโหลด Google Photorealistic 3D Tiles บนลูกโลกต้องใช้คีย์ API ของ Google Maps ในการตั้งค่า",
       "headersHint": "หนึ่งรายการต่อบรรทัดในรูปแบบ ชื่อ: ค่า ใช้ ${NAME} เพื่อแทรกตัวแปรสภาพแวดล้อมจาก การตั้งค่า → สภาพแวดล้อม โดยค่าจะไม่ถูกบันทึกไปกับเลเยอร์",
-      "insecureHeaders": "ส่วนหัวคำขอจะถูกส่งไปยัง URL ของ tileset ที่เป็น HTTPS (หรือ localhost) เท่านั้น"
+      "insecureHeaders": "ส่วนหัวคำขอจะถูกส่งไปยัง URL ของ tileset ที่เป็น HTTPS (หรือ localhost) เท่านั้น",
+      "showKey": "แสดงคีย์",
+      "hideKey": "ซ่อนคีย์",
+      "showKeyAria": "แสดงคีย์ API ของ Google Maps",
+      "hideKeyAria": "ซ่อนคีย์ API ของ Google Maps",
+      "toggleLayerAria": "เปิด/ปิด {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "ตัวดาวน์โหลด OSM",
@@ -9019,6 +9083,36 @@
         "17": "พื้นสะพาน",
         "18": "สัญญาณรบกวนสูง"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "โปรไฟล์ความสูง",
+      "drawHint": "คลิกบนแผนที่เพื่อเพิ่มจุด ดับเบิลคลิกหรือกด Enter เพื่อเสร็จสิ้น",
+      "drawCancelled": "ยกเลิกการวาดแล้ว",
+      "needTwoPoints": "ต้องมีอย่างน้อยสองจุดเพื่อสร้างโปรไฟล์",
+      "selectLineHint": "เลือกฟีเจอร์เส้นเพื่อสร้างโปรไฟล์ความสูง",
+      "sampling": "กำลังสุ่มตัวอย่างความสูง…",
+      "loadError": "ไม่สามารถโหลดข้อมูลความสูงได้",
+      "closePanel": "ปิดแผง",
+      "drawLine": "วาดเส้น",
+      "finish": "เสร็จสิ้น",
+      "clear": "ล้าง",
+      "useSelected": "ใช้รายการที่เลือก",
+      "useSelectedTitle": "สร้างโปรไฟล์จากฟีเจอร์เส้นที่เลือก",
+      "selectLineFirst": "เลือกฟีเจอร์เส้นก่อน",
+      "exportLabel": "ส่งออก:",
+      "exportCsv": "ดาวน์โหลดโปรไฟล์เป็น CSV",
+      "exportSvg": "บันทึกแผนภูมิเป็นภาพ SVG",
+      "statDistance": "ระยะทาง",
+      "statMin": "ต่ำสุด",
+      "statMax": "สูงสุด",
+      "statAscent": "ขึ้น ↑",
+      "statDescent": "ลง ↓",
+      "unitsTitle": "หน่วย: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "ลงชื่อเข้าใช้",
+      "signInOpening": "กำลังเปิดการลงชื่อเข้าใช้ Google...",
+      "signInComplete": "ลงชื่อเข้าใช้ Earth Engine เสร็จสมบูรณ์"
     }
   }
 }

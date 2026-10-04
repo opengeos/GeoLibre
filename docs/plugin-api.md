@@ -257,6 +257,9 @@ export interface GeoLibreAppAPI {
     defaultValue: string,
     params?: Record<string, string | number>
   ) => string;
+  registerTranslations?: (
+    resources: Record<string, Record<string, string>>
+  ) => void;
   // Credential storage (see "Saving credentials" below).
   credentials?: GeoLibrePluginCredentials;
   // Top toolbar menus (see "Toolbar menus" below).
@@ -1175,7 +1178,7 @@ Items use the same shape as [toolbar menus](#toolbar-menus): actions, submenus a
 
 ## Following the app language
 
-The GeoLibre UI is translated with react-i18next, but a plugin renders its panels as plain DOM and cannot use the host's React hooks. Three methods bridge that gap:
+The GeoLibre UI is translated with react-i18next, but a plugin renders its panels as plain DOM and cannot use the host's React hooks. Four methods bridge that gap:
 
 ```typescript
 // The active catalog code ("en", "zh", "pt-BR", ...).
@@ -1192,14 +1195,36 @@ const label = app.translate?.("plugin.my-plugin.count", "{{n}} features", {
 // call it from `deactivate`, or the listener keeps re-rendering DOM you no
 // longer own.
 const stop = app.onLocaleChange?.((next) => renderPanel(container, next));
+
+// Ship your own translations (call once, from `activate`). Flat dotted keys per
+// locale; `translate` then resolves them in that language.
+app.registerTranslations?.({
+  de: {
+    "plugin.my-plugin.title": "Werkbank",
+    "plugin.my-plugin.count": "{{n}} Objekte",
+  },
+  fr: {
+    "plugin.my-plugin.title": "Atelier",
+    "plugin.my-plugin.count": "{{n}} entités",
+  },
+});
 ```
 
 Conventions:
 
-- **Always pass your own English text as `defaultValue`.** GeoLibre's catalogs do not ship your plugin's strings, so the fallback is what makes your UI read correctly today; translations are an upgrade, not a prerequisite.
-- **Namespace your keys by plugin id** (`plugin.<your-id>.<something>`) so they cannot collide with the host's own keys.
+- **Always pass your own English text as `defaultValue`.** It is what renders in a language you ship no translation for, and on a host that predates these methods, so translations are an upgrade, not a prerequisite.
+- **Namespace your keys by plugin id** (`plugin.<your-id>.<something>`) so they cannot collide with the host's own keys. `registerTranslations` enforces this: it accepts only string values under `plugin.<id>.` and drops (with a console warning) anything else.
+- **The host's catalogs win.** A key GeoLibre's bundled catalogs already define keeps the host's text, and `registerTranslations` never overwrites an existing entry. Registrations last for the session; registering the same key again is a no-op, so do it once rather than on every activation.
+- Plural keys work as they do in the host: register `plugin.my-plugin.items_one` / `plugin.my-plugin.items_other` (and the extra forms languages such as Russian or Arabic need) and pass `{ count }` in `params`.
 - These methods are typed optional like the rest of the API, so call them with optional chaining and keep a literal fallback.
-- Panel titles and toolbar labels take getters precisely so they can call `app.translate?.()` and stay current; use those rather than re-registering on every language change.
+- Panel titles and toolbar labels take getters precisely so they can call `app.translate?.()` and stay current; use those rather than re-registering on every language change. DOM you build once (buttons, hints, status lines) should be re-labelled from an `onLocaleChange` listener.
+
+Built-in plugins (in `packages/plugins`) follow the same contract with two helpers exported from `@geolibre/plugins`:
+
+- `createPluginTranslator(app, pluginId)` returns `tr(key, english, params?)`, which resolves `plugin.<pluginId>.<key>` and interpolates the English fallback itself when the host has no `translate`. A key starting with `@` is absolute, for reusing a host key (`tr("@common.cancel", "Cancel")`). `app` may be a getter, for plugins that keep the API in a module-level variable.
+- `pluginDisplayTitle(app, pluginId, name)` returns a panel-title getter that reads `toolbar.plugin.<pluginId>`, the plugin's name as the Plugins menu shows it, so the dock header and the menu entry stay in the same language.
+
+Their strings live in GeoLibre's bundled catalogs (`apps/geolibre-desktop/src/i18n/locales/*.json`) rather than in `registerTranslations`, and the catalog test requires every locale to carry them (see `docs/i18n.md`).
 
 ## Saving credentials
 

@@ -183,6 +183,12 @@
       "trustButton": "اعتماد و بارگیری",
       "dismissButton": "بارگیری نکن"
     },
+    "registryTrust": {
+      "title_one": "این افزونه نصب شود؟",
+      "title_other": "این افزونه‌ها نصب شوند؟",
+      "description_one": "این پیوند یک افزونه از فهرست رسمی افزونه‌های GeoLibre را باز می‌کند که هنوز نصب نشده است. با نصب، به افزونه‌های شما افزوده و فعال می‌شود.",
+      "description_other": "این پیوند {{count}} افزونه از فهرست رسمی افزونه‌های GeoLibre را باز می‌کند که هنوز نصب نشده‌اند. با نصب، به افزونه‌های شما افزوده و فعال می‌شوند."
+    },
     "title": "مدیریت افزونه‌ها",
     "searchAria": "جستجوی افزونه‌ها",
     "searchPlaceholder": "جستجوی افزونه‌ها",
@@ -227,7 +233,10 @@
     "errorDirectoryPicker": "باز کردن انتخابگر پوشه ممکن نشد.",
     "errorInstall": "نصب افزونه ممکن نشد.",
     "errorUninstall": "حذف نصب افزونه ممکن نشد.",
-    "description": "افزونه‌های خارجی GeoLibre را مرور، نصب، به‌روز و حذف کنید. افزونه‌ها در <registryLink>فهرست افزونه‌های GeoLibre</registryLink> سیاهه شده‌اند."
+    "description": "افزونه‌های خارجی GeoLibre را مرور، نصب، به‌روز و حذف کنید. افزونه‌ها در <registryLink>فهرست افزونه‌های GeoLibre</registryLink> سیاهه شده‌اند.",
+    "policySideloadDisabled": "نصب افزونه از بیرون فهرست رسمی با سیاست استقرار غیرفعال شده است.",
+    "policyBlocked": "افزونهٔ «{{pluginId}}» با سیاست استقرار مسدود شده است.",
+    "policyNotAllowed": "افزونهٔ «{{pluginId}}» طبق سیاست استقرار مجاز نیست."
   },
   "viewState": {
     "panelTitle": "اطلاعات"
@@ -2789,16 +2798,19 @@
       "apiKeys": {
         "title": "کلیدهای API",
         "description": "کلیدها فقط در این مرورگر نگه داشته می‌شوند و هرگز همراه پروژه ذخیره نمی‌شوند.",
+        "descriptionKeychain": "کلیدها در جاکلیدی سیستم شما نگه داشته می‌شوند و هرگز همراه پروژه ذخیره نمی‌شوند.",
         "tomtom": "TomTom (جریان زنده ترافیک خیابان)",
         "aisstream": "AISStream (کشتی‌های زنده AIS)",
         "placeholder": "کلید API را جای‌گذاری کنید",
         "save": "ذخیره",
         "clear": "پاک کردن",
         "fromPanel": "در این مرورگر ذخیره شده",
+        "fromPanelKeychain": "ذخیره‌شده در جاکلیدی سیستم شما",
         "fromEnvironment": "استفاده از کلید متغیرهای محیطی",
         "notSet": "تنظیم نشده",
         "getKey": "دریافت کلید رایگان",
-        "saveFailed": "ذخیره کلید در این مرورگر ممکن نشد."
+        "saveFailed": "ذخیره کلید در این مرورگر ممکن نشد.",
+        "saveFailedKeychain": "ذخیرهٔ کلید در جاکلیدی سیستم شما ممکن نشد. تا زمانی که GeoLibre بسته نشود کار می‌کند."
       }
     }
   },
@@ -3583,6 +3595,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "داده‌های باز Vantor",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "خطوط شبکه",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4537,6 +4550,7 @@
     "tooLargeToOpen": "این فایل {{size}} است — برای باز شدن در مرورگر بسیار بزرگ است (حد {{limit}}). آن را دانلود کنید، یا از نسخهٔ پاره‌بندی‌شدهٔ این مجموعه‌داده استفاده کنید.",
     "tokenLabel": "توکن دسترسی",
     "tokenHint": "ساختن یک مخزن مجموعه‌داده و بارگذاری فایل‌ها به یک توکن دسترسی Hugging Face با اجازهٔ نوشتن نیاز دارد. تنها در همین مرورگر نگهداری می‌شود و تنها به huggingface.co فرستاده می‌گردد.",
+    "tokenHintKeychain": "ساختن مخزن مجموعه‌داده و بارگذاری فایل‌ها به یک توکن دسترسی Hugging Face با اجازهٔ نوشتن نیاز دارد. این توکن در جاکلیدی سیستم شما ذخیره می‌شود و تنها به huggingface.co فرستاده می‌شود.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "ذخیرهٔ توکن",
     "tokenClear": "پاک کردن",
@@ -4645,7 +4659,12 @@
     "cancel": "لغو",
     "saveElement": "ذخیرهٔ عنصر",
     "atPoint": "در نقطه",
-    "pinnedToExtent": "سنجاق‌شده به گستره"
+    "pinnedToExtent": "سنجاق‌شده به گستره",
+    "editorColor": "رنگ",
+    "noElements": "هنوز هیچ عنصر نقشه‌ای وجود ندارد.",
+    "moveUp": "بردن به بالا",
+    "moveDown": "بردن به پایین",
+    "deleteElement": "حذف"
   },
   "dimensions": {
     "toolbar": "ابزارهای اندازه‌گذاری",
@@ -8028,6 +8047,10 @@
     "exportedWithWarnings": "لایه ایجاد شد. {{warnings}}",
     "exported": "لایه ایجاد شد.",
     "exportLayerError": "خروجی این لایه ممکن نشد.",
+    "export3dModel": "مدل سه‌بعدی: {{format}}",
+    "export3dModelNoSolids": "هیچ چندضلعی برجسته‌شده‌ای برای خروجی وجود ندارد. به چندضلعی‌های لایه ارتفاعی بالاتر از پایهٔ برجسته‌سازی بدهید.",
+    "export3dModelSkipped_one": "مدل سه‌بعدی خروجی گرفته شد. {{count}} عارضه که ارتفاعی بالاتر از پایه یا مساحتی نداشت کنار گذاشته شد.",
+    "export3dModelSkipped_other": "مدل سه‌بعدی خروجی گرفته شد. {{count}} عارضه که ارتفاعی بالاتر از پایه یا مساحتی نداشتند کنار گذاشته شدند.",
     "exportPolyline": "چندخطی کدگذاری‌شده (دقت {{precision}})",
     "refreshIntervals": {
       "off": "خاموش",
@@ -8673,12 +8696,56 @@
     "catalogNmwdiSt": "ایستگاه‌های آبی نیومکزیکو",
     "catalogFlowlines": "خطوط جریان NHDPlus"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "مدل‌های رقومی ارتفاع USGS 3DEP را جستجو و روی نقشه بارگذاری کنید.",
+    "search": "جستجوی DEM",
+    "searching": "در حال جستجو در USGS API...",
+    "noResults": "هیچ مدل ارتفاعی برای ناحیهٔ انتخاب‌شده یافت نشد.",
+    "showing": "نمایش {{shown}} از {{total}} مدل ارتفاعی",
+    "searchError": "جستجو ناموفق بود: {{message}}",
+    "add": "بارگذاری روی نقشه",
+    "adding": "در حال بارگذاری...",
+    "download": "دانلود",
+    "zoom": "بزرگ‌نمایی",
+    "modeView": "نمای کنونی",
+    "modeDraw": "ترسیم کادر",
+    "modeBbox": "مختصات",
+    "modeQuad": "برگهٔ 24K",
+    "drawHint": "روی نقشه کلیک کنید و بکشید تا یک کادر محدوده برای جستجو ترسیم شود.",
+    "drawStart": "ترسیم کادر",
+    "drawCancel": "لغو ترسیم",
+    "drawnBox": "کادر ترسیم‌شده: {{box}}",
+    "coordWest": "غرب",
+    "coordSouth": "جنوب",
+    "coordEast": "شرق",
+    "coordNorth": "شمال",
+    "quadName": "نام برگه (مثلاً Mount St. Helens)",
+    "stateName": "ایالت (مثلاً WA)",
+    "quadSearchHint": "گسترهٔ یک برگهٔ توپوگرافی استاندارد USGS با مقیاس 1:24,000 را پیدا کنید.",
+    "datasets": "مجموعه‌داده‌های ارتفاعی",
+    "format": "قالب",
+    "filterRedundant": "کنار گذاشتن کاشی‌های ناقص تکراری",
+    "footprintsLayer": "ردپاهای USGS 3DEP",
+    "exportGeoJson": "خروجی GeoJSON",
+    "errorNoBounds": "تعیین محدودهٔ کنونی نقشه ممکن نشد.",
+    "errorNoDrawnBox": "لطفاً ابتدا یک کادر محدوده روی نقشه ترسیم کنید.",
+    "errorInvalidCoords": "لطفاً مختصات عددی معتبر برای غرب، جنوب، شرق و شمال وارد کنید.",
+    "errorQuadInputs": "لطفاً هم نام برگه و هم ایالت را وارد کنید.",
+    "errorQuadNotFound": "برگهٔ توپوگرافی 24K «{{quad}}» در ایالت «{{state}}» یافت نشد.",
+    "loadError": "بارگذاری DEM ناموفق بود: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "در این نمای ArcGIS از نشانی tileset.json مربوط به 3D Tiles استفاده کنید. کاشی‌های Google Photorealistic و I3S به موتور نمایش دیگری نیاز دارند.",
       "globeGoogleKeyRequired": "برای بارگذاری کاشی‌های Google Photorealistic 3D Tiles روی کره، به کلید API گوگل مپس در تنظیمات نیاز است.",
       "headersHint": "هر سرآیند در یک خط به‌صورت Name: Value. برای درج یک متغیر محیطی از تنظیمات ← محیط، از ${NAME} استفاده کنید؛ مقدار آن همراه لایه ذخیره نمی‌شود.",
-      "insecureHeaders": "سرآیندهای درخواست تنها به نشانی HTTPS مجموعه‌کاشی (یا localhost) فرستاده می‌شوند."
+      "insecureHeaders": "سرآیندهای درخواست تنها به نشانی HTTPS مجموعه‌کاشی (یا localhost) فرستاده می‌شوند.",
+      "showKey": "نمایش کلید",
+      "hideKey": "پنهان کردن کلید",
+      "showKeyAria": "نمایش کلید Google Maps API",
+      "hideKeyAria": "پنهان کردن کلید Google Maps API",
+      "toggleLayerAria": "تغییر وضعیت {{name}}"
     },
     "geolibre-osm-downloader": {
       "title": "بارگیر OSM",
@@ -9112,6 +9179,36 @@
         "17": "عرشهٔ پل",
         "18": "نویز زیاد"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "نیم‌رخ ارتفاعی",
+      "drawHint": "برای افزودن نقطه روی نقشه کلیک کنید. برای پایان دوبار کلیک کنید یا Enter را بزنید.",
+      "drawCancelled": "ترسیم لغو شد.",
+      "needTwoPoints": "برای ساختن نیم‌رخ دست‌کم دو نقطه لازم است.",
+      "selectLineHint": "یک عارضهٔ خطی انتخاب کنید تا نیم‌رخ ارتفاعی آن ساخته شود.",
+      "sampling": "در حال نمونه‌برداری ارتفاع…",
+      "loadError": "بارگذاری داده‌های ارتفاعی ممکن نشد.",
+      "closePanel": "بستن پنل",
+      "drawLine": "ترسیم خط",
+      "finish": "پایان",
+      "clear": "پاک کردن",
+      "useSelected": "استفاده از انتخاب‌شده",
+      "useSelectedTitle": "ساختن نیم‌رخ از عارضهٔ خطی انتخاب‌شده",
+      "selectLineFirst": "ابتدا یک عارضهٔ خطی انتخاب کنید",
+      "exportLabel": "خروجی:",
+      "exportCsv": "دانلود نیم‌رخ به‌صورت CSV",
+      "exportSvg": "ذخیرهٔ نمودار به‌صورت تصویر SVG",
+      "statDistance": "فاصله",
+      "statMin": "کمینه",
+      "statMax": "بیشینه",
+      "statAscent": "فراز ↑",
+      "statDescent": "فرود ↓",
+      "unitsTitle": "یکاها: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "ورود",
+      "signInOpening": "در حال باز کردن ورود با Google...",
+      "signInComplete": "ورود به Earth Engine کامل شد."
     }
   }
 }

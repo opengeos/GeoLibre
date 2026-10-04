@@ -179,6 +179,10 @@
       "trustButton": "신뢰하고 로드",
       "dismissButton": "로드하지 않음"
     },
+    "registryTrust": {
+      "title_other": "플러그인을 설치하시겠습니까?",
+      "description_other": "이 링크는 공식 GeoLibre 플러그인 레지스트리에서 아직 설치되지 않은 플러그인 {{count}}개를 엽니다. 설치하면 플러그인 목록에 추가되고 활성화됩니다."
+    },
     "title": "플러그인 관리",
     "searchAria": "플러그인 검색",
     "searchPlaceholder": "플러그인 검색",
@@ -223,7 +227,10 @@
     "errorDirectoryPicker": "디렉터리 선택 창을 열지 못했습니다.",
     "errorInstall": "플러그인을 설치하지 못했습니다.",
     "errorUninstall": "플러그인을 제거하지 못했습니다.",
-    "description": "외부 GeoLibre 플러그인을 찾아보고 설치, 업데이트, 제거합니다. 플러그인은 <registryLink>GeoLibre 플러그인 레지스트리</registryLink>에 등록되어 있습니다."
+    "description": "외부 GeoLibre 플러그인을 찾아보고 설치, 업데이트, 제거합니다. 플러그인은 <registryLink>GeoLibre 플러그인 레지스트리</registryLink>에 등록되어 있습니다.",
+    "policySideloadDisabled": "배포 정책에 따라 플러그인 사이드로드가 비활성화되었습니다.",
+    "policyBlocked": "플러그인 “{{pluginId}}”은(는) 배포 정책에 의해 차단되었습니다.",
+    "policyNotAllowed": "플러그인 “{{pluginId}}”은(는) 배포 정책에서 허용되지 않습니다."
   },
   "viewState": {
     "panelTitle": "정보"
@@ -2738,16 +2745,19 @@
       "apiKeys": {
         "title": "API 키",
         "description": "키는 이 브라우저에만 보관되며 프로젝트와 함께 저장되지 않습니다.",
+        "descriptionKeychain": "키는 시스템 키체인에 보관되며 프로젝트와 함께 저장되지 않습니다.",
         "tomtom": "TomTom(도로 교통 실시간 흐름)",
         "aisstream": "AISStream(실시간 AIS 선박)",
         "placeholder": "API 키 붙여넣기",
         "save": "저장",
         "clear": "지우기",
         "fromPanel": "이 브라우저에 저장됨",
+        "fromPanelKeychain": "시스템 키체인에 저장됨",
         "fromEnvironment": "환경 변수의 키 사용 중",
         "notSet": "설정되지 않음",
         "getKey": "무료 키 받기",
-        "saveFailed": "이 브라우저에 키를 저장할 수 없습니다."
+        "saveFailed": "이 브라우저에 키를 저장할 수 없습니다.",
+        "saveFailedKeychain": "키를 시스템 키체인에 저장할 수 없습니다. GeoLibre를 닫을 때까지는 사용할 수 있습니다."
       }
     }
   },
@@ -3527,6 +3537,7 @@
       "maplibre-gl-geoagent": "GeoAgent",
       "maplibre-gl-geolens": "GeoLens",
       "maplibre-gl-vantor": "Vantor 오픈 데이터",
+      "maplibre-gl-usgs-dem": "USGS 3DEP",
       "maplibre-gl-graticule": "격자선",
       "maplibre-gl-mapillary": "Mapillary",
       "maplibre-gl-nasa-earthdata": "NASA Earthdata",
@@ -4471,6 +4482,7 @@
     "tooLargeToOpen": "이 파일은 {{size}}로 브라우저에서 열기에는 너무 큽니다({{limit}} 한도). 다운로드하거나 이 데이터셋의 분할 버전을 사용하세요.",
     "tokenLabel": "액세스 토큰",
     "tokenHint": "데이터셋 저장소를 만들고 파일을 업로드하려면 쓰기 권한이 있는 Hugging Face 액세스 토큰이 필요합니다. 토큰은 이 브라우저에만 저장되며 huggingface.co로만 전송됩니다.",
+    "tokenHintKeychain": "데이터셋 저장소를 만들고 파일을 업로드하려면 쓰기 권한이 있는 Hugging Face 액세스 토큰이 필요합니다. 토큰은 시스템 키체인에 저장되며 huggingface.co로만 전송됩니다.",
     "tokenPlaceholder": "hf_…",
     "tokenSave": "토큰 저장",
     "tokenClear": "지우기",
@@ -4575,7 +4587,12 @@
     "cancel": "취소",
     "saveElement": "요소 저장",
     "atPoint": "지점에 고정",
-    "pinnedToExtent": "범위에 고정"
+    "pinnedToExtent": "범위에 고정",
+    "editorColor": "색상",
+    "noElements": "아직 지도 요소가 없습니다.",
+    "moveUp": "위로 이동",
+    "moveDown": "아래로 이동",
+    "deleteElement": "삭제"
   },
   "dimensions": {
     "toolbar": "치수 도구",
@@ -7942,6 +7959,9 @@
     "exportedWithWarnings": "레이어를 내보냈습니다. {{warnings}}",
     "exported": "레이어를 내보냈습니다.",
     "exportLayerError": "이 레이어를 내보낼 수 없습니다.",
+    "export3dModel": "3D 모델: {{format}}",
+    "export3dModelNoSolids": "내보낼 돌출 폴리곤이 없습니다. 레이어에 돌출 기준면보다 높은 폴리곤을 포함하세요.",
+    "export3dModelSkipped_other": "3D 모델을 내보냈습니다. 기준면보다 높이가 없거나 면적이 없는 피처 {{count}}개는 제외되었습니다.",
     "exportPolyline": "인코딩된 폴리라인(정밀도 {{precision}})",
     "refreshIntervals": {
       "off": "끄기",
@@ -8580,12 +8600,56 @@
     "catalogNmwdiSt": "뉴멕시코 수문 관측지점",
     "catalogFlowlines": "NHDPlus 유로"
   },
+  "usgsDem": {
+    "title": "USGS 3DEP",
+    "hint": "USGS 3DEP 수치 표고 모델을 조회하여 지도에 불러옵니다.",
+    "search": "DEM 검색",
+    "searching": "USGS API 검색 중...",
+    "noResults": "선택한 영역에서 표고 모델을 찾을 수 없습니다.",
+    "showing": "표고 모델 {{total}}개 중 {{shown}}개 표시",
+    "searchError": "검색 실패: {{message}}",
+    "add": "지도에 불러오기",
+    "adding": "불러오는 중...",
+    "download": "다운로드",
+    "zoom": "확대",
+    "modeView": "현재 화면",
+    "modeDraw": "BBox 그리기",
+    "modeBbox": "좌표",
+    "modeQuad": "24K 도엽",
+    "drawHint": "지도에서 클릭하고 드래그하여 검색 경계 상자를 그리세요.",
+    "drawStart": "상자 그리기",
+    "drawCancel": "그리기 취소",
+    "drawnBox": "그린 경계 상자: {{box}}",
+    "coordWest": "서쪽",
+    "coordSouth": "남쪽",
+    "coordEast": "동쪽",
+    "coordNorth": "북쪽",
+    "quadName": "도엽 이름(예: Mount St. Helens)",
+    "stateName": "주(예: WA)",
+    "quadSearchHint": "표준 USGS 1:24,000 지형 도엽의 범위를 조회합니다.",
+    "datasets": "표고 데이터셋",
+    "format": "형식",
+    "filterRedundant": "중복된 부분 타일 제외",
+    "footprintsLayer": "USGS 3DEP 범위",
+    "exportGeoJson": "GeoJSON 내보내기",
+    "errorNoBounds": "현재 지도 범위를 확인할 수 없습니다.",
+    "errorNoDrawnBox": "먼저 지도에 경계 상자를 그리세요.",
+    "errorInvalidCoords": "서쪽, 남쪽, 동쪽, 북쪽에 유효한 숫자 좌표를 입력하세요.",
+    "errorQuadInputs": "도엽 이름과 주를 모두 입력하세요.",
+    "errorQuadNotFound": "주 “{{state}}”에서 24K 지형 도엽 “{{quad}}”을(를) 찾을 수 없습니다.",
+    "loadError": "DEM을 불러오지 못했습니다: {{message}}"
+  },
   "plugin": {
     "3d-tiles": {
       "arcgisSourceUnsupported": "이 ArcGIS 뷰에서는 3D Tiles의 tileset.json URL을 사용하세요. Google Photorealistic 및 I3S 타일에는 다른 렌더링 엔진이 필요합니다.",
       "globeGoogleKeyRequired": "지구본에서 Google Photorealistic 3D Tiles를 불러오려면 설정에 Google Maps API 키가 필요합니다.",
       "headersHint": "한 줄에 하나씩 이름: 값 형식으로 입력합니다. 설정 → 환경의 환경 변수를 넣으려면 ${NAME}을 사용하세요. 값은 레이어와 함께 저장되지 않습니다.",
-      "insecureHeaders": "요청 헤더는 HTTPS 타일셋 URL(또는 localhost)로만 전송됩니다."
+      "insecureHeaders": "요청 헤더는 HTTPS 타일셋 URL(또는 localhost)로만 전송됩니다.",
+      "showKey": "키 표시",
+      "hideKey": "키 숨기기",
+      "showKeyAria": "Google Maps API 키 표시",
+      "hideKeyAria": "Google Maps API 키 숨기기",
+      "toggleLayerAria": "{{name}} 전환"
     },
     "geolibre-osm-downloader": {
       "title": "OSM 다운로더",
@@ -9019,6 +9083,36 @@
         "17": "교량 상판",
         "18": "높은 노이즈"
       }
+    },
+    "geolibre-elevation-profile": {
+      "title": "고도 프로파일",
+      "drawHint": "지도를 클릭하여 점을 추가하세요. 두 번 클릭하거나 Enter 키를 누르면 완료됩니다.",
+      "drawCancelled": "그리기가 취소되었습니다.",
+      "needTwoPoints": "프로파일을 만들려면 점이 두 개 이상 필요합니다.",
+      "selectLineHint": "고도 프로파일을 만들 선 피처를 선택하세요.",
+      "sampling": "고도 샘플링 중…",
+      "loadError": "고도 데이터를 불러올 수 없습니다.",
+      "closePanel": "패널 닫기",
+      "drawLine": "선 그리기",
+      "finish": "완료",
+      "clear": "지우기",
+      "useSelected": "선택 항목 사용",
+      "useSelectedTitle": "선택한 선 피처로 프로파일 만들기",
+      "selectLineFirst": "먼저 선 피처를 선택하세요",
+      "exportLabel": "내보내기:",
+      "exportCsv": "프로파일을 CSV로 다운로드",
+      "exportSvg": "차트를 SVG 이미지로 저장",
+      "statDistance": "거리",
+      "statMin": "최소",
+      "statMax": "최대",
+      "statAscent": "누적 상승 ↑",
+      "statDescent": "누적 하강 ↓",
+      "unitsTitle": "단위: {{units}}"
+    },
+    "maplibre-gl-geoagent": {
+      "signIn": "로그인",
+      "signInOpening": "Google 로그인을 여는 중...",
+      "signInComplete": "Earth Engine 로그인이 완료되었습니다."
     }
   }
 }

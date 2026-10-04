@@ -13,6 +13,7 @@ import {
   type BasemapControlOptions,
   type ManagedRasterBasemap,
 } from "maplibre-gl-basemap-control";
+import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { installBasemapThumbnails } from "./basemap-thumbnails";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
@@ -173,7 +174,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     unregisterPanel = app.registerRightPanel({
       id: PANEL_ID,
-      title: "Basemaps",
+      title: pluginDisplayTitle(app, BASEMAP_CONTROL_PLUGIN_ID, "Basemaps"),
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,

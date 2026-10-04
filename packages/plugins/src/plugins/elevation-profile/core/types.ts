@@ -71,7 +71,21 @@ export interface ElevationProfileControlOptions {
   getSelectedFeatures?: () => Feature<Geometry | null>[];
   /** Subscribe to host selection changes. Returns a function that unsubscribes. */
   onSelectionChange?: (callback: () => void) => () => void;
+  /**
+   * Resolve the panel's text in the host language. Receives a key relative to
+   * the control's namespace, the English text and any `{{placeholder}}`
+   * values; English is used when omitted. Call
+   * {@link ElevationProfileControl.refreshLabels} after a language change.
+   */
+  translate?: ElevationProfileTranslate;
 }
+
+/** Translation callback for the control's own UI text. */
+export type ElevationProfileTranslate = (
+  key: string,
+  fallback: string,
+  params?: Record<string, string | number>,
+) => string;
 
 /** Serializable state persisted with a GeoLibre project. */
 export interface ElevationProfileState {
