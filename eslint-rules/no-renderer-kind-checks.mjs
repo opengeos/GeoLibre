@@ -128,6 +128,37 @@ const rule = {
     },
   },
   create(context) {
+    const sourceCode = context.sourceCode ?? context.getSourceCode();
+
+    /**
+     * The array literal `node` is, or the initializer of the `const` binding it
+     * names (`const unsupported = ["cesium"]; unsupported.includes(...)`).
+     *
+     * @param {any} node The `includes` receiver.
+     * @param {any} at The node whose scope resolves an identifier.
+     * @returns {any} The ArrayExpression, or `null`.
+     */
+    function arrayLiteral(node, at) {
+      const n = unwrap(node);
+      if (n?.type === "ArrayExpression") return n;
+      if (n?.type !== "Identifier") return null;
+      for (let scope = sourceCode.getScope(at); scope; scope = scope.upper) {
+        const variable = scope.set.get(n.name);
+        if (!variable) continue;
+        const definition = variable.defs[0];
+        if (
+          variable.defs.length === 1 &&
+          definition.type === "Variable" &&
+          definition.parent?.kind === "const"
+        ) {
+          const init = unwrap(definition.node.init);
+          return init?.type === "ArrayExpression" ? init : null;
+        }
+        return null;
+      }
+      return null;
+    }
+
     return {
       BinaryExpression(node) {
         if (!EQUALITY.has(node.operator)) return;
@@ -161,8 +192,8 @@ const rule = {
         ) {
           return;
         }
-        const list = unwrap(callee.object);
-        if (list?.type !== "ArrayExpression") return;
+        const list = arrayLiteral(callee.object, node);
+        if (!list) return;
         const name = list.elements.map((element) => rendererLiteral(element)).find(Boolean);
         if (name) context.report({ node, messageId: "kindCheck", data: { name } });
       },

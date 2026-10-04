@@ -59,6 +59,19 @@ describe("local/no-renderer-kind-checks", () => {
     assert.equal(messages.length, 3);
   });
 
+  it("reports includes() on a local const list of renderer names", () => {
+    const messages = lint(
+      [
+        'const unsupported = ["cesium"] as const;',
+        "function f() { return unsupported.includes(primaryRenderer); }",
+        // A `let` list can be reassigned, so it is not resolved.
+        'let maybe = ["cesium"];',
+        "maybe.includes(renderer);",
+      ].join("\n"),
+    );
+    assert.equal(messages.length, 1);
+  });
+
   it("ignores other kinds that share a renderer's name", () => {
     const messages = lint(
       [
