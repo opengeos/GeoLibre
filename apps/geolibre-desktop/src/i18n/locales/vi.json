@@ -8,7 +8,7 @@
     "discard": "Loại bỏ",
     "restoreError": "Không thể khôi phục ảnh chụp nhanh này. Nó có thể bị hỏng hoặc không tương thích với phiên bản GeoLibre này.",
     "recoveryTitle": "Khôi phục công việc chưa được lưu?",
-    "recoveryDescription": "GeoLibre không đóng sạch sẽ. Đã có sẵn tính năng tự động lưu mới hơn “{{name}}”.",
+    "recoveryDescription": "GeoLibre không đóng sạch sẽ. Đã có bản tự động lưu mới hơn của “{{name}}”.",
     "autosavePaused": "Tự động lưu đang tạm dừng: dự án này lớn hơn {{limit}} MB nên không có ảnh chụp nhanh mới nào được lưu giữ. Hãy lưu dự án vào ổ đĩa để giữ công việc của bạn."
   },
   "browser": {

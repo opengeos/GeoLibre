@@ -143,9 +143,15 @@ export function StatusBar({
       <span className="shrink-0">Bearing: {mapView.bearing.toFixed(1)}°</span>
       <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
       {compact ? null : <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>}
+      {/* Always mounted so screen readers announce the pause when it starts,
+          with the full explanation (the visible label's tooltip is not
+          keyboard-reachable). */}
+      <span role="status" className="sr-only">
+        {autosavePaused ? autosavePausedMessage(t, i18n.language) : ""}
+      </span>
       {autosavePaused ? (
         <span
-          role="status"
+          aria-hidden="true"
           className="ms-auto inline-flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-300"
           title={autosavePausedMessage(t, i18n.language)}
         >
