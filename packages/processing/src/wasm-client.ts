@@ -7,7 +7,11 @@
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
 import { convertGeoTiffToCog } from "./cog-convert";
-import { isMultipleWhiteboxDatasetParameter, normalizeVectorOutputFormat } from "./sidecar-client";
+import {
+  identifierWords,
+  isMultipleWhiteboxDatasetParameter,
+  normalizeVectorOutputFormat,
+} from "./sidecar-client";
 import { runWasmToolInBackground } from "./wasm-tool-runner";
 import type {
   RunWhiteboxToolRequest,
@@ -452,11 +456,9 @@ export function outputTextFormatHint(param: WhiteboxToolParameter): string | nul
   // tolerance of 0.5 recommended") cannot be mistaken for an extension.
   const recommended = (param.description ?? "").match(/\.([a-z][a-z0-9]*)\s+recommended/i);
   if (recommended) return recommended[1].toLowerCase();
-  // Split the name on `_`/`-`/camelCase first: `_` is a word character, so
-  // `\bcsv\b` alone never matches inside `output_csv`.
-  const nameWords = (param.name ?? "")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ");
+  // Split the name into words first: `_` is a word character, so `\bcsv\b`
+  // alone never matches inside `output_csv`.
+  const nameWords = identifierWords(param.name ?? "").join(" ");
   const hint = `${nameWords} ${param.description ?? ""} ${param.type ?? ""}`;
   if (/\bcsv\b/i.test(hint)) return "csv";
   if (/\bhtml\b/i.test(hint)) return "html";

@@ -143,6 +143,29 @@ export interface WhiteboxToolParameter {
   schema?: unknown;
 }
 
+/**
+ * The lowercase words of a parameter identifier, split on snake_case,
+ * kebab-case and camelCase boundaries, including an acronym followed by a word
+ * (`outputFolder`, `output_folder` and `output-folder` all give
+ * `["output", "folder"]`; `inputJSONFile` gives `["input", "json", "file"]`).
+ *
+ * A plain `\b` regex cannot do this: `_` is a word character, so `\bfolder\b`
+ * never matches inside `output_folder`. Shared by the Processing dialog's
+ * path/filter heuristics and the WASM runner's output-format hint so the two
+ * cannot drift apart.
+ *
+ * @param name - A parameter name (or any identifier-like text).
+ * @returns The identifier's words, lowercased; empty for an empty name.
+ */
+export function identifierWords(name: string): string[] {
+  return name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
 /** Whether a dataset input accepts several datasets rather than one. */
 export function isMultipleWhiteboxDatasetParameter(param: WhiteboxToolParameter): boolean {
   const kind = String(param.kind ?? "").toLowerCase();

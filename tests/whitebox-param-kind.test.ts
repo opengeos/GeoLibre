@@ -140,4 +140,10 @@ describe("identifierWords", () => {
     assert.deepEqual(identifierWords("__CSV_out2File__"), ["csv", "out2", "file"]);
     assert.deepEqual(identifierWords(""), []);
   });
+
+  it("splits an acronym from the capitalized word after it", () => {
+    assert.deepEqual(identifierWords("inputJSONFile"), ["input", "json", "file"]);
+    assert.deepEqual(identifierWords("CSVOutput"), ["csv", "output"]);
+    assert.deepEqual(identifierWords("outputCSV"), ["output", "csv"]);
+  });
 });

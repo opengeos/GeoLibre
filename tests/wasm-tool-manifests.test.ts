@@ -503,6 +503,7 @@ describe("outputTextFormatHint name words", () => {
     assert.equal(fileOutputTargetExtension(variogram, undefined), "json");
     assert.equal(outputTextFormatHint({ name: "report-html" }), "html");
     assert.equal(outputTextFormatHint({ name: "summaryCsv" }), "csv");
+    assert.equal(outputTextFormatHint({ name: "CSVOutput" }), "csv");
   });
 
   it("does not match a format buried inside a longer word", () => {

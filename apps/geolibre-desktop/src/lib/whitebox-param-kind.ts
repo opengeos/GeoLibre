@@ -1,7 +1,12 @@
 import {
+  identifierWords,
   isMultipleWhiteboxDatasetParameter,
   type WhiteboxToolParameter,
 } from "@geolibre/processing";
+
+// Re-exported so the dialog helpers keep one import site for parameter
+// classification; the implementation is shared with the WASM runner.
+export { identifierWords };
 
 function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
   if (["raster", "vector", "lidar", "file"].includes(dataKind)) {
@@ -81,22 +86,3 @@ export function isDirectoryParameter(param: WhiteboxToolParameter): boolean {
 // name (`dir`), never as one word of a longer one: hydrology tools use it for
 // flow *direction* (`flow_dir`).
 const FOLDER_NAME_WORDS = new Set(["folder", "directory"]);
-
-/**
- * The lowercase words of a parameter identifier, split on snake_case,
- * kebab-case and camelCase boundaries (`outputFolder`, `output_folder` and
- * `output-folder` all give `["output", "folder"]`).
- *
- * A plain `\b` regex cannot do this: `_` is a word character, so `\bfolder\b`
- * never matches inside `output_folder`.
- *
- * @param name - A parameter name (or any identifier-like text).
- * @returns The identifier's words, lowercased; empty for an empty name.
- */
-export function identifierWords(name: string): string[] {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-}
