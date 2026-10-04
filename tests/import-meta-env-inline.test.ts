@@ -23,14 +23,17 @@ function sourceFiles(dir: string): string[] {
 // from the site root. Read `(import.meta as ...).env` inline instead.
 test("import.meta is never bound to a variable in app sources", () => {
   const offenders: string[] = [];
-  const alias = /=\s*import\.meta(?:\s+as\s[^;\n]*)?\s*;/;
+  // Any assignment whose value is `import.meta` itself rather than a member of
+  // it: `const meta = import.meta`, with or without `as ...`, a semicolon or a
+  // line break, and destructuring (`const { env } = import.meta`).
+  const alias = /=\s*import\.meta\b(?!\s*\.)/g;
   for (const root of SOURCE_ROOTS) {
     for (const file of sourceFiles(join(ROOT, root))) {
-      readFileSync(file, "utf8")
-        .split("\n")
-        .forEach((line, index) => {
-          if (alias.test(line)) offenders.push(`${relative(ROOT, file)}:${index + 1}`);
-        });
+      const source = readFileSync(file, "utf8");
+      for (const match of source.matchAll(alias)) {
+        const line = source.slice(0, match.index).split("\n").length;
+        offenders.push(`${relative(ROOT, file)}:${line}`);
+      }
     }
   }
   assert.deepEqual(offenders, []);
