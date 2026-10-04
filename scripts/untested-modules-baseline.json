@@ -17,7 +17,6 @@
   "apps/geolibre-desktop/src/components/layout/ManagePluginsDialog.tsx": 1116,
   "apps/geolibre-desktop/src/components/layout/MapContextMenu.tsx": 535,
   "apps/geolibre-desktop/src/components/layout/NetcdfCubeWindow.tsx": 663,
-  "apps/geolibre-desktop/src/components/layout/NewProjectDialog.tsx": 506,
   "apps/geolibre-desktop/src/components/layout/PixelTimeSeriesControl.tsx": 1000,
   "apps/geolibre-desktop/src/components/layout/ProjectGalleryDialog.tsx": 1209,
   "apps/geolibre-desktop/src/components/layout/RasterSubsetPanel.tsx": 676,
