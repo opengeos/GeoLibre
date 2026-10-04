@@ -29,11 +29,18 @@ let readsSealed = false;
  * external plugins share this webview and could otherwise read any saved
  * token. The read is used up even when it fails.
  */
-export function readSecureCredentials(
+export async function readSecureCredentials(
   accounts: readonly string[],
 ): Promise<Record<string, string>> {
+  // Only a read that succeeded is known to have claimed the store's gate. A
+  // failed call may never have reached the command (an IPC error), so it
+  // leaves {@link sealSecureCredentialReads} to close reads explicitly; the
+  // seal is idempotent on the Rust side.
+  const read = await invoke<Record<string, string>>("secure_store_get_many", {
+    accounts: [...accounts],
+  });
   readsSealed = true;
-  return invoke<Record<string, string>>("secure_store_get_many", { accounts: [...accounts] });
+  return read;
 }
 
 /**
