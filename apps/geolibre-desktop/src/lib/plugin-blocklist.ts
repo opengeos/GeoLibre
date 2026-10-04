@@ -153,6 +153,15 @@ export async function loadPluginBlocklist(registryUrl: string): Promise<void> {
   if (url === null) return;
   try {
     const document = await fetchBlocklist(url);
+    // A malformed document is a failed fetch, not an empty list: replacing the
+    // active (or cached) list with nothing would unblock everything.
+    if (
+      !document ||
+      typeof document !== "object" ||
+      !Array.isArray((document as { blocked?: unknown }).blocked)
+    ) {
+      throw new Error('blocklist has no "blocked" array');
+    }
     setPluginBlocklist(parsePluginBlocklist(document));
     writeCache(url, document);
   } catch (error) {

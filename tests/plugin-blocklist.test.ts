@@ -121,6 +121,21 @@ describe("plugin blocklist", () => {
     assert.equal(getBlocklistedPlugin("evil"), undefined);
   });
 
+  it("keeps the cached list when a 200 response is malformed", async () => {
+    respondWith({ version: 1, blocked: [{ id: "evil", reason: "Malware." }] });
+    await loadPluginBlocklist(REGISTRY);
+
+    setPluginBlocklist([]);
+    respondWith({ version: 1 });
+    await loadPluginBlocklist(REGISTRY);
+    assert.equal(getBlocklistedPlugin("evil")?.reason, "Malware.");
+    // The malformed document didn't overwrite the cache either.
+    setPluginBlocklist([]);
+    globalThis.fetch = (() => Promise.reject(new TypeError("offline"))) as typeof fetch;
+    await loadPluginBlocklist(REGISTRY);
+    assert.equal(getBlocklistedPlugin("evil")?.reason, "Malware.");
+  });
+
   it("treats a missing blocklist as empty", async () => {
     setPluginBlocklist([{ id: "stale", reason: "x" }]);
     respondWith("Not found", 404);
