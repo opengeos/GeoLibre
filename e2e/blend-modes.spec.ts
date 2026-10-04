@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
+import { dropGeoJson, layerRow, readFixture, waitForMap, waitForRenderedFeature } from "./helpers";
 
 const POLYGON = readFixture("blend-polygon.geojson");
 
@@ -100,6 +100,11 @@ test("blends a vector layer against the map beneath it", async ({ page }) => {
   await expect(layerRow(page, "blendtest")).toBeVisible();
 
   // Let the basemap tiles settle so the backdrop being blended into is stable.
+  // Pixel stability alone is not enough: the drop flies to the layer, and the
+  // landing zoom's basemap tiles can take longer than one poll interval to
+  // arrive, so two equal reads used to capture the overzoomed parent tile as
+  // the unblended reference and fail the final `normal` comparison (#2858).
+  await waitForRenderedFeature(page, "Blend test");
   const normal = await settledPixel(page);
   expect(normal[3]).toBe(255);
 
@@ -134,6 +139,7 @@ test("keeps the canvas opaque and the uncovered map intact in every mode", async
   expect(modes).not.toContain("darken");
   expect(modes).not.toContain("subtract");
 
+  await waitForRenderedFeature(page, "Blend test");
   const baseline = await settledPixel(page);
   expect(baseline[3]).toBe(255);
 
