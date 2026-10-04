@@ -1,6 +1,10 @@
 import { resolveConfiguredPopupTitle, type GeoLibreLayer } from "@geolibre/core";
 import type { Feature } from "geojson";
 import { applyPopupWidth, createIdentifyPopupRows } from "./feature-popup";
+import {
+  createIdentifyEditActionsElement,
+  type MapCanvasIdentifyEditActions,
+} from "./identify-edit-actions";
 import { DEFAULT_PHOTO_POPUP_LABELS, type PhotoPopupLabels } from "./photo-popup";
 
 // The grouped, all-layer Identify popup. Engine-neutral DOM, shared by the
@@ -26,6 +30,10 @@ export interface MapCanvasIdentifyAllLabels {
   wmsFailed: string;
   /** A WMS layer whose capabilities mark it `queryable="0"`. */
   wmsNotQueryable: string;
+  /** A result's button that starts editing the feature's geometry. */
+  editGeometry: string;
+  /** A result's button that opens the feature's attributes for editing. */
+  editAttributes: string;
   /** The geotagged-photo popup's strings; see `createPhotoPopupElement`. */
   photo: PhotoPopupLabels;
 }
@@ -46,6 +54,8 @@ export const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
   pixelReadFailed: "The pixel value could not be read.",
   wmsFailed: "The WMS GetFeatureInfo request failed.",
   wmsNotQueryable: "This WMS layer does not provide feature information.",
+  editGeometry: "Edit geometry",
+  editAttributes: "Edit attributes",
   photo: DEFAULT_PHOTO_POPUP_LABELS,
 };
 
@@ -68,6 +78,9 @@ export interface GlobalIdentifyHit {
  * @param labels Translated headings and counters for the grouped result.
  * @param maxWidth Widest width any hit layer's popup config asked for, in CSS
  *   pixels, or `undefined` to keep the default cap.
+ * @param editActions The app's feature edit actions; each result whose layer
+ *   allows one gets its button. Omitted, the popup offers no edit actions.
+ * @param beforeEditAction Runs before an edit action, e.g. to close the popup.
  * @returns Popup DOM containing every grouped hit and its visible attributes.
  */
 export function createGlobalIdentifyPopupElement(
@@ -76,6 +89,8 @@ export function createGlobalIdentifyPopupElement(
   onActivate: (hit: GlobalIdentifyHit) => void,
   labels: MapCanvasIdentifyAllLabels,
   maxWidth?: number,
+  editActions?: MapCanvasIdentifyEditActions,
+  beforeEditAction?: () => void,
 ): HTMLElement {
   const root = document.createElement("div");
   root.className =
@@ -179,6 +194,14 @@ export function createGlobalIdentifyPopupElement(
           false,
         ),
       );
+      const editRow = createIdentifyEditActionsElement(
+        layer,
+        hit.featureId,
+        editActions,
+        labels,
+        beforeEditAction,
+      );
+      if (editRow) featureContainer.appendChild(editRow);
       section.appendChild(featureContainer);
     }
     body.appendChild(section);

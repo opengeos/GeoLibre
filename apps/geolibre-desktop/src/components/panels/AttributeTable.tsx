@@ -632,6 +632,19 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setCalcSelectedOnly(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
+  // Identify's Edit attributes action asks for edit mode on its layer (#2932).
+  // Declared after the reset above so, when the request arrives together with
+  // the layer selection, the reset runs first and this one wins.
+  const attributeTableEditLayerId = useAppStore((s) => s.ui.attributeTableEditLayerId);
+  const requestAttributeTableEdit = useAppStore((s) => s.requestAttributeTableEdit);
+  const canEnterEditMode =
+    hasAttributeSource && layerCaps.update && !isReadOnlyVectorLayer && !isGeometryEditing;
+  useEffect(() => {
+    if (attributeTableEditLayerId === null) return;
+    if (layer?.id === attributeTableEditLayerId && canEnterEditMode) setIsEditing(true);
+    requestAttributeTableEdit(null);
+  }, [attributeTableEditLayerId, canEnterEditMode, layer?.id, requestAttributeTableEdit]);
+
   // If the selected feature is cleared while the calculator is open, drop the
   // "selected only" flag too: leaving it checked-but-disabled would mislead the
   // user, and the submit guard would silently widen the scope to all features.

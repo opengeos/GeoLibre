@@ -59,8 +59,12 @@ import {
   type GlobalIdentifyHit,
   type MapCanvasIdentifyAllLabels,
 } from "./identify-all-popup";
+import {
+  createIdentifyEditActionsElement,
+  type MapCanvasIdentifyEditActions,
+} from "./identify-edit-actions";
 
-export type { MapCanvasIdentifyAllLabels };
+export type { MapCanvasIdentifyAllLabels, MapCanvasIdentifyEditActions };
 import type { MapCanvasRasterIdentify } from "./raster-identify";
 export type { MapCanvasRasterIdentify, MapCanvasRasterIdentifyResult } from "./raster-identify";
 import { createMapController, type MapController } from "./map-controller";
@@ -98,6 +102,11 @@ export interface MapCanvasProps {
   identifyAllLabels?: MapCanvasIdentifyAllLabels;
   /** Reads app-owned raster layers for the grouped, all-layer Identify popup. */
   identifyRasterLayerAt?: MapCanvasRasterIdentify;
+  /**
+   * Edit geometry / Edit attributes actions shown on vector Identify results
+   * (#2932). Omitted, Identify results offer no edit actions.
+   */
+  identifyEditActions?: MapCanvasIdentifyEditActions;
 }
 
 function setMapLibreIdentifyCursor(map: maplibregl.Map, active: boolean): void {
@@ -231,6 +240,7 @@ export const MapCanvas = memo(function MapCanvas({
   canUseRemoteElevation,
   identifyAllLabels = DEFAULT_IDENTIFY_ALL_LABELS,
   identifyRasterLayerAt,
+  identifyEditActions,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const controller = useRef<MapController | null>(null);
@@ -256,6 +266,9 @@ export const MapCanvas = memo(function MapCanvas({
   // Read by the photo-popup effect, which rebinds only on photo-layer changes.
   const identifyLabelsRef = useRef(identifyAllLabels);
   identifyLabelsRef.current = identifyAllLabels;
+  // Read at click time, so a new actions object does not rebind Identify.
+  const identifyEditActionsRef = useRef(identifyEditActions);
+  identifyEditActionsRef.current = identifyEditActions;
   layerGroupsRef.current = layerGroups;
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
@@ -715,6 +728,11 @@ export const MapCanvas = memo(function MapCanvas({
             activate,
             identifyAllLabels,
             widest,
+            identifyEditActionsRef.current,
+            () => {
+              identifyPopup.current?.remove();
+              identifyPopup.current = null;
+            },
           );
           showPopup(content, identifyPopupShellMaxWidth(widest ? { maxWidth: widest } : undefined));
         };
@@ -1076,15 +1094,27 @@ export const MapCanvas = memo(function MapCanvas({
       }
 
       const featureId = findFeatureId(layer, feature);
-      showResolvedHitPopup(
-        createIdentifyPopupElement(layer.name, feature.properties ?? {}, featureId ?? feature.id, {
+      const content = createIdentifyPopupElement(
+        layer.name,
+        feature.properties ?? {},
+        featureId ?? feature.id,
+        {
           popup: layer.popup,
           fieldVisibility: layer.fieldVisibility,
           feature,
           zoom: map.getZoom(),
-        }),
-        featureId,
+        },
       );
+      const editRow = createIdentifyEditActionsElement(
+        layer,
+        featureId,
+        identifyEditActionsRef.current,
+        identifyAllLabels,
+        // Programmatic: the edit action owns the selection from here.
+        () => removeIdentifyPopup(),
+      );
+      if (editRow) content.appendChild(editRow);
+      showResolvedHitPopup(content, featureId);
     };
 
     map.on("click", handleIdentifyClick);

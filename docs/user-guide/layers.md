@@ -93,7 +93,7 @@ Selecting a layer expands a row of icon buttons on its card:
 | --- | --- |
 | **Move up** / **Move down** | Shift the layer one position in the stack. |
 | **Zoom to layer** | Fit the map to the layer's extent (for layers whose bounds are known). |
-| **Identify features** | Click features on the map to see their attributes in a popup. On a raster layer this reads the pixel value instead, and on a multiband raster it also builds a [spectral profile](styling.md#spectral-profile). |
+| **Identify features** | Click features on the map to see their attributes in a popup. On a raster layer this reads the pixel value instead, and on a multiband raster it also builds a [spectral profile](styling.md#spectral-profile). On an editable vector layer, each result also offers **Edit geometry** (opens the GeoEditor with that feature selected) and **Edit attributes** (opens the attribute table in edit mode on that feature's row). |
 | **Open Style panel** | Select the layer and open its [styling controls](styling.md). |
 | **Layer actions** | The full menu, below. |
 | **Metadata** | Inspect the layer's source and configuration. |

@@ -34,6 +34,7 @@ export { styleUsesUnsupportedSource } from "./gl-style-compiler";
 export {
   MapCanvas,
   type MapCanvasIdentifyAllLabels,
+  type MapCanvasIdentifyEditActions,
   type MapCanvasProps,
   type MapCanvasRasterIdentify,
   type MapCanvasRasterIdentifyResult,

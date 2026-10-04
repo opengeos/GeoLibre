@@ -54,6 +54,7 @@ function uiSetterCalls(layerId: string): Array<[string, () => void]> {
     ["setNotebookOpen", () => store().setNotebookOpen(true)],
     ["setAssistantOpen", () => store().setAssistantOpen(true)],
     ["setAttributeTableOpen", () => store().setAttributeTableOpen(true)],
+    ["requestAttributeTableEdit", () => store().requestAttributeTableEdit(layerId)],
     ["setRasterAttributeTableOpen", () => store().setRasterAttributeTableOpen(true)],
     ["setDashboardOpen", () => store().setDashboardOpen(true)],
     ["setStorymapPanelOpen", () => store().setStorymapPanelOpen(true)],
@@ -123,6 +124,15 @@ describe("app store undo history after the slice split", () => {
     }
     // Every ui field is exercised, so a flag added later is covered too.
     assert.deepEqual([...touched].sort(), Object.keys(store().ui).sort());
+  });
+
+  it("opens the attribute table for an edit request and clears only the request", () => {
+    store().requestAttributeTableEdit(layerId);
+    assert.equal(store().ui.attributeTableOpen, true);
+    assert.equal(store().ui.attributeTableEditLayerId, layerId);
+    store().requestAttributeTableEdit(null);
+    assert.equal(store().ui.attributeTableOpen, true);
+    assert.equal(store().ui.attributeTableEditLayerId, null);
   });
 
   it("never reverts dialog state on undo or redo", () => {

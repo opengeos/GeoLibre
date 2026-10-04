@@ -2053,6 +2053,8 @@
       "pixelReadFailed": "The pixel value could not be read.",
       "wmsFailed": "The WMS GetFeatureInfo request failed.",
       "wmsNotQueryable": "This WMS layer does not provide feature information.",
+      "editGeometry": "Edit geometry",
+      "editAttributes": "Edit attributes",
       "photo": "Photo",
       "photoNoPreview": "No preview available",
       "photoViewFullResolution": "Double-click to view at full resolution",

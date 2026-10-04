@@ -6,6 +6,7 @@ import {
   getGeometryEditTargetLayerId,
   isPluginEngineSupported,
   maplibreGeoEditorPlugin,
+  selectGeometryEditFeature,
   startLayerGeometryEdit,
 } from "@geolibre/plugins";
 import type { FeatureCollection } from "geojson";
@@ -26,7 +27,8 @@ interface LayerEditActionsOptions {
  * materializing a DuckDB query layer into an editable GeoJSON copy.
  *
  * @param options - The map engine, the status toast setters, and `t`.
- * @returns The geometry-edit toggle/cancel handlers and the materialize handler.
+ * @returns The geometry-edit toggle/cancel/feature handlers and the materialize
+ *   handler.
  */
 export function useLayerEditActions({
   mapControllerRef,
@@ -118,6 +120,20 @@ export function useLayerEditActions({
     [clearDropMessageLater, ensureLayerGeojsonFromSource, mapControllerRef, setDropError, t],
   );
 
+  /**
+   * Start (or keep) a geometry-edit session on `layerId` and select one of its
+   * features in the editor: Identify's Edit geometry action (#2932). Unlike
+   * {@link handleToggleGeometryEdit}, a session already open on this layer is
+   * kept rather than finished.
+   */
+  const handleEditFeatureGeometry = useCallback(
+    async (layerId: string, featureId: string) => {
+      if (getGeometryEditTargetLayerId() !== layerId) await handleToggleGeometryEdit(layerId);
+      if (getGeometryEditTargetLayerId() === layerId) selectGeometryEditFeature(featureId);
+    },
+    [handleToggleGeometryEdit],
+  );
+
   const handleCancelGeometryEdit = useCallback(() => {
     void endLayerGeometryEdit(createAppAPI(mapControllerRef), { save: false });
   }, [mapControllerRef]);
@@ -166,5 +182,10 @@ export function useLayerEditActions({
     [addGeoJsonLayer, clearDropMessageLater, mapControllerRef, setDropError, setDropMessage],
   );
 
-  return { handleCancelGeometryEdit, handleMaterializeDuckDBLayer, handleToggleGeometryEdit };
+  return {
+    handleCancelGeometryEdit,
+    handleEditFeatureGeometry,
+    handleMaterializeDuckDBLayer,
+    handleToggleGeometryEdit,
+  };
 }

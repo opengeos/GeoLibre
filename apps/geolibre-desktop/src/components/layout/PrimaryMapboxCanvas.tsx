@@ -1,6 +1,7 @@
 import {
   MapboxCanvas,
   type MapCanvasIdentifyAllLabels,
+  type MapCanvasIdentifyEditActions,
   type MapCanvasRasterIdentify,
   type MapDiagnosticEvent,
   type MapEngine,
@@ -26,6 +27,7 @@ export function PrimaryMapboxCanvas({
   canUseRemoteElevation,
   identifyAllLabels,
   identifyRasterLayerAt,
+  identifyEditActions,
   viewId,
 }: {
   engineRef?: RefObject<MapEngine | null>;
@@ -34,6 +36,7 @@ export function PrimaryMapboxCanvas({
   canUseRemoteElevation?: () => boolean;
   identifyAllLabels?: MapCanvasIdentifyAllLabels;
   identifyRasterLayerAt?: MapCanvasRasterIdentify;
+  identifyEditActions?: MapCanvasIdentifyEditActions;
   viewId?: string;
 }) {
   const token = useMapboxAccessToken();
@@ -46,6 +49,7 @@ export function PrimaryMapboxCanvas({
           engineRef={engineRef}
           identifyAllLabels={identifyAllLabels}
           identifyRasterLayerAt={identifyRasterLayerAt}
+          identifyEditActions={identifyEditActions}
           onEngineReady={onEngineReady}
           onMapDiagnosticEvent={onMapDiagnosticEvent}
           viewId={viewId}

@@ -485,6 +485,7 @@ export {
   startLayerGeometryEdit,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
+  selectGeometryEditFeature,
   isGeoEditorUsingRightClick,
   subscribeGeometryEdit,
   isGeoEditorAvailableForImport,

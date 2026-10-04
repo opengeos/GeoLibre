@@ -125,6 +125,12 @@ export interface UiSlice {
     notebookOpen: boolean;
     assistantOpen: boolean;
     attributeTableOpen: boolean;
+    /**
+     * Pending "open the attribute table in edit mode" request for this layer,
+     * written by Identify's Edit attributes action (#2932). The table consumes
+     * and clears it. Null when idle.
+     */
+    attributeTableEditLayerId: string | null;
     /** Whether the Raster Attribute Table bottom panel is open (issue #1307). */
     rasterAttributeTableOpen: boolean;
     dashboardOpen: boolean;
@@ -198,6 +204,11 @@ export interface UiSlice {
   setNotebookOpen: (open: boolean) => void;
   setAssistantOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
+  /**
+   * Ask the attribute table to open in edit mode on `layerId` (opening the
+   * table too), or clear a pending request with `null`.
+   */
+  requestAttributeTableEdit: (layerId: string | null) => void;
   setRasterAttributeTableOpen: (open: boolean) => void;
   setDashboardOpen: (open: boolean) => void;
   setStorymapPanelOpen: (open: boolean) => void;
@@ -242,6 +253,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
     notebookOpen: false,
     assistantOpen: false,
     attributeTableOpen: false,
+    attributeTableEditLayerId: null,
     rasterAttributeTableOpen: false,
     dashboardOpen: false,
     storymapPanelOpen: false,
@@ -301,6 +313,14 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
   setNotebookOpen: (open) => set((s) => ({ ui: { ...s.ui, notebookOpen: open } })),
   setAssistantOpen: (open) => set((s) => ({ ui: { ...s.ui, assistantOpen: open } })),
   setAttributeTableOpen: (open) => set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
+  requestAttributeTableEdit: (layerId) =>
+    set((s) => ({
+      ui: {
+        ...s.ui,
+        attributeTableEditLayerId: layerId,
+        attributeTableOpen: layerId === null ? s.ui.attributeTableOpen : true,
+      },
+    })),
   setRasterAttributeTableOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, rasterAttributeTableOpen: open } })),
   setDashboardOpen: (open) => set((s) => ({ ui: { ...s.ui, dashboardOpen: open } })),
