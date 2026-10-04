@@ -176,7 +176,11 @@ different places per build:
   shows the warning. `lib/credential-hydration.ts` loads them into memory
   before the app renders and migrates any plaintext values left in
   localStorage by an older build, removing each only after its keychain write
-  succeeds. The OAuth refresh token is stored per issuer as
+  succeeds. That load is the only read: `secure_store_get_many` answers once
+  per page load of a webview (the reload hook in `lib.rs` reopens it), and
+  `secure_store_seal`, which the external-plugin loader calls before importing
+  a plugin, closes it without reading, so plugin code cannot pull saved tokens
+  from the store (issue #2858). Writes and deletes stay open. The OAuth refresh token is stored per issuer as
   `share.oauth.refreshToken.<issuer>` and rotates on every refresh; the access
   token and the PKCE verifier stay in memory. Because the server revokes a
   session when a consumed refresh token is presented, the issuer is recorded
