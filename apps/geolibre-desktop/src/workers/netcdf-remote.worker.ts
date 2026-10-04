@@ -12,6 +12,7 @@ import {
   type LocalNetcdfVariable,
   type LocalNetcdfWindow,
 } from "@geolibre/plugins/local-netcdf";
+import { setH5wasmUrl } from "./h5wasm-url";
 
 /**
  * Hosts {@link openRemoteNetcdf} off the main thread.
@@ -27,7 +28,13 @@ import {
 
 /** A request from the client, tagged so replies can be matched to it. */
 type Request =
-  | { id: number; type: "open"; url: string }
+  | {
+      id: number;
+      type: "open";
+      url: string;
+      /** The main build's h5wasm chunk; null in dev, where h5wasm is imported normally. */
+      h5wasmUrl?: string | null;
+    }
   | { id: number; type: "listAxes"; variable: string }
   | {
       id: number;
@@ -64,6 +71,7 @@ function requireFile(): LocalNetcdfFile {
 async function handle(request: Request): Promise<unknown> {
   switch (request.type) {
     case "open": {
+      setH5wasmUrl(request.h5wasmUrl);
       file?.close();
       file = await openRemoteNetcdf(request.url);
       const variables: LocalNetcdfVariable[] = file.listVariables();

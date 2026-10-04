@@ -6,11 +6,13 @@ import path from "node:path";
 import type { RollupLog, WarningHandlerWithDefault } from "rollup";
 import type { OutputChunk, RolldownOptions } from "rolldown";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
+import { sharedH5wasmChunkPlugin, workerH5wasmFromMainPlugin } from "./vite-plugins/shared-h5wasm";
 import {
   proxyAircraftRequestGuarded,
   proxyAdsbdbAircraftRequestGuarded,
@@ -665,18 +667,26 @@ const CODE_SPLITTING_GROUPS = [
   },
 ];
 
-// Upper bound on the minified JS the app entry imports statically, i.e. what
-// index.html modulepreloads before the shell can mount. It measured ~2.2 MB
-// when this guard was added (MapLibre core is ~1.2 MB of it); it was ~19 MB
-// while Cesium and every MapLibre plugin sat on the boot path. Raise it only
-// deliberately, after confirming the new eager code actually belongs at boot.
-const BOOT_JS_BUDGET_BYTES = 3 * 1024 * 1024;
+// Upper bounds on the minified JS the app entry imports statically, i.e. what
+// index.html modulepreloads before the shell can mount, raw and gzipped (level
+// 9). Raw measured ~2.2 MB when this guard was added (MapLibre core is ~1.2 MB
+// of it); it was ~19 MB while Cesium and every MapLibre plugin sat on the boot
+// path. Gzip measured ~680 kB when its budget was added. Both live in
+// boot-budget.json, which scripts/bundle-report.mjs also reads. Raise them only
+// deliberately, after confirming the new eager code actually belongs at boot
+// (see "Boot bundle budget" in docs/maintenance.md).
+const BOOT_BUDGET = JSON.parse(
+  readFileSync(path.resolve(__dirname, "boot-budget.json"), "utf8"),
+) as {
+  rawBytes: number;
+  gzipBytes: number;
+};
 
 /**
- * Fails the build when the app entry's static import graph exceeds
- * BOOT_JS_BUDGET_BYTES or includes Cesium. Chunk-grouping regressions are
- * silent otherwise: the app still works, it just downloads megabytes more on
- * every launch.
+ * Fails the build when the app entry's static import graph exceeds the raw or
+ * gzip budget in boot-budget.json or includes Cesium. Chunk-grouping
+ * regressions are silent otherwise: the app still works, it just downloads
+ * megabytes more on every launch.
  */
 function bootBundleBudgetPlugin(): Plugin {
   return {
@@ -700,6 +710,7 @@ function bootBundleBudgetPlugin(): Plugin {
       const seen = new Set<string>();
       const pending = [entry.fileName];
       let bytes = 0;
+      let gzipBytes = 0;
       const offenders: string[] = [];
       while (pending.length > 0) {
         const fileName = pending.pop()!;
@@ -708,14 +719,20 @@ function bootBundleBudgetPlugin(): Plugin {
         const chunk = bundle[fileName];
         if (chunk?.type !== "chunk") continue;
         bytes += Buffer.byteLength(chunk.code);
+        gzipBytes += gzipSync(chunk.code, { level: 9 }).length;
         if (chunk.moduleIds.some((id) => /\/node_modules\/(?:cesium|@cesium)\//.test(id))) {
           offenders.push(`${fileName} contains Cesium`);
         }
         pending.push(...chunk.imports);
       }
       const mb = (n: number) => `${(n / 1024 / 1024).toFixed(2)} MB`;
-      if (bytes > BOOT_JS_BUDGET_BYTES) {
-        offenders.push(`boot JS is ${mb(bytes)}, over the ${mb(BOOT_JS_BUDGET_BYTES)} budget`);
+      if (bytes > BOOT_BUDGET.rawBytes) {
+        offenders.push(`boot JS is ${mb(bytes)}, over the ${mb(BOOT_BUDGET.rawBytes)} budget`);
+      }
+      if (gzipBytes > BOOT_BUDGET.gzipBytes) {
+        offenders.push(
+          `boot JS is ${mb(gzipBytes)} gzipped, over the ${mb(BOOT_BUDGET.gzipBytes)} gzip budget`,
+        );
       }
       if (offenders.length > 0) {
         const largest = [...seen]
@@ -1479,6 +1496,7 @@ export default defineConfig({
     react(),
     wmsProxyPlugin(),
     fastPathProxyPlugin(),
+    sharedH5wasmChunkPlugin(),
     selectiveJsMinifyPlugin(),
     bootBundleBudgetPlugin(),
     removeJupyterLiteFromTauriDistPlugin(),
@@ -1535,7 +1553,12 @@ export default defineConfig({
     // Worker bundles are separate builds that do not inherit the top-level
     // plugins, and `build.minify` is off, so without this the MapLibre worker
     // (loaded on every map start) and the tool workers ship unminified.
-    plugins: () => [selectiveJsMinifyPlugin()],
+    // The remote NetCDF worker imports the main build's h5wasm chunk by URL
+    // rather than bundling its own 4.8 MB copy (see vite-plugins/shared-h5wasm.ts).
+    plugins: () => [
+      workerH5wasmFromMainPlugin(path.resolve(__dirname, "src/workers/h5wasm-from-main.ts")),
+      selectiveJsMinifyPlugin(),
+    ],
   },
   envPrefix: ["VITE_", "TAURI_"],
   optimizeDeps: {

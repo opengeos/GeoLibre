@@ -6,6 +6,7 @@ import type {
   LocalNetcdfWindow,
 } from "@geolibre/plugins";
 import type { NetcdfWorkerResponse } from "../workers/netcdf-remote.worker";
+import { h5wasmChunkUrl } from "./h5wasm-chunk-url";
 
 /**
  * A remote NetCDF/HDF file read over HTTP by range request, through a worker.
@@ -167,7 +168,11 @@ export async function openRemoteNetcdfFile(url: string): Promise<RemoteNetcdfFil
 
   try {
     await ready;
-    const variables = await send<LocalNetcdfVariable[]>({ type: "open", url });
+    const variables = await send<LocalNetcdfVariable[]>({
+      type: "open",
+      url,
+      h5wasmUrl: h5wasmChunkUrl,
+    });
     return {
       variables,
       listAxes: (variable) => send<LocalNetcdfAxis[]>({ type: "listAxes", variable }),

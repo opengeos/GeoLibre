@@ -275,6 +275,23 @@ jobs:
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
+      # Per-asset raw/gzip sizes and the boot set against its budgets (see
+      # "Boot bundle budget" in docs/maintenance.md). Runs whenever the build
+      # produced output, even if a later test in the gate failed.
+      - name: Bundle size report
+        if: ${{ !cancelled() && hashFiles('apps/geolibre-desktop/dist/index.html') != '' }}
+        run: |
+          npm run bundle:report
+          cat bundle-report/bundle-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bundle size report
+        if: ${{ !cancelled() && hashFiles('bundle-report/bundle-report.json') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundle-report
+          path: bundle-report/
+          retention-days: 30
+
   backend:
     # The Python half of `npm run ci` (`npm run ci:backend`: sidecar tests with
     # their coverage floor, plus docker/tests), and the projects-and-identity
