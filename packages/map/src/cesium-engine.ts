@@ -575,7 +575,8 @@ export class CesiumEngine implements MapEngine {
 
   fitBounds(bounds: [number, number, number, number]): void {
     const viewer = this.live();
-    if (!viewer) return;
+    // Cesium throws from `flyTo` mid-morph; skip the fit as `animateTo` does.
+    if (!viewer || this.isMorphing()) return;
     const [west, south, east, north] = bounds;
     if (![west, south, east, north].every((value) => Number.isFinite(value))) return;
     // A degenerate point-sized box cannot be fit; fly to the point instead.

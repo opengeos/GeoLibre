@@ -2035,6 +2035,9 @@ export class CesiumLayerSync {
     const handle = entry.handle;
     if (!handle || entry.cancelled || !FLY_TO_KINDS.has(entry.kind)) return false;
     const viewer = this.viewer;
+    // Cesium throws from `flyTo` mid-morph. Drop the fit (reported as handled)
+    // the way the engine's own flights are skipped then.
+    if (viewer.scene.mode === this.Cesium.SceneMode.MORPHING) return true;
     // An I3S scene layer is a `3dtiles` entry, but an I3SDataProvider is not a
     // target `Viewer.flyTo` accepts; it publishes its footprint as a rectangle.
     const extent = (handle as { extent?: Rectangle }).extent;
