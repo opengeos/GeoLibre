@@ -353,10 +353,13 @@ export function setLocalRasterPicker(picker: LocalRasterPicker | null): void {
  * @param app - The GeoLibre app API.
  */
 export function openRasterLayerPanel(app: GeoLibreAppAPI): void {
-  panelOpenedInGeneration = useAppStore.getState().projectGeneration;
+  const openedInGeneration = useAppStore.getState().projectGeneration;
   void (async () => {
     const control = await ensureRasterControl(app);
     if (!control) return;
+    // Recorded only once the control exists, so a failed open never makes a
+    // later restore skip the project's saved panel state.
+    panelOpenedInGeneration = openedInGeneration;
     // Defer by one task so the control finishes its mount cycle before the
     // panel is shown and expanded, matching the other standalone panels
     // (Earth Engine, 3D Tiles); expanding in the same task as addControl can
