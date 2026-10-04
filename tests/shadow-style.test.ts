@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { LayerSpecification, RasterLayerSpecification } from "maplibre-gl";
+import type { RasterLayerSpecification } from "maplibre-gl";
 import { createShadowStyle } from "../packages/map/src/shadow-style";
 
 function setup() {
