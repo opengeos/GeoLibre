@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { waitForMap } from "./helpers";
 
 const PLUGINS_DOC = join(__dirname, "..", "docs", "user-guide", "plugins.md");

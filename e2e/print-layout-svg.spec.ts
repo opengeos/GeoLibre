@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
 async function downloadSvg(page: Page): Promise<string> {

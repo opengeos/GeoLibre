@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { waitForMap } from "./helpers";
 
 // The PMTiles path is the one asset type the panel cannot fetch and hand over as JSON: the archive

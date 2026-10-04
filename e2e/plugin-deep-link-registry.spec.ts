@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { waitForMap } from "./helpers";
 
 // The registry half of the `?plugin=` deep link: an unknown name prompts to

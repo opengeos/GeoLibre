@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { waitForMap } from "./helpers";
 
 // A Zarr store is a directory read key by key, so only a run through the real panel shows that the

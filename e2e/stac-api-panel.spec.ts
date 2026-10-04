@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { waitForMap } from "./helpers";
 
 // `maplibre-stac.ts` builds its panel by hand and exports nothing to call, so the wiring between

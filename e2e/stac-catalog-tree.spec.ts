@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { waitForMap } from "./helpers";
 
 // The catalog tree paints its selection through inline styles, which only a real browser resolves:

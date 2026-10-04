@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 /**
  * Validates the web build's PWA/offline support (issue #274):

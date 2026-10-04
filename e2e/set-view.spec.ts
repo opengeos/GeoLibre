@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 /** Waits for MapLibre to mount its WebGL canvas — the app's "map ready" signal. */
 async function waitForMap(page: Page): Promise<void> {

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { expectAccessible } from "./a11y";
 import { bindMapLibreMap, dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 

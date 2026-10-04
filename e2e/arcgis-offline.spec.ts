@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { createEmptyProject, DEFAULT_LAYER_STYLE } from "@geolibre/core";
 import { readFixture } from "./helpers";
 

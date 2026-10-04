@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 
 /**
  * Exercises the glTF 3D model layer (#306): the "3D Model (glTF)" Add Data

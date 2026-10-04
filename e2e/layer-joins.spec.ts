@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import * as XLSX from "@e965/xlsx";
 import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 

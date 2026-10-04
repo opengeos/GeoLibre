@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { dropGeoJson, layerRow, readFixture, waitForMap, waitForRenderedFeature } from "./helpers";
 
 const POLYGON = readFixture("blend-polygon.geojson");

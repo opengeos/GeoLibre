@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./test";
 import { strToU8, zipSync } from "fflate";
 import { createEmptyProject, DEFAULT_LAYER_STYLE } from "@geolibre/core";
 

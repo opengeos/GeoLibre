@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { waitForMap } from "./helpers";
 
 // maplibre-gl-lidar draws point clouds into an overlaid deck.gl canvas. That

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./test";
 import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
 const VALID_TEXT = readFixture("smoke.geojson");
