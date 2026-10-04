@@ -75,6 +75,74 @@ export function classifyLayer(layer: Pick<GeoLibreLayer, "type">): LayerKind | u
 }
 
 /**
+ * What an engine's per-kind dispatch does with a {@link LayerKind}:
+ *
+ * - `"native"`: the engine draws records of this kind from the store record
+ *   itself (its layer sync or style compiler has a path for them). A record
+ *   can still be rejected for its data (a missing URL, a tile type the engine
+ *   cannot read).
+ * - `"plugin"`: only a plugin control draws this kind, on the engine's map or
+ *   its deck.gl overlay; the engine mirrors the store record onto whatever
+ *   the plugin registered.
+ * - `"unsupported"`: the engine's kind dispatch draws no record of this kind.
+ *
+ * The verdict is the kind's alone. Paths that apply whatever the kind — a
+ * FeatureCollection on the globe, a CZML or KML document, a plugin's own
+ * registered native layers — sit outside it, so the layer panels keep asking
+ * each engine's per-record support check rather than this table.
+ */
+export type LayerKindSupport = "native" | "plugin" | "unsupported";
+
+/**
+ * One engine's {@link LayerKindSupport} for every {@link LayerKind}. The mapped
+ * type makes a missing kind a compile error, so a new kind cannot ship until
+ * every engine declares what it does with it. `tests/layer-support-matrix.test.ts`
+ * checks each engine's table against what its dispatch actually draws.
+ */
+export type SupportedLayerKinds = { readonly [K in LayerKind]: LayerKindSupport };
+
+/** The kinds a {@link SupportedLayerKinds} table gives `S`. */
+export type LayerKindsWith<T extends SupportedLayerKinds, S extends LayerKindSupport> = {
+  [K in LayerKind]: T[K] extends S ? K : never;
+}[LayerKind];
+
+/**
+ * The support `table` gives `kind`; an unknown type ({@link classifyLayer}'s
+ * `undefined`) is `"unsupported"`.
+ *
+ * @param table - An engine's supported-kinds table.
+ * @param kind - A {@link classifyLayer} result.
+ * @returns The kind's support on that engine.
+ */
+export function layerKindSupport(
+  table: SupportedLayerKinds,
+  kind: LayerKind | undefined,
+): LayerKindSupport {
+  return kind === undefined ? "unsupported" : table[kind];
+}
+
+/**
+ * Whether `table` gives `kind` the support `support`. A type guard, so an
+ * engine can settle a whole support class with one lookup and leave an
+ * exhaustive `switch` over only the kinds that remain: declare the table
+ * `as const satisfies SupportedLayerKinds` so its values stay literal.
+ *
+ * An unknown type counts as `"unsupported"`, as in {@link layerKindSupport}.
+ *
+ * @param table - An engine's supported-kinds table, declared `as const`.
+ * @param kind - A {@link classifyLayer} result.
+ * @param support - The support class to test for.
+ * @returns Whether `kind` has that support.
+ */
+export function hasLayerKindSupport<T extends SupportedLayerKinds, S extends LayerKindSupport>(
+  table: T,
+  kind: LayerKind | undefined,
+  support: S,
+): kind is LayerKindsWith<T, S> | (S extends "unsupported" ? undefined : never) {
+  return layerKindSupport(table, kind) === support;
+}
+
+/**
  * The `default` branch of an exhaustive `switch` over {@link classifyLayer}'s
  * result: once every {@link LayerKind} has a case, only `undefined` (an
  * unknown layer type from untrusted input) is left, so a kind no case handles

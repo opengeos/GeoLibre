@@ -33,7 +33,11 @@ import { TerrariumTerrainProvider } from "./cesium-terrarium";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import type { MapRenderSurface } from "./map-engine";
 import type { ExtentDrawingOptions, MapExtent } from "./map-engine";
-import { CesiumLayerSync, type MovingPointFeatureDescription } from "./cesium-layer-sync";
+import {
+  CESIUM_SUPPORTED_LAYER_KINDS,
+  CesiumLayerSync,
+  type MovingPointFeatureDescription,
+} from "./cesium-layer-sync";
 import { getLayerBounds } from "./geojson-loader";
 import type {
   BuiltInMapControl,
@@ -85,6 +89,7 @@ export const CESIUM_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   deferredEngineReady: false,
   measureTool: true,
   controlLayerPanels: true,
+  supportedLayerKinds: CESIUM_SUPPORTED_LAYER_KINDS,
 });
 
 /**

@@ -94,7 +94,8 @@ import {
   markerIconSizeValue,
   prepareKmlFeatureIcons,
 } from "./markers";
-import { classifyLayer, unhandledLayerKind } from "./layer-kind";
+import { classifyLayer, hasLayerKindSupport, unhandledLayerKind } from "./layer-kind";
+import { MAPLIBRE_SUPPORTED_LAYER_KINDS } from "./maplibre-layer-kinds";
 import { isPlaceholderLayer } from "./placeholders";
 import {
   circlePaint,
@@ -483,6 +484,11 @@ export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
   if (isPlaceholderLayer(layer)) return;
 
   const kind = classifyLayer(layer);
+  // The plugin kinds are drawn by a plugin control (the ArcGIS, Zarr, LiDAR,
+  // splat, 3D Tiles, COG, vector-file, DuckDB and deck.gl controls), which
+  // registers its own native or deck.gl layers; the store record alone gives
+  // layer-sync nothing to add. An unknown type is not drawn either.
+  if (!hasLayerKindSupport(MAPLIBRE_SUPPORTED_LAYER_KINDS, kind, "native")) return;
   switch (kind) {
     case "geojson":
       if (!layer.geojson) return;
@@ -524,20 +530,9 @@ export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
     case "image":
       syncImageLayer(map, layer, beforeId);
       return;
-    // Drawn by a plugin control (the ArcGIS, Zarr, LiDAR, splat, 3D Tiles, COG,
-    // vector-file, DuckDB and deck.gl controls), which registers its own native
-    // or deck.gl layers; the store record alone gives layer-sync nothing to add.
-    case "arcgis":
-    case "zarr":
-    case "lidar":
-    case "gaussian-splat":
-    case "3d-tiles":
-    case "cog":
-    case "vector-file":
-    case "duckdb-query":
-    case "deckgl-viz":
-      return;
     default:
+      // Unreachable: a kind the table calls native without a case above is a
+      // compile error here.
       unhandledLayerKind(kind, undefined);
   }
 }

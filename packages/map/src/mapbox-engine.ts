@@ -40,7 +40,11 @@ import {
   type MapboxLayerPlan,
   mapboxPaint,
 } from "./gl-style-compiler";
-import { isInternalMapboxLayer, isMapboxPluginLayer } from "./mapbox-layers";
+import {
+  isInternalMapboxLayer,
+  isMapboxPluginLayer,
+  MAPBOX_SUPPORTED_LAYER_KINDS,
+} from "./mapbox-layers";
 import {
   BASEMAP_LABEL_KEY,
   clearLayerLabels,
@@ -90,6 +94,7 @@ export const MAPBOX_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   deferredEngineReady: true,
   measureTool: true,
   controlLayerPanels: true,
+  supportedLayerKinds: MAPBOX_SUPPORTED_LAYER_KINDS,
 });
 
 const BLANK_BACKGROUND_LAYER_ID = "geolibre-blank-background";

@@ -5,7 +5,7 @@ import {
 } from "@geolibre/core";
 import type { LayerSpecification } from "mapbox-gl";
 import { compileMapboxLayer } from "./gl-style-compiler";
-import { classifyLayer, unhandledLayerKind } from "./layer-kind";
+import { classifyLayer, type SupportedLayerKinds, unhandledLayerKind } from "./layer-kind";
 
 /**
  * Whether a compiled style layer draws derived or synthetic features (an
@@ -16,6 +16,33 @@ import { classifyLayer, unhandledLayerKind } from "./layer-kind";
 export function isInternalMapboxLayer(spec: LayerSpecification): boolean {
   return (spec.metadata as Record<string, unknown> | undefined)?.["geolibre:internal"] === true;
 }
+
+/**
+ * What the Mapbox engine's kind dispatch does with each layer kind: the
+ * `"native"` kinds compile to Mapbox sources and style layers
+ * (`compileMapboxLayer`; an ArcGIS record only as a vector tile service, a
+ * tile archive only as a vector PMTiles), and the `"plugin"` kinds are drawn
+ * only by a plugin control on the Mapbox map or its deck.gl overlay
+ * ({@link isMapboxPluginLayer}). GeoJSON and vector tiles are `"native"` even
+ * though some plugins (search footprints, Overture Maps) draw their own.
+ */
+export const MAPBOX_SUPPORTED_LAYER_KINDS: SupportedLayerKinds = Object.freeze({
+  geojson: "native",
+  "raster-tiles": "native",
+  "vector-tiles": "native",
+  arcgis: "native",
+  "tile-archive": "native",
+  zarr: "plugin",
+  lidar: "plugin",
+  "gaussian-splat": "unsupported",
+  "3d-tiles": "plugin",
+  cog: "plugin",
+  "vector-file": "unsupported",
+  "duckdb-query": "plugin",
+  "deckgl-viz": "plugin",
+  video: "native",
+  image: "native",
+});
 
 /**
  * Whether Mapbox can draw a layer through a native plan or a supported plugin.

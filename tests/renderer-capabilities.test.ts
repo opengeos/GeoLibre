@@ -129,6 +129,11 @@ describe("rendererCapabilities", () => {
       for (const capabilities of variants(renderer)) {
         assert.deepEqual(Object.keys(capabilities).sort(), keys, renderer);
         for (const key of keys) {
+          // The one table among the flags (see tests/layer-support-matrix.test.ts).
+          if (key === "supportedLayerKinds") {
+            assert.ok(Object.isFrozen(capabilities.supportedLayerKinds), renderer);
+            continue;
+          }
           assert.equal(
             typeof capabilities[key as keyof MapEngineCapabilities],
             "boolean",
