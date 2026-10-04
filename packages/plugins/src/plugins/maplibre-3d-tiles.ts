@@ -146,6 +146,8 @@ let threeDTilesPanelPinned = false;
 let threeDTilesStoreUnsubscribe: (() => void) | null = null;
 let threeDTilesStoreSyncSuspended = 0;
 let threeDTilesRuntimeEnvUnsubscribe: (() => void) | null = null;
+/** Stops re-labelling the panel's own controls on a language change. */
+let threeDTilesLocaleUnsubscribe: (() => void) | null = null;
 let activeThreeDTilesApp: GeoLibreAppAPI | null = null;
 /** Resolves `plugin.3d-tiles.*` keys through the active app, falling back to English. */
 const tr = createPluginTranslator(() => activeThreeDTilesApp, "3d-tiles");
@@ -383,6 +385,7 @@ function ensureThreeDTilesControl(app: GeoLibreAppAPI): ThreeDTilesControl | nul
     }
     threeDTilesControlMounted = true;
   }
+  threeDTilesLocaleUnsubscribe ??= app.onLocaleChange?.(relabelThreeDTilesPanel) ?? null;
 
   return threeDTilesControl;
 }
@@ -797,6 +800,8 @@ function resetThreeDTilesControl(control: ThreeDTilesControl | null): void {
   threeDTilesStoreUnsubscribe = null;
   threeDTilesRuntimeEnvUnsubscribe?.();
   threeDTilesRuntimeEnvUnsubscribe = null;
+  threeDTilesLocaleUnsubscribe?.();
+  threeDTilesLocaleUnsubscribe = null;
   threeDTilesPanelPinned = false;
   threeDTilesControlMounted = false;
   threeDTilesControl = null;
@@ -1337,6 +1342,37 @@ function setGooglePhotorealisticHeadersToggleVisible(panel: HTMLElement, visible
   if (toggle) toggle.hidden = !visible;
 }
 
+/** Labels a layer row's visibility checkbox from its `data-geolibre-toggle-name`. */
+function labelThreeDTilesVisibilityToggle(input: HTMLInputElement): void {
+  input.setAttribute(
+    "aria-label",
+    tr("toggleLayerAria", "Toggle {{name}}", { name: input.dataset.geolibreToggleName ?? "" }),
+  );
+}
+
+/**
+ * Re-applies the text GeoLibre adds to the 3D Tiles panel (the API-key toggle
+ * and the layer rows' visibility checkboxes) after the app language changes.
+ * The rest of the panel is the upstream control's own DOM.
+ */
+function relabelThreeDTilesPanel(): void {
+  if (typeof document === "undefined") return;
+  for (const toggle of document.querySelectorAll<HTMLButtonElement>(
+    ".geolibre-google-tiles-key-toggle",
+  )) {
+    const panel = toggle.closest<HTMLElement>("[data-geolibre-google-maps-api-key-visible]");
+    updateGooglePhotorealisticHeadersToggle(
+      toggle,
+      panel?.dataset.geolibreGoogleMapsApiKeyVisible === "true",
+    );
+  }
+  for (const input of document.querySelectorAll<HTMLInputElement>(
+    "input[data-geolibre-toggle-name]",
+  )) {
+    labelThreeDTilesVisibilityToggle(input);
+  }
+}
+
 function updateGooglePhotorealisticHeadersToggle(
   toggle: HTMLButtonElement,
   visible: boolean,
@@ -1695,12 +1731,8 @@ function createDeckTilesPanelListItem(layer: GeoLibreLayer): HTMLElement {
   const visible = document.createElement("input");
   visible.type = "checkbox";
   visible.checked = layer.visible;
-  visible.setAttribute(
-    "aria-label",
-    tr("toggleLayerAria", "Toggle {{name}}", {
-      name: layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL,
-    }),
-  );
+  visible.dataset.geolibreToggleName = layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+  labelThreeDTilesVisibilityToggle(visible);
   visible.addEventListener("change", () => {
     useAppStore.getState().updateLayer(layer.id, { visible: visible.checked });
   });

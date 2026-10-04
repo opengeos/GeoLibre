@@ -1,4 +1,4 @@
-import { createPluginTranslator } from "../../plugin-i18n";
+import { createPluginTranslator, pluginDisplayTitle } from "../../plugin-i18n";
 import { getActiveRightPanel, isRightPanelCollapsed } from "../../right-panel-registry";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../../types";
 import { ElevationProfileControl } from "./core/ElevationProfileControl";
@@ -75,9 +75,7 @@ function registerPanel(app: GeoLibreAppAPI): void {
     app.registerRightPanel?.({
       id: PANEL_ID,
       // The plugin's display name is already translated in every catalog.
-      title: () =>
-        app.translate?.(`toolbar.plugin.${ELEVATION_PROFILE_PLUGIN_ID}`, "Elevation Profile") ??
-        "Elevation Profile",
+      title: pluginDisplayTitle(app, ELEVATION_PROFILE_PLUGIN_ID, "Elevation Profile"),
       dock: "replace-style",
       defaultWidth: 340,
       deactivatePluginOnClose: true,

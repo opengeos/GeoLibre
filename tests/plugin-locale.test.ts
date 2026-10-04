@@ -199,7 +199,8 @@ describe("registerTranslations", () => {
     assert.equal(warnings.length, 1);
     assert.equal(api.translate("common.cancel", "x"), "Cancel");
     assert.equal(api.translate("plugin.demo.ok", "x"), "Fine");
-    assert.equal(({} as Record<string, unknown>).polluted, undefined);
+    assert.equal((Object.prototype as Record<string, unknown>).polluted, undefined);
+    assert.equal(i18n.exists("plugin.demo.__proto__.polluted"), false);
   });
 
   it("is a no-op on a host without addResourceBundle", () => {

@@ -1,4 +1,5 @@
 import type { NativeProfileMap } from "./native";
+import { interpolatePluginText } from "../../../plugin-i18n";
 import type { IControl, Map as MapLibreMap, MapMouseEvent, GeoJSONSource } from "maplibre-gl";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 
@@ -1233,10 +1234,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   /** Resolves a UI string through the host translator, or the English text. */
   private _t(key: string, fallback: string, params?: Record<string, string | number>): string {
     const text = this._translate?.(key, fallback, params);
-    if (typeof text === "string") return text;
-    return params
-      ? fallback.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params[name] ?? ""))
-      : fallback;
+    return typeof text === "string" ? text : interpolatePluginText(fallback, params);
   }
 
   /** The panel title: the caller's own, else the translated default. */

@@ -83,6 +83,7 @@ export {
 export {
   createPluginTranslator,
   interpolatePluginText,
+  pluginDisplayTitle,
   type PluginTranslate,
   type PluginTranslateParams,
 } from "./plugin-i18n";
