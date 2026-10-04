@@ -247,6 +247,14 @@ covers, label the PR `full-e2e` to get that check before merging.
 
 Both jobs upload their Playwright report as an artifact on failure.
 
+Each PR's Cloudflare preview is also smoke-tested once it deploys: the
+`Preview smoke (Cloudflare)` commit status fails if the deployed `/demo/` app
+never finishes loading its map, logs a console error, or gets a 4xx/5xx from its
+own host. That catches host and subpath problems that `vite preview` at `/`
+cannot. Run it against any deployment with
+`PREVIEW_URL=<app URL> npm run test:e2e:preview`. The core suite runs the same
+clean-console check against the local build.
+
 Locally the suite serves the built app on port 4173 and reuses a server already
 listening there. Set `E2E_PORT` to use another port, for example when a second
 checkout is already serving its own build on 4173.

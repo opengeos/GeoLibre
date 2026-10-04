@@ -301,3 +301,41 @@ export async function setViewAndSettle(
   await expect(dialog).toBeHidden();
   return waitForSettledZoomNear(page, zoom);
 }
+
+/**
+ * Records everything that would put an error in the browser console while a
+ * page boots: `console.error` messages, uncaught page errors, and same-origin
+ * responses of 400 and above (the browser logs each of those as "Failed to load
+ * resource", which no app code can suppress — see #2916). Read `problems` once
+ * the page has settled; an empty list means a clean console.
+ *
+ * Cross-origin failures are left out: a basemap or CDN outage is not the build's
+ * fault. Their console lines are still caught when the browser logs them.
+ */
+export function collectPageProblems(page: Page): { problems: string[] } {
+  const problems: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() !== "error") return;
+    const where = message.location().url;
+    problems.push(`console.error: ${message.text()}${where ? ` (${where})` : ""}`);
+  });
+  page.on("pageerror", (error) => problems.push(`page error: ${error.message}`));
+  page.on("response", (response) => {
+    if (response.status() < 400) return;
+    const pageUrl = page.url();
+    if (!pageUrl.startsWith("http")) return;
+    if (new URL(response.url()).origin !== new URL(pageUrl).origin) return;
+    problems.push(`HTTP ${response.status()}: ${response.url()}`);
+  });
+  return { problems };
+}
+
+/**
+ * Waits until the primary MapLibre map reports its style and every visible
+ * tile loaded, which is the closest thing to "the map has rendered" the app
+ * exposes.
+ */
+export async function waitForMapLoaded(page: Page, timeout = 60_000): Promise<void> {
+  await bindMapLibreMap(page);
+  await page.waitForFunction(() => window.__geolibreTestMap?.loaded(), undefined, { timeout });
+}

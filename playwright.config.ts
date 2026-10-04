@@ -127,11 +127,11 @@ export default defineConfig({
       workers: 1,
       use: chromium,
     },
-    // `e2e/enterprise-sso/` needs a live API and Keycloak; it has its own
-    // config (`e2e/enterprise-sso/playwright.config.ts`) and nightly job.
+    // `e2e/enterprise-sso/` needs a live API and Keycloak, and `e2e/preview/`
+    // a deployed site; each has its own config and job.
     {
       name: "features",
-      testIgnore: [...coreMatch, ...coreEnginesMatch, "**/enterprise-sso/**"],
+      testIgnore: [...coreMatch, ...coreEnginesMatch, "**/enterprise-sso/**", "**/preview/**"],
       use: chromium,
     },
   ],

@@ -18,6 +18,11 @@ name: PR preview deploy
 #   * No `npm ci`, no build, no `npm run`, no running a script out of `site/`.
 #     The artifact is inert data here -- static files pushed to a host.
 #   * Nothing from the artifact may be interpolated into a `run:` block.
+#   * The one exception, the `smoke` job, runs `npm ci` and Playwright from the
+#     DEFAULT BRANCH checkout against the deployed URL. The PR's code runs only
+#     inside that headless browser, as it would for any visitor. That job holds
+#     no secrets and a read-only token, and reports its result through the
+#     separate `smoke-status` job, which runs nothing at all.
 #
 # GitHub Pages and Cloudflare deploy in separate jobs. They share only the PR
 # resolution job, so a failure in either host cannot block the other.
@@ -125,6 +130,8 @@ jobs:
       needs.resolve.outputs.action == 'deploy'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      url: ${{ steps.deploy.outputs.deployment-url }}
     steps:
       - name: Download the built site
         uses: actions/download-artifact@v8
@@ -189,6 +196,102 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
+
+  # Loads the deployed Cloudflare preview's app in a browser and fails on a map
+  # that never finishes loading, any console error, or any failed same-origin
+  # request (e2e/preview/preview-smoke.spec.ts). Catches what CI's `vite
+  # preview` at `/` cannot: the real host and the `/demo/` subpath (#2916,
+  # #2919). Only Cloudflare: the GitHub Pages preview publishes asynchronously
+  # and its own verifier already polls for it.
+  smoke:
+    name: Smoke-test Cloudflare preview
+    needs: cloudflare
+    if: needs.cloudflare.outputs.url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      # The default branch, never the PR (see the invariant at the top).
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright Chromium (cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Smoke-test the deployed app
+        run: npm run test:e2e:preview
+        env:
+          # Passed through env, never interpolated into the script.
+          PREVIEW_URL: ${{ needs.cloudflare.outputs.url }}/demo/
+
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-smoke-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # A `workflow_run` job does not show up in the PR's checks, so post the smoke
+  # result as a commit status on the PR's head commit instead.
+  smoke-status:
+    name: Report preview smoke status
+    needs: [cloudflare, smoke]
+    if: always() && needs.cloudflare.outputs.url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - name: Set the commit status
+        uses: actions/github-script@v9
+        env:
+          RESULT: ${{ needs.smoke.result }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const passed = process.env.RESULT === "success";
+            await github.rest.repos.createCommitStatus({
+              ...context.repo,
+              sha: process.env.HEAD_SHA,
+              state: passed ? "success" : "failure",
+              context: "Preview smoke (Cloudflare)",
+              description: passed
+                ? "Map renders with a clean console"
+                : `Smoke test ${process.env.RESULT}: see the run for details`,
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
 
   github-pages:
     name: Deploy GitHub Pages preview

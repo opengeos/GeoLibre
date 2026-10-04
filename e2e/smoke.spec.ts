@@ -1,10 +1,27 @@
 import { expect, test } from "@playwright/test";
-import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
+import {
+  collectPageProblems,
+  dropGeoJson,
+  layerRow,
+  readFixture,
+  waitForMap,
+  waitForMapLoaded,
+} from "./helpers";
 
 const FIXTURE_TEXT = readFixture("smoke.geojson");
 // Derived from the fixture so the expected row count can't drift if a feature
 // is added or removed.
 const FIXTURE_FEATURE_COUNT = (JSON.parse(FIXTURE_TEXT) as { features: unknown[] }).features.length;
+
+// The per-commit half of the deployed-preview smoke test
+// (e2e/preview/preview-smoke.spec.ts): a fresh boot of the built app renders
+// the map without a single console error or failed same-origin request.
+test("boots and renders the map with a clean console", async ({ page }) => {
+  const { problems } = collectPageProblems(page);
+  await waitForMap(page);
+  await waitForMapLoaded(page);
+  expect(problems, "console errors or failed same-origin requests").toEqual([]);
+});
 
 test("loads a GeoJSON layer, opens the attribute table, and toggles visibility", async ({
   page,
