@@ -238,7 +238,6 @@ export function LayerRow({
   const isRefreshing = refreshStatus?.type === "refreshing";
   return (
     <div
-      data-layer-card=""
       data-testid="layer-row"
       data-layer-name={layer.name}
       data-layer-id={layer.id}

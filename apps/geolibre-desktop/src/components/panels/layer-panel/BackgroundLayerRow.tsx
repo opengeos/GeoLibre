@@ -41,7 +41,6 @@ export function BackgroundLayerRow({
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
   return (
     <div
-      data-layer-card=""
       className={`rounded-md border p-2 transition-colors ${
         selected
           ? "border-primary bg-primary/5"
