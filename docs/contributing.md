@@ -153,8 +153,9 @@ order:
 
 The middle of the table is grouped into two scripts, which you can also run on
 their own: `npm run ci:frontend` (i18n check through worker checks; Node only)
-and `npm run ci:backend` (backend and Docker tests; Python only). CI runs lint,
-`ci:frontend`, `ci:backend` and `check:rust` as separate, parallel jobs in
+and `npm run ci:backend` (backend and Docker tests; needs Python and the npm CLI
+to run the script, but no `npm install`). CI runs lint, `ci:frontend`,
+`ci:backend` and `check:rust` as separate, parallel jobs in
 `.github/workflows/ci.yml` rather than one after another, so if you add a step
 to `npm run ci`, add it to one of those groups and CI picks it up.
 

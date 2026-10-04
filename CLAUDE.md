@@ -26,7 +26,7 @@ npm run tauri:build    # desktop installers → apps/geolibre-desktop/src-tauri/
 npm run typecheck      # alias for the full build (tsc -b && vite build) — writes to dist/, not a pure type-check
 npm run ci             # full local gate: lint + ci:frontend + ci:backend + check:rust
 npm run ci:frontend    # build + frontend + worker tests (CI runs the halves as parallel jobs)
-npm run ci:backend     # backend + docker/tests (Python only, no npm install needed)
+npm run ci:backend     # backend + docker/tests (needs Python and the npm CLI, no npm install)
 ```
 
 Tests:

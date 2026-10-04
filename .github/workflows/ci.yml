@@ -271,7 +271,9 @@ jobs:
     # The Python half of `npm run ci` (`npm run ci:backend`: sidecar tests with
     # their coverage floor, plus docker/tests), and the projects-and-identity
     # server suite. Needs no Node dependencies: `npm run` only reads the root
-    # package.json scripts.
+    # package.json scripts, so this job deliberately skips setup-node and uses
+    # the runner image's bundled npm. Add setup-node if `ci:backend` ever gains
+    # a step that needs Node itself.
     name: Backend tests
     runs-on: ubuntu-22.04
     timeout-minutes: 20
