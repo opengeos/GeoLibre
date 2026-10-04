@@ -56,8 +56,7 @@ export default function App() {
   useDesktopSettingsPersistence();
   useThemeScheme();
   useRecentProjectsPersistence();
-  const { warning: startupProjectWarning, restoring: restoringStartupProject } =
-    useStartupProject();
+  const { restoring: restoringStartupProject } = useStartupProject();
   useStyleLibraryPersistence();
   useStartupLayerStyles();
   useLayerLibraryPersistence();
@@ -102,14 +101,6 @@ export default function App() {
         onRemindLater={remindLater}
         onSkipVersion={skipVersion}
       />
-      {startupProjectWarning ? (
-        <div
-          role="alert"
-          className="fixed bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-md border bg-background px-4 py-3 text-sm shadow-lg"
-        >
-          {startupProjectWarning}
-        </div>
-      ) : null}
     </DirectionProvider>
   );
 }

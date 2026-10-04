@@ -1,3 +1,7 @@
+// Tile large local vector layers on a worker in the app (the published
+// headless entry leaves this out and tiles inline).
+import "./geojson-vt-worker-factory";
+
 export { MapboxCanvas, type MapboxCanvasProps } from "./MapboxCanvas";
 export { ArcgisCanvas, type ArcgisCanvasProps } from "./ArcgisCanvas";
 export {

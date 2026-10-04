@@ -14,7 +14,7 @@ import {
   rowsToFeatureCollection,
   suggestResolution,
 } from "../packages/processing/src/h3-tools";
-import { getVectorTool, resolveVectorRerun } from "../packages/processing/src/vector-tools";
+import { getVectorTool, resolveVectorRerun } from "../packages/processing/src/vector-tool-registry";
 
 describe("h3 resolution math", () => {
   it("exposes 16 average-area entries (res 0..15), strictly decreasing", () => {

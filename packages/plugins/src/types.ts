@@ -148,6 +148,13 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
    * such a layer stays blank there. Any other value throws.
    */
   crs?: string;
+  /**
+   * Pass `false` when the service's capabilities mark the requested layers
+   * `queryable="0"`: identify then sends no GetFeatureInfo for this layer and
+   * says the layer provides no feature information. Omitted or `true`, the
+   * layer is queried.
+   */
+  queryable?: boolean;
 }
 
 /** Options for adding a host-managed WFS GetFeature layer. */

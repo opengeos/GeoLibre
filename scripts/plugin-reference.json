@@ -186,7 +186,7 @@
   },
   "maplibre-gl-graticule": {
     "menu": "Controls → Gridlines",
-    "description": "A coordinate grid with edge labels, including a UTM easting/northing mode."
+    "description": "A coordinate grid with edge labels, including UTM easting/northing and MGRS/USNG modes."
   },
   "maplibre-gl-clouds": {
     "menu": "Controls → Weather",

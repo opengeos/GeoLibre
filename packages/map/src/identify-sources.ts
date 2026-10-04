@@ -59,6 +59,16 @@ export function isWmsLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "wms";
 }
 
+/**
+ * Whether a WMS layer answers GetFeatureInfo. Only `source.queryable: false`,
+ * written when the capabilities mark every requested layer `queryable="0"`,
+ * says no; a layer without the information (added by URL, an older project) is
+ * queried as before (#2887).
+ */
+export function isWmsQueryable(layer: GeoLibreLayer): boolean {
+  return layer.source.queryable !== false;
+}
+
 export function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
   return typeof window === "undefined"
     ? undefined
@@ -253,21 +263,29 @@ async function wmsIdentifyQueryBox(
   if (!projection) return { crs: "EPSG:3857", bbox: mercator };
 
   const [minX, minY, maxX, maxY] = mercator;
-  const corners = [
-    [minX, minY],
-    [minX, maxY],
-    [maxX, minY],
-    [maxX, maxY],
-  ].map(([x, y]) => projection.forward(webMercatorToLngLat(x, y)));
-  const xs = corners.map(([x]) => x);
-  const ys = corners.map(([, y]) => y);
-  const halfX = (Math.max(...xs) - Math.min(...xs)) / 2;
-  const halfY = (Math.max(...ys) - Math.min(...ys)) / 2;
-  const [x, y] = projection.forward(lngLat);
-  const bbox =
-    isV13 && projection.northFirst
-      ? [y - halfY, x - halfX, y + halfY, x + halfX]
-      : [x - halfX, y - halfY, x + halfX, y + halfY];
+  let bbox: number[];
+  try {
+    const corners = [
+      [minX, minY],
+      [minX, maxY],
+      [maxX, minY],
+      [maxX, maxY],
+    ].map(([x, y]) => projection.forward(webMercatorToLngLat(x, y)));
+    const xs = corners.map(([x]) => x);
+    const ys = corners.map(([, y]) => y);
+    const halfX = (Math.max(...xs) - Math.min(...xs)) / 2;
+    const halfY = (Math.max(...ys) - Math.min(...ys)) / 2;
+    const [x, y] = projection.forward(lngLat);
+    bbox =
+      isV13 && projection.northFirst
+        ? [y - halfY, x - halfX, y + halfY, x + halfX]
+        : [x - halfX, y - halfY, x + halfX, y + halfY];
+  } catch {
+    // A click the projection cannot convert (outside its domain): ask in Web Mercator.
+    return { crs: "EPSG:3857", bbox: mercator };
+  }
+  // A conversion that does not throw can still give NaN or Infinity.
+  if (!bbox.every(Number.isFinite)) return { crs: "EPSG:3857", bbox: mercator };
   return { crs, bbox };
 }
 
@@ -369,13 +387,113 @@ function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function textFromHtml(value: string): string {
-  const document = new DOMParser().parseFromString(value, "text/html");
-  return normalizeText(document.body.textContent ?? "");
+function cellText(cell: Element): string {
+  return normalizeText(cell.textContent ?? "");
+}
+
+/**
+ * Sets `name` on `target`, as `name (2)`, `name (3)`... when it is already
+ * taken. Own keys only, and defined rather than assigned, so a field named
+ * `constructor` or `__proto__` keeps its name and its value.
+ */
+function addProperty(target: Record<string, string>, name: string, value: string): void {
+  let key = name;
+  for (let copy = 2; Object.hasOwn(target, key); copy += 1) key = `${name} (${copy})`;
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+}
+
+function isRowOf(cells: Element[], tag: "th" | "td"): boolean {
+  return cells.length > 0 && cells.every((cell) => cell.localName === tag);
+}
+
+/**
+ * The attributes in one HTML table: one property per `<th>name</th><td>value</td>`
+ * row or, for a table with a column header, the header naming the cells of the
+ * first data row: the first all-`<td>` row right below an all-`<th>` row of the
+ * same length, at least two cells wide (a lone `<th>` over a lone `<td>` reads
+ * as a title over free text, not as a field). Rows of any other shape, such as
+ * a title spanning the table, are skipped, and so are the rows of a table
+ * nested in a cell. Null when the table has neither shape.
+ */
+function tableProperties(table: Element): Record<string, string> | null {
+  const rows = Array.from(table.querySelectorAll("tr"))
+    .filter((row) => row.closest("table") === table)
+    .map((row) =>
+      Array.from(row.children).filter((cell) => cell.localName === "th" || cell.localName === "td"),
+    );
+
+  const pairs: Record<string, string> = {};
+  for (const cells of rows) {
+    if (cells.length !== 2 || cells[0].localName !== "th" || cells[1].localName !== "td") continue;
+    const name = cellText(cells[0]);
+    if (name) addProperty(pairs, name, cellText(cells[1]));
+  }
+  if (Object.keys(pairs).length > 0) return pairs;
+
+  const valuesIndex = rows.findIndex(
+    (cells, index) =>
+      index > 0 &&
+      cells.length > 1 &&
+      isRowOf(cells, "td") &&
+      rows[index - 1].length === cells.length &&
+      isRowOf(rows[index - 1], "th"),
+  );
+  if (valuesIndex < 0) return null;
+  const header = rows[valuesIndex - 1];
+  const values = rows[valuesIndex];
+  const columns: Record<string, string> = {};
+  header.forEach((cell, index) => {
+    const name = cellText(cell);
+    if (name) addProperty(columns, name, cellText(values[index]));
+  });
+  return Object.keys(columns).length > 0 ? columns : null;
+}
+
+/**
+ * The attributes of an HTML GetFeatureInfo answer read from its tables (#2888),
+ * see tableProperties. A request for several layers can get one table per
+ * layer: the first `layerCount` tables with a shape are merged, a name already
+ * taken getting a ` (2)`, ` (3)` suffix, as within one table. With one layer
+ * only the first is read, as the JSON branch reads the first feature: a server
+ * may give one table per feature. Null when no table has either shape.
+ */
+function propertiesFromHtmlTables(
+  document: Document,
+  layerCount: number,
+): Record<string, string> | null {
+  const merged: Record<string, string> = {};
+  // A table nested in a cell belongs to that cell's value, not to the answer.
+  const tables = Array.from(document.querySelectorAll("table")).filter(
+    (table) => !table.parentElement?.closest("table"),
+  );
+  let read = 0;
+  for (const table of tables) {
+    if (read >= layerCount) break;
+    const properties = tableProperties(table);
+    if (!properties) continue;
+    read += 1;
+    for (const [name, value] of Object.entries(properties)) addProperty(merged, name, value);
+  }
+  return Object.keys(merged).length > 0 ? merged : null;
 }
 
 function isWmsExceptionResponse(value: string): boolean {
   return /<([\w:]+)?(ServiceException|ExceptionReport)\b/i.test(value);
+}
+
+/** The text of a WMS/OWS exception report, without its XML and CDATA wrapping. */
+function wmsExceptionMessage(value: string): string {
+  const match =
+    /<(?:[\w-]+:)?(ServiceException|ExceptionText)\b[^>]*>([\s\S]*?)<\/(?:[\w-]+:)?\1>/i.exec(
+      value,
+    );
+  const inner = match?.[2].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  return normalizeText(inner ?? "") || normalizeText(value);
 }
 
 function parseWmsJsonProperties(value: unknown): {
@@ -438,7 +556,9 @@ function parseWmsJsonProperties(value: unknown): {
  * @param lngLat The clicked position.
  * @param zoom The map zoom, which sets the query box's resolution.
  * @param signal Aborts the request when a newer click supersedes it.
- * @returns The first feature's id and properties, a text result, or null.
+ * @returns The first feature's id and properties, a text result, or null
+ *   (also, without a request, for a layer that is not queryable).
+ * @throws Error when every format probed came back as a WMS exception.
  */
 export async function fetchWmsIdentifyProperties(
   layer: GeoLibreLayer,
@@ -449,7 +569,11 @@ export async function fetchWmsIdentifyProperties(
   featureId?: string | number;
   properties: Record<string, unknown>;
 } | null> {
+  if (!isWmsQueryable(layer)) return null;
   let fallbackText = "";
+  // A WMS exception is the server refusing the request, not the feature's data:
+  // kept apart so it surfaces as an error when no format gave anything else.
+  let exceptionText = "";
 
   // Honor an explicitly configured INFO_FORMAT so we issue a single request
   // instead of probing JSON/HTML/plain-text in sequence.
@@ -471,7 +595,9 @@ export async function fetchWmsIdentifyProperties(
     if (!response.ok) {
       // HTTP/2 drops the reason phrase, so statusText is often "". Fall back to
       // the status code so a failed request never surfaces as "No attributes".
-      fallbackText = normalizeText(text) || response.statusText || `HTTP ${response.status}`;
+      // Some servers send their exception report with an error status too.
+      if (isWmsExceptionResponse(text)) exceptionText = wmsExceptionMessage(text);
+      else fallbackText = normalizeText(text) || response.statusText || `HTTP ${response.status}`;
       continue;
     }
 
@@ -490,7 +616,7 @@ export async function fetchWmsIdentifyProperties(
     // Only run the XML exception check on bodies that are not JSON, so a JSON
     // response that merely mentions "ServiceException" is not misread as one.
     if (!looksLikeJson && isWmsExceptionResponse(text)) {
-      fallbackText = normalizeText(text);
+      exceptionText = wmsExceptionMessage(text);
       continue;
     }
 
@@ -502,18 +628,27 @@ export async function fetchWmsIdentifyProperties(
         // so an unrecognized-but-real response isn't silently discarded.
         fallbackText = fallbackText || normalizeText(text);
       } catch {
-        fallbackText = normalizeText(text);
+        // A JSON probe often gets the server's XML exception back.
+        if (isWmsExceptionResponse(text)) exceptionText = wmsExceptionMessage(text);
+        else fallbackText = normalizeText(text);
       }
       continue;
     }
 
     if (headerlessHtml || contentType.includes("html")) {
-      const resultText = textFromHtml(text);
+      const document = new DOMParser().parseFromString(text, "text/html");
+      const resultText = normalizeText(document.body.textContent ?? "");
       if (!resultText) continue;
       // HTML we did not ask for (often a server error page) is kept as a
       // fallback so the remaining info formats are still tried.
       if (!headerlessHtml || infoFormat.includes("html")) {
-        return { properties: { result: resultText } };
+        const layerCount = Math.max(
+          1,
+          (stringSource(layer.source.layers) ?? "").split(",").filter((name) => name.trim()).length,
+        );
+        return {
+          properties: propertiesFromHtmlTables(document, layerCount) ?? { result: resultText },
+        };
       }
       fallbackText = fallbackText || resultText;
       continue;
@@ -528,7 +663,9 @@ export async function fetchWmsIdentifyProperties(
     fallbackText = resultText;
   }
 
-  return fallbackText ? { properties: { result: fallbackText } } : null;
+  if (fallbackText) return { properties: { result: fallbackText } };
+  if (exceptionText) throw new Error(`WMS GetFeatureInfo returned an error: ${exceptionText}`);
+  return null;
 }
 
 export function isAbortError(error: unknown): boolean {

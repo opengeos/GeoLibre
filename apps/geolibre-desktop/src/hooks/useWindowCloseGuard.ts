@@ -1,6 +1,8 @@
 import { useAppStore } from "@geolibre/core";
+import i18next from "i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "../lib/is-tauri";
+import { notify } from "../lib/notify";
 
 /** How the user answered the unsaved-changes prompt raised by a window close. */
 export type WindowCloseChoice = "save" | "discard" | "cancel";
@@ -76,6 +78,11 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
       })
       .catch((error) => {
         console.error("[GeoLibre] Could not guard the window close", error);
+        // Closing the window would then drop unsaved work without asking.
+        notify.warning(i18next.t("notifications.windowCloseGuardFailed"), {
+          dedupeKey: "window-close-guard",
+          durationMs: null,
+        });
       });
     return () => {
       disposed = true;
@@ -101,7 +108,13 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
         // (file name, embed-data, credential strip) are not stacked under it.
         saved = await saveProjectRef.current();
       } catch (error) {
+        // A save that fails cleanly resolves false and shows its own dialog;
+        // only an unexpected throw lands here, with nothing else on screen.
         console.error("Failed to save project before closing", error);
+        notify.error(i18next.t("notifications.windowCloseSaveFailed"), {
+          dedupeKey: "window-close-save",
+          error,
+        });
       } finally {
         savingRef.current = false;
         setWindowCloseSaving(false);
@@ -117,6 +130,10 @@ export function useWindowCloseGuard(saveProject: () => Promise<boolean>): Window
       await destroyCurrentWindow();
     } catch (error) {
       console.error("[GeoLibre] Could not close the window", error);
+      notify.error(i18next.t("notifications.windowCloseFailed"), {
+        dedupeKey: "window-close",
+        error,
+      });
     }
   }, []);
 

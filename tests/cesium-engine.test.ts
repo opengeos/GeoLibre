@@ -513,6 +513,18 @@ describe("CesiumEngine camera publishing", () => {
     engine.destroy();
   });
 
+  it("keeps the camera's orientation for a chapter without pitch or bearing", () => {
+    const fakes = makeViewer();
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView({ ...VIEW, bearing: 40, pitch: 30 });
+    const before = engine.readView();
+    engine.applyStoryChapterCamera({ center: [30, 10], zoom: 8 }, "jumpTo");
+    const after = engine.readView();
+    assert.ok(Math.abs(after.bearing - before.bearing) < 1e-6, `bearing ${after.bearing}`);
+    assert.ok(Math.abs(after.pitch - before.pitch) < 1e-6, `pitch ${after.pitch}`);
+    engine.destroy();
+  });
+
   it("stops publishing once destroyed", () => {
     const fakes = makeViewer();
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);

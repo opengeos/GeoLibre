@@ -84,7 +84,7 @@ GeoLibre registers 66 built-in plugins.
 | **GeoAgent** | Plugins | `geoagent` | An in-map AI agent panel. |
 | **Elevation Profile** | Plugins | `elevation-profile` | A terrain profile along a drawn line, or along the selected line features of a layer. |
 | **Layer Swipe** | Plugins | `swipe` | A swipe bar comparing two layers. |
-| **Gridlines** | Controls → Gridlines | `graticule` | A coordinate grid with edge labels, including a UTM easting/northing mode. |
+| **Gridlines** | Controls → Gridlines | `graticule` | A coordinate grid with edge labels, including UTM easting/northing and MGRS/USNG modes. |
 | **Clouds** | Controls → Weather | `clouds` | Near-realtime NASA cloud imagery, animated day by day. |
 | **Precipitation** | Controls → Weather | `precipitation` | RainViewer precipitation radar, animated over roughly the last two hours. |
 | **Atmospheric Effects** | Controls → Atmospheric Effects | `atmosphere-effects` | A deep-space backdrop, starfield, comets, and an atmospheric halo at low zoom. |

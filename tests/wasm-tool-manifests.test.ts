@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   fileOutputTargetExtension,
+  lidarOutputTargetExtension,
   manifestScalarDefaults,
   mergeWasmToolManifests,
   normalizeVectorOutputFormat,
+  outputTextFormatHint,
   type ToolManifest,
   type WhiteboxTool,
 } from "@geolibre/processing";
@@ -483,5 +485,44 @@ describe("fileOutputTargetExtension", () => {
       io_role: "output",
     };
     assert.equal(fileOutputTargetExtension(decimalProse, undefined), "csv");
+  });
+});
+
+describe("outputTextFormatHint name words", () => {
+  it("reads a format named by one word of a snake/kebab/camelCase name", () => {
+    // directional_variogram's `output_json`, as the WASM manifest reports it:
+    // its description never says JSON, and `_` is a word character, so the
+    // old `\bjson\b` rule missed the name and the tool wrote an opaque `.dat`.
+    const variogram = {
+      name: "output_json",
+      description: "Output file path for directional variogram results",
+      data_kind: "file",
+      io_role: "output",
+    };
+    assert.equal(outputTextFormatHint(variogram), "json");
+    assert.equal(fileOutputTargetExtension(variogram, undefined), "json");
+    assert.equal(outputTextFormatHint({ name: "report-html" }), "html");
+    assert.equal(outputTextFormatHint({ name: "summaryCsv" }), "csv");
+    assert.equal(outputTextFormatHint({ name: "CSVOutput" }), "csv");
+  });
+
+  it("does not match a format buried inside a longer word", () => {
+    assert.equal(outputTextFormatHint({ name: "csvlike_output" }), null);
+    assert.equal(outputTextFormatHint({ name: "jsonish" }), null);
+  });
+});
+
+describe("lidarOutputTargetExtension", () => {
+  it("honours a user-typed .laz path", () => {
+    assert.equal(lidarOutputTargetExtension("classified.laz"), "laz");
+    assert.equal(lidarOutputTargetExtension(" /data/OUT.LAZ "), "laz");
+  });
+
+  it("keeps uncompressed .las for anything else", () => {
+    assert.equal(lidarOutputTargetExtension("classified.las"), "las");
+    assert.equal(lidarOutputTargetExtension("classified.laz.bak"), "las");
+    assert.equal(lidarOutputTargetExtension(""), "las");
+    assert.equal(lidarOutputTargetExtension(undefined), "las");
+    assert.equal(lidarOutputTargetExtension(42), "las");
   });
 });

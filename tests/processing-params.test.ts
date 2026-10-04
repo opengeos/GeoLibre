@@ -136,8 +136,23 @@ describe("fileOutputExtension", () => {
     assert.equal(fileOutputExtension(new TextEncoder().encode("PMTiles\u0003rest")), "pmtiles");
   });
 
-  it("labels a LAZ file .las, since both share the LASF signature", () => {
-    // Existing behaviour: the sniff cannot tell LAZ from LAS.
+  it("tells LAZ from LAS by the compression bit on the point data format", () => {
+    // LAS and LAZ share "LASF"; LASzip sets bit 7 of the header's point data
+    // record format (byte 104). The WASM tools write format 6 as 0x06 for
+    // `.las` and 0x86 (134) for `.laz`.
+    const header = (pointFormat: number) => {
+      const out = new Uint8Array(227);
+      out.set([0x4c, 0x41, 0x53, 0x46]);
+      out[104] = pointFormat;
+      return out;
+    };
+    assert.equal(fileOutputExtension(header(0x06)), "las");
+    assert.equal(fileOutputExtension(header(0x86)), "laz");
+    assert.equal(fileOutputExtension(header(0x83)), "laz"); // format 3, compressed
+    assert.equal(fileOutputExtension(header(0x00)), "las");
+  });
+
+  it("calls a LASF header too short to carry the point format .las", () => {
     assert.equal(fileOutputExtension(bytes(0x4c, 0x41, 0x53, 0x46, 1, 4)), "las");
   });
 
@@ -280,11 +295,35 @@ describe("isPathParameter", () => {
     assert.equal(isPathParameter(param("output", { kind: "vector_out" })), true);
   });
 
-  it("falls back to whole-word path wording in the name, description or type", () => {
-    // Existing behaviour (possible follow-up): `_` is a word char, so a
-    // snake_case name like `output_folder` misses the whole-word rule.
-    assert.equal(isPathParameter(param("output_folder", { kind: "string" })), false);
-    assert.equal(isPathParameter(param("folder", { kind: "string" })), true);
+  it("matches a path-like word of a snake_case, camelCase or kebab-case name", () => {
+    for (const name of [
+      "folder",
+      "output_folder",
+      "input_file",
+      "outputFolder",
+      "inputFile",
+      "csv-path",
+      "INPUT_DIRECTORY",
+      "out_filename",
+      "image_files",
+      "inputJSONFile",
+      "output_folders",
+      "search_directories",
+    ]) {
+      assert.equal(isPathParameter(param(name, { kind: "string" })), true, name);
+    }
+    // Untyped parameters resolve to the string kind.
+    assert.equal(isPathParameter(param("output_folder")), true);
+  });
+
+  it("does not match a path word buried inside a longer word", () => {
+    assert.equal(isPathParameter(param("profile_name", { kind: "string" })), false);
+    assert.equal(isPathParameter(param("pathway", { kind: "string" })), false);
+    // `dir` is flow direction in hydrology tools, not a folder.
+    assert.equal(isPathParameter(param("flow_dir", { kind: "string" })), false);
+  });
+
+  it("falls back to whole-word path wording in the description or type", () => {
     assert.equal(isPathParameter(param("x", { description: "Input file to read" })), true);
     assert.equal(isPathParameter(param("x", { description: "The working DIRECTORY" })), true);
     assert.equal(isPathParameter(param("x", { type: "path" })), true);
@@ -292,9 +331,27 @@ describe("isPathParameter", () => {
     assert.equal(isPathParameter(param("x", { description: "Number of files" })), false);
   });
 
-  it("matches path wording even on a numeric parameter", () => {
-    // Existing behaviour: only the wording is checked for non-dataset kinds.
-    assert.equal(isPathParameter(param("n", { kind: "int", description: "Rows per file" })), true);
+  it("never offers a picker for a numeric, boolean or enum parameter", () => {
+    // Real catalog cases: split_lidar's `interval` ("points-per-output-file"),
+    // points_to_path's `close_path` and optimal_path_as_line's `path_type`.
+    assert.equal(isPathParameter(param("n", { kind: "int", description: "Rows per file" })), false);
+    assert.equal(
+      isPathParameter(param("interval", { kind: "double", description: "points-per-output-file" })),
+      false,
+    );
+    assert.equal(isPathParameter(param("close_path", { kind: "bool" })), false);
+    assert.equal(isPathParameter(param("path_type", { kind: "enum" })), false);
+    assert.equal(isPathParameter(param("output_file", { kind: "int" })), false);
+    // A WASM scalar resolves its kind from the schema.
+    assert.equal(
+      isPathParameter(
+        param("path_corrected_direction_preference", {
+          data_kind: "number",
+          schema: { kind: "scalar", scalar: "f64" },
+        }),
+      ),
+      false,
+    );
   });
 
   it("returns false for an empty parameter", () => {
@@ -331,8 +388,11 @@ describe("pathFiltersForParameter / acceptForParameter", () => {
     const expected = ".csv,.json,.geojson,.html,.txt,.xml";
     assert.equal(acceptForParameter(param("csv", { kind: "file_in" })), expected);
     assert.equal(acceptForParameter(param("report", { kind: "file_out", type: "HTML" })), expected);
-    // `_` is a word char, so `output_csv` does not match the whole-word rule.
-    assert.equal(acceptForParameter(param("output_csv", { kind: "file_out" })), "");
+    // One word of a snake_case, camelCase or kebab-case name is enough.
+    for (const name of ["output_csv", "out_html", "sweep_spec_json", "reportXml", "notes-txt"]) {
+      assert.equal(acceptForParameter(param(name, { kind: "file_out" })), expected, name);
+    }
+    assert.equal(acceptForParameter(param("csvish_output", { kind: "file_out" })), "");
     // The description is not consulted.
     assert.equal(acceptForParameter(param("x", { kind: "file_in", description: "a csv" })), "");
   });
@@ -388,13 +448,14 @@ describe("defaultOutputName", () => {
     );
   });
 
-  it("sanitizes unsafe characters and trims edge underscores", () => {
+  it("sanitizes unsafe characters into single underscores", () => {
     assert.equal(
       defaultOutputName("my tool!", param("out-file", { kind: "vector_out" })),
-      "my_tool__out_file.shp", // the `!` becomes `_` beside the joining `_`
+      "my_tool_out_file.shp",
     );
-    // Only edge underscores are trimmed; interior runs are kept.
-    assert.equal(defaultOutputName("_x_", param("y__", { kind: "lidar_out" })), "x__y.laz");
+    // Runs of underscores collapse, and edge underscores are trimmed.
+    assert.equal(defaultOutputName("_x_", param("y__", { kind: "lidar_out" })), "x_y.laz");
+    assert.equal(defaultOutputName("a__b", param("c - d", { kind: "raster_out" })), "a_b_c_d.tif");
   });
 
   it("falls back for an empty tool id, parameter name or stem", () => {

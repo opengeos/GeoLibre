@@ -1,4 +1,6 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import i18next from "i18next";
+import { notify } from "./notify";
 import type { KmlGroundOverlay } from "./kml";
 import { isTiffImageName } from "./kml-overlays";
 import { tiffBytesToImageBitmap } from "./tiff-image";
@@ -189,6 +191,26 @@ export async function registerKmlSuperOverlay(
 }
 
 /**
+ * Tells the user a reopened project's Super-Overlay drew nothing because its
+ * source file could not be read again (moved, deleted, permission revoked).
+ * Named after the layer that uses it when there is one, else the file.
+ */
+function notifySuperOverlayUnreadable(id: string): void {
+  const prefix = tileUrl(id).split("/{z}")[0];
+  const layer = useAppStore
+    .getState()
+    .layers.find((candidate) =>
+      ((candidate.source as { tiles?: unknown } | undefined)?.tiles as unknown[] | undefined)?.some(
+        (tile) => typeof tile === "string" && tile.startsWith(prefix),
+      ),
+    );
+  const name = layer?.name ?? id.split(/[\\/]/).pop() ?? id;
+  notify.warning(i18next.t("notifications.kmlSuperOverlayReadFailed", { name }), {
+    dedupeKey: `kml-super-overlay:${id}`,
+  });
+}
+
+/**
  * The archive behind a tile URL, re-reading it through the installed resolver
  * when this session has not registered it — the case after a saved project is
  * reopened, since only the tile URL persists, never the pyramid's bytes.
@@ -205,8 +227,12 @@ async function archiveFor(id: string): Promise<SuperOverlayArchive | null> {
       try {
         const tiles = await resolver(id);
         if (tiles && tiles.length > 0) return storeArchive(id, tiles);
+        // No throw, but nothing to draw either: the browser cannot re-read a
+        // path at all, and a session-only key from a dropped file names none.
+        notifySuperOverlayUnreadable(id);
       } catch (error) {
         console.warn(`[GeoLibre] Could not re-read the KML Super-Overlay from "${id}".`, error);
+        notifySuperOverlayUnreadable(id);
       } finally {
         pendingResolutions.delete(id);
       }

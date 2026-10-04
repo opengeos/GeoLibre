@@ -6,7 +6,10 @@ import {
   type ToolbarMapControl,
 } from "../../components/layout/toolbar/constants";
 import { readControlPreference, writeControlPreference } from "../../lib/control-preferences";
-import { isMaptoolkitBasemapActive } from "../../lib/maptoolkit-basemap";
+import {
+  createMaptoolkitLogoEngineSync,
+  isMaptoolkitBasemapActive,
+} from "../../lib/maptoolkit-basemap";
 import {
   SCRIPT_MAP_CONTROL_EVENT,
   forgetScriptMapControl,
@@ -47,14 +50,19 @@ export function useMapControlVisibility(
       return acc;
     }, {} as MapControlVisibility),
   );
+  const [syncMaptoolkitLogoToEngine] = useState(createMaptoolkitLogoEngineSync);
   // Restore optional chrome after startup and renderer replacement. Terrain is
-  // project state and the Maptoolkit logo follows attribution requirements.
+  // project state and the Maptoolkit logo follows attribution requirements:
+  // it is handed to each new engine once (a renderer swap starts the new one
+  // without it), not on every readiness bump, which would also clobber a
+  // manual toggle on each basemap style load.
   useEffect(() => {
     for (const { id } of MAP_CONTROL_ITEMS) {
       if (id !== "terrain" && id !== "maptoolkit-logo")
         mapControllerRef.current?.setBuiltInControlVisible(id, controlsVisible[id]);
     }
-  }, [mapControllerRef, mapReadyGeneration, controlsVisible]);
+    syncMaptoolkitLogoToEngine(mapControllerRef.current, controlsVisible["maptoolkit-logo"]);
+  }, [mapControllerRef, mapReadyGeneration, controlsVisible, syncMaptoolkitLogoToEngine]);
 
   // A script (the Jupyter widget's show_control/hide_control) toggles a control
   // on the map directly; mirror it here so the Controls menu checkmark agrees
@@ -127,9 +135,10 @@ export function useMapControlVisibility(
   // switch — reapplying the flag and silently clobbering a manual toggle the
   // user made while that basemap stayed active. The effect depends only on
   // the flag itself (edge-triggered), so a manual toggle from the menu is left
-  // alone until the flag actually flips; the trade-off is that an activation
-  // landing before the controller exists (mapControllerRef.current still
-  // null) is not retried, which our mount ordering does not otherwise hit.
+  // alone until the flag actually flips. An activation landing before the
+  // controller exists (mapControllerRef.current still null), and every
+  // replacement engine after a renderer swap, get the checkmark's state from
+  // the per-engine sync in the restore effect above.
   const maptoolkitBasemapActive = useAppStore((s) =>
     isMaptoolkitBasemapActive(s.basemapStyleUrl, s.layers),
   );

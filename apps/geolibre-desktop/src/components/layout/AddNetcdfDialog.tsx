@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   addCloudNetcdfLayer,
   composeRgbImage,
+  crossesAntimeridian,
   listKerchunkVariables,
   loadKerchunkReference,
   openLocalNetcdf,
@@ -227,8 +228,9 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
   // `axes` is empty when listAxes throws, but `leadingDims` comes from
   // listVariables and survives; without the fallback a time cube would quietly
   // lose the Time Slider by taking the baked-image path.
-  const hasTimeAxis =
-    axes.some((axis) => isTimeAxisName(axis.name)) || leadingDims.some(isTimeAxisName);
+  const timeAxisName =
+    axes.find((axis) => isTimeAxisName(axis.name))?.name ?? leadingDims.find(isTimeAxisName);
+  const hasTimeAxis = timeAxisName !== undefined;
   // Single-band grids from an opened dataset are colormapped on the CPU and
   // added as an image overlay rather than drawn by @carbonplan/zarr-layer, whose
   // `shift_x` uniform lookup throws on drivers that eliminate it (Mesa, so most
@@ -512,67 +514,44 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
             },
           });
           appApi.fitBounds?.(image.bounds);
-        } else if (useImagePath) {
-          // The grid itself, not just its pixels, so the Style panel can
-          // re-colormap the layer without re-reading the file.
-          const grid = await datasetGrid(dataset, variable, selector);
-          const symbology = {
-            colormap,
-            reversed: false,
-            clim: clim ?? grid.dataClim,
-          };
-          // The picker lists every ramp as soon as it opens, including sprite
-          // ramps the catalogue is still sampling; baking before one resolves
-          // would silently paint viridis under the chosen name.
-          await warmNetcdfColormap(colormap);
-          const image = bakeNetcdfImage(grid, symbology);
-          const layerId = addImageOverlayLayer(
-            `${baseName} - ${variable}`,
-            {
-              url: encodeImageOverlay(image),
-              coordinates: image.coordinates,
-            },
-            {
-              bounds: image.bounds,
-              sourceKind: NETCDF_IMAGE_SOURCE_KIND,
-              metadata: {
-                netcdfSymbology: symbology,
-                variable,
-                // Identify reads a cell value, not a feature, so the button's
-                // tooltip should say so — the same marker COG-backed Time
-                // Slider sources use.
-                pixelIdentify: true,
-              },
-            },
-          );
-          // The file stays open only for a cube, whose band axis is what a
-          // spectral signature walks; a plain 2-D grid needs nothing beyond the
-          // slice already read.
-          if (rgbAxis) retainedFileRef.current = dataset.file;
-          registerNetcdfLayer(layerId, {
-            grid,
-            variable,
-            ...(selectedVar?.units ? { units: selectedVar.units } : {}),
-            ...(rgbAxis ? { cube: cubeReader(dataset, variable, rgbAxis, selector) } : {}),
-          });
-          appApi.fitBounds?.(image.bounds);
-        } else if (dataset.kind === "local") {
-          const built = dataset.file.buildLayerRefs(variable, selector);
-          await addCloudNetcdfLayer(appApi, {
-            // Encoded so a name with URL-special chars (#, ?, %) survives
-            // layerNameFromUrl's new URL(...) parse; that helper decodes it
-            // again for the display name.
-            url: `local:${encodeURIComponent(baseName)}`,
-            refs: built.refs,
-            variable,
-            // The renderer's stock 0-300 limits paint most real grids as a flat
-            // wash, so fall back to the slice's own robust range when the user
-            // left the fields blank.
-            clim: clim ?? built.clim ?? undefined,
-            colormap,
-            bounds: built.bounds,
-          });
-          appApi.fitBounds?.(built.bounds);
+        } else {
+          // A local time cube stays on the Zarr renderer, which the Time Slider
+          // can step, with the time axis kept in the store as a dimension.
+          const built =
+            !useImagePath && dataset.kind === "local"
+              ? dataset.file.buildLayerRefs(
+                  variable,
+                  selector,
+                  timeAxisName ? { keepAxis: timeAxisName } : {},
+                )
+              : null;
+          // The renderer cannot draw a grid across the antimeridian (it wraps
+          // the far edge back to the other side and stretches the data over the
+          // whole world), so such a cube is baked as an image of the selected
+          // step, like a remote one.
+          if (built && !crossesAntimeridian(built.bounds)) {
+            await addCloudNetcdfLayer(appApi, {
+              // Encoded so a name with URL-special chars (#, ?, %) survives
+              // layerNameFromUrl's new URL(...) parse; that helper decodes it
+              // again for the display name.
+              url: `local:${encodeURIComponent(baseName)}`,
+              refs: built.refs,
+              variable,
+              // Names the kept time axis, or nothing at all; never the
+              // per-dimension indices of the dialog, most of which the store
+              // no longer has.
+              selector: built.selector,
+              // The renderer's stock 0-300 limits paint most real grids as a
+              // flat wash, so fall back to the slice's own robust range when
+              // the user left the fields blank.
+              clim: clim ?? built.clim ?? undefined,
+              colormap,
+              bounds: built.bounds,
+            });
+            appApi.fitBounds?.(built.bounds);
+          } else {
+            await addSingleBandImage(dataset, baseName, selector, clim);
+          }
         }
       } else {
         // No opened dataset: a kerchunk manifest, streamed by the Zarr renderer.
@@ -594,6 +573,65 @@ export function AddNetcdfDialog({ open, appApi, onOpenChange }: AddNetcdfDialogP
     } finally {
       if (gen === opGen.current) setAdding(false);
     }
+  };
+
+  /**
+   * Add one slice of a single-band variable as a CPU-colormapped image layer.
+   *
+   * @param dataset - The opened local file or remote URL.
+   * @param baseName - The file name the layer is named after.
+   * @param selector - The index fixed on every leading dimension.
+   * @param clim - The user's color limits, if they entered any.
+   */
+  const addSingleBandImage = async (
+    dataset: OpenDataset,
+    baseName: string,
+    selector: Record<string, number>,
+    clim: [number, number] | undefined,
+  ): Promise<void> => {
+    // The grid itself, not just its pixels, so the Style panel can
+    // re-colormap the layer without re-reading the file.
+    const grid = await datasetGrid(dataset, variable, selector);
+    const symbology = {
+      colormap,
+      reversed: false,
+      clim: clim ?? grid.dataClim,
+    };
+    // The picker lists every ramp as soon as it opens, including sprite
+    // ramps the catalogue is still sampling; baking before one resolves
+    // would silently paint viridis under the chosen name.
+    await warmNetcdfColormap(colormap);
+    const image = bakeNetcdfImage(grid, symbology);
+    const layerId = addImageOverlayLayer(
+      `${baseName} - ${variable}`,
+      {
+        url: encodeImageOverlay(image),
+        coordinates: image.coordinates,
+      },
+      {
+        bounds: image.bounds,
+        sourceKind: NETCDF_IMAGE_SOURCE_KIND,
+        metadata: {
+          netcdfSymbology: symbology,
+          variable,
+          // Identify reads a cell value, not a feature, so the button's
+          // tooltip should say so — the same marker COG-backed Time
+          // Slider sources use.
+          pixelIdentify: true,
+        },
+      },
+    );
+    // The file stays open only for a cube, whose band axis is what a
+    // spectral signature walks; a plain 2-D grid needs nothing beyond the
+    // slice already read.
+    if (rgbAxis) retainedFileRef.current = dataset.file;
+    registerNetcdfLayer(layerId, {
+      grid,
+      variable,
+      ...(selectedVar?.units ? { units: selectedVar.units } : {}),
+      ...(rgbAxis ? { cube: cubeReader(dataset, variable, rgbAxis, selector) } : {}),
+    });
+    appApi.fitBounds?.(image.bounds);
   };
 
   return (

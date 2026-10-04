@@ -533,4 +533,45 @@ describe("addCloudNetcdfLayer", () => {
     assert.equal(layer?.source.variable, "air");
     assert.deepEqual(layer?.source.bounds, [-10, -5, 10, 5]);
   });
+
+  it("sends an empty selector rather than none, so the control's default cannot leak in", async () => {
+    // The control reads a missing selector as "use the panel's", which is the
+    // CarbonPlan sample's `{ band, month }`: a local (time, lat, lon) file then
+    // failed with "selector 'band', 'month' does not name a dimension".
+    installStubModule();
+    addCalls.length = 0;
+
+    await addCloudNetcdfLayer(app, {
+      url: "local:air-temperature.nc",
+      refs: {},
+      variable: "air",
+    });
+
+    assert.deepEqual(addCalls.at(-1)?.options?.selector, {});
+  });
+
+  it("forwards a kept time axis selector as given", async () => {
+    installStubModule();
+    addCalls.length = 0;
+
+    await addCloudNetcdfLayer(app, {
+      url: "local:air-temperature.nc",
+      refs: {},
+      variable: "air",
+      selector: { time: 0 },
+    });
+
+    assert.deepEqual(addCalls.at(-1)?.options?.selector, { time: 0 });
+  });
+});
+
+describe("addZarrRasterLayer without a selector", () => {
+  it("sends an empty selector to the control", async () => {
+    installStubModule();
+    addCalls.length = 0;
+
+    await addZarrRasterLayer(app, { url: "https://example.org/store.zarr", variable: "sst" });
+
+    assert.deepEqual(addCalls.at(-1)?.options?.selector, {});
+  });
 });

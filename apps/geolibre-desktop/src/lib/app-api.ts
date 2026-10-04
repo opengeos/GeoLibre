@@ -254,6 +254,7 @@ export function createAppAPI(
         transparent,
         version,
         crs,
+        queryable,
         metadata,
         ...tileOptions
       } = options;
@@ -313,6 +314,7 @@ export function createAppAPI(
             transparent: resolvedTransparent,
             version: resolvedVersion,
             crs: resolvedCrs,
+            ...(queryable === false ? { queryable: false } : {}),
           },
           ...tileOptions,
           ...(validMetadata ? { metadata: validMetadata } : {}),

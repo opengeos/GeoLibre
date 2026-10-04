@@ -15,6 +15,7 @@ import {
   type VectorToolRequest,
   type VectorToolResult,
 } from "@geolibre/processing";
+import { rejectOnAbort } from "../../lib/abortable";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
 import { onPyodideProgress, runVectorToolInPyodide } from "../../lib/pyodide/pyodide-vector-loader";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
@@ -38,7 +39,7 @@ import {
   translateToolName,
 } from "../../lib/processing-tool-i18n";
 import { ParameterField } from "./ParameterField";
-import { Loader2, Play, Server } from "lucide-react";
+import { Loader2, Play, Server, Square } from "lucide-react";
 import type { FeatureCollection } from "geojson";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
@@ -48,6 +49,12 @@ interface VectorToolsDialogProps {
 }
 
 type Engine = "client" | "sidecar" | "pyodide";
+
+/** Where one run sends its log lines and result layers. */
+interface RunSink {
+  appendLog: (message: string) => void;
+  addResultLayer: (name: string, fc: FeatureCollection) => void;
+}
 
 /** Tools grouped by their `group` label, preserving registry order. */
 function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
@@ -85,6 +92,11 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
   const [autoRunPending, setAutoRunPending] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
+  // Cancels the in-flight run: the Cancel button, closing the dialog, or
+  // starting another run. A cancelled run adds no layer, fits no view and is not
+  // recorded in the Processing History; a worker-run Turf tool is also stopped
+  // (its worker is terminated).
+  const abortRef = useRef<AbortController | null>(null);
 
   const tool = useMemo(() => getVectorTool(selectedId) ?? VECTOR_TOOLS[0], [selectedId]);
 
@@ -312,7 +324,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     async (
       label: string,
       invoke: (request: VectorToolRequest) => Promise<VectorToolResult>,
+      sink: RunSink,
     ): Promise<string | null> => {
+      const { appendLog, addResultLayer } = sink;
       const inputLayer = layers.find((l) => l.id === params.layer);
       const overlayLayer = layers.find((l) => l.id === params.overlay);
       // A layer may have been removed from the project after the dialog opened;
@@ -349,7 +363,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       appendLog(`Error: ${message}`);
       return message;
     },
-    [layers, params, tool, appendLog, addResultLayer],
+    [layers, params, tool],
   );
 
   const handleRun = useCallback(async () => {
@@ -371,6 +385,21 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       }
     }
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const { signal } = controller;
+    // Everything the run does to the app goes through these, so a cancelled
+    // run's late callbacks (an inline tool that ignores the signal, a sidecar
+    // response still in flight) are dropped instead of reaching the map.
+    const sink: RunSink = {
+      appendLog: (message) => {
+        if (!signal.aborted) appendLog(message);
+      },
+      addResultLayer: (name, fc) => {
+        if (!signal.aborted) addResultLayer(name, fc);
+      },
+    };
     const tracker = beginProcessingRun({
       kind: "vector",
       toolId: tool.id,
@@ -384,42 +413,58 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
       // A remote engine can bail out without throwing (missing layer, invalid
       // response); its returned failure message keeps the run from being
       // recorded as a green no-output success.
-      let failure: string | null = null;
-      if (engine === "sidecar") {
-        failure = await runRemoteEngine("on the Python sidecar", runVectorTool);
-      } else if (engine === "pyodide") {
-        // Progress phases (one-time runtime + GeoPandas download) stream into
-        // the log; the subscription is dropped once the run finishes.
-        const unsubscribe = onPyodideProgress((phase) => appendLog(`${phase}...`));
-        try {
-          failure = await runRemoteEngine("in your browser (Pyodide)", runVectorToolInPyodide);
-        } finally {
-          unsubscribe();
+      const run = async (): Promise<string | null> => {
+        if (engine === "sidecar") {
+          return runRemoteEngine("on the Python sidecar", runVectorTool, sink);
         }
-      } else {
+        if (engine === "pyodide") {
+          // Progress phases (one-time runtime + GeoPandas download) stream into
+          // the log; the subscription is dropped once the run finishes.
+          const unsubscribe = onPyodideProgress((phase) => sink.appendLog(`${phase}...`));
+          try {
+            return await runRemoteEngine("in your browser (Pyodide)", runVectorToolInPyodide, sink);
+          } finally {
+            unsubscribe();
+          }
+        }
         const ctx: ProcessingContext = {
           layers,
           parameters: params,
-          log: appendLog,
-          fitBounds: (bounds) => mapControllerRef.current?.fitBounds(bounds),
-          addResultLayer,
+          log: sink.appendLog,
+          fitBounds: (bounds) => {
+            if (!signal.aborted) mapControllerRef.current?.fitBounds(bounds);
+          },
+          addResultLayer: sink.addResultLayer,
           duckdb,
           viewportBounds: () => mapControllerRef.current?.getViewBounds() ?? null,
+          signal,
         };
         // Turf tools run on a worker so a large layer does not freeze the UI
         // (#2858); DuckDB-backed tools still run here.
         await runAlgorithmInBackground(tool, ctx);
-      }
+        return null;
+      };
+      // Settle on cancel even when the run cannot be interrupted (an inline
+      // tool, a sidecar request), so the dialog is usable again at once.
+      const failure = await Promise.race([run(), rejectOnAbort(signal)]);
       // A logged "Error: ..." line marks a soft failure (the client tools
       // bail out without throwing); don't record those as successes.
       const softError = failure ?? softErrorRef.current;
       if (softError) tracker.finish("error", softError);
       else tracker.finish("success");
     } catch (error) {
+      // A cancelled run is not a failed one: say so, and leave the History
+      // alone. A newer run that replaced this one reports for itself.
+      if (signal.aborted) {
+        if (abortRef.current === null) appendLog(t("processing.vectorTools.cancelled"));
+        return;
+      }
       appendLog(`Error: ${(error as Error).message}`);
       tracker.finish("error", (error as Error).message);
     } finally {
-      setRunning(false);
+      if (abortRef.current === controller) abortRef.current = null;
+      // A run replaced by a newer one must not clear the newer run's spinner.
+      if (abortRef.current === null) setRunning(false);
     }
   }, [
     tool,
@@ -432,7 +477,14 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     mapControllerRef,
     isParamVisible,
     duckdb,
+    t,
   ]);
+
+  const handleCancel = useCallback(() => {
+    const controller = abortRef.current;
+    abortRef.current = null;
+    controller?.abort();
+  }, []);
 
   // Auto-run for a History "Re-run": kick off handleRun on the render after the
   // pre-fill effect committed the recorded parameters. The ref always points at
@@ -453,7 +505,10 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
     <Dialog
       open={open}
       onOpenChange={(next: boolean) => {
-        if (!next) setVectorToolOpen(null);
+        if (!next) {
+          handleCancel();
+          setVectorToolOpen(null);
+        }
       }}
     >
       <DialogContent className="max-w-3xl">
@@ -575,7 +630,7 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
               </div>
             ) : null}
 
-            <div>
+            <div className="flex gap-2">
               <Button
                 onClick={handleRun}
                 disabled={running || (engine === "sidecar" && sidecarAvailable !== true)}
@@ -588,6 +643,12 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
                 )}
                 {t("processing.vectorTools.run")}
               </Button>
+              {running ? (
+                <Button variant="outline" onClick={handleCancel} className="gap-2">
+                  <Square className="h-4 w-4" />
+                  {t("processing.vectorTools.cancel")}
+                </Button>
+              ) : null}
             </div>
 
             <ScrollArea className="h-24 rounded-md border bg-muted/30 p-2 font-mono text-xs">

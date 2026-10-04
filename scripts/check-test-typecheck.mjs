@@ -177,10 +177,10 @@ function tally(items, key) {
 async function main() {
   const max = parseMaxErrors(process.argv.slice(2));
   const verbose = process.argv.includes("--verbose");
-  const [main, ...workerProjects] = PROJECTS.map((project) =>
+  const [mainProject, ...workerProjects] = PROJECTS.map((project) =>
     JSON.parse(readFileSync(project, "utf8")),
   );
-  const unchecked = checkProjectSplit(main, workerProjects);
+  const unchecked = checkProjectSplit(mainProject, workerProjects);
   if (unchecked.length > 0) {
     throw new Error(
       `tests/tsconfig.json excludes ${unchecked.join(", ")} but no worker project ` +

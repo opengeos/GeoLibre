@@ -9,9 +9,9 @@
 // and one message is one uninterrupted task. Splitting the features over
 // several messages bounds each task by the chunk size instead of by the layer.
 import type { Feature, FeatureCollection } from "geojson";
-import { setActiveEllipsoidId, type GeoLibreLayer } from "@geolibre/core";
+import { setActiveEllipsoidId, type GeoLibreLayer } from "@geolibre/core/worker-safe";
 import type { ProcessingContext, ResultLayerOptions } from "./types";
-import { getVectorTool } from "./vector-tools";
+import { WORKER_VECTOR_TOOLS } from "./vector-tool-worker-tools";
 
 /** Features per chunk message. */
 export const VECTOR_TOOL_CHUNK_FEATURES = 2_000;
@@ -25,7 +25,7 @@ export type VectorToolWorkerLayer = Pick<GeoLibreLayer, "id" | "name" | "type" |
 
 /** The run itself, posted after every input layer has been sent. */
 export interface VectorToolRunRequest {
-  /** Registry id of the tool; the worker resolves it with `getVectorTool`. */
+  /** Registry id of the tool; the worker resolves it in `WORKER_VECTOR_TOOLS`. */
   toolId: string;
   parameters: Record<string, unknown>;
   /**
@@ -97,8 +97,9 @@ export function chunkFeatureCollection(collection: FeatureCollection): {
 }
 
 /**
- * Worker-side state for one run: collects the input layers as their chunks
- * arrive, then runs the tool on `run`, posting each callback the tool makes.
+ * Worker-side state: collects the input layers as their chunks arrive, then
+ * runs the tool on `run`, posting each callback the tool makes. The layers are
+ * dropped when the run ends, so a parked worker starts its next run empty.
  *
  * @param post Sends one message back to the main thread.
  * @returns The handler for each message the main thread posts.
@@ -132,11 +133,13 @@ export function createVectorToolSession(
         if (features) for (const feature of request.features) features.push(feature);
         return;
       }
-      const tool = getVectorTool(request.toolId);
+      const runLayers = [...layers.values()] as GeoLibreLayer[];
+      layers.clear();
+      const tool = WORKER_VECTOR_TOOLS.get(request.toolId);
       if (!tool) throw new Error(`Unknown tool "${request.toolId}"`);
       setActiveEllipsoidId(request.ellipsoidId);
       const ctx: ProcessingContext = {
-        layers: [...layers.values()] as GeoLibreLayer[],
+        layers: runLayers,
         parameters: request.parameters,
         log: (message) => post({ type: "log", message }),
         fitBounds: (bounds) => post({ type: "fit-bounds", bounds }),

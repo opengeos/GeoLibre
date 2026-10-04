@@ -386,6 +386,26 @@ describe("diagnostics startup transient suppression", () => {
     assert.equal(getDiagnosticsSnapshot().totalCount, 0);
   });
 
+  it("passes every completed response to network observers, logged or not", async () => {
+    const { observeNetworkResponses } =
+      await import("../apps/geolibre-desktop/src/lib/diagnostics");
+    const statuses = [200, 404];
+    win.fetch = (() =>
+      Promise.resolve(new Response(null, { status: statuses.shift() }))) as unknown as typeof fetch;
+    install();
+    const seen: Array<{ url: string; status: number }> = [];
+    const stop = observeNetworkResponses(({ url, status }) => seen.push({ url, status }));
+    // A throwing observer must not break the request or the others.
+    const stopThrowing = observeNetworkResponses(() => {
+      throw new Error("observer bug");
+    });
+    await (win.fetch as typeof fetch)("https://t.example/1/0/0.png");
+    stop();
+    await (win.fetch as typeof fetch)("https://t.example/1/0/1.png");
+    stopThrowing();
+    assert.deepEqual(seen, [{ url: "https://t.example/1/0/0.png", status: 200 }]);
+  });
+
   it("flags an unmarked non-ok response as an error", async () => {
     win.fetch = (() =>
       Promise.resolve(

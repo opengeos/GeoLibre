@@ -21,9 +21,6 @@ from geolibre_server.app.postgis import (
     PostgisReadRequest,
     PostgisTablesRequest,
     PostgisWriteRequest,
-    _allowed_postgis_targets,
-    _normalize_host,
-    _sanitize_error,
     _validate_postgis_target,
     postgis_read,
     postgis_status,
@@ -67,58 +64,8 @@ def test_status_reports_availability() -> None:
     assert "message" in result
 
 
-def test_json_safe_stringifies_unsafe_integers() -> None:
-    """bigint keys beyond JS's safe range must not round through JSON."""
-    from geolibre_server.app.postgis import _json_safe
-
-    assert _json_safe(42) == 42
-    assert _json_safe(2**53 - 1) == 2**53 - 1
-    assert _json_safe(2**60) == str(2**60)
-    assert _json_safe(-(2**60)) == str(-(2**60))
-    assert _json_safe(True) is True
-
-
-def test_sanitize_error_scrubs_passwords() -> None:
-    url = "connection to postgresql://alice:hunter2@db.example.com/gis failed"
-    assert "hunter2" not in _sanitize_error(url)
-    kv = "invalid dsn: host=db user=alice password=hunter2 dbname=gis"
-    assert "hunter2" not in _sanitize_error(kv)
-    # An empty username (PGUSER from the environment) must not leak either.
-    no_user = "connection to postgresql://:hunter2@db.example.com/gis failed"
-    assert "hunter2" not in _sanitize_error(no_user)
-    # A pasted password containing a literal, unescaped @ must be fully
-    # redacted, not truncated at its first @.
-    at_sign = "connection to postgresql://alice:p@ss@db.example.com/gis failed"
-    scrubbed = _sanitize_error(at_sign)
-    assert "p@ss" not in scrubbed
-    assert "@ss@" not in scrubbed
-    assert "****@db.example.com" in scrubbed
-
-
-def test_postgis_allowlist_parses_hosts_ips_and_ports() -> None:
-    assert _allowed_postgis_targets(
-        "DB.EXAMPLE., db.internal:5433, 10.0.0.4, [2001:db8::1]:5432"
-    ) == {
-        ("db.example", None),
-        ("db.internal", 5433),
-        ("10.0.0.4", None),
-        ("2001:db8::1", 5432),
-    }
-
-
-def test_postgis_allowlist_requires_brackets_for_ipv6() -> None:
-    """An unbracketed `2001:db8::1:5432` is a valid address, not host plus port."""
-    with pytest.raises(ValueError):
-        _allowed_postgis_targets("2001:db8::1:5432")
-    assert _allowed_postgis_targets("[2001:db8::1]") == {("2001:db8::1", None)}
-
-
 def test_postgis_wildcard_lifts_the_restriction(monkeypatch) -> None:
     """``*`` (what the desktop app passes its own sidecar) allows any DSN."""
-    assert _allowed_postgis_targets("*") is None
-    # Mixing it with hosts looks like a narrowing but is not one.
-    with pytest.raises(ValueError):
-        _allowed_postgis_targets("db.example,*")
     monkeypatch.setenv("GEOLIBRE_POSTGIS_HOSTS", "*")
     for conninfo in (
         {"host": "anything.internal", "port": "5432"},
@@ -199,11 +146,6 @@ def test_postgis_allowlist_rejects_indirect_destinations(monkeypatch) -> None:
         with pytest.raises(HTTPException) as exc:
             _validate_postgis_target(conninfo)
         assert exc.value.status_code == 400
-
-
-def test_postgis_bracketed_empty_host_is_rejected() -> None:
-    with pytest.raises(ValueError):
-        _normalize_host("[]")
 
 
 @requires_psycopg

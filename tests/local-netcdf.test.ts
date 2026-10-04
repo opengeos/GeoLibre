@@ -8,6 +8,7 @@ import {
   buildInlineZarrStore,
   composeColormappedImage,
   composeRgbImage,
+  crossesAntimeridian,
   gridBounds,
   gridPixelAt,
   gridValueAt,
@@ -1061,5 +1062,214 @@ describe("assertByteServing", () => {
         );
       },
     );
+  });
+});
+
+/** Read a store chunk as little-endian float64 values. */
+async function readFloat64(store: KerchunkReferenceStore, key: string): Promise<number[]> {
+  const chunk = await store.get(key);
+  assert.ok(chunk, `missing key ${key}`);
+  return Array.from(new Float64Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 8));
+}
+
+/** Round to a few decimals, so float32 fixture values compare exactly. */
+function rounded(values: number[]): number[] {
+  return values.map((value) => Math.round(value * 1000) / 1000);
+}
+
+/** A five-step grey image of a fixture's whole `air` plane, one stop per column. */
+async function fixtureImage(name: string) {
+  const file = await openLocalNetcdf(fixture(name));
+  try {
+    const grid = file.readGrid("air", {});
+    return composeColormappedImage({
+      ...grid,
+      colors: ["#000000", "#404040", "#808080", "#c0c0c0", "#ffffff"],
+      // The fixtures encode column c as +0.1c, so a 0..0.4 range over row 0
+      // makes the red channel a direct readout of which column landed where.
+      clim: [250, 250.4],
+    });
+  } finally {
+    file.close();
+  }
+}
+
+// The fixtures are written by netCDF4 in the NETCDF4 (HDF5) format, like the
+// NCEP air temperature file the bugs were reported against: `air` holds
+// 250 + 10*step + row + 0.1*column on lat [60, 40, 20].
+describe("0..360 and antimeridian-crossing longitudes", () => {
+  it("shifts a 0..360 grid wholly east of 180 into the western hemisphere", async () => {
+    // lon 200..300E. The extent used to read [187.5, ..., 180] — west past
+    // east — and the layer drew nothing.
+    const file = await openLocalNetcdf(fixture("netcdf-lon360.nc"));
+    try {
+      const { refs, bounds } = file.buildLayerRefs("air");
+      assert.deepEqual(bounds, [-172.5, 10, -47.5, 70]);
+      const store = new KerchunkReferenceStore(refs);
+      assert.deepEqual(await readFloat64(store, "lon/0"), [-160, -135, -110, -85, -60]);
+      // A shift, not a roll: the data columns keep their order.
+      assert.deepEqual(
+        rounded((await readFloat32(store, "air/0.0")).slice(0, 5)),
+        [250, 250.1, 250.2, 250.3, 250.4],
+      );
+    } finally {
+      file.close();
+    }
+  });
+
+  it("places the image of a 0..360 grid at the same western-hemisphere extent", async () => {
+    const image = await fixtureImage("netcdf-lon360.nc");
+    assert.deepEqual(image.bounds, [-172.5, 10, -47.5, 70]);
+    assert.deepEqual(image.coordinates, [
+      [-172.5, 70],
+      [-47.5, 70],
+      [-47.5, 10],
+      [-172.5, 10],
+    ]);
+    assert.equal(crossesAntimeridian(image.bounds), false);
+  });
+
+  it("keeps a regional grid across the antimeridian contiguous, centred on the map", async () => {
+    // lon 150E..250E. Rolling it about 180 used to split it into two halves at
+    // opposite edges of the map, stretched over the whole world. It is written
+    // as 210W..110W, not 150E..250E: MapLibre never draws an image source whose
+    // centre (here 200E) lies past 180.
+    const image = await fixtureImage("netcdf-antimeridian.nc");
+    assert.deepEqual(image.bounds, [-222.5, 10, -97.5, 70]);
+    assert.equal(crossesAntimeridian(image.bounds), true);
+    // Row 0 (north) still runs west to east: column 0 darkest, column 4 white.
+    const reds = [0, 1, 2, 3, 4].map((column) => image.pixels[column * 4]);
+    assert.deepEqual(reds, [0, 64, 128, 192, 255]);
+  });
+
+  it("reports the same crossing extent from the Zarr path", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-antimeridian.nc"));
+    try {
+      const { refs, bounds } = file.buildLayerRefs("air");
+      assert.deepEqual(bounds, [-222.5, 10, -97.5, 70]);
+      const store = new KerchunkReferenceStore(refs);
+      assert.deepEqual(await readFloat64(store, "lon/0"), [-210, -185, -160, -135, -110]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("unwraps a -180..180 axis that jumps across the antimeridian", () => {
+    // 165E, 175E, 175W, 165W: contiguous once the western half gets +360.
+    const image = composeColormappedImage({
+      ny: 1,
+      nx: 4,
+      values: new Float32Array([0, 1, 2, 3]),
+      lat: new Float64Array([0]),
+      lon: new Float64Array([165, 175, -175, -165]),
+      colors: ["#000000", "#555555", "#aaaaaa", "#ffffff"],
+      clim: [0, 3],
+    });
+    assert.deepEqual(image.bounds, [160, 0, 200, 0]);
+    const reds = [0, 1, 2, 3].map((column) => image.pixels[column * 4]);
+    assert.deepEqual(reds, [0, 85, 170, 255]);
+  });
+
+  it("still rolls a global 0..360 grid about 180", () => {
+    const { bounds } = buildInlineZarrStore({
+      ...sampleGrid(),
+      nx: 4,
+      data: new Float32Array(8),
+      lon: new Float64Array([0, 90, 180, 270]),
+    });
+    assert.deepEqual(bounds, [-180, 5, 135, 25]);
+  });
+});
+
+describe("buildLayerRefs with a kept time axis", () => {
+  it("names time, lat and lon as the variable's dimensions", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-time-cube.nc"));
+    try {
+      const [air] = file.listVariables();
+      assert.deepEqual(air.dims, ["time", "lat", "lon"]);
+      const [time] = file.listAxes("air");
+      assert.equal(time.name, "time");
+      assert.equal(time.units, "hours since 1800-01-01");
+      assert.equal(time.calendar, "standard");
+    } finally {
+      file.close();
+    }
+  });
+
+  it("keeps the whole time axis selectable, one chunk per step", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-time-cube.nc"));
+    try {
+      const built = file.buildLayerRefs("air", { time: 2 }, { keepAxis: "time" });
+      // The renderer is told to show the requested step on the kept axis.
+      assert.deepEqual(built.selector, { time: 2 });
+      const store = new KerchunkReferenceStore(built.refs);
+
+      const zarray = await readJson(store, "air/.zarray");
+      assert.deepEqual(zarray.shape, [3, 3, 5]);
+      assert.deepEqual(zarray.chunks, [1, 3, 5]);
+      const zattrs = await readJson(store, "air/.zattrs");
+      // Without `time` here the renderer reported "Selectable dimensions: []".
+      assert.deepEqual(zattrs._ARRAY_DIMENSIONS, ["time", "lat", "lon"]);
+
+      // The CF attributes the Time Slider decodes the raw values with.
+      const timeAttrs = await readJson(store, "time/.zattrs");
+      assert.equal(timeAttrs.units, "hours since 1800-01-01");
+      assert.equal(timeAttrs.calendar, "standard");
+      assert.deepEqual(timeAttrs._ARRAY_DIMENSIONS, ["time"]);
+      assert.deepEqual(await readFloat64(store, "time/0"), [1866744, 1866750, 1866756]);
+
+      for (const step of [0, 1, 2]) {
+        const plane = await readFloat32(store, `air/${step}.0.0`);
+        assert.equal(plane.length, 15);
+        assert.equal(rounded(plane)[0], 250 + 10 * step);
+      }
+      // Color limits come from the step shown, not the whole cube.
+      assert.ok(built.clim);
+      assert.ok(built.clim[0] >= 270 && built.clim[1] <= 272.4);
+      // The cube's longitudes are shifted like a single plane's.
+      assert.deepEqual(built.bounds, [-172.5, 10, -47.5, 70]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("builds a plain 2-D store with an empty selector when no axis is kept", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-time-cube.nc"));
+    try {
+      const built = file.buildLayerRefs("air", { time: 1 });
+      assert.deepEqual(built.selector, {});
+      const store = new KerchunkReferenceStore(built.refs);
+      assert.deepEqual((await readJson(store, "air/.zarray")).shape, [3, 5]);
+      assert.equal(rounded(await readFloat32(store, "air/0.0"))[0], 260);
+      assert.equal(await store.get("time/.zarray"), undefined);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("ignores a kept axis the variable does not have", async () => {
+    const file = await openLocalNetcdf(fixture("netcdf-lon360.nc"));
+    try {
+      const built = file.buildLayerRefs("air", {}, { keepAxis: "time" });
+      assert.deepEqual(built.selector, {});
+      const store = new KerchunkReferenceStore(built.refs);
+      assert.deepEqual((await readJson(store, "air/.zarray")).shape, [3, 5]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("keeps a NetCDF-3 time axis the same way", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const built = file.buildLayerRefs("temp", {}, { keepAxis: "time" });
+      assert.deepEqual(built.selector, { time: 0 });
+      const store = new KerchunkReferenceStore(built.refs);
+      assert.deepEqual((await readJson(store, "temp/.zarray")).shape, [2, 2, 3]);
+      assert.deepEqual(await readFloat32(store, "temp/0.0.0"), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(await readFloat32(store, "temp/1.0.0"), [11, 12, 13, 14, 15, 16]);
+    } finally {
+      file.close();
+    }
   });
 });

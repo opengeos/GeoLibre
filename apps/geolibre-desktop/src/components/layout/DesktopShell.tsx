@@ -21,7 +21,6 @@ import {
 import { createPortal } from "react-dom";
 import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
 import { COMMENTS_PANEL_ID, useRegisterCommentsPanel } from "../../hooks/useRegisterCommentsPanel";
-import { UrlLoadErrorBanner } from "./UrlLoadErrorBanner";
 import { MountWhenOpened } from "./MountWhenOpened";
 import { CommentsPanel } from "../comments/CommentsPanel";
 import { CommentMapOverlay } from "../comments/CommentMapOverlay";
@@ -87,9 +86,12 @@ import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
 import { useCommandBridge } from "../../hooks/useCommandBridge";
 import { useEmbedApi } from "../../hooks/useEmbedApi";
 import { useJupyterRelay } from "../../hooks/useJupyterRelay";
-import { appendDiagnostic, useDiagnosticsSnapshot } from "../../lib/diagnostics";
-import { layerToNotifyForMapError } from "../../lib/map-error-notification";
-import { notify } from "../../lib/notify";
+import {
+  appendDiagnostic,
+  observeNetworkResponses,
+  useDiagnosticsSnapshot,
+} from "../../lib/diagnostics";
+import { createLayerFailureNotifier } from "../../lib/layer-failure-notifier";
 import { useCredentialStorageStatus } from "../../lib/credential-store";
 import { SectionErrorBoundary, SilentErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
@@ -146,6 +148,7 @@ import {
 import { useCollabShareLinkAutoOpen } from "../../hooks/desktop-shell/useCollabShareLinkAutoOpen";
 import { useDataUrlFit } from "../../hooks/desktop-shell/useDataUrlFit";
 import { useDropStatus } from "../../hooks/desktop-shell/useDropStatus";
+import { useUrlLoadErrorNotices } from "../../hooks/desktop-shell/useUrlLoadErrorNotices";
 import { useFileDrop } from "../../hooks/desktop-shell/useFileDrop";
 import { useKnowledgeCard } from "../../hooks/desktop-shell/useKnowledgeCard";
 import { useLayerEditActions } from "../../hooks/desktop-shell/useLayerEditActions";
@@ -203,6 +206,7 @@ export function DesktopShell({
       noData: t("map.identifyAll.noData"),
       pixelReadFailed: t("map.identifyAll.pixelReadFailed"),
       wmsFailed: t("map.identifyAll.wmsFailed"),
+      wmsNotQueryable: t("map.identifyAll.wmsNotQueryable"),
       photo: {
         photo: t("map.identifyAll.photo"),
         noPreview: t("map.identifyAll.photoNoPreview"),
@@ -305,15 +309,8 @@ export function DesktopShell({
     getGeometryEditTargetLayerId,
   );
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
-  const {
-    clearDropMessageLater,
-    crsWarning,
-    dropError,
-    dropMessage,
-    setCrsWarning,
-    setDropError,
-    setDropMessage,
-  } = useDropStatus();
+  const { clearDropMessageLater, setCrsWarning, setDropError, setDropMessage } = useDropStatus();
+  useUrlLoadErrorNotices(projectUrlLoadState?.error, dataUrlLoadState?.error);
   const credentialStorageError = useCredentialStorageStatus((s) => s.error);
   const credentialStorageRevision = useCredentialStorageStatus((s) => s.revision);
   // A new failure bumps the revision, which re-shows a dismissed warning.
@@ -474,10 +471,24 @@ export function DesktopShell({
   });
   useMapControlLabels(mapControllerRef, mapReadyGeneration, t);
 
-  // Layers already toasted about this session: a broken tile source errors on
-  // every pan, and one notification per layer is enough (the rest stay in
-  // Diagnostics).
-  const notifiedMapErrorLayersRef = useRef(new Set<string>());
+  // One toast per layer per session: a broken tile source errors on every pan,
+  // and the first notice is enough (the rest stay in Diagnostics). Created once
+  // so the "already told" record survives re-renders and renderer swaps.
+  const translateRef = useRef(t);
+  translateRef.current = t;
+  const [layerFailureNotifier] = useState(() =>
+    createLayerFailureNotifier({
+      getLayers: () => useAppStore.getState().layers,
+      t: (key, options) => String(translateRef.current(key as never, options as never)),
+    }),
+  );
+  // MapLibre drops a 404 tile as "empty" before it becomes an error event, so
+  // a layer whose every tile is missing is only visible in the responses.
+  useEffect(
+    () =>
+      observeNetworkResponses((response) => layerFailureNotifier.handleNetworkResponse(response)),
+    [layerFailureNotifier],
+  );
   const handleMapDiagnosticEvent = useCallback(
     (event: MapDiagnosticEvent) => {
       const record = appendDiagnostic({
@@ -489,16 +500,9 @@ export function DesktopShell({
         status: event.status,
         url: event.url,
       });
-      const layer = layerToNotifyForMapError(event, useAppStore.getState().layers);
-      if (!layer || notifiedMapErrorLayersRef.current.has(layer.id)) return;
-      notifiedMapErrorLayersRef.current.add(layer.id);
-      notify.error(t("notifications.layerLoadFailed", { name: layer.name }), {
-        description: t("notifications.layerLoadFailedHint"),
-        dedupeKey: `map-layer:${layer.id}`,
-        diagnostic: record ?? undefined,
-      });
+      layerFailureNotifier.handleMapEvent(event, record ?? undefined);
     },
-    [t],
+    [layerFailureNotifier],
   );
 
   const { addDroppedPhotos, addDroppedRasters, addFilePath, finishDrop } = useLayerImport({
@@ -1255,37 +1259,6 @@ export function DesktopShell({
           </div>
         </div>
       ) : null}
-      <div className="pointer-events-none absolute left-1/2 top-14 z-50 flex w-max max-w-[min(90vw,32rem)] -translate-x-1/2 flex-col gap-2">
-        {projectUrlLoadState?.error ? (
-          <UrlLoadErrorBanner
-            key={`project:${projectUrlLoadState.error}`}
-            message={projectUrlLoadState.error}
-          />
-        ) : null}
-        {dataUrlLoadState?.error ? (
-          <UrlLoadErrorBanner
-            key={`data:${dataUrlLoadState.error}`}
-            message={dataUrlLoadState.error}
-          />
-        ) : null}
-      </div>
-      {crsWarning ? (
-        <div
-          data-testid="crs-warning"
-          role="status"
-          aria-live="polite"
-          className="absolute bottom-24 left-1/2 z-50 max-w-[min(90vw,36rem)] -translate-x-1/2 rounded-md border border-destructive/40 bg-background px-3 py-2 text-center text-sm text-destructive shadow-lg"
-        >
-          {crsWarning}
-          <button
-            type="button"
-            onClick={() => setCrsWarning(null)}
-            className="ms-2 underline underline-offset-2"
-          >
-            {t("common.close")}
-          </button>
-        </div>
-      ) : null}
       {credentialStorageError && credentialStorageRevision !== dismissedCredentialRevision ? (
         <div
           data-testid="credential-storage-warning"
@@ -1300,18 +1273,6 @@ export function DesktopShell({
           >
             {t("common.close")}
           </button>
-        </div>
-      ) : null}
-      {dropMessage || dropError ? (
-        <div
-          data-testid="drop-status"
-          data-drop-error={dropError ? "true" : undefined}
-          aria-live="polite"
-          className={`pointer-events-none absolute bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-sm shadow-lg ${
-            dropError ? "text-destructive" : "text-foreground"
-          }`}
-        >
-          {dropError ?? dropMessage}
         </div>
       ) : null}
       {commentTool.pendingComment && (

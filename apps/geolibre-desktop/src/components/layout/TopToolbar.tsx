@@ -49,11 +49,7 @@ import { PrintLayoutDialog } from "./PrintLayoutDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
 import { ConsentNoticeDialogs } from "./toolbar/ConsentNoticeDialogs";
-import {
-  newProjectToolbarControlVisibility,
-  openExternalLink,
-  type ToolbarChrome,
-} from "./toolbar/constants";
+import { openExternalLink, type ToolbarChrome } from "./toolbar/constants";
 import { ControlsMenu } from "./toolbar/ControlsMenu";
 import { EditMenu } from "./toolbar/EditMenu";
 import { HelpMenu } from "./toolbar/HelpMenu";
@@ -228,8 +224,7 @@ export function TopToolbar({
   const shareAvailable = shareHost.baseUrl != null;
 
   const handleNewProjectCreated = () => {
-    resetRuntimeControlsForNewProject(appApi, mapControllerRef);
-    setControlsVisible(newProjectToolbarControlVisibility());
+    setControlsVisible(resetRuntimeControlsForNewProject(appApi, mapControllerRef));
   };
 
   // The appApi-backed "add layer" handlers shared by the Add Data menu and the

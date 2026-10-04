@@ -1,4 +1,4 @@
-import type { FeatureCollection } from "geojson";
+import type { FeatureCollection, Geometry } from "geojson";
 import { csvCell, spreadsheetSafeText } from "./csv";
 
 /** Render an attribute value as the plain string used in CSV cells and inputs. */
@@ -12,7 +12,7 @@ export function formatAttributeValue(value: unknown): string {
  * Non-point rows have empty coordinate cells. Existing attributes are retained;
  * generated column names receive a numeric suffix when a property uses the name.
  */
-export function geojsonToCsv(geojson: FeatureCollection): string {
+export function geojsonToCsv(geojson: FeatureCollection<Geometry | null>): string {
   const propertyKeys = new Set<string>();
   for (const feature of geojson.features) {
     for (const key of Object.keys(feature.properties ?? {})) propertyKeys.add(key);

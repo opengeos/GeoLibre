@@ -1,4 +1,5 @@
 import { getRightPanel } from "@geolibre/plugins";
+import { notifyPanelRenderFailed } from "../../lib/panel-render-failure";
 import { useEffect, useState } from "react";
 import {
   PLUGIN_PANEL_DEFAULT_WIDTH,
@@ -75,6 +76,7 @@ export function useRightPanelHost(layoutOptions: LayoutOptions) {
       cleanup = activePanel.render(host);
     } catch (error) {
       console.error(`Right panel "${activePanelId}" render() threw.`, error);
+      notifyPanelRenderFailed(activePanelId, activePanel.title, error);
     }
     return () => {
       try {

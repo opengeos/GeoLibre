@@ -234,6 +234,8 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
   let currentGrid: FeatureCollection<Polygon> = emptyCollection();
   let currentError: string | null = null;
   let cachedTextFont: string[] | null = null;
+  /** The font the label layer was last given. */
+  let appliedTextFont: string[] | null = null;
   let pendingRefresh: number | null = null;
 
   const parentEnabled = (): boolean =>
@@ -270,6 +272,24 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
       fallback ??= font;
     }
     return (cachedTextFont = fallback ?? ["Open Sans Regular", "Arial Unicode MS Regular"]);
+  }
+
+  /**
+   * Point the label layer at the active basemap's font. A basemap change
+   * clears the cached font, but a label layer that survives the style swap
+   * (a host that carries plugin layers across it, such as the ArcGIS shadow
+   * style) would otherwise keep asking the new glyph server for the old
+   * basemap's font stack. Written only when the picked font changed (the
+   * cache hands back the same array until a basemap change clears it), since
+   * a host may redraw on every layout write.
+   *
+   * @param activeMap - The map hosting the label layer.
+   */
+  function applyLabelFont(activeMap: MapLibreMap): void {
+    const font = pickTextFont(activeMap);
+    if (font === appliedTextFont) return;
+    activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-font", font);
+    appliedTextFont = font;
   }
 
   function normalizeResolution(value: unknown): number {
@@ -371,6 +391,7 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
   function ensureLayers(): void {
     if (!map) return;
     if (!map.getSource(SOURCE_ID)) {
+      appliedTextFont = pickTextFont(map);
       map.addSource(SOURCE_ID, { type: "geojson", data: currentGrid });
       map.addLayer({
         id: FILL_LAYER_ID,
@@ -397,7 +418,7 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
         minzoom: config.labelMinZoom(effectiveResolution()),
         layout: {
           "text-field": ["get", config.idProperty],
-          "text-font": pickTextFont(map),
+          "text-font": appliedTextFont,
           "text-size": 10,
           visibility: settings.showLabels ? "visible" : "none",
         },
@@ -469,6 +490,7 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
     map.setPaintProperty(LINE_LAYER_ID, "line-width", settings.lineWidth);
     map.setPaintProperty(LABEL_LAYER_ID, "text-color", settings.lineColor);
     map.setLayoutProperty(LABEL_LAYER_ID, "visibility", settings.showLabels ? "visible" : "none");
+    applyLabelFont(map);
     map.setLayerZoomRange(LABEL_LAYER_ID, config.labelMinZoom(effectiveResolution()), 24);
     config.overlay?.apply(map, settings);
   }
@@ -856,6 +878,7 @@ export function createGridPlugin<S extends GridSettingsBase, L extends GridLabel
       currentGrid = emptyCollection();
       currentError = null;
       cachedTextFont = null;
+      appliedTextFont = null;
       map = null;
       appRef = null;
       app.closeRightPanel?.(PANEL_ID);
