@@ -7,6 +7,7 @@ import {
 } from "@geolibre/core";
 import type { DuckDbCapability, ProcessingAlgorithm, ProcessingContext } from "./types";
 import { getVectorTool } from "./vector-tools";
+import { runAlgorithmInBackground } from "./vector-tool-runner";
 
 /** Synthetic layer-id prefix for a pipeline step's chained input. */
 const PIPELINE_INPUT_ID_PREFIX = "__geolibre_pipeline_step_";
@@ -59,7 +60,9 @@ export async function runAlgorithmCapture(
     viewportBounds: host.viewportBounds,
     signal: host.signal,
   };
-  await tool.run(ctx);
+  // Off the main thread when the tool is a worker-safe vector tool (#2858);
+  // inline otherwise, with the same callbacks either way.
+  await runAlgorithmInBackground(tool, ctx);
   return captured;
 }
 

@@ -36,6 +36,11 @@ export {
   type ModelStepResult,
   type RunModelOptions,
 } from "./runner";
+export {
+  runAlgorithmInBackground,
+  canRunVectorToolOnWorker,
+  WORKER_VECTOR_TOOL_IDS,
+} from "./vector-tool-runner";
 export { NETWORK_TOOLS, getNetworkTool, layerToSequencedPoints } from "./network-tools";
 export {
   STATISTICS_TOOLS,

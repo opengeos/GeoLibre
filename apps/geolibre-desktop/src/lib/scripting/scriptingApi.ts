@@ -6,6 +6,7 @@ import {
   fetchRemoteWhiteboxCatalogSnapshot,
   listWasmToolManifests,
   mergeWasmToolManifests,
+  runAlgorithmInBackground,
   runWhiteboxToolWasm,
   topologicalOrder,
   validateModelGraph,
@@ -430,7 +431,8 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             return view?.bbox ?? null;
           },
         };
-        await algo.run(ctx);
+        // Off the main thread for the Turf vector tools (#2858).
+        await runAlgorithmInBackground(algo, ctx);
       } catch (error) {
         tracker.finish("error", error instanceof Error ? error.message : String(error));
         throw error;

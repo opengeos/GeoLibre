@@ -4,6 +4,7 @@ import {
   VECTOR_TOOLS,
   getVectorTool,
   resolveVectorRerun,
+  runAlgorithmInBackground,
   runVectorTool,
   fetchVectorStatus,
   maxResolutionForDggs,
@@ -405,7 +406,9 @@ export function VectorToolsDialog({ mapControllerRef }: VectorToolsDialogProps):
           duckdb,
           viewportBounds: () => mapControllerRef.current?.getViewBounds() ?? null,
         };
-        await tool.run(ctx);
+        // Turf tools run on a worker so a large layer does not freeze the UI
+        // (#2858); DuckDB-backed tools still run here.
+        await runAlgorithmInBackground(tool, ctx);
       }
       // A logged "Error: ..." line marks a soft failure (the client tools
       // bail out without throwing); don't record those as successes.
