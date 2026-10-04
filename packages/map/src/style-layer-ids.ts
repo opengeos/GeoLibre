@@ -134,7 +134,7 @@ export function highlightCircleLayerId(): string {
 /**
  * The Mapbox source id `compileMapboxLayer` derives for a store layer, and the
  * fill/line style layer ids under it. They live here, not in
- * `mapbox-layers.ts`, so a plugin that needs to find a store layer's Mapbox
+ * `gl-style-compiler.ts`, so a plugin that needs to find a store layer's Mapbox
  * layers (the STAC footprint picker) shares the scheme at compile time instead
  * of spelling it out.
  */
