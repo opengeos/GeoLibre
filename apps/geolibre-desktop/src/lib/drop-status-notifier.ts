@@ -88,7 +88,9 @@ export function createDropStatusNotifier(): DropStatusNotifier {
       if (clearTimer !== null) clearTimeout(clearTimer);
       clearTimer = setTimeout(() => {
         clearTimer = null;
-        update(status, null, () => "");
+        if (status.id) dismissNotification(status.id);
+        status.id = null;
+        status.message = null;
       }, DROP_MESSAGE_CLEAR_MS);
     },
     dispose() {

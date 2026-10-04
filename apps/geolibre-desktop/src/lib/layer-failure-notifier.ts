@@ -14,6 +14,7 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import type { MapDiagnosticEvent } from "@geolibre/map";
 import type { DiagnosticRecord, NetworkResponseObservation } from "./diagnostics";
 import {
+  EMPTY_TILE_STATUSES,
   layerForTileUrl,
   mapErrorNotice,
   tilesLookBroken,
@@ -46,9 +47,6 @@ export interface LayerFailureNotifier {
    */
   handleNetworkResponse(response: NetworkResponseObservation): void;
 }
-
-/** HTTP statuses a tile server answers for a tile that holds no data. */
-const EMPTY_TILE_STATUSES = new Set([204, 404]);
 
 /**
  * Creates a notifier. One instance lives as long as the shell, so "once per

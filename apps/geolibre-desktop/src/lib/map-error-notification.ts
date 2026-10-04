@@ -15,7 +15,7 @@ import { mapboxSourceId, sourceId } from "@geolibre/map/style-layer-ids";
 import type { MapDiagnosticEvent } from "@geolibre/map";
 
 /** HTTP statuses that mean "no data here" for a tile rather than a failure. */
-const EMPTY_TILE_STATUSES = new Set([204, 404]);
+export const EMPTY_TILE_STATUSES: ReadonlySet<number> = new Set([204, 404]);
 
 /** HTTP statuses that mean the server refused the request (a bad or missing key). */
 const ACCESS_DENIED_STATUSES = new Set([401, 403]);

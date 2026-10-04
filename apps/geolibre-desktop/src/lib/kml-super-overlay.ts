@@ -227,6 +227,9 @@ async function archiveFor(id: string): Promise<SuperOverlayArchive | null> {
       try {
         const tiles = await resolver(id);
         if (tiles && tiles.length > 0) return storeArchive(id, tiles);
+        // No throw, but nothing to draw either: the browser cannot re-read a
+        // path at all, and a session-only key from a dropped file names none.
+        notifySuperOverlayUnreadable(id);
       } catch (error) {
         console.warn(`[GeoLibre] Could not re-read the KML Super-Overlay from "${id}".`, error);
         notifySuperOverlayUnreadable(id);
