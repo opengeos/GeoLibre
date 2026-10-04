@@ -1265,6 +1265,232 @@ class Map(anywidget.AnyWidget):
         handle = self._resolve_layer(layer)
         self._update_project(lambda project: _authoring.clear_popup(project, handle.id))
 
+    def set_layer_filter(self, layer: str | Layer, expression: Any) -> None:
+        """Hide a layer's features that do not match a boolean expression.
+
+        Writes the layer's saved ``filterExpression`` -- the same filter the
+        app's **Select by Expression -> Filter layer** creates. The data is
+        untouched; non-matching features are just not drawn.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            expression: A boolean MapLibre expression, as a list or a JSON
+                string, e.g. ``[">=", ["get", "population"], 100000]``.
+                ``None`` clears the filter.
+
+        Example:
+            >>> m.set_layer_filter("Cities", ["==", ["get", "state"], "TN"])
+        """
+        handle = self._resolve_layer(layer)
+        self._update_project(
+            lambda project: _authoring.set_layer_filter(project, handle.id, expression)
+        )
+
+    def set_labels(
+        self,
+        layer: str | Layer,
+        field: str | None = None,
+        *,
+        expression: Any = None,
+        enabled: bool = True,
+        **options: Any,
+    ) -> dict[str, Any]:
+        """Label a vector layer's features from an attribute or an expression.
+
+        Options left out keep the layer's current label settings.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            field: Property whose value becomes the label text.
+            expression: MapLibre expression for the label text, overriding
+                ``field`` (e.g. ``["concat", ["get", "name"], " ", ["get",
+                "pop"]]``).
+            enabled: ``False`` hides the labels but keeps their settings.
+            **options: ``placement`` (``"point"``/``"line"``), ``size``,
+                ``color``, ``halo_color``, ``halo_width``, ``min_zoom``,
+                ``max_zoom``, ``allow_overlap``, ``anchor``, ``offset_x``,
+                ``offset_y``, ``rotation``, ``max_width``, ``transform``
+                (``"none"``/``"uppercase"``/``"lowercase"``),
+                ``number_format``, ``number_decimals``, ``number_locale``,
+                ``dedupe`` (``"off"``/``"unique"``/``"concatenate"``), and the
+                data-defined ``size_expression``, ``color_expression``,
+                ``opacity_expression``, ``visibility_expression``,
+                ``priority_expression``.
+
+        Returns:
+            The layer's labels object after the change.
+
+        Example:
+            >>> m.set_labels("Cities", "name", size=14, halo_width=2, anchor="top")
+        """
+        handle = self._resolve_layer(layer)
+        result: dict[str, Any] = {}
+
+        def _apply(project: dict[str, Any]) -> None:
+            result.update(
+                _authoring.set_labels(
+                    project, handle.id, field, expression=expression, enabled=enabled, **options
+                )
+            )
+
+        self._update_project(_apply)
+        return result
+
+    def set_plugin_state(
+        self,
+        plugin_id: str,
+        state: Any,
+        *,
+        position: str | None = None,
+        activate: bool = True,
+        allow_unknown: bool = False,
+    ) -> dict[str, Any]:
+        """Store a plugin's saved state in the project, as the app saves it.
+
+        Each plugin reads its own state shape when the project opens (the
+        Time Slider's timeline config, a grid plugin's resolution, ...). Use
+        :meth:`add_swipe`, :meth:`add_legend`, and :meth:`add_colorbar` for
+        those controls; they build validated state.
+
+        Args:
+            plugin_id: A built-in plugin id from
+                ``geolibre.project.PLUGIN_STATE_IDS``, or an external plugin's
+                id with ``allow_unknown=True``.
+            state: The plugin's settings, as plain JSON. ``None`` removes them.
+            position: Optional control corner (``"top-left"``, ...).
+            activate: Start the plugin active when the project opens.
+            allow_unknown: Accept an id that is not a built-in plugin.
+
+        Returns:
+            ``{"pluginId", "active", "position", "state"}`` as stored.
+        """
+        result: dict[str, Any] = {}
+
+        def _apply(project: dict[str, Any]) -> None:
+            result.update(
+                _authoring.set_plugin_state(
+                    project,
+                    plugin_id,
+                    state,
+                    position=position,
+                    activate=activate,
+                    allow_unknown=allow_unknown,
+                )
+            )
+
+        self._update_project(_apply)
+        return result
+
+    def set_story_map(self, **settings: Any) -> dict[str, Any]:
+        """Set the story map's title block and presentation settings.
+
+        Args:
+            **settings: ``title``, ``subtitle``, ``byline``, ``footer``,
+                ``theme`` (``"light"``/``"dark"``), ``show_markers``,
+                ``marker_color``, ``inset``, ``inset_position``,
+                ``hide_chapter_nav``, ``start_slide`` and ``end_slide``
+                (``"none"``, ``"blank"``, ``"black"``, ``"global"``,
+                ``"adjacent"``).
+
+        Returns:
+            The story settings with each chapter's id and title.
+        """
+        result: dict[str, Any] = {}
+        self._update_project(lambda p: result.update(_authoring.set_story_map(p, **settings)))
+        return result
+
+    def add_story_chapter(
+        self,
+        title: str,
+        *,
+        description: str = "",
+        center: tuple[float, float] | None = None,
+        zoom: float | None = None,
+        pitch: float | None = None,
+        bearing: float | None = None,
+        image: str | None = None,
+        alignment: str = "left",
+        hidden: bool = False,
+        map_animation: str = "flyTo",
+        rotate_animation: bool = False,
+        on_enter: list[dict[str, Any]] | None = None,
+        on_exit: list[dict[str, Any]] | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add a chapter to the map's story (Project -> Story Map).
+
+        A camera value left out is taken from the map's current saved view.
+
+        Args:
+            title: Chapter heading.
+            description: Chapter body text.
+            center: Camera target ``(lng, lat)``.
+            zoom: Camera zoom, 0-24.
+            pitch: Camera tilt in degrees, 0-85.
+            bearing: Camera rotation in degrees.
+            image: Optional image URL shown in the chapter panel.
+            alignment: ``"left"``, ``"center"``, ``"right"``, or ``"full"``.
+            hidden: Hide the text panel while still moving the map.
+            map_animation: ``"flyTo"``, ``"easeTo"``, or ``"jumpTo"``.
+            rotate_animation: Slowly rotate the camera once the move settles.
+            on_enter: Layer opacity changes on entering the chapter, as
+                ``{"layer": <id, name or Layer>, "opacity": 0-1,
+                "duration": ms}`` entries.
+            on_exit: Layer opacity changes on leaving, in the same form.
+            index: Position to insert at; appended when omitted.
+
+        Returns:
+            The chapter that was added, including its ``id``.
+
+        Example:
+            >>> m.add_story_chapter("Downtown", center=(-83.92, 35.96), zoom=14,
+            ...                     description="Where it started.")
+        """
+
+        def _layer_refs(entries: Any) -> Any:
+            if not isinstance(entries, (list, tuple)):
+                return entries
+            return [
+                {**entry, "layer": entry["layer"].id}
+                if isinstance(entry, dict) and isinstance(entry.get("layer"), Layer)
+                else entry
+                for entry in entries
+            ]
+
+        result: dict[str, Any] = {}
+
+        def _apply(project: dict[str, Any]) -> None:
+            result.update(
+                _authoring.add_story_chapter(
+                    project,
+                    title,
+                    description=description,
+                    center=center,
+                    zoom=zoom,
+                    pitch=pitch,
+                    bearing=bearing,
+                    image=image,
+                    alignment=alignment,
+                    hidden=hidden,
+                    map_animation=map_animation,
+                    rotate_animation=rotate_animation,
+                    on_enter=_layer_refs(on_enter),
+                    on_exit=_layer_refs(on_exit),
+                    index=index,
+                )
+            )
+
+        self._update_project(_apply)
+        return result
+
+    def remove_story_chapter(self, chapter: str | int) -> None:
+        """Remove a story chapter by id, title, or 0-based index."""
+        self._update_project(lambda p: _authoring.remove_story_chapter(p, chapter))
+
+    def move_story_chapter(self, chapter: str | int, index: int) -> None:
+        """Move a story chapter (by id, title, or index) to a new position."""
+        self._update_project(lambda p: _authoring.move_story_chapter(p, chapter, index))
+
     def rename_layer(self, layer: str | Layer, name: str) -> None:
         """Rename a layer addressed by id, name, or handle.
 

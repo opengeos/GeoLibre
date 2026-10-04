@@ -1,0 +1,228 @@
+{
+  "version": "0.1.0",
+  "name": "Python authoring round trip",
+  "mapView": {
+    "center": [-84.0, 36.0],
+    "zoom": 6.0,
+    "bearing": 0,
+    "pitch": 0
+  },
+  "basemapStyleUrl": "https://tiles.openfreemap.org/styles/liberty",
+  "basemapVisible": true,
+  "basemapOpacity": 1,
+  "layers": [
+    {
+      "id": "cities",
+      "name": "Cities",
+      "type": "geojson",
+      "visible": true,
+      "opacity": 1,
+      "style": {
+        "minZoom": 0,
+        "maxZoom": 24,
+        "fillColor": "#3b82f6",
+        "strokeColor": "#1e40af",
+        "strokeWidth": 2,
+        "fillOpacity": 0.6,
+        "circleRadius": 6,
+        "textColor": "#111827",
+        "textHaloColor": "#ffffff",
+        "textHaloWidth": 2,
+        "textSize": 16,
+        "extrusionEnabled": false,
+        "extrusionColor": "#3b82f6",
+        "extrusionOpacity": 0.8,
+        "extrusionHeightProperty": "height",
+        "extrusionHeightScale": 1,
+        "extrusionBase": 0,
+        "extrusionAdvancedStyleEnabled": false,
+        "extrusionColorExpression": "",
+        "extrusionHeightExpression": "",
+        "vectorStyleMode": "single",
+        "vectorStyleProperty": "",
+        "vectorStyleClassCount": 5,
+        "vectorStyleColorRamp": "viridis",
+        "vectorStyleClassificationScheme": "equal-interval",
+        "vectorStyleStops": [
+          {
+            "value": 0,
+            "color": "#dbeafe"
+          },
+          {
+            "value": 1,
+            "color": "#2563eb"
+          }
+        ],
+        "vectorStyleExpression": "",
+        "pointRenderer": "single",
+        "heatmapRadius": 30,
+        "heatmapIntensity": 1,
+        "heatmapColorRamp": "turbo",
+        "heatmapWeightProperty": "",
+        "clusterRadius": 50,
+        "clusterMaxZoom": 14,
+        "rasterBrightnessMin": 0,
+        "rasterBrightnessMax": 1,
+        "rasterSaturation": 0,
+        "rasterContrast": 0,
+        "rasterHueRotate": 0,
+        "blendMode": "normal",
+        "labels": {
+          "enabled": true,
+          "field": "name",
+          "expression": "",
+          "placement": "point",
+          "size": 14,
+          "color": "#111827",
+          "haloColor": "#ffffff",
+          "haloWidth": 2,
+          "minZoom": 0,
+          "maxZoom": 24,
+          "allowOverlap": false,
+          "anchor": "top",
+          "offsetX": 0,
+          "offsetY": 0.8,
+          "rotation": 0,
+          "maxWidth": 10,
+          "transform": "uppercase",
+          "numberFormatEnabled": true,
+          "numberDecimals": 1,
+          "numberLocale": "de-DE",
+          "dedupe": "unique",
+          "sizeExpression": "[\"interpolate\",[\"linear\"],[\"get\",\"pop\"],0,10,100,20]",
+          "colorExpression": "",
+          "opacityExpression": "",
+          "visibilityExpression": "[\">\",[\"get\",\"pop\"],0]",
+          "priorityExpression": ""
+        }
+      },
+      "metadata": {},
+      "source": {
+        "type": "geojson"
+      },
+      "geojson": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "A",
+              "pop": 10
+            },
+            "geometry": {
+              "type": "Point",
+              "coordinates": [0, 0]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "name": "B",
+              "pop": 90
+            },
+            "geometry": {
+              "type": "Point",
+              "coordinates": [1, 1]
+            }
+          }
+        ]
+      },
+      "filterExpression": ["all", [">=", ["get", "pop"], 20], ["has", "name"]]
+    }
+  ],
+  "styles": {},
+  "preferences": {
+    "map": {
+      "restrictBounds": false,
+      "bounds": [-180, -85, 180, 85],
+      "minZoom": 0,
+      "maxZoom": 24,
+      "maxPitch": 85,
+      "renderWorldCopies": true
+    },
+    "environmentVariables": []
+  },
+  "metadata": {},
+  "plugins": {
+    "manifestUrls": [],
+    "activePluginIds": [
+      "maplibre-layer-control",
+      "maplibre-deckgl-viz",
+      "maplibre-atmosphere-effects",
+      "maplibre-gl-graticule"
+    ],
+    "mapControlPositions": {
+      "maplibre-gl-graticule": "top-left"
+    },
+    "settings": {
+      "maplibre-gl-graticule": {
+        "interval": 10,
+        "color": "#888888"
+      }
+    }
+  },
+  "storymap": {
+    "title": "A tour",
+    "subtitle": "Two stops",
+    "byline": "GeoLibre",
+    "footer": "",
+    "theme": "light",
+    "showMarkers": true,
+    "markerColor": "#3fb1ce",
+    "inset": true,
+    "insetPosition": "top-right",
+    "hideChapterNav": false,
+    "startSlide": "global",
+    "endSlide": "black",
+    "chapters": [
+      {
+        "id": "overview",
+        "title": "Overview",
+        "description": "Every city.",
+        "alignment": "left",
+        "hidden": false,
+        "location": {
+          "center": [-84, 36],
+          "zoom": 4,
+          "pitch": 0,
+          "bearing": 315
+        },
+        "mapAnimation": "flyTo",
+        "rotateAnimation": false,
+        "onChapterEnter": [
+          {
+            "id": "fade-in",
+            "layerId": "cities",
+            "opacity": 1,
+            "duration": 800
+          }
+        ],
+        "onChapterExit": []
+      },
+      {
+        "id": "close-up",
+        "title": "Close up",
+        "description": "",
+        "image": "https://example.com/photo.jpg",
+        "alignment": "right",
+        "hidden": false,
+        "location": {
+          "center": [-83.5, 35.5],
+          "zoom": 11.5,
+          "pitch": 45,
+          "bearing": 0
+        },
+        "mapAnimation": "easeTo",
+        "rotateAnimation": true,
+        "onChapterEnter": [],
+        "onChapterExit": [
+          {
+            "id": "fade-out",
+            "layerId": "cities",
+            "opacity": 0.25
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -183,3 +183,67 @@ def test_live_set_opacity_rejects_out_of_range_values(tmp_path, monkeypatch):
     server = build_server(Workspace([tmp_path]))
     with pytest.raises(ToolError, match="between 0 and 1"):
         asyncio.run(server.call_tool("live_set_opacity", {"layer_id": "a", "opacity": 1.5}))
+
+
+def _live_server(tmp_path):
+    """Build an MCP server for the live tool tests (skips without the SDK)."""
+    pytest.importorskip("mcp", reason="the mcp SDK is an optional extra")
+    from geolibre.mcp.server import build_server
+    from geolibre.mcp.workspace import Workspace
+
+    return build_server(Workspace([tmp_path]))
+
+
+def test_live_list_algorithms_filters_by_query(relay_server, monkeypatch, tmp_path):
+    import asyncio
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.response = {
+        "delivered": 1,
+        "ok": True,
+        "value": [
+            {"id": "buffer", "name": "Buffer", "group": "Geometry", "description": ""},
+            {"id": "centroid", "name": "Centroids", "group": "Geometry", "description": ""},
+        ],
+    }
+    result = asyncio.run(server.call_tool("live_list_algorithms", {"query": "BUFF"}))
+    assert [item["id"] for item in result.structured_content["result"]] == ["buffer"]
+    assert relay_server.body["method"] == "listAlgorithms"
+
+
+def test_live_run_algorithm_sends_the_parameters(relay_server, monkeypatch, tmp_path):
+    import asyncio
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.response = {
+        "delivered": 1,
+        "ok": True,
+        "value": {"logs": ["done"], "resultLayerIds": ["out-1"]},
+    }
+    result = asyncio.run(
+        server.call_tool(
+            "live_run_algorithm",
+            {"algorithm_id": "buffer", "parameters": {"layer": "a", "distance": 100}},
+        )
+    )
+    assert result.structured_content == {"logs": ["done"], "resultLayerIds": ["out-1"]}
+    assert relay_server.body["method"] == "runAlgorithm"
+    assert relay_server.body["params"] == {
+        "id": "buffer",
+        "params": {"layer": "a", "distance": 100},
+    }
+
+
+def test_live_run_algorithm_reports_a_slow_run(relay_server, monkeypatch, tmp_path):
+    import asyncio
+
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    server = _live_server(tmp_path)
+    monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
+    relay_server.status_code = 504
+    relay_server.response = {"message": "GeoLibre did not return a result in time."}
+    with pytest.raises(ToolError, match="may still be running"):
+        asyncio.run(server.call_tool("live_run_algorithm", {"algorithm_id": "buffer"}))

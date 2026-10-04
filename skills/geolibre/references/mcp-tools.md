@@ -133,6 +133,11 @@ set_layer_popup(path, layer, fields=None, click=None, title=None,
 classify_layer(path, layer, column, class_count=5, colormap="viridis",
                scheme="equal-interval")
 list_layer_properties(path, layer)
+set_layer_filter(path, layer, expression=None)
+set_labels(path, layer, field=None, expression=None, enabled=True,
+           placement=None, size=None, color=None, halo_color=None,
+           halo_width=None, min_zoom=None, max_zoom=None,
+           allow_overlap=None, anchor=None, options=None)
 ```
 
 `layer` is a layer id **or** its display name, everywhere.
@@ -161,6 +166,58 @@ the fields. Run `list_layer_properties` first to get the real column names.
 (even value ranges) or `quantile` (even feature counts per class). It needs an
 inlined GeoJSON layer; run `list_layer_properties` first to get the real column
 name and a sense of the values.
+
+`set_layer_filter` hides the features that do not match a **boolean** MapLibre
+expression, the saved filter the app's Select by Expression → Filter layer
+writes: `[">=", ["get", "pop"], 100000]`, or several combined with `all` /
+`any`. The data is untouched. Omit `expression` to clear it. An expression that
+is not true/false (`["get", "pop"]`) is refused, because the app would drop it
+on load.
+
+`set_labels` labels features from a property (`field`) or a text `expression`
+(`["concat", ["get", "name"], " (", ["get", "pop"], ")"]`). Settings you omit
+keep their current values, so a second call can restyle without restating the
+field; `enabled=False` hides the labels and keeps the settings. `placement` is
+`point` or `line`; `anchor` is `center`, `top`, `bottom`, `left`, `right` or a
+corner such as `top-left`. Rarer settings go in `options` by name: `offset_x`,
+`offset_y`, `rotation`, `max_width`, `transform` (`none`, `uppercase`,
+`lowercase`), `number_format`, `number_decimals`, `number_locale`, `dedupe`
+(`off`, `unique`, `concatenate`), and the data-defined `size_expression`,
+`color_expression`, `opacity_expression`, `visibility_expression`,
+`priority_expression`.
+
+### Plugin state and story maps
+
+```text
+set_plugin_state(path, plugin_id, state=None, position=None, activate=True,
+                 allow_unknown=False)
+set_story_map(path, title=None, subtitle=None, byline=None, footer=None,
+              theme=None, show_markers=None, marker_color=None, inset=None,
+              inset_position=None, hide_chapter_nav=None, start_slide=None,
+              end_slide=None)
+add_story_chapter(path, title, description="", center=None, zoom=None,
+                  pitch=None, bearing=None, image=None, alignment="left",
+                  hidden=False, map_animation="flyTo", rotate_animation=False,
+                  on_enter=None, on_exit=None, index=None)
+remove_story_chapter(path, chapter)
+move_story_chapter(path, chapter, index)
+```
+
+- `set_plugin_state` stores a plugin's saved settings, the blob the plugin
+  reads back when the project opens (the Time Slider's timeline, a grid
+  plugin's resolution). `list_catalog` returns the built-in ids as
+  `pluginStateIds`; another id needs `allow_unknown=True` and an external
+  plugin loaded from a manifest URL. The shape of `state` is the plugin's own,
+  so copy it from a project the app saved rather than inventing keys. Prefer
+  `add_swipe`, `add_legend` and `add_colorbar` for those controls.
+- A story map is the scroll-driven narrative presented from Project → Story
+  Map. `set_story_map` sets its title block and presentation (`theme` is
+  `light` or `dark`; `start_slide` / `end_slide` are `none`, `blank`, `black`,
+  `global` or `adjacent`). `add_story_chapter` appends a chapter, or inserts it
+  at `index`; a camera value you omit comes from the project's saved view, so
+  `set_view` then `add_story_chapter` captures that view. `on_enter` /
+  `on_exit` fade layers: `[{"layer": "Cities", "opacity": 1, "duration": 800}]`.
+  `chapter` is a chapter id, title, or 0-based index.
 
 ### Framing and decoration
 
@@ -231,7 +288,17 @@ live_set_visibility(layer_id, visible)
 live_set_opacity(layer_id, opacity)
 live_set_style(layer_id, style)
 live_remove_layer(layer_id)
+live_list_algorithms(query=None)
+live_run_algorithm(algorithm_id, parameters=None)
 ```
+
+Processing runs in the app, so it is live-only: there is no file tool for it.
+`live_list_algorithms` returns each algorithm's `id` and `parameters`;
+`live_run_algorithm` runs one on the open map, adds its result layers, and
+returns their ids. Layer parameters take ids from `live_list_layers()`. The
+relay waits about five seconds: a longer run keeps going in the app and the
+call reports that it did not finish, so check `live_list_layers()` before
+running it again.
 
 `live_set_basemap` takes a catalog name (`liberty`, `bright`, `positron`,
 `dark`, `fiord`) or an `http(s)` style URL. `live_add_geojson` confines a

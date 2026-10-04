@@ -1486,3 +1486,404 @@ def add_swipe(
         position=control_position,
     )
     return state
+
+
+# -- filters, labels, plugin state ---------------------------------------------
+
+
+def set_layer_filter(project: dict[str, Any], ref: str, expression: Any) -> dict[str, Any]:
+    """Set or clear a layer's persistent feature filter.
+
+    The filter is the project's ``filterExpression`` -- the same one the app's
+    **Select by Expression -> Filter layer** writes. It hides the features that
+    do not match without changing the data, and combines with quick filters
+    and the Time Slider window.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+        expression: A boolean MapLibre expression (list or JSON string), e.g.
+            ``[">=", ["get", "population"], 100000]``; ``None`` or ``[]``
+            clears the filter.
+
+    Returns:
+        A summary of the layer, with the filter that is now set (or ``None``).
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one layer, or
+            the expression is not a boolean expression array.
+    """
+    layer = find_layer(project, ref)
+    if expression is None or expression == [] or expression == "":
+        layer.pop("filterExpression", None)
+    else:
+        layer["filterExpression"] = _project.filter_expression(expression)
+    return {**layer_summary(layer), "filterExpression": layer.get("filterExpression")}
+
+
+def set_labels(
+    project: dict[str, Any],
+    ref: str,
+    field: str | None = None,
+    *,
+    expression: Any = None,
+    enabled: bool = True,
+    **options: Any,
+) -> dict[str, Any]:
+    """Label a vector layer's features from an attribute or an expression.
+
+    Unspecified options keep the layer's current label settings, so a call can
+    restyle labels without restating the field.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+        field: Property whose value becomes the label text.
+        expression: MapLibre expression (list or JSON string) for the label
+            text; overrides ``field``. ``""`` clears it.
+        enabled: ``False`` hides the labels but keeps their settings.
+        **options: Label options; see :func:`geolibre.project.label_style`.
+
+    Returns:
+        The layer's labels object after the change.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one layer, or
+            an option is invalid.
+    """
+    layer = find_layer(project, ref)
+    style = layer.get("style")
+    if not isinstance(style, dict):
+        style = copy.deepcopy(_project.DEFAULT_LAYER_STYLE)
+        layer["style"] = style
+    current = style.get("labels")
+    labels = _project.label_style(
+        field,
+        expression=expression,
+        enabled=enabled,
+        base=current if isinstance(current, dict) else None,
+        **options,
+    )
+    style["labels"] = labels
+    return copy.deepcopy(labels)
+
+
+def set_plugin_state(
+    project: dict[str, Any],
+    plugin_id: str,
+    state: Any,
+    *,
+    position: str | None = None,
+    activate: bool = True,
+    allow_unknown: bool = False,
+) -> dict[str, Any]:
+    """Store a plugin's saved state in the project, the way the app saves it.
+
+    The blob is opaque to GeoLibre: each plugin reads its own shape in
+    ``applyProjectState`` (for example the Time Slider's timeline config). The
+    swipe, legend and colorbar have dedicated, validated builders --
+    :func:`add_swipe`, :func:`add_legend`, :func:`add_colorbar` -- and are the
+    better choice for those.
+
+    Args:
+        project: The project dict (mutated in place).
+        plugin_id: A built-in plugin id from
+            :data:`geolibre.project.PLUGIN_STATE_IDS`, or an external plugin's
+            id with ``allow_unknown=True``.
+        state: The plugin's settings blob; must be plain JSON. ``None``
+            removes the stored settings.
+        position: Optional control corner, one of :data:`CONTROL_POSITIONS`.
+        activate: Add the plugin to ``activePluginIds`` so it starts active.
+        allow_unknown: Accept an id that is not a built-in plugin with saved
+            state (an external plugin loaded from a manifest URL).
+
+    Returns:
+        ``{"pluginId", "active", "position", "state"}`` as now stored.
+
+    Raises:
+        ValueError: If the id is unknown (and not allowed), the position is
+            invalid, or the state is not plain JSON.
+    """
+    if not isinstance(plugin_id, str) or not plugin_id.strip():
+        raise ValueError("plugin_id must be a non-empty string")
+    plugin_id = plugin_id.strip()
+    if plugin_id not in _project.PLUGIN_STATE_IDS and not allow_unknown:
+        raise ValueError(
+            f"{plugin_id!r} is not a built-in plugin that saves project state. "
+            f"Known ids: {', '.join(sorted(_project.PLUGIN_STATE_IDS))}. "
+            "For an external plugin, pass allow_unknown=True."
+        )
+    if position is not None and position not in CONTROL_POSITIONS:
+        raise ValueError(f"position must be one of {sorted(CONTROL_POSITIONS)}, got {position!r}")
+    plugins = _project.ensure_plugins_block(project)
+    if state is None:
+        plugins["settings"].pop(plugin_id, None)
+        if position is not None:
+            plugins["mapControlPositions"][plugin_id] = position
+        if activate and plugin_id not in plugins["activePluginIds"]:
+            plugins["activePluginIds"].append(plugin_id)
+    else:
+        _project.set_plugin_state(
+            project,
+            plugin_id,
+            _project.json_compatible(state, "state"),
+            position=position,
+            activate=activate,
+        )
+    return {
+        "pluginId": plugin_id,
+        "active": plugin_id in plugins["activePluginIds"],
+        "position": plugins["mapControlPositions"].get(plugin_id),
+        "state": copy.deepcopy(plugins["settings"].get(plugin_id)),
+    }
+
+
+# -- story maps ----------------------------------------------------------------
+
+
+def _story_map(project: dict[str, Any]) -> dict[str, Any]:
+    """Return the project's story map, creating a default one when absent.
+
+    Args:
+        project: The project dict (mutated in place when a story is created).
+
+    Returns:
+        The live ``storymap`` dict, with every ``StoryMap`` key present.
+    """
+    story = project.get("storymap")
+    if not isinstance(story, dict):
+        story = copy.deepcopy(_project.DEFAULT_STORY_MAP)
+        project["storymap"] = story
+    for key, value in _project.DEFAULT_STORY_MAP.items():
+        story.setdefault(key, copy.deepcopy(value))
+    chapters = story["chapters"]
+    story["chapters"] = (
+        [chapter for chapter in chapters if isinstance(chapter, dict)]
+        if isinstance(chapters, list)
+        else []
+    )
+    return story
+
+
+def _story_summary(story: dict[str, Any]) -> dict[str, Any]:
+    """Summarize a story map: its settings plus one line per chapter.
+
+    Args:
+        story: A ``storymap`` dict.
+
+    Returns:
+        The settings with ``chapters`` reduced to ``{"id", "title"}`` entries.
+    """
+    return {
+        **{key: value for key, value in story.items() if key != "chapters"},
+        "chapters": [
+            {"id": chapter.get("id"), "title": chapter.get("title")}
+            for chapter in story["chapters"]
+            if isinstance(chapter, dict)
+        ],
+    }
+
+
+def find_story_chapter(project: dict[str, Any], ref: str | int) -> int:
+    """Resolve a story chapter by id, title, or 0-based position.
+
+    Args:
+        project: The project dict.
+        ref: A chapter id, a chapter title (exact, then case-insensitive), or
+            an integer index.
+
+    Returns:
+        The chapter's index in ``storymap.chapters``.
+
+    Raises:
+        ValueError: If nothing matches, or a title matches several chapters.
+    """
+    story = project.get("storymap")
+    chapters = story.get("chapters") if isinstance(story, dict) else None
+    chapters = [c for c in chapters if isinstance(c, dict)] if isinstance(chapters, list) else []
+    if isinstance(ref, int) and not isinstance(ref, bool):
+        if -len(chapters) <= ref < len(chapters):
+            return ref % len(chapters)
+        raise ValueError(f"No chapter at index {ref}; the story has {len(chapters)} chapter(s)")
+    for index, chapter in enumerate(chapters):
+        if chapter.get("id") == ref:
+            return index
+    for match in (
+        lambda chapter: chapter.get("title") == ref,
+        lambda chapter: str(chapter.get("title", "")).casefold() == str(ref).casefold(),
+    ):
+        hits = [index for index, chapter in enumerate(chapters) if match(chapter)]
+        if len(hits) == 1:
+            return hits[0]
+        if len(hits) > 1:
+            raise ValueError(f"{len(hits)} chapters are titled {ref!r}; reference one by id")
+    known = ", ".join(repr(chapter.get("title")) for chapter in chapters) or "none"
+    raise ValueError(f"No chapter matches {ref!r}. Chapters: {known}")
+
+
+def set_story_map(project: dict[str, Any], **settings: Any) -> dict[str, Any]:
+    """Set the story map's title block and presentation settings.
+
+    Args:
+        project: The project dict (mutated in place).
+        **settings: Any of :data:`geolibre.project.STORY_SETTING_NAMES` --
+            ``title``, ``subtitle``, ``byline``, ``footer``, ``theme``
+            (``"light"``/``"dark"``), ``show_markers``, ``marker_color``,
+            ``inset``, ``inset_position``, ``hide_chapter_nav``,
+            ``start_slide`` and ``end_slide`` (``"none"``, ``"blank"``,
+            ``"black"``, ``"global"``, ``"adjacent"``).
+
+    Returns:
+        A summary of the story map (settings plus chapter ids and titles).
+
+    Raises:
+        ValueError: If a setting is unknown or invalid.
+    """
+    updates = _project.story_map_settings(**settings)
+    story = _story_map(project)
+    story.update(updates)
+    return _story_summary(story)
+
+
+def _resolve_opacity_layers(project: dict[str, Any], entries: Any) -> Any:
+    """Resolve the layer references in chapter opacity changes to layer ids.
+
+    Args:
+        project: The project dict.
+        entries: ``None`` or a list of opacity-change mappings.
+
+    Returns:
+        The entries with ``layer`` replaced by the resolved ``layerId``.
+
+    Raises:
+        ValueError: If a layer reference does not resolve.
+    """
+    if not isinstance(entries, (list, tuple)):
+        return entries
+    resolved = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            ref = entry.get("layerId", entry.get("layer_id", entry.get("layer")))
+            if isinstance(ref, str) and ref:
+                entry = {
+                    **{k: v for k, v in entry.items() if k not in ("layer", "layer_id")},
+                    "layerId": str(find_layer(project, ref)["id"]),
+                }
+        resolved.append(entry)
+    return resolved
+
+
+def add_story_chapter(
+    project: dict[str, Any],
+    title: str,
+    *,
+    description: str = "",
+    center: Iterable[float] | None = None,
+    zoom: float | None = None,
+    pitch: float | None = None,
+    bearing: float | None = None,
+    image: str | None = None,
+    alignment: str = "left",
+    hidden: bool = False,
+    map_animation: str = "flyTo",
+    rotate_animation: bool = False,
+    on_enter: Any = None,
+    on_exit: Any = None,
+    index: int | None = None,
+    chapter_id: str | None = None,
+) -> dict[str, Any]:
+    """Add a chapter to the project's story map (Project -> Story Map).
+
+    A camera value left out is taken from the project's saved view, the way
+    the app's **Add chapter** button captures the current map.
+
+    Args:
+        project: The project dict (mutated in place).
+        title: Chapter heading.
+        description: Chapter body text.
+        center: Camera target ``[lng, lat]``.
+        zoom: Camera zoom, 0-24.
+        pitch: Camera tilt in degrees, 0-85.
+        bearing: Camera rotation in degrees.
+        image: Optional image URL shown in the chapter panel.
+        alignment: ``"left"``, ``"center"``, ``"right"``, or ``"full"``.
+        hidden: Hide the text panel while still moving the map.
+        map_animation: ``"flyTo"``, ``"easeTo"``, or ``"jumpTo"``.
+        rotate_animation: Slowly rotate the camera once the move settles.
+        on_enter: Layer opacity changes on entering, as ``{"layer": <id or
+            name>, "opacity": 0-1, "duration": ms}`` entries.
+        on_exit: Layer opacity changes on leaving, in the same form.
+        index: Position to insert at (clamped); appended when omitted.
+        chapter_id: Explicit chapter id; a UUID by default.
+
+    Returns:
+        The chapter that was added.
+
+    Raises:
+        ValueError: If a value is invalid, a layer reference does not resolve,
+            or ``chapter_id`` is already used.
+    """
+    view = project.get("mapView") if isinstance(project.get("mapView"), dict) else {}
+    view_center = view.get("center") or [0, 0]
+    chapter = _project.story_chapter(
+        title,
+        center=list(center) if center is not None else list(view_center),
+        zoom=zoom if zoom is not None else view.get("zoom", 2),
+        pitch=pitch if pitch is not None else view.get("pitch", 0),
+        bearing=bearing if bearing is not None else view.get("bearing", 0),
+        description=description,
+        image=image,
+        alignment=alignment,
+        hidden=hidden,
+        map_animation=map_animation,
+        rotate_animation=rotate_animation,
+        on_enter=_resolve_opacity_layers(project, on_enter),
+        on_exit=_resolve_opacity_layers(project, on_exit),
+        chapter_id=chapter_id,
+    )
+    story = _story_map(project)
+    chapters = story["chapters"]
+    if any(isinstance(c, dict) and c.get("id") == chapter["id"] for c in chapters):
+        raise ValueError(f"a chapter with id {chapter['id']!r} already exists")
+    position = len(chapters) if index is None else max(0, min(len(chapters), int(index)))
+    chapters.insert(position, chapter)
+    return copy.deepcopy(chapter)
+
+
+def remove_story_chapter(project: dict[str, Any], ref: str | int) -> dict[str, Any]:
+    """Remove a story chapter by id, title, or index.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A chapter id, title, or 0-based index.
+
+    Returns:
+        A summary of the story map after the removal.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one chapter.
+    """
+    story = _story_map(project)
+    story["chapters"].pop(find_story_chapter(project, ref))
+    return _story_summary(story)
+
+
+def move_story_chapter(project: dict[str, Any], ref: str | int, index: int) -> dict[str, Any]:
+    """Move a story chapter to a new position.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A chapter id, title, or 0-based index.
+        index: The destination position (clamped to the chapter list).
+
+    Returns:
+        A summary of the story map after the move.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one chapter.
+    """
+    story = _story_map(project)
+    chapter = story["chapters"].pop(find_story_chapter(project, ref))
+    destination = max(0, min(len(story["chapters"]), int(index)))
+    story["chapters"].insert(destination, chapter)
+    return _story_summary(story)

@@ -57,6 +57,12 @@ listening; the panel can be closed after that. Call `live_status` first. Use
 the file tools when the deliverable is a saved `.geolibre.json`, and `live_*`
 when the user is looking at the app and wants it to move now. A live edit
 stays in the open session until the user saves the project in the app.
+Processing (buffer, clip, dissolve, ...) runs in the app, so it is live-only:
+`live_list_algorithms`, then `live_run_algorithm`.
+
+Beyond layers: `set_labels` and `set_layer_filter` label and filter a layer's
+features, `set_plugin_state` stores a plugin's saved state, and
+`set_story_map` / `add_story_chapter` build a scroll-driven story map.
 
 Pick the layer tool by what the data *is*, not by file extension alone:
 - `add_geojson_layer`  - vector data inlined into the project (a URL, a local
@@ -380,19 +386,21 @@ def build_server(workspace: Workspace) -> MCPServer:
 
     @tool()
     def list_catalog() -> dict[str, Any]:
-        """List the named basemaps, color ramps, and legend presets available.
+        """List the named basemaps, color ramps, legend presets, and plugin ids.
 
         Call this before guessing a basemap or colormap name; the names here are
         the ones the app renders identically.
 
         Returns:
             The basemap name-to-URL mapping, the color ramp names accepted by
-            `classify_layer` and `add_colorbar`, and the built-in legend presets.
+            `classify_layer` and `add_colorbar`, the built-in legend presets,
+            and the built-in plugin ids `set_plugin_state` accepts.
         """
         return {
             "basemaps": authoring.basemap_catalog(),
             "colorRamps": authoring.color_ramp_names(),
             "legendPresets": builtin_legend_names(),
+            "pluginStateIds": sorted(_project.PLUGIN_STATE_IDS),
             "workspaceRoots": [str(root) for root in workspace.roots],
         }
 
@@ -1435,6 +1443,312 @@ def build_server(workspace: Workspace) -> MCPServer:
             )
         return _summarize(file, project, swipe=state)
 
+    # -- filters, labels, plugin state ----------------------------------------
+
+    @tool()
+    def set_layer_filter(
+        path: str, layer: str, expression: list[Any] | str | None = None
+    ) -> dict[str, Any]:
+        """Hide a layer's features that do not match a boolean expression.
+
+        This is the saved filter the app's Select by Expression → Filter layer
+        writes. The data is untouched; non-matching features are not drawn.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            layer: The layer's id or display name.
+            expression: A boolean MapLibre expression, as an array or a JSON
+                string, e.g. `[">=", ["get", "population"], 100000]` or
+                `["all", ["==", ["get", "state"], "TN"], [">", ["get", "pop"], 0]]`.
+                Omit it (or pass null) to clear the filter.
+
+        Returns:
+            The layer summary with the filter now set.
+        """
+        with edit(path) as (file, project):
+            summary = authoring.set_layer_filter(project, layer, expression)
+        return _summarize(file, project, layer=summary)
+
+    @tool()
+    def set_labels(
+        path: str,
+        layer: str,
+        field: str | None = None,
+        expression: list[Any] | str | None = None,
+        enabled: bool = True,
+        placement: str | None = None,
+        size: float | None = None,
+        color: str | None = None,
+        halo_color: str | None = None,
+        halo_width: float | None = None,
+        min_zoom: float | None = None,
+        max_zoom: float | None = None,
+        allow_overlap: bool | None = None,
+        anchor: str | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Label a vector layer's features from a property or an expression.
+
+        Settings you omit keep the layer's current label settings, so a call
+        can restyle labels without restating the field.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            layer: The layer's id or display name.
+            field: Property whose value becomes the label text.
+            expression: MapLibre expression for the label text, overriding
+                `field`, e.g. `["concat", ["get", "name"], " (", ["get", "pop"], ")"]`.
+                An empty string clears it.
+            enabled: False hides the labels but keeps their settings.
+            placement: `point` (at the feature or centroid) or `line` (along
+                lines).
+            size: Text size in pixels.
+            color: Text color (CSS).
+            halo_color: Halo color drawn behind the text.
+            halo_width: Halo width in pixels.
+            min_zoom: Lowest zoom labels show at (0-24).
+            max_zoom: Highest zoom labels show at (0-24).
+            allow_overlap: Draw colliding labels instead of hiding them.
+            anchor: Where the text sits relative to its point: `center`,
+                `left`, `right`, `top`, `bottom`, `top-left`, `top-right`,
+                `bottom-left`, `bottom-right`.
+            options: Further settings by name: `offset_x`, `offset_y`,
+                `rotation`, `max_width`, `transform` (`none`, `uppercase`,
+                `lowercase`), `number_format`, `number_decimals`,
+                `number_locale`, `dedupe` (`off`, `unique`, `concatenate`),
+                and the data-defined `size_expression`, `color_expression`,
+                `opacity_expression`, `visibility_expression`,
+                `priority_expression`.
+
+        Returns:
+            The layer's full label settings after the change.
+        """
+        named = {
+            "placement": placement,
+            "size": size,
+            "color": color,
+            "halo_color": halo_color,
+            "halo_width": halo_width,
+            "min_zoom": min_zoom,
+            "max_zoom": max_zoom,
+            "allow_overlap": allow_overlap,
+            "anchor": anchor,
+        }
+        extra = dict(options or {})
+        clash = sorted(set(extra) & set(named))
+        if clash:
+            raise ValueError(f"pass {clash} as arguments, not inside options")
+        with edit(path) as (file, project):
+            labels = authoring.set_labels(
+                project,
+                layer,
+                field,
+                expression=expression,
+                enabled=enabled,
+                **named,
+                **extra,
+            )
+        return _summarize(file, project, labels=labels)
+
+    @tool()
+    def set_plugin_state(
+        path: str,
+        plugin_id: str,
+        state: Any = None,
+        position: str | None = None,
+        activate: bool = True,
+        allow_unknown: bool = False,
+    ) -> dict[str, Any]:
+        """Store a plugin's saved state in the project, as the app saves it.
+
+        Each plugin reads its own state shape when the project opens -- the
+        Time Slider (`maplibre-gl-time-slider`) its timeline config, a grid
+        plugin its resolution, and so on. Use `add_swipe`, `add_legend` and
+        `add_colorbar` for those three controls instead; they validate their
+        state. `list_catalog` lists the built-in plugin ids.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            plugin_id: A built-in plugin id, or an external plugin's id with
+                `allow_unknown`.
+            state: The plugin's settings object, as plain JSON. Null removes
+                the stored settings.
+            position: Control corner: `top-left`, `top-right`, `bottom-left`,
+                or `bottom-right`.
+            activate: Start the plugin active when the project opens.
+            allow_unknown: Accept an id that is not a built-in plugin (one
+                loaded from a manifest URL).
+
+        Returns:
+            The plugin id, whether it is active, its position, and its state.
+        """
+        with edit(path) as (file, project):
+            stored = authoring.set_plugin_state(
+                project,
+                plugin_id,
+                state,
+                position=position,
+                activate=activate,
+                allow_unknown=allow_unknown,
+            )
+        return _summarize(file, project, plugin=stored)
+
+    # -- story map ------------------------------------------------------------
+
+    @tool()
+    def set_story_map(
+        path: str,
+        title: str | None = None,
+        subtitle: str | None = None,
+        byline: str | None = None,
+        footer: str | None = None,
+        theme: str | None = None,
+        show_markers: bool | None = None,
+        marker_color: str | None = None,
+        inset: bool | None = None,
+        inset_position: str | None = None,
+        hide_chapter_nav: bool | None = None,
+        start_slide: str | None = None,
+        end_slide: str | None = None,
+    ) -> dict[str, Any]:
+        """Set a story map's title block and presentation settings.
+
+        A story map is the scroll-driven narrative presented from Project →
+        Story Map; add its chapters with `add_story_chapter`.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            title: Story title.
+            subtitle: Subtitle under the title.
+            byline: Author line.
+            footer: Closing text.
+            theme: `light` or `dark`.
+            show_markers: Drop a marker at each chapter's location.
+            marker_color: Marker color (CSS).
+            inset: Show an overview inset map.
+            inset_position: Inset corner: `top-left`, `top-right`,
+                `bottom-left`, or `bottom-right`.
+            hide_chapter_nav: Start with the chapter list hidden.
+            start_slide: Intro slide: `none`, `blank`, `black`, `global`, or
+                `adjacent`.
+            end_slide: Closing slide, same choices as `start_slide`.
+
+        Returns:
+            The story settings and each chapter's id and title.
+        """
+        with edit(path) as (file, project):
+            story = authoring.set_story_map(
+                project,
+                title=title,
+                subtitle=subtitle,
+                byline=byline,
+                footer=footer,
+                theme=theme,
+                show_markers=show_markers,
+                marker_color=marker_color,
+                inset=inset,
+                inset_position=inset_position,
+                hide_chapter_nav=hide_chapter_nav,
+                start_slide=start_slide,
+                end_slide=end_slide,
+            )
+        return _summarize(file, project, storymap=story)
+
+    @tool()
+    def add_story_chapter(
+        path: str,
+        title: str,
+        description: str = "",
+        center: list[float] | None = None,
+        zoom: float | None = None,
+        pitch: float | None = None,
+        bearing: float | None = None,
+        image: str | None = None,
+        alignment: str = "left",
+        hidden: bool = False,
+        map_animation: str = "flyTo",
+        rotate_animation: bool = False,
+        on_enter: list[dict[str, Any]] | None = None,
+        on_exit: list[dict[str, Any]] | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add a chapter to the project's story map.
+
+        A camera value you omit is taken from the project's saved view.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            title: Chapter heading.
+            description: Chapter body text.
+            center: Camera target `[lng, lat]`.
+            zoom: Camera zoom (0-24).
+            pitch: Camera tilt in degrees (0-85).
+            bearing: Camera rotation in degrees.
+            image: Image URL shown in the chapter panel.
+            alignment: Text panel position: `left`, `center`, `right`, or
+                `full`.
+            hidden: Hide the text panel while still moving the map.
+            map_animation: `flyTo`, `easeTo`, or `jumpTo`.
+            rotate_animation: Slowly rotate the camera after arriving.
+            on_enter: Layer opacity changes on entering the chapter, as
+                `{"layer": <id or name>, "opacity": 0-1, "duration": ms}`.
+            on_exit: Layer opacity changes on leaving the chapter.
+            index: 0-based position to insert at; appended when omitted.
+
+        Returns:
+            The chapter that was added, including its id.
+        """
+        with edit(path) as (file, project):
+            chapter = authoring.add_story_chapter(
+                project,
+                title,
+                description=description,
+                center=center,
+                zoom=zoom,
+                pitch=pitch,
+                bearing=bearing,
+                image=image,
+                alignment=alignment,
+                hidden=hidden,
+                map_animation=map_animation,
+                rotate_animation=rotate_animation,
+                on_enter=on_enter,
+                on_exit=on_exit,
+                index=index,
+            )
+        return _summarize(file, project, chapter=chapter)
+
+    @tool()
+    def remove_story_chapter(path: str, chapter: str | int) -> dict[str, Any]:
+        """Remove a story chapter.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            chapter: The chapter's id, title, or 0-based index.
+
+        Returns:
+            The story settings and the remaining chapters.
+        """
+        with edit(path) as (file, project):
+            story = authoring.remove_story_chapter(project, chapter)
+        return _summarize(file, project, storymap=story)
+
+    @tool()
+    def move_story_chapter(path: str, chapter: str | int, index: int) -> dict[str, Any]:
+        """Reorder a story chapter.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            chapter: The chapter's id, title, or 0-based index.
+            index: The 0-based position to move it to.
+
+        Returns:
+            The story settings and the chapters in their new order.
+        """
+        with edit(path) as (file, project):
+            story = authoring.move_story_chapter(project, chapter, index)
+        return _summarize(file, project, storymap=story)
+
     # -- export ---------------------------------------------------------------
 
     @tool()
@@ -1699,6 +2013,64 @@ def build_server(workspace: Workspace) -> MCPServer:
         """
         live.require().call("removeLayer", {"layerId": layer_id})
         return {"layerId": layer_id}
+
+    @tool()
+    def live_list_algorithms(query: str | None = None) -> list[dict[str, Any]]:
+        """List the processing algorithms the open GeoLibre Desktop can run.
+
+        The catalog lives in the app (buffer, clip, dissolve, centroids, ...),
+        so this needs the live relay. Pass `query` to narrow a long list.
+
+        Args:
+            query: Case-insensitive text matched against each algorithm's id,
+                name, group, and description.
+
+        Returns:
+            One dict per algorithm with `id`, `name`, `group`, `description`,
+            and `parameters` (each parameter's id, type, and default), the
+            shape `live_run_algorithm` expects.
+        """
+        value = live.require().call("listAlgorithms")
+        if not isinstance(value, list):
+            raise ValueError(f"GeoLibre returned an unexpected algorithm list: {value!r}")
+        if query:
+            needle = query.casefold()
+            value = [
+                algorithm
+                for algorithm in value
+                if isinstance(algorithm, dict)
+                and any(
+                    needle in str(algorithm.get(key, "")).casefold()
+                    for key in ("id", "name", "group", "description")
+                )
+            ]
+        return value
+
+    @tool()
+    def live_run_algorithm(
+        algorithm_id: str, parameters: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Run a processing algorithm on the map open in GeoLibre Desktop.
+
+        Result layers are added to the open map, and the run is recorded in
+        the app's Processing History. Layer parameters take a layer id from
+        `live_list_layers`. The relay waits about five seconds for a result:
+        a longer run keeps going in the app and reports that it did not
+        finish in time, so check `live_list_layers` before retrying.
+
+        Args:
+            algorithm_id: An id from `live_list_algorithms` (e.g. `buffer`).
+            parameters: The algorithm's parameters, keyed by parameter id.
+
+        Returns:
+            The algorithm's `logs` and the `resultLayerIds` it added.
+        """
+        value = live.require().call(
+            "runAlgorithm", {"id": algorithm_id, "params": dict(parameters or {})}
+        )
+        if not isinstance(value, dict):
+            raise ValueError(f"GeoLibre returned an unexpected run result: {value!r}")
+        return value
 
     return server
 

@@ -2891,3 +2891,606 @@ def colorbar_gui_state(
         "selectedColorbarIndex": len(colorbars) - 1,
         "colorbars": colorbars,
     }
+
+
+# -- layer filters -------------------------------------------------------------
+
+#: Expression operators that can produce a boolean, which is what the app's
+#: ``filterExpression`` must evaluate to (``normalizeLayer`` in
+#: ``packages/core/src/project.ts`` validates it with ``expectedType:
+#: "boolean"`` and silently drops anything else on load). The app's validator is
+#: the authority; this is the structural pre-check that catches the common
+#: mistakes (a bare property name, a numeric expression) before they are saved
+#: and quietly discarded.
+FILTER_EXPRESSION_OPERATORS = frozenset(
+    {
+        "==",
+        "!=",
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "!",
+        "all",
+        "any",
+        "case",
+        "match",
+        "coalesce",
+        "in",
+        "has",
+        "!has",
+        "within",
+        "boolean",
+        "to-boolean",
+        "let",
+    }
+)
+
+
+def _parse_expression(expression: Any, what: str) -> list[Any]:
+    """Coerce a MapLibre expression given as a list or a JSON string to a list.
+
+    Args:
+        expression: A list, or a JSON string encoding one.
+        what: The argument name, for error messages.
+
+    Returns:
+        The expression as a non-empty list whose head is an operator string.
+
+    Raises:
+        ValueError: If the value is not a JSON array expression.
+    """
+    if isinstance(expression, str):
+        try:
+            expression = json.loads(expression)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{what} is not valid JSON: {exc.msg}") from exc
+    if isinstance(expression, tuple):
+        expression = list(expression)
+    if not isinstance(expression, list) or not expression:
+        raise ValueError(
+            f"{what} must be a MapLibre expression array such as "
+            '[">=", ["get", "population"], 100000]'
+        )
+    if not isinstance(expression[0], str):
+        raise ValueError(f"{what} must start with an operator string, got {expression[0]!r}")
+    try:
+        return json.loads(json.dumps(expression, allow_nan=False))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{what} must be JSON-serializable: {exc}") from exc
+
+
+def filter_expression(expression: Any) -> list[Any]:
+    """Build a layer's persistent ``filterExpression``.
+
+    Args:
+        expression: A boolean MapLibre expression, as a list or a JSON string,
+            e.g. ``[">=", ["get", "population"], 100000]``.
+
+    Returns:
+        The expression as a list, ready for the layer's ``filterExpression``.
+
+    Raises:
+        ValueError: If the expression is not an array, or its operator cannot
+            produce a boolean.
+    """
+    parsed = _parse_expression(expression, "filter expression")
+    if parsed[0] not in FILTER_EXPRESSION_OPERATORS:
+        raise ValueError(
+            f"a layer filter must evaluate to true/false; {parsed[0]!r} does not. "
+            "Use a comparison such as ['==', ['get', 'field'], 'value'] or combine "
+            "several with 'all' / 'any'"
+        )
+    return parsed
+
+
+# -- labels --------------------------------------------------------------------
+
+#: Mirror of ``DEFAULT_LAYER_STYLE.labels`` in ``packages/core/src/types.ts``.
+#: The app merges a stored ``labels`` object over these field by field when it
+#: renders, so a written object carries every key to stay stable on round trip.
+DEFAULT_LABEL_STYLE: dict[str, Any] = {
+    "enabled": False,
+    "field": "",
+    "expression": "",
+    "placement": "point",
+    "size": 13,
+    "color": "#111827",
+    "haloColor": "#ffffff",
+    "haloWidth": 1.5,
+    "minZoom": 0,
+    "maxZoom": 24,
+    "allowOverlap": False,
+    "anchor": "center",
+    "offsetX": 0,
+    "offsetY": 0,
+    "rotation": 0,
+    "maxWidth": 10,
+    "transform": "none",
+    "numberFormatEnabled": False,
+    "numberDecimals": 0,
+    "numberLocale": "",
+    "dedupe": "off",
+    "sizeExpression": "",
+    "colorExpression": "",
+    "opacityExpression": "",
+    "visibilityExpression": "",
+    "priorityExpression": "",
+}
+
+LABEL_PLACEMENTS = frozenset({"point", "line"})
+LABEL_ANCHORS = frozenset(
+    {
+        "center",
+        "left",
+        "right",
+        "top",
+        "bottom",
+        "top-left",
+        "top-right",
+        "bottom-left",
+        "bottom-right",
+    }
+)
+LABEL_TRANSFORMS = frozenset({"none", "uppercase", "lowercase"})
+LABEL_DEDUPE_MODES = frozenset({"off", "unique", "concatenate"})
+#: ``LABEL_NUMBER_LOCALES`` in ``packages/core/src/label-number-format.ts``;
+#: the empty string follows the app's own language.
+LABEL_NUMBER_LOCALES = frozenset({"", "en-US", "de-DE", "ru-RU", "hi-IN"})
+
+# snake_case keyword -> LabelStyle key, with how to check the value.
+_LABEL_OPTIONS: dict[str, tuple[str, str]] = {
+    "placement": ("placement", "placement"),
+    "size": ("size", "positive"),
+    "color": ("color", "color"),
+    "halo_color": ("haloColor", "color"),
+    "halo_width": ("haloWidth", "non_negative"),
+    "min_zoom": ("minZoom", "zoom"),
+    "max_zoom": ("maxZoom", "zoom"),
+    "allow_overlap": ("allowOverlap", "bool"),
+    "anchor": ("anchor", "anchor"),
+    "offset_x": ("offsetX", "number"),
+    "offset_y": ("offsetY", "number"),
+    "rotation": ("rotation", "number"),
+    "max_width": ("maxWidth", "positive"),
+    "transform": ("transform", "transform"),
+    "number_format": ("numberFormatEnabled", "bool"),
+    "number_decimals": ("numberDecimals", "decimals"),
+    "number_locale": ("numberLocale", "locale"),
+    "dedupe": ("dedupe", "dedupe"),
+    "size_expression": ("sizeExpression", "expression"),
+    "color_expression": ("colorExpression", "expression"),
+    "opacity_expression": ("opacityExpression", "expression"),
+    "visibility_expression": ("visibilityExpression", "expression"),
+    "priority_expression": ("priorityExpression", "expression"),
+}
+
+#: The keyword options :func:`label_style` accepts besides field/expression.
+LABEL_OPTION_NAMES = tuple(_LABEL_OPTIONS)
+
+_LABEL_ENUMS = {
+    "placement": LABEL_PLACEMENTS,
+    "anchor": LABEL_ANCHORS,
+    "transform": LABEL_TRANSFORMS,
+    "dedupe": LABEL_DEDUPE_MODES,
+    "locale": LABEL_NUMBER_LOCALES,
+}
+
+
+def _label_value(name: str, kind: str, value: Any) -> Any:
+    """Validate one label option and return the value to store.
+
+    Args:
+        name: The keyword name, for error messages.
+        kind: The check to apply (see ``_LABEL_OPTIONS``).
+        value: The caller's value.
+
+    Returns:
+        The value as the app stores it.
+
+    Raises:
+        ValueError: If the value is out of range or of the wrong kind.
+    """
+    if kind in _LABEL_ENUMS:
+        allowed = _LABEL_ENUMS[kind]
+        if value not in allowed:
+            raise ValueError(f"{name} must be one of {sorted(allowed)}, got {value!r}")
+        return value
+    if kind == "bool":
+        if not isinstance(value, bool):
+            raise ValueError(f"{name} must be true or false, got {value!r}")
+        return value
+    if kind == "color":
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{name} must be a CSS color string, got {value!r}")
+        return value.strip()
+    if kind == "expression":
+        if value is None or value == "":
+            return ""
+        return json.dumps(_parse_expression(value, name), separators=(",", ":"))
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a number, got {value!r}")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{name} must be finite, got {value!r}")
+    if kind == "positive" and number <= 0:
+        raise ValueError(f"{name} must be greater than 0, got {value!r}")
+    if kind == "non_negative" and number < 0:
+        raise ValueError(f"{name} must be 0 or more, got {value!r}")
+    if kind == "zoom" and not 0 <= number <= 24:
+        raise ValueError(f"{name} must be between 0 and 24, got {value!r}")
+    if kind == "decimals":
+        if number != int(number) or not 0 <= number <= 10:
+            raise ValueError(f"{name} must be a whole number from 0 to 10, got {value!r}")
+        return int(number)
+    return int(number) if number == int(number) else number
+
+
+def label_style(
+    field: str | None = None,
+    *,
+    expression: Any = None,
+    enabled: bool = True,
+    base: dict[str, Any] | None = None,
+    **options: Any,
+) -> dict[str, Any]:
+    """Build a layer's ``style.labels`` object (``LabelStyle`` in types.ts).
+
+    Args:
+        field: Attribute whose value becomes the label text.
+        expression: A MapLibre expression (list or JSON string) for the label
+            text; overrides ``field`` when set, e.g.
+            ``["concat", ["get", "name"], " (", ["get", "pop"], ")"]``. Pass
+            ``""`` to clear an existing one.
+        enabled: Whether labels are shown. ``False`` keeps the configuration
+            but hides the labels.
+        base: An existing labels object to update; unspecified options keep
+            its values. Defaults to :data:`DEFAULT_LABEL_STYLE`.
+        **options: Any of :data:`LABEL_OPTION_NAMES` -- ``placement``
+            (``"point"``/``"line"``), ``size``, ``color``, ``halo_color``,
+            ``halo_width``, ``min_zoom``, ``max_zoom``, ``allow_overlap``,
+            ``anchor``, ``offset_x``, ``offset_y``, ``rotation``, ``max_width``,
+            ``transform``, ``number_format``, ``number_decimals``,
+            ``number_locale``, ``dedupe``, and the data-defined
+            ``size_expression``, ``color_expression``, ``opacity_expression``,
+            ``visibility_expression``, ``priority_expression``. ``None``
+            values are skipped.
+
+    Returns:
+        A complete labels object.
+
+    Raises:
+        ValueError: If an option is unknown or invalid, or labels are enabled
+            with neither a field nor an expression to draw.
+    """
+    unknown = sorted(set(options) - set(_LABEL_OPTIONS))
+    if unknown:
+        raise ValueError(
+            f"unknown label option(s) {unknown}; expected any of {list(LABEL_OPTION_NAMES)}"
+        )
+    labels = copy.deepcopy(DEFAULT_LABEL_STYLE)
+    if isinstance(base, dict):
+        labels.update(copy.deepcopy(base))
+    if not isinstance(enabled, bool):
+        raise ValueError(f"enabled must be true or false, got {enabled!r}")
+    labels["enabled"] = enabled
+    if field is not None:
+        if not isinstance(field, str):
+            raise ValueError(f"field must be a property name, got {field!r}")
+        labels["field"] = field.strip()
+    if expression is not None:
+        labels["expression"] = _label_value("expression", "expression", expression)
+    for name, value in options.items():
+        if value is None:
+            continue
+        key, kind = _LABEL_OPTIONS[name]
+        labels[key] = _label_value(name, kind, value)
+    if labels["minZoom"] > labels["maxZoom"]:
+        raise ValueError(
+            f"min_zoom ({labels['minZoom']}) must not exceed max_zoom ({labels['maxZoom']})"
+        )
+    if labels["enabled"] and not labels["field"] and not labels["expression"]:
+        raise ValueError("labels need a field or an expression to draw")
+    return labels
+
+
+# -- plugin state --------------------------------------------------------------
+
+#: Built-in plugins that restore saved project state (they implement
+#: ``applyProjectState`` in ``packages/plugins/src/plugins/*``). A settings blob
+#: stored under any other id is ignored by the app unless an external plugin
+#: with that id is loaded from a manifest URL, so callers refuse unknown ids
+#: unless asked not to. A repo test checks every id here still appears in the
+#: plugin sources.
+PLUGIN_STATE_IDS = frozenset(
+    {
+        "geolibre-elevation-profile",
+        "geolibre-flight-simulator",
+        "geolibre-point-cloud-annotation",
+        "geolibre-route-animation",
+        "geolibre-sun",
+        "geolibre-timelapse",
+        "gods-eye-view",
+        "maplibre-a5-grid",
+        "maplibre-atmosphere-effects",
+        "maplibre-dggal",
+        "maplibre-dggrid",
+        "maplibre-geohash",
+        "maplibre-gl-components",
+        "maplibre-gl-graticule",
+        "maplibre-gl-overture-maps",
+        "maplibre-gl-swipe",
+        "maplibre-gl-time-slider",
+        "maplibre-h3-grid",
+        "maplibre-olc",
+        "maplibre-s2-grid",
+        "maplibre-samgeo",
+        "maplibre-tilecode",
+    }
+)
+
+
+def json_compatible(value: Any, what: str) -> Any:
+    """Return a deep copy of ``value`` after checking it is plain JSON.
+
+    Mirrors ``isJsonCompatible`` in project.ts, which drops a plugin's settings
+    on load when they are not.
+
+    Args:
+        value: The value to check.
+        what: The argument name, for error messages.
+
+    Returns:
+        A deep copy of the value.
+
+    Raises:
+        ValueError: If the value holds something JSON cannot represent.
+    """
+    try:
+        return json.loads(json.dumps(value, allow_nan=False))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{what} must be plain JSON (objects, lists, strings, numbers): {exc}"
+        ) from exc
+
+
+# -- story maps ----------------------------------------------------------------
+
+#: Mirror of ``DEFAULT_STORY_MAP`` in packages/core/src/types.ts.
+DEFAULT_STORY_MAP: dict[str, Any] = {
+    "title": "",
+    "subtitle": "",
+    "byline": "",
+    "footer": "",
+    "theme": "dark",
+    "showMarkers": False,
+    "markerColor": "#3fb1ce",
+    "inset": False,
+    "insetPosition": "bottom-left",
+    "hideChapterNav": False,
+    "startSlide": "none",
+    "endSlide": "none",
+    "chapters": [],
+}
+
+STORY_THEMES = frozenset({"light", "dark"})
+STORY_ALIGNMENTS = frozenset({"left", "center", "right", "full"})
+STORY_ANIMATIONS = frozenset({"flyTo", "easeTo", "jumpTo"})
+STORY_INSET_POSITIONS = CONTROL_POSITIONS
+STORY_SLIDE_MODES = frozenset({"none", "blank", "black", "global", "adjacent"})
+
+# snake_case keyword -> StoryMap key, with the allowed values (`str` for free
+# text, `bool` for flags, otherwise a vocabulary).
+_STORY_SETTINGS: dict[str, tuple[str, Any]] = {
+    "title": ("title", str),
+    "subtitle": ("subtitle", str),
+    "byline": ("byline", str),
+    "footer": ("footer", str),
+    "theme": ("theme", STORY_THEMES),
+    "show_markers": ("showMarkers", bool),
+    "marker_color": ("markerColor", str),
+    "inset": ("inset", bool),
+    "inset_position": ("insetPosition", STORY_INSET_POSITIONS),
+    "hide_chapter_nav": ("hideChapterNav", bool),
+    "start_slide": ("startSlide", STORY_SLIDE_MODES),
+    "end_slide": ("endSlide", STORY_SLIDE_MODES),
+}
+
+#: The keyword settings :func:`story_map_settings` accepts.
+STORY_SETTING_NAMES = tuple(_STORY_SETTINGS)
+
+
+def story_map_settings(**settings: Any) -> dict[str, Any]:
+    """Validate story map presentation settings and map them to project keys.
+
+    Args:
+        **settings: Any of :data:`STORY_SETTING_NAMES`. ``None`` values are
+            skipped.
+
+    Returns:
+        The settings keyed as ``StoryMap`` stores them (``showMarkers``, ...).
+
+    Raises:
+        ValueError: If a setting is unknown or has a value the app rejects.
+    """
+    unknown = sorted(set(settings) - set(_STORY_SETTINGS))
+    if unknown:
+        raise ValueError(
+            f"unknown story map setting(s) {unknown}; expected any of {list(STORY_SETTING_NAMES)}"
+        )
+    out: dict[str, Any] = {}
+    for name, value in settings.items():
+        if value is None:
+            continue
+        key, rule = _STORY_SETTINGS[name]
+        if rule is str:
+            if not isinstance(value, str):
+                raise ValueError(f"{name} must be a string, got {value!r}")
+        elif rule is bool:
+            if not isinstance(value, bool):
+                raise ValueError(f"{name} must be true or false, got {value!r}")
+        elif value not in rule:
+            raise ValueError(f"{name} must be one of {sorted(rule)}, got {value!r}")
+        out[key] = value
+    return out
+
+
+def _story_number(value: float) -> float | int:
+    """Store a whole float as an int, the way JSON written by the app reads."""
+    return int(value) if value == int(value) else value
+
+
+def _opacity_changes(entries: Any, what: str) -> list[dict[str, Any]]:
+    """Build a chapter's ``onChapterEnter``/``onChapterExit`` list.
+
+    Args:
+        entries: ``None`` or a list of ``{"layer", "opacity", "duration"}``
+            mappings (``layer_id``/``layerId`` are accepted for ``layer``).
+            Layer references are expected to be resolved to ids by the caller.
+        what: The argument name, for error messages.
+
+    Returns:
+        ``StoryLayerOpacityChange`` dicts.
+
+    Raises:
+        ValueError: If an entry has no layer, or an opacity or duration out of
+            range.
+    """
+    if entries is None:
+        return []
+    if not isinstance(entries, (list, tuple)):
+        raise ValueError(f"{what} must be a list of {{layer, opacity}} entries")
+    changes: list[dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError(f"each {what} entry must be an object, got {entry!r}")
+        layer_id = entry.get("layerId", entry.get("layer_id", entry.get("layer")))
+        if not isinstance(layer_id, str) or not layer_id:
+            raise ValueError(f"each {what} entry needs a layer")
+        opacity = entry.get("opacity", 1)
+        if isinstance(opacity, bool) or not isinstance(opacity, (int, float)):
+            raise ValueError(f"{what} opacity must be a number, got {opacity!r}")
+        if not 0 <= float(opacity) <= 1:
+            raise ValueError(f"{what} opacity must be between 0 and 1, got {opacity!r}")
+        change: dict[str, Any] = {
+            "id": str(entry.get("id") or uuid.uuid4()),
+            "layerId": layer_id,
+            "opacity": _story_number(float(opacity)),
+        }
+        duration = entry.get("duration")
+        if duration is not None:
+            if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+                raise ValueError(f"{what} duration must be milliseconds, got {duration!r}")
+            if not math.isfinite(float(duration)) or duration < 0:
+                raise ValueError(f"{what} duration must be 0 or more, got {duration!r}")
+            change["duration"] = _story_number(float(duration))
+        changes.append(change)
+    return changes
+
+
+def story_chapter(
+    title: str,
+    *,
+    center: tuple[float, float] | list[float],
+    zoom: float,
+    pitch: float = 0,
+    bearing: float = 0,
+    description: str = "",
+    image: str | None = None,
+    alignment: str = "left",
+    hidden: bool = False,
+    map_animation: str = "flyTo",
+    rotate_animation: bool = False,
+    on_enter: Any = None,
+    on_exit: Any = None,
+    chapter_id: str | None = None,
+) -> dict[str, Any]:
+    """Build one story map chapter (``StoryChapter`` in types.ts).
+
+    Values are stored the way ``normalizeStoryChapter`` in project.ts leaves
+    them, so the app loads the chapter unchanged: the bearing is wrapped into
+    0-360, and out-of-range coordinates, zooms, and pitches are refused rather
+    than silently clamped.
+
+    Args:
+        title: Chapter heading.
+        center: Camera target as ``(lng, lat)``.
+        zoom: Camera zoom, 0-24.
+        pitch: Camera tilt in degrees, 0-85.
+        bearing: Camera rotation in degrees.
+        description: Chapter body text.
+        image: Optional image URL (or data URI) shown in the chapter panel.
+        alignment: Text panel position: ``"left"``, ``"center"``, ``"right"``,
+            or ``"full"``.
+        hidden: Hide the text panel while still moving the map.
+        map_animation: ``"flyTo"``, ``"easeTo"``, or ``"jumpTo"``.
+        rotate_animation: Slowly rotate the camera once the move settles.
+        on_enter: Layer opacity changes applied on entering the chapter, as
+            ``{"layer": <id>, "opacity": 0-1, "duration": ms}`` entries.
+        on_exit: Layer opacity changes applied on leaving the chapter.
+        chapter_id: Explicit chapter id; a UUID by default.
+
+    Returns:
+        A chapter dict.
+
+    Raises:
+        ValueError: If any value is out of range or not in its vocabulary.
+    """
+    if not isinstance(title, str):
+        raise ValueError(f"title must be a string, got {title!r}")
+    if not isinstance(description, str):
+        raise ValueError(f"description must be a string, got {description!r}")
+    if not isinstance(center, (list, tuple)) or len(center) != 2:
+        raise ValueError(f"center must be (lng, lat), got {center!r}")
+    try:
+        lng, lat, zoom, pitch, bearing = (float(value) for value in (*center, zoom, pitch, bearing))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"center, zoom, pitch and bearing must be numbers: {exc}") from exc
+    if not (math.isfinite(lng) and -180 <= lng <= 180):
+        raise ValueError(f"longitude must be between -180 and 180, got {center[0]!r}")
+    if not (math.isfinite(lat) and -90 <= lat <= 90):
+        raise ValueError(f"latitude must be between -90 and 90, got {center[1]!r}")
+    if not (math.isfinite(zoom) and 0 <= zoom <= 24):
+        raise ValueError(f"zoom must be between 0 and 24, got {zoom!r}")
+    if not (math.isfinite(pitch) and 0 <= pitch <= 85):
+        raise ValueError(f"pitch must be between 0 and 85, got {pitch!r}")
+    if not math.isfinite(bearing):
+        raise ValueError(f"bearing must be finite, got {bearing!r}")
+    if alignment not in STORY_ALIGNMENTS:
+        raise ValueError(f"alignment must be one of {sorted(STORY_ALIGNMENTS)}, got {alignment!r}")
+    if map_animation not in STORY_ANIMATIONS:
+        raise ValueError(
+            f"map_animation must be one of {sorted(STORY_ANIMATIONS)}, got {map_animation!r}"
+        )
+    if not isinstance(hidden, bool) or not isinstance(rotate_animation, bool):
+        raise ValueError("hidden and rotate_animation must be true or false")
+    if image is not None and not isinstance(image, str):
+        raise ValueError(f"image must be a URL string, got {image!r}")
+    chapter_id = str(chapter_id).strip() if chapter_id is not None else str(uuid.uuid4())
+    if not chapter_id:
+        raise ValueError("chapter_id must not be empty")
+
+    chapter: dict[str, Any] = {
+        "id": chapter_id,
+        "title": title,
+        "description": description,
+    }
+    if image:
+        chapter["image"] = image
+    chapter.update(
+        {
+            "alignment": alignment,
+            "hidden": hidden,
+            "location": {
+                "center": [_story_number(lng), _story_number(lat)],
+                "zoom": _story_number(zoom),
+                "pitch": _story_number(pitch),
+                "bearing": _story_number(bearing % 360),
+            },
+            "mapAnimation": map_animation,
+            "rotateAnimation": rotate_animation,
+            "onChapterEnter": _opacity_changes(on_enter, "on_enter"),
+            "onChapterExit": _opacity_changes(on_exit, "on_exit"),
+        }
+    )
+    return chapter

@@ -59,7 +59,9 @@ Six steps. Most maps use four of them.
    build a graduated choropleth from a numeric column.
 5. **Decorate** — `set_map_legend` for a legend built from the layers' own
    styles, `add_legend` for hand-written entries, `add_colorbar`, `add_swipe`
-   for before/after.
+   for before/after. `set_labels` labels features, `set_layer_filter` hides
+   the ones you do not want, and `add_story_chapter` turns the project into a
+   scroll-driven story.
 6. **`export_html`** — a single self-contained page the recipient opens with no
    install.
 
@@ -127,6 +129,8 @@ export_html(path=..., out_path="counties.html", title="Population by county")
   `127.0.0.1:8766`. Call `live_status()` first. If it reports no relay, ask
   the user to open Processing → Jupyter Notebook once. A live edit is not on
   disk until the user saves in the app. Web and JupyterLite have no relay.
+  Processing (`live_list_algorithms()`, `live_run_algorithm()`) runs in the
+  app, so it is live-only.
 
 ## Verify before you claim it works
 

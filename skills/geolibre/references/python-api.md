@@ -248,6 +248,29 @@ m.add_colorbar(colormap="terrain", vmin=0, vmax=3000, label="Elevation", units="
 m.split_map(left_layers=["Before"], right_layers=["After"], orientation="vertical")
 ```
 
+## Labels, filters, plugin state, story maps
+
+These write the project, so they work headless too:
+
+```python
+m.set_labels("Cities", "name", size=14, halo_width=2, anchor="top")
+m.set_layer_filter("Cities", [">=", ["get", "pop"], 100000])   # None clears
+m.set_plugin_state("maplibre-gl-graticule", {...})  # a plugin's own saved state
+
+m.set_story_map(title="A tour", theme="light", start_slide="global")
+m.set_center(-84, 36, zoom=5)
+m.add_story_chapter("Overview", description="...")   # captures the saved view
+m.add_story_chapter("Downtown", center=(-83.92, 35.96), zoom=14,
+                    on_enter=[{"layer": "Cities", "opacity": 1}])
+m.move_story_chapter("Downtown", 0); m.remove_story_chapter("Overview")
+```
+
+`set_plugin_state` accepts the built-in ids in
+`geolibre.project.PLUGIN_STATE_IDS` (`allow_unknown=True` for an external
+plugin); the blob's shape is the plugin's own. Bookmarks are not part of a
+project (the app keeps them in browser storage), so there is no API for them;
+story chapters are the saved equivalent.
+
 ## Live interaction (notebook only)
 
 These need a running widget, so they are unavailable headless:
