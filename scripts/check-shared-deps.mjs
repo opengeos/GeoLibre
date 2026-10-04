@@ -70,7 +70,10 @@ function main() {
   const read = (file) => JSON.parse(readFileSync(path.join(ROOT, file), "utf8"));
   const mismatches = findRangeMismatches(read(fileA), read(fileB));
   if (process.argv.includes("--json")) {
+    // Stdout stays a single JSON document; the exit code carries pass/fail.
     console.log(JSON.stringify(mismatches, null, 2));
+    if (mismatches.length > 0) process.exitCode = 1;
+    return;
   }
   if (mismatches.length === 0) {
     console.log(
