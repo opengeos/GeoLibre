@@ -31,6 +31,12 @@ import {
   lineOfSightLayerCollection,
   lineOfSightOverlayCollection,
 } from "../apps/geolibre-desktop/src/lib/line-of-sight-layer";
+import {
+  lineOfSightChartModel,
+  MAX_HEIGHT_METERS,
+  parseHeight,
+  unitFormatter,
+} from "../apps/geolibre-desktop/src/lib/line-of-sight-chart";
 
 /** A point due north of the origin, `meters` away. */
 const north = (meters: number): LngLat => ({ lng: 0, lat: metersToLatDegrees(meters) });
@@ -238,6 +244,47 @@ describe("terrain sampling", () => {
   it("returns null for a degenerate or over-long path without fetching", async () => {
     assert.equal(await fetchLineOfSightProfile({ from: ORIGIN, to: ORIGIN }), null);
     assert.equal(await fetchLineOfSightProfile({ from: ORIGIN, to: north(400_000) }), null);
+  });
+});
+
+describe("line-of-sight panel helpers", () => {
+  const t = ((key: string) => key.split(".").at(-1)) as unknown as Parameters<
+    typeof unitFormatter
+  >[2];
+
+  it("parses heights, clamping and falling back on bad input", () => {
+    assert.equal(parseHeight("2.5", 1.7), 2.5);
+    assert.equal(parseHeight("", 1.7), 1.7);
+    assert.equal(parseHeight("abc", 0), 0);
+    assert.equal(parseHeight("-4", 1.7), 0);
+    assert.equal(parseHeight("99999", 1.7), MAX_HEIGHT_METERS);
+  });
+
+  it("formats in the scale bar's unit system", () => {
+    const metric = unitFormatter(false, "en", t);
+    assert.equal(metric.distance(850), "850 meters");
+    assert.equal(metric.distance(12_070), "12.07 kilometers");
+    assert.equal(metric.elevation(4392.4), "4,392 meters");
+    const imperial = unitFormatter(true, "en", t);
+    assert.equal(imperial.distance(100), "328 feet");
+    assert.equal(imperial.elevation(1000), "3,281 feet");
+  });
+
+  it("thins the chart, keeps visibility changes, and scales to the sight line", () => {
+    const ridge = (d: number) => (d >= 1000 && d <= 1100 ? 150 : 100);
+    const result = computeLineOfSight(profileNorth(3000, 4001, ridge), {
+      observerHeightMeters: 80,
+    });
+    const chart = lineOfSightChartModel(result);
+    assert.ok(chart.samples.length <= 420, `${chart.samples.length} chart samples`);
+    // From an 80 m mast the ground reappears past the ridge's shadow.
+    assert.deepEqual(
+      chart.runs.map((run) => run.visible),
+      [true, false, true],
+    );
+    // The y axis reaches the eye, 180 m, above the 150 m ridge.
+    assert.ok(chart.geometry.maxElevation >= 180);
+    assert.equal(chart.sightline.split(" ").length, chart.samples.length);
   });
 });
 

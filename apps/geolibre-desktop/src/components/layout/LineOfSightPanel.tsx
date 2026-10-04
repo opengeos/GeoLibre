@@ -1,6 +1,5 @@
-import { FEET_PER_METER, METERS_PER_MILE, useAppStore } from "@geolibre/core";
+import { useAppStore } from "@geolibre/core";
 import { rendererCapabilities, type MapEngine } from "@geolibre/map";
-import { buildChartGeometry } from "@geolibre/plugins/elevation-profile-chart";
 import {
   computeLineOfSight,
   DEFAULT_LOS_OBSERVER_HEIGHT_METERS,
@@ -13,60 +12,25 @@ import {
   type LineOfSightResult,
 } from "@geolibre/processing";
 import { Button, Input, Label } from "@geolibre/ui";
-import type { TFunction } from "i18next";
 import { Eye, Layers, Loader2, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
   createLineOfSightOverlay,
   LOS_HIDDEN_COLOR,
-  LOS_OBSERVER_COLOR,
-  LOS_OBSTRUCTION_COLOR,
-  LOS_TARGET_COLOR,
   LOS_VISIBLE_COLOR,
   lineOfSightLayerCollection,
   lineOfSightOverlayCollection,
   type LineOfSightOverlay,
 } from "../../lib/line-of-sight-layer";
+import {
+  MAX_HEIGHT_METERS,
+  parseHeight,
+  unitFormatter,
+  type UnitFormatter,
+} from "../../lib/line-of-sight-chart";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
-
-/** Largest height above ground the inputs accept, in metres. */
-const MAX_HEIGHT_METERS = 10_000;
-
-/** Parse a height input, falling back to `fallback` for anything unusable. */
-function parseHeight(value: string, fallback: number): number {
-  const parsed = Number(value);
-  if (value.trim() === "" || !Number.isFinite(parsed)) return fallback;
-  return Math.min(MAX_HEIGHT_METERS, Math.max(0, parsed));
-}
-
-/** Formats lengths and elevations in the scale bar's unit system. */
-interface UnitFormatter {
-  distance(meters: number): string;
-  elevation(meters: number): string;
-}
-
-function unitFormatter(imperial: boolean, language: string, t: TFunction): UnitFormatter {
-  const number = (value: number, digits: number) =>
-    new Intl.NumberFormat(language, { maximumFractionDigits: digits }).format(value);
-  return {
-    distance(meters) {
-      if (imperial) {
-        return meters >= METERS_PER_MILE
-          ? `${number(meters / METERS_PER_MILE, 2)} ${t("quickAnalysis.unit.miles")}`
-          : `${number(meters * FEET_PER_METER, 0)} ${t("quickAnalysis.unit.feet")}`;
-      }
-      return meters >= 1000
-        ? `${number(meters / 1000, 2)} ${t("quickAnalysis.unit.kilometers")}`
-        : `${number(meters, 0)} ${t("quickAnalysis.unit.meters")}`;
-    },
-    elevation(meters) {
-      return imperial
-        ? `${number(meters * FEET_PER_METER, 0)} ${t("quickAnalysis.unit.feet")}`
-        : `${number(meters, 0)} ${t("quickAnalysis.unit.meters")}`;
-    },
-  };
-}
+import { LineOfSightChart } from "./LineOfSightChart";
 
 /**
  * The interactive Line of Sight tool (issue #2858): click an observer and a
@@ -223,10 +187,15 @@ function LineOfSightTool({
     };
   }, [mapControllerRef, mapReadyGeneration]);
 
-  // Escape ends the session, like the other on-map tools.
+  // Escape ends the session, like the other on-map tools -- but not while a
+  // field has focus, where Escape means "leave this field", and closing would
+  // throw away the fetched profile and the settings.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -428,171 +397,5 @@ function LineOfSightSummary({
       </dl>
       <LineOfSightChart result={result} units={units} />
     </div>
-  );
-}
-
-const CHART_WIDTH = 320;
-const CHART_HEIGHT = 120;
-const CHART_PADDING = { top: 8, right: 8, bottom: 16, left: 44 };
-/** Most vertices one chart path gets; a 4096-sample profile is thinned to this. */
-const CHART_MAX_POINTS = 400;
-
-/**
- * The elevation profile under the line, drawn with the elevation-profile
- * plugin's chart geometry: the ground coloured by visibility, the sight line
- * from the observer's eye to the target's top dashed over it, and the first
- * obstruction marked.
- */
-function LineOfSightChart({ result, units }: { result: LineOfSightResult; units: UnitFormatter }) {
-  const { t } = useTranslation();
-  const [hover, setHover] = useState<number | null>(null);
-
-  const chart = useMemo(() => {
-    const stride = Math.max(1, Math.ceil(result.samples.length / CHART_MAX_POINTS));
-    const samples = result.samples.filter(
-      (sample, index) =>
-        Number.isFinite(sample.elevation) &&
-        // Thinned to every stride-th sample, keeping the end and every
-        // visibility change so a short hidden run still shows.
-        (index % stride === 0 ||
-          index === result.samples.length - 1 ||
-          sample.visible !== result.samples[index - 1]?.visible),
-    );
-    const sightlines = samples.map((sample) => sample.sightline);
-    const geometry = buildChartGeometry(
-      samples.map(({ distance, elevation }) => ({ distance, elevation })),
-      CHART_WIDTH,
-      CHART_HEIGHT,
-      CHART_PADDING,
-      [Math.min(...sightlines), Math.max(...sightlines)],
-    );
-    const point = (distance: number, elevation: number) =>
-      `${geometry.xScale(distance).toFixed(1)},${geometry.yScale(elevation).toFixed(1)}`;
-    // Ground runs of one visibility, sharing their boundary sample.
-    const runs: { visible: boolean; points: string }[] = [];
-    for (let i = 0; i < samples.length; i += 1) {
-      const sample = samples[i];
-      const last = runs.at(-1);
-      if (last && last.visible === sample.visible) {
-        last.points += ` ${point(sample.distance, sample.elevation)}`;
-      } else {
-        const previous = samples[i - 1];
-        runs.push({
-          visible: sample.visible,
-          points: `${previous ? `${point(previous.distance, previous.elevation)} ` : ""}${point(sample.distance, sample.elevation)}`,
-        });
-      }
-    }
-    const sightline = samples.map((sample) => point(sample.distance, sample.sightline)).join(" ");
-    return { samples, geometry, runs, sightline };
-  }, [result]);
-
-  const { geometry, samples } = chart;
-  const hovered = hover !== null ? samples[hover] : null;
-  const first = result.samples[0];
-  const last = result.samples[result.samples.length - 1];
-  const obstruction = result.firstObstruction;
-
-  return (
-    <svg
-      role="img"
-      aria-label={t("lineOfSight.chartLabel")}
-      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-      className="w-full select-none"
-      onPointerMove={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * CHART_WIDTH;
-        setHover(geometry.indexForX(x));
-      }}
-      onPointerLeave={() => setHover(null)}
-    >
-      <path d={geometry.areaPath} style={{ fill: "hsl(var(--muted-foreground) / 0.15)" }} />
-      {chart.runs.map((run, index) => (
-        <polyline
-          key={index}
-          points={run.points}
-          fill="none"
-          stroke={run.visible ? LOS_VISIBLE_COLOR : LOS_HIDDEN_COLOR}
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-      ))}
-      <polyline
-        points={chart.sightline}
-        fill="none"
-        strokeWidth={1.25}
-        strokeDasharray="4 3"
-        style={{ stroke: "hsl(var(--foreground))" }}
-      />
-      <circle
-        cx={geometry.xScale(first.distance)}
-        cy={geometry.yScale(result.observer.eyeMeters)}
-        r={3.5}
-        fill={LOS_OBSERVER_COLOR}
-      />
-      <circle
-        cx={geometry.xScale(last.distance)}
-        cy={geometry.yScale(result.target.topMeters)}
-        r={3.5}
-        fill={LOS_TARGET_COLOR}
-      />
-      {obstruction && (
-        <circle
-          cx={geometry.xScale(obstruction.distance)}
-          cy={geometry.yScale(obstruction.elevation)}
-          r={3.5}
-          fill={LOS_OBSTRUCTION_COLOR}
-          stroke="#ffffff"
-          strokeWidth={1}
-        />
-      )}
-      <text
-        x={CHART_PADDING.left - 4}
-        y={CHART_PADDING.top + 8}
-        textAnchor="end"
-        fontSize={9}
-        style={{ fill: "hsl(var(--muted-foreground))" }}
-      >
-        {units.elevation(geometry.maxElevation)}
-      </text>
-      <text
-        x={CHART_PADDING.left - 4}
-        y={CHART_HEIGHT - CHART_PADDING.bottom}
-        textAnchor="end"
-        fontSize={9}
-        style={{ fill: "hsl(var(--muted-foreground))" }}
-      >
-        {units.elevation(geometry.minElevation)}
-      </text>
-      <text
-        x={CHART_WIDTH - CHART_PADDING.right}
-        y={CHART_HEIGHT - 3}
-        textAnchor="end"
-        fontSize={9}
-        style={{ fill: "hsl(var(--muted-foreground))" }}
-      >
-        {units.distance(result.totalDistance)}
-      </text>
-      {hovered && (
-        <g pointerEvents="none">
-          <line
-            x1={geometry.xScale(hovered.distance)}
-            x2={geometry.xScale(hovered.distance)}
-            y1={CHART_PADDING.top}
-            y2={CHART_HEIGHT - CHART_PADDING.bottom}
-            strokeWidth={1}
-            style={{ stroke: "hsl(var(--muted-foreground))" }}
-          />
-          <text
-            x={CHART_PADDING.left + 4}
-            y={CHART_HEIGHT - 3}
-            fontSize={9}
-            style={{ fill: "hsl(var(--foreground))" }}
-          >
-            {`${units.distance(hovered.distance)} · ${units.elevation(hovered.elevation)}`}
-          </text>
-        </g>
-      )}
-    </svg>
   );
 }
