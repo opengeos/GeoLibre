@@ -1,5 +1,5 @@
 import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
-import { protocolScheme, requestProtocolTile } from "./cesium-protocol-imagery";
+import { protocolScheme, requestProtocolTile } from "./protocol-tiles";
 
 /**
  * A MapLibre raster tile source the SDK's `WebTileLayer` cannot express: a

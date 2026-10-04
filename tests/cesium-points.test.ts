@@ -5,7 +5,7 @@ import {
   type GeoLibreLayer,
   type LayerStyle,
 } from "../packages/core/src/types";
-import { createFeatureStyleResolver } from "../packages/map/src/cesium-feature-style";
+import { createFeatureStyleResolver } from "../packages/map/src/feature-style";
 import { CesiumLayerSync } from "../packages/map/src/cesium-layer-sync";
 import {
   MAX_ENTITY_POINT_FEATURES,

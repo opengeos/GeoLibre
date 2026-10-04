@@ -4,12 +4,8 @@ import {
   createPMTilesArchiveLayers,
   type PMTilesStoreLayerOptions,
 } from "../packages/map/src/pmtiles-layer";
-import {
-  externalSourceIdsFor,
-  hasPMTilesArchive,
-  registerPMTilesArchive,
-  removeLayerFromMap,
-} from "../packages/map/src/layer-sync";
+import { externalSourceIdsFor, removeLayerFromMap } from "../packages/map/src/layer-sync";
+import { hasPMTilesArchive, registerPMTilesArchive } from "../packages/map/src/pmtiles-archive";
 import {
   blendModeForNativeLayer,
   resetLayerBlendModes,

@@ -1,6 +1,12 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import type { LayerSpecification, SourceSpecification } from "maplibre-gl";
 
+// The resolved vector style an `arcgis` store layer (an Esri vector tile
+// service) carries, read by every renderer: MapLibre's layer sync, the Mapbox
+// compiler, the ArcGIS engine, and the globe's drape all draw the service from
+// these sources and style layers. "arcgis" names the layer type here, not the
+// ArcGIS renderer.
+
 /**
  * Scale outputs without nesting a camera expression below an arithmetic node.
  *

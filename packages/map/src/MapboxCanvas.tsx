@@ -32,8 +32,8 @@ import {
 import type { MapDiagnosticEvent } from "./map-diagnostic";
 import { MapboxEngine, redactMapboxError } from "./mapbox-engine";
 import { prepareMapboxStandard } from "./mapbox-standard-style";
-import { styleUsesUnsupportedSource } from "./mapbox-layers";
-import { resolveMapStyle } from "./map-controller";
+import { styleUsesUnsupportedSource } from "./gl-style-compiler";
+import { resolveMapStyle } from "./basemap-style";
 import { isGlobeControlToggleClick } from "./globe-control-toggle";
 import {
   attachFeatureSelection,
@@ -64,7 +64,7 @@ import {
   pixelIdentifyProperties,
   timeSliderBridge,
 } from "./identify-sources";
-import type { MapCanvasRasterIdentify } from "./MapCanvas";
+import type { MapCanvasRasterIdentify } from "./raster-identify";
 
 export interface MapboxCanvasProps {
   accessToken: string;

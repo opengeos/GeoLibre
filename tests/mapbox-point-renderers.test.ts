@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature, FeatureCollection } from "geojson";
 import type { HeatmapLayerSpecification } from "mapbox-gl";
-import {
-  compileMapboxLayer,
-  mapboxUnsupportedStyleSettings,
-} from "../packages/map/src/mapbox-layers";
+import { compileMapboxLayer } from "../packages/map/src/gl-style-compiler";
+import { mapboxUnsupportedStyleSettings } from "../packages/map/src/mapbox-layers";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 

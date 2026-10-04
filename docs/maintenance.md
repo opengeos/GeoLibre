@@ -133,7 +133,7 @@ color checks). The cast hides any contract change from the compiler, so run the
 frontend suite — the "enforces an expected result type" test in
 `tests/expressions.test.ts` fails if the shape stops being honored.
 
-`cssColor` (`packages/map/src/cesium-feature-style.ts`) turns the `Color`
+`cssColor` (`packages/map/src/feature-style.ts`) turns the `Color`
 object a compiled colour expression evaluates to into CSS by reading its
 `toString()` and accepting an `rgba(` or `#` prefix. That format is how the
 spec's `Color` happens to print, not a documented contract: if a bump changes

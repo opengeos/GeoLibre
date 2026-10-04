@@ -27,7 +27,7 @@ import {
 } from "./identify-sources";
 import { createIdentifyPopupState, restoreIdentifySelection } from "./map-identify-lifecycle";
 import type { IdentifiedFeature } from "./map-engine";
-import type { MapCanvasRasterIdentify } from "./MapCanvas";
+import type { MapCanvasRasterIdentify } from "./raster-identify";
 
 type ScreenPoint = { x: number; y: number };
 

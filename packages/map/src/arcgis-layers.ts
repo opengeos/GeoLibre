@@ -22,12 +22,12 @@ import {
 } from "@geolibre/core";
 import { createExpression, featureFilter } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
-import { createFeatureStyleResolver, type FeatureSymbol } from "./cesium-feature-style";
+import { createFeatureStyleResolver, type FeatureSymbol } from "./feature-style";
 import { KML_ICON_URL_PROPERTY } from "./markers";
-import { compileMapboxLayer } from "./mapbox-layers";
-import { arcgisVectorStyle } from "./arcgis-vector-style";
+import { compileMapboxLayer } from "./gl-style-compiler";
+import { arcgisVectorStyle } from "./vector-style";
 import { proxyWmsTiles } from "./wms-proxy";
-import { hasRegisteredProtocol, protocolScheme } from "./cesium-protocol-imagery";
+import { hasRegisteredProtocol, protocolScheme } from "./protocol-tiles";
 import {
   isTileTemplate,
   needsTemplateTileLayer,
@@ -67,7 +67,7 @@ import { classifyLayer, unhandledLayerKind } from "./layer-kind";
  * all reach the SDK through that one path, so a new style mode landing in
  * `vector-color.ts` reaches this renderer too.
  *
- * Like `mapbox-layers.ts`, this module is pure — it never imports the SDK —
+ * Like `gl-style-compiler.ts`, this module is pure — it never imports the SDK —
  * and returns a plain, serializable plan that the engine instantiates. That is
  * what makes it unit-testable without a browser or the CDN.
  */
