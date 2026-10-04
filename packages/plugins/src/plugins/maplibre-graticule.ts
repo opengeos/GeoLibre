@@ -8,6 +8,8 @@ import type {
 } from "maplibre-gl";
 import proj4, { type Converter } from "proj4";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { buildMgrsGrid } from "./mgrs-grid";
+import { utmZoneNumber } from "./mgrs-reference";
 import { getControlMap } from "./style-map";
 
 /**
@@ -48,6 +50,7 @@ export interface GraticuleLabels {
   gridType: string;
   typeGeographic: string;
   typeUtm: string;
+  typeMgrs: string;
   spacing: string;
   spacingAuto: string;
   spacingFixed: string;
@@ -74,6 +77,7 @@ export const DEFAULT_GRATICULE_LABELS: GraticuleLabels = {
   gridType: "Grid type",
   typeGeographic: "Geographic (lat/long)",
   typeUtm: "UTM (easting/northing)",
+  typeMgrs: "MGRS / USNG",
   spacing: "Spacing",
   spacingAuto: "Auto (by zoom)",
   spacingFixed: "Fixed interval",
@@ -119,13 +123,15 @@ export type GraticuleLabelEdges = "left-bottom" | "all";
 
 /**
  * Which coordinate reference the grid follows: a geographic lat/long graticule
- * (meridians + parallels in degrees) or a metric UTM grid (constant
- * easting/northing lines with metre labels and a zone designation).
+ * (meridians + parallels in degrees), a metric UTM grid (constant
+ * easting/northing lines with metre labels and a zone designation), or the
+ * MGRS/USNG grid (grid zones, lettered 100 km squares, then 10 km and 1 km
+ * lines as the map zooms in; see `mgrs-grid.ts`).
  */
-export type GraticuleGridType = "geographic" | "utm";
+export type GraticuleGridType = "geographic" | "utm" | "mgrs";
 
 export interface GraticuleSettings {
-  /** Geographic lat/long graticule or a metric UTM easting/northing grid. */
+  /** Geographic lat/long graticule, a metric UTM grid, or the MGRS/USNG grid. */
   gridType: GraticuleGridType;
   /** Auto spacing adapts to the zoom level; fixed uses {@link spacingDegrees}/{@link spacingMeters}. */
   spacingMode: "auto" | "fixed";
@@ -305,13 +311,14 @@ export interface UtmCoordinate {
  *
  * Returns null outside UTM's valid latitude range (-80 to 84) or when proj4
  * cannot project the point, so callers can fall back rather than print a
- * meaningless number. Uses the regular 6-degree zones; the Norway/Svalbard
- * exceptions are not applied, matching the grid overlay.
+ * meaningless number. The zone follows {@link utmZoneNumber}, the rule MGRS uses,
+ * so the Norway/Svalbard exceptions apply (Bergen is 32V, Longyearbyen 33X) and
+ * the UTM and MGRS readouts always agree on the zone.
  */
 export function lngLatToUtm(lng: number, lat: number): UtmCoordinate | null {
   const band = utmLatBand(lat);
   if (!band) return null;
-  const zone = utmZoneForLon(lng);
+  const zone = utmZoneNumber(lng, lat);
   const south = lat < 0;
   try {
     const [easting, northing] = proj4("EPSG:4326", utmProjDef(zone, south), [lng, lat]) as [
@@ -443,6 +450,7 @@ interface GraticuleGeometry {
 /** Build the grid lines and edge labels for the current viewport. */
 function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   if (settings.gridType === "utm") return buildUtmGeometry(activeMap);
+  if (settings.gridType === "mgrs") return buildMgrsGeometry(activeMap);
   const bounds = activeMap.getBounds();
   const { west, east } = unwrappedLongitudeRange(bounds);
   // Mercator cannot show the poles; clamp parallels to the renderable range.
@@ -763,6 +771,25 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   };
 }
 
+/**
+ * Build the MGRS/USNG grid for the current viewport. Its density follows the
+ * ground resolution rather than the spacing settings, which only apply to the
+ * lat/long and UTM grids.
+ */
+function buildMgrsGeometry(activeMap: MapLibreMap): GraticuleGeometry {
+  const bounds = activeMap.getBounds();
+  const { west, east } = unwrappedLongitudeRange(bounds);
+  const grid = buildMgrsGrid(
+    { west, east, south: bounds.getSouth(), north: bounds.getNorth() },
+    {
+      zoom: activeMap.getZoom(),
+      showLabels: settings.showLabels,
+      labelEdges: settings.labelEdges,
+    },
+  );
+  return { lines: grid.lines, labels: grid.labels, step: grid.step };
+}
+
 function labelFeature(
   lon: number,
   lat: number,
@@ -847,7 +874,20 @@ function ensureLayers(activeMap: MapLibreMap): void {
 
 function applyStyleProps(activeMap: MapLibreMap): void {
   activeMap.setPaintProperty(LINE_LAYER_ID, "line-color", settings.lineColor);
-  activeMap.setPaintProperty(LINE_LAYER_ID, "line-width", settings.lineWidth);
+  // The MGRS grid tags each line with its tier: zone boundaries draw heaviest,
+  // then 100 km squares, with 1 km lines lightest. The other grids carry no
+  // `level` and fall through to the configured width.
+  activeMap.setPaintProperty(LINE_LAYER_ID, "line-width", [
+    "match",
+    ["get", "level"],
+    "zone",
+    settings.lineWidth * 2,
+    "square",
+    settings.lineWidth * 1.5,
+    "1km",
+    settings.lineWidth * 0.75,
+    settings.lineWidth,
+  ]);
   activeMap.setPaintProperty(LINE_LAYER_ID, "line-opacity", settings.lineOpacity);
   // Setting the dash array to undefined reverts to a solid line; a literal like
   // [1] would render as a 1px dotted line that is almost invisible.
@@ -865,7 +905,12 @@ function applyStyleProps(activeMap: MapLibreMap): void {
   );
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-field", ["get", "label"]);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-font", pickTextFont(activeMap));
-  activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-size", settings.labelSize);
+  // MGRS zone and square labels carry a `scale` so they read as headings.
+  activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-size", [
+    "*",
+    settings.labelSize,
+    ["coalesce", ["get", "scale"], 1],
+  ]);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-anchor", anchor);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-allow-overlap", true);
   activeMap.setLayoutProperty(LABEL_LAYER_ID, "text-ignore-placement", true);
@@ -1133,42 +1178,47 @@ function buildPanelBody(container: HTMLElement): void {
     [
       { value: "geographic", label: labels.typeGeographic },
       { value: "utm", label: labels.typeUtm },
+      { value: "mgrs", label: labels.typeMgrs },
     ],
     () => settings.gridType,
     (v) => setGraticuleSettings({ gridType: v as GraticuleGridType }),
   );
-  select(
-    labels.spacing,
-    [
-      { value: "auto", label: labels.spacingAuto },
-      { value: "fixed", label: labels.spacingFixed },
-    ],
-    () => settings.spacingMode,
-    (v) =>
-      setGraticuleSettings({
-        spacingMode: v as GraticuleSettings["spacingMode"],
-      }),
-  );
-  if (settings.gridType === "utm") {
-    number(
-      labels.intervalMeters,
-      { min: 100, max: 1000000, step: 100 },
-      () => settings.spacingMeters,
-      (v) => setGraticuleSettings({ spacingMeters: v }),
-      // Auto spacing is purely zoom-driven, so the interval has no effect there.
-      () => settings.spacingMode === "auto",
+  // The MGRS grid picks its own tiers (100 km, 10 km, 1 km) from the zoom, so
+  // the spacing controls do not apply to it.
+  if (settings.gridType !== "mgrs") {
+    select(
+      labels.spacing,
+      [
+        { value: "auto", label: labels.spacingAuto },
+        { value: "fixed", label: labels.spacingFixed },
+      ],
+      () => settings.spacingMode,
+      (v) =>
+        setGraticuleSettings({
+          spacingMode: v as GraticuleSettings["spacingMode"],
+        }),
     );
-  } else {
-    number(
-      labels.interval,
-      // A fine step keeps clamped/default values (e.g. 10, 0.25) valid for the
-      // native number input rather than reading as step mismatches.
-      { min: 0.001, max: 45, step: 0.001 },
-      () => settings.spacingDegrees,
-      (v) => setGraticuleSettings({ spacingDegrees: v }),
-      // Auto spacing is purely zoom-driven, so the interval has no effect there.
-      () => settings.spacingMode === "auto",
-    );
+    if (settings.gridType === "utm") {
+      number(
+        labels.intervalMeters,
+        { min: 100, max: 1000000, step: 100 },
+        () => settings.spacingMeters,
+        (v) => setGraticuleSettings({ spacingMeters: v }),
+        // Auto spacing is purely zoom-driven, so the interval has no effect there.
+        () => settings.spacingMode === "auto",
+      );
+    } else {
+      number(
+        labels.interval,
+        // A fine step keeps clamped/default values (e.g. 10, 0.25) valid for the
+        // native number input rather than reading as step mismatches.
+        { min: 0.001, max: 45, step: 0.001 },
+        () => settings.spacingDegrees,
+        (v) => setGraticuleSettings({ spacingDegrees: v }),
+        // Auto spacing is purely zoom-driven, so the interval has no effect there.
+        () => settings.spacingMode === "auto",
+      );
+    }
   }
   color(
     labels.lineColor,
@@ -1198,8 +1248,8 @@ function buildPanelBody(container: HTMLElement): void {
     (v) => setGraticuleSettings({ showLabels: v }),
   );
   // The label format (decimal vs DMS) only applies to the geographic grid; UTM
-  // labels are always metric easting/northing values.
-  if (settings.gridType !== "utm") {
+  // and MGRS labels are always metric values or grid letters.
+  if (settings.gridType === "geographic") {
     select(
       labels.labelFormat,
       [
@@ -1263,7 +1313,7 @@ export function normalizeGraticuleSettings(value: unknown): GraticuleSettings {
   const v = (value ?? {}) as Partial<GraticuleSettings>;
   const d = DEFAULT_GRATICULE_SETTINGS;
   return {
-    gridType: v.gridType === "utm" ? "utm" : "geographic",
+    gridType: v.gridType === "utm" || v.gridType === "mgrs" ? v.gridType : "geographic",
     spacingMode: v.spacingMode === "fixed" ? "fixed" : "auto",
     spacingDegrees: clampNumber(v.spacingDegrees, 0.001, 45, d.spacingDegrees),
     spacingMeters: clampNumber(v.spacingMeters, 100, 1000000, d.spacingMeters),

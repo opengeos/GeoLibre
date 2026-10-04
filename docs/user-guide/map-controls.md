@@ -109,7 +109,7 @@ The Controls menu also carries tools that move the camera, drape live data over 
 | --- | --- |
 | **Sun** | Simulate the sun's position and the day/night terminator for any date and time. |
 | **Weather** | Overlay near-realtime **Clouds** (NASA satellite imagery, animated day by day) and **Precipitation** (RainViewer radar, animated over roughly the last two hours). |
-| **Gridlines** | Draw a coordinate grid with edge labels, including a UTM easting/northing mode. |
+| **Gridlines** | Draw a coordinate grid with edge labels, including a UTM easting/northing mode and an MGRS/USNG mode (grid zones with the Norway and Svalbard exceptions, lettered 100 km squares, then 10 km and 1 km lines as you zoom in). |
 | **Spinning Globe** | Slowly rotate the globe, optionally bounded to a region. |
 | **Route Animation** | Animate a marker along a line layer with play/pause, speed, a trail, and camera follow. |
 | **Flight Simulator** | Fly over terrain and 3D layers with continuous keyboard controls. |

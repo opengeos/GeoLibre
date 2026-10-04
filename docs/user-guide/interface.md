@@ -135,13 +135,13 @@ Decimal degrees are written longitude-first, matching GeoJSON and the rest of th
 
 Click the coordinates in the status bar to cycle through them, or set the notation in **Settings → Map Preferences → Coordinate format**. The choice is saved with the project.
 
-The UTM readout uses the same projection that draws the [Gridlines](map-controls.md#camera-overlay-and-recording-tools) UTM grid, so the numbers in the status bar always agree with the grid on screen. Outside the UTM latitude band (below 80°S or above 84°N) there is no valid UTM coordinate, and the readout falls back to decimal degrees.
+The UTM readout uses the same projection that draws the [Gridlines](map-controls.md#camera-overlay-and-recording-tools) UTM grid. Its zone follows the same rule as MGRS, including the Norway and Svalbard exceptions (Bergen reads as zone 32V, Longyearbyen as 33X), so the UTM and MGRS readouts always name the same zone. Outside the UTM latitude band (below 80°S or above 84°N) there is no valid UTM coordinate, and the readout falls back to decimal degrees.
 
-MGRS and USNG are the same grid reference at 1 m precision; USNG writes it with spaces. They apply the Norway and Svalbard zone exceptions, so near those coasts the zone can differ from the UTM readout's regular 6° zone. In the polar areas (below 80°S or above 84°N) the grid switches to UPS, which GeoLibre does not support, and the readout falls back to decimal degrees.
+MGRS and USNG are the same grid reference at 1 m precision; USNG writes it with spaces. In the polar areas (below 80°S or above 84°N) the grid switches to UPS, which GeoLibre does not support, and the readout falls back to decimal degrees.
 
 The projected format reports x/y in any coordinate reference system with an EPSG code. Choose it in **Settings → Map Preferences → Coordinate format**, then type a code (for example `3857` for Web Mercator or `32618` for UTM zone 18N) or pick one with **Browse**. The code is saved with the project alongside the format, and the readout falls back to decimal degrees for a code GeoLibre does not know or a point the projection cannot place.
 
-The place search at the foot of the Layers panel accepts the grid notations as well as lat/lon: type an MGRS or USNG reference (`18SUJ2337106519`, `18S UJ 23371 06519`, or a coarser `18SUJ23370651`) or a UTM coordinate (`18N 323394 4307395`, or the readout's own `18S 323394mE 4307395mN`) and pick **Go to** to fly there. A UTM letter is read as a latitude band, so `S` means band S (32°N–40°N) when the northing fits it and the southern hemisphere otherwise.
+The place search at the foot of the Layers panel accepts the grid notations as well as lat/lon: type an MGRS or USNG reference (`18SUJ2337106519`, `18S UJ 23371 06519`, or a coarser `18SUJ23370651`) or a UTM coordinate (`18N 323394 4307395`, or the readout's own `18S 323394mE 4307395mN`) and pick **Go to** to fly there. The **Paste coordinates** box in **View → Set View** accepts the same grid references. A UTM letter is read as a latitude band, so `S` means band S (32°N–40°N) when the northing fits it and the southern hemisphere otherwise.
 
 ### Elevation readout
 
