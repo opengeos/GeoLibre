@@ -1,6 +1,7 @@
 import {
   act,
   fireEvent,
+  i18n,
   render,
   screen,
   useAppStore,
@@ -47,7 +48,50 @@ function layoutSettings() {
   return useDesktopSettingsStore.getState().desktopSettings.layout;
 }
 
+// Each section's heading, used to check that exactly that section renders.
+const SECTION_TITLE_KEYS: Record<Section, string> = {
+  language: "settings.languagePack.title",
+  map: "settings.map.constraintsTitle",
+  layout: "settings.layout.title",
+  appearance: "settings.appearance.title",
+  interface: "settings.interface.title",
+  geocoding: "settings.geocoding.title",
+  ai: "settings.ai.title",
+  cloudStorage: "settings.cloudStorage.title",
+  environment: "settings.env.tokenTitle",
+  startup: "settings.startup.title",
+  updates: "settings.updates.title",
+};
+
+/** The text of every section heading (h3) in the open dialog. */
+function headings(dialog: HTMLElement): string[] {
+  return Array.from(dialog.querySelectorAll("h3"), (node) => node.textContent ?? "");
+}
+
 describe("SettingsDialog", () => {
+  for (const section of Object.keys(SECTION_TITLE_KEYS) as Section[]) {
+    it(`renders only the ${section} section when opened there`, () => {
+      // The Updates section is desktop-only; pretend to be Tauri for it.
+      if (section === "updates") {
+        Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+      }
+      try {
+        renderSettings();
+        const dialog = openAt(section);
+        const shown = headings(dialog);
+        for (const [other, key] of Object.entries(SECTION_TITLE_KEYS)) {
+          assert.equal(
+            shown.includes(i18n.t(key)),
+            other === section,
+            `${other} heading while showing ${section}`,
+          );
+        }
+      } finally {
+        delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+      }
+    });
+  }
+
   it("is closed until something opens it", () => {
     renderSettings();
 
