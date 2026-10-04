@@ -75,7 +75,7 @@ const HOME_DIRECTORY = /(\/home\/|\/Users\/|[A-Za-z]:\\Users\\)[^/\\\s"'<>]+/g;
 
 function scrubUrl(raw: string): string {
   // userinfo (`user:password@host`)
-  let url = raw.replace(/^([a-z][\w+.-]*:\/\/)[^/@]*@/i, "$1");
+  let url = raw.replace(/^([a-z][\w+.-]*:\/\/)[^/?#@]*@/i, "$1");
   // Already scrubbed: the match stops before the marker's closing bracket,
   // which the surrounding text still supplies.
   const marker = REDACTED.slice(0, -1);
@@ -147,7 +147,8 @@ function buildUrl(fields: Record<string, string>): string {
 /**
  * Builds a GitHub new-issue URL pre-filled with the app version, platform,
  * renderer, and (when given) one scrubbed diagnostics entry. The entry's
- * `detail`, then its `message`, is shortened until the URL fits `maxLength`.
+ * `detail`, `message`, `url`, then `source` are shortened until the URL fits
+ * `maxLength`.
  *
  * @param entry - The diagnostics record being reported, or `null` for a
  *   general report.
@@ -168,18 +169,26 @@ export function buildIssueReportUrl(
     os: truncateText(scrubForIssueReport(context.platform), 300),
   };
 
-  const compose = (detailLimit: number, messageLimit: number): string => {
+  // Fields shrunk to fit the budget, in the order they give way.
+  type Shrinkable = "detail" | "message" | "url" | "source";
+  const order: Shrinkable[] = ["detail", "message", "url", "source"];
+  const limits: Record<Shrinkable, number> = {
+    detail: scrubbed?.detail?.length ?? 0,
+    message: scrubbed?.message.length ?? 0,
+    url: scrubbed?.url?.length ?? 0,
+    source: scrubbed?.source?.length ?? 0,
+  };
+
+  const compose = (): string => {
     const lines = [`Renderer: ${context.renderer}`];
     let whatHappened = "";
     if (scrubbed) {
-      const reported: IssueReportEntry = {
-        ...scrubbed,
-        message: truncateText(scrubbed.message, messageLimit),
-      };
-      if (scrubbed.detail !== undefined) {
-        reported.detail = truncateText(scrubbed.detail, detailLimit);
+      const reported: IssueReportEntry = { ...scrubbed };
+      for (const field of order) {
+        const value = scrubbed[field];
+        if (value !== undefined) reported[field] = truncateText(value, limits[field]);
       }
-      whatHappened = `GeoLibre reported: ${truncateText(titleText, messageLimit)}`;
+      whatHappened = `GeoLibre reported: ${truncateText(titleText, limits.message)}`;
       lines.push("", "Diagnostics entry:", "```json", JSON.stringify(reported, null, 2), "```");
     }
     return buildUrl({
@@ -189,16 +198,14 @@ export function buildIssueReportUrl(
     });
   };
 
-  let detailLimit = scrubbed?.detail?.length ?? 0;
-  let messageLimit = scrubbed?.message.length ?? 0;
-  let url = compose(detailLimit, messageLimit);
+  let url = compose();
   // Encoding expands characters unevenly (one CJK character is nine bytes), so
   // shrink by at least the overshoot and re-measure until the link fits.
-  while (url.length > maxLength && (detailLimit > 0 || messageLimit > 0)) {
-    const overshoot = url.length - maxLength;
-    if (detailLimit > 0) detailLimit = Math.max(0, detailLimit - Math.max(overshoot, 32));
-    else messageLimit = Math.max(0, messageLimit - Math.max(overshoot, 32));
-    url = compose(detailLimit, messageLimit);
+  while (url.length > maxLength) {
+    const field = order.find((name) => limits[name] > 0);
+    if (!field) break;
+    limits[field] = Math.max(0, limits[field] - Math.max(url.length - maxLength, 32));
+    url = compose();
   }
   return url;
 }

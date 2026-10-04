@@ -17,6 +17,7 @@ import {
 } from "../../lib/plugin-deep-link";
 import { pluginManifestUrlsForIds } from "../../lib/external-plugins";
 import { notify } from "../../lib/notify";
+import { scrubForIssueReport } from "../../lib/issue-report";
 import {
   fetchPluginRegistry,
   pinRegistryEntryBundle,
@@ -87,7 +88,8 @@ const getPluginManagerVersion = () => getPluginManager().getVersion();
 function reportActivationFailure(id: string, error: unknown): void {
   console.error(`[GeoLibre] Could not activate the plugin "${id}"`, error);
   notify.error(i18next.t("notifications.pluginActivateFailed", { id }), {
-    description: error instanceof Error ? error.message : undefined,
+    // A plugin error can embed a keyed URL; never show a token on screen.
+    description: error instanceof Error ? scrubForIssueReport(error.message) : undefined,
     error,
   });
 }

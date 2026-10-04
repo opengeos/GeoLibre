@@ -141,6 +141,21 @@ describe("buildIssueReportUrl", () => {
     assert.match(fields(url).get("screenshots") ?? "", /data:\[omitted\]/);
   });
 
+  it("shrinks multi-byte url/source too when they alone exceed the budget", () => {
+    const url = buildIssueReportUrl(
+      entry({ url: `https://a.test/${"图".repeat(600)}`, source: "层".repeat(600) }),
+      context,
+    );
+    assert.ok(url.length <= MAX_ISSUE_URL_LENGTH, `length ${url.length}`);
+  });
+
+  it("keeps the real host when the query contains @", () => {
+    assert.equal(
+      scrubForIssueReport("https://service.test?email=a@other.test"),
+      "https://service.test?[REDACTED]",
+    );
+  });
+
   it("accounts for multi-byte encoding when truncating", () => {
     const url = buildIssueReportUrl(
       entry({ message: "图层".repeat(2000), detail: "加载失败".repeat(5000) }),

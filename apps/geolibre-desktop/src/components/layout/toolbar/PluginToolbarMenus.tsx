@@ -22,6 +22,7 @@ import { useToolbarMenus } from "../../../hooks/usePluginUiSurfaces";
 import { isExternalPluginId } from "../../../lib/external-plugins";
 import { isImageSource } from "../../../lib/icon-source";
 import { notify } from "../../../lib/notify";
+import { scrubForIssueReport } from "../../../lib/issue-report";
 import type { ToolbarChrome } from "./constants";
 
 interface PluginToolbarMenusProps {
@@ -100,7 +101,12 @@ export function renderItems(
               i18next.t("notifications.pluginMenuActionFailed", {
                 name: resolveToolbarLabel(item.label, `${menuId}.${item.id}`),
               }),
-              { description: error instanceof Error ? error.message : undefined, error },
+              {
+                // A plugin error can embed a keyed URL; never show a token on screen.
+                description:
+                  error instanceof Error ? scrubForIssueReport(error.message) : undefined,
+                error,
+              },
             );
           }
         }}
