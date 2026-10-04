@@ -16,6 +16,12 @@ page), not JSON, or of an unknown `version`. An unreachable web file or a fetch
 that takes more than 3 seconds also yields no policy. In those cases the app
 uses the next client configuration source.
 
+Every build ships a `deployment.json` stub containing `null`, which means no
+policy, so static hosts answer the startup fetch instead of logging a 404. To
+apply a policy on a static host, replace that file in the published output; on
+Docker the entrypoint overwrites it on every boot. On desktop the stub is the
+bundled web fallback, so a config-dir file still takes precedence.
+
 The recommended deployment input is a versioned `deployment.json`. On Docker,
 the entrypoint validates the mounted source, applies nonblank environment
 overrides field by field, and writes the generated public policy on every boot

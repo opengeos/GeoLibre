@@ -222,6 +222,18 @@ test("fetchDeploymentPolicy treats absence as no policy, silently", async (t) =>
   assert.deepEqual(warnings, []);
 });
 
+test("the shipped deployment.json stub is no policy, silently", (t) => {
+  // public/deployment.json exists only so static hosts answer the startup fetch
+  // with a 200 instead of logging a 404 (issue #2916). It must stay a no-op.
+  const warnings = captureWarnings(t);
+  const stub = readFileSync(
+    new URL("../apps/geolibre-desktop/public/deployment.json", import.meta.url),
+    "utf8",
+  );
+  assert.equal(parseDeploymentPolicy(stub), null);
+  assert.deepEqual(warnings, []);
+});
+
 test("fetchDeploymentPolicy parses a served policy and marks the request optional", async () => {
   let seen: RequestInit | undefined;
   const fetchImpl = (async (_input: unknown, init?: RequestInit) => {
