@@ -960,6 +960,45 @@ Run `node scripts/check-test-typecheck.mjs --max-errors 0 --verbose` to list
 every counted error, or `npx tsc --noEmit -p tests/tsconfig.json` for tsc's own
 output.
 
+## Boot bundle budget
+
+`npm run build` fails when the JS the app entry imports statically (what
+`index.html` modulepreloads before the shell mounts) grows past either budget
+in `apps/geolibre-desktop/boot-budget.json`, or when it contains Cesium. The
+check is `bootBundleBudgetPlugin` in `apps/geolibre-desktop/vite.config.ts`.
+
+| Budget      | Limit                     | Measured when set |
+| ----------- | ------------------------- | ----------------- |
+| `rawBytes`  | 3 MiB, minified           | ~2.2 MB           |
+| `gzipBytes` | 900 KiB, gzip level 9     | ~680 kB           |
+
+Gzip is the closer proxy for what a browser downloads; raw is what it parses.
+Most regressions trip both, because they come from a chunk-grouping change
+that drags a whole lazy package (Cesium, DuckDB, a `maplibre-gl-*` plugin) onto
+the boot path. The error lists the largest boot chunks. Fix the grouping in
+`CODE_SPLITTING_GROUPS` / `manualChunks` rather than raising a budget; raise
+one only after confirming the new eager code belongs at boot, and say so in the
+PR.
+
+`npm run bundle:report` (after a build) writes `bundle-report/bundle-report.md`
+and `.json`: every JS/WASM asset in `dist/assets` with raw and gzip sizes, the
+boot set read from the built `index.html` against both budgets, and the size of
+each top-level `dist` entry. CI's build job uploads it as the `bundle-report`
+artifact and appends the Markdown to the job summary, so two runs can be
+compared without rebuilding.
+
+### Workers do not share chunks with the main build
+
+Vite bundles each `new Worker(new URL(...))` as a separate build, so anything a
+worker imports is emitted again even when the main thread has the same module.
+That once shipped h5wasm (libhdf5, ~4.8 MB) twice, once for the local NetCDF
+reader and once inside `netcdf-remote.worker.ts`. The main build now emits h5wasm
+as an explicit chunk and the worker imports it by URL
+(`apps/geolibre-desktop/vite-plugins/shared-h5wasm.ts`), and the build fails if
+anything but exactly one `hdf5_hl-*.js` is emitted. A new worker that
+imports a large library should do the same, or accept the duplicate knowingly;
+the bundle report makes a second copy easy to spot.
+
 ## Dependency updates and the audit allowlist
 
 Dependencies are watched two ways: **Dependabot** (`.github/dependabot.yml`) opens

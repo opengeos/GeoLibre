@@ -16,6 +16,7 @@
     "build:jupyterlite": "node scripts/build-jupyterlite.mjs",
     "build:embed": "node scripts/build-embed.mjs",
     "build:chrome-extension": "node scripts/package-chrome-extension.mjs",
+    "bundle:report": "node scripts/bundle-report.mjs",
     "typecheck": "npm run build",
     "lint": "eslint apps packages workers tests --max-warnings 263",
     "test": "npm run test:frontend",
