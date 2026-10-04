@@ -32,6 +32,7 @@ import {
   removePluginBundlePin,
   verifyPluginBundleIntegrity,
 } from "./plugin-integrity";
+import { getBlocklistedBundle } from "./plugin-blocklist";
 import { isTauri } from "./tauri-io";
 import type { DeploymentPolicy } from "./deployment-policy";
 import { getDeploymentPolicy } from "./deployment-env";
@@ -353,6 +354,22 @@ async function loadPluginUrlBundles(
         // crypto.subtle unavailable) to this one URL — letting it throw here would
         // reject the whole loadExternalPlugins Promise.all and drop every plugin.
         try {
+          // A bundle the registry's blocklist names is never executed, whatever
+          // the pin says (a whole-plugin block was already refused by policy).
+          const blocklisted = getBlocklistedBundle(
+            bundle.manifest.id,
+            await computePluginBundleHash(bundle),
+          );
+          if (blocklisted) {
+            issues.push({
+              archiveName: bundle.archiveName,
+              sourceUrl: bundle.sourceUrl,
+              message:
+                `Plugin '${bundle.manifest.id}' ${bundle.manifest.version} was blocked by the plugin ` +
+                `registry and was not loaded: ${blocklisted.reason}`,
+            });
+            continue;
+          }
           const integrity = await verifyPluginBundleIntegrity(
             manifestUrls[index],
             bundle,
@@ -959,6 +976,12 @@ async function reloadExternalUrlPluginUncoalesced(
     if (options.expectedHash !== undefined && bundleHash !== options.expectedHash) {
       throw new Error(
         `Cannot update plugin: the code downloaded from '${manifestUrl}' does not match the version the registry lists. It may still be publishing; refresh the plugin list and try again in a few minutes.`,
+      );
+    }
+    const blocklisted = getBlocklistedBundle(bundle.manifest.id, bundleHash);
+    if (blocklisted) {
+      throw new Error(
+        `Cannot update plugin: '${bundle.manifest.id}' ${bundle.manifest.version} was blocked by the plugin registry: ${blocklisted.reason}`,
       );
     }
     // The timeout only bounds the fetch/stream above; a dynamic import() of a

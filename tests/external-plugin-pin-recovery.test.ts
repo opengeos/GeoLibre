@@ -11,6 +11,7 @@ import { setDeploymentPolicy } from "../apps/geolibre-desktop/src/lib/deployment
 type ExternalPlugins = typeof import("../apps/geolibre-desktop/src/lib/external-plugins");
 type PluginIntegrity = typeof import("../apps/geolibre-desktop/src/lib/plugin-integrity");
 type PluginRegistry = typeof import("../apps/geolibre-desktop/src/lib/plugin-registry");
+type PluginBlocklist = typeof import("../apps/geolibre-desktop/src/lib/plugin-blocklist");
 
 const app = {} as GeoLibreAppAPI;
 const MANIFEST_URL = "http://localhost:7777/pin-demo/plugin.json";
@@ -93,6 +94,7 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
   let externalPlugins: ExternalPlugins;
   let integrity: PluginIntegrity;
   let registry: PluginRegistry;
+  let blocklist: PluginBlocklist;
   let PluginManagerCtor: typeof PluginManager;
   let manager: PluginManager;
 
@@ -101,6 +103,7 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     externalPlugins = await import("../apps/geolibre-desktop/src/lib/external-plugins");
     integrity = await import("../apps/geolibre-desktop/src/lib/plugin-integrity");
     registry = await import("../apps/geolibre-desktop/src/lib/plugin-registry");
+    blocklist = await import("../apps/geolibre-desktop/src/lib/plugin-blocklist");
     ({ PluginManager: PluginManagerCtor } = await import("../packages/plugins/src/plugin-manager"));
   });
 
@@ -116,6 +119,7 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     // left registered by one test would be skipped as "already loaded" by the
     // next. Uninstalling every URL is the same teardown the app performs.
     externalPlugins.unloadRemovedUrlPlugins(manager, [], app);
+    blocklist.setPluginBlocklist([]);
   });
 
   it("reports a blocked ID before fetching entry or style, even when allowed", async () => {
@@ -510,5 +514,41 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     // One download for the two matching calls, a second for the other hash.
     assert.equal(requests.filter((url) => url === MANIFEST_URL).length, 2);
     assert.equal(integrity.getPluginBundlePin(MANIFEST_URL), registryHash);
+  });
+
+  it("never loads a bundle the registry blocklist names", async () => {
+    blocklist.setPluginBlocklist([
+      { id: "pin-demo", bundleSha256: await servedBundleHash(), reason: "Bad release." },
+    ]);
+
+    const loaded = await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    assert.deepEqual(loaded.loadedPluginIds, []);
+    assert.match(loaded.issues[0]?.message ?? "", /blocked by the plugin registry.*Bad release/);
+    assert.deepEqual(manager.list(), []);
+  });
+
+  it("refuses, without evaluating it, an update to a blocklisted bundle", async () => {
+    integrity.pinPluginBundle(MANIFEST_URL, "0".repeat(64), "0.9.0");
+    await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    const flag = "__pinDemoBlocklistEvaluated";
+    served.set(ENTRY_URL, `globalThis.${flag} = true;\n${served.get(ENTRY_URL) ?? ""}`);
+    blocklist.setPluginBlocklist([
+      { id: "pin-demo", bundleSha256: await servedBundleHash(), reason: "Bad release." },
+    ]);
+
+    await assert.rejects(
+      externalPlugins.reloadExternalUrlPlugin(manager, MANIFEST_URL, app),
+      /blocked by the plugin registry: Bad release/,
+    );
+    assert.equal((globalThis as Record<string, unknown>)[flag], undefined);
+    assert.deepEqual(manager.list(), []);
+  });
+
+  it("refuses a whole-plugin block through the policy gate", async () => {
+    blocklist.setPluginBlocklist([{ id: "pin-demo", reason: "Malware." }]);
+
+    const loaded = await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    assert.deepEqual(loaded.loadedPluginIds, []);
+    assert.match(JSON.stringify(loaded.issues), /blocked by the plugin registry: Malware/);
   });
 });

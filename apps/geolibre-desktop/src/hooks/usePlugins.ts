@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
 import { reserveBuiltInPluginIds } from "../lib/plugin-registry";
+import { ensurePluginBlocklistLoaded } from "../lib/plugin-blocklist";
 import {
   addRasterToMap,
   readRasterWindow,
@@ -881,6 +882,8 @@ async function ensureExternalPluginsLoadedWithSettings(
   // opening a project never fetches or imports third-party plugin code; they
   // reach this scan only after the user trusts them, at which point they are in
   // desktopSettings.pluginManifestUrls (see useProjectPluginTrust / #1062).
+  // The registry's blocklist must be in place before any plugin code loads.
+  await ensurePluginBlocklistLoaded();
   const bundledManifestUrls = bundledPluginManifestUrls();
   const policy = getDeploymentPolicy();
   const additionalPluginDirectories =
