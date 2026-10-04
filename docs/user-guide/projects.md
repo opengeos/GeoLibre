@@ -45,6 +45,8 @@ GeoLibre autosaves the project as you work. Three seconds after a change settles
 
 **Project → History...** lists the snapshots for the current project, newest first, each summarized by its layer count and zoom level. **Restore** loads a snapshot back into the workspace, as an undoable step so you can back out of it. There is no manual delete here — snapshots age out on their own once a cap is hit.
 
+**Compare** shows what changed between a snapshot and the current project, or between two snapshots (pick one under **Compare with**). Changes are grouped into collapsible sections: layers added, removed, renamed, reordered or restyled (each changed style, label, filter and source setting with its before and after value, plus counts of embedded features added, removed and modified), the camera, basemap and projection, plugins, and the project title, details and preferences. When comparing against the current project, **Restore this layer** brings back the snapshot's version of a single layer — or re-adds one you deleted — without touching the rest of the project; **Undo** reverts it.
+
 The store is capped, so history stays bounded: at most 20 snapshots per project, 10 MB per snapshot, and 50 MB in total. The oldest snapshots are dropped once a cap is hit, and a project too large to fit in a single snapshot is not autosaved.
 
 !!! note "Crash recovery is a standalone-browser feature"

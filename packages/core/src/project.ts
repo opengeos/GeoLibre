@@ -2113,6 +2113,32 @@ export function portableWmsTileUrl(tile: unknown): unknown {
   }
 }
 
+/**
+ * The store form of one project layer: its style completed from
+ * {@link DEFAULT_LAYER_STYLE} and the project's top-level `styles` entry.
+ *
+ * Legacy and externally-authored projects can carry a partial top-level style
+ * alongside newer fields on the layer itself. Those layer fields are kept,
+ * while the top-level copy stays authoritative where it explicitly supplies a
+ * value.
+ *
+ * @param project - The project the layer belongs to (for its `styles` map).
+ * @param layer - One of `project.layers`.
+ * @returns A new layer record ready for the store.
+ */
+export function hydrateProjectLayer(
+  project: Pick<GeoLibreProject, "styles">,
+  layer: GeoLibreLayer,
+): GeoLibreLayer {
+  const topLevel = project.styles?.[layer.id];
+  return {
+    ...layer,
+    style: topLevel
+      ? { ...DEFAULT_LAYER_STYLE, ...layer.style, ...topLevel }
+      : { ...DEFAULT_LAYER_STYLE, ...layer.style },
+  };
+}
+
 export function applyProjectToStore(project: GeoLibreProject): {
   projectName: string;
   mapView: MapViewState;
@@ -2140,16 +2166,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   projectInteraction: ProjectInteraction | null;
   metadata: Record<string, unknown>;
 } {
-  // Legacy and externally-authored projects can carry a partial top-level
-  // style alongside newer fields on the layer itself. Preserve those layer
-  // fields while keeping the top-level copy authoritative where it explicitly
-  // supplies a value.
-  const layers = project.layers.map((layer) => ({
-    ...layer,
-    style: project.styles[layer.id]
-      ? { ...DEFAULT_LAYER_STYLE, ...layer.style, ...project.styles[layer.id] }
-      : { ...DEFAULT_LAYER_STYLE, ...layer.style },
-  }));
+  const layers = project.layers.map((layer) => hydrateProjectLayer(project, layer));
   // Re-normalize here (even though `parseProject` already did) because
   // `applyProjectToStore` is a public entry point also reached directly by
   // programmatic/newProject loads that never passed through `parseProject`, so

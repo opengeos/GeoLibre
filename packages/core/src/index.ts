@@ -31,6 +31,7 @@ export * from "./scale-units";
 export * from "./elevation";
 export * from "./camera-altitude";
 export * from "./project";
+export * from "./project-diff";
 export * from "./style-library";
 export * from "./layer-library";
 export * from "./layer-defaults";

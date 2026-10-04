@@ -1103,6 +1103,8 @@ export function DesktopShell({
         snapshots={projectHistory.snapshots}
         restoreError={projectHistory.restoreError}
         onRestore={projectHistory.restore}
+        onRestoreLayer={projectHistory.restoreLayer}
+        getCurrentProject={projectHistory.currentProject}
       />
       <ProjectRecoveryDialog
         snapshot={projectHistory.recoverySnapshot}

@@ -6,9 +6,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@geolibre/ui";
+import type { GeoLibreProject } from "@geolibre/core";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ProjectHistorySnapshot } from "../../lib/project-history-store";
 import { autosavePausedMessage } from "../../lib/autosave-status";
+import { CURRENT_PROJECT_TARGET, ProjectSnapshotDiff } from "./ProjectSnapshotDiff";
 
 interface ProjectHistoryDialogProps {
   open: boolean;
@@ -18,6 +21,10 @@ interface ProjectHistoryDialogProps {
   snapshots: ProjectHistorySnapshot[];
   restoreError: string | null;
   onRestore: (snapshot: ProjectHistorySnapshot) => boolean;
+  /** Restores one layer from a snapshot; enables "Restore this layer". */
+  onRestoreLayer?: (snapshot: ProjectHistorySnapshot, layerId: string) => boolean;
+  /** Builds the live project for "Compare"; without it, Compare is hidden. */
+  getCurrentProject?: () => GeoLibreProject;
 }
 
 export function ProjectHistoryDialog({
@@ -27,8 +34,23 @@ export function ProjectHistoryDialog({
   snapshots,
   restoreError,
   onRestore,
+  onRestoreLayer,
+  getCurrentProject,
 }: ProjectHistoryDialogProps) {
   const { t, i18n } = useTranslation();
+  const [compare, setCompare] = useState<{ baseId: string; targetId: string } | null>(null);
+  // Reopening the dialog starts from the snapshot list again.
+  useEffect(() => {
+    if (!open) setCompare(null);
+  }, [open]);
+  const compareBase = compare
+    ? snapshots.find((snapshot) => snapshot.id === compare.baseId)
+    : undefined;
+  const formatDate = (iso: string) =>
+    new Intl.DateTimeFormat(i18n.language, {
+      dateStyle: "medium",
+      timeStyle: "medium",
+    }).format(new Date(iso));
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
@@ -53,7 +75,17 @@ export function ProjectHistoryDialog({
               {restoreError}
             </p>
           ) : null}
-          {snapshots.length === 0 ? (
+          {compare && compareBase && getCurrentProject ? (
+            <ProjectSnapshotDiff
+              base={compareBase}
+              snapshots={snapshots}
+              targetId={compare.targetId}
+              onTargetChange={(targetId) => setCompare({ ...compare, targetId })}
+              onBack={() => setCompare(null)}
+              getCurrentProject={getCurrentProject}
+              onRestoreLayer={onRestoreLayer}
+            />
+          ) : snapshots.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {t("projectHistory.empty")}
             </p>
@@ -65,12 +97,7 @@ export function ProjectHistoryDialog({
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{snapshot.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Intl.DateTimeFormat(i18n.language, {
-                      dateStyle: "medium",
-                      timeStyle: "medium",
-                    }).format(new Date(snapshot.createdAt))}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{formatDate(snapshot.createdAt)}</p>
                   <p className="truncate text-xs text-muted-foreground">
                     {t("projectHistory.summary", {
                       count: snapshot.layerCount,
@@ -81,14 +108,30 @@ export function ProjectHistoryDialog({
                     })}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (onRestore(snapshot)) onOpenChange(false);
-                  }}
-                >
-                  {t("projectHistory.restore")}
-                </Button>
+                <div className="flex shrink-0 gap-2">
+                  {getCurrentProject ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-label={t("projectHistory.diff.compareAria", {
+                        date: formatDate(snapshot.createdAt),
+                      })}
+                      onClick={() =>
+                        setCompare({ baseId: snapshot.id, targetId: CURRENT_PROJECT_TARGET })
+                      }
+                    >
+                      {t("projectHistory.diff.compare")}
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (onRestore(snapshot)) onOpenChange(false);
+                    }}
+                  >
+                    {t("projectHistory.restore")}
+                  </Button>
+                </div>
               </div>
             ))
           )}

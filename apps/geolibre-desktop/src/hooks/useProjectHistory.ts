@@ -4,6 +4,7 @@ import {
   registerProjectRestoreHistory,
   serializeProjectWithLayerCache,
   useAppStore,
+  type GeoLibreProject,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
@@ -28,6 +29,7 @@ import {
   SESSION_HEARTBEAT_MS,
   shouldOfferProjectRecovery,
 } from "../lib/project-history-session";
+import { restoreLayerFromSnapshot } from "../lib/snapshot-layer-restore";
 const AUTOSAVE_DELAY_MS = 3_000;
 
 function currentProjectKey(): string {
@@ -196,6 +198,46 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
     [mapControllerRef, t],
   );
 
+  /**
+   * The current project in the shape a snapshot is read back in (serialized
+   * and re-parsed), so comparing it with a snapshot reports real edits rather
+   * than in-memory versus on-disk shape differences.
+   */
+  const currentProject = useCallback((): GeoLibreProject => {
+    const layerSources = useAppStore.getState().layers;
+    const snapshot = buildProjectSnapshot(mapControllerRef);
+    return parseProject(
+      serializeProjectWithLayerCache(snapshot, layerSources, layerCacheRef.current),
+    );
+  }, [mapControllerRef]);
+
+  /**
+   * Restore one layer from a snapshot as a single undoable step, leaving the
+   * rest of the project untouched.
+   */
+  const restoreLayer = useCallback(
+    (snapshot: ProjectHistorySnapshot, layerId: string) => {
+      setRestoreError(null);
+      try {
+        const state = useAppStore.getState();
+        const layers = restoreLayerFromSnapshot(
+          { layers: state.layers, layerGroups: state.layerGroups },
+          parseProject(snapshot.content),
+          layerId,
+        );
+        if (!layers) throw new Error(`Snapshot has no layer ${layerId}.`);
+        // One store write, so one Undo step reverts the whole restore.
+        useAppStore.setState({ layers, isDirty: true });
+        return true;
+      } catch (error) {
+        console.error("Could not restore the layer from the snapshot.", error);
+        setRestoreError(t("projectHistory.diff.restoreLayerError"));
+        return false;
+      }
+    },
+    [t],
+  );
+
   const discardRecovery = useCallback(() => {
     if (recoverySnapshot) {
       void deleteProjectSnapshot(recoverySnapshot.id)
@@ -215,6 +257,8 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
     restoreError,
     refresh,
     restore,
+    restoreLayer,
+    currentProject,
     discardRecovery,
     dismissRecovery,
     clearRestoreError,
