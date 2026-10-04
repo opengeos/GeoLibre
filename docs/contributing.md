@@ -229,7 +229,8 @@ The suite is split into two Playwright projects, which together partition
 
 | Project | Command | What it covers | When it runs |
 | --- | --- | --- | --- |
-| `core` | `npm run test:e2e:core` | The app boots and renders a map, plus the shared UI surfaces: layer panel, attribute table, dialogs, drag-and-drop, theme, RTL, accessibility, PWA shell. | Every push and PR, as the `E2E core (Playwright)` job in `ci.yml`. |
+| `core` | `npm run test:e2e:core` | The app boots and renders a map, plus the shared UI surfaces: layer panel, attribute table, dialogs, drag-and-drop, theme, RTL, accessibility, PWA shell, project save and reopen, the plugin deep-link docs. | Every push and PR, as the `E2E core (Playwright)` job in `ci.yml`. |
+| `core-engines` | (run by `npm run test:e2e:core`) | One smoke pass per alternate engine (Cesium, ArcGIS): switch to it, add GeoJSON, identify a feature. Runs after `core`, on one worker, because a software-rendered 3D view saturates the CPU. The ArcGIS pass loads the SDK from `js.arcgis.com`. | Every push and PR, as the `E2E core (Playwright)` job in `ci.yml`. |
 | `features` | `npm run test:e2e:features` | Per-feature integration: Mapbox/Cesium engines, STAC, exports, story maps, the scene graph, plugin install. | Nightly and on demand via `e2e-full.yml`, sharded 4x — or on a PR labelled `full-e2e`. |
 
 The split is a wall-clock decision, not a judgement about value: the full suite
@@ -244,6 +245,10 @@ automatically part of `features`. If you are touching an area the nightly suite
 covers, label the PR `full-e2e` to get that check before merging.
 
 Both jobs upload their Playwright report as an artifact on failure.
+
+Locally the suite serves the built app on port 4173 and reuses a server already
+listening there. Set `E2E_PORT` to use another port, for example when a second
+checkout is already serving its own build on 4173.
 
 ### Coding conventions
 
