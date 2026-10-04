@@ -138,6 +138,7 @@ kepler.gl, see the [Comparison](comparison.md).
 - **Identify every visible layer at once**, folding vector features and raster pixel values from all visible queryable layers into one grouped, expandable popup with expand-all and collapse-all, instead of picking a layer first and clicking again
 - Single-band pseudocolor with classification, reversed and custom color ramps, opacity classes on continuous ramps, the full colormap list shown as inline gradient swatches in the Color ramp picker, a Legend populated automatically from a paletted raster's embedded color table, and RGB band combination for styling raster layers, plus COG pixel-value inspection from the Identify icon
     - A viewport stretch that recomputes an unclassified raster's display range from what is on screen — min/max, 5th to 95th percentile, or mean ± 2 standard deviations — and keeps following the view with the Style panel closed
+    - An interactive histogram of the band — one per channel for RGB — with the active stretch shaded and two draggable, keyboard-operable handles bound to the Min/Max inputs, so a contrast stretch can be set by eye against the data distribution
     - Per-class color and opacity controls for discrete raster classes
 - NetCDF and HDF grids are first-class raster layers rather than a single grey band
     - Local grids are colormapped in the browser from the same colormap catalog the Style panel uses, added as image overlays, and fitted to the camera on add, so Zoom to layer has a real extent to fly to
