@@ -120,6 +120,8 @@ function makeGlobe() {
     imagery: [] as Array<{ provider: unknown; show: boolean; alpha: number }>,
   };
   const Cesium = {
+    // The viewer below has no `scene.mode`, so it never reads as mid-morph.
+    SceneMode: { MORPHING: 0 },
     IonResource: {
       fromAssetId: async (assetId: number, options?: { accessToken?: string }) => {
         calls.ionResources.push({ assetId, token: options?.accessToken });
