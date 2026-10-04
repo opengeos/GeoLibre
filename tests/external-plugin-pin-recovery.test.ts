@@ -490,4 +490,25 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     assert.equal(integrity.getPluginBundlePin(MANIFEST_URL), registryHash);
     assert.equal(integrity.getPluginBundlePinVersion(MANIFEST_URL), "1.0.0");
   });
+
+  it("concurrent updates share a reload only when they expect the same hash", async () => {
+    integrity.pinPluginBundle(MANIFEST_URL, "0".repeat(64), "0.9.0");
+    await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    const registryHash = await servedBundleHash();
+    requests = [];
+
+    const reload = (expectedHash: string) =>
+      externalPlugins.reloadExternalUrlPlugin(manager, MANIFEST_URL, app, { expectedHash });
+    const first = reload(registryHash);
+    const same = reload(registryHash);
+    // Started while the first reload is in flight, but announcing other code:
+    // it must be checked against its own download, not handed the first result.
+    const other = reload("1".repeat(64));
+
+    assert.equal(await same, await first);
+    await assert.rejects(other, /does not match the version the registry lists/);
+    // One download for the two matching calls, a second for the other hash.
+    assert.equal(requests.filter((url) => url === MANIFEST_URL).length, 2);
+    assert.equal(integrity.getPluginBundlePin(MANIFEST_URL), registryHash);
+  });
 });
