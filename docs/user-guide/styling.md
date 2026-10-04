@@ -143,6 +143,25 @@ For raster layers the Style panel exposes image adjustments:
 
 These let you tune the look of GeoTIFF, COG, and tile-based raster layers without changing the underlying data.
 
+### Raster symbology and histogram stretch
+
+GeoTIFF and COG layers add a **Raster symbology** section with a **Render mode**:
+
+- **Single band (pseudocolor)** draws one **Band** through a colormap, which can be reversed or replaced with your own colors, and optionally **Classify into discrete classes** (equal interval, quantile, or manual breaks).
+- **RGB composite** maps three bands to red, green, and blue.
+- **Index (normalized difference)** computes an index such as NDVI from two bands.
+
+**Min** and **Max** set the stretch range (left empty, they show `auto`), and **Stretch** (**Linear**, **Logarithmic**, or **Square root**) and **Gamma** shape it. **No data** reads the nodata value from the file, renders every pixel, or uses a custom value.
+
+Under **Histogram**, a single-band (unclassified) or RGB raster shows the distribution of its pixel values with the active stretch window shaded between two handles:
+
+- **Drag a handle** to set the minimum or maximum; the **Min**/**Max** inputs follow, and typing a value moves the handle.
+- From the keyboard, focus a handle and use the arrow keys, with `Shift` or `Page Up`/`Page Down` for steps ten times larger and `Home`/`End` for the ends.
+- An **RGB composite** shows one histogram per channel, each with its own **Min** and **Max**. Editing one channel pins the others at their current automatic range so they do not jump.
+- With no range set, the automatic window is the 2nd to 98th percentile of the band.
+
+**Viewport stretch** fits the range to the pixels currently on screen instead: **Viewport min / max**, **Viewport 5–95 percentile**, or **Viewport mean ± 2 standard deviations**, then **Apply to viewport**. Tick **Update automatically when the map moves** to keep refitting as you pan and zoom. The stretch is saved with the layer.
+
 ### Spectral profile
 
 For a **multiband** raster — a stacked Landsat or Sentinel scene, a NetCDF/HDF cube, or any COG with more than one band — the Style panel adds a **Spectral profile** chart of one pixel's value across every band.

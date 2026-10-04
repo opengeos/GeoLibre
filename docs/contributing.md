@@ -145,6 +145,7 @@ order:
 | Lint               | `npm run lint`                   | ESLint over `apps/`, `packages/`, `workers/` and `tests/`                                                              |
 | i18n catalog check | `npm run i18n:tools:check`       | The processing-tool strings in `en.json` match the tool registries (regenerate with `npm run i18n:tools`)              |
 | Gallery check      | `npm run gallery:check`          | `docs/gallery.md` and the `docs/demos.md` teaser match `scripts/demo-gallery.json` (regenerate with `npm run gallery`) |
+| Plugin docs check  | `npm run plugins:docs:check`     | The built-in plugin table in `docs/user-guide/plugins.md` matches the plugin registry (regenerate with `npm run plugins:docs`) |
 | Build              | `npm run build`                  | TypeScript compile (`tsc -b`) and Vite build                                                                           |
 | Frontend tests     | `npm run test:frontend:coverage` | Unit tests under `tests/`, gated on a [coverage floor](maintenance.md#coverage-floors)                                 |
 | Untested modules   | `npm run check:untested-modules` | Source files over 500 lines that no test loads, held by a [baseline ratchet](maintenance.md#untested-module-ratchet)   |

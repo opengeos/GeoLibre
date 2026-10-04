@@ -362,12 +362,11 @@ Every run is recorded in **Processing → History**, newest first, with the tool
 ![The Model Builder canvas, with the tool palette on the left, the graph in the middle, and the selected node's settings on the right](https://assets.geolibre.app/images/geolibre-model-builder.webp)
 
 - **Drag a tool from the palette** onto the canvas to add it as a node, then wire one node's output into the next node's input. **+ Input** and **+ Output** add the model's own entry and exit points, so the same graph can be re-run against different layers.
-- The palette draws on the same catalog as everything else in this menu: the client-side [GeoLibre Toolbox](#geolibre-toolbox) tools plus the full [Whitebox](#whitebox-toolbox) catalog, so a raster chain such as fill depressions → flow accumulation → extract streams is a valid model.
-- Select a node to edit its parameters in the right-hand panel. **Arrange** lays the graph out automatically.
-- **Run** validates the whole graph first — cycles, missing connections, parameters that do not exist on the tool, and wrong parameter types are all reported before anything executes — then runs the chain as one job, with progress in the message log at the bottom.
+- The palette draws on the client-side [GeoLibre Toolbox](#geolibre-toolbox) vector tools plus the open [Whitebox](#whitebox-toolbox) catalog, so a raster chain such as fill depressions → flow accumulation → extract streams is a valid model.
+- The canvas checks the graph as you build it (missing inputs, unconnected ports, mismatched data types, loops), and **Run** executes the chain as one job, with progress in the message log at the bottom.
 - **Save** stores the model with the project, **Import** / **Export** move it between projects as a file, and **Copy Python script** puts the equivalent [`geolibre` Python](../python.md) code on the clipboard.
 
-The [AI Assistant](ai-assistant.md) can author a model from a plain-language description and open it here for review before you run it.
+See [Model Builder](model-builder.md) for the full guide, including node types, validation messages, how runs execute, the model file format, and Python export. The [AI Assistant](ai-assistant.md) can also author a model from a plain-language description and open it here for review before you run it.
 
 ## Dashboard
 

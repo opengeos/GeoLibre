@@ -18,7 +18,7 @@ The toolbar across the top of the window groups every action into nine menus:
 | **Controls** | Toggle map controls and component panels (Measure, Bookmark, Minimap, and more). See [Map Controls & Tools](map-controls.md). |
 | **Plugins** | Activate built-in plugins and set their on-map position. See [Plugins & Marketplace](plugins.md). |
 | **Settings** | Map preferences, layout, environment variables, project settings, and Manage Plugins. See [Settings & Preferences](settings.md). |
-| **Help** | The command palette, keyboard shortcuts, diagnostics, feedback, update checks, and the About dialog. |
+| **Help** | The command palette, keyboard shortcuts, **Simplify Interface...**, diagnostics, feedback, update checks, and the About dialog. |
 
 On the right side of the toolbar are the light/dark theme toggle and the editable project name.
 
@@ -33,11 +33,16 @@ The **Edit** and **View** menus are the two most easily missed, because their co
 !!! tip "Toolbar labels"
     On narrow windows the toolbar collapses to icon-only buttons. You can also force icon-only buttons from **Settings → Layout**, or with the `toolbar=icons` URL parameter. See [Embedding & Sharing](embedding.md).
 
+### Simplify the interface
+
+**Help → Simplify Interface...** (also in the command palette) opens **Settings → Interface**, where an **Experience level** of **Beginner**, **Intermediate**, or **Advanced** trims the Add Data sources, plugins, and menu items to match, and the **Data sources**, **Plugins**, and **Menus** checklists hide individual items (which switches the level to **Custom**). Nothing is removed: switch back to **Advanced**, or re-tick an item, to bring it back. The command palette follows the same choice. The Help entry itself can never be hidden, so there is always a way back; it is missing only where the deployment does not offer the Settings dialog, and an administrator can lock the profile. See [UI Profiles](../ui-profiles.md).
+
 ## Command palette and keyboard shortcuts
 
 Every menu and toolbar action is also reachable from the keyboard, so you don't have to hunt through nested menus.
 
 - **Command palette** — press `Ctrl`/`Cmd` + `K` (or **Help → Command Palette**) to open a searchable list of actions: Add Data sources, Processing tools, Controls, Plugins, and more. Type to filter, move the highlight with the arrow keys, and press `Enter` to run the highlighted command.
+- **Individual tools** — start typing and the palette also lists every processing tool on its own: the GeoLibre Toolbox vector, network, and statistics tools under **Tools**, and each Whitebox tool under **Whitebox Toolbox**. Choosing one opens the processing dialog with that tool already selected, so `Ctrl`/`Cmd` + `K`, "slope", `Enter` reaches Whitebox's Slope without opening a menu. Tool names stay searchable in English in every language, an exact title match ranks first, and the palette hides whatever the active [interface profile](#simplify-the-interface) hides from the menus.
 - **Keyboard shortcuts cheat sheet** — press `?` (or **Help → Keyboard Shortcuts**) to see the full list of global shortcuts.
 
 ![The command palette, listing every Add Data source, Processing tool, control, and plugin in one searchable list](https://assets.geolibre.app/images/geolibre-command-palette.webp)
@@ -108,7 +113,7 @@ The status bar along the bottom reports the live state of the map, from left to 
 | **Bearing** / **Pitch** | The camera rotation and tilt, in degrees. |
 | **BBox** | The bounding box of the current view (hidden on narrow windows). |
 
-It also holds a button to expand the [Attribute Table](attribute-table.md) and a **Diagnostics** button (also under **Help**) that surfaces any runtime errors.
+It also holds a **Diagnostics: N** button (also under **Help → Diagnostics**) that counts the errors and warnings captured this session and opens the [Diagnostics dialog](troubleshooting.md#the-diagnostics-dialog). It turns red when there are errors and amber when there are only warnings. While autosave is paused for a very large project, an **Autosave paused** notice appears here too.
 
 **Eye alt** is scaled to the active celestial body, so it stays correct on a Mars or Moon basemap rather than reporting an Earth-derived height, and it follows the **Scale bar units** preference (metres/kilometres, feet/miles, or nautical miles). See [Settings → Map Preferences](settings.md#map-preferences).
 
@@ -149,6 +154,15 @@ Because that fallback sends the coordinates under your pointer to a third-party 
 
 !!! tip "Reading elevation along a line"
     For a profile rather than a single point, use the Elevation Profile plugin, or the [Measure tool](map-controls.md#component-tools), which reports terrain-aware 3D distances.
+
+## Notifications
+
+Messages about what just happened (a layer that failed to load, a file that was skipped, a plugin that could not start) appear as notifications stacked in the bottom corner of the window, above the status bar:
+
+- Success and information messages close themselves after a few seconds, and warnings after a little longer. Hovering over or focusing a notification pauses the timer.
+- Errors stay until you dismiss them with **×** or `Esc`, and are also recorded in the Diagnostics dialog.
+- A message that repeats collapses into one notification with a counter such as **×3**, and at most four show at once.
+- Error notifications carry a **Report issue** button. See [Reporting a problem](troubleshooting.md#reporting-a-problem).
 
 ## Theme
 

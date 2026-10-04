@@ -1,0 +1,244 @@
+{
+  "maplibre-layer-control": {
+    "menu": "Controls → Layer Control",
+    "description": "The on-map layer list. On by default."
+  },
+  "maplibre-gl-geo-editor": {
+    "description": "Drawing, vertex editing, snapping, and deletion tools for GeoJSON layers."
+  },
+  "maplibre-gl-annotations": {
+    "description": "The map-annotation toolbar (text, arrows, highlights, pins, sticky notes, images) and the Elements panel.",
+    "docs": "map-controls.md#annotations-and-the-elements-panel"
+  },
+  "maplibre-gl-dimensions": {
+    "description": "CAD-style linear and angular dimension features with vertex snapping, stored in the project as a GeoJSON layer."
+  },
+  "maplibre-gl-fema-wms": {
+    "description": "FEMA National Flood Hazard Layer WMS layers.",
+    "docs": "web-services.md#fema-nfhl"
+  },
+  "maplibre-gl-nasa-earthdata": {
+    "description": "Over 1,100 pre-rendered global NASA GIBS imagery layers, by date.",
+    "docs": "web-services.md#nasa-earthdata"
+  },
+  "maplibre-gl-enviroatlas": {
+    "description": "US EPA environmental and ecosystem map services.",
+    "docs": "web-services.md#us-epa-enviroatlas"
+  },
+  "maplibre-gl-national-map": {
+    "description": "USGS topo, imagery, hydrography, elevation, and index services.",
+    "docs": "web-services.md#usgs-national-map"
+  },
+  "maplibre-usgs-nldi": {
+    "description": "Flowline tracing, hydrolocation, upstream basins, and network navigation.",
+    "docs": "usgs-nldi.md"
+  },
+  "maplibre-gl-usgs-dem": {
+    "description": "USGS 3DEP digital elevation models (1 m, 1/3 and 1 arc-second, and more).",
+    "docs": "web-services.md#usgs-3dep"
+  },
+  "maplibre-gl-usgs-lidar": {
+    "description": "Clip a USGS 3DEP point cloud to an area of interest and download the result as COPC."
+  },
+  "maplibre-gl-vantor": {
+    "description": "Vantor disaster-event satellite imagery (COG).",
+    "docs": "web-services.md#vantor-open-data"
+  },
+  "geolibre-planet-open-data": {
+    "description": "Planet's disaster data releases, through the STAC browser.",
+    "docs": "web-services.md#planet-open-data"
+  },
+  "geolibre-portolan": {
+    "description": "Browse the public Portolan Registry of catalogs, or connect to a publisher's catalog URL, and add assets through the STAC loaders."
+  },
+  "maplibre-gl-earthdata-gis": {
+    "description": "NASA EOSDIS ArcGIS image, map, and feature services, and published web maps.",
+    "docs": "web-services.md#earthdata-gis"
+  },
+  "maplibre-gl-openaerialmap": {
+    "description": "Openly licensed drone and aerial imagery.",
+    "docs": "web-services.md#openaerialmap"
+  },
+  "geolibre-osm-downloader": {
+    "description": "Download OpenStreetMap buildings, roads, amenities, waterways, land use, or custom tags through Overpass.",
+    "docs": "web-services.md#osm-downloader"
+  },
+  "geolibre-ign-lidar-hd": {
+    "description": "Search France's IGN LiDAR HD tile coverage and download COPC point clouds."
+  },
+  "maplibre-gl-arcgis-hub": {
+    "description": "Public datasets published to ArcGIS Hub.",
+    "docs": "web-services.md#arcgis-hub"
+  },
+  "geolibre-tennessee-gis": {
+    "description": "The geodata.tn.gov open GIS data portal.",
+    "docs": "web-services.md#tennessee-gis"
+  },
+  "geolibre-us-federal-gis": {
+    "description": "The public GIS portals of 24 US federal agencies.",
+    "docs": "web-services.md#us-federal-gis"
+  },
+  "geolibre-us-state-gis": {
+    "description": "The public GIS data portals of all 50 states and DC.",
+    "docs": "web-services.md#us-state-gis"
+  },
+  "geolibre-us-local-gis": {
+    "description": "The GIS and open-data portals of about 150 large US cities, counties, and regional agencies.",
+    "docs": "web-services.md#us-local-gis"
+  },
+  "maplibre-gl-socrata": {
+    "description": "Search government Socrata open-data portals.",
+    "docs": "web-services.md#socrata"
+  },
+  "maplibre-gl-ckan": {
+    "description": "Humanitarian Data Exchange (CKAN) resources.",
+    "docs": "web-services.md#ckan"
+  },
+  "geolibre-stac-catalogs": {
+    "description": "Any STAC API or static catalog, via STAC Index.",
+    "docs": "web-services.md#stac-catalogs"
+  },
+  "maplibre-gl-source-coop": {
+    "description": "Cloud-native products (PMTiles, GeoParquet, COG) on Source Cooperative.",
+    "docs": "web-services.md#source-cooperative"
+  },
+  "geolibre-s3-browser": {
+    "description": "Browse any Amazon S3 or S3-compatible bucket, public or private, and add its files.",
+    "docs": "web-services.md#s3-browser"
+  },
+  "maplibre-gl-natural-earth": {
+    "description": "The Natural Earth vector and raster themes.",
+    "docs": "web-services.md#natural-earth"
+  },
+  "maplibre-gl-huggingface": {
+    "description": "Geospatial files in Hugging Face dataset repos, and uploads to them.",
+    "docs": "web-services.md#hugging-face"
+  },
+  "geolibre-satellite-embeddings": {
+    "description": "Pre-computed foundation-model embeddings such as AlphaEarth, Tessera, and Earth Index.",
+    "docs": "web-services.md#satellite-embeddings"
+  },
+  "geolibre-fields-of-the-world": {
+    "description": "Global agricultural field boundaries colored by model confidence.",
+    "docs": "web-services.md#fields-of-the-world"
+  },
+  "geolibre-ocean-data-platform": {
+    "description": "HUB Ocean's public ocean datasets: habitats, protected areas, fisheries, and observations.",
+    "docs": "web-services.md#ocean-data-platform"
+  },
+  "maplibre-gl-geolens": {
+    "description": "A self-hosted GeoLens spatial catalog.",
+    "docs": "web-services.md#geolens"
+  },
+  "maplibre-gl-streetview": {
+    "description": "Google Street View panoramas at a clicked point."
+  },
+  "maplibre-gl-mapillary": {
+    "description": "Mapillary street-level imagery."
+  },
+  "maplibre-h3-grid": {
+    "description": "The H3 hexagonal grid over the current view; identify a cell and export the grid or selection."
+  },
+  "maplibre-s2-grid": {
+    "description": "The S2 cell grid over the current view; identify a cell and export the grid or selection."
+  },
+  "maplibre-a5-grid": {
+    "description": "The A5 pentagonal grid over the current view; identify a cell and export the grid or selection."
+  },
+  "maplibre-dggrid": {
+    "description": "DGGRID discrete global grids over the current view; identify a cell and export the grid or selection."
+  },
+  "maplibre-dggal": {
+    "description": "DGGAL discrete global grids over the current view; identify a cell and export the grid or selection."
+  },
+  "maplibre-olc": {
+    "description": "The Open Location Code (plus code) grid over the current view; identify a cell and export the grid or selection."
+  },
+  "maplibre-geohash": {
+    "description": "The Geohash grid over the current view; identify a cell and export the grid or selection."
+  },
+  "maplibre-tilecode": {
+    "description": "The web-map tile grid (z/x/y tile codes) over the current view; identify a cell and export the grid or selection."
+  },
+  "maplibre-gl-basemap-control": {
+    "description": "A basemap gallery for switching the background map, from the same catalog as the Change basemap dialog."
+  },
+  "maplibre-gl-esri-wayback": {
+    "description": "Browse historical aerial and satellite imagery (Esri World Imagery Wayback) for a location."
+  },
+  "maplibre-gl-time-slider": {
+    "description": "Filter a temporal layer by a date or number field, or step a time-enabled raster or Zarr cube through its time axis."
+  },
+  "geolibre-timelapse": {
+    "description": "Animate annual cloudless basemaps (EOX Sentinel-2, NASA GIBS Landsat/WELD and MODIS land cover) and record them to video."
+  },
+  "maplibre-gl-overture-maps": {
+    "description": "Browse and add Overture Maps themes."
+  },
+  "maplibre-gl-geoagent": {
+    "description": "An in-map AI agent panel."
+  },
+  "geolibre-elevation-profile": {
+    "description": "A terrain profile along a drawn line, or along the selected line features of a layer."
+  },
+  "maplibre-gl-swipe": {
+    "description": "A swipe bar comparing two layers."
+  },
+  "maplibre-gl-graticule": {
+    "menu": "Controls → Gridlines",
+    "description": "A coordinate grid with edge labels, including a UTM easting/northing mode."
+  },
+  "maplibre-gl-clouds": {
+    "menu": "Controls → Weather",
+    "description": "Near-realtime NASA cloud imagery, animated day by day."
+  },
+  "maplibre-gl-precipitation": {
+    "menu": "Controls → Weather",
+    "description": "RainViewer precipitation radar, animated over roughly the last two hours."
+  },
+  "maplibre-atmosphere-effects": {
+    "menu": "Controls → Atmospheric Effects",
+    "description": "A deep-space backdrop, starfield, comets, and an atmospheric halo at low zoom."
+  },
+  "geolibre-sun": {
+    "menu": "Controls → Sun",
+    "description": "The sun's position and the day/night terminator for any date and time."
+  },
+  "geolibre-route-animation": {
+    "menu": "Controls → Route Animation",
+    "description": "Animate a marker along a line layer with play/pause, speed, a trail, and camera follow."
+  },
+  "geolibre-flight-simulator": {
+    "menu": "Plugins; also Controls → Flight Simulator",
+    "description": "Fly over terrain and 3D layers with keyboard controls."
+  },
+  "gods-eye-view": {
+    "description": "Live earthquakes, satellite orbits, flights, transit, public cameras, and more on the Cesium globe.",
+    "docs": "#gods-eye-view"
+  },
+  "maplibre-samgeo": {
+    "description": "Segment imagery into vector features.",
+    "docs": "segmentation.md"
+  },
+  "geolibre-point-cloud-annotation": {
+    "description": "Select LiDAR points with a box or lasso, assign ASPRS classes, and export LAS 1.4 or a Segments.ai label.",
+    "docs": "point-cloud-annotation.md"
+  },
+  "maplibre-gl-directions": {
+    "menu": "Controls → Directions",
+    "description": "Click the map to add waypoints and get a route from the public OSRM demo server."
+  },
+  "maplibre-reverse-geocode": {
+    "menu": "Controls → Reverse Geocode",
+    "description": "Click the map to look up the address at that point through the configured geocoding provider."
+  },
+  "maplibre-deckgl-viz": {
+    "menu": "Add Data → Deck.gl Layer",
+    "description": "The deck.gl overlay that renders layers built in the Deck.gl Layer dialog."
+  },
+  "maplibre-gl-components": {
+    "menu": "Controls (Search, Legend, Measure, …)",
+    "description": "The component panels; each is toggled from the Controls menu rather than as one plugin.",
+    "docs": "map-controls.md#component-tools"
+  }
+}
