@@ -322,9 +322,15 @@ export function collectPageProblems(page: Page): { problems: string[] } {
   page.on("pageerror", (error) => problems.push(`page error: ${error.message}`));
   page.on("response", (response) => {
     if (response.status() < 400) return;
-    const pageUrl = page.url();
-    if (!pageUrl.startsWith("http")) return;
-    if (new URL(response.url()).origin !== new URL(pageUrl).origin) return;
+    const request = response.request();
+    // The page's own document always counts. Its response can arrive before the
+    // frame commits the new URL, while page.url() still reads about:blank.
+    const isDocument = request.isNavigationRequest() && request.frame() === page.mainFrame();
+    if (!isDocument) {
+      const pageUrl = page.url();
+      if (!pageUrl.startsWith("http")) return;
+      if (new URL(response.url()).origin !== new URL(pageUrl).origin) return;
+    }
     problems.push(`HTTP ${response.status()}: ${response.url()}`);
   });
   return { problems };

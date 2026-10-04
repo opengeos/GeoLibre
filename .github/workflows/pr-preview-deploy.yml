@@ -250,7 +250,8 @@ jobs:
       - name: Smoke-test the deployed app
         run: npm run test:e2e:preview
         env:
-          # Passed through env, never interpolated into the script.
+          # Passed through env, never interpolated into the script. The config
+          # collapses the double slash a trailing-slash deployment URL would add.
           PREVIEW_URL: ${{ needs.cloudflare.outputs.url }}/demo/
 
       - name: Upload Playwright report
@@ -272,6 +273,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      # Needed to post the "Preview smoke (Cloudflare)" commit status.
       statuses: write
     steps:
       - name: Set the commit status

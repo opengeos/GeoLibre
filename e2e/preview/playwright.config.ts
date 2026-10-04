@@ -18,7 +18,11 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
  */
 const PREVIEW_URL = process.env.PREVIEW_URL;
 if (!PREVIEW_URL) throw new Error("Set PREVIEW_URL to the deployed app's URL.");
-const BASE_URL = PREVIEW_URL.endsWith("/") ? PREVIEW_URL : `${PREVIEW_URL}/`;
+// Collapse repeated slashes (a host URL with a trailing slash plus "/demo/")
+// and end on one, so relative navigation stays inside the app's directory.
+const previewUrl = new URL(PREVIEW_URL);
+previewUrl.pathname = `${previewUrl.pathname}/`.replace(/\/{2,}/g, "/");
+const BASE_URL = previewUrl.href;
 
 export default defineConfig({
   testDir: ".",
