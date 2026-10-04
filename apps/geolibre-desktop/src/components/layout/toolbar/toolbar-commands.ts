@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Bug,
+  ClipboardList,
   Compass,
   Crosshair,
   Database,
@@ -19,6 +20,7 @@ import {
   Keyboard,
   Layers,
   Link2,
+  LocateFixed,
   MapPin,
   MessageSquare,
   Moon,
@@ -28,6 +30,7 @@ import {
   RefreshCw,
   Save,
   Share2,
+  SlidersHorizontal,
   Sparkles,
   Sun,
   Users,
@@ -117,6 +120,11 @@ export interface ToolbarCommandContext {
   setNewProjectDialogOpen: SetOpen;
   setShareDialogOpen: SetOpen;
   setPrintLayoutOpen: SetOpen;
+  setGeoreferencerOpen: SetOpen;
+  setFieldCollectionOpen: SetOpen;
+  setGpsTrackingOpen: SetOpen;
+  /** Open Settings → Interface, where the UI profiles live. */
+  onSimplifyInterface: () => void;
   setSetViewOpen: SetOpen;
   setShortcutsOpen: SetOpen;
   setAboutOpen: SetOpen;
@@ -182,6 +190,10 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
     setNewProjectDialogOpen,
     setShareDialogOpen,
     setPrintLayoutOpen,
+    setGeoreferencerOpen,
+    setFieldCollectionOpen,
+    setGpsTrackingOpen,
+    onSimplifyInterface,
     setSetViewOpen,
     setShortcutsOpen,
     setAboutOpen,
@@ -502,6 +514,15 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       keywords: "raster tool",
       run: () => setRasterToolOpen(kind),
     })),
+    // The Georeferencer sits at the foot of the Processing menu's Raster
+    // submenu; the palette hides it on mobile with the rest of that submenu.
+    {
+      id: "proc.georeferencer",
+      title: t("toolbar.item.georeferencing"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "georeference georeferencer control points gcp warp scanned map image raster",
+      run: () => setGeoreferencerOpen(true),
+    },
     {
       id: "proc.planetary-computer",
       title: t("toolbar.command.planetaryComputer"),
@@ -592,6 +613,25 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       title: t("toolbar.command.toggleViewState"),
       group: t("toolbar.commandGroup.controls"),
       run: panels.viewState.toggle,
+    },
+    // Field Collection and GPS Tracking author the project, so like their
+    // Controls-menu entries they stay out of the read-only viewer preset (which
+    // mounts no palette at all).
+    {
+      id: "control.field-collection",
+      title: t("toolbar.item.fieldCollection"),
+      group: t("toolbar.commandGroup.controls"),
+      keywords: "field collection survey form capture points mobile data entry",
+      icon: ClipboardList,
+      run: () => setFieldCollectionOpen(true),
+    },
+    {
+      id: "control.gps-tracking",
+      title: t("toolbar.item.gpsTracking"),
+      group: t("toolbar.commandGroup.controls"),
+      keywords: "gps tracking track location record position device",
+      icon: LocateFixed,
+      run: () => setGpsTrackingOpen(true),
     },
     // View
     // All eight drive the shared engine's camera, which every engine
@@ -797,6 +837,17 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       keywords: "style manager saved styles symbol ramp label preset library",
       icon: Palette,
       run: () => setStyleManagerOpen(true),
+    },
+    // The Help menu's "Simplify Interface..." entry: the UI profiles that hide
+    // menu items are otherwise only reachable from Settings → Interface.
+    {
+      id: "settings.simplify-interface",
+      title: t("toolbar.item.simplifyInterface"),
+      group: t("toolbar.commandGroup.settings"),
+      keywords:
+        "simplify interface ui profile beginner intermediate advanced hide menus clutter experience level",
+      icon: SlidersHorizontal,
+      run: onSimplifyInterface,
     },
   ];
   return commands;

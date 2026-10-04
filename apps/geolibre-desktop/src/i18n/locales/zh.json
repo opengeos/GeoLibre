@@ -2846,7 +2846,8 @@
       "view": "视图",
       "help": "帮助",
       "plugins": "插件",
-      "settings": "设置"
+      "settings": "设置",
+      "tools": "工具"
     },
     "command": {
       "projectNew": "新建项目",
@@ -3307,6 +3308,7 @@
       "showMenuInToolbar": "在工具栏中显示菜单",
       "dggs": "DGGS",
       "commandPalette": "命令面板",
+      "simplifyInterface": "简化界面...",
       "openProjectFromUrl": "从 URL 打开项目",
       "importQgisProjectEllipsis": "导入 QGIS 项目…",
       "importArcgisProjectEllipsis": "导入 ArcGIS Pro 项目…",

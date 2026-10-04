@@ -2892,7 +2892,8 @@
       "view": "نما",
       "help": "راهنما",
       "plugins": "افزونه‌ها",
-      "settings": "تنظیمات"
+      "settings": "تنظیمات",
+      "tools": "ابزارها"
     },
     "command": {
       "projectNew": "پروژهٔ جدید",
@@ -3354,6 +3355,7 @@
       "showMenuInToolbar": "نمایش منو در نوار ابزار",
       "dggs": "DGGS",
       "commandPalette": "پالت فرمان",
+      "simplifyInterface": "ساده‌سازی رابط کاربری...",
       "openProjectFromUrl": "باز کردن پروژه از نشانی",
       "importQgisProjectEllipsis": "وارد کردن پروژهٔ QGIS…",
       "importArcgisProjectEllipsis": "وارد کردن پروژهٔ ArcGIS Pro…",

@@ -2904,7 +2904,8 @@
       "view": "View",
       "help": "Help",
       "plugins": "Plugins",
-      "settings": "Settings"
+      "settings": "Settings",
+      "tools": "Tools"
     },
     "command": {
       "projectNew": "New Project",
@@ -3366,6 +3367,7 @@
       "showMenuInToolbar": "Show menu in toolbar",
       "dggs": "DGGS",
       "commandPalette": "Command Palette",
+      "simplifyInterface": "Simplify Interface...",
       "openProjectFromUrl": "Open project from URL",
       "importQgisProjectEllipsis": "Import QGIS Project…",
       "importArcgisProjectEllipsis": "Import ArcGIS Pro Project…",

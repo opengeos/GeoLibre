@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogTitle } from "@geolibre/ui";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -9,19 +10,40 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { type Command, filterCommands, formatShortcut, isMacPlatform } from "../../lib/commands";
+import { paletteRows } from "../../lib/palette-rows";
 
 interface CommandPaletteProps {
   open: boolean;
+  /** Commands listed with or without a query. */
   commands: Command[];
+  /**
+   * Commands matched only once the user types (the ~1,100 per-tool entries),
+   * so the empty palette opens on the short list of actions.
+   */
+  searchOnlyCommands?: Command[];
   onOpenChange: (open: boolean) => void;
 }
+
+/** Estimated heights (px) before the virtualizer measures a row. */
+const GROUP_ROW_HEIGHT = 28;
+const COMMAND_ROW_HEIGHT = 32;
+
+const NO_COMMANDS: Command[] = [];
 
 /**
  * A searchable command palette (Cmd/Ctrl-K) built from the shared command
  * registry. Type to filter, navigate with arrow keys, and press Enter to run
  * the highlighted command.
+ *
+ * With the per-tool entries a broad query can match a thousand commands, so
+ * the list is virtualized: only the rows in and around the viewport mount.
  */
-export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  commands,
+  searchOnlyCommands = NO_COMMANDS,
+  onOpenChange,
+}: CommandPaletteProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -30,8 +52,27 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
   const listboxId = "command-palette-listbox";
   const optionId = (command: Command) => `command-option-${command.id}`;
 
-  const filtered = useMemo(() => filterCommands(commands, query), [commands, query]);
+  const searchable = useMemo(
+    () => (searchOnlyCommands.length ? [...commands, ...searchOnlyCommands] : commands),
+    [commands, searchOnlyCommands],
+  );
+  const filtered = useMemo(
+    () => (query.trim() ? filterCommands(searchable, query) : commands),
+    [commands, searchable, query],
+  );
   const activeCommand = filtered[activeIndex];
+  const { rows, rowOfCommand } = useMemo(() => paletteRows(filtered), [filtered]);
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: (index) => (rows[index].kind === "group" ? GROUP_ROW_HEIGHT : COMMAND_ROW_HEIGHT),
+    getItemKey: (index) => {
+      const row = rows[index];
+      return row.kind === "group" ? `group:${row.index}` : row.command.id;
+    },
+    overscan: 8,
+  });
 
   // Reset the query each time the palette opens so it always starts fresh.
   useEffect(() => {
@@ -46,13 +87,14 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
     setActiveIndex((index) => (filtered.length === 0 ? 0 : Math.min(index, filtered.length - 1)));
   }, [filtered.length]);
 
-  // Scroll the highlighted row into view as the user navigates.
+  // Scroll the highlighted row into view as the user navigates. The row may not
+  // be mounted (virtualized), so scroll by index rather than by element. The
+  // first command also brings its group header into view.
   useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const active = list.querySelector<HTMLElement>('[data-active="true"]');
-    active?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex, filtered]);
+    const row = rowOfCommand[activeIndex];
+    if (row === undefined) return;
+    virtualizer.scrollToIndex(activeIndex === 0 ? 0 : row, { align: "auto" });
+  }, [activeIndex, rowOfCommand, virtualizer]);
 
   const runCommand = (command: Command) => {
     if (command.disabledReason) return;
@@ -121,50 +163,78 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
               {t("commandPalette.noMatches")}
             </p>
           ) : (
-            filtered.map((command, index) => {
-              const Icon = command.icon;
-              const previousGroup = filtered[index - 1]?.group;
-              const showGroup = command.group !== previousGroup;
-              const isActive = index === activeIndex;
-              return (
-                <div key={command.id}>
-                  {showGroup ? (
-                    <div className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground">
-                      {command.group}
-                    </div>
-                  ) : null}
-                  <button
-                    type="button"
-                    id={optionId(command)}
-                    role="option"
-                    aria-selected={isActive}
-                    aria-disabled={Boolean(command.disabledReason)}
-                    data-active={isActive}
-                    className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm ${
-                      isActive ? "bg-accent text-accent-foreground" : "text-foreground"
-                    } ${command.disabledReason ? "opacity-50" : ""}`}
-                    onMouseMove={() => setActiveIndex(index)}
-                    onClick={() => runCommand(command)}
+            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+              {virtualizer.getVirtualItems().map((item) => {
+                const row = rows[item.index];
+                return (
+                  <div
+                    key={item.key}
+                    ref={virtualizer.measureElement}
+                    data-index={item.index}
+                    className="absolute start-0 top-0 w-full"
+                    style={{ transform: `translateY(${item.start}px)` }}
                   >
-                    {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
-                    <span className="min-w-0 flex-1 truncate">{command.title}</span>
-                    {command.disabledReason ? (
-                      <span className="text-xs text-muted-foreground">
-                        {command.disabledReason}
-                      </span>
-                    ) : null}
-                    {command.shortcut ? (
-                      <kbd className="shrink-0 rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                        {formatShortcut(command.shortcut, isMac)}
-                      </kbd>
-                    ) : null}
-                  </button>
-                </div>
-              );
-            })
+                    {row.kind === "group" ? (
+                      <div className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground">
+                        {row.label}
+                      </div>
+                    ) : (
+                      <CommandRow
+                        command={row.command}
+                        id={optionId(row.command)}
+                        active={row.index === activeIndex}
+                        isMac={isMac}
+                        onHover={() => setActiveIndex(row.index)}
+                        onRun={() => runCommand(row.command)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface CommandRowProps {
+  command: Command;
+  id: string;
+  active: boolean;
+  isMac: boolean;
+  onHover: () => void;
+  onRun: () => void;
+}
+
+/** One selectable palette option. */
+function CommandRow({ command, id, active, isMac, onHover, onRun }: CommandRowProps) {
+  const Icon = command.icon;
+  return (
+    <button
+      type="button"
+      id={id}
+      role="option"
+      aria-selected={active}
+      aria-disabled={Boolean(command.disabledReason)}
+      data-active={active}
+      className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm ${
+        active ? "bg-accent text-accent-foreground" : "text-foreground"
+      } ${command.disabledReason ? "opacity-50" : ""}`}
+      onMouseMove={onHover}
+      onClick={onRun}
+    >
+      {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
+      <span className="min-w-0 flex-1 truncate">{command.title}</span>
+      {command.disabledReason ? (
+        <span className="text-xs text-muted-foreground">{command.disabledReason}</span>
+      ) : null}
+      {command.shortcut ? (
+        <kbd className="shrink-0 rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+          {formatShortcut(command.shortcut, isMac)}
+        </kbd>
+      ) : null}
+    </button>
   );
 }

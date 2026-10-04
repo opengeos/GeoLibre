@@ -2941,7 +2941,8 @@
       "view": "תצוגה",
       "help": "עזרה",
       "plugins": "תוספים",
-      "settings": "הגדרות"
+      "settings": "הגדרות",
+      "tools": "כלים"
     },
     "command": {
       "projectNew": "פרויקט חדש",
@@ -3403,6 +3404,7 @@
       "showMenuInToolbar": "הצג את התפריט בסרגל הכלים",
       "dggs": "DGGS",
       "commandPalette": "לוח הפקודות",
+      "simplifyInterface": "פישוט הממשק...",
       "openProjectFromUrl": "פתיחת פרויקט מכתובת URL",
       "importQgisProjectEllipsis": "ייבוא פרויקט QGIS…",
       "importArcgisProjectEllipsis": "ייבוא פרויקט ArcGIS Pro…",

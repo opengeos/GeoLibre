@@ -2843,7 +2843,8 @@
       "view": "表示",
       "help": "ヘルプ",
       "plugins": "プラグイン",
-      "settings": "設定"
+      "settings": "設定",
+      "tools": "ツール"
     },
     "command": {
       "projectNew": "新規プロジェクト",
@@ -3305,6 +3306,7 @@
       "showMenuInToolbar": "ツールバーにメニューを表示",
       "dggs": "DGGS",
       "commandPalette": "コマンドパレット",
+      "simplifyInterface": "インターフェースを簡素化...",
       "openProjectFromUrl": "URL からプロジェクトを開く",
       "importQgisProjectEllipsis": "QGIS プロジェクトをインポート…",
       "importArcgisProjectEllipsis": "ArcGIS Pro プロジェクトをインポート…",

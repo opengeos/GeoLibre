@@ -50,7 +50,9 @@ const ids = (overrides?: Partial<ToolbarCommandContext>) =>
 
 // The full registry, captured from the inline array in TopToolbar.tsx before
 // it moved here (#2858). A change to this list changes the command palette,
-// the cheat sheet, and the global shortcuts, so it must be deliberate.
+// the cheat sheet, and the global shortcuts, so it must be deliberate. Since
+// captured it has only gained the Georeferencer, Field Collection, GPS
+// Tracking, and Simplify Interface commands.
 const FULL_REGISTRY_IDS = [
   "project.new",
   "project.open-file",
@@ -149,6 +151,7 @@ const FULL_REGISTRY_IDS = [
   "proc.raster.reclassify",
   "proc.raster.mosaic",
   "proc.raster.focal",
+  "proc.georeferencer",
   "proc.planetary-computer",
   "proc.earth-engine",
   "control.navigation",
@@ -171,6 +174,8 @@ const FULL_REGISTRY_IDS = [
   "control.bookmark",
   "control.minimap",
   "control.view-state",
+  "control.field-collection",
+  "control.gps-tracking",
   "view.zoom-in",
   "view.zoom-out",
   "view.previous",
@@ -191,6 +196,7 @@ const FULL_REGISTRY_IDS = [
   "plugin.demo",
   "settings.manage-plugins",
   "settings.style-manager",
+  "settings.simplify-interface",
 ];
 
 describe("buildToolbarCommands", () => {
@@ -260,6 +266,33 @@ describe("buildToolbarCommands", () => {
       ["view.reset-north", { key: "n" }],
       ["view.reset-pitch", { key: "u" }],
       ["view.reset-pitch-bearing", { key: "r" }],
+    ]);
+  });
+
+  it("opens the Georeferencer, Field Collection, GPS Tracking, and Settings → Interface", () => {
+    const calls: string[] = [];
+    const record = (name: string) => (open?: unknown) => calls.push(`${name}:${String(open)}`);
+    const commands = buildToolbarCommands(
+      context({
+        setGeoreferencerOpen: record("georeferencer"),
+        setFieldCollectionOpen: record("fieldCollection"),
+        setGpsTrackingOpen: record("gpsTracking"),
+        onSimplifyInterface: () => calls.push("simplifyInterface"),
+      }),
+    );
+    for (const id of [
+      "proc.georeferencer",
+      "control.field-collection",
+      "control.gps-tracking",
+      "settings.simplify-interface",
+    ]) {
+      commands.find((command) => command.id === id)?.run();
+    }
+    assert.deepEqual(calls, [
+      "georeferencer:true",
+      "fieldCollection:true",
+      "gpsTracking:true",
+      "simplifyInterface",
     ]);
   });
 

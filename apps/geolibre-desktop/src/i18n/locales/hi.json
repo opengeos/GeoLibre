@@ -2892,7 +2892,8 @@
       "view": "दृश्य",
       "help": "सहायता",
       "plugins": "प्लगइन",
-      "settings": "सेटिंग्स"
+      "settings": "सेटिंग्स",
+      "tools": "टूल्स"
     },
     "command": {
       "projectNew": "नया प्रोजेक्ट",
@@ -3354,6 +3355,7 @@
       "showMenuInToolbar": "टूलबार में मेनू दिखाएँ",
       "dggs": "DGGS",
       "commandPalette": "कमांड पैलेट",
+      "simplifyInterface": "इंटरफ़ेस सरल करें...",
       "openProjectFromUrl": "URL से प्रोजेक्ट खोलें",
       "importQgisProjectEllipsis": "QGIS प्रोजेक्ट आयात करें…",
       "importArcgisProjectEllipsis": "ArcGIS Pro प्रोजेक्ट आयात करें…",

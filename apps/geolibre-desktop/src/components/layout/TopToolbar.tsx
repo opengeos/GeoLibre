@@ -34,7 +34,8 @@ import { useViewportHistory } from "../../hooks/useViewportHistory";
 import { useAddDataDialogState } from "../../hooks/toolbar/useAddDataDialogState";
 import { useMapControlVisibility } from "../../hooks/toolbar/useMapControlVisibility";
 import { usePluginLabelSync } from "../../hooks/toolbar/usePluginLabelSync";
-import { useToolbarCommands } from "../../hooks/toolbar/useToolbarCommands";
+import { usePaletteCommands } from "../../hooks/toolbar/usePaletteCommands";
+import { openSimplifyInterface, useToolbarCommands } from "../../hooks/toolbar/useToolbarCommands";
 import { useToolbarDialogs } from "../../hooks/toolbar/useToolbarDialogs";
 import { resolveAppName } from "../../lib/app-name";
 import { IS_MAS_BUILD } from "../../lib/build-flags";
@@ -269,6 +270,13 @@ export function TopToolbar({
     viewer,
     addDataReady,
     ...dialogs,
+  });
+  // The palette lists what the menus would show under the active UI profile and
+  // platform, plus one entry per processing tool (loaded on first open).
+  const paletteCommands = usePaletteCommands({
+    commands: allowedCommands,
+    open: dialogs.commandPaletteOpen,
+    openNetworkTool: consent.openNetworkTool,
   });
 
   const toolbarButtonSize = compact ? "icon" : "sm";
@@ -616,6 +624,12 @@ export function TopToolbar({
           diagnosticsErrorCount={diagnosticsErrorCount}
           onOpenCommandPalette={() => dialogs.setCommandPaletteOpen(true)}
           onOpenShortcuts={() => dialogs.setShortcutsOpen(true)}
+          // Only where the Settings dialog is mounted to answer the request.
+          onSimplifyInterface={
+            !viewer && deploymentCapabilities.has("settings:manage")
+              ? openSimplifyInterface
+              : undefined
+          }
           onOpenDiagnostics={onOpenDiagnostics}
           onCheckForUpdates={() => {
             dialogs.setAboutOpen(true);
@@ -654,7 +668,8 @@ export function TopToolbar({
         <MountWhenOpened open={dialogs.commandPaletteOpen}>
           <CommandPalette
             open={dialogs.commandPaletteOpen}
-            commands={allowedCommands}
+            commands={paletteCommands.commands}
+            searchOnlyCommands={paletteCommands.toolCommands}
             onOpenChange={dialogs.setCommandPaletteOpen}
           />
         </MountWhenOpened>

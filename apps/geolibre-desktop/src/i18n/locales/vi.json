@@ -2843,7 +2843,8 @@
       "view": "Xem",
       "help": "Giúp đỡ",
       "plugins": "Plugin",
-      "settings": "Cài đặt"
+      "settings": "Cài đặt",
+      "tools": "Công cụ"
     },
     "command": {
       "diagnostics": "Chẩn đoán",
@@ -3305,6 +3306,7 @@
       "showMenuInToolbar": "Hiển thị menu trên thanh công cụ",
       "dggs": "DGGS",
       "commandPalette": "Bảng lệnh",
+      "simplifyInterface": "Đơn giản hóa giao diện...",
       "openProjectFromUrl": "Mở dự án từ URL",
       "importQgisProjectEllipsis": "Nhập dự án QGIS…",
       "importArcgisProjectEllipsis": "Nhập Dự án ArcGIS Pro…",

@@ -2843,7 +2843,8 @@
       "view": "보기",
       "help": "도움말",
       "plugins": "플러그인",
-      "settings": "설정"
+      "settings": "설정",
+      "tools": "도구"
     },
     "command": {
       "projectNew": "새 프로젝트",
@@ -3305,6 +3306,7 @@
       "showMenuInToolbar": "도구 모음에 메뉴 표시",
       "dggs": "DGGS",
       "commandPalette": "명령 팔레트",
+      "simplifyInterface": "인터페이스 단순화...",
       "openProjectFromUrl": "URL에서 프로젝트 열기",
       "importQgisProjectEllipsis": "QGIS 프로젝트 가져오기…",
       "importArcgisProjectEllipsis": "ArcGIS Pro 프로젝트 가져오기…",

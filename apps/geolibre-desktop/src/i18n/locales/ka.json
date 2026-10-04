@@ -2892,7 +2892,8 @@
       "view": "ხედი",
       "help": "დახმარება",
       "plugins": "პლაგინები",
-      "settings": "პარამეტრები"
+      "settings": "პარამეტრები",
+      "tools": "ხელსაწყოები"
     },
     "command": {
       "projectNew": "ახალი პროექტი",
@@ -3354,6 +3355,7 @@
       "showMenuInToolbar": "მენიუს ჩვენება ხელსაწყოთა ზოლში",
       "dggs": "DGGS",
       "commandPalette": "ბრძანებების პალიტრა",
+      "simplifyInterface": "ინტერფეისის გამარტივება...",
       "openProjectFromUrl": "პროექტის გახსნა URL-იდან",
       "importQgisProjectEllipsis": "QGIS პროექტის იმპორტი…",
       "importArcgisProjectEllipsis": "ArcGIS Pro პროექტის იმპორტი…",

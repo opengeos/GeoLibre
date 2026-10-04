@@ -2843,7 +2843,8 @@
       "view": "มุมมอง",
       "help": "ช่วยเหลือ",
       "plugins": "ปลั๊กอิน",
-      "settings": "ตั้งค่า"
+      "settings": "ตั้งค่า",
+      "tools": "เครื่องมือ"
     },
     "command": {
       "projectNew": "โปรเจกต์ใหม่",
@@ -3305,6 +3306,7 @@
       "showMenuInToolbar": "แสดงเมนูในแถบเครื่องมือ",
       "dggs": "DGGS",
       "commandPalette": "พาเลตต์คำสั่ง",
+      "simplifyInterface": "ลดความซับซ้อนของส่วนติดต่อผู้ใช้...",
       "openProjectFromUrl": "เปิดโปรเจกต์จาก URL",
       "importQgisProjectEllipsis": "นำเข้าโปรเจกต์ QGIS…",
       "importArcgisProjectEllipsis": "นำเข้าโปรเจกต์ ArcGIS Pro…",

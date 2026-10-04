@@ -3087,7 +3087,8 @@
       "view": "عرض",
       "help": "مساعدة",
       "plugins": "الإضافات",
-      "settings": "الإعدادات"
+      "settings": "الإعدادات",
+      "tools": "الأدوات"
     },
     "command": {
       "projectNew": "مشروع جديد",
@@ -3549,6 +3550,7 @@
       "showMenuInToolbar": "إظهار القائمة في شريط الأدوات",
       "dggs": "DGGS",
       "commandPalette": "لوحة الأوامر",
+      "simplifyInterface": "تبسيط الواجهة...",
       "openProjectFromUrl": "فتح مشروع من عنوان URL",
       "importQgisProjectEllipsis": "استيراد مشروع QGIS…",
       "importArcgisProjectEllipsis": "استيراد مشروع ArcGIS Pro…",

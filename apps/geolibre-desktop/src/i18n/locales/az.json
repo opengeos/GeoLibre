@@ -2892,7 +2892,8 @@
       "view": "Görünüş",
       "help": "Kömək",
       "plugins": "Plaginlər",
-      "settings": "Parametrlər"
+      "settings": "Parametrlər",
+      "tools": "Alətlər"
     },
     "command": {
       "projectNew": "Yeni layihə",
@@ -3354,6 +3355,7 @@
       "showMenuInToolbar": "Menyunu alətlər panelində göstər",
       "dggs": "DGGS",
       "commandPalette": "Əmrlər palitrası",
+      "simplifyInterface": "İnterfeysi sadələşdir...",
       "openProjectFromUrl": "Layihəni URL-dən aç",
       "importQgisProjectEllipsis": "QGIS layihəsini idxal et…",
       "importArcgisProjectEllipsis": "ArcGIS Pro layihəsini idxal et…",

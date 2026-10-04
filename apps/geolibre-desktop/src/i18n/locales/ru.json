@@ -2990,7 +2990,8 @@
       "view": "Вид",
       "help": "Справка",
       "plugins": "Плагины",
-      "settings": "Настройки"
+      "settings": "Настройки",
+      "tools": "Инструменты"
     },
     "command": {
       "projectNew": "Новый проект",
@@ -3452,6 +3453,7 @@
       "showMenuInToolbar": "Показывать меню на панели инструментов",
       "dggs": "DGGS",
       "commandPalette": "Палитра команд",
+      "simplifyInterface": "Упростить интерфейс...",
       "openProjectFromUrl": "Открыть проект по URL",
       "importQgisProjectEllipsis": "Импортировать проект QGIS…",
       "importArcgisProjectEllipsis": "Импортировать проект ArcGIS Pro…",

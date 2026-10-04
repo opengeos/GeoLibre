@@ -11,6 +11,7 @@ import {
   REVERSE_GEOCODE_PLUGIN_ID,
 } from "@geolibre/plugins";
 import { useMemo } from "react";
+import { openSettingsSection } from "../../components/layout/SettingsDialog";
 import { EARTH_ENGINE_AVAILABLE } from "../../components/layout/toolbar/ProcessingMenu";
 import {
   buildToolbarCommands,
@@ -44,6 +45,7 @@ type HookSuppliedContext =
   | "isPluginEngineSupported"
   | "openRightPanel"
   | "earthEngineAvailable"
+  | "onSimplifyInterface"
   | "setCollaborateDialogOpen"
   | "setProcessingOpen"
   | "setSqlWorkspaceOpen"
@@ -70,6 +72,11 @@ export interface UseToolbarCommandsOptions extends Omit<
   /** Whether the live engine can take Add Data requests yet. */
   addDataReady: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
+}
+
+/** Open Settings → Interface, where the UI profiles live. */
+export function openSimplifyInterface(): void {
+  openSettingsSection("interface");
 }
 
 /**
@@ -114,6 +121,7 @@ export function useToolbarCommands(options: UseToolbarCommandsOptions): Command[
     isPluginEngineSupported,
     openRightPanel,
     earthEngineAvailable: EARTH_ENGINE_AVAILABLE,
+    onSimplifyInterface: openSimplifyInterface,
     setCollaborateDialogOpen,
     setProcessingOpen,
     setSqlWorkspaceOpen,

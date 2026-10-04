@@ -130,8 +130,10 @@ function formatKey(key: string): string {
 /**
  * Filter and rank commands for a palette query. Matching is token-based: every
  * whitespace-separated token in the query must appear in the command's title,
- * group, or keywords. Title-prefix matches rank ahead of other matches, and
- * the original registry order is preserved within each rank.
+ * group, or keywords. An exact title match ranks first, then title-prefix
+ * matches, then the rest, and the original registry order is preserved within
+ * each rank. The exact rank matters with the per-tool entries: "slope" must put
+ * "Slope" ahead of "Slope Vs Aspect Plot" and the dozen other Slope… tools.
  */
 export function filterCommands(commands: Command[], query: string): Command[] {
   const trimmed = query.trim().toLowerCase();
@@ -145,7 +147,7 @@ export function filterCommands(commands: Command[], query: string): Command[] {
       command.keywords?.toLowerCase() ?? ""
     }`;
     if (!tokens.every((token) => haystack.includes(token))) return;
-    const rank = title.startsWith(trimmed) ? 0 : 1;
+    const rank = title === trimmed ? 0 : title.startsWith(trimmed) ? 1 : 2;
     scored.push({ command, rank, index });
   });
 
