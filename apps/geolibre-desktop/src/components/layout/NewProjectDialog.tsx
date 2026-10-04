@@ -97,7 +97,7 @@ interface NewProjectDialogProps {
    * from URL path). Rejects on failure so the dialog can show the error inline.
    * When omitted, the Examples section is hidden.
    */
-  onOpenExample?: (projectUrl: string) => Promise<void>;
+  onOpenExample?: (projectUrl: string, signal: AbortSignal) => Promise<void>;
 }
 
 export function NewProjectDialog({
@@ -119,6 +119,11 @@ export function NewProjectDialog({
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const customUrlRef = useRef<HTMLInputElement>(null);
+  // The in-flight starter-project open, if any. Closing the dialog or creating
+  // a project another way aborts it, so a late download can never replace the
+  // project the user chose instead.
+  const exampleAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => exampleAbortRef.current?.abort(), []);
 
   const customStyleUrl = customUrl.trim();
   const customIsPmtiles = isPmtilesStyleUrl(customStyleUrl);
@@ -194,6 +199,8 @@ export function NewProjectDialog({
     setCustomFlavor("light");
     setShowSavePrompt(false);
     setIsSaving(false);
+    exampleAbortRef.current?.abort();
+    exampleAbortRef.current = null;
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -267,6 +274,21 @@ export function NewProjectDialog({
     onProjectCreated?.();
     onOpenChange(false);
     resetForm();
+  };
+
+  // Resolves true once the example loaded, false when it was cancelled.
+  const openExample = async (projectUrl: string): Promise<boolean> => {
+    if (!onOpenExample) return false;
+    exampleAbortRef.current?.abort();
+    const controller = new AbortController();
+    exampleAbortRef.current = controller;
+    try {
+      await onOpenExample(projectUrl, controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) return false;
+      throw error;
+    }
+    return !controller.signal.aborted;
   };
 
   const handleExampleOpened = () => {
@@ -371,7 +393,7 @@ export function NewProjectDialog({
 
               {onOpenExample ? (
                 <StarterProjectsSection
-                  onOpenExample={onOpenExample}
+                  onOpenExample={openExample}
                   onOpened={handleExampleOpened}
                 />
               ) : null}

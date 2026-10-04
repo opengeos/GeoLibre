@@ -493,8 +493,6 @@ export function MapLegendPanel({
     // a flex column keeps header/footer fixed while the entry list scrolls.
     <div
       ref={panelRef}
-      // Opt into View → Color vision preview so swatches match the map.
-      data-cvd-filter=""
       className="relative flex w-64 flex-col overflow-hidden rounded-lg border border-border/50 map-glass text-foreground shadow-lg"
       style={{
         maxHeight: maxHeight ?? undefined,
@@ -558,7 +556,12 @@ export function MapLegendPanel({
       {panelCollapsed ? null : displayed.length === 0 ? (
         <p className="px-3 py-4 text-xs text-muted-foreground">{t("legendPanel.empty")}</p>
       ) : (
-        <ul className="min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto">
+        <ul
+          // Opt the entries (not the header or edit controls) into View →
+          // Color vision preview, so swatches match the filtered map.
+          data-cvd-filter=""
+          className="min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto"
+        >
           {displayed.map((entry) => (
             <LegendEntryRow
               key={entry.id}

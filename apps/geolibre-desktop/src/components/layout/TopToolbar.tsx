@@ -399,7 +399,9 @@ export function TopToolbar({
           onOpenChange={dialogs.setNewProjectDialogOpen}
           onSaveCurrentProject={projectFiles.handleSave}
           onProjectCreated={handleNewProjectCreated}
-          onOpenExample={(url) => projectFiles.openProjectFromShareUrl(url, { asCopy: true })}
+          onOpenExample={(url, signal) =>
+            projectFiles.openProjectFromShareUrl(url, { asCopy: true, signal })
+          }
         />
       </MountWhenOpened>
       {!viewer && isMenuVisible(uiProfile, "addData") && deploymentCapabilities.has("data:add") && (

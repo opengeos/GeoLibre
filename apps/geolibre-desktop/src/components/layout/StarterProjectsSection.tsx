@@ -52,10 +52,11 @@ function StarterProjectCard({ example, loading, disabled, onOpen }: StarterProje
 
 interface StarterProjectsSectionProps {
   /**
-   * Load a starter project from its raw `.geolibre.json` URL. Rejects on
-   * failure so the section can show the error inline.
+   * Load a starter project from its raw `.geolibre.json` URL. Resolves true
+   * once loaded and false when the open was cancelled; rejects on failure so
+   * the section can show the error inline.
    */
-  onOpenExample: (projectUrl: string) => Promise<void>;
+  onOpenExample: (projectUrl: string) => Promise<boolean>;
   /** Called once an example has loaded, so the dialog can close. */
   onOpened: () => void;
 }
@@ -77,8 +78,8 @@ export function StarterProjectsSection({ onOpenExample, onOpened }: StarterProje
     setLoadingId(example.id);
     setError(null);
     try {
-      await onOpenExample(example.projectUrl);
-      onOpened();
+      if (await onOpenExample(example.projectUrl)) onOpened();
+      else setLoadingId(null);
     } catch (err) {
       // Offline, a moved file, or a project that fails to parse: keep the
       // dialog open on the current project and say which example failed.
