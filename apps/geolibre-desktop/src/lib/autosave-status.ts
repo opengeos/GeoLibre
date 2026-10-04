@@ -62,6 +62,13 @@ export interface AutosaveStatusTracker {
    * @returns Whether autosave is currently paused.
    */
   paused(): boolean;
+  /**
+   * Whether an attempt is still the latest one, i.e. its outcome would count.
+   *
+   * @param token The token `begin` returned.
+   * @returns False once a newer attempt started or `reset` ran.
+   */
+  isCurrent(token: number): boolean;
 }
 
 /**
@@ -95,6 +102,7 @@ export function createAutosaveStatusTracker(
       set(false);
     },
     paused: () => paused,
+    isCurrent: (token) => token === latest,
   };
 }
 

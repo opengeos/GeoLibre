@@ -2579,12 +2579,11 @@ export class ArcgisEngine implements MapEngine {
     return { pending, errors: [...this.errors.values()] };
   }
   /**
-   * The store layers that failed to load, keyed by message, as the last
-   * {@link getRenderStatus} call left them. A plugin layer the SDK cannot draw
-   * is left out: it is unsupported here, not broken, and the banner already
-   * says so.
+   * The store layers that failed to load, as the last {@link getRenderStatus}
+   * call left them. A plugin layer the SDK cannot draw is left out: it is
+   * unsupported here, not broken, and the banner already says so.
    *
-   * @returns Each failing layer's render-status message mapped to its store id.
+   * @returns Each failing layer's store id mapped to its render-status message.
    */
   getLayerLoadErrors(): Map<string, string> {
     const failures = new Map<string, string>();
@@ -2592,7 +2591,7 @@ export class ArcgisEngine implements MapEngine {
       if (!key.startsWith("layer:")) continue;
       const id = key.slice(6);
       if (this.pluginLayerIds.has(id)) continue;
-      failures.set(message, id);
+      failures.set(id, message);
     }
     return failures;
   }

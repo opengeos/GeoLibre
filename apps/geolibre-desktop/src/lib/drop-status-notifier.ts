@@ -29,7 +29,7 @@ export interface DropStatusNotifier {
   setCrsWarning(update: MessageUpdate): void;
   /** Clears the status toast after {@link DROP_MESSAGE_CLEAR_MS}. */
   clearDropMessageLater(): void;
-  /** Cancels the pending clear. The toasts themselves stay. */
+  /** Cancels the pending clear and takes down its toasts, as an unmount used to. */
   dispose(): void;
 }
 
@@ -94,6 +94,11 @@ export function createDropStatusNotifier(): DropStatusNotifier {
     dispose() {
       if (clearTimer !== null) clearTimeout(clearTimer);
       clearTimer = null;
+      for (const slot of [status, error, crs]) {
+        if (slot.id) dismissNotification(slot.id);
+        slot.id = null;
+        slot.message = null;
+      }
     },
   };
 }

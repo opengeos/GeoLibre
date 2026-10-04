@@ -103,6 +103,19 @@ describe("autosavePausedMessage", () => {
   });
 });
 
+describe("createAutosaveStatusTracker isCurrent", () => {
+  it("is true only for the latest attempt", () => {
+    const { status } = tracker();
+    const first = status.begin();
+    assert.equal(status.isCurrent(first), true);
+    const second = status.begin();
+    assert.equal(status.isCurrent(first), false);
+    assert.equal(status.isCurrent(second), true);
+    status.reset();
+    assert.equal(status.isCurrent(second), false);
+  });
+});
+
 describe("createAutosaveFailureNotice", () => {
   it("tells once per run of failures, and again after a stored snapshot", () => {
     let told = 0;

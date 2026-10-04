@@ -143,7 +143,9 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
         // save still runs after it, and must not flag a project that now has
         // nothing unsaved.
         const settle = (outcome: AutosaveOutcome) => {
-          noticeAutosaveOutcome(outcome);
+          // A superseded attempt's late outcome says nothing about the
+          // project now, the same rule the paused indicator follows.
+          if (autosaveStatus.isCurrent(attempt)) noticeAutosaveOutcome(outcome);
           autosaveStatus.settle(attempt, outcome, useAppStore.getState().isDirty);
         };
         // Serialization runs synchronously, so its failure cannot be caught

@@ -75,6 +75,14 @@ describe("createDropStatusNotifier", () => {
     assert.deepEqual(visible(), [{ kind: "warning", message: "Same failure" }]);
   });
 
+  it("takes its toasts down when disposed", () => {
+    const status = createDropStatusNotifier();
+    status.setDropMessage("Importing data...");
+    status.setCrsWarning("Layer sits far from its data");
+    status.dispose();
+    assert.deepEqual(visible(), []);
+  });
+
   it("accepts React-style updater functions", () => {
     const status = createDropStatusNotifier();
     status.setDropMessage("one");

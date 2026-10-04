@@ -880,16 +880,23 @@ export function ArcgisCanvas({
             errors.push(terrainRestoreError);
           // Each error reaches the Diagnostics log once, when it first shows;
           // one that clears and comes back is reported again. A layer's own
-          // failure names the layer, so the app can tell the user which one.
+          // failure names the layer, so the app can tell the user which one;
+          // it is keyed by layer too, so two same-named layers failing the
+          // same way are each reported.
           const layerFailures = current.getLayerLoadErrors();
-          for (const message of errors)
-            if (!reported.has(message))
-              diagnosticRef.current?.({
-                message,
-                source: "arcgis",
-                layerId: layerFailures.get(message),
-              });
-          reported = new Set(errors);
+          const layerMessages = new Set(layerFailures.values());
+          const shown = new Set<string>();
+          for (const [layerId, message] of layerFailures) {
+            const key = `layer:${layerId}\u0000${message}`;
+            shown.add(key);
+            if (!reported.has(key)) diagnosticRef.current?.({ message, source: "arcgis", layerId });
+          }
+          for (const message of errors) {
+            if (layerMessages.has(message)) continue;
+            shown.add(message);
+            if (!reported.has(message)) diagnosticRef.current?.({ message, source: "arcgis" });
+          }
+          reported = shown;
           setError(errors.length ? errors.join("; ") : null);
         }, 1000);
         // The SDK ships one stylesheet per theme; follow the app's dark-mode
