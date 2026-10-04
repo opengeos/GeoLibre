@@ -73,7 +73,8 @@ export function validateStarterManifest(raw: unknown): string[] {
 
 /**
  * Parse a raw manifest into its usable entries, silently dropping any that
- * fail validation so one bad row can never break the New Project dialog.
+ * fail validation or repeat an earlier id, so one bad row can never break the
+ * New Project dialog.
  *
  * @param raw The parsed manifest JSON.
  *
@@ -82,10 +83,16 @@ export function validateStarterManifest(raw: unknown): string[] {
 export function parseStarterManifest(raw: unknown): StarterProject[] {
   const examples = (raw as { examples?: unknown } | null)?.examples;
   if (!Array.isArray(examples)) return [];
-  return examples.filter(
-    (entry: unknown): entry is StarterProject =>
-      validateStarterManifest({ examples: [entry] }).length === 0,
-  );
+  // Validate each entry on its own, then drop later repeats of an id: the
+  // duplicate check in validateStarterManifest only sees across one array.
+  const seenIds = new Set<string>();
+  return examples.filter((entry: unknown): entry is StarterProject => {
+    if (validateStarterManifest({ examples: [entry] }).length > 0) return false;
+    const { id } = entry as StarterProject;
+    if (seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
 }
 
 /** The bundled starter projects. */

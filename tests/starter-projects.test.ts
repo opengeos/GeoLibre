@@ -84,4 +84,17 @@ describe("parseStarterManifest", () => {
     );
     assert.deepEqual(parseStarterManifest("nope"), []);
   });
+
+  it("keeps only the first entry for a repeated id", () => {
+    const parsed = parseStarterManifest({
+      examples: [valid, { ...valid, title: "Copy" }, { ...valid, id: "other" }],
+    });
+    assert.deepEqual(
+      parsed.map((p) => [p.id, p.title]),
+      [
+        ["demo", "Demo"],
+        ["other", "Demo"],
+      ],
+    );
+  });
 });
