@@ -8,10 +8,13 @@ import {
 } from "@geolibre/ui";
 import { useTranslation } from "react-i18next";
 import type { ProjectHistorySnapshot } from "../../lib/project-history-store";
+import { autosavePausedMessage } from "../../lib/autosave-status";
 
 interface ProjectHistoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** True while autosave is skipping snapshots because the project is too large. */
+  autosavePaused?: boolean;
   snapshots: ProjectHistorySnapshot[];
   restoreError: string | null;
   onRestore: (snapshot: ProjectHistorySnapshot) => boolean;
@@ -20,6 +23,7 @@ interface ProjectHistoryDialogProps {
 export function ProjectHistoryDialog({
   open,
   onOpenChange,
+  autosavePaused = false,
   snapshots,
   restoreError,
   onRestore,
@@ -33,6 +37,14 @@ export function ProjectHistoryDialog({
           <DialogDescription>{t("projectHistory.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
+          {autosavePaused ? (
+            <p
+              role="status"
+              className="rounded-md border border-amber-500/50 p-3 text-sm text-amber-700 dark:text-amber-300"
+            >
+              {autosavePausedMessage(t, i18n.language)}
+            </p>
+          ) : null}
           {restoreError ? (
             <p
               role="alert"

@@ -11,9 +11,10 @@ import {
   normalizeCoordinateFormat,
 } from "../../lib/coordinate-format";
 import { cn } from "@geolibre/ui";
-import { Bug } from "lucide-react";
+import { Bug, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatAccuracy, formatSpeedKmh } from "../../lib/gps-tracking";
+import { autosavePausedMessage } from "../../lib/autosave-status";
 
 /**
  * Ground elevation for the readout, in the scale bar's unit family: feet for
@@ -29,6 +30,8 @@ export function formatPointerElevation(meters: number, unit: MapScaleUnit): stri
 }
 
 interface StatusBarProps {
+  /** True while autosave is skipping snapshots because the project is too large. */
+  autosavePaused?: boolean;
   compact?: boolean;
   diagnosticsErrorCount: number;
   diagnosticsWarningCount: number;
@@ -36,12 +39,13 @@ interface StatusBarProps {
 }
 
 export function StatusBar({
+  autosavePaused = false,
   compact = false,
   diagnosticsErrorCount,
   diagnosticsWarningCount,
   onOpenDiagnostics,
 }: StatusBarProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const pointerCoords = useAppStore((s) => s.pointerCoords);
   const pointerElevation = useAppStore((s) => s.pointerElevation);
   const cameraAltitude = useAppStore((s) => s.cameraAltitude);
@@ -139,11 +143,21 @@ export function StatusBar({
       <span className="shrink-0">Bearing: {mapView.bearing.toFixed(1)}°</span>
       <span className="shrink-0">Pitch: {mapView.pitch.toFixed(1)}°</span>
       {compact ? null : <span className="min-w-0 flex-1 truncate">BBox: {bboxText}</span>}
+      {autosavePaused ? (
+        <span
+          role="status"
+          className="ms-auto inline-flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-300"
+          title={autosavePausedMessage(t, i18n.language)}
+        >
+          <TriangleAlert className="h-3 w-3" />
+          {t("statusBar.autosavePaused")}
+        </span>
+      ) : null}
       <button
         type="button"
         className={cn(
           "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground",
-          "ms-auto",
+          !autosavePaused && "ms-auto",
           diagnosticsErrorCount > 0 && "text-red-700 dark:text-red-300",
           diagnosticsErrorCount === 0 &&
             diagnosticsWarningCount > 0 &&

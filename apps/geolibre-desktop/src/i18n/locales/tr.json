@@ -8,7 +8,8 @@
     "discard": "Sil",
     "restoreError": "Bu anlık görüntü geri yüklenemedi. Bozulmuş ya da bu GeoLibre sürümüyle uyumsuz olabilir.",
     "recoveryTitle": "Kaydedilmemiş çalışma kurtarılsın mı?",
-    "recoveryDescription": "GeoLibre düzgün şekilde kapanmadı. \"{{name}}\" için daha yeni bir otomatik kayıt mevcut."
+    "recoveryDescription": "GeoLibre düzgün şekilde kapanmadı. \"{{name}}\" için daha yeni bir otomatik kayıt mevcut.",
+    "autosavePaused": "Otomatik kaydetme duraklatıldı: bu proje {{limit}} MB'tan büyük olduğu için yeni anlık görüntüler saklanmıyor. Çalışmanızı korumak için projeyi diske kaydedin."
   },
   "browser": {
     "title": "Gözatıcı",
@@ -203,7 +204,8 @@
       "ddm": "Derece, ondalık dakika",
       "utm": "UTM (dilim, doğu/kuzey)"
     },
-    "coordinateFormatHint": "Koordinat biçimi: {{format}}. Değiştirmek için tıklayın."
+    "coordinateFormatHint": "Koordinat biçimi: {{format}}. Değiştirmek için tıklayın.",
+    "autosavePaused": "Otomatik kaydetme duraklatıldı"
   },
   "fileNamePrompt": {
     "title": "Dosyayı farklı kaydet",

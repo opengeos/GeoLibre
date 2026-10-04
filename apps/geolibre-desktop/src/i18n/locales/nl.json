@@ -8,7 +8,8 @@
     "discard": "Weggooien",
     "restoreError": "Deze momentopname kon niet worden hersteld. Mogelijk is ze beschadigd of niet compatibel met deze versie van GeoLibre.",
     "recoveryTitle": "Niet-opgeslagen werk herstellen?",
-    "recoveryDescription": "GeoLibre is niet netjes afgesloten. Er is een nieuwere automatische opslag van \"{{name}}\" beschikbaar."
+    "recoveryDescription": "GeoLibre is niet netjes afgesloten. Er is een nieuwere automatische opslag van \"{{name}}\" beschikbaar.",
+    "autosavePaused": "Automatisch opslaan is gepauzeerd: dit project is groter dan {{limit}} MB, dus er worden geen nieuwe momentopnamen bewaard. Sla het op schijf op om uw werk te behouden."
   },
   "browser": {
     "title": "Browser",
@@ -203,7 +204,8 @@
       "ddm": "Graden, decimale minuten",
       "utm": "UTM (zone, oost/noord)"
     },
-    "coordinateFormatHint": "Coördinaatformaat: {{format}}. Klik om te wisselen."
+    "coordinateFormatHint": "Coördinaatformaat: {{format}}. Klik om te wisselen.",
+    "autosavePaused": "Automatisch opslaan gepauzeerd"
   },
   "fileNamePrompt": {
     "title": "Bestand opslaan als",

@@ -8,7 +8,8 @@
     "discard": "Discard",
     "restoreError": "Could not restore this snapshot. It may be damaged or incompatible with this GeoLibre version.",
     "recoveryTitle": "Recover unsaved work?",
-    "recoveryDescription": "GeoLibre did not close cleanly. A newer autosave of “{{name}}” is available."
+    "recoveryDescription": "GeoLibre did not close cleanly. A newer autosave of “{{name}}” is available.",
+    "autosavePaused": "Autosave is paused: this project is larger than {{limit}} MB, so no new snapshots are being kept. Save it to disk to keep your work."
   },
   "browser": {
     "title": "Browser",
@@ -212,7 +213,8 @@
       "ddm": "Degrees, decimal minutes",
       "utm": "UTM (zone, easting/northing)"
     },
-    "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch."
+    "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch.",
+    "autosavePaused": "Autosave paused"
   },
   "fileNamePrompt": {
     "title": "Save file as",

@@ -8,7 +8,8 @@
     "discard": "Descartar",
     "restoreError": "No se pudo restaurar esta instantánea. Puede estar dañada o ser incompatible con esta versión de GeoLibre.",
     "recoveryTitle": "¿Recuperar el trabajo sin guardar?",
-    "recoveryDescription": "GeoLibre no se cerró correctamente. Hay disponible un autoguardado más reciente de «{{name}}»."
+    "recoveryDescription": "GeoLibre no se cerró correctamente. Hay disponible un autoguardado más reciente de «{{name}}».",
+    "autosavePaused": "El autoguardado está en pausa: este proyecto supera los {{limit}} MB, por lo que no se conservan instantáneas nuevas. Guárdelo en el disco para conservar su trabajo."
   },
   "browser": {
     "title": "Explorador",
@@ -203,7 +204,8 @@
       "ddm": "Grados, minutos decimales",
       "utm": "UTM (huso, este/norte)"
     },
-    "coordinateFormatHint": "Formato de coordenadas: {{format}}. Haga clic para cambiar."
+    "coordinateFormatHint": "Formato de coordenadas: {{format}}. Haga clic para cambiar.",
+    "autosavePaused": "Autoguardado en pausa"
   },
   "fileNamePrompt": {
     "title": "Guardar archivo como",

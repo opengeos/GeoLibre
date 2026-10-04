@@ -8,7 +8,8 @@
     "discard": "Sil",
     "restoreError": "Bu anlıq görüntünü bərpa etmək mümkün olmadı. O, zədələnmiş və ya GeoLibre-nin bu versiyası ilə uyğun olmaya bilər.",
     "recoveryTitle": "Yadda saxlanmamış işi bərpa edək?",
-    "recoveryDescription": "GeoLibre düzgün bağlanmayıb. “{{name}}” üçün daha yeni avtomatik saxlanmış nüsxə mövcuddur."
+    "recoveryDescription": "GeoLibre düzgün bağlanmayıb. “{{name}}” üçün daha yeni avtomatik saxlanmış nüsxə mövcuddur.",
+    "autosavePaused": "Avtomatik saxlama dayandırılıb: bu layihə {{limit}} MB-dan böyükdür, ona görə yeni anlıq görüntülər saxlanılmır. İşinizi qorumaq üçün onu diskə saxlayın."
   },
   "browser": {
     "title": "Bələdçi",
@@ -203,7 +204,8 @@
       "ddm": "Dərəcə, onluq dəqiqə",
       "utm": "UTM (zona, şərq/şimal koordinatı)"
     },
-    "coordinateFormatHint": "Koordinat formatı: {{format}}. Dəyişmək üçün klikləyin."
+    "coordinateFormatHint": "Koordinat formatı: {{format}}. Dəyişmək üçün klikləyin.",
+    "autosavePaused": "Avtomatik saxlama dayandırılıb"
   },
   "fileNamePrompt": {
     "title": "Faylı bu adla yadda saxla",
