@@ -884,6 +884,8 @@ function applyStyleProps(activeMap: MapLibreMap): void {
     settings.lineWidth * 2,
     "square",
     settings.lineWidth * 1.5,
+    "10km",
+    settings.lineWidth,
     "1km",
     settings.lineWidth * 0.75,
     settings.lineWidth,
