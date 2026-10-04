@@ -23,6 +23,11 @@ export type PaletteRow = PaletteGroupRow | PaletteCommandRow;
  * as "reclass" (an exact Whitebox match, then a Processing prefix match, then
  * more Whitebox prefix matches) would show the Whitebox heading twice.
  *
+ * The palette's contract is therefore group-first: one heading per group wins
+ * over strict global rank. A group's lower-ranked matches stay with it, so they
+ * can precede a better match from a later group; the overall best match is
+ * always first, and so remains the default Enter target.
+ *
  * @param commands - Commands in ranked order.
  * @returns The same commands, stably grouped.
  */

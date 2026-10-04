@@ -299,6 +299,27 @@ describe("groupRankedCommands", () => {
     );
   });
 
+  it("is group-first: a group's prefix match stays ahead of a later group's exact match", () => {
+    const ranked = filterCommands(
+      [
+        command("wb.exact", "Whitebox", "Slope"),
+        command("proc.exact", "Processing", "Slope"),
+        command("wb.prefix", "Whitebox", "Slope Vs Aspect Plot"),
+      ],
+      "slope",
+    );
+    // Global rank: both exact matches, then the prefix match.
+    assert.deepEqual(
+      ranked.map((entry) => entry.id),
+      ["wb.exact", "proc.exact", "wb.prefix"],
+    );
+    // Grouped: the best match is still first, each group renders once.
+    assert.deepEqual(
+      groupRankedCommands(ranked).map((entry) => entry.id),
+      ["wb.exact", "wb.prefix", "proc.exact"],
+    );
+  });
+
   it("renders the Whitebox heading once for a query spanning rank tiers", () => {
     const fixed = fixedRegistryIds().map((id) =>
       command(id, "Processing", id === "proc.raster.reclassify" ? "Reclassify" : id),

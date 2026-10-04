@@ -92,7 +92,10 @@ export function usePaletteCommands({
 
   // The registry ids are stable across renders even though `commands` is not,
   // so key the (expensive) tool list on them rather than on the array.
-  const existingIdsKey = commands.map((command) => command.id).join("\n");
+  const existingIdsKey = useMemo(
+    () => commands.map((command) => command.id).join("\n"),
+    [commands],
+  );
   const allTools = useMemo(() => {
     if (!toolsModule) return [];
     return toolsModule.buildPaletteToolCommands({
