@@ -22,7 +22,7 @@ import {
   buildPaletteToolCommands,
   type PaletteToolContext,
 } from "../apps/geolibre-desktop/src/lib/palette-tools";
-import { paletteRows } from "../apps/geolibre-desktop/src/lib/palette-rows";
+import { groupRankedCommands, paletteRows } from "../apps/geolibre-desktop/src/lib/palette-rows";
 import { WHITEBOX_MENU_CATALOG } from "../apps/geolibre-desktop/src/lib/whitebox-menu-catalog";
 
 const noop = () => {};
@@ -281,6 +281,34 @@ describe("command-profile-gates", () => {
       ),
       ["proc.sql"],
     );
+  });
+});
+
+describe("groupRankedCommands", () => {
+  it("keeps each group in one section, ordered by its best match", () => {
+    const grouped = groupRankedCommands([
+      command("a", "Whitebox"),
+      command("b", "Processing"),
+      command("c", "Whitebox"),
+      command("d", "Tools"),
+      command("e", "Processing"),
+    ]);
+    assert.deepEqual(
+      grouped.map((entry) => entry.id),
+      ["a", "c", "b", "e", "d"],
+    );
+  });
+
+  it("renders the Whitebox heading once for a query spanning rank tiers", () => {
+    const fixed = fixedRegistryIds().map((id) =>
+      command(id, "Processing", id === "proc.raster.reclassify" ? "Reclassify" : id),
+    );
+    const { context } = toolContext(fixedRegistryIds());
+    const ranked = filterCommands([...fixed, ...buildPaletteToolCommands(context)], "reclass");
+    const headings = paletteRows(groupRankedCommands(ranked))
+      .rows.filter((row) => row.kind === "group")
+      .map((row) => (row.kind === "group" ? row.label : ""));
+    assert.equal(new Set(headings).size, headings.length, headings.join(", "));
   });
 });
 

@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { type Command, filterCommands, formatShortcut, isMacPlatform } from "../../lib/commands";
-import { paletteRows } from "../../lib/palette-rows";
+import { groupRankedCommands, paletteRows } from "../../lib/palette-rows";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -57,7 +57,7 @@ export function CommandPalette({
     [commands, searchOnlyCommands],
   );
   const filtered = useMemo(
-    () => (query.trim() ? filterCommands(searchable, query) : commands),
+    () => (query.trim() ? groupRankedCommands(filterCommands(searchable, query)) : commands),
     [commands, searchable, query],
   );
   const activeCommand = filtered[activeIndex];
