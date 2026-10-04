@@ -644,6 +644,22 @@ describe("CesiumEngine terrain correction", () => {
     }
   });
 
+  it("keeps correcting while a layer fit waits for a flight that never starts", () => {
+    // A layer with no bounds in the store hands its fit to the layer sync, which
+    // flies only once the layer's Cesium object loads. Until it does, the
+    // camera is still on its placement and terrain must still correct it.
+    const fakes = makeViewer(0);
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView(VIEW);
+    engine.fitLayer({ id: "not-loaded-yet", type: "3d-tiles", source: {}, metadata: {} } as never);
+    assert.equal(fakes.flights.length, 0, "nothing to fly to yet");
+    const placements = fakes.placements;
+    fakes.setGroundHeight(1200);
+    fakes.tileLoadProgressEvent.emit(0);
+    assert.equal(fakes.placements, placements + 1, "the placement is still corrected");
+    engine.destroy();
+  });
+
   it("corrects again once a new placement replaces the flight", () => {
     const fakes = makeViewer(0);
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);

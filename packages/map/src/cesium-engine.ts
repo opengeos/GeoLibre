@@ -388,6 +388,7 @@ export class CesiumEngine implements MapEngine {
     const onDiagnostic = options.onDiagnostic;
     this.layerSync = new CesiumLayerSync(Cesium, viewer, undefined, {
       onTilesetFields: publishTilesetFields,
+      onFlyTo: () => this.supersedePlacement(),
       onLayerError: ({ layerId, layerName, message }) =>
         onDiagnostic?.({ message: `${layerName}: ${message}`, source: "cesium", layerId }),
       onTileFailure: ({ layerId, layerName, message, status, loaded, failed }) =>
@@ -602,8 +603,8 @@ export class CesiumEngine implements MapEngine {
     // An Ion asset, a tileset by URL, CZML and KML keep no bounds in the store:
     // their extent belongs to the Cesium object the sync loads. Hand the fit
     // over, including for a layer added a moment ago whose object is still
-    // loading — the sync flies as soon as it has one.
-    this.supersedePlacement();
+    // loading — the sync flies as soon as it has one, and reports that flight
+    // through `onFlyTo`.
     this.layerSync.zoomToLayer(layer.id);
   }
 

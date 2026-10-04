@@ -2,8 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   dropGeoJsonOnShell,
   layerRow,
-  readStatusZoom,
   setViewAndSettle,
+  waitForSettledZoom,
   waitForSettledZoomNear,
 } from "./helpers";
 
@@ -145,18 +145,7 @@ for (const engine of ENGINES) {
     // Adding the layer flies to it, and the camera comes to rest there rather
     // than back at the seed view. The globe's terrain correction used to pull
     // the flight back to the seed mid-air (#2878).
-    let previous = NaN;
-    await expect
-      .poll(
-        async () => {
-          const now = await readStatusZoom(page);
-          const settled = now > seeded + 1 && now === previous;
-          previous = now;
-          return settled;
-        },
-        { timeout: 60_000, intervals: [500] },
-      )
-      .toBe(true);
+    await waitForSettledZoom(page, (zoom) => zoom > seeded + 1);
     // Then a Set View to the layer's centre lands too: the same pull-back
     // refused it on the globe (#2878).
     await setViewAndSettle(page, -97.5, 37.5, 4);

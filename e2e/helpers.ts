@@ -261,12 +261,27 @@ export async function readStatusZoom(page: Page): Promise<number> {
  * @returns The settled zoom.
  */
 export async function waitForSettledZoomNear(page: Page, zoom: number): Promise<number> {
+  return waitForSettledZoom(page, (now) => Math.abs(now - zoom) < 0.5);
+}
+
+/**
+ * Waits until the status bar reports a settled camera whose zoom satisfies
+ * `accept`, and returns that zoom. Settled means two equal reads in a row.
+ *
+ * @param page - The page whose status bar to read.
+ * @param accept - Whether a zoom is the one being waited for.
+ * @returns The settled zoom.
+ */
+export async function waitForSettledZoom(
+  page: Page,
+  accept: (zoom: number) => boolean,
+): Promise<number> {
   let previous = NaN;
   await expect
     .poll(
       async () => {
         const now = await readStatusZoom(page);
-        const settled = Math.abs(now - zoom) < 0.5 && now === previous;
+        const settled = accept(now) && now === previous;
         previous = now;
         return settled;
       },
