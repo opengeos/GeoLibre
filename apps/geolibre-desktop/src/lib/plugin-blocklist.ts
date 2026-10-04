@@ -12,7 +12,7 @@
 // one with a hash blocks only that bundle (checked where URL bundles are
 // hashed). Bundled drop-ins are never blocked: the deployment ships them.
 
-import { resolveRegistryUrl } from "./plugin-registry";
+import { readBodyWithCap, resolveRegistryUrl } from "./plugin-registry";
 
 export interface PluginBlocklistEntry {
   id: string;
@@ -80,6 +80,11 @@ export function setPluginBlocklist(entries: readonly PluginBlocklistEntry[]): vo
   }
 }
 
+/** Whether any plugin or bundle is blocked at all. */
+export function hasPluginBlocklistEntries(): boolean {
+  return blockedPlugins.size > 0 || blockedBundles.size > 0;
+}
+
 /** The entry blocking every version of a plugin, if any. */
 export function getBlocklistedPlugin(id: string): PluginBlocklistEntry | undefined {
   return blockedPlugins.get(id);
@@ -129,9 +134,7 @@ async function fetchBlocklist(url: string): Promise<unknown> {
   // A registry without a blocklist answers 404: nothing is blocked.
   if (response.status === 404) return { blocked: [] };
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const text = await response.text();
-  if (text.length > MAX_BYTES) throw new Error("blocklist too large");
-  return JSON.parse(text) as unknown;
+  return JSON.parse(await readBodyWithCap(response, MAX_BYTES, "plugin blocklist")) as unknown;
 }
 
 /**
@@ -164,6 +167,20 @@ export async function loadPluginBlocklist(registryUrl: string): Promise<void> {
  * loading awaits this, so a blocked plugin is refused from the first launch.
  */
 export function ensurePluginBlocklistLoaded(): Promise<void> {
-  loadPromise ??= loadPluginBlocklist(resolveRegistryUrl());
+  loadPromise ??= (async () => {
+    // Like every other failure here, a registry URL that can't be resolved
+    // (outside a Vite build, for one) means nothing is blocked.
+    let registryUrl: string;
+    try {
+      registryUrl = resolveRegistryUrl();
+    } catch (error) {
+      console.warn(
+        "[GeoLibre] Could not resolve the plugin registry URL for the blocklist.",
+        error,
+      );
+      return;
+    }
+    await loadPluginBlocklist(registryUrl);
+  })();
   return loadPromise;
 }

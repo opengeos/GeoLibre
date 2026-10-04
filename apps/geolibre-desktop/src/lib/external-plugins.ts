@@ -32,7 +32,7 @@ import {
   removePluginBundlePin,
   verifyPluginBundleIntegrity,
 } from "./plugin-integrity";
-import { getBlocklistedBundle } from "./plugin-blocklist";
+import { ensurePluginBlocklistLoaded, getBlocklistedBundle } from "./plugin-blocklist";
 import { isTauri } from "./tauri-io";
 import type { DeploymentPolicy } from "./deployment-policy";
 import { getDeploymentPolicy } from "./deployment-env";
@@ -356,10 +356,8 @@ async function loadPluginUrlBundles(
         try {
           // A bundle the registry's blocklist names is never executed, whatever
           // the pin says (a whole-plugin block was already refused by policy).
-          const blocklisted = getBlocklistedBundle(
-            bundle.manifest.id,
-            await computePluginBundleHash(bundle),
-          );
+          const bundleHash = await computePluginBundleHash(bundle);
+          const blocklisted = getBlocklistedBundle(bundle.manifest.id, bundleHash);
           if (blocklisted) {
             issues.push({
               archiveName: bundle.archiveName,
@@ -374,6 +372,7 @@ async function loadPluginUrlBundles(
             manifestUrls[index],
             bundle,
             bundle.manifest.version,
+            bundleHash,
           );
           if (integrity.status === "changed") {
             const heldBack: HeldBackPluginBundle = {
@@ -681,6 +680,8 @@ export async function installWebPluginArchive(
   app: GeoLibreAppAPI,
   policy: DeploymentPolicy | null = getDeploymentPolicy(),
 ): Promise<string> {
+  // The blocklist check below must not run against a list still loading.
+  await ensurePluginBlocklistLoaded();
   if (policy?.plugins?.sideload === false) {
     enforcePluginPolicy("", "zip", policy, fileName);
   }

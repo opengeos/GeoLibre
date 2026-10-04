@@ -118,6 +118,23 @@ describe("plugin blocklist", () => {
     assert.equal(getBlocklistedPlugin("stale"), undefined);
   });
 
+  it("rejects an oversized blocklist while streaming it", async () => {
+    // A chunked body with no Content-Length, well over the 1 MB cap.
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent > 4 * 1024 * 1024) return controller.close();
+        sent += 256 * 1024;
+        controller.enqueue(new Uint8Array(256 * 1024).fill(32));
+      },
+    });
+    globalThis.fetch = (() => Promise.resolve(new Response(stream))) as typeof fetch;
+    await loadPluginBlocklist(REGISTRY);
+    assert.equal(evaluatePlugin("anything", "registry", null).allowed, true);
+    assert.match(String((warnings[0] as unknown[])[1]), /exceeds the 1 MB size limit/);
+    assert.ok(sent < 4 * 1024 * 1024, "stopped reading early");
+  });
+
   it("fails open when it can't be fetched and nothing is cached", async () => {
     respondWith("{ not json", 200);
     await loadPluginBlocklist(REGISTRY);
