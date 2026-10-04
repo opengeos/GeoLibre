@@ -91,6 +91,16 @@ describe("notify", () => {
     assert.equal(visible()[0].count, 2);
   });
 
+  it("renders a repeat that escalates severity as the new kind", () => {
+    notify.warning("retrying", { dedupeKey: "job" });
+    notify.error("gave up", { dedupeKey: "job" });
+    assert.equal(visible().length, 1);
+    assert.equal(visible()[0].kind, "error");
+    assert.equal(visible()[0].durationMs, null);
+    mock.timers.tick(60_000);
+    assert.equal(visible().length, 1, "the escalated toast persists like an error");
+  });
+
   it("caps the visible count, evicting the oldest non-error first", () => {
     notify.error("first error");
     for (let index = 0; index < MAX_VISIBLE_NOTIFICATIONS; index += 1) {

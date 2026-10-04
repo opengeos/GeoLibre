@@ -46,7 +46,7 @@ export interface NotifyOptions {
    * the map engine's own entry). An error notification then links to it
    * instead of writing a second record.
    */
-  diagnostic?: DiagnosticRecord | null;
+  diagnostic?: DiagnosticRecord;
 }
 
 export interface AppNotification {
@@ -154,6 +154,8 @@ function push(kind: NotificationKind, message: string, options: NotifyOptions = 
   if (existing) {
     updated = {
       ...existing,
+      // A repeat can escalate (warning -> error); render it as the latest kind.
+      kind,
       message,
       description: options.description,
       action: options.action ?? existing.action,

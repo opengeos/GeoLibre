@@ -483,7 +483,7 @@ export function DesktopShell({
       notify.error(t("notifications.layerLoadFailed", { name: layer.name }), {
         description: t("notifications.layerLoadFailedHint"),
         dedupeKey: `map-layer:${layer.id}`,
-        diagnostic: record,
+        diagnostic: record ?? undefined,
       });
     },
     [t],

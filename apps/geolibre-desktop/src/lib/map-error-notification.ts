@@ -37,7 +37,13 @@ export function layerForMapSource(
  * The engine records the tile coordinates in the event detail when it has them.
  */
 function isTileFailure(event: MapDiagnosticEvent): boolean {
-  return typeof event.detail === "string" && event.detail.includes('"tile":');
+  if (typeof event.detail !== "string") return false;
+  try {
+    const parsed: unknown = JSON.parse(event.detail);
+    return typeof parsed === "object" && parsed !== null && "tile" in parsed;
+  } catch {
+    return false;
+  }
 }
 
 /**

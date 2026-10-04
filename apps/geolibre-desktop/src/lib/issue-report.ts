@@ -70,16 +70,19 @@ const HOME_DIRECTORY = /(\/home\/|\/Users\/|[A-Za-z]:\\Users\\)[^/\\\s"'<>]+/g;
 
 function scrubUrl(raw: string): string {
   // Already scrubbed (the match stops before the marker's closing bracket).
-  if (raw.endsWith(`?${REDACTED.slice(0, -1)}`)) return raw;
+  const marker = REDACTED.slice(0, -1);
+  if (raw.endsWith(`?${marker}`) || raw.endsWith(`#${marker}`)) return raw;
   let url = raw;
   const fragment = url.indexOf("#");
   const query = url.indexOf("?");
   const cut = [fragment, query].filter((index) => index !== -1);
-  const hadQuery = cut.length > 0;
-  if (hadQuery) url = url.slice(0, Math.min(...cut));
+  // Keep the URL's shape: a fragment-only URL is marked with `#`, not `?`.
+  const separator = query !== -1 && (fragment === -1 || query < fragment) ? "?" : "#";
+  const hadSuffix = cut.length > 0;
+  if (hadSuffix) url = url.slice(0, Math.min(...cut));
   // userinfo (`user:password@host`)
   url = url.replace(/^([a-z][\w+.-]*:\/\/)[^/@]*@/i, "$1");
-  return hadQuery ? `${url}?${REDACTED}` : url;
+  return hadSuffix ? `${url}${separator}${REDACTED}` : url;
 }
 
 /**

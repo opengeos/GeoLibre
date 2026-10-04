@@ -75,6 +75,17 @@ describe("scrubForIssueReport", () => {
     assert.equal(scrubForIssueReport("/Users/carol/x.gpkg"), "~/x.gpkg");
   });
 
+  it("marks a fragment-only URL with # rather than a synthetic query", () => {
+    assert.equal(
+      scrubForIssueReport("https://x.test/path#secretToken"),
+      "https://x.test/path#[REDACTED]",
+    );
+    assert.equal(
+      scrubForIssueReport("https://x.test/path#[REDACTED]"),
+      "https://x.test/path#[REDACTED]",
+    );
+  });
+
   it("is idempotent", () => {
     const once = scrubForIssueReport("token=abc https://x.test/a?key=1");
     assert.equal(scrubForIssueReport(once), once);
