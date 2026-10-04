@@ -42,6 +42,7 @@ import {
 } from "../../hooks/usePlugins";
 import type { DataUrlLoadState } from "../../hooks/useDataUrlLoader";
 import { wikipediaLang } from "../../lib/knowledge";
+import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { projectUrlFromLocation } from "../../lib/project-url";
 import { useEmbedBridge } from "../../hooks/useEmbedBridge";
 import { useRasterIdentify } from "../../hooks/useRasterIdentify";
@@ -232,6 +233,15 @@ export function DesktopShell({
     confirmKnowledgeConsent,
     handleKnowledgeFlyTo,
   } = useKnowledgeCard(mapControllerRef);
+  // The Line of Sight panel and the knowledge card share the map's bottom
+  // corner, so opening either closes the other rather than stacking them.
+  const lineOfSightRequest = useLineOfSightTool((s) => s.request);
+  useEffect(() => {
+    if (lineOfSightRequest > 0) setKnowledgePlace(null);
+  }, [lineOfSightRequest, setKnowledgePlace]);
+  useEffect(() => {
+    if (knowledgePlace) useLineOfSightTool.getState().closeLineOfSight();
+  }, [knowledgePlace]);
   const [rasterSubsetLayer, setRasterSubsetLayer] = useRasterSubsetLayer();
   // The Offline Basemap Extract panel is a non-modal floating panel over the
   // map (so the map stays interactive for drawing a bbox), mounted here beside

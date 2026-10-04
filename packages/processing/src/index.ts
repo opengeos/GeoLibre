@@ -365,6 +365,7 @@ export {
   DEFAULT_LOS_TARGET_HEIGHT_METERS,
   DEFAULT_REFRACTION_COEFFICIENT,
   MAX_LINE_OF_SIGHT_METERS,
+  MIN_LINE_OF_SIGHT_METERS,
   type LineOfSightOptions,
   type LineOfSightProfile,
   type LineOfSightResult,

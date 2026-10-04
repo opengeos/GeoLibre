@@ -47,6 +47,8 @@ export const DEFAULT_LOS_OBSERVER_HEIGHT_METERS = 1.7;
 /** Default target height above the ground -- a point on the ground. */
 export const DEFAULT_LOS_TARGET_HEIGHT_METERS = 0;
 
+/** Shortest path a line of sight takes; anything shorter has no profile to read. */
+export const MIN_LINE_OF_SIGHT_METERS = 1;
 /** Longest path one line of sight may span, so one click cannot fetch a continent. */
 export const MAX_LINE_OF_SIGHT_METERS = 300_000;
 /** Most profile samples one line of sight takes. */
@@ -527,7 +529,12 @@ export async function fetchLineOfSightProfile(
 ): Promise<LineOfSightProfile | null> {
   const { from, to, signal, tileUrl = TERRARIUM_TILE_URL } = options;
   const total = greatCircleDistance(from, to);
-  if (!Number.isFinite(total) || total < 1 || total > MAX_LINE_OF_SIGHT_METERS) return null;
+  if (
+    !Number.isFinite(total) ||
+    total < MIN_LINE_OF_SIGHT_METERS ||
+    total > MAX_LINE_OF_SIGHT_METERS
+  )
+    return null;
   // Web Mercator tiles stop at ~85 degrees.
   if (Math.abs(from.lat) > 85 || Math.abs(to.lat) > 85) return null;
 

@@ -7,6 +7,7 @@ import {
   fetchLineOfSightProfile,
   greatCircleDistance,
   MAX_LINE_OF_SIGHT_METERS,
+  MIN_LINE_OF_SIGHT_METERS,
   type LineOfSightPoint,
   type LineOfSightProfile,
   type LineOfSightResult,
@@ -172,6 +173,9 @@ function LineOfSightTool({
       const point = { lng: event.lngLat.lng, lat: event.lngLat.lat };
       const current = placementRef.current;
       if (current.observer && !current.target) {
+        // A second click on (nearly) the observer is a slip, not a target: a
+        // line under a metre has no profile to read.
+        if (greatCircleDistance(current.observer, point) < MIN_LINE_OF_SIGHT_METERS) return;
         setTarget(point);
       } else {
         setObserver(point);

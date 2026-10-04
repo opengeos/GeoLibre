@@ -74,6 +74,9 @@ export const CHART_MAX_POINTS = 400;
  */
 export function lineOfSightChartModel(result: LineOfSightResult) {
   const stride = Math.max(1, Math.ceil(result.samples.length / CHART_MAX_POINTS));
+  // The samples the summary names must survive thinning, or the chart's peak
+  // and obstruction marker could disagree with the numbers beside them.
+  const pinned = new Set([result.highestPoint.distance, result.firstObstruction?.distance]);
   const samples = result.samples.filter(
     (sample, index) =>
       Number.isFinite(sample.elevation) &&
@@ -81,7 +84,8 @@ export function lineOfSightChartModel(result: LineOfSightResult) {
       // visibility change so a short hidden run still shows.
       (index % stride === 0 ||
         index === result.samples.length - 1 ||
-        sample.visible !== result.samples[index - 1]?.visible),
+        sample.visible !== result.samples[index - 1]?.visible ||
+        pinned.has(sample.distance)),
   );
   const sightlines = samples.map((sample) => sample.sightline);
   const geometry = buildChartGeometry(

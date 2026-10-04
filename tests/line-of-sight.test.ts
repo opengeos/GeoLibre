@@ -286,6 +286,16 @@ describe("line-of-sight panel helpers", () => {
     assert.ok(chart.geometry.maxElevation >= 180);
     assert.equal(chart.sightline.split(" ").length, chart.samples.length);
   });
+
+  it("keeps a one-sample peak the thinning stride would skip", () => {
+    // 4001 samples thin to every 11th; sample 1005 is a lone 400 m spike.
+    const profile = profileNorth(4000, 4001, () => 100);
+    profile[1005].elevation = 400;
+    const result = computeLineOfSight(profile);
+    const chart = lineOfSightChartModel(result);
+    assert.equal(chart.geometry.maxElevation, 400);
+    assert.ok(chart.samples.some((sample) => sample.distance === result.highestPoint.distance));
+  });
 });
 
 describe("line-of-sight layer features", () => {
