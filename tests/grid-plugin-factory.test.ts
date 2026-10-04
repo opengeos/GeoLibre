@@ -172,16 +172,20 @@ const GRIDS: GridCase[] = [
 const BBOX: [number, number, number, number] = [10, 45, 10.5, 45.5];
 
 type Listener = (event?: unknown) => void;
+type FakeLayer = { id: string; type: string; layout?: Record<string, unknown> };
 
 /** A recording fake of the Style Spec surface the grid plugins drive. */
 function fakeMap() {
   const sources = new Map<string, { data?: unknown; setData: (data: unknown) => void }>();
-  const layers = new Map<string, { id: string; type: string }>();
+  const layers = new Map<string, FakeLayer>();
   const listeners = new Map<string, Set<Listener>>();
+  // The basemap's own symbol layers, which the grid borrows its label font from.
+  const basemapLayers: FakeLayer[] = [];
   const map = {
     sources,
     layers,
     listeners,
+    basemapLayers,
     fire: (event: string, payload?: unknown) => {
       for (const listener of [...(listeners.get(event) ?? [])]) listener(payload);
     },
@@ -190,8 +194,15 @@ function fakeMap() {
       listeners.get(event)!.add(listener);
     },
     off: (event: string, listener: Listener) => void listeners.get(event)?.delete(listener),
-    once: () => {},
-    getStyle: () => ({ layers: [] }),
+    once: (event: string, listener: Listener) => {
+      const wrapped: Listener = (payload) => {
+        listeners.get(event)?.delete(wrapped);
+        listener(payload);
+      };
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event)!.add(wrapped);
+    },
+    getStyle: () => ({ layers: [...basemapLayers, ...layers.values()] }),
     getZoom: () => 9,
     getBounds: () => ({
       getWest: () => BBOX[0],
@@ -205,11 +216,15 @@ function fakeMap() {
     },
     getSource: (id: string) => sources.get(id),
     removeSource: (id: string) => void sources.delete(id),
-    addLayer: (spec: { id: string; type: string }) => void layers.set(spec.id, spec),
+    addLayer: (spec: FakeLayer) =>
+      void layers.set(spec.id, { ...spec, layout: { ...spec.layout } }),
     getLayer: (id: string) => layers.get(id),
     removeLayer: (id: string) => void layers.delete(id),
     setPaintProperty: () => {},
-    setLayoutProperty: () => {},
+    setLayoutProperty: (id: string, name: string, value: unknown) => {
+      const layer = layers.get(id);
+      if (layer) layer.layout = { ...layer.layout, [name]: value };
+    },
     setLayerZoomRange: () => {},
   };
   return map;
@@ -217,11 +232,19 @@ function fakeMap() {
 
 function hostFor(map: ReturnType<typeof fakeMap>) {
   const panels: string[] = [];
+  const basemapListeners = new Set<(styleUrl: string) => void>();
   const host = {
     panels,
+    /** Reports a basemap change the way the app's store subscription does. */
+    changeBasemap: (styleUrl: string) => {
+      for (const listener of [...basemapListeners]) listener(styleUrl);
+    },
     getMap: () => map,
     getMapRenderer: () => "maplibre" as const,
-    onBasemapChange: () => () => {},
+    onBasemapChange: (listener: (styleUrl: string) => void) => {
+      basemapListeners.add(listener);
+      return () => void basemapListeners.delete(listener);
+    },
     registerRightPanel: (panel: { id: string }) => {
       panels.push(panel.id);
       return () => {};
@@ -309,6 +332,35 @@ for (const grid of GRIDS) {
       assert.equal(map.layers.size, 0);
       assert.equal(map.listeners.get("moveend")?.size ?? 0, 0);
       assert.equal(map.listeners.get("click")?.size ?? 0, 0);
+    });
+
+    it("re-points surviving labels at the new basemap's font", () => {
+      const map = fakeMap();
+      const host = hostFor(map);
+      const labelId = `geolibre-${grid.slug}-grid-label`;
+      map.basemapLayers.push({
+        id: "place-label",
+        type: "symbol",
+        layout: { "text-font": ["Montserrat Regular"] },
+      });
+      assert.notEqual(grid.plugin.activate(host), false);
+      try {
+        assert.deepEqual(map.layers.get(labelId)?.layout?.["text-font"], ["Montserrat Regular"]);
+        // A host that keeps plugin layers across a style swap (the ArcGIS
+        // shadow style) leaves the label layer in place while the basemap's
+        // fonts change underneath it.
+        map.basemapLayers.splice(0, 1, {
+          id: "place-label",
+          type: "symbol",
+          layout: { "text-font": ["Noto Sans Regular"] },
+        });
+        host.changeBasemap("https://example.com/other-style.json");
+        map.fire("idle");
+        assert.deepEqual(map.layers.get(labelId)?.layout?.["text-font"], ["Noto Sans Regular"]);
+      } finally {
+        grid.plugin.deactivate(host);
+        grid.plugin.applyProjectState?.(host, undefined);
+      }
     });
 
     it("round-trips project state in the persisted key order", () => {

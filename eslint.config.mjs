@@ -135,12 +135,7 @@ export default [
     // engines and is where a name legitimately maps to behaviour. An error, so
     // a new check either uses a capability or states why it is about the kind.
     files: ["apps/*/src/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}"],
-    ignores: [
-      "packages/map/**",
-      // The place-search camera branch moves with in-flight place-search work
-      // (#2858); annotate or convert it there.
-      "apps/geolibre-desktop/src/components/panels/LayerPanelPlaceSearch.tsx",
-    ],
+    ignores: ["packages/map/**"],
     rules: {
       "local/no-renderer-kind-checks": "error",
     },

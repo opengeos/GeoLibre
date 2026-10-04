@@ -398,10 +398,11 @@ export function LayerPanelPlaceSearch({
             type: "Point",
             coordinates: center,
           });
+          // Preserve the globe's existing instant placement. Its animated
+          // camera path differs in flat scene modes; search previously used
+          // the store's applyView path rather than a flight there.
+          // eslint-disable-next-line local/no-renderer-kind-checks -- the Cesium camera's flight path, not a capability, is why the globe jumps instead
           if (engine.kind === "cesium") {
-            // Preserve the globe's existing instant placement. Its animated
-            // camera path differs in flat scene modes; search previously used
-            // the store's applyView path rather than a flight there.
             const store = useAppStore.getState();
             store.setMapView({ center, zoom: Math.max(store.mapView.zoom, 12) });
           } else {

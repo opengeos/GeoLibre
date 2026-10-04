@@ -22,6 +22,8 @@ import type { createAppAPI } from "./usePlugins";
 /** Read-only tile query shared by MapLibre and Mapbox. */
 interface TileFeatureMap {
   querySourceFeatures(sourceId: string, options?: { sourceLayer?: string }): Feature[];
+  /** Present on both GL maps; optional so a bare query stub still type-checks. */
+  getSource?(sourceId: string): unknown;
   on(event: "idle", listener: () => void): unknown;
   off(event: "idle", listener: () => void): unknown;
 }
@@ -49,11 +51,33 @@ function sourceLayerOf(layer: GeoLibreLayer): string | undefined {
   return undefined;
 }
 
-function liveSourceId(layer: GeoLibreLayer): string {
+/**
+ * The id of the native source a layer's tiles load into on the live map.
+ *
+ * MapLibre adopts a control-owned source named on the record. Mapbox compiles
+ * a record into its own `geolibre-mapbox-<id>` source, except the rows a
+ * plugin control draws itself (Overture Maps' `overture-<theme>` archives),
+ * which the engine never compiles: when the map carries the source the record
+ * names, the control put it there and that is where the tiles are.
+ *
+ * @param map - The live map, asked whether the record's own source exists.
+ * @param layer - The vector-tile layer.
+ * @param renderer - The primary renderer's kind.
+ * @returns The source id to query.
+ */
+function liveSourceId(
+  map: Pick<TileFeatureMap, "getSource">,
+  layer: GeoLibreLayer,
+  renderer: string,
+): string {
   const externalSourceId = layer.source.sourceId;
-  return typeof externalSourceId === "string" && externalSourceId
-    ? externalSourceId
-    : sourceId(layer.id);
+  const external =
+    typeof externalSourceId === "string" && externalSourceId ? externalSourceId : null;
+  // eslint-disable-next-line local/no-renderer-kind-checks -- each engine names its sources its own way
+  if (renderer === "mapbox") {
+    return external && map.getSource?.(external) ? external : mapboxSourceId(layer.id);
+  }
+  return external ?? sourceId(layer.id);
 }
 
 /**
@@ -69,7 +93,7 @@ export function isVectorTileLayer(layer: GeoLibreLayer): boolean {
 
 /** A bounded sample of features currently loaded for a vector-tile layer. */
 export function loadedVectorTileFeatures(
-  map: Pick<TileFeatureMap, "querySourceFeatures">,
+  map: Pick<TileFeatureMap, "querySourceFeatures" | "getSource">,
   layer: GeoLibreLayer,
   renderer: string = "maplibre",
 ): Feature[] {
@@ -77,8 +101,7 @@ export function loadedVectorTileFeatures(
   try {
     return map
       .querySourceFeatures(
-        // eslint-disable-next-line local/no-renderer-kind-checks -- each engine names its sources its own way
-        renderer === "mapbox" ? mapboxSourceId(layer.id) : liveSourceId(layer),
+        liveSourceId(map, layer, renderer),
         sourceLayer ? { sourceLayer } : undefined,
       )
       .slice(0, 400);

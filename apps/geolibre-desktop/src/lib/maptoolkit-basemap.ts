@@ -54,3 +54,33 @@ export function isMaptoolkitBasemapActive(
     layers.some((layer) => layer.visible && layer.metadata?.basemapProvider === "maptoolkit")
   );
 }
+
+/** The slice of a map engine the Maptoolkit logo sync drives. */
+export interface MaptoolkitLogoEngine {
+  setBuiltInControlVisible(control: "maptoolkit-logo", visible: boolean): unknown;
+}
+
+/**
+ * Builds a function that gives each new map engine the Maptoolkit logo state.
+ *
+ * A renderer swap replaces the engine, and the new one starts without the
+ * logo. The logo's own sync reacts only when the Maptoolkit basemap's active
+ * state flips, which a swap does not do, and re-applying it on every map
+ * readiness bump would also fire on each basemap style load and clobber a
+ * manual toggle. So this applies the desired state once per engine instance:
+ * a fresh engine gets it, the same engine is left alone.
+ *
+ * @returns A function taking the live engine (or null) and the logo's desired
+ *   visibility, applying it when the engine has not received it yet.
+ */
+export function createMaptoolkitLogoEngineSync(): (
+  engine: MaptoolkitLogoEngine | null | undefined,
+  visible: boolean,
+) => void {
+  let synced: MaptoolkitLogoEngine | null = null;
+  return (engine, visible) => {
+    if (!engine || engine === synced) return;
+    synced = engine;
+    engine.setBuiltInControlVisible("maptoolkit-logo", visible);
+  };
+}
