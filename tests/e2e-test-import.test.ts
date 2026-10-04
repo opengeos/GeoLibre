@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const E2E_DIR = fileURLToPath(new URL("../e2e/", import.meta.url));
 
-/** A value import from `@playwright/test`: named, aliased or namespace. Type-only imports pass. */
+/**
+ * An import from `@playwright/test` that can bind a value: named, aliased or
+ * namespace. Only an `import type { ... }` declaration passes; an inline
+ * `import { type X }` is rejected too, and is written as `import type` instead.
+ */
 const DIRECT_IMPORT = /^\s*import\s+(?!type\b)[^;]*?\bfrom\s*["']@playwright\/test["']/m;
 
 // `e2e/test.ts` blanks a passing test's pages before Playwright disposes its
