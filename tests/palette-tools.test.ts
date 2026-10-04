@@ -243,6 +243,9 @@ describe("command-profile-gates", () => {
     });
     const visible = (id: string) => isCommandVisibleInProfile(hidden, id);
     assert.ok(!visible("view.zoom-in"));
+    // Their controls live outside the View menu, so hiding it keeps them.
+    assert.ok(visible("view.theme"));
+    assert.ok(visible("view.comments"));
     assert.ok(!visible("control.gps-tracking"));
     assert.ok(visible("control.field-collection"));
     assert.ok(!visible("help.diagnostics"));

@@ -103,6 +103,13 @@ const COMMAND_MENU_ITEMS: ReadonlyArray<readonly [string, string]> = [
   ["settings.style-manager", "settings.styleManager"],
 ];
 
+/**
+ * Commands whose real control lives outside any profile-hideable menu, so the
+ * profile never hides them: the theme toggle is a standalone toolbar button and
+ * the Comments panel is a sidebar rail, both rendered whatever the profile.
+ */
+const PROFILE_EXEMPT_COMMANDS: ReadonlySet<string> = new Set(["view.theme", "view.comments"]);
+
 const DATA_SOURCE_IDS: ReadonlySet<string> = new Set(DATA_SOURCE_CATALOG.map((entry) => entry.id));
 
 /**
@@ -156,7 +163,7 @@ export function commandMenuItem(id: string): string | undefined {
  *   source, or plugin.
  */
 export function isCommandVisibleInProfile(profile: UiProfileSettings, id: string): boolean {
-  if (!profile.enabled) return true;
+  if (!profile.enabled || PROFILE_EXEMPT_COMMANDS.has(id)) return true;
   const menu = COMMAND_MENU_PREFIXES.find(([prefix]) => id.startsWith(prefix))?.[1];
   if (menu && !isMenuVisible(profile, menu)) return false;
   if (id.startsWith("plugin.")) return isPluginVisible(profile, id.slice("plugin.".length));
