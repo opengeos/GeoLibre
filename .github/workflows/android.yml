@@ -61,6 +61,7 @@ jobs:
   build:
     name: Build Android APK (release)
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     # Elevated here (not workflow-level) so only this job can write release
     # assets; workflow_dispatch runs never attach but the grant is harmless.
     permissions:

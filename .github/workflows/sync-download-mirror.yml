@@ -35,6 +35,7 @@ jobs:
       (github.event.workflow_run.event == 'release' &&
        github.event.workflow_run.conclusion != 'cancelled')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DOWNLOADS_DEPLOY_KEY: ${{ secrets.DOWNLOADS_DEPLOY_KEY }}

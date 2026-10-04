@@ -36,6 +36,7 @@ jobs:
     # Forks have neither the deploy token nor a reason to publish.
     if: github.repository == 'opengeos/GeoLibre'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

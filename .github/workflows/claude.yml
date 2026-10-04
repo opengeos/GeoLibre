@@ -25,6 +25,7 @@ jobs:
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # This job only calls the REST API (via gh) and never checks out or reads
     # repository content, so it needs no repository scopes. The
     # collaborators/permission endpoint requires only metadata:read, which the
@@ -62,6 +63,7 @@ jobs:
     needs: check-access
     if: needs.check-access.outputs.trusted == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     # Least-privilege token. Each scope maps to a concrete operation the agent
     # performs, and this job only runs after check-access confirms the invoking
     # user already has push access. `id-token: write` is intentionally omitted:

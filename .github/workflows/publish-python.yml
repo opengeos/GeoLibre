@@ -24,6 +24,7 @@ jobs:
   test:
     name: Test Python package
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     strategy:
       matrix:
         # Cover the declared minimum (requires-python >= 3.11) and current
@@ -59,6 +60,7 @@ jobs:
   publish:
     name: Build wheel and publish
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     needs: test
     if: github.event_name == 'release'
     environment: pypi

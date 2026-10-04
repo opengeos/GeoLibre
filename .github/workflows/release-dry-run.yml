@@ -51,6 +51,7 @@ jobs:
   dry-run:
     name: Build everything, publish nothing
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     permissions:
       contents: read
       # Dispatch the release workflows and read back their conclusions.
