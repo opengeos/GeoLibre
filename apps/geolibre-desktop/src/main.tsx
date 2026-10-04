@@ -62,6 +62,7 @@ import "./lib/auth-return-url-boot";
 import i18n, { AVAILABLE_LANGUAGES, i18nReady, setActiveLanguage } from "./i18n";
 import { startAnalytics } from "./lib/analytics";
 import { installDiagnosticsCapture } from "./lib/diagnostics";
+import { notify } from "./lib/notify";
 import { isDesktopRuntime, isWindows } from "./lib/is-mobile";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
@@ -304,6 +305,13 @@ const sharedSettingsReady = sharedSettingsUrl
         // with the visitor's local settings, but make a bad URL visible in the
         // diagnostics capture and developer console.
         console.error("[GeoLibre] Failed to load shared desktop settings", error);
+        // The link promised a configured app; say why it looks like the
+        // visitor's own instead. Worded once translations are up.
+        void i18nReady.then(() =>
+          notify.warning(i18n.t("notifications.sharedSettingsFailed"), {
+            dedupeKey: "shared-settings",
+          }),
+        );
         return null;
       })
   : Promise.resolve(null);
@@ -335,6 +343,9 @@ const startupLanguageReady = Promise.all([i18nReady, sharedSettingsReady]).then(
       // Shared language is optional presentation configuration. If its lazy
       // catalog cannot load, retain the language i18next already initialized.
       console.error("[GeoLibre] Failed to apply shared settings language", error);
+      notify.warning(i18n.t("notifications.sharedLanguageFailed"), {
+        dedupeKey: "shared-settings-language",
+      });
     }
   },
 );

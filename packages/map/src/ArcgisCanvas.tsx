@@ -879,9 +879,16 @@ export function ArcgisCanvas({
           if (terrainRestoreError && useAppStore.getState().preferences.map.terrainEnabled)
             errors.push(terrainRestoreError);
           // Each error reaches the Diagnostics log once, when it first shows;
-          // one that clears and comes back is reported again.
+          // one that clears and comes back is reported again. A layer's own
+          // failure names the layer, so the app can tell the user which one.
+          const layerFailures = current.getLayerLoadErrors();
           for (const message of errors)
-            if (!reported.has(message)) diagnosticRef.current?.({ message, source: "arcgis" });
+            if (!reported.has(message))
+              diagnosticRef.current?.({
+                message,
+                source: "arcgis",
+                layerId: layerFailures.get(message),
+              });
           reported = new Set(errors);
           setError(errors.length ? errors.join("; ") : null);
         }, 1000);

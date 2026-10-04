@@ -111,3 +111,27 @@ export function autosavePausedMessage(t: TFunction, language: string): string {
     limit: new Intl.NumberFormat(language).format(MAX_SNAPSHOT_BYTES / (1024 * 1024)),
   });
 }
+
+/**
+ * Tells the user once when autosave fails for a reason other than size (an
+ * IndexedDB quota, a blocked database), and again only after a snapshot has
+ * been stored since. Autosave runs a few seconds after every edit, so a toast
+ * per failed attempt would repeat for as long as the cause lasts.
+ *
+ * @param onFirstFailure Shows the notice; called on the first failure of a run.
+ * @returns A function to call with every attempt's outcome.
+ */
+export function createAutosaveFailureNotice(
+  onFirstFailure: () => void,
+): (outcome: AutosaveOutcome) => void {
+  let told = false;
+  return (outcome) => {
+    if (outcome === "failed") {
+      if (told) return;
+      told = true;
+      onFirstFailure();
+    } else if (outcome === "added" || outcome === "duplicate") {
+      told = false;
+    }
+  };
+}

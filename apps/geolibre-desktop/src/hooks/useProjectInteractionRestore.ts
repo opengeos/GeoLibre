@@ -1,6 +1,9 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
+import i18next from "i18next";
 import { useEffect, useRef } from "react";
+
+import { notify } from "../lib/notify";
 
 import { createScriptingHandlers } from "../lib/scripting/scriptingApi";
 import { isScriptableMapControl, isScriptablePanel } from "../lib/scripting/ui-controls";
@@ -35,12 +38,21 @@ export function useProjectInteractionRestore(
     const controls = useAppStore.getState().projectInteraction?.controls;
     if (!controls) return;
     const handlers = createScriptingHandlers({ getController: () => mapControllerRef.current });
+    const report = (control: string, error: unknown) => {
+      console.warn(`[GeoLibre] could not apply the project's "${control}" control`, error);
+      notify.warning(i18next.t("notifications.projectControlFailed", { control }), {
+        dedupeKey: `project-control:${control}`,
+      });
+    };
     for (const [control, visible] of Object.entries(controls)) {
       if (!isScriptablePanel(control) && !isScriptableMapControl(control)) continue;
       try {
-        void handlers.setControlVisible({ control, visible });
+        // The handler is async, so its failure is a rejection, not a throw.
+        void Promise.resolve(handlers.setControlVisible({ control, visible })).catch(
+          (error: unknown) => report(control, error),
+        );
       } catch (error) {
-        console.warn(`[GeoLibre] could not apply the project's "${control}" control`, error);
+        report(control, error);
       }
     }
   }, [mapControllerRef, mapReadyGeneration, projectGeneration]);

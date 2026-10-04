@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   autosavePausedAfter,
   autosavePausedMessage,
+  createAutosaveFailureNotice,
   createAutosaveStatusTracker,
   isSizeSkip,
 } from "../apps/geolibre-desktop/src/lib/autosave-status";
@@ -99,5 +100,24 @@ describe("autosavePausedMessage", () => {
     ]);
     assert.match(en.projectHistory.autosavePaused, /\{\{limit\}\} MB/);
     assert.equal(typeof en.statusBar.autosavePaused, "string");
+  });
+});
+
+describe("createAutosaveFailureNotice", () => {
+  it("tells once per run of failures, and again after a stored snapshot", () => {
+    let told = 0;
+    const notice = createAutosaveFailureNotice(() => told++);
+    notice("failed");
+    notice("failed");
+    // A size skip is the paused indicator's business, not this notice's.
+    notice("too-large");
+    notice("failed");
+    assert.equal(told, 1);
+    notice("added");
+    notice("failed");
+    assert.equal(told, 2);
+    notice("duplicate");
+    notice("failed");
+    assert.equal(told, 3);
   });
 });

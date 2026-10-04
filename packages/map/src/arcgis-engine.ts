@@ -556,6 +556,8 @@ export class ArcgisEngine implements MapEngine {
   /** Whether {@link settleView} has placed the stored camera. */
   private placed = false;
   private errors = new Map<string, string>();
+  /** Store ids last seen as plugin layers, whose `layer:` error means "unsupported". */
+  private pluginLayerIds = new Set<string>();
   private preferences: MapPreferences | null = null;
   private basemapPlan: ArcgisBasemapPlan | null = null;
   private basemapVisible = true;
@@ -1370,12 +1372,14 @@ export class ArcgisEngine implements MapEngine {
       const opacity = this.storyOpacities.get(original.id);
       const layer = opacity === undefined ? original : { ...original, opacity };
       if (isArcgisPluginLayer(original)) {
+        this.pluginLayerIds.add(original.id);
         this.removeLayer(original.id);
         // The layer panels badge it too; the banner says why it is missing.
         if (original.visible)
           this.errors.set(`layer:${original.id}`, this.messages.pluginLayer(original.name));
         continue;
       }
+      this.pluginLayerIds.delete(original.id);
       try {
         let entry = this.natives.get(layer.id);
         const compileKey = layer.geojson ? geojsonCompileKey(layer) : undefined;
@@ -2573,6 +2577,24 @@ export class ArcgisEngine implements MapEngine {
             );
         }
     return { pending, errors: [...this.errors.values()] };
+  }
+  /**
+   * The store layers that failed to load, keyed by message, as the last
+   * {@link getRenderStatus} call left them. A plugin layer the SDK cannot draw
+   * is left out: it is unsupported here, not broken, and the banner already
+   * says so.
+   *
+   * @returns Each failing layer's render-status message mapped to its store id.
+   */
+  getLayerLoadErrors(): Map<string, string> {
+    const failures = new Map<string, string>();
+    for (const [key, message] of this.errors) {
+      if (!key.startsWith("layer:")) continue;
+      const id = key.slice(6);
+      if (this.pluginLayerIds.has(id)) continue;
+      failures.set(message, id);
+    }
+    return failures;
   }
   async captureImage(): Promise<Blob> {
     const view = this.view;

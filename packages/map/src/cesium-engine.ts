@@ -385,8 +385,16 @@ export class CesiumEngine implements MapEngine {
     const onDiagnostic = options.onDiagnostic;
     this.layerSync = new CesiumLayerSync(Cesium, viewer, undefined, {
       onTilesetFields: publishTilesetFields,
-      onLayerError: ({ layerName, message }) =>
-        onDiagnostic?.({ message: `${layerName}: ${message}`, source: "cesium" }),
+      onLayerError: ({ layerId, layerName, message }) =>
+        onDiagnostic?.({ message: `${layerName}: ${message}`, source: "cesium", layerId }),
+      onTileFailure: ({ layerId, layerName, message, status, loaded, failed }) =>
+        onDiagnostic?.({
+          message: `${layerName}: ${message}`,
+          source: "cesium",
+          layerId,
+          status,
+          tiles: { loaded, failed },
+        }),
     });
     this.terrainExaggeration = viewer.scene.verticalExaggeration ?? 1;
     this.installInputTracking();
