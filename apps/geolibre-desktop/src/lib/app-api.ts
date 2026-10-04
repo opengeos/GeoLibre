@@ -21,8 +21,7 @@ import {
   isCredentialedS3Url,
   resolveReadableUrl,
 } from "@geolibre/core";
-import type * as GeoLibreMap from "@geolibre/map";
-import type { CesiumEngine, MapEngine } from "@geolibre/map";
+import type { CesiumEngine, getPrimaryCesiumControlHost, MapEngine } from "@geolibre/map";
 import type * as GeoLibrePlugins from "@geolibre/plugins";
 import type {
   GeoLibreCogLayerOptions,
@@ -150,7 +149,7 @@ export interface AppApiHost extends Pick<
     engine: MapEngine | null | undefined,
   ) => ReturnType<CesiumEngine["getCesiumScene"]>;
   /** The control host of a Cesium-primary map, used when no 2D engine is mounted. */
-  getPrimaryCesiumControlHost: typeof GeoLibreMap.getPrimaryCesiumControlHost;
+  getPrimaryCesiumControlHost: typeof getPrimaryCesiumControlHost;
 }
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
