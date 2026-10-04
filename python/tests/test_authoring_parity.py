@@ -158,6 +158,21 @@ def test_set_labels_keeps_unspecified_settings(proj):
     assert authoring.set_labels(proj, "Cities", enabled=True)["enabled"] is True
 
 
+def test_set_labels_treats_a_stored_empty_labels_object_as_on(proj):
+    """A hand-edited `labels: {}` does not make new labels invisible."""
+    authoring.find_layer(proj, "Cities")["style"]["labels"] = {}
+    assert authoring.set_labels(proj, "Cities", "name")["enabled"] is True
+
+
+def test_deeply_nested_expressions_are_a_value_error(proj):
+    """Recursion limits surface as the documented ValueError."""
+    deep: list = [">", ["get", "pop"], 0]
+    for _ in range(5000):
+        deep = ["coalesce", deep]
+    with pytest.raises(ValueError, match="nested too deeply"):
+        authoring.set_layer_filter(proj, "Cities", deep)
+
+
 def test_set_labels_expression_overrides_field(proj):
     """A label-text expression is stored compactly and can be cleared."""
     labels = authoring.set_labels(proj, "Cities", expression=["concat", ["get", "name"], "!"])
@@ -214,14 +229,23 @@ def test_set_plugin_state_stores_and_activates(proj):
         assert default in plugins["activePluginIds"]
 
 
-def test_set_plugin_state_none_removes_settings(proj):
-    """Passing None drops the stored settings blob."""
+def test_set_plugin_state_without_state_keeps_settings(proj):
+    """Omitting the state repositions without wiping the stored settings."""
     authoring.set_plugin_state(proj, "maplibre-h3-grid", {"resolution": 5})
-    authoring.set_plugin_state(proj, "maplibre-h3-grid", None)
+    moved = authoring.set_plugin_state(proj, "maplibre-h3-grid", position="bottom-left")
+    assert moved["state"] == {"resolution": 5}
+    assert moved["position"] == "bottom-left"
+
+
+def test_set_plugin_state_clear_removes_settings_only(proj):
+    """clear=True drops the blob and never switches the plugin on."""
+    authoring.set_plugin_state(proj, "maplibre-h3-grid", {"resolution": 5})
+    authoring.set_plugin_state(proj, "maplibre-h3-grid", clear=True)
     assert "maplibre-h3-grid" not in proj["plugins"]["settings"]
-    # Clearing never switches a plugin on as a side effect.
-    authoring.set_plugin_state(proj, "maplibre-olc", None)
+    authoring.set_plugin_state(proj, "maplibre-olc", clear=True)
     assert "maplibre-olc" not in proj["plugins"]["activePluginIds"]
+    with pytest.raises(ValueError, match="not both"):
+        authoring.set_plugin_state(proj, "maplibre-olc", {"a": 1}, clear=True)
 
 
 def test_set_plugin_state_refuses_unknown_ids_unless_allowed(proj):

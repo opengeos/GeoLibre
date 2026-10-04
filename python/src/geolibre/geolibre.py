@@ -1340,11 +1340,12 @@ class Map(anywidget.AnyWidget):
     def set_plugin_state(
         self,
         plugin_id: str,
-        state: Any,
+        state: Any = None,
         *,
         position: str | None = None,
         activate: bool = True,
         allow_unknown: bool = False,
+        clear: bool = False,
     ) -> dict[str, Any]:
         """Store a plugin's saved state in the project, as the app saves it.
 
@@ -1357,11 +1358,13 @@ class Map(anywidget.AnyWidget):
             plugin_id: A built-in plugin id from
                 ``geolibre.project.PLUGIN_STATE_IDS``, or an external plugin's
                 id with ``allow_unknown=True``.
-            state: The plugin's settings, as plain JSON. ``None`` removes them
-                and leaves activation and position as they were.
+            state: The plugin's settings, as plain JSON. ``None`` keeps the
+                stored settings (to change only ``position``/``activate``).
             position: Optional control corner (``"top-left"``, ...).
             activate: Start the plugin active when the project opens.
             allow_unknown: Accept an id that is not a built-in plugin.
+            clear: Remove the stored settings only, leaving activation and
+                position as they were.
 
         Returns:
             ``{"pluginId", "active", "position", "state"}`` as stored.
@@ -1377,6 +1380,7 @@ class Map(anywidget.AnyWidget):
                     position=position,
                     activate=activate,
                     allow_unknown=allow_unknown,
+                    clear=clear,
                 )
             )
 

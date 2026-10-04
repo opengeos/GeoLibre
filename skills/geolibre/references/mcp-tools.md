@@ -190,7 +190,7 @@ corner such as `top-left`. Rarer settings go in `options` by name: `offset_x`,
 
 ```text
 set_plugin_state(path, plugin_id, state=None, position=None, activate=True,
-                 allow_unknown=False)
+                 allow_unknown=False, clear=False)
 set_story_map(path, title=None, subtitle=None, byline=None, footer=None,
               theme=None, show_markers=None, marker_color=None, inset=None,
               inset_position=None, hide_chapter_nav=None, start_slide=None,
@@ -208,7 +208,9 @@ move_story_chapter(path, chapter, index)
   plugin's resolution). `list_catalog` returns the built-in ids as
   `pluginStateIds`; another id needs `allow_unknown=True` and an external
   plugin loaded from a manifest URL. The shape of `state` is the plugin's own,
-  so copy it from a project the app saved rather than inventing keys. Prefer
+  so copy it from a project the app saved rather than inventing keys. Omit
+  `state` to change only `position` / `activate`; `clear=True` removes the
+  stored state. Prefer
   `add_swipe`, `add_legend` and `add_colorbar` for those controls.
 - A story map is the scroll-driven narrative presented from Project → Story
   Map. `set_story_map` sets its title block and presentation (`theme` is

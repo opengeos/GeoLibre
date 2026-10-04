@@ -1560,6 +1560,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         position: str | None = None,
         activate: bool = True,
         allow_unknown: bool = False,
+        clear: bool = False,
     ) -> dict[str, Any]:
         """Store a plugin's saved state in the project, as the app saves it.
 
@@ -1573,13 +1574,16 @@ def build_server(workspace: Workspace) -> MCPServer:
             path: Path to the `.geolibre.json` file.
             plugin_id: A built-in plugin id, or an external plugin's id with
                 `allow_unknown`.
-            state: The plugin's settings object, as plain JSON. Null removes
-                the stored settings and leaves activation and position alone.
+            state: The plugin's settings object, as plain JSON. Omit it to
+                keep the stored settings and change only `position` or
+                `activate`.
             position: Control corner: `top-left`, `top-right`, `bottom-left`,
                 or `bottom-right`.
             activate: Start the plugin active when the project opens.
             allow_unknown: Accept an id that is not a built-in plugin (one
                 loaded from a manifest URL).
+            clear: Remove the stored settings only; activation and position
+                are left as they were.
 
         Returns:
             The plugin id, whether it is active, its position, and its state.
@@ -1592,6 +1596,7 @@ def build_server(workspace: Workspace) -> MCPServer:
                 position=position,
                 activate=activate,
                 allow_unknown=allow_unknown,
+                clear=clear,
             )
         return _summarize(file, project, plugin=stored)
 

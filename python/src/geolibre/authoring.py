@@ -1573,11 +1573,12 @@ def set_labels(
 def set_plugin_state(
     project: dict[str, Any],
     plugin_id: str,
-    state: Any,
+    state: Any = None,
     *,
     position: str | None = None,
     activate: bool = True,
     allow_unknown: bool = False,
+    clear: bool = False,
 ) -> dict[str, Any]:
     """Store a plugin's saved state in the project, the way the app saves it.
 
@@ -1593,20 +1594,26 @@ def set_plugin_state(
             :data:`geolibre.project.PLUGIN_STATE_IDS`, or an external plugin's
             id with ``allow_unknown=True``.
         state: The plugin's settings blob; must be plain JSON. ``None``
-            removes the stored settings and nothing else (``position`` and
-            ``activate`` are then ignored).
+            keeps the stored settings, so ``position``/``activate`` can be
+            changed without resending them.
         position: Optional control corner, one of :data:`CONTROL_POSITIONS`.
         activate: Add the plugin to ``activePluginIds`` so it starts active.
         allow_unknown: Accept an id that is not a built-in plugin with saved
             state (an external plugin loaded from a manifest URL).
+        clear: Remove the stored settings and nothing else (``state``,
+            ``position`` and ``activate`` are then not applied, so clearing
+            cannot switch the plugin on).
 
     Returns:
         ``{"pluginId", "active", "position", "state"}`` as now stored.
 
     Raises:
         ValueError: If the id is unknown (and not allowed), the position is
-            invalid, or the state is not plain JSON.
+            invalid, the state is not plain JSON, or ``clear`` is combined
+            with a ``state``.
     """
+    if clear and state is not None:
+        raise ValueError("pass either a state or clear=True, not both")
     if not isinstance(plugin_id, str) or not plugin_id.strip():
         raise ValueError("plugin_id must be a non-empty string")
     plugin_id = plugin_id.strip()
@@ -1619,10 +1626,16 @@ def set_plugin_state(
     if position is not None and position not in CONTROL_POSITIONS:
         raise ValueError(f"position must be one of {sorted(CONTROL_POSITIONS)}, got {position!r}")
     plugins = _project.ensure_plugins_block(project)
-    if state is None:
+    if clear:
         # Clearing is only that: activation and the corner are left alone, so
         # wiping a plugin's settings cannot switch it on as a side effect.
         plugins["settings"].pop(plugin_id, None)
+    elif state is None:
+        # Reposition or (de)activate without touching the stored settings.
+        if activate and plugin_id not in plugins["activePluginIds"]:
+            plugins["activePluginIds"].append(plugin_id)
+        if position is not None:
+            plugins["mapControlPositions"][plugin_id] = position
     else:
         _project.set_plugin_state(
             project,

@@ -2984,6 +2984,25 @@ def _parse_expression(expression: Any, what: str) -> list[Any]:
     Raises:
         ValueError: If the value is not a JSON array expression.
     """
+    try:
+        return _parse_expression_checked(expression, what)
+    except RecursionError as exc:
+        raise ValueError(f"{what} is nested too deeply") from exc
+
+
+def _parse_expression_checked(expression: Any, what: str) -> list[Any]:
+    """Do the work of :func:`_parse_expression` (which guards recursion depth).
+
+    Args:
+        expression: A list, or a JSON string encoding one.
+        what: The argument name, for error messages.
+
+    Returns:
+        The expression as a JSON-clean list.
+
+    Raises:
+        ValueError: If the value is not a JSON array expression.
+    """
     if isinstance(expression, str):
         try:
             expression = json.loads(expression)
@@ -3019,7 +3038,11 @@ def filter_expression(expression: Any) -> list[Any]:
             produce a boolean.
     """
     parsed = _parse_expression(expression, "filter expression")
-    if not _yields_boolean(parsed):
+    try:
+        yields_boolean = _yields_boolean(parsed)
+    except RecursionError as exc:
+        raise ValueError("filter expression is nested too deeply") from exc
+    if not yields_boolean:
         raise ValueError(
             f"a layer filter must evaluate to true/false; this {parsed[0]!r} does not. "
             "Use a comparison such as ['==', ['get', 'field'], 'value'] or combine "
@@ -3199,7 +3222,9 @@ def label_style(
             ``number_locale``, ``dedupe``, and the data-defined
             ``size_expression``, ``color_expression``, ``opacity_expression``,
             ``visibility_expression``, ``priority_expression``. ``None``
-            values are skipped.
+            values are skipped. Expressions are checked for shape only (a
+            JSON array with an operator), not for their result type; the app
+            reports a mistyped one when it renders.
 
     Returns:
         A complete labels object.
@@ -3217,7 +3242,9 @@ def label_style(
     if isinstance(base, dict):
         labels.update(copy.deepcopy(base))
     if enabled is None:
-        enabled = bool(labels.get("enabled")) if isinstance(base, dict) else True
+        # A stored labels object with no `enabled` key (`{}` in a hand-edited
+        # project) counts as on, not as the default's False.
+        enabled = bool(base.get("enabled", True)) if isinstance(base, dict) else True
     if not isinstance(enabled, bool):
         raise ValueError(f"enabled must be true or false, got {enabled!r}")
     labels["enabled"] = enabled
