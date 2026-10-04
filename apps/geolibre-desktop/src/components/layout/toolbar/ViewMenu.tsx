@@ -26,6 +26,7 @@ import {
   Link2,
   MapIcon,
   Mountain,
+  Palette,
   RotateCcw,
   ZoomIn,
   ZoomOut,
@@ -37,6 +38,8 @@ import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
 import { isMenuItemVisible, isMenuVisible } from "../../../lib/ui-profile";
 import type { ToolbarChrome } from "./constants";
+import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../CvdPreview";
+import { CVD_MODES, isCvdMode } from "../../../lib/cvd-simulation";
 
 /** Selectable map-grid presets offered in the Split View submenu. */
 const SPLIT_VIEW_PRESETS: ReadonlyArray<{
@@ -113,6 +116,8 @@ export function ViewMenu({
   const setSyncView = useAppStore((s) => s.setSyncView);
   const primaryRenderer = useAppStore((s) => s.primaryRenderer);
   const setPrimaryRenderer = useAppStore((s) => s.setPrimaryRenderer);
+  const cvdMode = useCvdPreviewStore((s) => s.mode);
+  const setCvdMode = useCvdPreviewStore((s) => s.setMode);
   // Camera snapshot taken when the menu opens. The dropdown blocks map
   // interaction while open, so a single read on open stays accurate for the
   // life of the menu and lets items grey out at their limit (#708, #710).
@@ -145,6 +150,8 @@ export function ViewMenu({
     (!showResetPitchBearing || (bearingIsNorth && pitchIsFlat));
   const showSetView = show("view.setView");
   const showSplitView = show("view.splitView");
+  // A CSS filter on the map canvases, so it works on every renderer.
+  const showColorVision = show("view.colorVision");
   // Always offered while the globe owns the primary map, whatever the UI
   // profile says: this submenu is the only way back to the 2D map, and hiding
   // it there would strand a user on a renderer whose tools are all disabled.
@@ -170,6 +177,7 @@ export function ViewMenu({
     !showReset &&
     !showSetView &&
     !showSplitView &&
+    !showColorVision &&
     !showRenderingEngine &&
     !showExternal
   )
@@ -324,6 +332,36 @@ export function ViewMenu({
           </DropdownMenuSub>
         )}
         {(showZoom || showNavigation || showReset || showSetView || showSplitView) &&
+          showColorVision && <DropdownMenuSeparator />}
+        {showColorVision && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Palette className="h-3.5 w-3.5 shrink-0" />
+              <span className="whitespace-nowrap">{t("toolbar.item.colorVisionPreview")}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup
+                value={cvdMode ?? "off"}
+                onValueChange={(value: string) => setCvdMode(isCvdMode(value) ? value : null)}
+              >
+                <DropdownMenuRadioItem value="off">
+                  <span className="whitespace-nowrap">{t("toolbar.item.cvdOff")}</span>
+                </DropdownMenuRadioItem>
+                {CVD_MODES.map((mode) => (
+                  <DropdownMenuRadioItem key={mode} value={mode}>
+                    <span className="whitespace-nowrap">{t(CVD_MODE_LABEL_KEYS[mode])}</span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        {(showZoom ||
+          showNavigation ||
+          showReset ||
+          showSetView ||
+          showSplitView ||
+          showColorVision) &&
           showRenderingEngine && <DropdownMenuSeparator />}
         {showRenderingEngine && (
           <DropdownMenuSub>
@@ -366,6 +404,7 @@ export function ViewMenu({
           showReset ||
           showSetView ||
           showSplitView ||
+          showColorVision ||
           showRenderingEngine) &&
           showExternal && <DropdownMenuSeparator />}
         {showGoogleMaps && (

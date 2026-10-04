@@ -228,8 +228,15 @@
     "projectName": "Nama proyek",
     "savedTemplates": "Templat Tersimpan",
     "deleteTemplate": "Hapus templat",
+    "examples": "Contoh",
+    "examplesDescription": "Mulai dari peta demo yang dipublikasikan. Membuka salinan dan memerlukan koneksi internet.",
+    "exampleOpenFailed": "Tidak dapat membuka “{{title}}”.",
     "basemapLabel": "Peta dasar",
     "create": "Buat"
+  },
+  "cvdPreview": {
+    "badge": "Pratinjau penglihatan warna: {{mode}}",
+    "turnOff": "Matikan pratinjau penglihatan warna"
   },
   "basemapPicker": {
     "title": "Ubah latar belakang",
@@ -3192,6 +3199,12 @@
       "splitViewGrid2x3": "Grid 2 × 3",
       "splitViewGrid3x3": "Grid 3 × 3",
       "splitViewSync": "Sinkronkan tampilan",
+      "colorVisionPreview": "Pratinjau penglihatan warna",
+      "cvdOff": "Mati",
+      "cvdProtanopia": "Protanopia (buta merah)",
+      "cvdDeuteranopia": "Deuteranopia (buta hijau)",
+      "cvdTritanopia": "Tritanopia (buta biru)",
+      "cvdAchromatopsia": "Akromatopsia (tanpa warna)",
       "renderingEngine": "Mesin render",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

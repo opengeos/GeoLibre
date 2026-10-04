@@ -230,8 +230,15 @@
     "projectName": "Proje adı",
     "savedTemplates": "Kaydedilmiş Şablonlar",
     "deleteTemplate": "Şablonu sil",
+    "examples": "Örnekler",
+    "examplesDescription": "Yayımlanmış bir demo haritayla başlayın. Bir kopya açılır ve internet bağlantısı gerekir.",
+    "exampleOpenFailed": "“{{title}}” açılamadı.",
     "basemapLabel": "Altlık harita",
     "create": "Oluştur"
+  },
+  "cvdPreview": {
+    "badge": "Renk görme önizlemesi: {{mode}}",
+    "turnOff": "Renk görme önizlemesini kapat"
   },
   "basemapPicker": {
     "title": "Arka planı değiştir",
@@ -3241,6 +3248,12 @@
       "splitViewGrid2x3": "2 × 3 ızgara",
       "splitViewGrid3x3": "3 × 3 ızgara",
       "splitViewSync": "Görünümleri eşzamanla",
+      "colorVisionPreview": "Renk görme önizlemesi",
+      "cvdOff": "Kapalı",
+      "cvdProtanopia": "Protanopi (kırmızı körlüğü)",
+      "cvdDeuteranopia": "Döteranopi (yeşil körlüğü)",
+      "cvdTritanopia": "Tritanopi (mavi körlüğü)",
+      "cvdAchromatopsia": "Akromatopsi (renk yok)",
       "renderingEngine": "Çizim motoru",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

@@ -52,7 +52,12 @@ export { getPrimaryCesiumControlHost } from "./cesium-control-host";
 // `CesiumCanvas`'s dynamic import exists to keep it off.
 export type { CesiumWidgetControlLabels } from "./cesium-widget-controls";
 export { isCesiumSupportedLayerType } from "./cesium-layer-sync";
-export { classifyLayer, type LayerKind } from "./layer-kind";
+export {
+  classifyLayer,
+  type LayerKind,
+  type LayerKindSupport,
+  type SupportedLayerKinds,
+} from "./layer-kind";
 export { arcgisVectorStyle } from "./vector-style";
 export {
   CESIUM_CAPABILITIES,

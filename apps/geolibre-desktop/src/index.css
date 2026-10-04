@@ -5075,3 +5075,54 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   color: hsl(var(--primary));
   font-weight: 600;
 }
+
+/* View → Color vision preview (CvdPreview.tsx). Filter only what draws the map
+   — every renderer's canvas (MapLibre, Mapbox, Cesium, ArcGIS, deck.gl
+   overlays) plus DOM markers and the on-map legends/colorbar (anything marked
+   `data-cvd-filter`), so swatches can be compared with the map — never the
+   surrounding controls and panels. The SVG filters are defined once by
+   CvdFilterDefs. */
+[data-cvd-preview="protanopia"]
+  :is(
+    canvas,
+    .maplibregl-marker,
+    .mapboxgl-marker,
+    .maplibre-gl-legend,
+    .maplibre-gl-colorbar,
+    [data-cvd-filter]
+  ) {
+  filter: url(#geolibre-cvd-protanopia);
+}
+[data-cvd-preview="deuteranopia"]
+  :is(
+    canvas,
+    .maplibregl-marker,
+    .mapboxgl-marker,
+    .maplibre-gl-legend,
+    .maplibre-gl-colorbar,
+    [data-cvd-filter]
+  ) {
+  filter: url(#geolibre-cvd-deuteranopia);
+}
+[data-cvd-preview="tritanopia"]
+  :is(
+    canvas,
+    .maplibregl-marker,
+    .mapboxgl-marker,
+    .maplibre-gl-legend,
+    .maplibre-gl-colorbar,
+    [data-cvd-filter]
+  ) {
+  filter: url(#geolibre-cvd-tritanopia);
+}
+[data-cvd-preview="achromatopsia"]
+  :is(
+    canvas,
+    .maplibregl-marker,
+    .mapboxgl-marker,
+    .maplibre-gl-legend,
+    .maplibre-gl-colorbar,
+    [data-cvd-filter]
+  ) {
+  filter: url(#geolibre-cvd-achromatopsia);
+}

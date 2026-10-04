@@ -230,8 +230,15 @@
     "projectName": "Nome del progetto",
     "savedTemplates": "Modelli salvati",
     "deleteTemplate": "Elimina modello",
+    "examples": "Esempi",
+    "examplesDescription": "Parti da una mappa dimostrativa pubblicata. Apre una copia e richiede una connessione a Internet.",
+    "exampleOpenFailed": "Impossibile aprire «{{title}}».",
     "basemapLabel": "Mappa di base",
     "create": "Crea"
+  },
+  "cvdPreview": {
+    "badge": "Anteprima della visione dei colori: {{mode}}",
+    "turnOff": "Disattiva l’anteprima della visione dei colori"
   },
   "basemapPicker": {
     "title": "Cambia sfondo",
@@ -3241,6 +3248,12 @@
       "splitViewGrid2x3": "Griglia 2 × 3",
       "splitViewGrid3x3": "Griglia 3 × 3",
       "splitViewSync": "Sincronizza viste",
+      "colorVisionPreview": "Anteprima della visione dei colori",
+      "cvdOff": "Disattivata",
+      "cvdProtanopia": "Protanopia (cecità al rosso)",
+      "cvdDeuteranopia": "Deuteranopia (cecità al verde)",
+      "cvdTritanopia": "Tritanopia (cecità al blu)",
+      "cvdAchromatopsia": "Acromatopsia (nessun colore)",
       "renderingEngine": "Motore di rendering",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

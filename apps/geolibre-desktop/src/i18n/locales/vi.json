@@ -220,6 +220,9 @@
     "projectName": "Tên dự án",
     "savedTemplates": "Mẫu đã lưu",
     "deleteTemplate": "Xóa mẫu",
+    "examples": "Ví dụ",
+    "examplesDescription": "Bắt đầu từ một bản đồ minh họa đã xuất bản. Mở một bản sao và cần kết nối internet.",
+    "exampleOpenFailed": "Không thể mở “{{title}}”.",
     "basemapLabel": "Sơ đồ cơ sở",
     "create": "Tạo nên",
     "basemapDescription": "Chọn sơ đồ cơ sở OpenFreeMap hoặc Protomaps, nền trống hoặc URL kiểu MapLibre.",
@@ -230,6 +233,10 @@
     "invalidCustomUrl": "Nhập URL style.json hoặc .pmtiles hợp lệ.",
     "savePromptTitle": "Lưu dự án hiện tại?",
     "savePromptDescription": "Dự án hiện tại có những thay đổi chưa được lưu. Lưu chúng trước khi tạo một dự án mới?"
+  },
+  "cvdPreview": {
+    "badge": "Xem trước khả năng nhìn màu: {{mode}}",
+    "turnOff": "Tắt xem trước khả năng nhìn màu"
   },
   "basemapPicker": {
     "title": "Thay đổi nền",
@@ -3192,6 +3199,12 @@
       "splitViewGrid2x3": "Lưới 2 × 3",
       "splitViewGrid3x3": "Lưới 3 × 3",
       "splitViewSync": "Đồng bộ hóa lượt xem",
+      "colorVisionPreview": "Xem trước khả năng nhìn màu",
+      "cvdOff": "Tắt",
+      "cvdProtanopia": "Mù màu đỏ (Protanopia)",
+      "cvdDeuteranopia": "Mù màu xanh lục (Deuteranopia)",
+      "cvdTritanopia": "Mù màu xanh lam (Tritanopia)",
+      "cvdAchromatopsia": "Mù màu hoàn toàn (Achromatopsia)",
       "renderingEngine": "Bộ kết xuất",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

@@ -232,8 +232,15 @@
     "projectName": "שם הפרויקט",
     "savedTemplates": "תבניות שמורות",
     "deleteTemplate": "מחק תבנית",
+    "examples": "דוגמאות",
+    "examplesDescription": "התחילו ממפת הדגמה שפורסמה. נפתח עותק ונדרש חיבור לאינטרנט.",
+    "exampleOpenFailed": "לא ניתן לפתוח את „{{title}}”.",
     "basemapLabel": "מפת בסיס",
     "create": "צור"
+  },
+  "cvdPreview": {
+    "badge": "תצוגה מקדימה של ראיית צבעים: {{mode}}",
+    "turnOff": "כיבוי התצוגה המקדימה של ראיית צבעים"
   },
   "basemapPicker": {
     "title": "החלפת רקע",
@@ -3290,6 +3297,12 @@
       "splitViewGrid2x3": "רשת 2 × 3",
       "splitViewGrid3x3": "רשת 3 × 3",
       "splitViewSync": "סנכרון תצוגות",
+      "colorVisionPreview": "תצוגה מקדימה של ראיית צבעים",
+      "cvdOff": "כבוי",
+      "cvdProtanopia": "פרוטנופיה (עיוורון לאדום)",
+      "cvdDeuteranopia": "דויטרנופיה (עיוורון לירוק)",
+      "cvdTritanopia": "טריטנופיה (עיוורון לכחול)",
+      "cvdAchromatopsia": "אכרומטופסיה (ללא צבע)",
       "renderingEngine": "מנוע רינדור",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

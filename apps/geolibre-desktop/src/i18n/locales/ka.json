@@ -230,8 +230,15 @@
     "projectName": "პროექტის სახელი",
     "savedTemplates": "შენახული შაბლონები",
     "deleteTemplate": "შაბლონის წაშლა",
+    "examples": "მაგალითები",
+    "examplesDescription": "დაიწყეთ გამოქვეყნებული სადემონსტრაციო რუკიდან. იხსნება ასლი და საჭიროა ინტერნეტთან კავშირი.",
+    "exampleOpenFailed": "„{{title}}“ ვერ გაიხსნა.",
     "basemapLabel": "საბაზისო რუკა",
     "create": "შექმნა"
+  },
+  "cvdPreview": {
+    "badge": "ფერის აღქმის გადახედვა: {{mode}}",
+    "turnOff": "ფერის აღქმის გადახედვის გამორთვა"
   },
   "basemapPicker": {
     "title": "ფონის შეცვლა",
@@ -3241,6 +3248,12 @@
       "splitViewGrid2x3": "2 × 3 ბადე",
       "splitViewGrid3x3": "3 × 3 ბადე",
       "splitViewSync": "ხედების სინქრონიზაცია",
+      "colorVisionPreview": "ფერის აღქმის გადახედვა",
+      "cvdOff": "გამორთული",
+      "cvdProtanopia": "პროტანოპია (წითლის სიბრმავე)",
+      "cvdDeuteranopia": "დეიტერანოპია (მწვანის სიბრმავე)",
+      "cvdTritanopia": "ტრიტანოპია (ლურჯის სიბრმავე)",
+      "cvdAchromatopsia": "აქრომატოფსია (ფერის გარეშე)",
       "renderingEngine": "რენდერინგის ძრავა",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

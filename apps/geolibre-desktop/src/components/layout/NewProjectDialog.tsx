@@ -21,6 +21,7 @@ import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-
 import { clearProjectSnapshots } from "../../lib/project-history-store";
 import { CollapsibleSection } from "../CollapsibleSection";
 import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
+import { StarterProjectsSection } from "./StarterProjectsSection";
 import {
   Button,
   cn,
@@ -91,6 +92,12 @@ interface NewProjectDialogProps {
   onOpenChange: (open: boolean) => void;
   onSaveCurrentProject: () => Promise<boolean>;
   onProjectCreated?: () => void;
+  /**
+   * Load a starter project from its raw `.geolibre.json` URL (the Open Project
+   * from URL path). Rejects on failure so the dialog can show the error inline.
+   * When omitted, the Examples section is hidden.
+   */
+  onOpenExample?: (projectUrl: string, signal: AbortSignal) => Promise<void>;
 }
 
 export function NewProjectDialog({
@@ -98,6 +105,7 @@ export function NewProjectDialog({
   onOpenChange,
   onSaveCurrentProject,
   onProjectCreated,
+  onOpenExample,
 }: NewProjectDialogProps) {
   const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
@@ -111,6 +119,11 @@ export function NewProjectDialog({
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const customUrlRef = useRef<HTMLInputElement>(null);
+  // The in-flight starter-project open, if any. Closing the dialog or creating
+  // a project another way aborts it, so a late download can never replace the
+  // project the user chose instead.
+  const exampleAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => exampleAbortRef.current?.abort(), []);
 
   const customStyleUrl = customUrl.trim();
   const customIsPmtiles = isPmtilesStyleUrl(customStyleUrl);
@@ -186,6 +199,8 @@ export function NewProjectDialog({
     setCustomFlavor("light");
     setShowSavePrompt(false);
     setIsSaving(false);
+    exampleAbortRef.current?.abort();
+    exampleAbortRef.current = null;
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -256,6 +271,30 @@ export function NewProjectDialog({
       console.error("Could not clear project history for the new project.", error),
     );
     useAppStore.setState({ isDirty: true });
+    onProjectCreated?.();
+    onOpenChange(false);
+    resetForm();
+  };
+
+  // Resolves true once the example loaded, false when it was cancelled.
+  const openExample = async (projectUrl: string): Promise<boolean> => {
+    if (!onOpenExample) return false;
+    exampleAbortRef.current?.abort();
+    const controller = new AbortController();
+    exampleAbortRef.current = controller;
+    try {
+      await onOpenExample(projectUrl, controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) return false;
+      throw error;
+    }
+    return !controller.signal.aborted;
+  };
+
+  const handleExampleOpened = () => {
+    void clearProjectSnapshots().catch((error) =>
+      console.error("Could not clear project history for the new project.", error),
+    );
     onProjectCreated?.();
     onOpenChange(false);
     resetForm();
@@ -350,6 +389,13 @@ export function NewProjectDialog({
                     ))}
                   </div>
                 </div>
+              ) : null}
+
+              {onOpenExample ? (
+                <StarterProjectsSection
+                  onOpenExample={openExample}
+                  onOpened={handleExampleOpened}
+                />
               ) : null}
 
               <div className="space-y-4">

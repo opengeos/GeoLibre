@@ -880,6 +880,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       asCopy?: boolean;
       oauthSessionRevision?: number;
       remoteProject?: RemoteSharedProjectTarget;
+      /**
+       * Lets the caller cancel the open (e.g. the New Project dialog closing
+       * mid-download): an abort before the project loads leaves the current
+       * project untouched.
+       */
+      signal?: AbortSignal;
     } = {},
   ): Promise<void> => {
     const normalizedUrl = normalizeProjectUrl(url);
@@ -890,6 +896,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     shareUrlAbortRef.current?.abort();
     const controller = new AbortController();
     shareUrlAbortRef.current = controller;
+    if (options.signal?.aborted) controller.abort();
+    options.signal?.addEventListener("abort", () => controller.abort(), { once: true });
 
     try {
       let project: Awaited<ReturnType<typeof resolveProjectXyzLayers>>;

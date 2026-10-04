@@ -238,8 +238,15 @@
     "projectName": "اسم المشروع",
     "savedTemplates": "القوالب المحفوظة",
     "deleteTemplate": "حذف القالب",
+    "examples": "أمثلة",
+    "examplesDescription": "ابدأ من خريطة عرض توضيحي منشورة. تُفتح نسخة منها ويلزم اتصال بالإنترنت.",
+    "exampleOpenFailed": "تعذّر فتح «{{title}}».",
     "basemapLabel": "خريطة الأساس",
     "create": "إنشاء"
+  },
+  "cvdPreview": {
+    "badge": "معاينة رؤية الألوان: {{mode}}",
+    "turnOff": "إيقاف معاينة رؤية الألوان"
   },
   "basemapPicker": {
     "title": "تغيير الخلفية",
@@ -3436,6 +3443,12 @@
       "splitViewGrid2x3": "شبكة 2 × 3",
       "splitViewGrid3x3": "شبكة 3 × 3",
       "splitViewSync": "مزامنة العروض",
+      "colorVisionPreview": "معاينة رؤية الألوان",
+      "cvdOff": "إيقاف",
+      "cvdProtanopia": "عمى اللون الأحمر (Protanopia)",
+      "cvdDeuteranopia": "عمى اللون الأخضر (Deuteranopia)",
+      "cvdTritanopia": "عمى اللون الأزرق (Tritanopia)",
+      "cvdAchromatopsia": "عمى الألوان الكلي (Achromatopsia)",
       "renderingEngine": "محرك العرض",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

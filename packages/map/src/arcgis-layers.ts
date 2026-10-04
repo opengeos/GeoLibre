@@ -49,7 +49,7 @@ import {
   mapboxRenderableMask,
 } from "./derived-geometry";
 import { arcgisLineDecorationSymbol, hasLineDecoration } from "./arcgis-line-decoration";
-import { classifyLayer, unhandledLayerKind } from "./layer-kind";
+import { classifyLayer, hasLayerKindSupport, type SupportedLayerKinds } from "./layer-kind";
 
 /**
  * Translate a store layer into what the ArcGIS Maps SDK can draw (issue #2421).
@@ -1889,6 +1889,32 @@ export function isArcgisPluginLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
+ * What the ArcGIS engine's kind dispatch does with each layer kind: the
+ * `"native"` kinds go through {@link compileArcgisLayer} (which still rejects
+ * a record whose data it cannot read), and the `"plugin"` kinds are drawn only
+ * by a plugin on the map's deck.gl overlay ({@link isArcgisExternalDeckLayer}),
+ * so they need an engine whose capabilities include `deckOverlay`. The SDK has
+ * no renderer for the `"unsupported"` kinds.
+ */
+export const ARCGIS_SUPPORTED_LAYER_KINDS = Object.freeze({
+  geojson: "native",
+  "raster-tiles": "native",
+  "vector-tiles": "native",
+  arcgis: "native",
+  "tile-archive": "native",
+  zarr: "native",
+  lidar: "plugin",
+  "gaussian-splat": "unsupported",
+  "3d-tiles": "plugin",
+  cog: "native",
+  "vector-file": "unsupported",
+  "duckdb-query": "plugin",
+  "deckgl-viz": "plugin",
+  video: "unsupported",
+  image: "native",
+} as const satisfies SupportedLayerKinds);
+
+/**
  * Whether a plugin draws the record through the ArcGIS map's deck.gl overlay
  * (the deckgl-viz plugin, DuckDB query results, and the LiDAR and 3D Tiles
  * controls' URL layers), so the engine only needs that overlay to exist.
@@ -1896,6 +1922,9 @@ export function isArcgisPluginLayer(layer: GeoLibreLayer): boolean {
 function isArcgisExternalDeckLayer(layer: GeoLibreLayer): boolean {
   const sourceKind = layer.metadata.sourceKind;
   const kind = classifyLayer(layer);
+  // The other kinds are compiled natively (or rejected by the compiler) from
+  // the record itself.
+  if (!hasLayerKindSupport(ARCGIS_SUPPORTED_LAYER_KINDS, kind, "plugin")) return false;
   switch (kind) {
     case "deckgl-viz":
       return sourceKind === "deckgl-viz";
@@ -1905,21 +1934,6 @@ function isArcgisExternalDeckLayer(layer: GeoLibreLayer): boolean {
       return sourceKind === "duckdb-query";
     case "3d-tiles":
       return sourceKind === "3d-tiles-url";
-    // Compiled natively (or rejected by the compiler) from the record itself.
-    case "geojson":
-    case "raster-tiles":
-    case "vector-tiles":
-    case "arcgis":
-    case "tile-archive":
-    case "zarr":
-    case "gaussian-splat":
-    case "cog":
-    case "vector-file":
-    case "video":
-    case "image":
-      return false;
-    default:
-      return unhandledLayerKind(kind, false);
   }
 }
 

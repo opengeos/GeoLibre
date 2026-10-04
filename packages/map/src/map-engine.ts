@@ -9,6 +9,8 @@ import type {
 } from "@geolibre/core";
 import type { FeatureCollection, Geometry, Point, Polygon } from "geojson";
 import type * as maplibregl from "maplibre-gl";
+import type { SupportedLayerKinds } from "./layer-kind";
+import { MAPLIBRE_SUPPORTED_LAYER_KINDS } from "./maplibre-layer-kinds";
 
 /** Shared search highlight color across rendering engines. */
 export const SEARCH_HIGHLIGHT_COLOR = "#ef4444";
@@ -341,6 +343,20 @@ export interface MapEngineCapabilities {
    * the Add Data dialog's forms instead.
    */
   readonly controlLayerPanels: boolean;
+  /**
+   * What the engine's per-kind layer dispatch does with each
+   * layer kind (`classifyLayer`): draws it from the store record (`"native"`), leaves it
+   * to a plugin control (`"plugin"`), or never draws it (`"unsupported"`).
+   * MapLibre's layer sync and the Cesium and ArcGIS kind checks read this
+   * same object; Mapbox's kind switch is separate, and
+   * tests/layer-support-matrix.test.ts holds every table to its engine's
+   * dispatch. It describes kinds, not records: whether one record
+   * draws still depends on its data, which the per-record support checks
+   * (`isCesiumSupportedLayerType`, `isMapboxSupportedLayer`,
+   * `isArcgisSupportedLayer`) answer. ArcGIS's `"plugin"` kinds draw on its
+   * deck.gl overlay, so they also need {@link deckOverlay}.
+   */
+  readonly supportedLayerKinds: SupportedLayerKinds;
 }
 
 /**
@@ -372,6 +388,7 @@ export const MAPLIBRE_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   deferredEngineReady: false,
   measureTool: true,
   controlLayerPanels: true,
+  supportedLayerKinds: MAPLIBRE_SUPPORTED_LAYER_KINDS,
 });
 
 /** One feature returned by {@link MapEngine.identifyFeatures}. */

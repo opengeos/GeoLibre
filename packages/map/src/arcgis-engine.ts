@@ -43,6 +43,7 @@ import {
   ARCGIS_ID_FIELD,
   ARCGIS_LABEL_CLASS_FIELD,
   ARCGIS_LABEL_FIELD,
+  ARCGIS_SUPPORTED_LAYER_KINDS,
   arcgisBlendMode,
   isArcgisRasterPlan,
   ARCGIS_SYMBOL_FIELD,
@@ -119,6 +120,7 @@ export const ARCGIS_CAPABILITIES: MapEngineCapabilities = Object.freeze({
   deferredEngineReady: true,
   measureTool: false,
   controlLayerPanels: false,
+  supportedLayerKinds: ARCGIS_SUPPORTED_LAYER_KINDS,
 });
 
 export const ARCGIS_DECK_CAPABILITIES: MapEngineCapabilities = Object.freeze({

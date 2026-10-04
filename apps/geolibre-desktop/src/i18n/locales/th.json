@@ -228,8 +228,15 @@
     "projectName": "ชื่อโปรเจกต์",
     "savedTemplates": "เทมเพลตที่บันทึกไว้",
     "deleteTemplate": "ลบเทมเพลต",
+    "examples": "ตัวอย่าง",
+    "examplesDescription": "เริ่มจากแผนที่สาธิตที่เผยแพร่แล้ว จะเปิดสำเนาและต้องเชื่อมต่ออินเทอร์เน็ต",
+    "exampleOpenFailed": "ไม่สามารถเปิด “{{title}}” ได้",
     "basemapLabel": "แผนที่ฐาน",
     "create": "สร้าง"
+  },
+  "cvdPreview": {
+    "badge": "แสดงตัวอย่างการมองเห็นสี: {{mode}}",
+    "turnOff": "ปิดการแสดงตัวอย่างการมองเห็นสี"
   },
   "basemapPicker": {
     "title": "เปลี่ยนพื้นหลัง",
@@ -3192,6 +3199,12 @@
       "splitViewGrid2x3": "กริด 2 × 3",
       "splitViewGrid3x3": "กริด 3 × 3",
       "splitViewSync": "ซิงค์มุมมอง",
+      "colorVisionPreview": "แสดงตัวอย่างการมองเห็นสี",
+      "cvdOff": "ปิด",
+      "cvdProtanopia": "Protanopia (ตาบอดสีแดง)",
+      "cvdDeuteranopia": "Deuteranopia (ตาบอดสีเขียว)",
+      "cvdTritanopia": "Tritanopia (ตาบอดสีน้ำเงิน)",
+      "cvdAchromatopsia": "Achromatopsia (ไม่เห็นสี)",
       "renderingEngine": "เอนจินการแสดงผล",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
