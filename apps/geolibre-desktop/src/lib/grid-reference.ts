@@ -11,7 +11,7 @@
  */
 
 import { utmToLngLat } from "@geolibre/plugins/maplibre-graticule";
-import { parseMgrsReference } from "@geolibre/plugins/mgrs-reference";
+import { parseMgrsReference, utmBandRange } from "@geolibre/plugins/mgrs-reference";
 
 /** A grid reference resolved to a point. */
 export interface GridReferenceMatch {
@@ -25,9 +25,6 @@ export interface GridReferenceMatch {
    */
   label: string;
 }
-
-/** Latitude-band letters, south to north (C–X without I and O). */
-const BANDS = "CDEFGHJKLMNPQRSTUVWX";
 
 /**
  * Zone, a band or hemisphere letter, easting, northing. Separators are spaces
@@ -49,11 +46,9 @@ const BAND_TOLERANCE_DEG = 1;
 
 /** Whether a latitude lies within (or within a degree of) a UTM band. */
 function inBand(lat: number, band: string): boolean {
-  const index = BANDS.indexOf(band);
-  if (index < 0) return false;
-  const south = -80 + index * 8;
-  const north = band === "X" ? 84 : south + 8;
-  return lat >= south - BAND_TOLERANCE_DEG && lat <= north + BAND_TOLERANCE_DEG;
+  const range = utmBandRange(band);
+  if (!range) return false;
+  return lat >= range[0] - BAND_TOLERANCE_DEG && lat <= range[1] + BAND_TOLERANCE_DEG;
 }
 
 /**
@@ -105,7 +100,8 @@ export function parseUtmReference(text: string): GridReferenceMatch | null {
   const easting = Number(match[3]);
   const northing = Number(match[4]);
   if (zone < 1 || zone > 60) return null;
-  if (!BANDS.includes(letter)) return null;
+  const bandRange = utmBandRange(letter);
+  if (!bandRange) return null;
   if (easting < MIN_EASTING || easting > MAX_EASTING) return null;
   if (northing < 0 || northing > MAX_NORTHING) return null;
 
@@ -116,8 +112,8 @@ export function parseUtmReference(text: string): GridReferenceMatch | null {
     const north = utmPoint(zone, false, easting, northing);
     point = north && inBand(north[1], "S") ? north : utmPoint(zone, true, easting, northing);
   } else {
-    const south = BANDS.indexOf(letter) < BANDS.indexOf("N");
-    point = utmPoint(zone, south, easting, northing);
+    // Bands C–M lie south of the equator, N–X north of it.
+    point = utmPoint(zone, bandRange[0] < 0, easting, northing);
     if (point && !inBand(point[1], letter)) return null;
   }
   if (!point) return null;

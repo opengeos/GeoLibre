@@ -19,6 +19,7 @@ import {
   lngLatToUsng,
   mgrsToUsng,
   parseMgrsReference,
+  utmBandRange,
 } from "../packages/plugins/src/plugins/mgrs-reference";
 
 /** Assert two numbers agree within a tolerance. */
@@ -124,6 +125,18 @@ describe("parseMgrsReference", () => {
     assert.ok(parseMgrsReference("18RUA2337106519"));
   });
 
+  it("rejects the zones the Svalbard exception removes from band X", () => {
+    // Zones 31/33/35/37 widen across band X, so 32X, 34X and 36X do not exist.
+    for (const zone of [32, 34, 36]) {
+      assert.equal(parseMgrsReference(`${zone}XNK0000000000`), null, `${zone}X`);
+    }
+    // Those zones are still valid in other bands (Norway's 32V among them),
+    // and the widened X zones decode.
+    assert.ok(parseMgrsReference(lngLatToMgrs(5.3221, 60.3913) ?? ""));
+    assert.ok(parseMgrsReference(lngLatToMgrs(10, 78.2) ?? ""));
+    assert.ok(parseMgrsReference(lngLatToMgrs(8.5, 78.2) ?? ""));
+  });
+
   it("round-trips formatted references across the whole grid", () => {
     let checked = 0;
     for (let lat = -79.5; lat < 84; lat += 3.7) {
@@ -145,6 +158,19 @@ describe("parseMgrsReference", () => {
       }
     }
     assert.ok(checked > 5000);
+  });
+});
+
+describe("utmBandRange", () => {
+  it("spans 8° per band and 12° for X, skipping I and O", () => {
+    assert.deepEqual(utmBandRange("C"), [-80, -72]);
+    assert.deepEqual(utmBandRange("M"), [-8, 0]);
+    assert.deepEqual(utmBandRange("N"), [0, 8]);
+    assert.deepEqual(utmBandRange("S"), [32, 40]);
+    assert.deepEqual(utmBandRange("X"), [72, 84]);
+    for (const letter of ["A", "B", "I", "O", "Y", "Z", "s", ""]) {
+      assert.equal(utmBandRange(letter), null, letter);
+    }
   });
 });
 

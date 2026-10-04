@@ -138,9 +138,19 @@ export function lngLatToUsng(lng: number, lat: number, precision = 5): string | 
   return reference ? mgrsToUsng(reference) : null;
 }
 
-/** Southern and northern edge, in degrees, of a latitude band. */
-function bandRange(band: string): [number, number] | null {
-  const index = BANDS.indexOf(band);
+/**
+ * Southern and northern edge of a UTM/MGRS latitude band. Shared with the UTM
+ * search parser (`grid-reference.ts`) so the band layout is defined once.
+ *
+ * Args:
+ *   band: A band letter, C–X without I and O (upper case).
+ *
+ * Returns:
+ *   `[south, north]` in degrees, or null for a letter that is not a band.
+ */
+export function utmBandRange(band: string): [number, number] | null {
+  // A single letter only: indexOf would find "" (and "CD"…) at index 0.
+  const index = band.length === 1 ? BANDS.indexOf(band) : -1;
   if (index < 0) return null;
   const south = -80 + index * 8;
   // Band X is 12° tall (72°N–84°N); every other band is 8°.
@@ -182,8 +192,11 @@ export function parseMgrsReference(text: string): MgrsReferenceMatch | null {
 
   const zone = Number(zoneText);
   if (zone < 1 || zone > 60) return null;
-  const range = bandRange(band);
+  const range = utmBandRange(band);
   if (!range) return null;
+  // The Svalbard exception widens zones 31, 33, 35 and 37 across band X, so
+  // 32X, 34X and 36X do not exist; `mgrs` would still decode them.
+  if (band === "X" && (zone === 32 || zone === 34 || zone === 36)) return null;
   if (!COLUMN_LETTERS[(zone - 1) % 3].includes(column)) return null;
   if (!ROW_LETTERS.includes(row)) return null;
 
