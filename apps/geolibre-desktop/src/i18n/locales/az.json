@@ -202,7 +202,10 @@
       "dd": "Onluq dərəcələr",
       "dms": "Dərəcə, dəqiqə, saniyə",
       "ddm": "Dərəcə, onluq dəqiqə",
-      "utm": "UTM (zona, şərq/şimal koordinatı)"
+      "utm": "UTM (zona, şərq/şimal koordinatı)",
+      "mgrs": "MGRS (Hərbi şəbəkə istinad sistemi)",
+      "usng": "USNG (ABŞ Milli Şəbəkəsi)",
+      "epsg": "Proyeksiyalı (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Koordinat formatı: {{format}}. Dəyişmək üçün klikləyin.",
     "autosavePaused": "Avtomatik saxlama dayandırılıb"
@@ -2428,7 +2431,10 @@
       "scaleUnitHint": "Xəritənin aşağı hissəsindəki miqyas xəttində göstərilən vahidləri seçin.",
       "errorBoundsUnavailable": "Xəritə sərhədləri hələ əlçatan deyil.",
       "coordinateFormat": "Koordinat formatı",
-      "coordinateFormatHint": "Status sətrində göstəricinin koordinatlarının hansı yazılışda göstəriləcəyini təyin edir. Yazılışı dəyişmək üçün status sətrindəki koordinatlara klikləyin."
+      "coordinateFormatHint": "Status sətrində göstəricinin koordinatlarının hansı yazılışda göstəriləcəyini təyin edir. Yazılışı dəyişmək üçün status sətrindəki koordinatlara klikləyin.",
+      "coordinateEpsg": "Koordinat istinad sistemi (EPSG)",
+      "coordinateEpsgHint": "Status sətrinin göstəricinin koordinatını proyeksiya etdiyi EPSG kodu, məsələn 3857 (Web Mercator) və ya 32618 (UTM zonası 18N).",
+      "coordinateEpsgUnknown": "Naməlum EPSG kodu. Məlum kod daxil edilənə qədər status sətri onluq dərəcələri göstərir."
     },
     "layout": {
       "title": "Düzən",

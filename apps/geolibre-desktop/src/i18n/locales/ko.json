@@ -200,7 +200,10 @@
       "dd": "십진 도",
       "dms": "도, 분, 초",
       "ddm": "도, 십진 분",
-      "utm": "UTM (구역, 동거/북거)"
+      "utm": "UTM (구역, 동거/북거)",
+      "mgrs": "MGRS (군사 격자 참조 체계)",
+      "usng": "USNG (미국 국가 격자)",
+      "epsg": "투영 좌표 (EPSG:{{code}})"
     },
     "coordinateFormatHint": "좌표 형식: {{format}}. 클릭하여 전환.",
     "autosavePaused": "자동 저장 일시 중지됨"
@@ -2381,7 +2384,10 @@
       "scaleUnitHint": "지도 하단의 축척 막대에 표시할 단위를 선택하세요.",
       "errorBoundsUnavailable": "지도 경계를 아직 사용할 수 없습니다.",
       "coordinateFormat": "좌표 형식",
-      "coordinateFormatHint": "상태 표시줄이 포인터 좌표를 표시하는 표기법입니다. 상태 표시줄의 좌표를 클릭하면 표기법이 전환됩니다."
+      "coordinateFormatHint": "상태 표시줄이 포인터 좌표를 표시하는 표기법입니다. 상태 표시줄의 좌표를 클릭하면 표기법이 전환됩니다.",
+      "coordinateEpsg": "좌표 참조계 (EPSG)",
+      "coordinateEpsgHint": "상태 표시줄이 포인터 좌표를 투영하는 EPSG 코드입니다(예: 3857 (Web Mercator) 또는 32618 (UTM 18N 구역)).",
+      "coordinateEpsgUnknown": "알 수 없는 EPSG 코드입니다. 알려진 코드를 입력할 때까지 상태 표시줄은 십진 도로 표시합니다."
     },
     "layout": {
       "title": "레이아웃",

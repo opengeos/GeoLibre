@@ -202,7 +202,10 @@
       "dd": "Graus decimais",
       "dms": "Graus, minutos, segundos",
       "ddm": "Graus, minutos decimais",
-      "utm": "UTM (fuso, este/norte)"
+      "utm": "UTM (fuso, este/norte)",
+      "mgrs": "MGRS (Sistema de Referência de Quadrícula Militar)",
+      "usng": "USNG (Quadrícula Nacional dos EUA)",
+      "epsg": "Projetadas (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Formato de coordenadas: {{format}}. Clique para mudar.",
     "autosavePaused": "Salvamento automático pausado"
@@ -2428,7 +2431,10 @@
       "scaleUnitHint": "Escolha as unidades mostradas na barra de escala na parte inferior do mapa.",
       "errorBoundsUnavailable": "Os limites do mapa ainda não estão disponíveis.",
       "coordinateFormat": "Formato de coordenadas",
-      "coordinateFormatHint": "Notação em que a barra de estado apresenta a coordenada do ponteiro. Clique nas coordenadas na barra de estado para mudar de notação."
+      "coordinateFormatHint": "Notação em que a barra de estado apresenta a coordenada do ponteiro. Clique nas coordenadas na barra de estado para mudar de notação.",
+      "coordinateEpsg": "Sistema de referência de coordenadas (EPSG)",
+      "coordinateEpsgHint": "Código EPSG para o qual a barra de estado projeta a coordenada do ponteiro, p. ex. 3857 (Web Mercator) ou 32618 (UTM zona 18N).",
+      "coordinateEpsgUnknown": "Código EPSG desconhecido. A barra de estado mostra graus decimais até ser introduzido um código conhecido."
     },
     "layout": {
       "title": "Layout",

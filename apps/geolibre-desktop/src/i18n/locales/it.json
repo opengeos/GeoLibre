@@ -202,7 +202,10 @@
       "dd": "Gradi decimali",
       "dms": "Gradi, primi, secondi",
       "ddm": "Gradi, primi decimali",
-      "utm": "UTM (fuso, est/nord)"
+      "utm": "UTM (fuso, est/nord)",
+      "mgrs": "MGRS (Military Grid Reference System)",
+      "usng": "USNG (US National Grid)",
+      "epsg": "Proiettate (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Formato coordinate: {{format}}. Fare clic per cambiare.",
     "autosavePaused": "Salvataggio automatico in pausa"
@@ -2428,7 +2431,10 @@
       "scaleUnitHint": "Scegli le unità mostrate sulla barra di scala in fondo alla mappa.",
       "errorBoundsUnavailable": "L'estensione della mappa non è ancora disponibile.",
       "coordinateFormat": "Formato coordinate",
-      "coordinateFormatHint": "Notazione con cui la barra di stato mostra la coordinata del puntatore. Fare clic sulle coordinate nella barra di stato per cambiare notazione."
+      "coordinateFormatHint": "Notazione con cui la barra di stato mostra la coordinata del puntatore. Fare clic sulle coordinate nella barra di stato per cambiare notazione.",
+      "coordinateEpsg": "Sistema di riferimento delle coordinate (EPSG)",
+      "coordinateEpsgHint": "Codice EPSG in cui la barra di stato proietta la coordinata del puntatore, ad es. 3857 (Web Mercator) o 32618 (UTM zona 18N).",
+      "coordinateEpsgUnknown": "Codice EPSG sconosciuto. La barra di stato mostra gradi decimali finché non si inserisce un codice noto."
     },
     "layout": {
       "title": "Layout",

@@ -202,7 +202,10 @@
       "dd": "Ondalık derece",
       "dms": "Derece, dakika, saniye",
       "ddm": "Derece, ondalık dakika",
-      "utm": "UTM (dilim, doğu/kuzey)"
+      "utm": "UTM (dilim, doğu/kuzey)",
+      "mgrs": "MGRS (Askerî Grid Referans Sistemi)",
+      "usng": "USNG (ABD Ulusal Gridi)",
+      "epsg": "Projeksiyonlu (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Koordinat biçimi: {{format}}. Değiştirmek için tıklayın.",
     "autosavePaused": "Otomatik kaydetme duraklatıldı"
@@ -2428,7 +2431,10 @@
       "scaleUnitHint": "Haritanın altındaki ölçek çubuğunda gösterilen birimleri seçin.",
       "errorBoundsUnavailable": "Harita sınırları henüz kullanılamıyor.",
       "coordinateFormat": "Koordinat biçimi",
-      "coordinateFormatHint": "Durum çubuğunun imleç koordinatını gösterdiği biçim. Gösterimi değiştirmek için durum çubuğundaki koordinatlara tıklayın."
+      "coordinateFormatHint": "Durum çubuğunun imleç koordinatını gösterdiği biçim. Gösterimi değiştirmek için durum çubuğundaki koordinatlara tıklayın.",
+      "coordinateEpsg": "Koordinat referans sistemi (EPSG)",
+      "coordinateEpsgHint": "Durum çubuğunun imleç koordinatını projekte ettiği EPSG kodu; ör. 3857 (Web Mercator) veya 32618 (UTM 18N dilimi).",
+      "coordinateEpsgUnknown": "Bilinmeyen EPSG kodu. Bilinen bir kod girilene kadar durum çubuğu ondalık dereceleri gösterir."
     },
     "layout": {
       "title": "Düzen",

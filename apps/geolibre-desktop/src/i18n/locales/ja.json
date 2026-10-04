@@ -200,7 +200,10 @@
       "dd": "十進度",
       "dms": "度分秒",
       "ddm": "度・十進分",
-      "utm": "UTM（ゾーン、東距/北距）"
+      "utm": "UTM（ゾーン、東距/北距）",
+      "mgrs": "MGRS（軍用グリッド参照系）",
+      "usng": "USNG（米国国家グリッド）",
+      "epsg": "投影座標（EPSG:{{code}}）"
     },
     "coordinateFormatHint": "座標形式: {{format}}。クリックで切り替え。",
     "autosavePaused": "自動保存一時停止中"
@@ -2381,7 +2384,10 @@
       "scaleUnitHint": "地図下部のスケールバーに表示する単位を選択します。",
       "errorBoundsUnavailable": "地図の表示範囲がまだ取得できていません。",
       "coordinateFormat": "座標形式",
-      "coordinateFormatHint": "ステータスバーがポインター座標を表示する表記です。 ステータスバーの座標をクリックすると表記を切り替えられます。"
+      "coordinateFormatHint": "ステータスバーがポインター座標を表示する表記です。 ステータスバーの座標をクリックすると表記を切り替えられます。",
+      "coordinateEpsg": "座標参照系（EPSG）",
+      "coordinateEpsgHint": "ステータスバーがポインター座標を投影する EPSG コードです（例: 3857 (Web Mercator)、32618 (UTM ゾーン 18N)）。",
+      "coordinateEpsgUnknown": "不明な EPSG コードです。既知のコードが入力されるまで、ステータスバーは十進度で表示します。"
     },
     "layout": {
       "title": "レイアウト",

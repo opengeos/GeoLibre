@@ -202,7 +202,10 @@
       "dd": "Decimale graden",
       "dms": "Graden, minuten, seconden",
       "ddm": "Graden, decimale minuten",
-      "utm": "UTM (zone, oost/noord)"
+      "utm": "UTM (zone, oost/noord)",
+      "mgrs": "MGRS (Military Grid Reference System)",
+      "usng": "USNG (US National Grid)",
+      "epsg": "Geprojecteerd (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Coördinaatformaat: {{format}}. Klik om te wisselen.",
     "autosavePaused": "Automatisch opslaan gepauzeerd"
@@ -2428,7 +2431,10 @@
       "scaleUnitHint": "Kies de eenheden die op de schaalbalk onderaan de kaart worden weergegeven.",
       "errorBoundsUnavailable": "De kaartgrenzen zijn nog niet beschikbaar.",
       "coordinateFormat": "Coördinaatformaat",
-      "coordinateFormatHint": "Notatie waarin de statusbalk de aanwijzercoördinaat toont. Klik op de coördinaten in de statusbalk om van notatie te wisselen."
+      "coordinateFormatHint": "Notatie waarin de statusbalk de aanwijzercoördinaat toont. Klik op de coördinaten in de statusbalk om van notatie te wisselen.",
+      "coordinateEpsg": "Coördinaatreferentiesysteem (EPSG)",
+      "coordinateEpsgHint": "EPSG-code waarnaar de statusbalk de aanwijzercoördinaat projecteert, bijv. 3857 (Web Mercator) of 32618 (UTM-zone 18N).",
+      "coordinateEpsgUnknown": "Onbekende EPSG-code. De statusbalk toont decimale graden totdat een bekende code is ingevoerd."
     },
     "layout": {
       "title": "Lay-out",

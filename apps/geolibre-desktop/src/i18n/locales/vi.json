@@ -200,7 +200,10 @@
       "dd": "Độ thập phân",
       "dms": "Độ, phút, giây",
       "ddm": "Độ, phút thập phân",
-      "utm": "UTM (vùng, hướng đông/hướng bắc)"
+      "utm": "UTM (vùng, hướng đông/hướng bắc)",
+      "mgrs": "MGRS (Hệ quy chiếu lưới quân sự)",
+      "usng": "USNG (Lưới quốc gia Hoa Kỳ)",
+      "epsg": "Tọa độ phẳng (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Định dạng tọa độ: {{format}}. Bấm để chuyển đổi.",
     "autosavePaused": "Đã tạm dừng tự động lưu"
@@ -2368,8 +2371,11 @@
       "useCurrentViewGlobeHint": "Chuyển sang phép chiếu Mercator trước khi sử dụng. Trong phép chiếu Quả cầu, bản đồ vẫn có thể trôi ra ngoài giới hạn đã chụp một chút.",
       "scaleUnitHint": "Chọn các đơn vị hiển thị trên thanh tỷ lệ ở cuối bản đồ.",
       "errorBoundsUnavailable": "Giới hạn bản đồ chưa có sẵn.",
-      "coordinateFormat": "Mã thông báo API Share.GeoLibre",
+      "coordinateFormat": "Định dạng tọa độ",
       "coordinateFormatHint": "Ký hiệu trên thanh trạng thái báo cáo tọa độ con trỏ. Bấm vào tọa độ trên thanh trạng thái để chuyển đổi ký hiệu.",
+      "coordinateEpsg": "Hệ quy chiếu tọa độ (EPSG)",
+      "coordinateEpsgHint": "Mã EPSG mà thanh trạng thái dùng để chiếu tọa độ con trỏ, ví dụ 3857 (Web Mercator) hoặc 32618 (UTM múi 18N).",
+      "coordinateEpsgUnknown": "Mã EPSG không xác định. Thanh trạng thái hiển thị độ thập phân cho đến khi nhập một mã đã biết.",
       "minZoom": "Thu phóng tối thiểu",
       "maxZoom": "Thu phóng tối đa",
       "maxPitch": "Cao độ tối đa",

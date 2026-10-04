@@ -325,6 +325,40 @@ export function lngLatToUtm(lng: number, lat: number): UtmCoordinate | null {
   }
 }
 
+/**
+ * Inverse of {@link lngLatToUtm}: unproject a UTM easting/northing in a zone and
+ * hemisphere back to lng/lat, through the same proj4 definition.
+ *
+ * Args:
+ *   zone: UTM zone number, 1–60.
+ *   south: Whether the northing is a southern-hemisphere (false-northing) value.
+ *   easting: Easting in metres.
+ *   northing: Northing in metres.
+ *
+ * Returns:
+ *   `[lng, lat]` in degrees, or null for an invalid zone or when proj4 cannot
+ *   unproject the values.
+ */
+export function utmToLngLat(
+  zone: number,
+  south: boolean,
+  easting: number,
+  northing: number,
+): [number, number] | null {
+  if (!Number.isInteger(zone) || zone < 1 || zone > 60) return null;
+  if (!Number.isFinite(easting) || !Number.isFinite(northing)) return null;
+  try {
+    const [lng, lat] = proj4(utmProjDef(zone, south), "EPSG:4326", [easting, northing]) as [
+      number,
+      number,
+    ];
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    return [lng, lat];
+  } catch {
+    return null;
+  }
+}
+
 /** Format a UTM easting for display, e.g. `500000mE`. */
 export function formatEasting(easting: number): string {
   return `${Math.round(easting)}mE`;

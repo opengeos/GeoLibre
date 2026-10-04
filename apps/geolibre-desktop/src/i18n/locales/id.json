@@ -200,7 +200,10 @@
       "dd": "Derajat desimal",
       "dms": "Derajat, menit, detik",
       "ddm": "Derajat, menit desimal",
-      "utm": "UTM (zona, timur/utara)"
+      "utm": "UTM (zona, timur/utara)",
+      "mgrs": "MGRS (Sistem Referensi Grid Militer)",
+      "usng": "USNG (Grid Nasional AS)",
+      "epsg": "Terproyeksi (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Format koordinat: {{format}}. Klik untuk mengganti.",
     "autosavePaused": "Simpan otomatis dijeda"
@@ -2381,7 +2384,10 @@
       "scaleUnitHint": "Pilih satuan yang ditampilkan pada bilah skala di bagian bawah peta.",
       "errorBoundsUnavailable": "Batas peta belum tersedia.",
       "coordinateFormat": "Format koordinat",
-      "coordinateFormatHint": "Notasi yang digunakan bilah status untuk koordinat penunjuk. Klik koordinat di bilah status untuk mengganti notasi."
+      "coordinateFormatHint": "Notasi yang digunakan bilah status untuk koordinat penunjuk. Klik koordinat di bilah status untuk mengganti notasi.",
+      "coordinateEpsg": "Sistem referensi koordinat (EPSG)",
+      "coordinateEpsgHint": "Kode EPSG tempat bilah status memproyeksikan koordinat penunjuk, mis. 3857 (Web Mercator) atau 32618 (UTM zona 18N).",
+      "coordinateEpsgUnknown": "Kode EPSG tidak dikenal. Bilah status menampilkan derajat desimal hingga kode yang dikenal dimasukkan."
     },
     "layout": {
       "title": "Tata Letak",

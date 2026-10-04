@@ -1645,12 +1645,21 @@ export interface MapPreferences {
   /**
    * Notation the status bar reports the pointer coordinate in: `"dd"` decimal
    * degrees (default), `"dms"` degrees/minutes/seconds, `"ddm"` degrees and
-   * decimal minutes, or `"utm"` zone easting/northing. Stored as a string
-   * rather than a union so `@geolibre/core` does not have to depend on the
-   * formatter, which lives with the app's DMS helpers and the Gridlines
-   * plugin's UTM projection; the app normalises unknown values to `"dd"`.
+   * decimal minutes, `"utm"` zone easting/northing, `"mgrs"`/`"usng"` grid
+   * references, or `"epsg"` x/y in the CRS named by `coordinateEpsgCode`.
+   * Stored as a string rather than a union so `@geolibre/core` does not have to
+   * depend on the formatter, which lives with the app's DMS helpers and the
+   * Gridlines plugin's UTM projection; the app normalises unknown values to
+   * `"dd"`.
    */
   coordinateFormat: string;
+  /**
+   * EPSG code the `"epsg"` coordinate format projects the pointer into, e.g.
+   * `3857` or `32618`. Kept beside `coordinateFormat` rather than inside it so
+   * the code survives cycling through the other notations. Absent means the
+   * app default (EPSG:3857).
+   */
+  coordinateEpsgCode?: number;
   /**
    * Whether the map fits to a layer's extent after data is added (Add Data
    * menus, drag-and-drop, file import, tool outputs). Defaults to `true`; turn

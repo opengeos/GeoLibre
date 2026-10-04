@@ -8,9 +8,16 @@ import {
 import type { MapEngine } from "@geolibre/map";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Crosshair, RotateCcw, TriangleAlert } from "lucide-react";
-import type { RefObject } from "react";
+import { type RefObject, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { COORDINATE_FORMATS, normalizeCoordinateFormat } from "../../../lib/coordinate-format";
+import {
+  COORDINATE_FORMATS,
+  createProjectedReadout,
+  normalizeCoordinateEpsgCode,
+  normalizeCoordinateFormat,
+  parseEpsgCodeInput,
+} from "../../../lib/coordinate-format";
+import { CrsPickerInput } from "../../processing/CrsPickerInput";
 import { roundCoordinate } from "./settings-draft";
 import { useSettingsDraft } from "./SettingsDraftContext";
 
@@ -36,6 +43,30 @@ interface MapSectionProps {
 export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps) {
   const { t } = useTranslation();
   const { draftPreferences, setDraftPreferences, setError } = useSettingsDraft();
+  const coordinateFormat = normalizeCoordinateFormat(draftPreferences.map.coordinateFormat);
+  const coordinateEpsgCode = normalizeCoordinateEpsgCode(draftPreferences.map.coordinateEpsgCode);
+  // The EPSG field's own text, so a half-typed or cleared code stays editable;
+  // only a well-formed code is written to the draft.
+  const [epsgText, setEpsgText] = useState(() => String(coordinateEpsgCode));
+  // Follow a code changed from outside the field (a settings reset).
+  useEffect(() => {
+    setEpsgText((text) =>
+      parseEpsgCodeInput(text) === coordinateEpsgCode ? text : String(coordinateEpsgCode),
+    );
+  }, [coordinateEpsgCode]);
+  // Whether the bundled EPSG tables know the draft code; null while checking.
+  const [epsgKnown, setEpsgKnown] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (coordinateFormat !== "epsg") return;
+    let cancelled = false;
+    setEpsgKnown(null);
+    void createProjectedReadout(coordinateEpsgCode).then((readout) => {
+      if (!cancelled) setEpsgKnown(readout !== null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [coordinateFormat, coordinateEpsgCode]);
 
   const updateMapPreferences = (patch: Partial<MapPreferences>) => {
     setDraftPreferences((current) => ({
@@ -275,17 +306,40 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
         <Label htmlFor="settings-coordinate-format">{t("settings.map.coordinateFormat")}</Label>
         <Select
           id="settings-coordinate-format"
-          value={normalizeCoordinateFormat(draftPreferences.map.coordinateFormat)}
+          value={coordinateFormat}
           onChange={(event) => updateMapPreferences({ coordinateFormat: event.target.value })}
         >
           {COORDINATE_FORMATS.map((format) => (
             <option key={format} value={format}>
-              {t(`statusBar.coordinateFormat.${format}`)}
+              {t(`statusBar.coordinateFormat.${format}`, { code: coordinateEpsgCode })}
             </option>
           ))}
         </Select>
         <p className="text-xs text-muted-foreground">{t("settings.map.coordinateFormatHint")}</p>
       </div>
+      {coordinateFormat === "epsg" ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="settings-coordinate-epsg">{t("settings.map.coordinateEpsg")}</Label>
+          <CrsPickerInput
+            id="settings-coordinate-epsg"
+            value={epsgText}
+            onChange={(value) => {
+              const text = String(value ?? "");
+              setEpsgText(text);
+              const code = parseEpsgCodeInput(text);
+              if (code !== null) updateMapPreferences({ coordinateEpsgCode: code });
+            }}
+          />
+          {epsgKnown === false || parseEpsgCodeInput(epsgText) === null ? (
+            <p className="flex items-center gap-1 text-xs text-destructive">
+              <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+              {t("settings.map.coordinateEpsgUnknown")}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">{t("settings.map.coordinateEpsgHint")}</p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

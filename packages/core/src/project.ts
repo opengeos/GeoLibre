@@ -1372,6 +1372,11 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         typeof (map as Partial<ProjectPreferences["map"]>).coordinateFormat === "string"
           ? ((map as Partial<ProjectPreferences["map"]>).coordinateFormat as string)
           : DEFAULT_PROJECT_PREFERENCES.map.coordinateFormat,
+      // Absent in projects written before the EPSG readout existed; only a
+      // positive integer survives, so a hand-edited value cannot reach proj4.
+      coordinateEpsgCode: normalizeEpsgCode(
+        (map as Partial<ProjectPreferences["map"]>).coordinateEpsgCode,
+      ),
       // Older projects omit this field and keep fitting to newly added data.
       zoomToNewLayers: normalizeBoolean(
         (map as Partial<ProjectPreferences["map"]>).zoomToNewLayers,
@@ -1385,6 +1390,19 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       : [],
     geocoding: normalizeGeocodingPreferences(candidate.geocoding),
   };
+}
+
+/**
+ * Keep a stored EPSG code only when it is a positive integer.
+ *
+ * Args:
+ *   value: The stored value, of unknown shape.
+ *
+ * Returns:
+ *   The code, or undefined for anything else.
+ */
+function normalizeEpsgCode(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 function normalizeGeocodingPreferences(geocoding: unknown): ProjectPreferences["geocoding"] {

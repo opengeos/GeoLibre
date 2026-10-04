@@ -202,7 +202,10 @@
       "dd": "Degrés décimaux",
       "dms": "Degrés, minutes, secondes",
       "ddm": "Degrés, minutes décimales",
-      "utm": "UTM (fuseau, est/nord)"
+      "utm": "UTM (fuseau, est/nord)",
+      "mgrs": "MGRS (Military Grid Reference System)",
+      "usng": "USNG (US National Grid)",
+      "epsg": "Projetées (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Format de coordonnées : {{format}}. Cliquez pour changer.",
     "autosavePaused": "Enregistrement auto en pause"
@@ -2428,7 +2431,10 @@
       "scaleUnitHint": "Choisissez les unités affichées sur la barre d'échelle en bas de la carte.",
       "errorBoundsUnavailable": "L'étendue de la carte n'est pas encore disponible.",
       "coordinateFormat": "Format de coordonnées",
-      "coordinateFormatHint": "Notation utilisée par la barre d'état pour la coordonnée du pointeur. Cliquez sur les coordonnées dans la barre d'état pour changer de notation."
+      "coordinateFormatHint": "Notation utilisée par la barre d'état pour la coordonnée du pointeur. Cliquez sur les coordonnées dans la barre d'état pour changer de notation.",
+      "coordinateEpsg": "Système de coordonnées de référence (EPSG)",
+      "coordinateEpsgHint": "Code EPSG dans lequel la barre d'état projette la coordonnée du pointeur, par ex. 3857 (Web Mercator) ou 32618 (UTM zone 18N).",
+      "coordinateEpsgUnknown": "Code EPSG inconnu. La barre d'état affiche des degrés décimaux jusqu'à la saisie d'un code connu."
     },
     "layout": {
       "title": "Disposition",

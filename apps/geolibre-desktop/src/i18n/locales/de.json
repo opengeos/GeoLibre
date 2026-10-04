@@ -202,7 +202,10 @@
       "dd": "Dezimalgrad",
       "dms": "Grad, Minuten, Sekunden",
       "ddm": "Grad, Dezimalminuten",
-      "utm": "UTM (Zone, Ost-/Nordwert)"
+      "utm": "UTM (Zone, Ost-/Nordwert)",
+      "mgrs": "MGRS (Military Grid Reference System)",
+      "usng": "USNG (US National Grid)",
+      "epsg": "Projiziert (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Koordinatenformat: {{format}}. Zum Wechseln klicken.",
     "autosavePaused": "Automatisches Speichern pausiert"
@@ -2428,7 +2431,10 @@
       "scaleUnitHint": "Wählen Sie die Einheiten, die auf der Maßstabsleiste am unteren Kartenrand angezeigt werden.",
       "errorBoundsUnavailable": "Die Kartengrenzen sind noch nicht verfügbar.",
       "coordinateFormat": "Koordinatenformat",
-      "coordinateFormatHint": "Notation, in der die Statusleiste die Zeigerkoordinate anzeigt. Klicken Sie auf die Koordinaten in der Statusleiste, um die Notation zu wechseln."
+      "coordinateFormatHint": "Notation, in der die Statusleiste die Zeigerkoordinate anzeigt. Klicken Sie auf die Koordinaten in der Statusleiste, um die Notation zu wechseln.",
+      "coordinateEpsg": "Koordinatenbezugssystem (EPSG)",
+      "coordinateEpsgHint": "EPSG-Code, in den die Statusleiste die Zeigerkoordinate projiziert, z. B. 3857 (Web Mercator) oder 32618 (UTM-Zone 18N).",
+      "coordinateEpsgUnknown": "Unbekannter EPSG-Code. Die Statusleiste zeigt Dezimalgrad, bis ein bekannter Code eingegeben wird."
     },
     "layout": {
       "title": "Layout",

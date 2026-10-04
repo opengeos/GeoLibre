@@ -36,7 +36,7 @@ The Settings dialog is organized into these sections:
 | **Render world copies** | Show repeated copies of the world when zoomed out. |
 | **Celestial body** | The body whose radius drives distance, area, and scale measurements. Pick the one matching your planetary basemap under [Add Data](adding-data.md). |
 | **Scale bar units** | Metric (m / km), Imperial (ft / mi), or Nautical (nmi). This also sets the units used by the status bar's **Elev** and **Eye alt** readouts and by the quick-analysis buffer presets. |
-| **Coordinate format** | The notation the status bar reports the pointer coordinate in: decimal degrees, DMS, DDM, or UTM. See [the status bar](interface.md#coordinate-format). |
+| **Coordinate format** | The notation the status bar reports the pointer coordinate in: decimal degrees, DMS, DDM, UTM, MGRS, USNG, or x/y in a projected CRS. Choosing the projected format shows an **EPSG** field for the CRS code. See [the status bar](interface.md#coordinate-format). |
 
 Use **Use Current View** to set the bounds from where the map is now, or **Reset** to restore the defaults. These preferences are saved in the project file.
 

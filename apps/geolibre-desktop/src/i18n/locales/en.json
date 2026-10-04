@@ -211,7 +211,10 @@
       "dd": "Decimal degrees",
       "dms": "Degrees, minutes, seconds",
       "ddm": "Degrees, decimal minutes",
-      "utm": "UTM (zone, easting/northing)"
+      "utm": "UTM (zone, easting/northing)",
+      "mgrs": "MGRS (Military Grid Reference System)",
+      "usng": "USNG (US National Grid)",
+      "epsg": "Projected (EPSG:{{code}})"
     },
     "coordinateFormatHint": "Coordinate format: {{format}}. Click to switch.",
     "autosavePaused": "Autosave paused"
@@ -2437,7 +2440,10 @@
       "scaleUnitHint": "Choose the units shown on the scale bar at the bottom of the map.",
       "errorBoundsUnavailable": "The map bounds are not available yet.",
       "coordinateFormat": "Coordinate format",
-      "coordinateFormatHint": "Notation the status bar reports the pointer coordinate in. Click the coordinates in the status bar to switch notation."
+      "coordinateFormatHint": "Notation the status bar reports the pointer coordinate in. Click the coordinates in the status bar to switch notation.",
+      "coordinateEpsg": "Coordinate reference system (EPSG)",
+      "coordinateEpsgHint": "EPSG code the status bar projects the pointer coordinate into, e.g. 3857 (Web Mercator) or 32618 (UTM zone 18N).",
+      "coordinateEpsgUnknown": "Unknown EPSG code. The status bar shows decimal degrees until a known code is entered."
     },
     "layout": {
       "title": "Layout",
