@@ -217,10 +217,12 @@ const SIDECAR_PORT: u16 = 8765;
 // backend/geolibre_server/geolibre_server/app/postgis.py.
 #[cfg(not(feature = "mas"))]
 const POSTGIS_HOSTS_ENV: &str = "GEOLIBRE_POSTGIS_HOSTS";
-// Desktop is the case that restriction is not aimed at: the sidecar is
-// loopback-bound, token-authenticated, and spawned for one user who is also its
-// operator, so it would only mean a user cannot reach their own database
-// without setting an environment variable for a process the app launches.
+// SQL Server endpoints use the same destination restriction for shared deployments.
+#[cfg(not(feature = "mas"))]
+const MSSQL_HOSTS_ENV: &str = "GEOLIBRE_MSSQL_HOSTS";
+#[cfg(not(feature = "mas"))]
+const MSSQL_HOSTS_DESKTOP_DEFAULT: &str = "*";
+// Desktop starts its loopback sidecar for one user, so the default is unrestricted.
 #[cfg(not(feature = "mas"))]
 const POSTGIS_HOSTS_DESKTOP_DEFAULT: &str = "*";
 // The desktop JupyterLab server for the Notebook panel. Loopback-bound and
@@ -2608,7 +2610,9 @@ fn add_main_sidecar_extras(command: &mut Command) {
         .arg("--extra")
         .arg("ml")
         .arg("--extra")
-        .arg("postgis");
+        .arg("postgis")
+        .arg("--extra")
+        .arg("mssql");
 }
 
 #[cfg(not(feature = "mas"))]
@@ -2678,6 +2682,10 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| POSTGIS_HOSTS_DESKTOP_DEFAULT.to_string());
+    let mssql_hosts = env::var(MSSQL_HOSTS_ENV)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| MSSQL_HOSTS_DESKTOP_DEFAULT.to_string());
 
     let mut command = Command::new(&uv);
     command
@@ -2687,10 +2695,9 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .arg("--frozen")
         .arg("--project")
         .arg(&project_dir);
-    // The main sidecar serves both the AI segmentation proxy and editable
-    // PostGIS layers. Unlike whitebox/conversion (separate managed venvs),
-    // neither feature has a lazy bootstrap, so both extras must be synced into
-    // the sidecar environment here.
+    // The main sidecar serves AI segmentation, editable PostGIS and SQL Server
+    // layers. Unlike whitebox/conversion (separate managed venvs), their extras
+    // must be synced into this environment here.
     add_main_sidecar_extras(&mut command);
     command
         .arg("uvicorn")
@@ -2704,6 +2711,8 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .env("GEOLIBRE_SIDECAR_TOKEN", sidecar_token())
         .env("GEOLIBRE_RUNTIME_DIR", &runtime_dir)
         .env(POSTGIS_HOSTS_ENV, &postgis_hosts)
+        .env(MSSQL_HOSTS_ENV, &mssql_hosts)
+        .env("GEOLIBRE_MSSQL_DESKTOP_AUTH", "1")
         .env("UV_CACHE_DIR", runtime_dir.join("uv-cache"))
         .env("UV_PYTHON_INSTALL_DIR", runtime_dir.join("uv-python"))
         .env("UV_PROJECT_ENVIRONMENT", runtime_dir.join("sidecar-server"))
@@ -4997,7 +5006,7 @@ mod tests {
 
     #[cfg(not(feature = "mas"))]
     #[test]
-    fn main_sidecar_installs_postgis_runtime() {
+    fn main_sidecar_installs_database_runtimes() {
         let mut command = Command::new("uv");
         add_main_sidecar_extras(&mut command);
         let args: Vec<_> = command.get_args().collect();
@@ -5008,6 +5017,8 @@ mod tests {
                 OsStr::new("ml"),
                 OsStr::new("--extra"),
                 OsStr::new("postgis"),
+                OsStr::new("--extra"),
+                OsStr::new("mssql"),
             ]
         );
     }

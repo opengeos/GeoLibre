@@ -159,6 +159,9 @@ RUN mkdir -p /data
 # `host` or `host:port`) — otherwise a same-origin caller could aim them at
 # hosts only this container can reach. Deliberately left unset: set it at
 # `docker run` time to enable PostGIS, or `*` to accept any connection string.
+# SQL Server uses the same destination allowlist via GEOLIBRE_MSSQL_HOSTS; it is
+# intentionally unset in this image. This image also does not install pyodbc or
+# Microsoft ODBC Driver 18: operators must add both in a derived image.
 
 # WARNING: docker/nginx.conf's CSP allows http://localhost:* / http://127.0.0.1:*
 # (and ws:// equivalents) in connect-src for local-dev data sources (PMTiles/COGs

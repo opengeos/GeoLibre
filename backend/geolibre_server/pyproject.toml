@@ -12,7 +12,7 @@ dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0"]
 # the vector/raster/SQL/ML tests skip themselves (via skipif/importorskip), so a
 # `[dev]`-only install reports a misleadingly green, near-empty run. CI installs
 # this group; run it locally with `pip install -e "backend/geolibre_server[test]"`.
-test = ["geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis,notebook,pointcloud]"]
+test = ["geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis,mssql,notebook,pointcloud]"]
 whitebox = ["whitebox-workflows>=2.0.2"]
 conversion = ["duckdb>=1.1.0", "rio-cogeo>=5.0.0", "freestiler>=0.1.0"]
 # Optional GeoPandas engine for the Vector processing tools. Not installed by
@@ -23,6 +23,10 @@ vector = ["geopandas>=1.0", "shapely>=2.0"]
 # only requirement: geometries are read/written as GeoJSON via ST_AsGeoJSON /
 # ST_GeomFromGeoJSON, so no GeoPandas is involved on this path.
 postgis = ["psycopg[binary]>=3.1"]
+# SQL Server / Azure SQL editable layers. The Microsoft ODBC Driver 18 (and
+# unixODBC on macOS/Linux) must be installed separately from Python packages.
+mssql = ["pyodbc>=5.1", "azure-identity>=1.17", "shapely>=2.0", "pyproj>=3.6"]
+
 # Raster processing tools (hillshade, slope, reproject, polygonize, contour...).
 # rasterio + numpy already arrive via the `conversion` extra (rio-cogeo); they
 # are listed here too so the raster feature can be installed on its own.

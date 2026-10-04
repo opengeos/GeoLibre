@@ -15,6 +15,7 @@ ROUTE_CAPABILITIES = {
     "ml": frozenset({"processing:run"}),
     "sql": frozenset({"processing:run"}),
     "postgis": frozenset({"data:add"}),
+    "mssql": frozenset({"data:add"}),
     "conversion": frozenset({"processing:run", "data:add"}),
 }
 

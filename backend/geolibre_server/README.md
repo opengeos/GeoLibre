@@ -130,6 +130,33 @@ default, so a desktop user can still narrow it. A deployment where the sidecar
 is reachable by untrusted same-origin content (the bundled Docker image) leaves
 it unset, and PostGIS stays off until an operator lists the databases.
 
+## SQL Server / Azure SQL
+
+Editable SQL Server and Azure SQL spatial tables require the optional Python
+extra and Microsoft's ODBC Driver 18, which is installed separately:
+
+```bash
+pip install -e ".[mssql]"
+```
+
+Install ODBC Driver 18 using the [Windows MSI installer](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server),
+`brew install microsoft/mssql-release/msodbcsql18` on macOS, or the
+[Microsoft apt repository](https://learn.microsoft.com/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
+on Linux. Linux and macOS also need unixODBC. The Docker image does **not**
+install pyodbc or the ODBC driver; see the derived-image example in
+`docs/getting-started.md`.
+
+The endpoints are disabled until `GEOLIBRE_MSSQL_HOSTS` lists permitted
+destinations, using the same comma-separated host/IP and optional-port syntax
+as `GEOLIBRE_POSTGIS_HOSTS`. Named SQL Server instances need a host-only entry
+because they do not use a TCP port. The desktop sidecar enables Windows
+integrated and interactive Entra authentication; those methods are unavailable
+to a shared sidecar. Managed identity (`msi`) is likewise disabled by default,
+since it would let any caller borrow the sidecar host's Azure identity; a
+single-tenant operator can opt in with
+`GEOLIBRE_MSSQL_ALLOW_MANAGED_IDENTITY=1`. `GEOLIBRE_MSSQL_DESKTOP_AUTH=1` (set by the desktop app) implies that opt-in as well as enabling Windows and interactive sign-in, so do not set it on a shared sidecar. Writes are 2D, so Z/M coordinates
+are not retained for features that are saved.
+
 ## Endpoints
 
 | Method | Path | Description |

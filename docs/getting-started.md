@@ -204,6 +204,26 @@ reach. Pass `-e GEOLIBRE_POSTGIS_HOSTS='db.internal:5432'` (or `*` to accept any
 connection string) to enable them. The desktop app is not affected: its sidecar
 is loopback-bound and started for a single user, so it defaults to unrestricted.
 
+The image does **not** ship with pyodbc or Microsoft ODBC Driver 18. To enable
+SQL Server / Azure SQL, build a derived image that installs the driver and the
+sidecar's `mssql` extra:
+
+```dockerfile
+FROM ghcr.io/opengeos/geolibre:latest
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl gpg \
+ && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
+ && echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/microsoft-prod.list \
+ && apt-get update \
+ && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 unixodbc \
+ && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir "/opt/geolibre_server[mssql]"
+```
+
+Then allow only the database host at runtime, for example
+`-e GEOLIBRE_MSSQL_HOSTS='sql.internal:1433'`. Do not expose the SQL Server
+endpoints without an explicit allowlist.
+
 `freestiler` and `whitebox-workflows` publish no linux/arm64 wheels, so they are
 installed on **amd64 only**; on arm64 the sidecar reports those tools
 unavailable. This does not affect the browser's own PMTiles and Whitebox

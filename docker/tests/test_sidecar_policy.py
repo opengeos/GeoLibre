@@ -19,6 +19,7 @@ def test_route_ownership_contract():
     assert sp.ROUTE_CAPABILITIES == {
         **{prefix: frozenset({"processing:run"}) for prefix in PROCESSING},
         "postgis": frozenset({"data:add"}),
+        "mssql": frozenset({"data:add"}),
         "conversion": frozenset({"processing:run", "data:add"}),
     }
 
@@ -27,12 +28,12 @@ def test_route_ownership_contract():
     "capabilities,denied,start",
     [
         (None, set(), True),
-        ([], PROCESSING | {"postgis", "conversion"}, False),
-        (["export:data"], PROCESSING | {"postgis", "conversion"}, False),
+        ([], PROCESSING | {"postgis", "mssql", "conversion"}, False),
+        (["export:data"], PROCESSING | {"postgis", "mssql", "conversion"}, False),
         (["data:add"], PROCESSING, True),
-        (["processing:run"], {"postgis"}, True),
+        (["processing:run"], {"postgis", "mssql"}, True),
         (["processing:run", "data:add"], set(), True),
-        (["project:edit", "sharing:embed"], PROCESSING | {"postgis", "conversion"}, False),
+        (["project:edit", "sharing:embed"], PROCESSING | {"postgis", "mssql", "conversion"}, False),
     ],
 )
 def test_capability_matrix(capabilities, denied, start):

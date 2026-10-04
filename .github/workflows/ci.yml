@@ -457,6 +457,55 @@ jobs:
           GEOLIBRE_TEST_POSTGRES_URL: postgresql+psycopg://geolibre:geolibre@127.0.0.1:5432/geolibre_test
         run: python -m pytest backend/geolibre_server_api/tests -m postgres
 
+  sidecar-mssql:
+    name: Sidecar SQL Server integration
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "GeoLibre_Test1!"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'GeoLibre_Test1!' -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Microsoft ODBC Driver 18
+        run: |
+          if ! grep -Rqs "packages.microsoft.com" /etc/apt/sources.list /etc/apt/sources.list.d; then
+            sudo install -d -m 0755 /etc/apt/keyrings
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc |
+              sudo gpg --dearmor --batch --yes -o /etc/apt/keyrings/microsoft-prod.gpg
+            echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" |
+              sudo tee /etc/apt/sources.list.d/mssql-release.list
+          fi
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc
+      - name: Install the sidecar with the SQL Server extra
+        run: python -m pip install -e "backend/geolibre_server[dev,mssql]"
+      - name: Run SQL Server integration tests
+        env:
+          GEOLIBRE_TEST_MSSQL_SERVER: 127.0.0.1
+          GEOLIBRE_TEST_MSSQL_DATABASE: master
+          GEOLIBRE_TEST_MSSQL_USER: sa
+          GEOLIBRE_TEST_MSSQL_PASSWORD: GeoLibre_Test1!
+          GEOLIBRE_TEST_MSSQL_REQUIRED: "1"
+          GEOLIBRE_MSSQL_HOSTS: 127.0.0.1:1433
+        run: python -m pytest backend/geolibre_server/tests/test_mssql.py -rs
+
   projects-identity-oidc-interop:
     name: Identity OIDC interop
     runs-on: ubuntu-22.04
