@@ -1760,6 +1760,10 @@ describe("story map import/export", () => {
     assert.ok(!csv.includes("undefined"), csv);
     const restored = parseStoryMapCsv(csv, null);
     assert.equal(restored.chapters[0].location.zoom, 4);
+    // Import fills an empty cell with 0, the same as loading a project file
+    // whose chapter omits them (see StoryChapterLocation).
+    assert.equal(restored.chapters[0].location.pitch, 0);
+    assert.equal(restored.chapters[0].location.bearing, 0);
   });
 
   it("imports hand-authored CSV with reordered columns and missing ids", () => {

@@ -96,11 +96,11 @@ export function storyVisibleLayers(
 /**
  * Resolve a story chapter location to a full camera view.
  *
- * A chapter's `pitch` and `bearing` are optional (a hand-written or older
- * project may omit them). An absent value keeps the camera's current one, the
- * same as MapLibre's camera methods do for an omitted option, so engines whose
- * camera API needs every field (Cesium, `MapEngine.applyView`) behave like the
- * MapLibre map.
+ * A location's `pitch` and `bearing` are optional in memory (a project file
+ * fills them with 0 on load). An absent value keeps the camera's current one,
+ * the same as MapLibre's camera methods do for an omitted option, so engines
+ * whose camera API needs every field (Cesium, `MapEngine.applyView`) behave
+ * like the MapLibre map.
  *
  * @param location The chapter's camera target.
  * @param current The camera's current view, used for an absent pitch/bearing.
