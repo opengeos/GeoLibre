@@ -148,7 +148,7 @@ describe("menu presets and predicates", () => {
   });
 
   it("never hides the Settings menu (excluded from TOP_LEVEL_MENUS)", () => {
-    assert.ok(!TOP_LEVEL_MENUS.some((menu) => menu.id === "settings"));
+    assert.ok(!TOP_LEVEL_MENUS.some((menu) => (menu.id as string) === "settings"));
   });
 
   it("never hides the Settings Interface entry", () => {

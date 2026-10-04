@@ -53,7 +53,7 @@ describe("createWeatherLayer", () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     useAppStore.setState({ isDirty: false });
     useAppStore.temporal.getState().clear();
-    const tile = () => ownedLayers()[0]?.source.tiles?.[0];
+    const tile = () => (ownedLayers()[0]?.source.tiles as string[] | undefined)?.[0];
     const before = tile();
     c.togglePlaying();
     // Exactly one tick: the resting frame differs from the start frame.

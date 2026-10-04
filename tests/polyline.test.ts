@@ -9,6 +9,7 @@ import {
   unescapePolyline,
 } from "@geolibre/core";
 import type { Feature, FeatureCollection, LineString, MultiLineString } from "geojson";
+import type { LoadedVectorLayer } from "../apps/geolibre-desktop/src/lib/file-io/loaded-layer";
 
 describe("polyline codec", () => {
   describe("decodePolyline", () => {
@@ -642,9 +643,11 @@ describe("polyline codec", () => {
       const loaded = await loadDroppedVectorFiles([mockPolylineFile]);
       assert.equal(loaded.length, 1);
       assert.equal(loaded[0].name, "Polyline");
-      assert.equal(loaded[0].data.type, "FeatureCollection");
-      assert.equal(loaded[0].data.features.length, 2);
-      assert.equal(loaded[0].data.features[0].geometry.type, "LineString");
+      // A .polyline file always loads as a vector layer.
+      const vector = loaded[0] as LoadedVectorLayer;
+      assert.equal(vector.data.type, "FeatureCollection");
+      assert.equal(vector.data.features.length, 2);
+      assert.equal(vector.data.features[0].geometry.type, "LineString");
     });
   });
 

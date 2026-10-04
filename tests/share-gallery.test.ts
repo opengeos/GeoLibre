@@ -226,7 +226,7 @@ describe("fetchSharedProjects", () => {
         json: async () => {
           throw new SyntaxError("Unexpected token < in JSON");
         },
-      }) as Response) as unknown as typeof fetch;
+      }) as unknown as Response) as unknown as typeof fetch;
     await assert.rejects(
       () => fetchSharedProjects({ baseUrl: BASE, fetchImpl: fn }),
       (err: unknown) => err instanceof GalleryError && err.code === "invalid-response",

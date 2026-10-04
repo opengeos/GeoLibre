@@ -5,6 +5,7 @@ import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins/geo-editor-geometry";
 import type { GeoLibreSelection } from "@geolibre/plugins";
 import { createPluginLayerGroupActions } from "../apps/geolibre-desktop/src/lib/plugin-layer-groups";
 import { createPluginLayerQueries } from "../apps/geolibre-desktop/src/lib/plugin-layer-queries";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 // These exercise `createPluginLayerQueries`, which `createAppAPI` spreads into
 // the object it hands plugins, rather than reaching through `createAppAPI`
@@ -24,8 +25,8 @@ describe("external plugin query API", () => {
     const layerId = store.addGeoJsonLayer("Catchments", {
       type: "FeatureCollection",
       features: [
-        { type: "Feature", id: "A", properties: { NAME: "A" }, geometry: null },
-        { type: "Feature", id: "B", properties: { NAME: "B" }, geometry: null },
+        { type: "Feature", id: "A", properties: { NAME: "A" }, geometry: NULL_GEOMETRY },
+        { type: "Feature", id: "B", properties: { NAME: "B" }, geometry: NULL_GEOMETRY },
       ],
     });
     store.selectLayer(layerId);
@@ -152,8 +153,8 @@ describe("external plugin query API", () => {
     const layerId = store.addGeoJsonLayer("Unkeyed", {
       type: "FeatureCollection",
       features: [
-        { type: "Feature", properties: { NAME: "First" }, geometry: null },
-        { type: "Feature", properties: { NAME: "Second" }, geometry: null },
+        { type: "Feature", properties: { NAME: "First" }, geometry: NULL_GEOMETRY },
+        { type: "Feature", properties: { NAME: "Second" }, geometry: NULL_GEOMETRY },
       ],
     });
     store.selectLayer(layerId);
@@ -171,7 +172,7 @@ describe("external plugin query API", () => {
     const store = useAppStore.getState();
     const layerId = store.addGeoJsonLayer("Catchments", {
       type: "FeatureCollection",
-      features: [{ type: "Feature", id: "A", properties: {}, geometry: null }],
+      features: [{ type: "Feature", id: "A", properties: {}, geometry: NULL_GEOMETRY }],
     });
     store.selectLayer(layerId);
 
@@ -184,7 +185,7 @@ describe("external plugin query API", () => {
     const store = useAppStore.getState();
     store.addGeoJsonLayer("Catchments", {
       type: "FeatureCollection",
-      features: [{ type: "Feature", id: "ordinary", properties: {}, geometry: null }],
+      features: [{ type: "Feature", id: "ordinary", properties: {}, geometry: NULL_GEOMETRY }],
     });
     const sketchLayerId = store.addGeoJsonLayer("Sketches", {
       type: "FeatureCollection",
@@ -283,7 +284,7 @@ describe("external plugin layer-group API", () => {
     const store = useAppStore.getState();
     const layerId = store.addGeoJsonLayer("Catchments", {
       type: "FeatureCollection",
-      features: [{ type: "Feature", id: "A", properties: {}, geometry: null }],
+      features: [{ type: "Feature", id: "A", properties: {}, geometry: NULL_GEOMETRY }],
     });
     const app = { ...createPluginLayerGroupActions(), ...createPluginLayerQueries() };
     const groupId = app.addLayerGroup("Basins");

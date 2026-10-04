@@ -710,12 +710,16 @@ describe("God's Eye View feed refresh", () => {
         '[data-feed-id="satellites"] input[type=checkbox]',
       ) as HTMLInputElement;
       checkbox.checked = false;
-      checkbox.dispatchEvent(new (globe.panel.ownerDocument.defaultView as Window).Event("change"));
+      checkbox.dispatchEvent(
+        new (globe.panel.ownerDocument.defaultView as Window & typeof globalThis).Event("change"),
+      );
       const back = globe.panel.querySelector(
         '[data-feed-id="satellites"] input[type=checkbox]',
       ) as HTMLInputElement;
       back.checked = true;
-      back.dispatchEvent(new (globe.panel.ownerDocument.defaultView as Window).Event("change"));
+      back.dispatchEvent(
+        new (globe.panel.ownerDocument.defaultView as Window & typeof globalThis).Event("change"),
+      );
       for (let i = 0; i < 8; i++) await flush();
       const clock = globe.viewer.clock;
       assert.ok((clock.currentTime as number) <= (clock.stopTime as number));
@@ -849,7 +853,7 @@ describe("God's Eye View feed refresh", () => {
   it("restores the current viewport when an intervening request is still in flight", async () => {
     const originalFetch = globalThis.fetch;
     let overpassCalls = 0;
-    let resolveSecond: ((response: Response) => void) | null = null;
+    let resolveSecond = null as ((response: Response) => void) | null;
     globalThis.fetch = (async (input: string | URL | Request) => {
       if (!String(input).includes("tiles.geolibre.app/overpass")) {
         return new Response(JSON.stringify({ elements: [] }), { status: 200 });
@@ -947,12 +951,17 @@ describe("God's Eye View clock speed", () => {
       const sixty = [...select.options].find((option) => option.value === "60");
       assert.ok(sixty);
       sixty.selected = true;
-      select.dispatchEvent(new (globe.panel.ownerDocument.defaultView as Window).Event("change"));
+      select.dispatchEvent(
+        new (globe.panel.ownerDocument.defaultView as Window & typeof globalThis).Event("change"),
+      );
       // The panel re-renders on a setting change; the fresh select shows it.
       assert.equal((globe.panel.querySelector("select") as HTMLSelectElement).value, "60");
       assert.equal(globe.viewer.clock.multiplier, 60);
       assert.equal(net.calls(), afterActivate, "changing speed refetches nothing");
-      assert.equal(godsEyeViewPlugin.getProjectState?.().speed, 60);
+      assert.equal(
+        (godsEyeViewPlugin.getProjectState?.() as { speed?: unknown } | undefined)?.speed,
+        60,
+      );
 
       // A project carrying a speed re-times a globe that is already running;
       // a hand-edited one carrying nonsense falls back to real time.
@@ -1040,7 +1049,7 @@ describe("God's Eye View keyed feeds", () => {
     } as unknown as typeof WebSocket;
     const net = stubFetch();
     const globe = makeGlobe();
-    const Event = () => (globe.panel.ownerDocument.defaultView as Window).Event;
+    const Event = () => (globe.panel.ownerDocument.defaultView as Window & typeof globalThis).Event;
     try {
       useAppStore.setState({ layers: [] });
       globe.setViewBounds([-75, 40, -73, 41.5]);
@@ -1135,7 +1144,7 @@ describe("God's Eye View keyed feeds", () => {
       for (let i = 0; i < 4; i++) await flush();
       assert.equal(sockets.length, 2);
 
-      const state = godsEyeViewPlugin.getProjectState?.(globe.app);
+      const state = godsEyeViewPlugin.getProjectState?.();
       assert.equal((state as Record<string, unknown>).vessels, true);
       assert.doesNotMatch(JSON.stringify(state), /secret-ais-key/);
       assert.ok(

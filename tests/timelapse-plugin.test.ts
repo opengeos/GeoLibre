@@ -534,7 +534,7 @@ describe("maplibreTimelapsePlugin", () => {
     plugin.applyProjectState?.(app, { providerId: "slow-async", year: 2020 });
     const activation = plugin.activate(app);
     plugin.deactivate(app);
-    release?.();
+    (release as (() => void) | null)?.(); // assigned inside the provider callback
     assert.equal(await activation, false);
     assert.equal(getActiveTimelapseControl(), null);
     assert.equal(map.sources.size, 0);

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isPluginEngineSupported } from "../packages/plugins/src/types";
+import { isPluginEngineSupported, type GeoLibrePlugin } from "../packages/plugins/src/types";
+
+/** The identity fields plus the optional engine list the check reads. */
+type PluginStub = Pick<GeoLibrePlugin, "id" | "name" | "version" | "engines">;
 import { maplibreArcGisHubPlugin } from "../packages/plugins/src/plugins/maplibre-arcgis-hub";
 import { maplibreBasemapControlPlugin } from "../packages/plugins/src/plugins/maplibre-basemap-control";
 import {
@@ -25,7 +28,7 @@ import {
 
 describe("isPluginEngineSupported", () => {
   it("defaults to MapLibre support when engines is undefined", () => {
-    const plugin = { id: "test", name: "Test", version: "1.0.0" };
+    const plugin: PluginStub = { id: "test", name: "Test", version: "1.0.0" };
     assert.equal(isPluginEngineSupported(plugin, "maplibre"), true);
     assert.equal(isPluginEngineSupported(plugin, "cesium"), false);
   });
@@ -126,7 +129,7 @@ describe("Tier 1 built-in plugin engine support audit", () => {
   });
 
   it("defaults MapLibre-only plugins without explicit engines to maplibre", () => {
-    const defaultPlugin = { id: "plain-plugin", name: "Plain", version: "1.0.0" };
+    const defaultPlugin: PluginStub = { id: "plain-plugin", name: "Plain", version: "1.0.0" };
     assert.equal(isPluginEngineSupported(defaultPlugin, "maplibre"), true);
     assert.equal(isPluginEngineSupported(defaultPlugin, "cesium"), false);
   });

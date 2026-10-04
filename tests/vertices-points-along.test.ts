@@ -3,9 +3,15 @@ import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, setActiveEllipsoidId, type GeoLibreLayer } from "@geolibre/core";
 import { getVectorTool } from "@geolibre/processing";
 import distance from "@turf/distance";
-import type { FeatureCollection, Point, Position } from "geojson";
+import type { FeatureCollection, Geometry, Point, Position } from "geojson";
+import { withNullGeometries } from "./helpers/null-geometry";
 
-function makeLayer(id: string, name: string, fc: FeatureCollection): GeoLibreLayer {
+// `fc` may hold null geometries: the tools must skip them, so fixtures carry them.
+function makeLayer(
+  id: string,
+  name: string,
+  fc: FeatureCollection<Geometry | null>,
+): GeoLibreLayer {
   return {
     id,
     name,
@@ -15,7 +21,7 @@ function makeLayer(id: string, name: string, fc: FeatureCollection): GeoLibreLay
     opacity: 1,
     style: { ...DEFAULT_LAYER_STYLE },
     metadata: {},
-    geojson: fc,
+    geojson: withNullGeometries(fc),
   };
 }
 
@@ -114,7 +120,7 @@ describe("extract vertices tool", () => {
   it("skips geometry-less features and errors on an empty result", () => {
     const mixed = makeLayer("mixed", "Mixed", {
       type: "FeatureCollection",
-      features: [{ type: "Feature", properties: {}, geometry: null }, ...line.geojson.features],
+      features: [{ type: "Feature", properties: {}, geometry: null }, ...line.geojson!.features],
     });
     const skipped = runTool("extract-vertices", [mixed], { layer: "mixed" });
     assert.ok(skipped.messages.some((m) => m.includes("Skipped 1")));
@@ -453,7 +459,7 @@ describe("points along geometry tool", () => {
           properties: {},
           geometry: { type: "Point", coordinates: [5, 5] },
         },
-        ...line.geojson.features,
+        ...line.geojson!.features,
       ],
     });
     const { messages, results } = runTool("points-along-geometry", [degenerate], {

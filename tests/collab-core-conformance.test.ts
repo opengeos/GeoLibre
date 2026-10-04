@@ -17,7 +17,7 @@ import {
   type SessionParticipant,
 } from "../packages/collab-core/src/index";
 
-function participant(role: "host" | "guest", clientId = role): SessionParticipant {
+function participant(role: "host" | "guest", clientId: string = role): SessionParticipant {
   return {
     clientId,
     displayName: role,

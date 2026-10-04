@@ -144,7 +144,7 @@ describe("KMZ Super-Overlay import", () => {
   it("folds linked leaf KML documents without Regions into the pyramid", async () => {
     // shpjs, pulled in by the general vector importer, expects the browser
     // global even though this case never asks it to parse a shapefile.
-    globalThis.self = globalThis;
+    Object.assign(globalThis, { self: globalThis });
     const { superOverlayDocNames } = await import("../apps/geolibre-desktop/src/lib/tauri-io");
     const names = superOverlayDocNames([
       {

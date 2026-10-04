@@ -7,7 +7,7 @@ describe("resolveSvgSource", () => {
     const source = resolveSvgSource("<svg><circle r='4'/></svg>");
     assert.ok(source?.startsWith("data:image/svg+xml;charset=utf-8,"));
     assert.equal(
-      decodeURIComponent(source.slice("data:image/svg+xml;charset=utf-8,".length)),
+      decodeURIComponent(source!.slice("data:image/svg+xml;charset=utf-8,".length)),
       "<svg><circle r='4'/></svg>",
     );
   });

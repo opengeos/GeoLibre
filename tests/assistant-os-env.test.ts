@@ -8,14 +8,20 @@ import {
   configForProvider,
   scopeOsEnvToProject,
 } from "../apps/geolibre-desktop/src/lib/assistant/provider";
-import { PROVIDER_FIELDS } from "../apps/geolibre-desktop/src/lib/assistant/provider-fields";
+import {
+  PROVIDER_FIELDS,
+  type ProviderField,
+} from "../apps/geolibre-desktop/src/lib/assistant/provider-fields";
 
 describe("OS_ENV_VAR_NAMES", () => {
   const allowlist = new Set(OS_ENV_VAR_NAMES);
 
   // Every env var name any provider field reads or accepts as an alias.
   const fieldNames = new Set<string>();
-  for (const fields of Object.values(PROVIDER_FIELDS)) {
+  // Widened to the interface: `as const` drops `aliases` from fields that
+  // declare none.
+  const providerFields: readonly (readonly ProviderField[])[] = Object.values(PROVIDER_FIELDS);
+  for (const fields of providerFields) {
     for (const field of fields) {
       fieldNames.add(field.envKey);
       for (const alias of field.aliases ?? []) fieldNames.add(alias);

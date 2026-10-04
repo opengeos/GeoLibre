@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { Feature } from "geojson";
+import type { Feature, Geometry } from "geojson";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 import {
   buildCreateTableStatement,
   buildInsertChunk,
@@ -96,7 +97,7 @@ describe("buildCreateTableStatement", () => {
 
 describe("buildInsertChunk", () => {
   it("binds property values and wraps geometry in ST_GeomFromGeoJSON", () => {
-    const point = { type: "Point", coordinates: [1, 2] } as const;
+    const point: Geometry = { type: "Point", coordinates: [1, 2] };
     const { text, params } = buildInsertChunk(
       '"t"',
       [
@@ -117,7 +118,7 @@ describe("buildInsertChunk", () => {
 
   it("emits a null geometry parameter when a feature has no geometry", () => {
     const { params } = buildInsertChunk('"t"', [{ name: "id", type: "double precision" }], "geom", [
-      feature({ id: 1 }, null),
+      feature({ id: 1 }, NULL_GEOMETRY),
     ]);
     assert.deepEqual(params, [1, null]);
   });
@@ -143,7 +144,7 @@ describe("buildInsertChunk", () => {
 
   it("stringifies non-string scalars for text columns", () => {
     const { params } = buildInsertChunk('"t"', [{ name: "mixed", type: "text" }], "geom", [
-      feature({ mixed: 42 }, null),
+      feature({ mixed: 42 }, NULL_GEOMETRY),
     ]);
     assert.deepEqual(params, ["42", null]);
   });

@@ -97,7 +97,7 @@ describe("addArcGISLayer (map and image services)", () => {
     app = {
       // Neither service touches the map: both become plain raster layers.
       getMap: () => null,
-      fitBounds: (bounds) => {
+      fitBounds: (bounds: [number, number, number, number]) => {
         fitBoundsCalls.push(bounds);
       },
     } as unknown as GeoLibreAppAPI;

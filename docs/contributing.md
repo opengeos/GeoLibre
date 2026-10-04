@@ -133,7 +133,8 @@ runs the full production build once per invocation; if you already built, add
 `SKIP=npm-build` in front of the command.
 
 `npm run ci:web` is the quick gate for changes that only touch the web app and
-its packages: lint, the i18n catalog check, `typecheck:fast`, and the frontend
+its packages: lint, the i18n catalog check, `typecheck:fast`, the
+[test type check](maintenance.md#test-type-check-ratchet), and the frontend
 unit tests. It needs only Node.
 
 `npm run ci` runs the complete gate that mirrors continuous integration, in this
@@ -147,6 +148,7 @@ order:
 | Build              | `npm run build`                  | TypeScript compile (`tsc -b`) and Vite build                                                                           |
 | Frontend tests     | `npm run test:frontend:coverage` | Unit tests under `tests/`, gated on a [coverage floor](maintenance.md#coverage-floors)                                 |
 | Worker checks      | `npm run test:worker`            | Type checks all five workers (`viewer`, `collab`, `collab-node`, `tiles`, `ai-proxy`) and runs the `collab-node` tests |
+| Test type check    | `npm run typecheck:tests`        | `tsc` over `tests/`, gated on a [type-error ratchet](maintenance.md#test-type-check-ratchet)                           |
 | Backend tests      | `npm run test:backend:coverage`  | `pytest` for the Python sidecar, gated on a [coverage floor](maintenance.md#coverage-floors)                           |
 | Docker tests       | `npm run test:docker`            | `pytest` for the container's deployment and sidecar policy scripts under `docker/tests`                                |
 | Rust check         | `npm run check:rust`             | `cargo check` for the Tauri shell                                                                                      |
@@ -156,8 +158,10 @@ their own: `npm run ci:frontend` (i18n check through worker checks; Node only)
 and `npm run ci:backend` (backend and Docker tests; needs Python and the npm CLI
 to run the script, but no `npm install`). CI runs lint, `ci:frontend`,
 `ci:backend` and `check:rust` as separate, parallel jobs in
-`.github/workflows/ci.yml` rather than one after another, so if you add a step
-to `npm run ci`, add it to one of those groups and CI picks it up.
+`.github/workflows/ci.yml` rather than one after another, with
+`typecheck:tests` running next to lint in the "Lint and type check" job, so if
+you add a step to `npm run ci`, add it to one of those groups and CI picks it
+up.
 
 You only need the toolchains for the areas you touched. A docs-only or
 frontend-only change does not require Rust or Python (use `npm run ci:web`),

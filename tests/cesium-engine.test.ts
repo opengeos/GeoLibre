@@ -8,7 +8,7 @@ import {
 } from "@cesium/engine";
 import { beforeEach, describe, it } from "node:test";
 import { useAppStore } from "../packages/core/src/store";
-import type { MapViewState } from "../packages/core/src/types";
+import { DEFAULT_LAYER_STYLE, type MapViewState } from "../packages/core/src/types";
 import {
   CesiumEngine,
   CESIUM_CAPABILITIES,
@@ -278,7 +278,9 @@ function makeViewer(groundHeight = 0) {
     duration?: number;
   }
   return {
-    viewer: viewer as never,
+    // The fake stands in for the CesiumWidget the engine takes, while tests
+    // still read the fake's own fields back.
+    viewer: viewer as typeof viewer & ConstructorParameters<typeof CesiumEngine>[1],
     setPickHits(ground: boolean, ellipsoid: boolean) {
       groundPick = ground;
       ellipsoidPick = ellipsoid;
@@ -969,7 +971,12 @@ describe("CesiumEngine framing", () => {
 
     // A plain min/max would hand Cesium a 358-degree box and frame the globe.
     // `west` greater than `east` is the repo's crossing-rectangle convention.
-    assert.deepEqual(fakes.flights[0].destination, { w: 179, s: 10, e: -179, n: 20 });
+    assert.deepEqual((fakes.flights[0] as { destination: unknown }).destination, {
+      w: 179,
+      s: 10,
+      e: -179,
+      n: 20,
+    });
     engine.destroy();
   });
 
@@ -994,7 +1001,12 @@ describe("CesiumEngine framing", () => {
 
     engine.highlightFeature(layer, ["a", "b", "c"], { fit: true });
 
-    const box = fakes.flights[0].destination as { w: number; s: number; e: number; n: number };
+    const box = (fakes.flights[0] as { destination: unknown }).destination as {
+      w: number;
+      s: number;
+      e: number;
+      n: number;
+    };
     assert.equal(box.w, 0);
     assert.equal(box.e, -170);
     // The latitudes round-trip through radians in the fake.
@@ -1358,7 +1370,7 @@ describe("Cesium feature picking", () => {
       metadata: {},
       visible: true,
       opacity: 1,
-      style: {},
+      style: { ...DEFAULT_LAYER_STYLE },
       geojson: {
         type: "FeatureCollection",
         features: [

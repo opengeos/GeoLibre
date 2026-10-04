@@ -125,7 +125,7 @@ describe("applyBasemapImagery", () => {
     assert.equal(stack.length, 2);
     assert.equal(stack[0], second[0]);
     assert.equal(stack[1], data);
-    assert.ok(!stack.includes(first[0]), "the previous basemap should be gone");
+    assert.ok(!(stack as unknown[]).includes(first[0]), "the previous basemap should be gone");
     assert.equal(
       (second[0] as FakeLayer).provider?.url,
       "https://other.example/{z}/{x}/{y}.png",

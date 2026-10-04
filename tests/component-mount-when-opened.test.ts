@@ -14,7 +14,12 @@ function renderWrapped() {
     renders.count += 1;
     return createElement("div", { "data-testid": "child" }, "child");
   }
-  render(createElement(MountWhenOpened, { isOpen: (ui) => ui.geocodeOpen }, createElement(Child)));
+  render(
+    createElement(MountWhenOpened, {
+      isOpen: (ui) => ui.geocodeOpen,
+      children: createElement(Child),
+    }),
+  );
   return renders;
 }
 

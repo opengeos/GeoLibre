@@ -14,25 +14,25 @@ import { PanelUI } from "../packages/plugins/src/plugins/vantor/panel";
 import { StacClient } from "../packages/plugins/src/plugins/vantor/stac-client";
 import { WEB_SERVICE_PLUGIN_IDS } from "../packages/plugins/src/plugins/web-service-sync";
 import { pluginTier } from "../apps/geolibre-desktop/src/lib/ui-profile";
+import type { StacItem } from "../packages/plugins/src/plugins/vantor/types";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 describe("Vantor Open Data built-in plugin", () => {
-  const item = (id: string, href = "https://example.com/vantor.tif") =>
-    ({
-      type: "Feature",
-      stac_version: "1.0.0",
-      id,
-      geometry: null,
-      bbox: [0, 0, 1, 1],
-      properties: {},
-      assets: {
-        visual: {
-          href,
-          type: "image/tiff; application=geotiff; profile=cloud-optimized",
-        },
+  const item = (id: string, href = "https://example.com/vantor.tif"): StacItem => ({
+    type: "Feature",
+    stac_version: "1.0.0",
+    id,
+    geometry: null,
+    bbox: [0, 0, 1, 1],
+    properties: {},
+    assets: {
+      visual: {
+        href,
+        type: "image/tiff; application=geotiff; profile=cloud-optimized",
       },
-      links: [],
-    }) as const;
+    },
+    links: [],
+  });
 
   const installDom = () => {
     const { document, window } = parseHTML("<html><body></body></html>");
@@ -122,7 +122,9 @@ describe("Vantor Open Data built-in plugin", () => {
       undefined,
       async () => "vantor-host-layer",
       "maplibre-gl-raster",
-      async (engine) => switched.push(engine),
+      async (engine) => {
+        switched.push(engine);
+      },
     );
 
     await layer.addCogLayer(item("host-scene"));

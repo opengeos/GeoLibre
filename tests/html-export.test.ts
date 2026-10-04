@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GeoLibreProject } from "@geolibre/core";
-import { createEmptyProject } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, createEmptyProject } from "@geolibre/core";
 import {
   buildProjectHtml,
   DEFAULT_VIEWER_BASE_URL,
@@ -56,7 +56,7 @@ describe("buildProjectHtml", () => {
       source: { requestHeaders: { Authorization: "Bearer html-egress-secret" } },
       visible: true,
       opacity: 1,
-      style: {},
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {},
     });
     const html = buildProjectHtml({ project, title: project.name });

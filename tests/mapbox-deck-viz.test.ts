@@ -65,6 +65,7 @@ it("renders Deck.gl Layers on a host that only exposes a Mapbox map", async () =
     name: "Manhattan",
     config: {
       layerKind: "scatterplot",
+      format: "json-array",
       fieldMapping: { lng: 0, lat: 1 },
       style: { ...DEFAULT_DECK_VIZ_STYLE, radius: 20 },
     },
@@ -89,7 +90,7 @@ it("renders Deck.gl Layers on a host that only exposes a Mapbox map", async () =
 
   // Store changes still flow through: hiding the layer clears the overlay.
   useAppStore.getState().updateLayer("viz", { visible: false });
-  assert.deepEqual(rendered, []);
+  assert.equal(rendered.length, 0);
   useAppStore.getState().updateLayer("viz", { visible: true, opacity: 0.5 });
   assert.equal(rendered.length, 1);
   assert.equal(rendered[0].props.opacity, 0.5);

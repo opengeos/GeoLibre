@@ -183,8 +183,8 @@ describe("buildWfsGeoJsonLayer", () => {
     const data: FeatureCollection = {
       type: "FeatureCollection",
       features: [
-        { type: "Feature", geometry: null, properties: {} },
-        { type: "Feature", geometry: null, properties: {} },
+        { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: {} },
+        { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: {} },
       ],
     };
     const layer = buildWfsGeoJsonLayer({
@@ -221,7 +221,9 @@ describe("buildWfsGeoJsonLayer", () => {
   it("reserves a different palette color for a pending batch sibling", () => {
     const data: FeatureCollection = {
       type: "FeatureCollection",
-      features: [{ type: "Feature", geometry: null, properties: {} }],
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: {} },
+      ],
     };
     const params = {
       name: "First",

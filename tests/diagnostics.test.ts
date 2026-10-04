@@ -185,7 +185,7 @@ describe("diagnostics network info capture", () => {
 describe("diagnostics startup transient suppression", () => {
   type Listener = (event: unknown) => void;
   const listeners = new Map<string, Listener>();
-  const win = (globalThis as { window?: Record<string, unknown> }).window!;
+  const win = (globalThis as unknown as { window?: Record<string, unknown> }).window!;
   let installCapture: DiagnosticsModule["installDiagnosticsCapture"];
   let realWarn: typeof console.warn;
   let realError: typeof console.error;

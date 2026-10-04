@@ -24,7 +24,7 @@ npm run build          # production web build → apps/geolibre-desktop/dist/
 npm run lite:build     # same, but DuckDB-WASM from jsDelivr — for hosts with a per-asset size cap
 npm run tauri:build    # desktop installers → apps/geolibre-desktop/src-tauri/target/release/bundle/
 npm run typecheck      # alias for the full build (tsc -b && vite build) — writes to dist/, not a pure type-check
-npm run ci             # full local gate: lint + ci:frontend + ci:backend + check:rust
+npm run ci             # full local gate: lint + ci:frontend + typecheck:tests + ci:backend + check:rust
 npm run ci:frontend    # build + frontend + worker tests (CI runs the halves as parallel jobs)
 npm run ci:backend     # backend + docker/tests (needs Python and the npm CLI, no npm install)
 ```
@@ -41,6 +41,7 @@ python -m pytest backend/geolibre_server/tests/test_x.py::test_y   # a single ba
 npm run test:worker                                # typecheck workers/viewer
 npm run test:e2e                                   # Playwright smoke tests (e2e/) against the built web app
 npm run check:rust                                 # cargo check the Tauri crate
+npm run typecheck:tests                            # tsc over tests/, ratcheted on an error-count baseline (docs/maintenance.md)
 cd python && pytest                                # the geolibre Python package's own suite
 ```
 

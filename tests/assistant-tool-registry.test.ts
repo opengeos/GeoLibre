@@ -158,7 +158,12 @@ test("registration is activation-only: an inactive plugin cannot add a tool", ()
   });
   manager.applyPluginState("test", app, { any: "state" });
   manager.restoreProjectState(
-    { activePluginIds: [], mapControlPositions: {}, settings: { test: { any: "state" } } },
+    {
+      manifestUrls: [],
+      activePluginIds: [],
+      mapControlPositions: {},
+      settings: { test: { any: "state" } },
+    },
     app,
   );
   assert.deepEqual(seen, [undefined, undefined]);

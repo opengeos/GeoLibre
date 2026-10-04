@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import type { FeatureCollection } from "geojson";
 import { runWhiteboxToolWasm, type WhiteboxLayerInput } from "@geolibre/processing";
 import { releaseIdleWasmToolWorkers } from "../packages/processing/src/wasm-tool-runner";
 
@@ -52,7 +53,7 @@ describe("runWhiteboxToolWasm multi-input staging", () => {
   it("stages every vector and passes one comma-delimited argument", async () => {
     globalThis.Worker = FakeWorker as unknown as typeof Worker;
 
-    const collection = { type: "FeatureCollection", features: [] } as const;
+    const collection: FeatureCollection = { type: "FeatureCollection", features: [] };
     const inputs: WhiteboxLayerInput[] = ["a", "b"].map((name) => ({
       name,
       kind: "vector_in",

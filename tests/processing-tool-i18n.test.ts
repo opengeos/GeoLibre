@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TFunction } from "i18next";
+import type { AlgorithmParameter } from "@geolibre/processing";
 import {
   modelProviderCatalog,
   translateModelToolGroup,
@@ -142,7 +143,7 @@ describe("translateParameter", () => {
   });
 
   it("leaves a parameter without a description or options alone", () => {
-    const plain = { id: "distance", label: "Distance", type: "number" as const };
+    const plain: AlgorithmParameter = { id: "distance", label: "Distance", type: "number" };
     const translated = translateParameter(fakeT(), "vector", "buffer", plain);
     assert.equal(translated.description, undefined);
     assert.equal(translated.options, undefined);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { Feature, FeatureCollection } from "geojson";
+import type * as maplibregl from "maplibre-gl";
 import {
   DEFAULT_LAYER_STYLE,
   LARGE_VECTOR_FEATURE_THRESHOLD,

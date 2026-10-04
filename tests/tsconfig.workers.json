@@ -1,0 +1,25 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node", "@cloudflare/workers-types"]
+  },
+  "files": [
+    "aircraft-proxy.test.ts",
+    "cctv-proxy.test.ts",
+    "celestrak-proxy.test.ts",
+    "edge-proxy-redirect.test.ts",
+    "firms-proxy.test.ts",
+    "gods-eye-view-fire-feeds.test.ts",
+    "gods-eye-view-transit-feeds.test.ts",
+    "launch-library-proxy.test.ts",
+    "ocean-data-platform.test.ts",
+    "osm-overpass-proxy.test.ts",
+    "reproject.test.ts",
+    "transit-proxy.test.ts"
+  ]
+}

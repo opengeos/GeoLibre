@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
+  DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerJoin,
@@ -13,9 +14,10 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 function tableFeature(properties: Record<string, unknown>): Feature {
-  return { type: "Feature", geometry: null, properties };
+  return { type: "Feature", geometry: NULL_GEOMETRY, properties };
 }
 
 function pointFeature(properties: Record<string, unknown>): Feature {
@@ -512,7 +514,7 @@ function bareLayer(
     source: { type: "geojson" },
     visible: true,
     opacity: 1,
-    style: {},
+    style: { ...DEFAULT_LAYER_STYLE },
     metadata: {},
     geojson: collection([pointFeature(properties)]),
     ...(joins ? { joins } : {}),

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
+import type { SymbolLayerSpecification } from "mapbox-gl";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LabelStyle } from "@geolibre/core";
 import { compileMapboxLayer } from "../packages/map/src/mapbox-layers";
 import { geojsonLayer } from "./helpers/layer-fixtures";
@@ -36,7 +37,8 @@ function labelled(
 
 const labelSpec = (layer: GeoLibreLayer) =>
   compileMapboxLayer(layer).layers.find(
-    (spec) => spec.type === "symbol" && spec.id.endsWith("-labels"),
+    (spec): spec is SymbolLayerSpecification =>
+      spec.type === "symbol" && spec.id.endsWith("-labels"),
   );
 
 describe("Mapbox label compilation", () => {
@@ -75,7 +77,7 @@ describe("Mapbox label compilation", () => {
   it("reads deduplicated labels from an aggregated companion source", () => {
     const layer = labelled({ dedupe: "concatenate" });
     const plan = compileMapboxLayer(layer);
-    const spec = plan.layers.find((s) => s.id.endsWith("-labels"))!;
+    const spec = plan.layers.find((s) => s.id.endsWith("-labels")) as SymbolLayerSpecification;
     const sourceId = (spec as { source: string }).source;
     assert.notEqual(sourceId, plan.sourceId);
     const companion = plan.additionalSources?.[sourceId];

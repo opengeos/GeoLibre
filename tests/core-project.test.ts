@@ -18,8 +18,14 @@ import {
   serializeStoryMapJson,
   shouldZoomToNewLayers,
   useAppStore,
+  type SecondaryMapView,
 } from "@geolibre/core";
 import { geojsonLayer } from "./helpers/layer-fixtures";
+
+/** View a saved layer as a plain record, to probe for keys its type does not declare. */
+function asRecord(value: object): Record<string, unknown> {
+  return value as Record<string, unknown>;
+}
 
 describe("project parsing", () => {
   it("discards session raster URLs on save and on loading older projects", () => {
@@ -58,7 +64,7 @@ describe("project parsing", () => {
       metadata: {},
     });
 
-    assert.equal(saved.layers[0].source.tiles?.[0], tile);
+    assert.equal((saved.layers[0].source.tiles as string[] | undefined)?.[0], tile);
     assert.equal(layer.source.tiles[0], routed);
   });
 
@@ -81,7 +87,7 @@ describe("project parsing", () => {
       metadata: {},
     });
 
-    assert.equal(saved.layers[0].source.tiles?.[0], routed);
+    assert.equal((saved.layers[0].source.tiles as string[] | undefined)?.[0], routed);
   });
 
   it("preserves layer style fields missing from a legacy top-level style", () => {
@@ -407,13 +413,13 @@ describe("project parsing", () => {
       preferences: createEmptyProject().preferences,
       metadata: {},
     });
-    const saved = project.layers[0] as Record<string, unknown>;
+    const saved = asRecord(project.layers[0]);
     assert.ok(!("timeFilter" in saved), "timeFilter must not be saved");
     assert.ok(!("embedFilter" in saved), "embedFilter must not be saved");
     // Everything else about the layer survives.
     assert.equal(saved.id, "roads");
 
-    const reparsed = parseProject(serializeProject(project)).layers[0] as Record<string, unknown>;
+    const reparsed = asRecord(parseProject(serializeProject(project)).layers[0]);
     assert.ok(!("embedFilter" in reparsed));
   });
 
@@ -474,7 +480,7 @@ describe("project parsing", () => {
       metadata: {},
     });
 
-    const reparsed = parseProject(serializeProject(project)).layers[0] as Record<string, unknown>;
+    const reparsed = asRecord(parseProject(serializeProject(project)).layers[0]);
     assert.deepEqual(reparsed.quickFilters, quickFilters);
   });
 
@@ -710,7 +716,13 @@ describe("project parsing", () => {
       geojson: featureCollection,
       source: { type: "geojson", url: "https://example.test/wfs?request=GetFeature&bbox=1,2,3,4" },
       metadata: { sourceKind: "wfs-getfeature", featureCount: 1 },
-      connection: { lastSyncedAt: "2025-01-01T00:00:00.000Z", error: null },
+      connection: {
+        layerId: "wfs-reference",
+        interval: null,
+        lastSyncedAt: "2025-01-01T00:00:00.000Z",
+        lastError: null,
+        onFailure: "keep-last",
+      },
     });
     const state = {
       projectName: "WFS",
@@ -1107,7 +1119,7 @@ describe("multi-map grid persistence", () => {
   });
 
   it("round-trips a 2x2 grid with per-pane layer visibility and labels", () => {
-    const secondaryMapViews = [
+    const secondaryMapViews: SecondaryMapView[] = [
       {
         id: "pane-1",
         view: { center: [10, 20], zoom: 5, bearing: 0, pitch: 0 },
@@ -1148,7 +1160,7 @@ describe("multi-map grid persistence", () => {
   });
 
   it("round-trips a secondary pane's 3D-globe viewKind", () => {
-    const secondaryMapViews = [
+    const secondaryMapViews: SecondaryMapView[] = [
       {
         id: "globe",
         view: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },

@@ -46,6 +46,16 @@ function addEvent(
   return { layerId: id, state: { layers: [layer], selectedSourceLayers } } as never;
 }
 
+/**
+ * A `layerremove` whose snapshot holds no archives, naming `layerId` when given. Like
+ * {@link addEvent}, only the fields the handler reads are set.
+ */
+function removeEvent(layerId?: string) {
+  return (
+    layerId === undefined ? { state: { layers: [] } } : { layerId, state: { layers: [] } }
+  ) as never;
+}
+
 function archiveLayers() {
   const state = useAppStore.getState();
   return state.layers.filter((layer) => layer.id.startsWith("pmtiles-1"));
@@ -412,7 +422,7 @@ describe("the folder an archive's source layers are added into", () => {
     handle(addEvent(["roads", "water"]));
     assert.equal(useAppStore.getState().layerGroups.length, 1);
 
-    createPMTilesLayerRemoveHandler()({ layerId: "pmtiles-1", state: { layers: [] } });
+    createPMTilesLayerRemoveHandler()(removeEvent("pmtiles-1"));
 
     const state = useAppStore.getState();
     assert.deepEqual(archiveLayers(), [], "every layer of the archive went");
@@ -434,7 +444,7 @@ describe("the folder an archive's source layers are added into", () => {
     useAppStore.getState().addLayer(mine);
     useAppStore.getState().moveLayersToGroup([mine.id], groupId);
 
-    createPMTilesLayerRemoveHandler()({ layerId: "pmtiles-1", state: { layers: [] } });
+    createPMTilesLayerRemoveHandler()(removeEvent("pmtiles-1"));
 
     const state = useAppStore.getState();
     assert.deepEqual(archiveLayers(), [], "the archive still went");
@@ -453,9 +463,9 @@ describe("the folder an archive's source layers are added into", () => {
     handle(addEvent(["parcels"], "pmtiles-2"));
 
     // The control drops the first archive, and its snapshot lists neither.
-    createPMTilesLayerRemoveHandler()({ layerId: "pmtiles-1", state: { layers: [] } });
+    createPMTilesLayerRemoveHandler()(removeEvent("pmtiles-1"));
     // The second archive is still the control's, so its own clear-all still takes it.
-    createPMTilesLayerRemoveHandler()({ layerId: "pmtiles-2", state: { layers: [] } });
+    createPMTilesLayerRemoveHandler()(removeEvent("pmtiles-2"));
 
     assert.deepEqual(useAppStore.getState().layers, [], "both archives went");
   });
@@ -466,7 +476,7 @@ describe("the folder an archive's source layers are added into", () => {
     createPMTilesLayerAddHandler()(addEvent(["roads", "water"]));
     teardownPMTilesControl({ removeMapControl: () => true } as never);
 
-    createPMTilesLayerRemoveHandler()({ state: { layers: [] } });
+    createPMTilesLayerRemoveHandler()(removeEvent());
 
     assert.equal(archiveLayers().length, 2, "a new control's clear-all does not take them");
   });
@@ -482,7 +492,7 @@ describe("the folder an archive's source layers are added into", () => {
 
     teardownPMTilesControl({
       removeMapControl: () => {
-        onRemove({ state: { layers: [] } });
+        onRemove(removeEvent());
         return true;
       },
     } as never);

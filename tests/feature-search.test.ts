@@ -187,7 +187,7 @@ describe("searchLayerFeatures — group visibility", () => {
     });
     const groups = [
       { id: "g1", name: "Group", visible: false, opacity: 1 },
-    ] as unknown as Parameters<typeof searchLayerFeatures>[2]["groups"];
+    ] as unknown as NonNullable<Parameters<typeof searchLayerFeatures>[2]>["groups"];
     assert.equal(searchLayerFeatures([grouped], "site").length, 1);
     assert.deepEqual(searchLayerFeatures([grouped], "site", { groups }), []);
   });
@@ -198,7 +198,7 @@ describe("searchLayerFeatures — group visibility", () => {
     });
     const groups = [
       { id: "g1", name: "Group", visible: true, opacity: 1 },
-    ] as unknown as Parameters<typeof searchLayerFeatures>[2]["groups"];
+    ] as unknown as NonNullable<Parameters<typeof searchLayerFeatures>[2]>["groups"];
     assert.equal(searchLayerFeatures([grouped], "site", { groups }).length, 1);
   });
 });

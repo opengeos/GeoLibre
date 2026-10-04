@@ -77,6 +77,12 @@ function layerById(style_: ReturnType<typeof buildMapboxStyle>["style"], id: str
   return style_.layers.find((l) => l.id === id);
 }
 
+/** A render layer's filter; `background` layers have none, so the union lacks the key. */
+function filterOf(style_: ReturnType<typeof buildMapboxStyle>["style"], id: string): unknown {
+  const found = layerById(style_, id);
+  return found && "filter" in found ? found.filter : undefined;
+}
+
 describe("buildMapboxStyle base document", () => {
   it("emits a version 8 style with the layer's features embedded", () => {
     const { style: doc, warnings } = buildMapboxStyle(layer(), points());
@@ -110,12 +116,12 @@ describe("persistent expression filters", () => {
     const filterExpression = [">=", ["get", "value"], 10];
     const { style: doc } = buildMapboxStyle(layer({ filterExpression }), mixedGeom());
 
-    assert.deepEqual(layerById(doc, "my-layer-fill")?.filter, [
+    assert.deepEqual(filterOf(doc, "my-layer-fill"), [
       "all",
       ["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false],
       filterExpression,
     ]);
-    assert.deepEqual(layerById(doc, "my-layer-circle")?.filter, [
+    assert.deepEqual(filterOf(doc, "my-layer-circle"), [
       "all",
       ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
       filterExpression,

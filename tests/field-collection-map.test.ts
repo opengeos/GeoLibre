@@ -9,7 +9,7 @@ import {
   listenForFieldCollectionClicks,
 } from "../apps/geolibre-desktop/src/lib/field-collection-map";
 
-function withDom(body: (document: Document, window: Window) => void): void {
+function withDom(body: (document: Document, window: Window & typeof globalThis) => void): void {
   const dom = parseHTML("<html><body><div id='map'><canvas></canvas></div></body></html>");
   const previous = {
     document: globalThis.document,
@@ -29,7 +29,7 @@ function withDom(body: (document: Document, window: Window) => void): void {
     ResizeObserver: TestResizeObserver,
   });
   try {
-    body(dom.document, dom.window as unknown as Window);
+    body(dom.document, dom.window as unknown as Window & typeof globalThis);
   } finally {
     Object.assign(globalThis, previous);
   }

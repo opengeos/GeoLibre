@@ -39,7 +39,11 @@ describe("fieldNamesByLayer", () => {
 
   it("scans any layer holding in-memory GeoJSON, whatever its type", () => {
     // The Model Builder reads such a layer as a vector input, so its picker must too.
-    const layer = { ...geojsonLayer("v", [{ zone: "A" }]), type: "vector" } as GeoLibreLayer;
+    // "vector" is outside LayerType on purpose: any type holding GeoJSON counts.
+    const layer = {
+      ...geojsonLayer("v", [{ zone: "A" }]),
+      type: "vector",
+    } as unknown as GeoLibreLayer;
     assert.deepEqual(fieldNamesByLayer([layer]).get("v"), ["zone"]);
   });
 

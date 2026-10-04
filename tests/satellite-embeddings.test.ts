@@ -471,7 +471,8 @@ describe("Tessera reader", () => {
   const scale = (row: number, col: number): number =>
     (row + col) % 11 === 0 ? Number.NaN : Math.fround(0.01 * (1 + ((row + col) % 5)));
 
-  const json = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value));
+  const json = (value: unknown): Uint8Array<ArrayBuffer> =>
+    new TextEncoder().encode(JSON.stringify(value));
   const arrayMeta = (dataType: string, fill: number | string, chunk: number[], dims: string[]) =>
     json({
       zarr_format: 3,
@@ -505,7 +506,7 @@ describe("Tessera reader", () => {
   const shard = (
     chunks: [number, number][],
     encode: (cy: number, cx: number) => Uint8Array,
-  ): Uint8Array => {
+  ): Uint8Array<ArrayBuffer> => {
     const bodies = chunks.map(([cy, cx]) => encode(cy, cx));
     const dataBytes = bodies.reduce((sum, body) => sum + body.byteLength, 0);
     const out = new Uint8Array(dataBytes + 128 * 128 * 16 + 4);
@@ -542,7 +543,7 @@ describe("Tessera reader", () => {
       ),
     );
 
-    const files = new Map<string, Uint8Array>([
+    const files = new Map<string, Uint8Array<ArrayBuffer>>([
       [
         "/utm33/zarr.json",
         json({

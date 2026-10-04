@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import {
+  DEFAULT_LAYER_STYLE,
   changedPreferenceCredentials,
   createEmptyProject,
   overlayStoredPreferenceCredentials,
@@ -33,7 +34,7 @@ function projectWithCredentials() {
       },
       visible: true,
       opacity: 1,
-      style: {},
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {},
     },
   ];

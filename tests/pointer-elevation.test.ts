@@ -105,7 +105,7 @@ describe("pointer elevation resolver", () => {
 
   it("never emits a result for a point the pointer has left", async () => {
     const emitted: (number | null)[] = [];
-    let resolveFirst: ((r: Response) => void) | null = null;
+    let resolveFirst = null as ((r: Response) => void) | null;
     const fetchImpl: FetchLike = async () =>
       new Promise<Response>((resolve) => {
         if (!resolveFirst) resolveFirst = resolve;
@@ -180,7 +180,7 @@ describe("pointer elevation resolver", () => {
     // timer, so a fetch already in flight (500ms debounce + up to 15s network)
     // still emitted after MapCanvas teardown, writing into a torn-down map.
     const emitted: (number | null)[] = [];
-    let release: ((r: Response) => void) | null = null;
+    let release = null as ((r: Response) => void) | null;
     // Resolved by fetchImpl itself, so the test proves the request really is in
     // flight before disposing rather than trusting a fixed delay.
     let notifyStarted: (() => void) | null = null;
@@ -338,7 +338,7 @@ describe("pointer elevation resolver", () => {
     // project must not repaint it, including Earth-to-Earth switches where
     // neither the body nor the pointer changed.
     const emitted: (number | null)[] = [];
-    let release: ((r: Response) => void) | null = null;
+    let release = null as ((r: Response) => void) | null;
     let notifyStarted: (() => void) | null = null;
     const started = new Promise<void>((resolve) => {
       notifyStarted = resolve;

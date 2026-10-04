@@ -3,7 +3,8 @@ import { afterEach, describe, it } from "node:test";
 import { tilesWorker } from "../workers/tiles/src/index";
 
 const originalFetch = globalThis.fetch;
-const originalCaches = globalThis.caches;
+// `caches` is a Workers global (`declare const`), not a property of `globalThis`.
+const originalCaches = (globalThis as { caches?: unknown }).caches;
 afterEach(() => {
   globalThis.fetch = originalFetch;
   Object.defineProperty(globalThis, "caches", {
@@ -77,7 +78,8 @@ describe("aircraft edge proxies", () => {
   });
 
   it("edge-caches aircraft responses only after validation", async () => {
-    let cachedResponse: Response | null = null;
+    // `as`, not an annotation: the cache fake assigns it in a callback TS cannot follow.
+    let cachedResponse = null as Response | null;
     let cacheWrite: Promise<unknown> | null = null;
     Object.defineProperty(globalThis, "caches", {
       configurable: true,

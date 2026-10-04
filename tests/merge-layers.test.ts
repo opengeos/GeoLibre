@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import { getVectorTool } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 function makeLayer(id: string, name: string, fc: FeatureCollection): GeoLibreLayer {
   return {
@@ -132,7 +133,7 @@ describe("merge layers tool", () => {
   it("distinguishes a missing layer from one with no usable geometry", () => {
     const nullGeom = makeLayer("n", "Null geometry", {
       type: "FeatureCollection",
-      features: [{ type: "Feature", properties: { a: 1 }, geometry: null }],
+      features: [{ type: "Feature", properties: { a: 1 }, geometry: NULL_GEOMETRY }],
     });
     const run = runMerge([pointsA, nullGeom], { layers: ["a", "n", "gone"] });
     assert.ok(run.messages.some((m) => m.includes("1 selected layer(s) that no longer exist")));
@@ -153,7 +154,7 @@ describe("merge layers tool", () => {
           geometry: { type: "Point", coordinates: [1, 1] },
         },
         // Dropped by the geometry filter, so "dropped" must not become a column.
-        { type: "Feature", properties: { dropped: 2 }, geometry: null },
+        { type: "Feature", properties: { dropped: 2 }, geometry: NULL_GEOMETRY },
       ],
     });
     const { results } = runMerge([pointsA, mixed], { layers: ["a", "m"], addSourceField: false });

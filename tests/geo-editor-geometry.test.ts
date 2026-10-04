@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "../packages/core/src/types";
 import {
   GEOMAN_SHAPE_PROPERTIES,

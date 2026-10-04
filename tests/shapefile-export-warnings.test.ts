@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
+import { withNullGeometries } from "./helpers/null-geometry";
 
 // vector-export.ts statically pulls in tauri-io -> shpjs, whose bundle reads the
 // browser `self` global at module-eval time; shim it before the dynamic import.
@@ -84,17 +85,19 @@ describe("shapefileFieldWarnings", () => {
   });
 
   it("does not warn about null geometries in a single-family layer", () => {
-    const warnings = shapefileFieldWarnings({
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [0, 0] },
-          properties: {},
-        },
-        { type: "Feature", geometry: null, properties: {} },
-      ],
-    });
+    const warnings = shapefileFieldWarnings(
+      withNullGeometries({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [0, 0] },
+            properties: {},
+          },
+          { type: "Feature", geometry: null, properties: {} },
+        ],
+      }),
+    );
     assert.deepEqual(warnings, []);
   });
 });

@@ -48,8 +48,8 @@ it("imports polygon geometry through the real vector control without MapLibre so
   const fitted: unknown[] = [];
   const control = new VectorControl({ enablePicker: false });
   bridgeVectorControlToStore(control, {
-    fitBounds: (bounds) => fitted.push(bounds),
-  } as GeoLibreAppAPI);
+    fitBounds: (bounds: unknown) => fitted.push(bounds),
+  } as unknown as GeoLibreAppAPI);
   for (const event of ["layeradded", "layerupdated", "layerremoved"] as const) {
     control.on(event, () => syncVectorLayersToStore(control));
   }

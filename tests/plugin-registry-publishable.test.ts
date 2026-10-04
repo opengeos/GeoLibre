@@ -55,6 +55,7 @@ describe("registry publishableSettings", () => {
     project.plugins = {
       manifestUrls: [],
       activePluginIds: ["ext"],
+      mapControlPositions: {},
       settings: { ext: { search: "idrografia", secret: "k" } },
     };
     const { project: out } = redactProjectCredentials(project);
@@ -70,6 +71,7 @@ describe("registry publishableSettings", () => {
       project.plugins = {
         manifestUrls: [],
         activePluginIds: [],
+        mapControlPositions: {},
         settings: { "builtin-x": { a: 1 } },
       };
       const { project: out } = redactProjectCredentials(project);

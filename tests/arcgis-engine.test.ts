@@ -7,6 +7,7 @@ import {
   DEFAULT_LAYER_STYLE,
   useAppStore,
   type MapPreferences,
+  type StoryChapterLocation,
 } from "@geolibre/core";
 import {
   ARCGIS_WORLD_ELEVATION_URL,
@@ -33,6 +34,14 @@ import { geojsonLayer } from "./helpers/layer-fixtures";
 // orders them, how camera state maps between MapLibre and SDK conventions, and
 // how a hit test resolves back to the app's feature identity.
 
+/**
+ * A story chapter location with no bearing or pitch. The type marks both
+ * required, but the engine reads them as optional and leaves the camera's
+ * orientation alone when they are absent, which is what these tests rely on.
+ */
+const chapterAt = (center: [number, number], zoom: number) =>
+  ({ center, zoom }) as StoryChapterLocation;
+
 interface FakeLayer extends ArcgisLayer {
   kind: string;
   props: Record<string, unknown>;
@@ -42,7 +51,12 @@ interface FakeLayer extends ArcgisLayer {
 function makeSdk() {
   const created: FakeLayer[] = [];
   const basemaps: { destroyed: boolean }[] = [];
-  const widgets: { kind: string; props: Record<string, unknown>; destroyed: boolean }[] = [];
+  const widgets: {
+    kind: string;
+    props: Record<string, unknown>;
+    destroyed: boolean;
+    label?: string;
+  }[] = [];
   const goTo: unknown[] = [];
   let watchers: (() => void)[] = [];
   const viewHandlers = new Map<string, Set<(event: Record<string, unknown>) => void>>();
@@ -217,7 +231,15 @@ function makeSdk() {
       x: p.x ?? p.longitude ?? 0,
       y: p.y ?? p.latitude ?? 0,
     }),
-    toMap: (p: { x: number; y: number }) => ({ longitude: p.x, latitude: p.y, x: p.x, y: p.y }),
+    toMap: (p: {
+      x: number;
+      y: number;
+    }): { longitude: number; latitude: number; x: number; y: number } | null => ({
+      longitude: p.x,
+      latitude: p.y,
+      x: p.x,
+      y: p.y,
+    }),
     // As the SDK does, only graphics of the included layers are reported.
     hitTest: async (_point: unknown, options?: { include?: unknown[] }) => ({
       results: hitResults.filter(
@@ -505,11 +527,11 @@ describe("ArcgisEngine camera moves", () => {
   });
   it("turns a story chapter once, and not when a later chapter superseded it", async () => {
     const { engine, goTo } = makeEngine();
-    engine.applyStoryChapterCamera({ center: [1, 2], zoom: 5 }, "flyTo", true);
-    engine.applyStoryChapterCamera({ center: [3, 4], zoom: 6 }, "flyTo", false);
+    engine.applyStoryChapterCamera(chapterAt([1, 2], 5), "flyTo", true);
+    engine.applyStoryChapterCamera(chapterAt([3, 4], 6), "flyTo", false);
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(goTo.length, 2);
-    engine.applyStoryChapterCamera({ center: [3, 4], zoom: 6 }, "flyTo", true);
+    engine.applyStoryChapterCamera(chapterAt([3, 4], 6), "flyTo", true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const turns = goTo.filter((call) => "rotation" in (call as { target: object }).target);
     assert.equal(turns.length, 1);
@@ -523,12 +545,12 @@ describe("ArcgisEngine camera moves", () => {
     const seen: (boolean | undefined)[] = [];
     engine.onCameraIdle((event) => seen.push(event?.storyCamera));
     fireWatchers();
-    engine.applyStoryChapterCamera({ center: [1, 2], zoom: 5 });
+    engine.applyStoryChapterCamera(chapterAt([1, 2], 5));
     fireWatchers();
     await Promise.resolve();
     fireWatchers();
     // A drag during a story move makes the next settle the user's.
-    engine.applyStoryChapterCamera({ center: [3, 4], zoom: 6 });
+    engine.applyStoryChapterCamera(chapterAt([3, 4], 6));
     fireViewEvent("drag", { x: 1, y: 1, action: "start" });
     fireWatchers();
     engine.destroy();
@@ -850,7 +872,7 @@ describe("ArcgisEngine camera conventions", () => {
         ],
       ],
     });
-    assert.equal((multi as { rings: unknown[] }).rings.length, 2);
+    assert.equal((multi as unknown as { rings: unknown[] }).rings.length, 2);
     assert.equal(geojsonToArcgisGeometry({ type: "GeometryCollection", geometries: [] }), null);
   });
 });
@@ -928,7 +950,7 @@ describe("ArcgisEngine controls", () => {
     assert.equal(engine.getBuiltInControlPosition("scale"), "bottom-right");
     assert.equal(uiAdds.at(-1)?.position, "bottom-right");
     // Missing controls are rejected before consulting the plugin control host.
-    assert.equal(engine.addControl(), false);
+    assert.equal(engine.addControl(undefined as never), false);
     assert.equal(engine.capabilities.domControls, true);
   });
   it("keeps MapLibre's corner order when a control mounts after its neighbours", () => {
@@ -1543,7 +1565,7 @@ describe("ArcgisEngine picking and highlight", () => {
     const selection = layers.items.at(-1);
     const clearPoint = engine.showSearchResult({ type: "Point", coordinates: [-77.0365, 38.8977] });
     const point = layers.items.at(-1)!;
-    assert.deepEqual(point.graphics!.getItemAt(0).geometry, {
+    assert.deepEqual(point.graphics!.getItemAt(0)!.geometry, {
       type: "point",
       x: -77.0365,
       y: 38.8977,
@@ -1557,7 +1579,7 @@ describe("ArcgisEngine picking and highlight", () => {
     ];
     const clearCell = engine.showSearchResult({ type: "Polygon", coordinates: [ring] });
     const cell = layers.items.at(-1)!;
-    assert.equal(cell.graphics!.getItemAt(0).geometry?.type, "polygon");
+    assert.equal(cell.graphics!.getItemAt(0)!.geometry?.type, "polygon");
     clearPoint();
     clearPoint();
     assert.ok(point.destroyed);
@@ -2032,7 +2054,7 @@ it("hosts DOM controls with instant jumps, navigation events and complete cleanu
     facade.easeTo({ zoom: 10 });
     assert.equal((goTo.at(-1) as { options: { duration: number } }).options.duration, 500);
     const events: string[] = [];
-    for (const event of ["movestart", "moveend", "idle", "remove"])
+    for (const event of ["movestart", "moveend", "idle", "remove"] as const)
       facade.on(event, () => events.push(event));
     rawView.stationary = false;
     fireWatchers();

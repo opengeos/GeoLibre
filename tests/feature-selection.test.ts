@@ -17,6 +17,7 @@ import {
   selectionModeFromModifiers,
   suspendedCameraHandlers,
 } from "../packages/map/src/feature-selection";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 const point = (
   coords: [number, number],
@@ -331,7 +332,7 @@ describe("map feature selection", () => {
       // No id: featureSelectionId falls back to the array index, "1".
       point([1.5, 1.5]),
       // Inside the polygon's bounds but carrying no geometry to test.
-      { type: "Feature", id: "no-geometry", properties: {}, geometry: null },
+      { type: "Feature", id: "no-geometry", properties: {}, geometry: NULL_GEOMETRY },
       point([5, 5], {}, "outside"),
     ];
     const selectionPolygon: Polygon = {

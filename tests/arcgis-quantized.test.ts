@@ -9,6 +9,7 @@ import {
   arcgisQuantizationParams,
   decodeArcGISQuantizedFeatures,
   isArcGISQuantizedFeatureSet,
+  type ArcGISQuantizedFeatureSet,
 } from "../packages/plugins/src/plugins/arcgis-quantized";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
@@ -19,7 +20,10 @@ const POLYGON_LAYER = {
 };
 
 /** A quantized feature set on a 1 km grid with an upper-left origin at (0, 0) meters. */
-const featureSet = (features: unknown[], originPosition = "upperLeft") => ({
+const featureSet = (
+  features: ArcGISQuantizedFeatureSet["features"],
+  originPosition = "upperLeft",
+): ArcGISQuantizedFeatureSet => ({
   objectIdFieldName: "OBJECTID",
   transform: { originPosition, scale: [1000, 1000], translate: [0, 0] },
   exceededTransferLimit: true,

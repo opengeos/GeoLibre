@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature } from "geojson";
-import type { MapEngine, MapViewState } from "@geolibre/map";
+import type { MapViewState } from "@geolibre/core";
+import type { MapEngine } from "@geolibre/map";
 import {
   atlasCamera,
   fitCamera,

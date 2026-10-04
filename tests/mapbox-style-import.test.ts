@@ -1323,7 +1323,8 @@ describe("the colour a layer with no colour of its own is drawn in", () => {
       ["circle", "circle-color"],
     ] as const) {
       assert.equal(
-        v8[`paint_${type}`]?.[property]?.default,
+        (v8[`paint_${type}`] as Record<string, { default?: unknown } | undefined>)[property]
+          ?.default,
         SPEC_DEFAULT_COLOR,
         `${property} still defaults to the colour mapbox-style-import assumes`,
       );

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { getLayerBounds } from "../packages/map/src/geojson-loader";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 function layerWith(features: GeoLibreLayer["geojson"]): GeoLibreLayer {
   return {
@@ -71,8 +72,8 @@ describe("getLayerBounds", () => {
       layerWith({
         type: "FeatureCollection",
         features: [
-          { type: "Feature", geometry: null, properties: { code: "AVH" } },
-          { type: "Feature", geometry: null, properties: { code: "BDP" } },
+          { type: "Feature", geometry: NULL_GEOMETRY, properties: { code: "AVH" } },
+          { type: "Feature", geometry: NULL_GEOMETRY, properties: { code: "BDP" } },
         ],
       }),
     );

@@ -63,28 +63,45 @@ function fakeMapboxGl() {
 }
 
 /** A Geoman whose adapter still carries MapLibre's implementations (which throw). */
+/** The marker `createDomMarker` returns once the adapter is patched. */
+interface FakeDomMarker {
+  getLngLat(): [number, number];
+  getElement(): HTMLElement | null;
+  setLngLat(lngLat: [number, number]): void;
+  remove(): void;
+}
+
+/** The source wrapper `addSource` returns once the adapter is patched. */
+interface FakeSourceWrapper {
+  id: string;
+  setData(data: unknown): Promise<void>;
+  updateData(diff: unknown): Promise<void>;
+}
+
 function fakeGeoman(mapInstance: object) {
+  // Typed with the signatures the patched methods take, so the tests can call
+  // them the way Geoman does; the originals only throw.
   const adapter = {
     getMapInstance: () => mapInstance,
     project: ([lng, lat]: [number, number]) => [lng * 10, lat * 10] as [number, number],
     // Geoman's wrapper adds the source to the map inside its constructor and
     // would push MapLibre diffs through `updateData` (rejected by mapbox-gl).
-    addSource: (sourceId: string, _geoJson: unknown) => ({
+    addSource: (sourceId: string, _geoJson: unknown): FakeSourceWrapper => ({
       id: sourceId,
-      setData: async () => {
+      setData: async (_data: unknown) => {
         throw new Error("Geoman's own setData");
       },
-      updateData: async () => {
+      updateData: async (_diff: unknown) => {
         throw new Error("Data to update should be a feature or a feature collection.");
       },
     }),
-    createDomMarker: () => {
+    createDomMarker: (_options: object, _lngLat: [number, number]): FakeDomMarker => {
       throw new Error("MapLibre Marker on a mapbox-gl map");
     },
-    coordBoundsToScreenBounds: () => {
+    coordBoundsToScreenBounds: (_bounds: [[number, number], [number, number]]): unknown => {
       throw new Error("MapLibre LngLatBounds");
     },
-    loadImage: async () => {
+    loadImage: async (_options: { id: string; image: string }): Promise<void> => {
       throw new Error("promise-style loadImage");
     },
   };

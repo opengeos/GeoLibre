@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import type { VectorControl, VectorLayerInfo } from "maplibre-gl-vector";
+import type { VectorControl, VectorLayerInfo, VectorLayerStyle } from "maplibre-gl-vector";
 import {
   DEFAULT_LAYER_STYLE,
   LAYER_PALETTE,
@@ -106,7 +106,11 @@ describe("container default colors", () => {
     assert.equal(new Set(useAppStore.getState().layers.map((l) => l.style.strokeColor)).size, 3);
   });
   it("preserves explicitly supplied colors and color expressions", () => {
-    for (const style of [{ fillColor: "#ffffff" }, { fillColorExpression: ["get", "color"] }]) {
+    const styles: Partial<VectorLayerStyle>[] = [
+      { fillColor: "#ffffff" },
+      { fillColorExpression: ["get", "color"] },
+    ];
+    for (const style of styles) {
       const original = layers();
       useAppStore.setState({ layers: original });
       applyVectorContainerColors(

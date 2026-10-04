@@ -447,7 +447,7 @@ describe("Vite proxy guard — readBodyWithLimit", () => {
       headers: { "content-length": "5" },
     });
     const buf = await readBodyWithLimit(response, 100);
-    assert.equal(buf.toString("utf8"), "hello");
+    assert.equal(new TextDecoder().decode(buf), "hello");
   });
 });
 

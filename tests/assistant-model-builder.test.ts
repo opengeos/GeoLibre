@@ -458,7 +458,7 @@ describe("AI-created Model Builder models", () => {
     // so the saved graph must hold ids only -- as it does for a "layer" slot.
     const model = buildAssistantModel(base, layers, [MERGE], ids());
     const step = model.graph?.nodes.find((node) => node.kind === "tool");
-    assert.deepEqual(step?.parameters.layers, ["roads-id", "counties-id"]);
+    assert.deepEqual(step?.parameters?.layers, ["roads-id", "counties-id"]);
 
     // An unknown name fails at build time rather than silently at Run time.
     assert.throws(

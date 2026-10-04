@@ -24,13 +24,14 @@ function installDom() {
 }
 
 function fakeMap(mapContainer: HTMLElement) {
-  let removeListener: (() => void) | null = null;
+  type Listener = (event: { type: string }) => void;
+  let removeListener: Listener | null = null;
   return {
     getContainer: () => mapContainer,
-    on: (type: string, listener: () => void) => {
+    on: (type: string, listener: Listener) => {
       if (type === "remove") removeListener = listener;
     },
-    off: (type: string, listener: () => void) => {
+    off: (type: string, listener: Listener) => {
       if (type === "remove" && removeListener === listener) removeListener = null;
     },
     emitRemove: () => removeListener?.({ type: "remove" }),

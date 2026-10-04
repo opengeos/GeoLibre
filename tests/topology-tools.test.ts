@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, Polygon } from "geojson";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type { DuckDbCapability, ProcessingContext } from "../packages/processing/src/types";
 import {
@@ -36,7 +36,7 @@ function layerOf(fc: FeatureCollection, id = "layer-1"): GeoLibreLayer {
   };
 }
 
-const BOWTIE = {
+const BOWTIE: Feature<Polygon> = {
   type: "Feature",
   properties: { name: "bowtie" },
   geometry: {
@@ -51,9 +51,9 @@ const BOWTIE = {
       ],
     ],
   },
-} as const;
+};
 
-const SQUARE = {
+const SQUARE: Feature<Polygon> = {
   type: "Feature",
   properties: { name: "square" },
   geometry: {
@@ -68,7 +68,7 @@ const SQUARE = {
       ],
     ],
   },
-} as const;
+};
 
 function fcOf(...features: unknown[]): FeatureCollection {
   return {

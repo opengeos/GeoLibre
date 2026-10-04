@@ -43,7 +43,8 @@ describe("USGS 3DEP built-in plugin", () => {
 
   it("activates, registers its right panel, and opens it in the host application", () => {
     let panelRegistered = false;
-    let panelOptions: GeoLibreRightPanelRegistration | null = null;
+    // `as`, not an annotation: the fake assigns it in a callback TS cannot follow.
+    let panelOptions = null as GeoLibreRightPanelRegistration | null;
     let unregisterCalled = false;
     let openRightPanelCalledWith: string | null = null;
     let closeRightPanelCalledWith: string | null = null;
@@ -96,7 +97,8 @@ describe("USGS 3DEP built-in plugin", () => {
   });
 
   it("supports updating localized labels dynamically", () => {
-    let panelOptions: GeoLibreRightPanelRegistration | null = null;
+    // `as`, not an annotation: the fake assigns it in a callback TS cannot follow.
+    let panelOptions = null as GeoLibreRightPanelRegistration | null;
     const mockApp = {
       registerRightPanel: (opts: GeoLibreRightPanelRegistration) => {
         panelOptions = opts;
@@ -119,7 +121,8 @@ describe("USGS 3DEP built-in plugin", () => {
   });
 
   it("shows example coordinates as placeholders and keeps typed input across a relabel", () => {
-    let panelOptions: GeoLibreRightPanelRegistration | null = null;
+    // `as`, not an annotation: the fake assigns it in a callback TS cannot follow.
+    let panelOptions = null as GeoLibreRightPanelRegistration | null;
     const mockApp = {
       registerRightPanel: (opts: GeoLibreRightPanelRegistration) => {
         panelOptions = opts;

@@ -1442,8 +1442,8 @@ describe("MapController camera and query helpers", () => {
 
     controller.fitLayer(
       pointLayer("global-tiles", {
-        type: "vector-tile",
-        source: { type: "vector-tile", minzoom: 2 },
+        type: "vector-tiles",
+        source: { type: "vector-tiles", minzoom: 2 },
         geojson: undefined,
         metadata: { bounds: [-180, -85, 180, 85] },
       }),
@@ -2199,7 +2199,7 @@ function makeTerrainDomStub(): { createElement: () => unknown } {
 
 describe("MapController terrain auto-enable", () => {
   it("lets a plugin enable and restore terrain while the map control is hidden", () => {
-    let terrain: maplibregl.TerrainSpecification | null = null;
+    let terrain = null as maplibregl.TerrainSpecification | null;
     let centerClamped = true;
     const sources = new Set<string>();
     const map = {
@@ -2233,7 +2233,7 @@ describe("MapController terrain auto-enable", () => {
     const prevDoc = (globalThis as { document?: unknown }).document;
     (globalThis as { document?: unknown }).document = makeTerrainDomStub();
     try {
-      let terrain: maplibregl.TerrainSpecification | null = null;
+      let terrain = null as maplibregl.TerrainSpecification | null;
       const sources = new Set<string>();
       const map = {
         // addControl mirrors MapLibre: it runs the control's onAdd so the
@@ -2273,7 +2273,7 @@ describe("MapController terrain auto-enable", () => {
     const prevDoc = (globalThis as { document?: unknown }).document;
     (globalThis as { document?: unknown }).document = makeTerrainDomStub();
     try {
-      let terrain: maplibregl.TerrainSpecification | null = null;
+      let terrain = null as maplibregl.TerrainSpecification | null;
       const sources = new Set<string>();
       const map = {
         addControl: (control: maplibregl.IControl) =>
@@ -2315,7 +2315,11 @@ describe("MapController terrain auto-enable", () => {
       internal.addTerrainSource();
       if (internal.terrainEnablePending) internal.autoEnableTerrain();
 
-      assert.equal(terrain?.source, "geolibre-terrain-dem");
+      // Re-read through the declared type: the `assert.equal(terrain, null)`
+      // above narrowed the local to `null`, and the fake's setTerrain assigns it
+      // out of the compiler's sight.
+      const enabled = terrain as maplibregl.TerrainSpecification | null;
+      assert.equal(enabled?.source, "geolibre-terrain-dem");
       assert.equal(internal.terrainEnablePending, false);
     } finally {
       if (prevDoc === undefined) delete (globalThis as { document?: unknown }).document;

@@ -1,0 +1,38 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "declaration": false,
+    "declarationMap": false,
+    "allowJs": true,
+    "types": ["node", "react", "react-dom", "vite/client"],
+    "paths": {
+      "@/*": ["../apps/geolibre-desktop/src/*"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "../apps/geolibre-desktop/src/vite-env.d.ts",
+    "../apps/geolibre-desktop/src/types/*.d.ts",
+    "../packages/*/src/*.d.ts"
+  ],
+  "exclude": [
+    "fixtures",
+    "ai-proxy-*.test.ts",
+    "aircraft-proxy.test.ts",
+    "cctv-proxy.test.ts",
+    "celestrak-proxy.test.ts",
+    "edge-proxy-redirect.test.ts",
+    "firms-proxy.test.ts",
+    "gods-eye-view-fire-feeds.test.ts",
+    "gods-eye-view-transit-feeds.test.ts",
+    "launch-library-proxy.test.ts",
+    "ocean-data-platform.test.ts",
+    "osm-overpass-proxy.test.ts",
+    "reproject.test.ts",
+    "transit-proxy.test.ts"
+  ]
+}

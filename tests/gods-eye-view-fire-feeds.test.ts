@@ -14,6 +14,7 @@ import {
   proxyFirmsRequestGuarded,
 } from "../apps/geolibre-desktop/vite-proxy-guard";
 import type { ServerResponse } from "node:http";
+import type { Point } from "geojson";
 import { FIRMS_UPSTREAMS as EDGE_FIRMS_UPSTREAMS } from "../workers/tiles/src/allowlisted-fetch";
 
 const VIIRS_HEADER =
@@ -112,7 +113,7 @@ describe("FIRMS fire clusters", () => {
       satellites: "N20, N21",
       source: "NASA FIRMS VIIRS",
     });
-    assert.deepEqual(merged.geometry.coordinates, [20.02, 10.02]);
+    assert.deepEqual((merged.geometry as Point).coordinates, [20.02, 10.02]);
     const point = packets[2].point as { pixelSize: number };
     const bigger = packets[1].point as { pixelSize: number };
     assert.ok(bigger.pixelSize > point.pixelSize);

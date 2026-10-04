@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import { type GeoLibreLayer, type LayerStyle, useAppStore } from "@geolibre/core";
 import {
   RASTER_SOURCE_KIND,
   activateRasterClassification,
@@ -94,7 +94,7 @@ function rasterLayer(
     source: { type: "raster", url: `https://example.com/${id}.tif` },
     visible: true,
     opacity: 1,
-    style: {},
+    style: {} as LayerStyle,
     sourcePath: id,
     metadata: {
       sourceKind: RASTER_SOURCE_KIND,

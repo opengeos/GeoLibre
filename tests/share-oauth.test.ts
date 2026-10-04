@@ -241,7 +241,9 @@ describe("sign-in stale result handling", () => {
       const signIn = signInToShare(issuer);
       await messageListenerReady.promise;
 
-      const handler = messageHandler;
+      // Assigned inside the addEventListener fake, which TS cannot see, so it
+      // would otherwise narrow the `let` to its initial null.
+      const handler = messageHandler as ((event: MessageEvent) => void) | null;
       assert.ok(handler, "consent callback listener was not installed");
       const authorizeUrl = new URL(popup.location.href);
       handler({

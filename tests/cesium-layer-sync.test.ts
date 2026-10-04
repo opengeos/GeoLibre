@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { useAppStore } from "@geolibre/core";
-import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/types";
+import {
+  DEFAULT_LAYER_STYLE,
+  type GeoLibreLayer,
+  type LayerStyle,
+} from "../packages/core/src/types";
 import { CesiumLayerSync, isCesiumSupportedLayerType } from "../packages/map/src/cesium-layer-sync";
 
 // Verifies the store → Cesium reconciler against a fake Cesium namespace + viewer
@@ -189,7 +193,7 @@ function makeFakes() {
                     {
                       properties: {
                         ...(features[0]?.properties ?? {}),
-                        __geolibre_cesium_feature_index: { getValue: () => 0 },
+                        __geolibre_cesium_feature_index: { getValue: (): number => 0 },
                       },
                       polygon: polygonFor(features[0]),
                       show: true,
@@ -197,7 +201,7 @@ function makeFakes() {
                     {
                       properties: {
                         ...(features[0]?.properties ?? {}),
-                        __geolibre_cesium_feature_index: { getValue: () => 0 },
+                        __geolibre_cesium_feature_index: { getValue: (): number => 0 },
                       },
                       polyline: { material: options.stroke },
                       show: true,
@@ -205,7 +209,7 @@ function makeFakes() {
                     {
                       properties: {
                         ...(features[0]?.properties ?? {}),
-                        __geolibre_cesium_feature_index: { getValue: () => 0 },
+                        __geolibre_cesium_feature_index: { getValue: (): number => 0 },
                       },
                       billboard: { color: undefined },
                       show: true,
@@ -213,7 +217,7 @@ function makeFakes() {
                     {
                       properties: {
                         ...(features[0]?.properties ?? {}),
-                        __geolibre_cesium_feature_index: { getValue: () => 0 },
+                        __geolibre_cesium_feature_index: { getValue: (): number => 0 },
                       },
                       label: {},
                       show: true,
@@ -286,7 +290,9 @@ function makeFakes() {
   return { calls, viewer, Cesium, flush };
 }
 
-function mkLayer(over: Partial<GeoLibreLayer>): GeoLibreLayer {
+type LayerPatch = Omit<Partial<GeoLibreLayer>, "style"> & { style?: Partial<LayerStyle> };
+
+function mkLayer(over: LayerPatch): GeoLibreLayer {
   return {
     id: "l1",
     name: "layer",
@@ -294,10 +300,10 @@ function mkLayer(over: Partial<GeoLibreLayer>): GeoLibreLayer {
     source: {},
     visible: true,
     opacity: 1,
-    style: {},
     metadata: {},
     ...over,
-  } as GeoLibreLayer;
+    style: { ...DEFAULT_LAYER_STYLE, ...over.style },
+  };
 }
 
 /** A one-polygon GeoJSON layer, the shape the render-status tests need. */
@@ -351,8 +357,8 @@ function newSync(
 ) {
   // The fakes stand in for the Cesium namespace + Viewer (cast through unknown).
   return new CesiumLayerSync(
-    f.Cesium as unknown as typeof import("cesium"),
-    f.viewer as unknown as import("cesium").Viewer,
+    f.Cesium as unknown as ConstructorParameters<typeof CesiumLayerSync>[0],
+    f.viewer as unknown as ConstructorParameters<typeof CesiumLayerSync>[1],
     readZoom,
     deps,
   );
@@ -1913,7 +1919,12 @@ describe("CesiumLayerSync", () => {
     // The extrusion path likewise skips height/heightReference on it and, since
     // Cesium reads extrudedHeight as an absolute altitude there, lifts the roof
     // above the ring's own height (100 m + 10 m) rather than extruding down to 10 m.
-    sync.sync([{ ...layer, style: { extrusionEnabled: true, extrusionHeightProperty: "height" } }]);
+    sync.sync([
+      {
+        ...layer,
+        style: { ...layer.style, extrusionEnabled: true, extrusionHeightProperty: "height" },
+      },
+    ]);
     await f.flush();
     const extruded = f.calls.dataSourcesAdded[1] as {
       entities: {

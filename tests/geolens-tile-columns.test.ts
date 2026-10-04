@@ -145,7 +145,13 @@ describe("desiredTileColumns", () => {
     useAppStore.getState().setLayerStyle(id, {
       vectorStyleMode: "rule-based",
       vectorRules: [
-        { id: "r1", label: "a", filter: '["==", ["get", "col_4"], "x"]', color: "#2563eb" },
+        {
+          id: "r1",
+          label: "a",
+          filter: '["==", ["get", "col_4"], "x"]',
+          color: "#2563eb",
+          isElse: false,
+        },
         { id: "r2", label: "else", filter: "", color: "#dc2626", isElse: true },
       ],
     });
