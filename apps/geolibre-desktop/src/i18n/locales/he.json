@@ -242,7 +242,7 @@
     "description": "עיון, התקנה, עדכון והסרה של תוספים חיצוניים של GeoLibre. התוספים מופיעים ב<registryLink>מרשם התוספים של GeoLibre</registryLink>.",
     "policySideloadDisabled": "התקנת תוספים שלא מהמרשם מושבתת על ידי מדיניות הפריסה.",
     "policyBlocked": "התוסף „{{pluginId}}” חסום על ידי מדיניות הפריסה.",
-    "policyBlocklisted": "התוסף '{{pluginId}}' נחסם על ידי מאגר התוספים: {{reason}}",
+    "policyBlocklisted": "התוסף „{{pluginId}}” נחסם על ידי מאגר התוספים: {{reason}}",
     "policyNotAllowed": "התוסף „{{pluginId}}” אינו מותר לפי מדיניות הפריסה."
   },
   "viewState": {

@@ -230,7 +230,7 @@
     "description": "Duyệt, cài đặt, cập nhật và xóa các plugin GeoLibre bên ngoài. Các plugin được liệt kê trong sổ đăng ký plugin <registryLink>GeoLibre</registryLink>.",
     "policySideloadDisabled": "Việc cài đặt plugin thủ công (sideload) đã bị tắt theo chính sách triển khai.",
     "policyBlocked": "Plugin “{{pluginId}}” bị chặn theo chính sách triển khai.",
-    "policyBlocklisted": "Plugin '{{pluginId}}' đã bị sổ đăng ký plugin chặn: {{reason}}",
+    "policyBlocklisted": "Plugin “{{pluginId}}” đã bị sổ đăng ký plugin chặn: {{reason}}",
     "policyNotAllowed": "Plugin “{{pluginId}}” không được phép theo chính sách triển khai."
   },
   "viewState": {

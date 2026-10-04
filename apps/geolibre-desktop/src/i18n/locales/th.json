@@ -230,7 +230,7 @@
     "description": "เรียกดู ติดตั้ง อัปเดต และนำปลั๊กอินภายนอกของ GeoLibre ออก ปลั๊กอินทั้งหมดแสดงอยู่ใน<registryLink>รีจิสทรีปลั๊กอินของ GeoLibre</registryLink>",
     "policySideloadDisabled": "การติดตั้งปลั๊กอินจากภายนอก (sideload) ถูกปิดใช้งานโดยนโยบายการปรับใช้",
     "policyBlocked": "ปลั๊กอิน “{{pluginId}}” ถูกบล็อกโดยนโยบายการปรับใช้",
-    "policyBlocklisted": "ปลั๊กอิน '{{pluginId}}' ถูกบล็อกโดยรีจิสทรีปลั๊กอิน: {{reason}}",
+    "policyBlocklisted": "ปลั๊กอิน “{{pluginId}}” ถูกบล็อกโดยรีจิสทรีปลั๊กอิน: {{reason}}",
     "policyNotAllowed": "นโยบายการปรับใช้ไม่อนุญาตปลั๊กอิน “{{pluginId}}”"
   },
   "viewState": {

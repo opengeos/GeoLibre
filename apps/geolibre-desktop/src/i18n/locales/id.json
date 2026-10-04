@@ -230,7 +230,7 @@
     "description": "Jelajahi, pasang, perbarui, dan hapus plugin GeoLibre eksternal. Plugin terdaftar di <registryLink>registri plugin GeoLibre</registryLink>.",
     "policySideloadDisabled": "Pemasangan plugin secara manual (sideload) dinonaktifkan oleh kebijakan penerapan.",
     "policyBlocked": "Plugin \"{{pluginId}}\" diblokir oleh kebijakan penerapan.",
-    "policyBlocklisted": "Plugin '{{pluginId}}' diblokir oleh registri plugin: {{reason}}",
+    "policyBlocklisted": "Plugin \"{{pluginId}}\" diblokir oleh registri plugin: {{reason}}",
     "policyNotAllowed": "Plugin \"{{pluginId}}\" tidak diizinkan oleh kebijakan penerapan."
   },
   "viewState": {

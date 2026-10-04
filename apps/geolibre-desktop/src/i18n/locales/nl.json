@@ -236,7 +236,7 @@
     "description": "Blader door externe GeoLibre-plugins en installeer, werk bij of verwijder ze. Plugins staan in het <registryLink>GeoLibre-pluginregister</registryLink>.",
     "policySideloadDisabled": "Het handmatig installeren van plugins (sideloading) is uitgeschakeld door het implementatiebeleid.",
     "policyBlocked": "Plugin ‘{{pluginId}}’ is geblokkeerd door het implementatiebeleid.",
-    "policyBlocklisted": "De plug-in '{{pluginId}}' is geblokkeerd door het plug-inregister: {{reason}}",
+    "policyBlocklisted": "De plug-in ‘{{pluginId}}’ is geblokkeerd door het plug-inregister: {{reason}}",
     "policyNotAllowed": "Plugin ‘{{pluginId}}’ is niet toegestaan door het implementatiebeleid."
   },
   "viewState": {

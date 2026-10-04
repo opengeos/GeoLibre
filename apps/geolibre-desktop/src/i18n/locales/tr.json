@@ -236,7 +236,7 @@
     "description": "Harici GeoLibre eklentilerine göz atın, kurun, güncelleyin ve kaldırın. Eklentiler <registryLink>GeoLibre eklenti kayıt defterinde</registryLink> listelenir.",
     "policySideloadDisabled": "Eklentilerin harici olarak yüklenmesi dağıtım ilkesi tarafından devre dışı bırakıldı.",
     "policyBlocked": "\"{{pluginId}}\" eklentisi dağıtım ilkesi tarafından engellendi.",
-    "policyBlocklisted": "'{{pluginId}}' eklentisi eklenti kayıt defteri tarafından engellendi: {{reason}}",
+    "policyBlocklisted": "\"{{pluginId}}\" eklentisi eklenti kayıt defteri tarafından engellendi: {{reason}}",
     "policyNotAllowed": "\"{{pluginId}}\" eklentisine dağıtım ilkesi tarafından izin verilmiyor."
   },
   "viewState": {

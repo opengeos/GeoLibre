@@ -260,7 +260,7 @@
     "description": "تصفّح إضافات GeoLibre الخارجية وثبّتها وحدّثها وأزلها. الإضافات مُدرَجة في <registryLink>سجل إضافات GeoLibre</registryLink>.",
     "policySideloadDisabled": "تثبيت الإضافات من خارج السجل معطّل بموجب سياسة النشر.",
     "policyBlocked": "الإضافة «{{pluginId}}» محظورة بموجب سياسة النشر.",
-    "policyBlocklisted": "حظر سجل الإضافات الإضافة '{{pluginId}}': {{reason}}",
+    "policyBlocklisted": "حظر سجل الإضافات الإضافة «{{pluginId}}»: {{reason}}",
     "policyNotAllowed": "الإضافة «{{pluginId}}» غير مسموح بها بموجب سياسة النشر."
   },
   "viewState": {
