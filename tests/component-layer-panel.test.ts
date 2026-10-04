@@ -286,8 +286,58 @@ describe("LayerPanel", () => {
     fireEvent.click(row("Rivers"));
 
     assert.equal(useAppStore.getState().selectedLayerId, "rivers");
-    assert.equal(row("Rivers").getAttribute("aria-pressed"), "true");
-    assert.equal(row("Parks").getAttribute("aria-pressed"), "false");
+    // The selection state lives on the row's name button, not the card: the
+    // card holds the row's other controls, so it must not be a button too.
+    const selectButton = (name: string) => within(row(name)).getByRole("button", { name });
+    assert.equal(selectButton("Rivers").getAttribute("aria-pressed"), "true");
+    assert.equal(selectButton("Parks").getAttribute("aria-pressed"), "false");
+    assert.equal(row("Rivers").getAttribute("role"), "listitem");
+    assert.equal(row("Rivers").hasAttribute("tabindex"), false);
+  });
+
+  it("selects a layer from its name button, the row's keyboard target", () => {
+    useAppStore.setState({
+      layers: [
+        geojsonLayer({ id: "rivers", name: "Rivers" }),
+        geojsonLayer({ id: "parks", name: "Parks" }),
+      ],
+    });
+    renderLayerPanel();
+
+    // Enter or Space on a native button dispatches this click.
+    fireEvent.click(within(row("Parks")).getByRole("button", { name: "Parks" }));
+
+    assert.equal(useAppStore.getState().selectedLayerId, "parks");
+    assert.equal(
+      within(row("Parks")).getByRole("button", { name: "Parks" }).getAttribute("aria-pressed"),
+      "true",
+    );
+  });
+
+  it("labels each row with its depth in the layer list", () => {
+    useAppStore.setState({
+      layers: [
+        geojsonLayer({ id: "rivers", name: "Rivers", groupId: "water" }),
+        geojsonLayer({ id: "parks", name: "Parks" }),
+      ],
+      layerGroups: [
+        {
+          id: "water",
+          name: "Water",
+          visible: true,
+          opacity: 1,
+          collapsed: false,
+        },
+      ],
+    });
+    renderLayerPanel();
+
+    assert.ok(screen.getByRole("list", { name: "Layers" }));
+    assert.equal(row("Parks").getAttribute("aria-level"), "1");
+    assert.equal(row("Rivers").getAttribute("aria-level"), "2");
+    const header = screen.getByTestId("layer-group-header");
+    assert.equal(header.getAttribute("role"), "listitem");
+    assert.equal(header.getAttribute("aria-level"), "1");
   });
 
   it("moves a layer up the draw order", () => {

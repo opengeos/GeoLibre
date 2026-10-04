@@ -90,6 +90,10 @@ export function LayerGroupHeader({
       data-testid="layer-group-header"
       data-group-name={group.name}
       data-group-id={group.id}
+      // Its level in the layer list's hierarchy; the expanded state is on
+      // the collapse toggle, which is where a listitem may carry it.
+      role="listitem"
+      aria-level={depth + 1}
       className={`w-full min-w-0 max-w-full rounded-md border p-2 transition-colors ${
         isDropTarget
           ? "border-primary bg-primary/10"

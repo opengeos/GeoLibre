@@ -534,12 +534,19 @@ export function LayerPanel({
         // legacy iOS property that does nothing on the Android WebView this fix
         // targets.
       >
-        <div data-layer-list="" className="w-full min-w-0 space-y-1 p-2">
-          {layers.length === 0 && (
-            <p className="px-2 py-4 text-xs text-muted-foreground">
-              {isBeginnerProfile ? t("layers.emptyBeginner") : t("layers.empty")}
-            </p>
-          )}
+        {layers.length === 0 && (
+          <p className="px-4 pb-2 pt-6 text-xs text-muted-foreground">
+            {isBeginnerProfile ? t("layers.emptyBeginner") : t("layers.empty")}
+          </p>
+        )}
+        {/* Rows, group headers and the Background card are listitems carrying
+            their nesting depth as aria-level. */}
+        <div
+          data-layer-list=""
+          role="list"
+          aria-label={t("sharedRail.layers")}
+          className="w-full min-w-0 space-y-1 p-2"
+        >
           {visibleLayers.map((layer, displayIndex) => {
             const group = layer.groupId ? groupById.get(layer.groupId) : undefined;
             const groupCollapsed = group?.collapsed ?? false;
@@ -565,7 +572,6 @@ export function LayerPanel({
                     onPointerUp={drag.handlePointerUp}
                     onPointerCancel={drag.resetDragState}
                     onSelect={selection.handleLayerSelection}
-                    selectOnlyLayer={selection.selectOnlyLayer}
                     editing={rename.editingLayerId === layer.id}
                     editingName={rename.editingName}
                     setEditingName={rename.setEditingName}

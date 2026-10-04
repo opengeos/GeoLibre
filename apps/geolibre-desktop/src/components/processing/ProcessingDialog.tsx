@@ -1896,6 +1896,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
               className="min-w-0 flex-1"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
+              aria-label={t("processing.whitebox.filterByCategory")}
             >
               {categories.map((item) => (
                 <option key={item.value} value={item.value}>
@@ -2578,6 +2579,7 @@ function ParameterField({
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
         <LayerOrPathInput
           id={`whitebox-${param.name}`}
+          label={label}
           layers={availableLayers}
           param={param}
           value={valueText}
@@ -2898,6 +2900,8 @@ function DistanceInput({ id, latitude, onChange, value }: DistanceInputProps) {
 
 interface LayerOrPathInputProps {
   id: string;
+  /** The parameter's visible label, which also names the layer picker. */
+  label: string;
   layers: GeoLibreLayer[];
   onChange: (value: unknown) => void;
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
@@ -2984,6 +2988,7 @@ function MultiLayerOrPathInput({
 
 function LayerOrPathInput({
   id,
+  label,
   layers,
   onChange,
   onPickFile,
@@ -3002,6 +3007,7 @@ function LayerOrPathInput({
           child count is fine; this is the one that needs saying. */}
       <Select
         className="col-span-2 @sm/params:col-span-1"
+        aria-label={t("processing.whitebox.layerFor", { name: label })}
         value={usingLayer ? value : ""}
         onChange={(event) => onChange(event.target.value)}
       >

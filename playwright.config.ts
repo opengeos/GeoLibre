@@ -22,6 +22,10 @@ const CORE_SPECS = [
   "smoke.spec.ts", // the app loads, a layer renders, the attribute table opens
   "theme.spec.ts",
   "a11y.spec.ts",
+  // Add, restyle and export a layer with the keyboard alone: one ~6 s test,
+  // so a control dropped from the tab order fails its own PR (#2858). The
+  // wider per-dialog axe sweep, a11y-screens.spec.ts, stays nightly (~70 s).
+  "keyboard-only.spec.ts",
   "layer-panel.spec.ts",
   "drop-overlay.spec.ts",
   "set-view.spec.ts",

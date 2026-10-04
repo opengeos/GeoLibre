@@ -3566,7 +3566,10 @@ body,
   --mlr-text-strong: hsl(var(--foreground));
   --mlr-text-soft: hsl(var(--popover-foreground) / 0.8);
   --mlr-text-muted: hsl(var(--muted-foreground));
-  --mlr-text-faint: hsl(var(--muted-foreground) / 0.75);
+  /* Faint text (the empty-list hint) at full muted-foreground strength: the
+     0.75 alpha it used to carry fell to ~3.5:1 on the panel background,
+     under WCAG AA's 4.5:1 for its 11px text. */
+  --mlr-text-faint: hsl(var(--muted-foreground));
   --mlr-border: hsl(var(--border));
   --mlr-border-soft: hsl(var(--border) / 0.8);
   --mlr-border-faint: hsl(var(--border) / 0.6);

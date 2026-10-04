@@ -48,20 +48,14 @@ export function BackgroundLayerRow({
           : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
       }`}
       title={t("layers.doubleClickToChangeBackground")}
+      // A listitem like the layer rows, not a button wrapping the card's own
+      // controls (axe `nested-interactive`). The mouse can still click or
+      // double-click anywhere on it; the keyboard selects with the name
+      // button and opens the picker with "Change background".
+      role="listitem"
+      aria-level={1}
       onClick={() => selectLayer(BACKGROUND_SELECTION_ID)}
       onDoubleClick={onOpenBasemapPicker}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === "Enter") selectLayer(BACKGROUND_SELECTION_ID);
-        // Keyboard equivalent of the double-click: Space opens the basemap
-        // picker (preventDefault stops the panel from scrolling).
-        if (e.key === " ") {
-          e.preventDefault();
-          onOpenBasemapPicker();
-        }
-      }}
-      role="button"
-      tabIndex={0}
     >
       <div className="flex items-center gap-1">
         <span
@@ -87,7 +81,14 @@ export function BackgroundLayerRow({
           )}
         </button>
         <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="flex-1 truncate text-sm font-medium">{t("layers.background")}</span>
+        {/* Selects the background; its click bubbles to the card's handler. */}
+        <button
+          type="button"
+          aria-pressed={selected}
+          className="min-w-0 flex-1 truncate rounded text-start text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t("layers.background")}
+        </button>
         <span className="text-[10px] uppercase text-muted-foreground">
           {t("layers.typeBackground")}
         </span>

@@ -58,8 +58,11 @@ export function GeocodingSection() {
         return (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">{t("settings.geocoding.provider")}</Label>
+              <Label className="text-xs" htmlFor="geocoding-provider">
+                {t("settings.geocoding.provider")}
+              </Label>
               <Select
+                id="geocoding-provider"
                 value={provider.id}
                 onChange={(event) =>
                   updateGeocoding({

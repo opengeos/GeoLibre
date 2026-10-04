@@ -5247,6 +5247,8 @@
         "projectedHint": "Saved to your downloads in the target CRS. The map only displays EPSG:4326, so a projected result is not added as a layer."
       },
       "filterBySource": "Filter by source",
+      "filterByCategory": "Filter by category",
+      "layerFor": "Layer for {{name}}",
       "allSources": "All sources",
       "geolibreTools": "GeoLibre tools",
       "whiteboxTools": "Whitebox tools",

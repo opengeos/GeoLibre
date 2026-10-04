@@ -72,7 +72,6 @@ interface LayerRowProps {
   onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
   onPointerCancel: () => void;
   onSelect: (event: ReactMouseEvent<HTMLDivElement>, layerId: string) => void;
-  selectOnlyLayer: (layerId: string) => void;
   /** Whether this row's name is open for inline rename. */
   editing: boolean;
   editingName: string;
@@ -113,7 +112,6 @@ export function LayerRow({
   onPointerUp,
   onPointerCancel,
   onSelect,
-  selectOnlyLayer,
   editing,
   editingName,
   setEditingName,
@@ -261,20 +259,14 @@ export function LayerRow({
             }
           : undefined
       }
-      aria-pressed={selected}
+      // A listitem, not a button: the card holds a dozen controls of its own,
+      // and an interactive element must not nest others (axe
+      // `nested-interactive`). Clicking anywhere on the card still selects
+      // for the mouse; the keyboard and assistive-technology path is the
+      // name button below, which carries the selection state.
+      role="listitem"
+      aria-level={group ? groupDepth(group) + 2 : 1}
       onClick={(e) => onSelect(e, layer.id)}
-      onKeyDown={(e) => {
-        // Only act on the card itself: preventDefault here would
-        // otherwise cancel the Enter activation of the action
-        // buttons nested inside it.
-        if (e.target !== e.currentTarget) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          selectOnlyLayer(layer.id);
-        }
-      }}
-      role="button"
-      tabIndex={0}
     >
       {dropTarget && draggedDisplayIndex > displayIndex && (
         <div className="pointer-events-none absolute -top-1 left-2 right-2 h-1 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]" />
@@ -350,8 +342,14 @@ export function LayerRow({
             }}
           />
         ) : (
-          <span
-            className={`min-w-0 flex-1 truncate text-sm font-medium ${
+          // The row's selection control. Its click bubbles to the card's
+          // handler, so Enter/Space selects the layer and a Shift/Ctrl click
+          // still extends or toggles the multi-selection.
+          <button
+            type="button"
+            aria-pressed={selected}
+            data-layer-select=""
+            className={`min-w-0 flex-1 truncate rounded text-start text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               groupHidden ? "text-muted-foreground" : ""
             }`}
             title={
@@ -367,7 +365,7 @@ export function LayerRow({
             }}
           >
             {layer.name}
-          </span>
+          </button>
         )}
         {isLayerLocked && (
           <span title={t("collaborate.layerLockedHint")}>
