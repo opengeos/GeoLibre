@@ -132,6 +132,15 @@ describe("buildIssueReportUrl", () => {
     assert.match(fields(url).get("screenshots") ?? "", /…\[truncated\]/);
   });
 
+  it("bounds a huge url/source and omits data: payloads", () => {
+    const url = buildIssueReportUrl(
+      entry({ url: `data:image/png;base64,${"A".repeat(50_000)}`, source: "s".repeat(50_000) }),
+      context,
+    );
+    assert.ok(url.length <= MAX_ISSUE_URL_LENGTH, `length ${url.length}`);
+    assert.match(fields(url).get("screenshots") ?? "", /data:\[omitted\]/);
+  });
+
   it("accounts for multi-byte encoding when truncating", () => {
     const url = buildIssueReportUrl(
       entry({ message: "图层".repeat(2000), detail: "加载失败".repeat(5000) }),
@@ -172,6 +181,20 @@ describe("layerToNotifyForMapError", () => {
   it("ignores basemap and unknown sources", () => {
     assert.equal(layerToNotifyForMapError({ message: "x", source: "openmaptiles" }, layers), null);
     assert.equal(layerToNotifyForMapError({ message: "x" }, layers), null);
+  });
+
+  it("treats a 404 on a tile-template layer as an empty tile even without tile detail", () => {
+    const tiled = [
+      { id: "xyz", name: "Tiles", source: { tiles: ["https://t/{z}/{x}/{y}.png"] } },
+    ] as unknown as GeoLibreLayer[];
+    const mapbox404 = {
+      message: "Not Found",
+      source: "geolibre-mapbox-xyz",
+      status: 404,
+      detail: JSON.stringify({ source: "geolibre-mapbox-xyz", status: 404 }),
+    };
+    assert.equal(layerToNotifyForMapError(mapbox404, tiled), null);
+    assert.equal(layerToNotifyForMapError({ ...mapbox404, status: 401 }, tiled)?.name, "Tiles");
   });
 
   it("ignores an empty tile (404) but not a missing whole-file source", () => {

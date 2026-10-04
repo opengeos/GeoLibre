@@ -58,8 +58,24 @@ export function layerToNotifyForMapError(
   event: MapDiagnosticEvent,
   layers: readonly GeoLibreLayer[],
 ): GeoLibreLayer | null {
-  if (event.status !== undefined && EMPTY_TILE_STATUSES.has(event.status) && isTileFailure(event)) {
+  const layer = layerForMapSource(event.source, layers);
+  if (!layer) return null;
+  if (
+    event.status !== undefined &&
+    EMPTY_TILE_STATUSES.has(event.status) &&
+    (isTileFailure(event) || hasTileTemplates(layer))
+  ) {
     return null;
   }
-  return layerForMapSource(event.source, layers);
+  return layer;
+}
+
+/**
+ * Whether the layer's source is a tile template set. The Mapbox engine's error
+ * detail carries no tile coordinates, so for those layers a 404 is read as an
+ * empty tile from the layer record instead.
+ */
+function hasTileTemplates(layer: GeoLibreLayer): boolean {
+  const tiles = (layer.source as { tiles?: unknown } | undefined)?.tiles;
+  return Array.isArray(tiles) && tiles.length > 0;
 }

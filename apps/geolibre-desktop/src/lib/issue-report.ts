@@ -66,6 +66,11 @@ const TOKEN_PATTERNS: RegExp[] = [
   /\bAIza[0-9A-Za-z_-]{35}\b/g, // Google API key
 ];
 
+// Inline payloads are never useful in a report and can be megabytes long.
+const DATA_URI = /\bdata:[^\s"'<>)\]]+/gi;
+/** Cap for the entry's `url` and `source`, which the shrink loop leaves whole. */
+const MAX_LOCATOR_LENGTH = 500;
+
 const HOME_DIRECTORY = /(\/home\/|\/Users\/|[A-Za-z]:\\Users\\)[^/\\\s"'<>]+/g;
 
 function scrubUrl(raw: string): string {
@@ -94,7 +99,7 @@ function scrubUrl(raw: string): string {
  * @returns The scrubbed text.
  */
 export function scrubForIssueReport(text: string): string {
-  let result = text.replace(EMBEDDED_URL, scrubUrl);
+  let result = text.replace(DATA_URI, "data:[omitted]").replace(EMBEDDED_URL, scrubUrl);
   for (const pattern of TOKEN_PATTERNS) {
     result = result.replace(pattern, (match, scheme?: string) =>
       typeof scheme === "string" && /^(Bearer|Basic|Token)$/i.test(scheme)
@@ -126,8 +131,10 @@ function scrubEntry(entry: IssueReportEntry): IssueReportEntry {
   };
   if (entry.method) scrubbed.method = entry.method;
   if (entry.status !== undefined) scrubbed.status = entry.status;
-  if (entry.url) scrubbed.url = scrubForIssueReport(entry.url);
-  if (entry.source) scrubbed.source = scrubForIssueReport(entry.source);
+  if (entry.url) scrubbed.url = truncateText(scrubForIssueReport(entry.url), MAX_LOCATOR_LENGTH);
+  if (entry.source) {
+    scrubbed.source = truncateText(scrubForIssueReport(entry.source), MAX_LOCATOR_LENGTH);
+  }
   if (entry.detail) scrubbed.detail = scrubForIssueReport(entry.detail);
   return scrubbed;
 }
