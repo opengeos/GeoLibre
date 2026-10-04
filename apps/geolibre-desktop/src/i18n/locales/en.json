@@ -23,6 +23,7 @@
       "changeCount_other": "{{count}} changes",
       "noChanges": "No differences.",
       "parseError": "Could not read this snapshot to compare it.",
+      "currentError": "Could not read the current project to compare it.",
       "none": "(none)",
       "added": "Added",
       "removed": "Removed",

@@ -23,6 +23,7 @@
       "changeCount_other": "{{count}} alterações",
       "noChanges": "Nenhuma diferença.",
       "parseError": "Não foi possível ler este snapshot para compará-lo.",
+      "currentError": "Não foi possível ler o projeto atual para compará-lo.",
       "none": "(nenhum)",
       "added": "Adicionada",
       "removed": "Removida",

@@ -23,6 +23,7 @@
       "changeCount_other": "{{count}} modifications",
       "noChanges": "Aucune différence.",
       "parseError": "Impossible de lire cet instantané pour le comparer.",
+      "currentError": "Impossible de lire le projet actuel pour le comparer.",
       "none": "(aucun)",
       "added": "Ajoutée",
       "removed": "Supprimée",

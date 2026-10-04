@@ -23,6 +23,7 @@
       "changeCount_other": "{{count}} wijzigingen",
       "noChanges": "Geen verschillen.",
       "parseError": "Kan deze momentopname niet lezen om te vergelijken.",
+      "currentError": "Kan het huidige project niet lezen om te vergelijken.",
       "none": "(geen)",
       "added": "Toegevoegd",
       "removed": "Verwijderd",

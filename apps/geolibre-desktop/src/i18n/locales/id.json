@@ -22,6 +22,7 @@
       "changeCount_other": "{{count}} perubahan",
       "noChanges": "Tidak ada perbedaan.",
       "parseError": "Tidak dapat membaca snapshot ini untuk dibandingkan.",
+      "currentError": "Tidak dapat membaca proyek saat ini untuk dibandingkan.",
       "none": "(tidak ada)",
       "added": "Ditambahkan",
       "removed": "Dihapus",

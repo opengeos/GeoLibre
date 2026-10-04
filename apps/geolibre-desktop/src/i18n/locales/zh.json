@@ -22,6 +22,7 @@
       "changeCount_other": "{{count}} 处更改",
       "noChanges": "没有差异。",
       "parseError": "无法读取此快照以进行比较。",
+      "currentError": "无法读取当前项目以进行比较。",
       "none": "（无）",
       "added": "已添加",
       "removed": "已删除",

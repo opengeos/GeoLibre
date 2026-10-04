@@ -23,6 +23,7 @@
       "changeCount_other": "{{count}} dəyişiklik",
       "noChanges": "Fərq yoxdur.",
       "parseError": "Bu snapşotu müqayisə üçün oxumaq mümkün olmadı.",
+      "currentError": "Cari layihəni müqayisə üçün oxumaq mümkün olmadı.",
       "none": "(yoxdur)",
       "added": "Əlavə edildi",
       "removed": "Silindi",

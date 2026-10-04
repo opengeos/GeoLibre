@@ -13,9 +13,11 @@ import {
  *
  * A layer still in the project is replaced wholesale by its snapshot record,
  * in place, so fields added since the snapshot (a filter, a popup) go away
- * too. A layer deleted since the snapshot is re-inserted below the nearest
- * layer that sat above it in the snapshot and still exists, so it lands where
- * it was relative to its surviving neighbours. Group membership is kept only
+ * too. A layer deleted since the snapshot is re-inserted directly below the
+ * nearest layer that sat above it in the snapshot and still exists or, when
+ * none does, directly above the nearest surviving layer that sat below it, so
+ * it lands where it was relative to its surviving neighbours rather than
+ * above layers added since. Group membership is kept only
  * when that group still exists, and group contiguity is re-established.
  *
  * @param current - The live store's layers and layer groups.
@@ -44,14 +46,17 @@ export function restoreLayerFromSnapshot(
     layers[existingIndex] = restored;
   } else {
     const currentIndex = new Map(current.layers.map((layer, i) => [layer.id, i]));
-    let insertAt = current.layers.length;
-    for (let i = snapshotIndex + 1; i < snapshot.layers.length; i++) {
+    let insertAt: number | null = null;
+    for (let i = snapshotIndex + 1; i < snapshot.layers.length && insertAt === null; i++) {
       const index = currentIndex.get(snapshot.layers[i].id);
-      if (index !== undefined) {
-        insertAt = index;
-        break;
-      }
+      if (index !== undefined) insertAt = index;
     }
+    for (let i = snapshotIndex - 1; i >= 0 && insertAt === null; i--) {
+      const index = currentIndex.get(snapshot.layers[i].id);
+      if (index !== undefined) insertAt = index + 1;
+    }
+    // No neighbour survives: put it on top, as a newly added layer would be.
+    insertAt ??= current.layers.length;
     layers = [...current.layers.slice(0, insertAt), restored, ...current.layers.slice(insertAt)];
   }
   return normalizeGroupContiguity(layers);

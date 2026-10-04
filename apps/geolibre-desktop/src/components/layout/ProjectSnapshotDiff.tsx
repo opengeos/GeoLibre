@@ -8,7 +8,7 @@ import {
 } from "@geolibre/core";
 import { Button, Label, Select } from "@geolibre/ui";
 import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ProjectHistorySnapshot } from "../../lib/project-history-store";
 
@@ -41,7 +41,7 @@ type DiffResult =
       afterLabel: string;
       againstCurrent: boolean;
     }
-  | { ok: false };
+  | { ok: false; error: "snapshot" | "current" };
 
 /**
  * Grouped, collapsible summary of what changed between a snapshot and the
@@ -68,36 +68,64 @@ export function ProjectSnapshotDiff({
     return (iso: string) => format.format(new Date(iso));
   }, [i18n.language]);
 
+  // Parsed projects are kept across target switches so the differ's per-feature
+  // hash cache (keyed by feature object) hits instead of re-hashing every
+  // embedded feature. The live project is re-read only after a layer restore.
+  const parsedSnapshots = useRef(new Map<string, GeoLibreProject>());
+  const currentCache = useRef<{ revision: number; project: GeoLibreProject } | null>(null);
+
   const result = useMemo<DiffResult>(() => {
-    // Read so a layer restore (which bumps it) re-runs the comparison.
-    void revision;
-    try {
-      const baseProject = parseProject(base.content);
-      if (targetId === CURRENT_PROJECT_TARGET) {
-        return {
-          ok: true,
-          diff: diffProjects(baseProject, getCurrentProject()),
-          beforeLabel: formatDate(base.createdAt),
-          afterLabel: t("projectHistory.diff.current"),
-          againstCurrent: true,
-        };
+    const parsed = (snapshot: ProjectHistorySnapshot): GeoLibreProject => {
+      let project = parsedSnapshots.current.get(snapshot.id);
+      if (!project) {
+        project = parseProject(snapshot.content);
+        parsedSnapshots.current.set(snapshot.id, project);
       }
-      const other = snapshots.find((snapshot) => snapshot.id === targetId);
-      if (!other) return { ok: false };
-      // Always read oldest to newest, whichever row was picked first.
-      const [older, newer] = other.createdAt < base.createdAt ? [other, base] : [base, other];
-      const olderProject = older === base ? baseProject : parseProject(older.content);
-      const newerProject = newer === base ? baseProject : parseProject(newer.content);
+      return project;
+    };
+    let baseProject: GeoLibreProject;
+    try {
+      baseProject = parsed(base);
+    } catch (error) {
+      console.error("Could not read the project snapshot.", error);
+      return { ok: false, error: "snapshot" };
+    }
+    if (targetId === CURRENT_PROJECT_TARGET) {
+      let current: GeoLibreProject;
+      try {
+        if (currentCache.current?.revision !== revision) {
+          currentCache.current = { revision, project: getCurrentProject() };
+        }
+        current = currentCache.current.project;
+      } catch (error) {
+        // Building the live project can fail on its own (a project too large
+        // to serialize throws RangeError), which is not the snapshot's fault.
+        console.error("Could not read the current project.", error);
+        return { ok: false, error: "current" };
+      }
       return {
         ok: true,
-        diff: diffProjects(olderProject, newerProject),
+        diff: diffProjects(baseProject, current),
+        beforeLabel: formatDate(base.createdAt),
+        afterLabel: t("projectHistory.diff.current"),
+        againstCurrent: true,
+      };
+    }
+    try {
+      const other = snapshots.find((snapshot) => snapshot.id === targetId);
+      if (!other) return { ok: false, error: "snapshot" };
+      // Always read oldest to newest, whichever row was picked first.
+      const [older, newer] = other.createdAt < base.createdAt ? [other, base] : [base, other];
+      return {
+        ok: true,
+        diff: diffProjects(parsed(older), parsed(newer)),
         beforeLabel: formatDate(older.createdAt),
         afterLabel: formatDate(newer.createdAt),
         againstCurrent: false,
       };
     } catch (error) {
-      console.error("Could not compare the project snapshot.", error);
-      return { ok: false };
+      console.error("Could not compare the project snapshots.", error);
+      return { ok: false, error: "snapshot" };
     }
   }, [base, snapshots, targetId, getCurrentProject, formatDate, t, revision]);
 
@@ -153,7 +181,9 @@ export function ProjectSnapshotDiff({
           role="alert"
           className="rounded-md border border-destructive/50 p-3 text-sm text-destructive"
         >
-          {t("projectHistory.diff.parseError")}
+          {result.error === "current"
+            ? t("projectHistory.diff.currentError")
+            : t("projectHistory.diff.parseError")}
         </p>
       ) : (
         <DiffSummary

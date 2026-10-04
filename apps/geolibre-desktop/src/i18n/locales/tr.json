@@ -23,6 +23,7 @@
       "changeCount_other": "{{count}} değişiklik",
       "noChanges": "Fark yok.",
       "parseError": "Bu anlık görüntü karşılaştırma için okunamadı.",
+      "currentError": "Geçerli proje karşılaştırma için okunamadı.",
       "none": "(yok)",
       "added": "Eklendi",
       "removed": "Kaldırıldı",

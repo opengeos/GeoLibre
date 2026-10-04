@@ -22,6 +22,7 @@
       "changeCount_other": "{{count}} 件の変更",
       "noChanges": "差分はありません。",
       "parseError": "比較のためにこのスナップショットを読み込めませんでした。",
+      "currentError": "比較のために現在のプロジェクトを読み込めませんでした。",
       "none": "（なし）",
       "added": "追加",
       "removed": "削除",

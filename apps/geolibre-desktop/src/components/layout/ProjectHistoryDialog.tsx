@@ -55,7 +55,9 @@ export function ProjectHistoryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t("projectHistory.title")}</DialogTitle>
+          <DialogTitle>
+            {compare ? t("projectHistory.diff.title") : t("projectHistory.title")}
+          </DialogTitle>
           <DialogDescription>{t("projectHistory.description")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">

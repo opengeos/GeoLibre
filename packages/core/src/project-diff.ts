@@ -684,8 +684,8 @@ function numbersDiffer(a: unknown, b: unknown): boolean {
  *
  * Layers are matched by id. Embedded GeoJSON is compared per feature (by id,
  * falling back to geometry hash) and each feature is hashed once per object,
- * so diffing the current project against several snapshots reuses the
- * current side's hashes.
+ * so diffing the same parsed project against several others reuses its
+ * hashes; callers keep and pass the same parsed project objects to benefit.
  *
  * @param before - The earlier project (e.g. an autosave snapshot).
  * @param after - The later project (e.g. the current project).

@@ -82,16 +82,29 @@ describe("restoreLayerFromSnapshot", () => {
     );
   });
 
-  it("appends a deleted top-most layer at the top", () => {
+  it("keeps a deleted top-most layer beside its lower neighbour, below newer layers", () => {
     const snapshot = snapshotOf([layer("a"), layer("b")]);
     const next = restoreLayerFromSnapshot(
-      { layers: [layer("a")], layerGroups: [] },
+      { layers: [layer("a"), layer("z")], layerGroups: [] },
       snapshot,
       "b",
     )!;
     assert.deepEqual(
       next.map((l) => l.id),
-      ["a", "b"],
+      ["a", "b", "z"],
+    );
+  });
+
+  it("puts a deleted layer on top when no neighbour survives", () => {
+    const snapshot = snapshotOf([layer("a"), layer("b")]);
+    const next = restoreLayerFromSnapshot(
+      { layers: [layer("x"), layer("y")], layerGroups: [] },
+      snapshot,
+      "b",
+    )!;
+    assert.deepEqual(
+      next.map((l) => l.id),
+      ["x", "y", "b"],
     );
   });
 
