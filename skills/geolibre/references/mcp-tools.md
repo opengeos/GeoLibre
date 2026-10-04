@@ -134,7 +134,7 @@ classify_layer(path, layer, column, class_count=5, colormap="viridis",
                scheme="equal-interval")
 list_layer_properties(path, layer)
 set_layer_filter(path, layer, expression=None)
-set_labels(path, layer, field=None, expression=None, enabled=True,
+set_labels(path, layer, field=None, expression=None, enabled=None,
            placement=None, size=None, color=None, halo_color=None,
            halo_width=None, min_zoom=None, max_zoom=None,
            allow_overlap=None, anchor=None, options=None)

@@ -239,9 +239,9 @@ def test_live_run_algorithm_sends_the_parameters(relay_server, monkeypatch, tmp_
 def test_live_run_algorithm_reports_a_slow_run(relay_server, monkeypatch, tmp_path):
     import asyncio
 
+    server = _live_server(tmp_path)
     from mcp.server.mcpserver.exceptions import ToolError
 
-    server = _live_server(tmp_path)
     monkeypatch.setenv("GEOLIBRE_RELAY_URL", f"http://127.0.0.1:{relay_server.port}")
     relay_server.status_code = 504
     relay_server.response = {"message": "GeoLibre did not return a result in time."}

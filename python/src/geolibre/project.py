@@ -2913,18 +2913,62 @@ FILTER_EXPRESSION_OPERATORS = frozenset(
         "!",
         "all",
         "any",
-        "case",
-        "match",
-        "coalesce",
         "in",
         "has",
         "!has",
         "within",
         "boolean",
         "to-boolean",
-        "let",
     }
 )
+
+#: Operators whose result type is whichever branch they return, mapped to the
+#: indexes of those branches (``None`` for "the last argument"). A filter built
+#: from one is boolean only when every branch is.
+_POLYMORPHIC_OPERATORS = {"case", "match", "coalesce", "let"}
+
+
+def _polymorphic_branches(expression: list[Any]) -> list[Any]:
+    """Return the branches a ``case``/``match``/``coalesce``/``let`` can yield.
+
+    Args:
+        expression: An expression whose head is in ``_POLYMORPHIC_OPERATORS``.
+
+    Returns:
+        The argument expressions the result is taken from.
+    """
+    head, args = expression[0], expression[1:]
+    if head == "case":
+        # [cond, out, cond, out, ..., fallback]
+        return [*args[1:-1:2], args[-1]] if args else []
+    if head == "match":
+        # [input, labels, out, labels, out, ..., fallback]
+        return [*args[2:-1:2], args[-1]] if len(args) > 1 else []
+    if head == "let":
+        return args[-1:]
+    return list(args)
+
+
+def _yields_boolean(value: Any) -> bool:
+    """Whether an expression (or literal) can only produce a boolean.
+
+    Args:
+        value: An expression array or a literal.
+
+    Returns:
+        ``True`` for a boolean literal, a boolean operator, or a polymorphic
+        operator all of whose branches yield booleans.
+    """
+    if isinstance(value, bool):
+        return True
+    if not isinstance(value, list) or not value or not isinstance(value[0], str):
+        return False
+    if value[0] in FILTER_EXPRESSION_OPERATORS:
+        return True
+    if value[0] in _POLYMORPHIC_OPERATORS:
+        branches = _polymorphic_branches(value)
+        return bool(branches) and all(_yields_boolean(branch) for branch in branches)
+    return False
 
 
 def _parse_expression(expression: Any, what: str) -> list[Any]:
@@ -2975,9 +3019,9 @@ def filter_expression(expression: Any) -> list[Any]:
             produce a boolean.
     """
     parsed = _parse_expression(expression, "filter expression")
-    if parsed[0] not in FILTER_EXPRESSION_OPERATORS:
+    if not _yields_boolean(parsed):
         raise ValueError(
-            f"a layer filter must evaluate to true/false; {parsed[0]!r} does not. "
+            f"a layer filter must evaluate to true/false; this {parsed[0]!r} does not. "
             "Use a comparison such as ['==', ['get', 'field'], 'value'] or combine "
             "several with 'all' / 'any'"
         )
@@ -3130,7 +3174,7 @@ def label_style(
     field: str | None = None,
     *,
     expression: Any = None,
-    enabled: bool = True,
+    enabled: bool | None = None,
     base: dict[str, Any] | None = None,
     **options: Any,
 ) -> dict[str, Any]:
@@ -3143,7 +3187,8 @@ def label_style(
             ``["concat", ["get", "name"], " (", ["get", "pop"], ")"]``. Pass
             ``""`` to clear an existing one.
         enabled: Whether labels are shown. ``False`` keeps the configuration
-            but hides the labels.
+            but hides the labels. ``None`` keeps ``base``'s value, or turns
+            labels on when there is no ``base``.
         base: An existing labels object to update; unspecified options keep
             its values. Defaults to :data:`DEFAULT_LABEL_STYLE`.
         **options: Any of :data:`LABEL_OPTION_NAMES` -- ``placement``
@@ -3171,6 +3216,8 @@ def label_style(
     labels = copy.deepcopy(DEFAULT_LABEL_STYLE)
     if isinstance(base, dict):
         labels.update(copy.deepcopy(base))
+    if enabled is None:
+        enabled = bool(labels.get("enabled")) if isinstance(base, dict) else True
     if not isinstance(enabled, bool):
         raise ValueError(f"enabled must be true or false, got {enabled!r}")
     labels["enabled"] = enabled

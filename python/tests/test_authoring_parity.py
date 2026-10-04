@@ -77,6 +77,21 @@ def test_set_layer_filter_accepts_a_list_or_json_and_clears(proj):
 
 
 @pytest.mark.parametrize(
+    "expression",
+    [
+        ["case", ["has", "pop"], [">", ["get", "pop"], 5], False],
+        ["match", ["get", "k"], ["a", "b"], True, False],
+        ["coalesce", ["boolean", ["get", "flag"]], False],
+        ["let", "x", 5, [">", ["get", "pop"], ["var", "x"]]],
+    ],
+)
+def test_set_layer_filter_accepts_boolean_branching_operators(proj, expression):
+    """case/match/coalesce/let pass when every branch they can return is boolean."""
+    authoring.set_layer_filter(proj, "Cities", expression)
+    assert authoring.find_layer(proj, "Cities")["filterExpression"] == expression
+
+
+@pytest.mark.parametrize(
     ("expression", "message"),
     [
         ("pop", "not valid JSON"),
@@ -85,6 +100,9 @@ def test_set_layer_filter_accepts_a_list_or_json_and_clears(proj):
         ([1, 2], "operator string"),
         (["get", "pop"], "true/false"),
         (["+", 1, 2], "true/false"),
+        (["case", ["has", "pop"], 1, 0], "true/false"),
+        (["let", "x", 5, ["var", "x"]], "true/false"),
+        (["match", ["get", "k"], "a", True, "nope"], "true/false"),
     ],
 )
 def test_set_layer_filter_rejects_non_boolean_expressions(proj, expression, message):
@@ -134,6 +152,10 @@ def test_set_labels_keeps_unspecified_settings(proj):
     hidden = authoring.set_labels(proj, "Cities", enabled=False)
     assert hidden["enabled"] is False
     assert hidden["field"] == "name"
+    # A restyle that does not mention `enabled` leaves hidden labels hidden.
+    restyled = authoring.set_labels(proj, "Cities", size=11)
+    assert restyled["enabled"] is False
+    assert authoring.set_labels(proj, "Cities", enabled=True)["enabled"] is True
 
 
 def test_set_labels_expression_overrides_field(proj):
@@ -197,6 +219,9 @@ def test_set_plugin_state_none_removes_settings(proj):
     authoring.set_plugin_state(proj, "maplibre-h3-grid", {"resolution": 5})
     authoring.set_plugin_state(proj, "maplibre-h3-grid", None)
     assert "maplibre-h3-grid" not in proj["plugins"]["settings"]
+    # Clearing never switches a plugin on as a side effect.
+    authoring.set_plugin_state(proj, "maplibre-olc", None)
+    assert "maplibre-olc" not in proj["plugins"]["activePluginIds"]
 
 
 def test_set_plugin_state_refuses_unknown_ids_unless_allowed(proj):
@@ -427,7 +452,8 @@ def test_mcp_tools_author_filters_labels_plugins_and_stories(mcp_server, tmp_pat
     assert "maplibre-gl-graticule" in _call(mcp_server, "list_catalog")["pluginStateIds"]
 
 
-def test_mcp_set_labels_refuses_named_options_inside_options(mcp_server):
+@pytest.mark.parametrize("key", ["size", "enabled", "field", "expression"])
+def test_mcp_set_labels_refuses_named_options_inside_options(mcp_server, key):
     """A setting passed both ways is an error rather than a silent pick."""
     from mcp.server.mcpserver.exceptions import ToolError
 
@@ -447,7 +473,7 @@ def test_mcp_set_labels_refuses_named_options_inside_options(mcp_server):
                     "path": "map.geolibre.json",
                     "layer": "Cities",
                     "field": "name",
-                    "options": {"size": 3},
+                    "options": {key: 3},
                 },
             )
         )

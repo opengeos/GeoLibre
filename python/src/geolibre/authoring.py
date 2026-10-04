@@ -1527,7 +1527,7 @@ def set_labels(
     field: str | None = None,
     *,
     expression: Any = None,
-    enabled: bool = True,
+    enabled: bool | None = None,
     **options: Any,
 ) -> dict[str, Any]:
     """Label a vector layer's features from an attribute or an expression.
@@ -1541,7 +1541,9 @@ def set_labels(
         field: Property whose value becomes the label text.
         expression: MapLibre expression (list or JSON string) for the label
             text; overrides ``field``. ``""`` clears it.
-        enabled: ``False`` hides the labels but keeps their settings.
+        enabled: ``False`` hides the labels but keeps their settings, ``True``
+            shows them; omitted, labels keep their current state (on for a
+            layer that had none).
         **options: Label options; see :func:`geolibre.project.label_style`.
 
     Returns:
@@ -1591,7 +1593,8 @@ def set_plugin_state(
             :data:`geolibre.project.PLUGIN_STATE_IDS`, or an external plugin's
             id with ``allow_unknown=True``.
         state: The plugin's settings blob; must be plain JSON. ``None``
-            removes the stored settings.
+            removes the stored settings and nothing else (``position`` and
+            ``activate`` are then ignored).
         position: Optional control corner, one of :data:`CONTROL_POSITIONS`.
         activate: Add the plugin to ``activePluginIds`` so it starts active.
         allow_unknown: Accept an id that is not a built-in plugin with saved
@@ -1617,11 +1620,9 @@ def set_plugin_state(
         raise ValueError(f"position must be one of {sorted(CONTROL_POSITIONS)}, got {position!r}")
     plugins = _project.ensure_plugins_block(project)
     if state is None:
+        # Clearing is only that: activation and the corner are left alone, so
+        # wiping a plugin's settings cannot switch it on as a side effect.
         plugins["settings"].pop(plugin_id, None)
-        if position is not None:
-            plugins["mapControlPositions"][plugin_id] = position
-        if activate and plugin_id not in plugins["activePluginIds"]:
-            plugins["activePluginIds"].append(plugin_id)
     else:
         _project.set_plugin_state(
             project,

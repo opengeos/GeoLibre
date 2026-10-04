@@ -1292,7 +1292,7 @@ class Map(anywidget.AnyWidget):
         field: str | None = None,
         *,
         expression: Any = None,
-        enabled: bool = True,
+        enabled: bool | None = None,
         **options: Any,
     ) -> dict[str, Any]:
         """Label a vector layer's features from an attribute or an expression.
@@ -1305,7 +1305,8 @@ class Map(anywidget.AnyWidget):
             expression: MapLibre expression for the label text, overriding
                 ``field`` (e.g. ``["concat", ["get", "name"], " ", ["get",
                 "pop"]]``).
-            enabled: ``False`` hides the labels but keeps their settings.
+            enabled: ``False`` hides the labels but keeps their settings;
+                omitted, they keep their current state (on for a new layer).
             **options: ``placement`` (``"point"``/``"line"``), ``size``,
                 ``color``, ``halo_color``, ``halo_width``, ``min_zoom``,
                 ``max_zoom``, ``allow_overlap``, ``anchor``, ``offset_x``,
@@ -1356,7 +1357,8 @@ class Map(anywidget.AnyWidget):
             plugin_id: A built-in plugin id from
                 ``geolibre.project.PLUGIN_STATE_IDS``, or an external plugin's
                 id with ``allow_unknown=True``.
-            state: The plugin's settings, as plain JSON. ``None`` removes them.
+            state: The plugin's settings, as plain JSON. ``None`` removes them
+                and leaves activation and position as they were.
             position: Optional control corner (``"top-left"``, ...).
             activate: Start the plugin active when the project opens.
             allow_unknown: Accept an id that is not a built-in plugin.

@@ -1475,7 +1475,7 @@ def build_server(workspace: Workspace) -> MCPServer:
         layer: str,
         field: str | None = None,
         expression: list[Any] | str | None = None,
-        enabled: bool = True,
+        enabled: bool | None = None,
         placement: str | None = None,
         size: float | None = None,
         color: str | None = None,
@@ -1499,7 +1499,9 @@ def build_server(workspace: Workspace) -> MCPServer:
             expression: MapLibre expression for the label text, overriding
                 `field`, e.g. `["concat", ["get", "name"], " (", ["get", "pop"], ")"]`.
                 An empty string clears it.
-            enabled: False hides the labels but keeps their settings.
+            enabled: False hides the labels but keeps their settings, true
+                shows them. Omitted, they keep their current state (on for a
+                layer that had no labels).
             placement: `point` (at the feature or centroid) or `line` (along
                 lines).
             size: Text size in pixels.
@@ -1535,7 +1537,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             "anchor": anchor,
         }
         extra = dict(options or {})
-        clash = sorted(set(extra) & set(named))
+        clash = sorted(set(extra) & ({"field", "expression", "enabled"} | set(named)))
         if clash:
             raise ValueError(f"pass {clash} as arguments, not inside options")
         with edit(path) as (file, project):
@@ -1572,7 +1574,7 @@ def build_server(workspace: Workspace) -> MCPServer:
             plugin_id: A built-in plugin id, or an external plugin's id with
                 `allow_unknown`.
             state: The plugin's settings object, as plain JSON. Null removes
-                the stored settings.
+                the stored settings and leaves activation and position alone.
             position: Control corner: `top-left`, `top-right`, `bottom-left`,
                 or `bottom-right`.
             activate: Start the plugin active when the project opens.
