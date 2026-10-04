@@ -1192,9 +1192,19 @@ def build_server(workspace: Workspace) -> MCPServer:
             }.items()
             if value is not None
         }
-        if temporal_start is not None or temporal_end is not None:
-            fields["temporal_extent"] = (temporal_start, temporal_end)
         with edit(path) as (file, project):
+            if temporal_start is not None or temporal_end is not None:
+                # The two bounds are separate parameters, so merge them one by
+                # one: passing only a start keeps the stored end, and vice versa.
+                stored: dict[str, Any] = {}
+                if merge:
+                    current = authoring.find_layer(project, layer).get("descriptiveMetadata")
+                    extent = current.get("temporalExtent") if isinstance(current, dict) else None
+                    stored = extent if isinstance(extent, dict) else {}
+                fields["temporal_extent"] = (
+                    temporal_start if temporal_start is not None else stored.get("start"),
+                    temporal_end if temporal_end is not None else stored.get("end"),
+                )
             metadata = authoring.set_layer_metadata(project, layer, merge=merge, **fields)
         return _summarize(file, project, descriptiveMetadata=metadata)
 

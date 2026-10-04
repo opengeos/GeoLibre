@@ -738,6 +738,14 @@ def test_set_layer_metadata_merges_and_validates(server, project_path):
     merged = call(server, "set_layer_metadata", path=project_path, layer="Cities", license="MIT")
     assert merged["descriptiveMetadata"]["title"] == "Cities"
     assert merged["descriptiveMetadata"]["license"] == "MIT"
+    # Each temporal bound merges on its own: an end alone keeps the stored start.
+    ended = call(
+        server, "set_layer_metadata", path=project_path, layer="Cities", temporal_end="2020-12-31"
+    )
+    assert ended["descriptiveMetadata"]["temporalExtent"] == {
+        "start": "2020-01-01",
+        "end": "2020-12-31",
+    }
     message = call_error(
         server, "set_layer_metadata", path=project_path, layer="Cities", contact={"email": "x"}
     )

@@ -161,6 +161,9 @@ describe("metadata field validation", () => {
     ]) {
       assert.equal(isValidMetadataDate(value), false, value);
     }
+    // Years below 100 are real years, not 1900-1999 (Date.UTC's legacy rule).
+    assert.equal(isValidMetadataDate("0099-01-01"), true);
+    assert.equal(isValidMetadataDate("0099-02-29"), false);
   });
 
   it("converts dates to RFC 3339, covering a whole day for date-only bounds", () => {
@@ -169,6 +172,11 @@ describe("metadata field validation", () => {
     assert.equal(metadataDateToRfc3339("2020-05-01T12:30", "start"), "2020-05-01T12:30:00.000Z");
     assert.equal(
       metadataDateToRfc3339("2020-05-01T12:30:00+02:00", "start"),
+      "2020-05-01T10:30:00.000Z",
+    );
+    // A compact offset converts the same as the colon form.
+    assert.equal(
+      metadataDateToRfc3339("2020-05-01T12:30:00+0200", "start"),
       "2020-05-01T10:30:00.000Z",
     );
     assert.equal(metadataDateToRfc3339("nope", "start"), null);

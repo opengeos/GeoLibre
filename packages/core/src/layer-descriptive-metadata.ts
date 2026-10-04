@@ -177,7 +177,9 @@ export function isValidMetadataUrl(value: string): boolean {
  * @returns `true` when the date exists.
  */
 function isRealDate(year: number, month: number, day: number): boolean {
-  const date = new Date(Date.UTC(year, month - 1, day));
+  // setUTCFullYear, not Date.UTC: the latter maps years 0-99 to 1900-1999.
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
   return (
     date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
@@ -219,7 +221,9 @@ export function metadataDateToRfc3339(value: string, bound: "start" | "end"): st
   if (DATE_ONLY_PATTERN.test(text)) {
     return `${text}T${bound === "start" ? "00:00:00" : "23:59:59"}Z`;
   }
-  const normalized = text.replace(" ", "T");
+  // A compact `+HHMM` offset passes validation but is not an ECMAScript
+  // date-time format, so spell it `+HH:MM` before parsing.
+  const normalized = text.replace(" ", "T").replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
   const hasOffset = /(Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
   const parsed = new Date(hasOffset ? normalized : `${normalized}Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();

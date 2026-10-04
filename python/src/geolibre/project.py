@@ -1229,7 +1229,10 @@ def layer_metadata(
             raise ValueError("temporal extent end must not be before its start")
     for link in metadata.get("links", []):
         if not _is_valid_metadata_url(link["href"]):
-            raise ValueError(f"link href must be an absolute http(s) URL: {link['href']!r}")
+            raise ValueError(
+                "link href must be an absolute http(s), ftp, s3, gs or mailto URL: "
+                f"{link['href']!r}"
+            )
     return metadata
 
 
