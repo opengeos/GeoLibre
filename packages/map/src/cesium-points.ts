@@ -9,7 +9,7 @@ import type {
   Scene,
 } from "@cesium/engine";
 import type { Feature } from "geojson";
-import type { FeatureStyleResolver } from "./cesium-feature-style";
+import type { FeatureStyleResolver } from "./feature-style";
 
 // Point layers on the globe beyond one entity per feature (issue #2282).
 //

@@ -23,9 +23,9 @@ export { MapboxEngine, MAPBOX_CAPABILITIES } from "./mapbox-engine";
 export {
   isMapboxSupportedLayer,
   mapboxUnsupportedStyleSettings,
-  styleUsesUnsupportedSource,
   type MapboxUnsupportedStyleSetting,
 } from "./mapbox-layers";
+export { styleUsesUnsupportedSource } from "./gl-style-compiler";
 export {
   MapCanvas,
   type MapCanvasIdentifyAllLabels,
@@ -52,7 +52,7 @@ export { getPrimaryCesiumControlHost } from "./cesium-control-host";
 export type { CesiumWidgetControlLabels } from "./cesium-widget-controls";
 export { isCesiumSupportedLayerType } from "./cesium-layer-sync";
 export { classifyLayer, type LayerKind } from "./layer-kind";
-export { arcgisVectorStyle } from "./arcgis-vector-style";
+export { arcgisVectorStyle } from "./vector-style";
 export {
   CESIUM_CAPABILITIES,
   CESIUM_PANE_CAPABILITIES,
@@ -167,8 +167,8 @@ export {
   hasPMTilesArchive,
   registerPMTilesArchive,
   unregisterPMTilesArchive,
-  setExternalDeckLayerOrderHandler,
-} from "./layer-sync";
+} from "./pmtiles-archive";
+export { setExternalDeckLayerOrderHandler } from "./layer-sync";
 export {
   createPMTilesStoreLayer,
   pmtilesNativeLayerIds,

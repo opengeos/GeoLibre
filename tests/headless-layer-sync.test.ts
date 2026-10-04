@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import { createLayerSync } from "../packages/map/src/headless";
-import { arcgisOpacity } from "../packages/map/src/arcgis-vector-style";
+import { arcgisOpacity } from "../packages/map/src/vector-style";
 
 /**
  * Stateful maplibre stub that keeps a real style-layer order, so a test can

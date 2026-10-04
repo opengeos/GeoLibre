@@ -53,6 +53,13 @@ import {
   viewportRange,
   type ViewportStretchMethod,
 } from "../../lib/viewport-stretch";
+import {
+  effectiveChannelRange,
+  roundForDomain,
+  setChannelRange,
+  type ValueRange,
+} from "../../lib/raster-histogram";
+import { RasterHistogram, useRasterHistogramStats } from "./RasterHistogram";
 
 type RasterStateRecord = {
   mode: "single" | "rgb" | "index";
@@ -338,6 +345,25 @@ export function RasterSymbologySection({
   // so the hook order stays stable.
   const catalogueRamps = useColormapRamps();
 
+  // Bands whose histograms the stretch editor draws: every RGB channel, or the
+  // single band of a continuous (unclassified, non-palette) pseudocolor layer.
+  // Index mode is skipped -- its stretch applies to the computed index, which
+  // no band histogram describes. Declared before the RGB early return so the
+  // hook order stays stable.
+  const rgbBands = state.bands.length >= 3 ? state.bands.slice(0, 3) : [1, 2, 3];
+  const showSingleHistogram =
+    state.mode === "single" &&
+    !isPaletteRaster &&
+    !symbology?.classified &&
+    !symbology?.opacityClasses;
+  const histogramBands = state.mode === "rgb" ? rgbBands : showSingleHistogram ? [band] : [];
+  const histogram = useRasterHistogramStats(
+    layer.id,
+    histogramBands,
+    localBytesUrl,
+    histogramBands.length > 0,
+  );
+
   function commit(options: {
     statePatch?: Partial<RasterStateRecord>;
     symbology?: RasterSymbology | null;
@@ -594,6 +620,8 @@ export function RasterSymbologySection({
         <RgbControls
           state={state}
           bandOptions={bandOptions}
+          histogramStats={histogram.stats}
+          histogramLoading={histogram.loading}
           onChange={(patch) => commit({ statePatch: patch })}
         />
         <NodataControl state={state} onChange={(nodata) => commit({ statePatch: { nodata } })} />
@@ -895,6 +923,22 @@ export function RasterSymbologySection({
         />
       )}
 
+      {showSingleHistogram && (
+        <div className="space-y-2">
+          <Label>{t("rasterSymbology.histogram")}</Label>
+          <RasterHistogram
+            stats={histogram.stats.get(band) ?? null}
+            range={effectiveChannelRange(state.rescale, 0, histogram.stats.get(band) ?? null)}
+            isAuto={state.rescale === null}
+            loading={histogram.loading}
+            bandLabel={bandOptions.find((option) => option.value === band)?.label ?? `Band ${band}`}
+            onCommit={(range) =>
+              commit({ statePatch: { rescale: setChannelRange(state.rescale, 0, range, [range]) } })
+            }
+          />
+        </div>
+      )}
+
       {!classified && !symbology?.opacityClasses && (
         <RescaleControls
           rescale={state.rescale}
@@ -953,13 +997,35 @@ export function RasterSymbologySection({
 function RgbControls({
   state,
   bandOptions,
+  histogramStats,
+  histogramLoading,
   onChange,
 }: {
   state: RasterStateRecord;
   bandOptions: { value: number; label: string }[];
+  histogramStats: Map<number, RasterBandStats>;
+  histogramLoading: boolean;
   onChange: (patch: Partial<RasterStateRecord>) => void;
 }) {
+  const { t } = useTranslation();
   const bands = state.bands.length >= 3 ? state.bands : [1, 2, 3];
+  const statsFor = (index: number) => histogramStats.get(bands[index] ?? index + 1) ?? null;
+  // Each channel's window today, so editing one channel pins the other two
+  // where they already render instead of letting them jump.
+  const effective = (index: number): ValueRange | null =>
+    effectiveChannelRange(state.rescale, index, statsFor(index));
+  const commitChannel = (index: number, range: ValueRange) => {
+    const fallbacks = [0, 1, 2].map((channel): ValueRange => {
+      const current = effective(channel) ?? range;
+      const stats = statsFor(channel);
+      // An auto window is an interpolated percentile: round it as it gets
+      // pinned so the other channels' Min/Max inputs don't show float noise.
+      if (state.rescale !== null || !stats) return current;
+      const domain: ValueRange = [stats.min, stats.max];
+      return [roundForDomain(current[0], domain), roundForDomain(current[1], domain)];
+    });
+    onChange({ rescale: setChannelRange(state.rescale, index, range, fallbacks) });
+  };
   const channels: { key: "R" | "G" | "B"; index: number }[] = [
     { key: "R", index: 0 },
     { key: "G", index: 1 },
@@ -991,6 +1057,43 @@ function RgbControls({
               ))
             )}
           </Select>
+          <div className="col-start-2 space-y-2">
+            <RasterHistogram
+              stats={statsFor(index)}
+              range={effective(index)}
+              isAuto={state.rescale === null}
+              loading={histogramLoading}
+              bandLabel={`${key}: ${
+                bandOptions.find((option) => option.value === bands[index])?.label ??
+                `Band ${bands[index] ?? index + 1}`
+              }`}
+              onCommit={(range) => commitChannel(index, range)}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <NumberField
+                label={t("rasterSymbology.min")}
+                value={state.rescale ? (effective(index)?.[0] ?? "") : ""}
+                placeholder={t("rasterSymbology.autoPlaceholder")}
+                step={0.1}
+                onCommit={(value, empty) => {
+                  // All-or-nothing like the single-band inputs: clearing a
+                  // bound returns every channel to the auto stretch.
+                  if (empty) return onChange({ rescale: null });
+                  commitChannel(index, [value, effective(index)?.[1] ?? value]);
+                }}
+              />
+              <NumberField
+                label={t("rasterSymbology.max")}
+                value={state.rescale ? (effective(index)?.[1] ?? "") : ""}
+                placeholder={t("rasterSymbology.autoPlaceholder")}
+                step={0.1}
+                onCommit={(value, empty) => {
+                  if (empty) return onChange({ rescale: null });
+                  commitChannel(index, [effective(index)?.[0] ?? value, value]);
+                }}
+              />
+            </div>
+          </div>
         </div>
       ))}
     </div>

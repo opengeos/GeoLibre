@@ -14,12 +14,14 @@ import {
 } from "../packages/map/src/cesium-cog-imagery";
 import {
   expandTileTemplate,
-  hasRegisteredProtocol,
   ProtocolImageryProvider,
-  protocolScheme,
-  requestProtocolTile,
   type DecodedTile,
 } from "../packages/map/src/cesium-protocol-imagery";
+import {
+  hasRegisteredProtocol,
+  protocolScheme,
+  requestProtocolTile,
+} from "../packages/map/src/protocol-tiles";
 
 // The protocol-bridged imagery provider (issue #2283). Cesium's tiling scheme,
 // rectangle, credit, and event classes are the real ones; the tile bytes come

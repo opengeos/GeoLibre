@@ -36,12 +36,11 @@ import {
 } from "./map-engine";
 import {
   compileMapboxLayer,
-  isInternalMapboxLayer,
-  isMapboxPluginLayer,
   DEFAULT_MAPBOX_TEXT_FONT,
   type MapboxLayerPlan,
   mapboxPaint,
-} from "./mapbox-layers";
+} from "./gl-style-compiler";
+import { isInternalMapboxLayer, isMapboxPluginLayer } from "./mapbox-layers";
 import {
   BASEMAP_LABEL_KEY,
   clearLayerLabels,
@@ -63,7 +62,7 @@ import {
   STANDARD_OPACITY,
   STANDARD_BLANK_COLOR,
 } from "./mapbox-standard-style";
-import { arcgisOpacity } from "./arcgis-vector-style";
+import { arcgisOpacity } from "./vector-style";
 import { LayerControlHost, normalizeLayerBounds } from "./layer-control-host";
 import { ResetBearingControl } from "./reset-bearing-control";
 import { MapboxGlobeControl } from "./mapbox-globe-control";

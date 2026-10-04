@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import type { SymbolLayerSpecification } from "mapbox-gl";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, type LabelStyle } from "@geolibre/core";
-import { compileMapboxLayer } from "../packages/map/src/mapbox-layers";
+import { compileMapboxLayer } from "../packages/map/src/gl-style-compiler";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 // Attribute labels on the Mapbox renderer, compiled like MapLibre's

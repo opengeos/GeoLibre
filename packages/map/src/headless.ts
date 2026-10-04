@@ -89,7 +89,7 @@ export {
   registerPMTilesArchive,
   unregisterPMTilesArchive,
   ensureRemotePMTilesArchive,
-} from "./layer-sync";
+} from "./pmtiles-archive";
 export { readRemotePMTilesInfo, readPMTilesArchiveInfo } from "./pmtiles-layer";
 // Style engine outputs (standard MapLibre style-spec objects).
 export {

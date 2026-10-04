@@ -6,7 +6,7 @@ import {
   type DecodedTile,
 } from "./cesium-protocol-imagery";
 import { createLayerSync, type LayerSync } from "./headless";
-import { arcgisVectorStyle } from "./arcgis-vector-style";
+import { arcgisVectorStyle } from "./vector-style";
 
 // The MapLibre drape (issue #2284): tile-backed vector layers on the globe.
 //

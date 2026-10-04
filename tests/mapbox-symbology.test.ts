@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
-import { compileMapboxLayer, isInternalMapboxLayer } from "../packages/map/src/mapbox-layers";
+import { compileMapboxLayer } from "../packages/map/src/gl-style-compiler";
+import { isInternalMapboxLayer } from "../packages/map/src/mapbox-layers";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 // The Style panel's symbology on the Mapbox renderer, compiled the way

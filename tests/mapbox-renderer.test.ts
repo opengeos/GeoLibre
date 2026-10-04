@@ -11,7 +11,10 @@ import {
   serializeProject,
   useAppStore,
 } from "@geolibre/core";
-import { compileMapboxLayer, styleUsesUnsupportedSource } from "../packages/map/src/mapbox-layers";
+import {
+  compileMapboxLayer,
+  styleUsesUnsupportedSource,
+} from "../packages/map/src/gl-style-compiler";
 import { proxyWmsTiles } from "../packages/map/src/wms-proxy";
 import { resolveTextFontFromStyleLayers } from "../packages/map/src/text-font";
 import { MAPBOX_CAPABILITIES, redactMapboxError } from "../packages/map/src/mapbox-engine";

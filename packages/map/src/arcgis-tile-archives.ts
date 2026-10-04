@@ -1,7 +1,7 @@
 import type { ArcgisLayerPlan } from "./arcgis-layers";
 import type { ArcgisLayer, ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
-import { getPMTilesArchive } from "./layer-sync";
-import { requestProtocolTile } from "./cesium-protocol-imagery";
+import { getPMTilesArchive } from "./pmtiles-archive";
+import { requestProtocolTile } from "./protocol-tiles";
 import { attachArcgisSprite } from "./arcgis-sprite";
 
 type ArchivePlan = Extract<ArcgisLayerPlan, { kind: "archive" }>;

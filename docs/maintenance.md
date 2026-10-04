@@ -15,6 +15,17 @@ error** — the feature just stops working. After bumping any of the packages
 below (**including Dependabot PRs**), do the listed check and run the frontend
 suite.
 
+`tests/upstream-contracts.test.ts` checks the **installed** package for the
+exact shape each mirror below relies on — a class name in the published files,
+a private field on a real instance, a constant, a snippet of a method body — and
+its failure message names the section here to read. Mirrors with a dedicated
+real-package test of their own (named in their section) are not repeated there.
+Packages that touch the DOM or WebGL at import are checked against their
+published files' text rather than imported. A test there passing is not the
+whole check: semantics the shape cannot show (ordering, pixels, network
+behaviour) still need the manual steps listed. When you add a mirror, add its
+contract there too.
+
 ### Patched packages (`patches/`)
 
 `postinstall` applies the `patch-package` patches in `patches/`, and each patch
@@ -29,7 +40,7 @@ which shipped the same non-throwing uniform lookups upstream (the layer vanished
 at zoom >= 12 on Mesa GPUs without them). Before bumping it, confirm
 `createShaderProgram` in its `dist/index.js` still looks up `shift_x`,
 `shift_y` and `u_worldXOffset` with `gl.getUniformLocation`, not
-`mustGetUniformLocation`.
+`mustGetUniformLocation` (`tests/upstream-contracts.test.ts` checks this).
 
 ### `geolibre-wasm` (`packages/processing/package.json`)
 
@@ -100,8 +111,9 @@ at zoom >= 12 on Mesa GPUs without them). Before bumping it, confirm
   `apps/geolibre-desktop/src/lib/field-collection-map.ts`) positions that pin by
   hand on every engine (Mapbox, Cesium, ArcGIS, and MapLibre alike), so if a bump changes the default pin's
   anchor or offset, story markers drift off their coordinate with no error.
-  Compare with `defaultMarker.ts`/`marker.ts` upstream and play a story on a
-  non-MapLibre renderer.
+  `tests/upstream-contracts.test.ts` reads the default offset out of the
+  published bundle and fails if it moves; still play a story on a non-MapLibre
+  renderer if the pin's anchor changed.
 
 ### `@deck.gl/mapbox` and `@deck.gl/maplibre`
 
@@ -133,7 +145,7 @@ color checks). The cast hides any contract change from the compiler, so run the
 frontend suite — the "enforces an expected result type" test in
 `tests/expressions.test.ts` fails if the shape stops being honored.
 
-`cssColor` (`packages/map/src/cesium-feature-style.ts`) turns the `Color`
+`cssColor` (`packages/map/src/feature-style.ts`) turns the `Color`
 object a compiled colour expression evaluates to into CSS by reading its
 `toString()` and accepting an `rgba(` or `#` prefix. That format is how the
 spec's `Color` happens to print, not a documented contract: if a bump changes
@@ -172,8 +184,10 @@ black — it declines the stack.
   appends to the map container into GeoLibre's native right-panel host. Vantor
   returns a wrapper instead, so the bridge selects its `.vantor-panel`
   descendant. The scoped CSS in `index.css` mirrors each package's panel,
-  header, toggle, close, and resize-handle class names. After bumping any of
-  these packages, activate every migrated Web Services plugin and verify that
+  header, toggle, close, and resize-handle class names;
+  `tests/upstream-contracts.test.ts` lists them per package and fails when a
+  package stops rendering one (or `index.css` stops styling it). After bumping
+  any of these packages, activate every migrated Web Services plugin and verify that
   its catalog renders, resizing the GeoLibre dock preserves the content, and
   no vendor panel remains under the map container.
 
@@ -186,7 +200,8 @@ black — it declines the stack.
   panels" option can rasterize those on-map overlays into the recording. These are
   the display elements, deliberately **not** the `*-gui-control` authoring
   editors. If a class drifts, the option silently stops burning that panel into
-  the video (or the checkbox never appears) with no build error.
+  the video (or the checkbox never appears) with no build error;
+  `tests/upstream-contracts.test.ts` fails instead.
 - **The PMTiles control's layer ids** (`pmtilesControlLayerId` /
   `pmtilesIdsForSourceLayers` / `pmtilesIdNamesSourceLayer`,
   `packages/map/src/pmtiles-layer.ts`, read from `layer-sync.ts` and
@@ -222,9 +237,10 @@ black — it declines the stack.
   panel carries GeoLibre's Terrain (3D)/heading sections and the resize styling,
   and the source id is how `lidar-measure-mirror.ts` finds the geometry it
   redraws above a LiDAR point cloud (#2533). Both readers warn and fall back to
-  doing nothing on a rename, so after a bump check the console for
-  "MeasureControl: …not found" and confirm the Terrain section still appears and
-  a measured line still shows inside a point cloud.
+  doing nothing on a rename; `tests/upstream-contracts.test.ts` builds a real
+  `MeasureControl` and fails if either field is gone. After a bump, still
+  confirm the Terrain section appears and a measured line shows inside a point
+  cloud.
 - **The measure paint** (`MEASURE_LINE_COLOR`/`MEASURE_LINE_WIDTH`/
   `MEASURE_FILL_COLOR`, `packages/plugins/src/plugins/lidar-measure-mirror.ts`)
   is passed to the control explicitly rather than left to its defaults, because
@@ -259,7 +275,8 @@ so re-check `src/lib/utils/remote.ts` in that package and update the mirror if i
 moved. If it drifts, the remote-browse panels (Source Cooperative, Hugging Face)
 silently block GeoParquet the engine could now open, or offer an Add that is
 certain to fail. Updating the constant is enough: the limit the user is shown is
-rendered from it, not written into the copy.
+rendered from it, not written into the copy. `tests/upstream-contracts.test.ts`
+reads the constant out of the published chunk and compares.
 
 `remote-file-formats.ts` is the **single** home for this and the other
 format/reader/size rules those panels share — a per-panel copy would miss this
@@ -274,7 +291,8 @@ the layer's DuckDB table as well as its map source, or adoption keeps two copies
 of the data. And `KML_ICON_PROPERTY` mirrors the feature property the control's
 KML/KMZ icon layer filters on (`__geolibre_kml_icon_url`); a layer carrying it
 stays with the control, so a rename upstream would adopt KML layers and drop
-their icons. Re-check all three on a bump.
+their icons. Re-check all three on a bump (the contract test covers only
+`KML_ICON_PROPERTY`).
 
 ### `maplibre-gl-lidar` (`packages/plugins/package.json`) — half checked by the compiler
 
@@ -298,7 +316,9 @@ annotator's highlight, box and vector layers use the same flag. One thing is not
 compiler checked: the geometry is read from the MapLibre/Mapbox `geojson`
 source's `_data` field, since neither library exposes a public reader. Losing it
 costs only the mirror — the measured line goes back to being hidden inside the
-cloud, which is what #2533 was.
+cloud, which is what #2533 was. `tests/upstream-contracts.test.ts` checks both
+shapes against the real libraries (a real MapLibre `GeoJSONSource`, and the
+mapbox-gl bundle's `setData`).
 
 The **class** is a hand-kept copy of the package's `DECK_CANVAS_CLASS`, not an
 import: `maplibre-gl-lidar` builds into its own lazy chunk, and importing even
@@ -339,8 +359,9 @@ whole downloads get the size check. If upstream changes that routing, update the
 copy, or a streamed file gets a needless size check and a downloaded one skips
 it. `addLidarLayerFromUrl` also relies on `load` firing, and adding the store
 layer, before `loadPointCloud` resolves; it throws if not.
-`tests/lidar-url-layer.test.ts` pins the GeoLibre side of both. Re-read
-`loadPointCloud` on a bump.
+`tests/lidar-url-layer.test.ts` pins the GeoLibre side of both, and
+`tests/upstream-contracts.test.ts` fails if `loadPointCloud` stops routing on
+those strings. Re-read `loadPointCloud` on a bump.
 
 The point cloud annotator (`packages/plugins/src/plugins/point-cloud-annotation/`)
 edits the control's loaded points through the point-editing API the package
@@ -375,8 +396,10 @@ compiler cannot check; `LayerControlInternalState` in that file lists them:
   basemap layers, and to redraw the rows after a reorder the store refused.
 
 If upstream renames any of these, the panel stops following the store (or a
-rebuild closes the panel) without an error. Re-read `LayerControl.ts` for them
-on a bump, and drive the control in the app: toggle a grouped layer, reorder
+rebuild closes the panel) without an error. `tests/upstream-contracts.test.ts`
+builds a real `LayerControl` and checks every member above and the row class
+names; it cannot check how a rebuild uses them, so still drive the control in
+the app on a bump: toggle a grouped layer, reorder
 inside a group, and hide a group. The fix belongs upstream as public API; this
 package is ours (`opengeos/maplibre-gl-layer-control`).
 
@@ -399,7 +422,9 @@ package is ours (`opengeos/maplibre-gl-layer-control`).
 If upstream renames those fields or changes how it assigns ids, id reservation
 and placement restore stop working without an error.
 `tests/splatting-restore.test.ts` drives a fake with the same shape, so it will
-not catch that either: re-read `loadSplat` / `loadModel` in the package on a bump.
+not catch that; `tests/upstream-contracts.test.ts` builds a real control and
+checks each field and the `splat-${counter}` / `model-${counter}` naming and
+placement recording in `loadSplat` / `loadModel`.
 Better still, upstream an id option and a per-asset placement getter and delete
 the patching.
 
@@ -416,9 +441,10 @@ under `packages/plugins` and `apps/geolibre-desktop`, not the root one.
 
 If a bump renames the action key or those members, the wrapper silently stops
 applying and MultiLineString vertices go back to logging
-`EditChange.cutVertex: feature not updated`. On a bump, re-read `cutVertex` in
-the package's `dist/maplibre-geoman.es.js`, then right-click a MultiLineString
-vertex in Edit mode. If upstream adds MultiLineString support, delete the
+`EditChange.cutVertex: feature not updated`. `tests/upstream-contracts.test.ts`
+checks the hook points in both nested copies' `dist/maplibre-geoman.es.js`
+(text only: Geoman cannot be built without a live map). On a bump, still
+right-click a MultiLineString vertex in Edit mode. If upstream adds MultiLineString support, delete the
 wrapper.
 
 ### `zarr-cesium` (`packages/map/package.json`) — private internals
@@ -455,9 +481,10 @@ subclass reuses the private `fetch` / `abortController` fields, and
 `_stacClient` field before the control is added (collections load in `onAdd`).
 
 If upstream renames those fields, loads collections in its constructor, or adds
-new POST requests, the panel breaks again without a compiler error. Re-read
-`STACClient` and the control's constructor/`onAdd` on a bump, and run
-`tests/planetary-computer-stac.test.ts`. Regenerate the bundled list with
+new POST requests, the panel breaks again without a compiler error.
+`tests/upstream-contracts.test.ts` checks the real client and control for the
+private fields, that the constructor loads nothing, and that every non-search
+read is a GET. Run it and `tests/planetary-computer-stac.test.ts` on a bump. Regenerate the bundled list with
 `node scripts/gen-planetary-computer-collections.mjs` to pick up new
 collections. Better still, upstream a GET search and a client/fetch option and
 delete the swap.
@@ -487,6 +514,9 @@ typed, and only under a non-default stretch or gamma. On a bump, re-read that
 package's `pushAdjustments` for the forward curves and their order (its own
 `inverseStretch` helper, used for the histogram ticks, is a second copy of the
 two stretch inverses above) and run `tests/raster-symbology.test.ts`.
+`tests/upstream-contracts.test.ts` reads `pushAdjustments` and the three shader
+curves out of the published chunk and fails if the order, a curve or the
+strength changes.
 
 ### `maplibre-gl-raster` — checked by the compiler
 
@@ -524,7 +554,8 @@ per-photo grants before the plugin synchronously replays them at startup. On a
 `tauri-plugin-persisted-scope` bump, compare the upstream struct's field order
 and types against this mirror and run the Rust scope-cleanup tests. Bincode
 encodes fields positionally, so an upstream layout change is not compiler
-checked.
+checked. This mirror is Rust-side, so `tests/upstream-contracts.test.ts` does
+not cover it.
 
 The `bincode` dependency itself is pinned to the **1.x** line and Dependabot is
 configured (`.github/dependabot.yml`) to skip its major bumps: the plugin writes
@@ -644,8 +675,11 @@ so it catches a broken `CESIUM_BASE_URL` or a dead chunk.
 `e2e/cesium-primary-renderer.spec.ts` adds the toolbar: it asserts the three
 buttons mount, carry translated tooltips, and share a right edge, which catches a
 renamed view-model observable and the 0x0-button case of a missing stylesheet.
-Neither catches the rest of the CSS regression or the bundle-size one — check
-those by eye and in the build output.
+`tests/upstream-contracts.test.ts` adds the static half: `Build/Cesium`'s
+directories must equal `RUNTIME_DIRS`, every `CESIUM_CSS_PATHS` file must exist
+and define each `.cesium-*` class `index.css` restyles, and the view models
+must still carry the tooltip observables. None of these catches the bundle-size
+regression — check that in the build output.
 
 ### ArcGIS Maps SDK for JavaScript — loaded from Esri's CDN
 
@@ -706,6 +740,18 @@ through it, the guard is bypassed with no error. After a bump, check that
 run `python -m pytest backend/geolibre_server_api/tests/test_egress.py`
 (`test_identity_provider_client_refuses_loopback` makes a real connection
 through the transport).
+
+## Shared dependency ranges
+
+`apps/geolibre-desktop` and `packages/plugins` declare many of the same
+upstream packages. If a bump moves the range in only one of them, npm can no
+longer hoist one copy and nests a second under the workspace that disagrees:
+the app bundles two versions, and the contract tests above check one copy while
+the other runs. Dependabot opens one PR per manifest, so this is easy to merge
+by accident. `npm run check:shared-deps` (`scripts/check-shared-deps.mjs`, run
+in the CI "Lint and type check" job) fails when a package declared in both
+manifests, in any dependency section, carries different ranges. Fix it by
+giving both the same range and refreshing `package-lock.json` in the same PR.
 
 ## Adding a blend mode
 

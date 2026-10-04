@@ -23,7 +23,7 @@ import { createArcgisIdentify } from "./arcgis-identify";
 import { consumePendingIdentifyRestore } from "./map-identify-lifecycle";
 import { selectionFitKey } from "./map-selection";
 import { DEFAULT_IDENTIFY_ALL_LABELS, type MapCanvasIdentifyAllLabels } from "./identify-all-popup";
-import type { MapCanvasRasterIdentify } from "./MapCanvas";
+import type { MapCanvasRasterIdentify } from "./raster-identify";
 import type * as maplibregl from "maplibre-gl";
 import { CogDemError } from "./cog-dem-source";
 import {

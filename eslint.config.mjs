@@ -13,7 +13,7 @@
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
-import local from "./eslint-rules/no-physical-tailwind.mjs";
+import local from "./eslint-rules/index.mjs";
 
 // Source compiled into the app, the packages and the workers. Type-aware rules
 // run only here: each file is checked against the tsconfig.json nearest to it
@@ -117,6 +117,16 @@ export default [
     files: ["apps/**/*.{ts,tsx,jsx}", "packages/**/*.{ts,tsx,jsx}"],
     rules: {
       "local/no-physical-tailwind": "warn",
+    },
+  },
+  {
+    // The map engines in @geolibre/map share code only through neutral
+    // modules; see eslint-rules/no-cross-engine-imports.mjs for which files
+    // belong to which engine. An error, not a ratcheted warning: the boundary
+    // has no exceptions, and a warning could hide behind an unrelated fix.
+    files: ["packages/map/src/**/*.{ts,tsx}"],
+    rules: {
+      "local/no-cross-engine-imports": "error",
     },
   },
   {

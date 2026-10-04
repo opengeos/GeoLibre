@@ -3,7 +3,7 @@ import { it } from "node:test";
 import { compileArcgisLayer } from "../packages/map/src/arcgis-layers";
 import { createArcgisArchiveLayer } from "../packages/map/src/arcgis-tile-archives";
 import type { ArcgisSdk } from "../packages/map/src/arcgis-sdk";
-import { getPMTilesArchive } from "../packages/map/src/layer-sync";
+import { getPMTilesArchive } from "../packages/map/src/pmtiles-archive";
 import { geojsonLayer } from "./helpers/layer-fixtures";
 
 it("serves archive bytes to the SDK and isolates/cancels interceptor lifetimes", async () => {

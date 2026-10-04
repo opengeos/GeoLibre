@@ -40,7 +40,7 @@ import {
   type ZarrCesiumModule,
 } from "./cesium-zarr-imagery";
 import { getZarrStore } from "./zarr-source";
-import { createFeatureStyleResolver, type FeatureStyleResolver } from "./cesium-feature-style";
+import { createFeatureStyleResolver, type FeatureStyleResolver } from "./feature-style";
 import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
 import {
   buildPointCloudCollection,
@@ -61,13 +61,12 @@ import {
   type PointRenderPlan,
 } from "./cesium-points";
 import {
-  hasRegisteredProtocol,
   mercatorBbox,
   ProtocolImageryProvider,
-  protocolScheme,
   quadkey,
   webMercatorRectangle,
 } from "./cesium-protocol-imagery";
+import { hasRegisteredProtocol, protocolScheme } from "./protocol-tiles";
 import {
   compileTilesetStyle,
   tilesetStyleKey,
@@ -76,7 +75,7 @@ import {
 import { renderFillPatternCanvas } from "./fill-patterns";
 import { getLayerBounds } from "./geojson-loader";
 import { classifyLayer, type LayerKind, unhandledLayerKind } from "./layer-kind";
-import { getPMTilesArchive } from "./layer-sync";
+import { getPMTilesArchive } from "./pmtiles-archive";
 import { renderMarkerCanvas } from "./markers";
 import { normalizePMTilesUrl } from "./pmtiles-layer";
 import type { Header as PMTilesHeader } from "pmtiles";
