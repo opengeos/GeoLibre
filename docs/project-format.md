@@ -574,9 +574,9 @@ layer name when unset), `abstract` as `description`, `keywords`, `license`, the
 contact as a `producer` provider, `lineage` as `processing:lineage` (with the
 processing extension declared), the temporal extent as `datetime` or
 `start_datetime`/`end_datetime`, the links, and a `data` asset for a remote
-source URL. A license that is not an SPDX-style identifier is exported as
-`proprietary` with the text in `geolibre:license`; the attribution goes to
-`geolibre:attribution`. A layer with no temporal extent is stamped with the
+source URL (a `tiles` asset when it is a `{z}/{x}/{y}` tile template). A
+license that is not an SPDX-style identifier is exported as `proprietary` with
+the text in `geolibre:license`; the attribution goes to `geolibre:attribution`. A layer with no temporal extent is stamped with the
 export time, since STAC requires a `datetime`. Exporting a vector layer to
 GeoParquet writes the block as JSON into the file's Parquet key-value metadata
 under `geolibre:metadata`, beside the `geo` key.

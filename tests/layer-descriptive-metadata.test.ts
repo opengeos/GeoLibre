@@ -442,6 +442,16 @@ describe("buildLayerStacItem", () => {
     assert.equal(invalid.geometry, null);
   });
 
+  it("publishes a tile template as a tiles asset, not a data asset", () => {
+    const item = buildLayerStacItem(makeLayer({ type: "xyz" }), {
+      assetHref: "https://t.org/{z}/{x}/{y}.png",
+      now,
+    });
+    assert.deepEqual(item.assets, {
+      tiles: { href: "https://t.org/{z}/{x}/{y}.png", title: "Rivers", roles: ["tiles"] },
+    });
+  });
+
   it("names the provider from whatever contact field exists", () => {
     const item = buildLayerStacItem(
       makeLayer({ descriptiveMetadata: { contact: { email: "ada@example.org" } } }),

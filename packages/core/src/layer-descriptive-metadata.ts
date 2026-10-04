@@ -517,12 +517,15 @@ export function buildLayerStacItem(
   const assets: Record<string, StacAsset> = {};
   const assetHref = cleanString(options.assetHref);
   if (assetHref) {
-    const type = stacAssetMediaType(assetHref, layer.type);
-    assets.data = {
+    // A tile template (`…/{z}/{x}/{y}.png`) cannot be fetched as-is, so it
+    // is published as a `tiles` asset rather than a dereferenceable `data` one.
+    const templated = /\{[a-z]+\}/i.test(assetHref);
+    const type = templated ? undefined : stacAssetMediaType(assetHref, layer.type);
+    assets[templated ? "tiles" : "data"] = {
       href: assetHref,
       ...(type ? { type } : {}),
       title: properties.title as string,
-      roles: ["data"],
+      roles: [templated ? "tiles" : "data"],
     };
   }
 
