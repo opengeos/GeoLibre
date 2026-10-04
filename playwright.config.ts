@@ -28,21 +28,22 @@ const CORE_SPECS = [
   "keyboard-only.spec.ts",
   "layer-panel.spec.ts",
   "drop-overlay.spec.ts",
-  "set-view.spec.ts",
   "error-handling.spec.ts",
   "attribute-status.spec.ts",
-  "paste-style.spec.ts",
   "rtl.spec.ts",
   "pwa.spec.ts",
-  "style-manager.spec.ts",
-  "identify-restore.spec.ts",
   "deployment-policy.spec.ts",
   // Project -> Save -> reopen. Moved from `features` after an unexpected save
   // prompt broke every saving spec and only the nightly run noticed (#2858).
   "layer-groups.spec.ts",
   // Holds the Plugins docs to the app's deep-link names, so a new built-in
-  // plugin fails its own PR instead of the next night's run (#2858).
+  // plugin fails its own PR instead of the next night's run (#2858). Its
+  // registry install flows are in plugin-deep-link-registry.spec.ts, nightly.
   "plugin-deep-link.spec.ts",
+  // Moved to `features` once core reached ~11 min wall-clock (~25 min of test
+  // time): set-view, paste-style, style-manager and identify-restore. Each
+  // covers one dialog or interaction, not something every user hits, and
+  // together they were ~40% of core's test time and most of its retries.
 ];
 
 const coreMatch = CORE_SPECS.map((spec) => `**/${spec}`);
