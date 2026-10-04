@@ -23,17 +23,24 @@ Security posture:
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import logging
-import os
-import re
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from geolibre_server import vector_ops
+
+from .db_common import (
+    allowlist_from_env,
+    host_port_allowed,
+    json_safe,
+    normalize_host,
+    plan_feature_diff,
+    require_features,
+    scrub_secrets,
+)
 
 router = APIRouter(prefix="/postgis", tags=["postgis"])
 logger = logging.getLogger(__name__)
@@ -43,20 +50,6 @@ logger = logging.getLogger(__name__)
 _STATEMENT_TIMEOUT_MS = 60_000
 _POSTGIS_HOSTS_ENV = "GEOLIBRE_POSTGIS_HOSTS"
 _DEFAULT_POSTGRES_PORT = 5432
-# Allowlist entry that lifts the restriction entirely. The desktop app passes
-# it when it spawns its own sidecar: there the caller and the operator are the
-# same person, and the sidecar is loopback-bound and token-authenticated. A
-# shared deployment (Docker/nginx proxy) leaves the variable unset and stays
-# closed, so the permissive mode is only ever reached by an explicit opt-in.
-_UNRESTRICTED = "*"
-
-# Username is optional (postgresql://:pw@host relies on PGUSER), so the group
-# is zero-or-more: an empty username must not let the password through. The
-# password segment matches greedily to the LAST @ in the token so an unescaped
-# literal @ inside a pasted password is fully redacted (leaning toward
-# over-redaction of the host rather than a partial password leak).
-_PASSWORD_URL_RE = re.compile(r"(://[^:/\s@]*:)[^\s]+@")
-_PASSWORD_KV_RE = re.compile(r"(password\s*=\s*)('[^']*'|[^\s]+)", re.IGNORECASE)
 
 
 def psycopg_import_error() -> Optional[str]:
@@ -80,135 +73,42 @@ def _import_psycopg() -> Any:
     return psycopg
 
 
-def _sanitize_error(message: str) -> str:
-    """Scrub password material from an error message before returning it.
-
-    psycopg errors normally do not include credentials, but a malformed
-    connection string can be echoed back verbatim by the URL parser, so every
-    outbound detail is scrubbed of ``user:password@`` URL segments and
-    ``password=...`` keyword pairs.
-    """
-    scrubbed = _PASSWORD_URL_RE.sub(r"\1****@", message)
-    return _PASSWORD_KV_RE.sub(r"\1****", scrubbed)
-
-
-def _normalize_host(host: str) -> str:
-    """Return a stable representation for exact host allowlist comparisons."""
-    candidate = host.strip()
-    if candidate.startswith("[") and candidate.endswith("]"):
-        candidate = candidate[1:-1]
-    # After the unwrap, so a bracketed-empty "[]" is rejected rather than
-    # normalizing to the empty string.
-    if not candidate or candidate.startswith("/"):
-        raise ValueError("PostgreSQL host must be a TCP hostname or IP address")
-    try:
-        return str(ipaddress.ip_address(candidate))
-    except ValueError:
-        # DNS names are case-insensitive and a final dot only marks the DNS
-        # root; treating both spellings alike avoids surprising mismatches.
-        return candidate.rstrip(".").lower()
-
-
-def _allowed_postgis_targets(value: str) -> Optional[set[tuple[str, Optional[int]]]]:
-    """Parse comma-separated ``host`` or ``host:port`` allowlist entries.
-
-    Returns:
-        The allowed ``(host, port)`` pairs, where a ``None`` port allows any
-        port on that host, or ``None`` when the value is ``*`` and the
-        restriction is lifted altogether.
-
-    Raises:
-        ValueError: An entry is malformed, or ``*`` is mixed with hosts.
-    """
-    entries = [entry.strip() for entry in value.split(",") if entry.strip()]
-    # `*` alongside hosts reads as a narrowing but is not one, so refuse it
-    # rather than leaving an operator who meant to narrow wide open.
-    if _UNRESTRICTED in entries:
-        if len(entries) > 1:
-            raise ValueError(f"'{_UNRESTRICTED}' must be the only entry")
-        return None
-    targets: set[tuple[str, Optional[int]]] = set()
-    for entry in entries:
-        host = entry
-        port: Optional[int] = None
-        if entry.startswith("["):
-            closing = entry.find("]")
-            if closing < 0:
-                raise ValueError("invalid bracketed IPv6 address")
-            host = entry[1:closing]
-            suffix = entry[closing + 1 :]
-            if suffix:
-                if not suffix.startswith(":"):
-                    raise ValueError("invalid characters after IPv6 address")
-                port = int(suffix[1:])
-        elif entry.count(":") == 1:
-            host, port_text = entry.rsplit(":", 1)
-            port = int(port_text)
-        elif entry.count(":") > 1:
-            # An unbracketed IPv6 address that carries a port is itself a valid
-            # address (`2001:db8::1:5432` parses cleanly), so the two spellings
-            # cannot be told apart. Requiring brackets refuses the typo instead
-            # of quietly allowing any port on an address nobody meant.
-            raise ValueError("IPv6 entries must be bracketed, e.g. [2001:db8::1]:5432")
-        if port is not None and not 1 <= port <= 65535:
-            raise ValueError("port must be between 1 and 65535")
-        targets.add((_normalize_host(host), port))
-    return targets
-
-
 def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, str]]:
-    """Validate every destination against the allowlist.
+    """Validate all DSN destinations against the configured host allowlist.
 
     Args:
-        conninfo: The parsed libpq connection keywords of the request's DSN.
+        conninfo: Parsed libpq connection keywords from the request DSN.
 
     Returns:
-        The explicit ``host``/``port`` lists to pin the connection to, or
-        ``None`` when the allowlist is unrestricted and the DSN should be used
-        as given (including Unix sockets and ``service=`` indirection).
+        Explicit host/port overrides, or ``None`` when the allowlist is ``*``.
 
     Raises:
-        HTTPException: The allowlist is unset, malformed, or does not cover
-            every destination the connection string names.
+        HTTPException: If the allowlist is unset, invalid, or excludes a target.
+
+    ``service`` can resolve or change hosts after validation, and ``hostaddr``
+    can route to an IP that differs from an allowlisted hostname, so neither
+    indirection is accepted when a host allowlist is active.
     """
-    configured = os.environ.get(_POSTGIS_HOSTS_ENV, "")
-    try:
-        allowed = _allowed_postgis_targets(configured)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"{_POSTGIS_HOSTS_ENV} is invalid",
-        ) from exc
+    allowed = allowlist_from_env(
+        _POSTGIS_HOSTS_ENV,
+        f"PostGIS access is disabled; configure {_POSTGIS_HOSTS_ENV}",
+    )
     if allowed is None:
         return None
-    if not allowed:
-        raise HTTPException(
-            status_code=403,
-            detail=f"PostGIS access is disabled; configure {_POSTGIS_HOSTS_ENV}",
-        )
-
-    # A service can load (and change) hosts from pg_service.conf after this
-    # validation. Requiring an explicit DSN host closes that indirection.
     if conninfo.get("service"):
         raise HTTPException(
-            status_code=400,
-            detail="PostgreSQL service connection strings are not supported",
+            status_code=400, detail="PostgreSQL service connection strings are not supported"
         )
-    # libpq connects to hostaddr while retaining host for authentication and
-    # display, which would otherwise let an allowlisted name mask any IP.
     if conninfo.get("hostaddr"):
         raise HTTPException(
-            status_code=400,
-            detail="PostgreSQL hostaddr connection strings are not supported",
+            status_code=400, detail="PostgreSQL hostaddr connection strings are not supported"
         )
-    # Each item is stripped here, not just when comparing: the list is rejoined
-    # into the `host`/`port` overrides, and libpq would take stray whitespace
-    # from a quoted multi-host DSN (`host='a, b'`) as part of the name.
+    # Strip each host before rejoining overrides; libpq treats whitespace in
+    # a quoted multi-host value as part of the hostname.
     hosts = [host.strip() for host in conninfo.get("host", "").split(",")]
     if not hosts or any(not host for host in hosts):
         raise HTTPException(
-            status_code=400,
-            detail="PostgreSQL connection must specify an allowed TCP host",
+            status_code=400, detail="PostgreSQL connection must specify an allowed TCP host"
         )
     raw_ports = conninfo.get("port", "")
     ports = (
@@ -220,27 +120,19 @@ def _validate_postgis_target(conninfo: dict[str, str]) -> Optional[tuple[str, st
         ports *= len(hosts)
     if len(ports) != len(hosts):
         raise HTTPException(status_code=400, detail="Invalid PostgreSQL host/port list")
-    # libpq reads an empty item in a comma-separated port list as "the default
-    # port for this host" (`host=a,b port=,5433`), so fill those in rather than
-    # refusing a failover DSN the server would have accepted.
+    # An empty item in libpq's comma-separated port list means that host's
+    # default port (e.g. `host=a,b port=,5433`), not an invalid value.
     ports = [port if port else str(_DEFAULT_POSTGRES_PORT) for port in ports]
-
     for host, port_text in zip(hosts, ports):
         try:
-            normalized_host = _normalize_host(host)
+            normalized_host = normalize_host(host)
             port = int(port_text)
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail="Invalid PostgreSQL host or port") from exc
         if not 1 <= port <= 65535:
             raise HTTPException(status_code=400, detail="Invalid PostgreSQL port")
-        if (normalized_host, port) not in allowed and (
-            normalized_host,
-            None,
-        ) not in allowed:
-            raise HTTPException(
-                status_code=403,
-                detail="PostgreSQL host or port is not allowed",
-            )
+        if not host_port_allowed(allowed, normalized_host, port):
+            raise HTTPException(status_code=403, detail="PostgreSQL host or port is not allowed")
     return ",".join(hosts), ",".join(ports)
 
 
@@ -322,7 +214,7 @@ def _connect(connection: str) -> Any:
     except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
         raise HTTPException(
             status_code=400,
-            detail=f"Could not connect to PostgreSQL: {_sanitize_error(str(exc))}",
+            detail=f"Could not connect to PostgreSQL: {scrub_secrets(str(exc))}",
         ) from exc
 
 
@@ -490,10 +382,10 @@ def postgis_tables(request: PostgisTablesRequest) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
-        logger.error("PostGIS table listing failed: %s", _sanitize_error(str(exc)))
+        logger.error("PostGIS table listing failed: %s", scrub_secrets(str(exc)))
         raise HTTPException(
             status_code=400,
-            detail=f"Could not list tables: {_sanitize_error(str(exc))}",
+            detail=f"Could not list tables: {scrub_secrets(str(exc))}",
         ) from exc
 
     tables = [
@@ -508,30 +400,6 @@ def postgis_tables(request: PostgisTablesRequest) -> dict[str, Any]:
         for schema, table, geometry_column, srid, geometry_type in rows
     ]
     return {"tables": tables}
-
-
-def _json_safe(value: Any) -> Any:
-    """Convert a database cell to a JSON-serializable value.
-
-    Recurses into containers so e.g. a ``date[]`` array column serializes as a
-    list of ISO strings rather than failing JSON encoding.
-    """
-    if value is None or isinstance(value, (bool, float, str)):
-        return value
-    if isinstance(value, int):
-        # Integers beyond JavaScript's safe range would be silently rounded by
-        # the client's JSON.parse — fatal for a bigint primary key, whose
-        # rounded value would no longer match any row on write-back. Serialize
-        # such values as strings (like uuid/date already are).
-        return value if -(2**53) < value < 2**53 else str(value)
-    if isinstance(value, dict):
-        return {key: _json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, (bytes, memoryview)):
-        return bytes(value).hex()
-    # datetime/date/time/Decimal/UUID and anything else stringify cleanly.
-    return str(value)
 
 
 @router.post("/read")
@@ -583,11 +451,11 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
             "PostGIS read of %s.%s failed: %s",
             request.schema_name,
             request.table,
-            _sanitize_error(str(exc)),
+            scrub_secrets(str(exc)),
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Could not read table: {_sanitize_error(str(exc))}",
+            detail=f"Could not read table: {scrub_secrets(str(exc))}",
         ) from exc
 
     if len(rows) > vector_ops.MAX_FEATURES:
@@ -602,7 +470,7 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
     features = []
     for row in rows:
         properties_raw = {
-            column: _json_safe(value) for column, value in zip(read_columns, row[1:], strict=True)
+            column: json_safe(value) for column, value in zip(read_columns, row[1:], strict=True)
         }
         feature: dict[str, Any] = {
             "type": "Feature",
@@ -667,14 +535,7 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
     psycopg = _import_psycopg()
     sql = psycopg.sql
 
-    features = request.geojson.get("features") if request.geojson else None
-    if not isinstance(features, list) or not features:
-        raise HTTPException(status_code=400, detail="No features to write.")
-    if len(features) > vector_ops.MAX_FEATURES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Layer exceeds the {vector_ops.MAX_FEATURES}-feature limit",
-        )
+    features = require_features(request.geojson)
 
     with _connect(request.connection) as conn:
         info = _table_info(conn, request.schema_name, request.table, request.geometry_column)
@@ -689,18 +550,10 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
             )
 
         writable = [column for column in info["columns"] if column != pk]
-        writable_set = set(writable)
         schema_ident = sql.Identifier(request.schema_name)
         table_ident = sql.Identifier(request.table)
         geom_ident = sql.Identifier(info["geometry_column"])
         geom_param = _geometry_param(sql, info["srid"])
-
-        # Absent flags default to allowed, matching the frontend's inference
-        # for a layer that declares no explicit capabilities.
-        caps = request.capabilities or {}
-        allow_create = caps.get("create", True)
-        allow_update = caps.get("update", True)
-        allow_delete = caps.get("delete", True)
 
         skipped: set[str] = set()
         inserted = updated = 0
@@ -748,169 +601,115 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                 )
                 existing_rows: dict[Any, tuple[Any, dict[str, Any]]] = {}
                 for row in cur.fetchall():
-                    existing_rows[_json_safe(row[0])] = (
+                    existing_rows[json_safe(row[0])] = (
                         json.loads(row[1]) if row[1] else None,
                         {
-                            column: _json_safe(value)
+                            column: json_safe(value)
                             for column, value in zip(info["columns"], row[2:])
                         },
                     )
-                existing_keys = set(existing_rows)
 
-                kept_keys: set[Any] = set()
-                # Pipeline mode batches the per-feature statements into a few
-                # network round trips instead of one per feature. The counters
-                # track the taken branch (a keyed UPDATE matches exactly one
-                # row by construction) because reading rowcount per statement
-                # would force a sync each time. Known gap: a row deleted by
-                # another session after the snapshot above makes its UPDATE
-                # match zero rows yet still count as updated — detecting that
-                # is part of the conflict-detection follow-up (issue #1070).
+                diff = plan_feature_diff(
+                    features,
+                    primary_key=pk,
+                    writable_columns=writable,
+                    existing_rows=existing_rows,
+                    pk_is_generated=info["pk_is_generated"],
+                    insert_explicit_key=True,
+                    baseline_keys=request.baseline_keys,
+                    capabilities=request.capabilities,
+                    table_label=f"{request.schema_name}.{request.table}",
+                )
+                skipped = set(diff.skipped_fields)
+                inserted = len(diff.inserts)
+                updated = len(diff.updates)
+                # Pipeline mode batches per-feature statements into fewer
+                # network round trips. Counts follow the chosen branch because
+                # reading rowcount per statement would force a sync each time.
+                # A concurrent delete after the snapshot can therefore make
+                # an UPDATE match zero rows while still counting as updated;
+                # conflict detection is a separate concern (issue #1070).
                 with conn.pipeline():
-                    for feature in features:
-                        properties = feature.get("properties") or {}
-                        skipped.update(
-                            key for key in properties if key not in writable_set and key != pk
-                        )
-                        columns = [c for c in writable if c in properties]
-                        # dicts and lists bind as json/jsonb — except a list
-                        # aimed at a native array column (data_type 'ARRAY'),
-                        # which psycopg's array adapter must handle instead.
+                    for change in diff.updates:
+                        columns = list(change.values)
                         values = [
-                            properties[c]
-                            if isinstance(properties[c], list)
-                            and info["column_types"].get(c) == "ARRAY"
-                            else psycopg.types.json.Json(properties[c])
-                            if isinstance(properties[c], (dict, list))
-                            else properties[c]
-                            for c in columns
+                            change.values[column]
+                            if isinstance(change.values[column], list)
+                            and info["column_types"].get(column) == "ARRAY"
+                            else psycopg.types.json.Json(change.values[column])
+                            if isinstance(change.values[column], (dict, list))
+                            else change.values[column]
+                            for column in columns
                         ]
-                        geometry = feature.get("geometry")
-                        geometry_value = json.dumps(geometry) if geometry else None
-
-                        # A null primary-key property must not shadow feature.id
-                        # (the read endpoint sets both, but editors may blank the
-                        # property while the feature id survives).
-                        key = properties.get(pk)
-                        if key is None:
-                            key = feature.get("id")
-                        if key is None and not info["pk_is_generated"]:
-                            raise HTTPException(
-                                status_code=400,
-                                detail=(
-                                    f"Feature without a '{pk}' value cannot be "
-                                    f"inserted: {request.schema_name}."
-                                    f"{request.table}'s primary key has no "
-                                    "default or identity."
-                                ),
+                        geometry_value = json.dumps(change.geometry) if change.geometry else None
+                        assignments = [
+                            sql.SQL("{col} = ").format(col=geom_ident)
+                            + (geom_param if geometry_value is not None else sql.SQL("NULL"))
+                        ]
+                        params: list[Any] = [geometry_value] if geometry_value is not None else []
+                        for column, value in zip(columns, values):
+                            assignments.append(
+                                sql.SQL("{col} = %s").format(col=sql.Identifier(column))
                             )
-                        if key is not None and key in existing_keys:
-                            kept_keys.add(key)
-                            # Skip rows whose payload matches what is stored:
-                            # untouched features must not be rewritten.
-                            stored_geometry, stored_values = existing_rows[key]
-                            if geometry == stored_geometry and all(
-                                properties[column] == stored_values.get(column)
-                                for column in columns
-                            ):
-                                continue
-                            if not allow_update:
-                                raise HTTPException(
-                                    status_code=403,
-                                    detail="Layer capability excludes feature updates.",
-                                )
-                            assignments = [
-                                sql.SQL("{col} = ").format(col=geom_ident)
-                                + (geom_param if geometry_value is not None else sql.SQL("NULL"))
-                            ]
-                            params: list[Any] = (
-                                [geometry_value] if geometry_value is not None else []
-                            )
-                            for column, value in zip(columns, values):
-                                assignments.append(
-                                    sql.SQL("{col} = %s").format(col=sql.Identifier(column))
-                                )
-                                params.append(value)
-                            params.append(key)
-                            cur.execute(
-                                sql.SQL(
-                                    "UPDATE {schema}.{table} SET {assignments} WHERE {pk} = %s"
-                                ).format(
-                                    schema=schema_ident,
-                                    table=table_ident,
-                                    assignments=sql.SQL(", ").join(assignments),
-                                    pk=sql.Identifier(pk),
-                                ),
-                                params,
-                            )
-                            updated += 1
-                        else:
-                            # New feature: the key column is left to its identity
-                            # / default. A non-null key that is not in the table
-                            # is inserted explicitly so client-assigned keys
-                            # survive; a GENERATED ALWAYS identity column rejects
-                            # explicit values unless the insert overrides it.
-                            if not allow_create:
-                                raise HTTPException(
-                                    status_code=403,
-                                    detail="Layer capability excludes feature creation.",
-                                )
-                            insert_columns = list(columns)
-                            insert_values = list(values)
-                            overriding = sql.SQL("")
-                            if key is not None:
-                                insert_columns.append(pk)
-                                insert_values.append(key)
-                                kept_keys.add(key)
-                                if info["pk_always_identity"]:
-                                    overriding = sql.SQL(" OVERRIDING SYSTEM VALUE")
-                            column_idents = [geom_ident] + [
-                                sql.Identifier(column) for column in insert_columns
-                            ]
-                            value_exprs = [
-                                geom_param if geometry_value is not None else sql.SQL("NULL")
-                            ] + [sql.SQL("%s")] * len(insert_values)
-                            params = (
-                                [geometry_value] if geometry_value is not None else []
-                            ) + insert_values
-                            cur.execute(
-                                sql.SQL(
-                                    "INSERT INTO {schema}.{table} ({columns})"
-                                    "{overriding} VALUES ({values})"
-                                ).format(
-                                    schema=schema_ident,
-                                    table=table_ident,
-                                    columns=sql.SQL(", ").join(column_idents),
-                                    overriding=overriding,
-                                    values=sql.SQL(", ").join(value_exprs),
-                                ),
-                                params,
-                            )
-                            inserted += 1
-
-                # Scope deletions to the edit session's baseline when the
-                # client provides one, so rows inserted concurrently by another
-                # session are not swept away by an unrelated save.
-                deletable = existing_keys
-                if request.baseline_keys is not None:
-                    deletable = existing_keys & set(request.baseline_keys)
-                to_delete = sorted(deletable - kept_keys, key=lambda value: str(value))
+                            params.append(value)
+                        params.append(change.key)
+                        cur.execute(
+                            sql.SQL(
+                                "UPDATE {schema}.{table} SET {assignments} WHERE {pk} = %s"
+                            ).format(
+                                schema=schema_ident,
+                                table=table_ident,
+                                assignments=sql.SQL(", ").join(assignments),
+                                pk=sql.Identifier(pk),
+                            ),
+                            params,
+                        )
+                    for change in diff.inserts:
+                        columns = list(change.values)
+                        values = [
+                            change.values[column]
+                            if isinstance(change.values[column], list)
+                            and info["column_types"].get(column) == "ARRAY"
+                            else psycopg.types.json.Json(change.values[column])
+                            if isinstance(change.values[column], (dict, list))
+                            else change.values[column]
+                            for column in columns
+                        ]
+                        overriding = sql.SQL("")
+                        if change.key is not None:
+                            columns.append(pk)
+                            values.append(change.key)
+                            if info["pk_always_identity"]:
+                                overriding = sql.SQL(" OVERRIDING SYSTEM VALUE")
+                        column_idents = [geom_ident] + [
+                            sql.Identifier(column) for column in columns
+                        ]
+                        geometry_value = json.dumps(change.geometry) if change.geometry else None
+                        value_exprs = [
+                            geom_param if geometry_value is not None else sql.SQL("NULL")
+                        ] + [sql.SQL("%s")] * len(values)
+                        params = ([geometry_value] if geometry_value is not None else []) + values
+                        cur.execute(
+                            sql.SQL(
+                                "INSERT INTO {schema}.{table} ({columns})"
+                                "{overriding} VALUES ({values})"
+                            ).format(
+                                schema=schema_ident,
+                                table=table_ident,
+                                columns=sql.SQL(", ").join(column_idents),
+                                overriding=overriding,
+                                values=sql.SQL(", ").join(value_exprs),
+                            ),
+                            params,
+                        )
+                to_delete = diff.deletes
                 deleted = 0
                 if to_delete:
-                    if not allow_delete:
-                        raise HTTPException(
-                            status_code=403,
-                            detail="Layer capability excludes feature deletion.",
-                        )
-                    # Compare as text so the (JSON-native) keys match uuid /
-                    # numeric / date key columns; both sides render the same
-                    # canonical form the /read endpoint serialized. Known edge:
-                    # timestamp/timestamptz and float/real keys' Python str()
-                    # can differ from Postgres's ::text rendering (e.g. '5.0'
-                    # vs '5'), so such exotic keys may not match and their
-                    # deletes silently no-op (the deleted count comes out
-                    # lower than the client expects);
-                    # integer/text/uuid/numeric/date keys all round-trip.
+                    # Text comparison matches the JSON-safe keys emitted by
+                    # /read for common integer, text, uuid, numeric, and date
+                    # keys. Timestamp and floating-point textual formatting
+                    # can differ between Python and Postgres, causing those
+                    # uncommon key types' deletes to match no rows.
                     cur.execute(
                         sql.SQL("DELETE FROM {schema}.{table} WHERE {pk}::text = ANY(%s)").format(
                             schema=schema_ident,
@@ -933,11 +732,11 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                 "PostGIS write-back to %s.%s failed: %s",
                 request.schema_name,
                 request.table,
-                _sanitize_error(str(exc)),
+                scrub_secrets(str(exc)),
             )
             raise HTTPException(
                 status_code=400,
-                detail=f"Write-back failed: {_sanitize_error(str(exc))}",
+                detail=f"Write-back failed: {scrub_secrets(str(exc))}",
             ) from exc
 
     messages = [

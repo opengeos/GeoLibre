@@ -139,6 +139,100 @@ export function lngLatToUsng(lng: number, lat: number, precision = 5): string | 
 }
 
 /**
+ * UTM/MGRS zone number for a point, applying the two exceptions to the regular
+ * 6°-wide zones: zone 32 is widened to 3°E–12°E in band V (56°N–64°N, southern
+ * Norway), and band X (72°N–84°N, Svalbard) uses four widened zones 31
+ * (0°–9°E), 33 (9°E–21°E), 35 (21°E–33°E) and 37 (33°E–42°E), so 32X, 34X and
+ * 36X do not exist.
+ *
+ * This is the one zone rule shared by the UTM readout (`lngLatToUtm`), the MGRS
+ * grid overlay and, through the `mgrs` package which applies the same rule, the
+ * MGRS readout, so the three never disagree about which zone a point is in.
+ *
+ * Args:
+ *   lng: Longitude in degrees; values outside -180..180 are wrapped.
+ *   lat: Latitude in degrees.
+ *
+ * Returns:
+ *   The zone number, 1–60.
+ */
+export function utmZoneNumber(lng: number, lat: number): number {
+  const wrapped = ((((lng + 180) % 360) + 360) % 360) - 180;
+  if (lat >= 56 && lat < 64 && wrapped >= 3 && wrapped < 12) return 32;
+  if (lat >= 72 && wrapped >= 0 && wrapped < 42) {
+    if (wrapped < 9) return 31;
+    if (wrapped < 21) return 33;
+    if (wrapped < 33) return 35;
+    return 37;
+  }
+  return Math.floor((wrapped + 180) / 6) + 1;
+}
+
+/**
+ * Longitude extent of one zone within a latitude band, honouring the
+ * Norway/Svalbard exceptions (see {@link utmZoneNumber}).
+ *
+ * Args:
+ *   zone: Zone number, 1–60.
+ *   band: Latitude-band letter, C–X without I and O.
+ *
+ * Returns:
+ *   `[west, east]` in degrees, or null when the zone does not occur in that band
+ *   (32X, 34X, 36X) or either argument is invalid.
+ */
+export function gridZoneLongitudeRange(zone: number, band: string): [number, number] | null {
+  if (!Number.isInteger(zone) || zone < 1 || zone > 60 || !utmBandRange(band)) return null;
+  const west = (zone - 1) * 6 - 180;
+  if (band === "V") {
+    if (zone === 31) return [0, 3];
+    if (zone === 32) return [3, 12];
+  }
+  if (band === "X" && zone >= 31 && zone <= 37) {
+    switch (zone) {
+      case 31:
+        return [0, 9];
+      case 33:
+        return [9, 21];
+      case 35:
+        return [21, 33];
+      case 37:
+        return [33, 42];
+      default:
+        return null;
+    }
+  }
+  return [west, west + 6];
+}
+
+/**
+ * The 100 km square identifier (column and row letters) of a UTM coordinate,
+ * using the standard MGRS lettering (the "AA" scheme on WGS84): the column
+ * letter set repeats every three zones, and even zones offset their row
+ * letters by five.
+ *
+ * Args:
+ *   zone: Zone number, 1–60.
+ *   easting: Easting in metres (100,000–899,999 inside a zone).
+ *   northing: Northing in metres, including the 10,000,000 m false northing in
+ *     the southern hemisphere.
+ *
+ * Returns:
+ *   Two letters such as `UJ`, or null when the easting lies outside the eight
+ *   100 km columns a zone can hold.
+ */
+export function mgrsSquareId(zone: number, easting: number, northing: number): string | null {
+  if (!Number.isInteger(zone) || zone < 1 || zone > 60) return null;
+  const column = Math.floor(easting / 100_000);
+  if (!Number.isFinite(column) || column < 1 || column > 8) return null;
+  const columnLetter = COLUMN_LETTERS[(zone - 1) % 3][column - 1];
+  const rowIndex = Math.floor(northing / 100_000);
+  if (!Number.isFinite(rowIndex)) return null;
+  const offset = zone % 2 === 0 ? 5 : 0;
+  const rowLetter = ROW_LETTERS[(((rowIndex + offset) % 20) + 20) % 20];
+  return `${columnLetter}${rowLetter}`;
+}
+
+/**
  * Southern and northern edge of a UTM/MGRS latitude band. Shared with the UTM
  * search parser (`grid-reference.ts`) so the band layout is defined once.
  *

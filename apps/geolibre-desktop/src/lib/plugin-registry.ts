@@ -290,8 +290,10 @@ function normalizeEntry(value: unknown, registryUrl: string): PluginRegistryEntr
 // A bundle hash is a lowercase hex SHA-256. Anything else is ignored, so the
 // entry falls back to trust-on-first-use rather than pinning a value no bundle
 // can ever match. That silently weakens the check, so say so in the console.
+// `null` is how a registry generator commonly writes "no hash", so it means the
+// same as an absent field and is not worth a warning.
 function bundleHashOrUndefined(value: unknown, id: string): string | undefined {
-  if (value === undefined) return undefined;
+  if (value === undefined || value === null) return undefined;
   if (typeof value === "string" && /^[0-9a-f]{64}$/.test(value)) return value;
   console.warn(
     `[GeoLibre] Ignoring the registry's bundleSha256 for "${id}": expected 64 lowercase hex characters. Installing it falls back to trust-on-first-use.`,

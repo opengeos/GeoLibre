@@ -6,7 +6,7 @@ import {
   type ProcessingModelStep,
 } from "@geolibre/core";
 import type { DuckDbCapability, ProcessingAlgorithm, ProcessingContext } from "./types";
-import { getVectorTool } from "./vector-tools";
+import { getVectorTool } from "./vector-tool-registry";
 import { runAlgorithmInBackground } from "./vector-tool-runner";
 
 /** Synthetic layer-id prefix for a pipeline step's chained input. */

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import type { StoryChapterLocation } from "@geolibre/core";
+import type { MapViewState, StoryChapterLocation } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { applyStoryViewAndWait } from "../apps/geolibre-desktop/src/components/storymap/storymap-engine";
 
@@ -30,14 +30,18 @@ after(() => {
   globalThis.requestAnimationFrame = originalRaf;
 });
 
+// The camera a fake engine reports before the story view is applied.
+const CURRENT_VIEW: MapViewState = { center: [0, 0], zoom: 2, bearing: 30, pitch: 45 };
+
 function engineWith(
-  applyView: () => void | Promise<void>,
+  applyView: (view: MapViewState) => void | Promise<void>,
   pending: () => string[] = () => [],
   kind: MapEngine["kind"] = "maplibre",
 ): MapEngine {
   return {
     kind,
     applyView,
+    readView: () => CURRENT_VIEW,
     getRenderStatus: () => ({ pending: pending(), errors: [] }),
     isCameraMoving: () => false,
     onCameraMove: () => () => {},
@@ -78,6 +82,17 @@ describe("applyStoryViewAndWait", () => {
     complete();
     await waiting;
     assert.equal(resolved, true);
+  });
+
+  it("keeps the camera's pitch and bearing when the chapter omits them", async () => {
+    const applied: MapViewState[] = [];
+    await applyStoryViewAndWait(
+      engineWith((view) => void applied.push(view)),
+      { center: [-77, 39], zoom: 8 },
+      () => false,
+      1_000,
+    );
+    assert.deepEqual(applied, [{ center: [-77, 39], zoom: 8, bearing: 30, pitch: 45 }]);
   });
 
   it("falls back to the timeout while renderer work remains pending", async () => {

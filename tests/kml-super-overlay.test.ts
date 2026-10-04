@@ -13,6 +13,8 @@ import {
   type KmlSuperOverlayTile,
 } from "../apps/geolibre-desktop/src/lib/kml-super-overlay";
 
+import { clearNotifications, useNotificationStore } from "../apps/geolibre-desktop/src/lib/notify";
+
 const PROTOCOL = "geolibre-kml-super-overlay";
 
 type ProtocolHandler = (
@@ -270,6 +272,7 @@ describe("the tile protocol", () => {
 
   it("answers with an empty tile when the archive cannot be re-read", async () => {
     setKmlSuperOverlayResolver(async () => null);
+    clearNotifications();
 
     try {
       const result = await protocolHandler()({
@@ -277,8 +280,14 @@ describe("the tile protocol", () => {
       });
 
       assert.equal(result.data.byteLength, 0);
+      // A resolver that finds nothing (no throw) still tells the user once.
+      const toasts = useNotificationStore.getState().notifications;
+      assert.equal(toasts.length, 1);
+      assert.equal(toasts[0].kind, "warning");
+      assert.equal(toasts[0].dedupeKey, "kml-super-overlay:missing");
     } finally {
       setKmlSuperOverlayResolver(null);
+      clearNotifications();
     }
   });
 });

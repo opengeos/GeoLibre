@@ -202,6 +202,97 @@ describe("VectorToolsDialog", () => {
     await waitFor(() => assert.equal(run.disabled, false));
   });
 
+  it("cancels a worker run: the worker stops and nothing reaches the map or the History", async () => {
+    const originalWorker = globalThis.Worker;
+    let terminated = 0;
+    // A worker that loads but never finishes, standing in for a long Turf run.
+    globalThis.Worker = class {
+      private listeners: Array<(event: MessageEvent) => void> = [];
+      constructor() {
+        setTimeout(() => {
+          for (const listener of this.listeners)
+            listener({ data: { type: "ready" } } as MessageEvent);
+        }, 0);
+      }
+      addEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === "message") this.listeners.push(listener);
+      }
+      removeEventListener() {}
+      postMessage() {}
+      terminate() {
+        terminated += 1;
+      }
+    } as unknown as typeof Worker;
+    try {
+      useAppStore.setState({ processingHistory: [] });
+      renderDialog();
+      const dialog = openTool("buffer");
+      fireEvent.change(within(dialog).getByLabelText(/^Input layer/), {
+        target: { value: "wells" },
+      });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Run" }));
+
+      const cancel = await waitFor(() => within(dialog).getByRole("button", { name: "Cancel" }));
+      fireEvent.click(cancel);
+
+      await waitFor(() =>
+        assert.ok(within(dialog).getByText("Cancelled. Nothing was added to the map.")),
+      );
+      assert.equal(within(dialog).queryByRole("button", { name: "Cancel" }), null);
+      assert.equal(
+        (within(dialog).getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled,
+        false,
+      );
+      assert.equal(terminated, 1);
+      assert.equal(useAppStore.getState().layers.length, 2);
+      assert.equal(useAppStore.getState().processingHistory.length, 0);
+    } finally {
+      if (originalWorker === undefined) delete (globalThis as { Worker?: typeof Worker }).Worker;
+      else globalThis.Worker = originalWorker;
+    }
+  });
+
+  it("drops a sidecar result that arrives after the run was cancelled", async () => {
+    let respond: (response: Response) => void = () => {};
+    renderDialog(true);
+    mockFetch(async (input) => {
+      if (String(input).endsWith("/vector/status")) {
+        return Response.json({ available: true, message: "" });
+      }
+      return new Promise<Response>((resolve) => {
+        respond = resolve;
+      });
+    });
+    useAppStore.setState({ processingHistory: [] });
+    const dialog = openTool("buffer");
+    fireEvent.change(engineSelect(dialog), { target: { value: "sidecar" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Input layer/), {
+      target: { value: "wells" },
+    });
+    const run = within(dialog).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    await waitFor(() => assert.equal(run.disabled, false));
+    fireEvent.click(run);
+
+    fireEvent.click(await waitFor(() => within(dialog).getByRole("button", { name: "Cancel" })));
+    await waitFor(() =>
+      assert.ok(within(dialog).getByText("Cancelled. Nothing was added to the map.")),
+    );
+
+    // The sidecar answers anyway; its result must not become a layer.
+    await act(async () => {
+      respond(
+        Response.json({
+          geojson: { type: "FeatureCollection", features: points.features },
+          messages: ["done"],
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.equal(useAppStore.getState().layers.length, 2);
+    assert.equal(within(dialog).queryByText("done"), null);
+    assert.equal(useAppStore.getState().processingHistory.length, 0);
+  });
+
   it("closes through the store when dismissed", () => {
     renderDialog();
     openTool("buffer");

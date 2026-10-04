@@ -81,6 +81,14 @@ describe("formatCoordinate", () => {
     assert.match(text, /\d+mN$/);
   });
 
+  it("applies the Norway and Svalbard zone exceptions like MGRS", () => {
+    // By longitude alone Bergen would be zone 31; MGRS (and so the readout)
+    // puts it in the widened zone 32V. Longyearbyen is in Svalbard's 33X.
+    assert.match(formatCoordinate(5.3221, 60.3913, "utm"), /^32V /);
+    assert.match(formatCoordinate(15.6356, 78.2232, "utm"), /^33X /);
+    assert.match(formatCoordinate(8.5, 78.2, "utm"), /^31X /);
+  });
+
   it("falls back to decimal degrees where UTM is undefined", () => {
     // UTM covers -80 to 84; the poles have no zone.
     const north = formatCoordinate(0, 89, "utm");
@@ -129,8 +137,10 @@ describe("formatCoordinate — MGRS and USNG (#2858)", () => {
   it("agrees with the UTM readout's easting and northing", () => {
     // MGRS digits are the UTM easting/northing truncated to the metre within
     // the 100 km square, so they must match the UTM projection the UTM readout
-    // uses wherever the zone is a regular one (not the Norway exceptions).
+    // uses, including inside the Norway/Svalbard zone exceptions.
     const points: [number, number][] = [
+      [5.3221, 60.3913], // Bergen (32V)
+      [15.6356, 78.2232], // Longyearbyen (33X)
       [MONUMENT_LNG, MONUMENT_LAT],
       [151.2153, -33.8568], // Sydney Opera House
       [-0.1276, 51.5072], // London

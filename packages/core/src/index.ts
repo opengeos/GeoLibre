@@ -47,6 +47,7 @@ export {
   applyStoryLayerOpacity,
   isStoryHiddenLayer,
   storyLayerOpacityFactor,
+  storyLocationView,
   storyVisibleLayers,
 } from "./storymap-playback";
 export {

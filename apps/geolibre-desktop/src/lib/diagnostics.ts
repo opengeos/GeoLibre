@@ -408,6 +408,43 @@ export function getDiagnosticsSnapshot(): DiagnosticsSnapshot {
  * Each caller must therefore invoke its cleanup exactly once (e.g. from a
  * useEffect cleanup or a single entry-point install as in main.tsx).
  */
+/** A completed fetch the capture saw: enough to judge a tile layer's health. */
+export interface NetworkResponseObservation {
+  url: string;
+  method: string;
+  status: number;
+}
+
+const networkResponseObservers = new Set<(observation: NetworkResponseObservation) => void>();
+
+/**
+ * Subscribes to every completed `fetch` response the capture sees (successful
+ * or not, logged or not), so a feature can follow request outcomes without
+ * re-patching `fetch`. Opaque responses carry no status and are not passed on.
+ * Only active while {@link installDiagnosticsCapture} is installed.
+ *
+ * @param listener - Called once per completed response. A throw is swallowed.
+ * @returns A function that unsubscribes.
+ */
+export function observeNetworkResponses(
+  listener: (observation: NetworkResponseObservation) => void,
+): () => void {
+  networkResponseObservers.add(listener);
+  return () => {
+    networkResponseObservers.delete(listener);
+  };
+}
+
+function emitNetworkResponse(observation: NetworkResponseObservation): void {
+  for (const listener of networkResponseObservers) {
+    try {
+      listener(observation);
+    } catch {
+      // An observer's bug must never fail the request it observed.
+    }
+  }
+}
+
 export function installDiagnosticsCapture(): () => void {
   captureRefCount += 1;
   if (captureCleanup) {
@@ -468,6 +505,7 @@ export function installDiagnosticsCapture(): () => void {
         status: response.status,
         url,
       });
+      if (!opaque) emitNetworkResponse({ url, method, status: response.status });
       return response;
     } catch (error) {
       const isAbort =

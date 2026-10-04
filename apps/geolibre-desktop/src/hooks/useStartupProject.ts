@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataUrlParameters, serviceUrlParameter, stacUrlParameter } from "../lib/data-url";
 import { isTauri } from "../lib/is-tauri";
+import { notify } from "../lib/notify";
 import { isViewerLayout } from "./useLayoutOptions";
 import { projectUrlFromLocation } from "../lib/project-url";
 import { planStartup, startupDefaultWorkspace, type StartupPlan } from "../lib/startup-project";
@@ -94,11 +95,9 @@ function applyDefaultWorkspace(
 }
 
 export function useStartupProject(): {
-  warning: string | null;
   restoring: boolean;
 } {
   const { t } = useTranslation();
-  const [hasWarning, setHasWarning] = useState(false);
   // Consume a direct-file export before the shell and MapCanvas mount. Loading
   // it here gives it the same startup precedence as a ?url= deep link and, more
   // importantly, prevents the default-workspace initializer from replacing it.
@@ -181,7 +180,6 @@ export function useStartupProject(): {
     const restoringOver = useAppStore.getState().projectGeneration;
 
     let cancelled = false;
-    let warningTimer: number | undefined;
     // Bounded gate: mount the shell over the default workspace if the restore
     // has not settled in time. The restore itself is left running -- it can
     // still land, guarded by `restoringOver`/`isDirty` below -- so a merely slow
@@ -242,8 +240,9 @@ export function useStartupProject(): {
         // is gone stays gone whoever owns the workspace now.
         const { projectGeneration, isDirty } = useAppStore.getState();
         if (projectGeneration !== restoringOver || isDirty) return;
-        setHasWarning(true);
-        warningTimer = window.setTimeout(() => setHasWarning(false), 8000);
+        // A warning toast (8 s, like the banner it replaced): the app is usable,
+        // just not with the project the user asked to start with.
+        notify.warning(t("settings.startup.loadWarning"), { dedupeKey: "startup-project" });
         openDefaultWorkspace();
       } finally {
         window.clearTimeout(gateTimer);
@@ -254,15 +253,11 @@ export function useStartupProject(): {
       cancelled = true;
       abortController.abort();
       window.clearTimeout(gateTimer);
-      if (warningTimer !== undefined) window.clearTimeout(warningTimer);
     };
     // Startup restoration is intentionally one-shot. In particular, changing
     // language must not reopen this project over the user's current workspace.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inlineProject, openedProjectPath]);
 
-  return {
-    warning: hasWarning ? t("settings.startup.loadWarning") : null,
-    restoring,
-  };
+  return { restoring };
 }

@@ -79,8 +79,9 @@ export function serializeStoryMapCsv(storymap: StoryMap): string {
         String(c.location.center[0]),
         String(c.location.center[1]),
         String(c.location.zoom),
-        String(c.location.pitch),
-        String(c.location.bearing),
+        // An absent pitch/bearing is an empty cell, not the string "undefined".
+        String(c.location.pitch ?? ""),
+        String(c.location.bearing ?? ""),
         c.mapAnimation,
         String(c.rotateAnimation),
         JSON.stringify(c.onChapterEnter),

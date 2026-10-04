@@ -41,7 +41,7 @@
     "gallery:check": "node scripts/gen-demo-gallery.mjs --check",
     "plugins:docs": "node scripts/gen-plugin-reference.mjs",
     "plugins:docs:check": "node scripts/gen-plugin-reference.mjs --check",
-    "typecheck:tests": "node scripts/check-test-typecheck.mjs --max-errors 1",
+    "typecheck:tests": "node scripts/check-test-typecheck.mjs --max-errors 0",
     "typecheck:fast": "npm run build -w @geolibre/embed && tsc -b apps/geolibre-desktop --noEmit",
     "ci:web": "npm run lint && npm run check:shared-deps && npm run i18n:tools:check && npm run gallery:check && npm run plugins:docs:check && npm run typecheck:fast && npm run typecheck:tests && npm run test:frontend",
     "ci": "npm run lint && npm run check:shared-deps && npm run ci:frontend && npm run typecheck:tests && npm run ci:backend && npm run check:rust",

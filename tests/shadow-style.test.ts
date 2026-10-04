@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { LayerSpecification, RasterLayerSpecification } from "maplibre-gl";
+import type { RasterLayerSpecification } from "maplibre-gl";
 import { createShadowStyle } from "../packages/map/src/shadow-style";
 
 function setup() {
@@ -18,14 +18,6 @@ const raster = (id: string, source: string): RasterLayerSpecification => ({
   type: "raster",
   source,
 });
-
-/**
- * A layer with an inline source object. The shadow style accepts these the way
- * MapLibre's `addLayer` does, but its `addLayer` is typed against
- * `LayerSpecification`, whose `source` is a string id.
- */
-const inlineLayer = (layer: Record<string, unknown>): LayerSpecification =>
-  layer as unknown as LayerSpecification;
 
 describe("shadow style", () => {
   it("records sources and layers and reads them back as MapLibre does", () => {
@@ -82,13 +74,11 @@ describe("shadow style", () => {
 
   it("registers an inline layer source under the layer id", () => {
     const { style } = setup();
-    style.addLayer(
-      inlineLayer({
-        id: "inline",
-        type: "circle",
-        source: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
-      }),
-    );
+    style.addLayer({
+      id: "inline",
+      type: "circle",
+      source: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+    });
     assert.equal(style.getSource("inline")?.type, "geojson");
     assert.equal((style.getLayer("inline") as { source: string }).source, "inline");
   });
@@ -132,7 +122,7 @@ describe("shadow style", () => {
     style.addLayer(raster("a", "s"));
     style.addLayer(raster("b", "s"), "missing");
     style.addLayer(
-      inlineLayer({ id: "inline", type: "circle", source: { type: "geojson", data: "x" } }),
+      { id: "inline", type: "circle", source: { type: "geojson", data: "x" } },
       "missing",
     );
     style.moveLayer("a", "missing");

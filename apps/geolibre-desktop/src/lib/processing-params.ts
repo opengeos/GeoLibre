@@ -12,7 +12,7 @@ import { subsetUrlToolKind } from "./subset-tool-url";
 import type { FileDialogFilter } from "./tauri-io";
 import { isDistanceParameterName, wgs84VectorLayerIds } from "./whitebox-distance-params";
 import { isFieldParameterName } from "./whitebox-field-params";
-import { parameterKind } from "./whitebox-param-kind";
+import { identifierWords, parameterKind } from "./whitebox-param-kind";
 
 /**
  * Pure parameter and output helpers for the Whitebox Processing dialog
@@ -42,12 +42,24 @@ export function isOutputParameter(param: WhiteboxToolParameter): boolean {
   return parameterKind(param).endsWith("_out");
 }
 
+// Byte offset of the "point data record format" field in a LAS 1.x public
+// header block. LASzip marks a compressed (LAZ) file by setting bit 7 of it.
+const LAS_POINT_FORMAT_OFFSET = 104;
+const LAZ_COMPRESSED_BIT = 0x80;
+
 /**
  * Best-effort extension for a binary tool output, sniffed from its magic bytes.
- * Covers the formats GeoLibre `file_out` and (CRS-preserving) `vector_out` tools
- * emit today (GeoTIFF, GeoParquet, FlatGeobuf, zipped Shapefile, PNG, PMTiles); a
- * genuinely opaque output falls back to `.bin`. Extend the sniff here if a
- * future tool writes a recognizable format.
+ * Covers the formats GeoLibre `file_out`, (CRS-preserving) `vector_out` and
+ * `lidar_out` tools emit today (GeoTIFF, GeoParquet, FlatGeobuf, zipped
+ * Shapefile, PNG, LAS/LAZ, PMTiles); a genuinely opaque output falls back to
+ * `.bin`. Extend the sniff here if a future tool writes a recognizable format.
+ *
+ * LAS and LAZ share the `LASF` signature, so the two are told apart by the
+ * compression bit LASzip sets on the header's point data format. A header too
+ * short to carry that field is reported as plain `.las`.
+ *
+ * @param bytes - The output's raw bytes.
+ * @returns A bare extension (no leading dot), `bin` when nothing matches.
  */
 export function fileOutputExtension(bytes: Uint8Array): string {
   const matches = (sig: number[]) => sig.every((b, i) => bytes[i] === b);
@@ -56,7 +68,11 @@ export function fileOutputExtension(bytes: Uint8Array): string {
   if (matches([0x66, 0x67, 0x62, 0x03])) return "fgb"; // FlatGeobuf "fgb\x03"
   if (matches([0x50, 0x4b, 0x03, 0x04])) return "zip"; // Shapefile bundle "PK\x03\x04"
   if (matches([0x89, 0x50, 0x4e, 0x47])) return "png";
-  if (matches([0x4c, 0x41, 0x53, 0x46])) return "las"; // "LASF" (LAS/LAZ)
+  if (matches([0x4c, 0x41, 0x53, 0x46])) {
+    // "LASF" (LAS/LAZ)
+    const pointFormat = bytes[LAS_POINT_FORMAT_OFFSET];
+    return pointFormat !== undefined && pointFormat & LAZ_COMPRESSED_BIT ? "laz" : "las";
+  }
   // "PMTiles"
   if (matches([0x50, 0x4d, 0x54, 0x69, 0x6c, 0x65, 0x73])) return "pmtiles";
   return "bin";
@@ -150,12 +166,45 @@ export function wgs84ToolLayerIds(
   );
 }
 
+// Name words that mark a free-text parameter as a filesystem path. `dir` is left
+// out on purpose: hydrology tools use it for flow *direction* (`flow_dir`).
+const PATH_NAME_WORDS = new Set([
+  "path",
+  "paths",
+  "file",
+  "files",
+  "filename",
+  "filenames",
+  "filepath",
+  "folder",
+  "folders",
+  "directory",
+  "directories",
+]);
+
+/**
+ * Whether a parameter takes a filesystem path, so the form renders a browse
+ * button beside its text box.
+ *
+ * Typed dataset inputs and outputs (`raster_in`, `file_out`, …) always do. Any
+ * other parameter qualifies only when it is free text (`string`): a number,
+ * bool or enum never takes a path, whatever its description says ("Rows per
+ * file" is a count). A string qualifies when a word of its name is path-like
+ * (`output_folder`, `inputFile`, `csv-path`) or its description/type uses one
+ * of the words path/file/folder/directory.
+ *
+ * @param param - A tool parameter from either catalog.
+ * @returns True when the parameter should get a path picker.
+ */
 export function isPathParameter(param: WhiteboxToolParameter): boolean {
-  const kind = parameterKind(param);
   if (isDataInputParameter(param) || isOutputParameter(param)) return true;
-  const text = `${param.name} ${param.description ?? ""} ${param.type ?? ""}`.toLowerCase();
+  if (parameterKind(param) !== "string") return false;
+  if (identifierWords(param.name ?? "").some((word) => PATH_NAME_WORDS.has(word))) return true;
+  const text = `${param.description ?? ""} ${param.type ?? ""}`.toLowerCase();
   return /\b(path|file|folder|directory)\b/.test(text);
 }
+
+const TEXT_FORMAT_WORDS = new Set(["csv", "json", "html", "txt", "xml"]);
 
 export function pathFiltersForParameter(param: WhiteboxToolParameter): FileDialogFilter[] {
   const kind = parameterKind(param);
@@ -183,7 +232,10 @@ export function pathFiltersForParameter(param: WhiteboxToolParameter): FileDialo
       },
     ];
   }
-  if (/\b(csv|json|html|txt|xml)\b/i.test(`${param.name} ${param.type ?? ""}`)) {
+  // A text format named by a word of the parameter's name (`csv`, `output_csv`,
+  // `reportHtml`) or its type; the description is not consulted.
+  const words = [...identifierWords(param.name ?? ""), ...identifierWords(param.type ?? "")];
+  if (words.some((word) => TEXT_FORMAT_WORDS.has(word))) {
     return [
       {
         name: "Files",
@@ -215,9 +267,19 @@ export function outputExtensionForParameter(param: WhiteboxToolParameter): strin
   return hint ? `.${hint}` : ".txt";
 }
 
+/**
+ * A suggested file name for a tool output, `<tool>_<param><ext>`, made safe for
+ * any filesystem: every run of non-alphanumeric characters (including runs of
+ * `_`, and the separator joining the two parts) collapses to a single `_`, and
+ * edge underscores are trimmed.
+ *
+ * @param toolId - The tool id (`whitebox` when empty).
+ * @param param - The output parameter (`output` when its name is empty).
+ * @returns The file name with the parameter's default extension.
+ */
 export function defaultOutputName(toolId: string, param: WhiteboxToolParameter): string {
   const stem = `${toolId || "whitebox"}_${param.name || "output"}`
-    .replace(/[^A-Za-z0-9_]+/g, "_")
+    .replace(/[^A-Za-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
   return `${stem || "whitebox_output"}${outputExtensionForParameter(param)}`;
 }

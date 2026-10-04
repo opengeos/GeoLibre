@@ -130,9 +130,14 @@ and the server ships untested.
 ## Conventions
 
 - Never commit directly to `main`; branch and open a PR.
-- Tauri CSP allowlists tile/style hosts (OpenFreeMap, CARTO) — new external
-  map/tile hosts must be added there. Map/tile-host CORS for selected release
-  assets is handled by a dev-server raster proxy.
+- CSP: `connect-src`/`img-src` allow any `https:` (desktop also `http:`), so a
+  new map/tile/service host needs no CSP change. `script-src` is pinned: the
+  desktop (`tauri.conf.json`) and web (`docker/nginx.conf`) CSPs list
+  version-specific jsDelivr paths that `tests/tauri-csp.test.ts` re-derives, so
+  a bump that moves a CDN script URL (or a new script host) must update both
+  files — see [`docs/maintenance.md`](docs/maintenance.md#desktop-csp-script-src-allowlist).
+  Map/tile-host CORS for selected release assets is handled by a dev-server
+  raster proxy.
 - For MapLibre control styling fixes, add scoped overrides in
   `apps/geolibre-desktop/src/index.css`, never edit `node_modules`.
 - UI strings are translatable via **react-i18next**; catalogs live in

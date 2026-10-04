@@ -555,6 +555,7 @@ export function usePluginLabelSync(): void {
       gridType: t("graticule.gridType"),
       typeGeographic: t("graticule.typeGeographic"),
       typeUtm: t("graticule.typeUtm"),
+      typeMgrs: t("graticule.typeMgrs"),
       spacing: t("graticule.spacing"),
       spacingAuto: t("graticule.spacingAuto"),
       spacingFixed: t("graticule.spacingFixed"),

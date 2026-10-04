@@ -1,9 +1,18 @@
 import type {
+  AddLayerObject,
+  CustomLayerInterface,
   FilterSpecification,
   LayerSpecification,
   SourceSpecification,
   StyleSpecification,
 } from "maplibre-gl";
+
+/**
+ * What `addLayer` accepts: MapLibre's own `AddLayerObject` (a layer whose
+ * `source` is a source id or an inline source spec) minus custom layers, which
+ * a style without a renderer cannot record.
+ */
+export type ShadowLayerInput = Exclude<AddLayerObject, CustomLayerInterface>;
 
 /**
  * A source as a control reads it back through `map.getSource(id)`: the spec's
@@ -27,7 +36,7 @@ export interface ShadowStyleMethods {
   removeSource: (id: string) => unknown;
   isSourceLoaded: (id: string) => boolean;
   areTilesLoaded: () => boolean;
-  addLayer: (layer: LayerSpecification, beforeId?: string) => unknown;
+  addLayer: (layer: ShadowLayerInput, beforeId?: string) => unknown;
   getLayer: (id: string) => LayerSpecification | undefined;
   removeLayer: (id: string) => unknown;
   moveLayer: (id: string, beforeId?: string) => unknown;
@@ -182,19 +191,23 @@ export function createShadowStyle(host: ShadowStyleHost): ShadowStyleMethods & {
     addLayer: (layer, beforeId) => {
       if (layerIndex(layer.id) >= 0) return fail(`Layer "${layer.id}" already exists.`);
       const source = "source" in layer ? layer.source : undefined;
-      let recorded = layer;
-      if (source && typeof source === "object") {
+      let recorded: LayerSpecification;
+      const inlineSource = Boolean(source && typeof source === "object");
+      if (inlineSource) {
         // MapLibre accepts an inline source spec and registers it under the
         // layer's id.
         if (sources.has(layer.id)) return fail(`Source "${layer.id}" already exists.`);
         sources.set(layer.id, { ...(source as Record<string, unknown>) });
         recorded = { ...layer, source: layer.id } as LayerSpecification;
-      } else if (typeof source === "string" && !sources.has(source)) {
-        return fail(`Source "${source}" not found.`);
+      } else {
+        if (typeof source === "string" && !sources.has(source)) {
+          return fail(`Source "${source}" not found.`);
+        }
+        recorded = layer as LayerSpecification;
       }
       const at = insertAt(beforeId);
       if (at === null) {
-        if (recorded !== layer) sources.delete(layer.id);
+        if (inlineSource) sources.delete(layer.id);
         return fail(`Cannot add layer "${layer.id}" before non-existing layer "${beforeId}".`);
       }
       layers.splice(at, 0, structuredClone(recorded));

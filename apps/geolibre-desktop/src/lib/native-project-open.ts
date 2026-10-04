@@ -1,4 +1,21 @@
+import i18next from "i18next";
+import { afterI18nInit } from "./after-i18n-init";
 import { isTauri } from "./is-tauri";
+import { notify } from "./notify";
+
+/**
+ * Tells the user that a project file the operating system handed over (a
+ * double-click, "Open with") could not be picked up, so nothing opening is not
+ * a mystery.
+ */
+function notifyProjectPathsUnreadable(error: unknown): void {
+  afterI18nInit(() =>
+    notify.error(i18next.t("notifications.nativeProjectPathFailed"), {
+      dedupeKey: "native-project-paths",
+      error,
+    }),
+  );
+}
 
 const OPEN_PROJECT_FILES_EVENT = "open-project-files";
 
@@ -19,6 +36,7 @@ export async function initializeNativeProjectOpen(): Promise<void> {
     deferredPaths.push(...paths.slice(1));
   } catch (error) {
     console.error("[GeoLibre] Could not read project paths supplied at launch", error);
+    notifyProjectPathsUnreadable(error);
   }
 }
 
@@ -56,6 +74,7 @@ export async function listenForNativeProjectOpen(
           paths.push(...(await takePendingProjectPaths()));
         } catch (error) {
           console.error("[GeoLibre] Could not read an opened project path", error);
+          notifyProjectPathsUnreadable(error);
         }
         for (const path of paths) {
           if (disposed) return;

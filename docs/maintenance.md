@@ -761,14 +761,21 @@ When `maplibre-gl-vector` changes a CDN URL, the test's
 paths by listing each new bundle's imports, for example
 `curl -s https://cdn.jsdelivr.net/npm/vt-pbf@3.1.3/+esm | grep -o '/npm/[^"]*'`,
 recursing into each result, then update `ESM_TRANSITIVE_PATHS` and the CSP
-together. The nginx CSP for the web build (`docker/nginx.conf`) is separate and
-still allows all of jsDelivr.
+together.
 
-A self-hosted `VITE_PYODIDE_INDEX_URL` mirror needs no CSP change:
-`pyodide-console.ts` fetches the mirror's entry scripts and runs them from
-`blob:` URLs, and the vector-tools worker is not under the CSP. A rebuilt app
-that loads scripts from any other host needs that host's path added to
-`script-src`.
+The web build's CSP (the app `location /` in `docker/nginx.conf`) lists exactly
+the same pinned paths, and the test fails when the two lists disagree, so update
+both files in the same change. There too the app's own worker files carry no
+CSP: nginx serves `.js` files from the static-asset location, which sends none.
+The JupyterLite location allows only `pyodide/` from jsDelivr, unpinned: the
+site's Pyodide comes from whichever `jupyterlite-pyodide-kernel` release pip
+resolves when the image is built.
+
+A self-hosted `VITE_PYODIDE_INDEX_URL` mirror needs no CSP change in either
+build: `pyodide-console.ts` fetches the mirror's entry scripts and runs them
+from `blob:` URLs, and the vector-tools worker is not under the CSP. A rebuilt
+app that loads scripts from any other host needs that host's path added to
+`script-src` in both files.
 
 **`'unsafe-eval'` stays.** `maplibre-gl-vector` builds its CDN loader with
 `new Function("url", "return import(url)")` at module scope, and that module is

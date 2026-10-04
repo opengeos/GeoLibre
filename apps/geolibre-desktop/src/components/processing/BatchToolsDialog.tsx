@@ -29,7 +29,8 @@ import {
   translateToolName,
 } from "../../lib/processing-tool-i18n";
 import { ParameterField } from "./ParameterField";
-import { Loader2, Play } from "lucide-react";
+import { Loader2, Play, Square } from "lucide-react";
+import { rejectOnAbort } from "../../lib/abortable";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 interface BatchToolsDialogProps {
@@ -209,6 +210,10 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  // Cancels the in-flight batch: the Cancel button, closing the dialog, or
+  // starting another batch. A worker-run tool is stopped (its worker is
+  // terminated); the remaining inputs are skipped.
+  const abortRef = useRef<AbortController | null>(null);
 
   const appendLog = useCallback((message: string) => setLog((prev) => [...prev, message]), []);
 
@@ -300,24 +305,34 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
       }
     }
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const { signal } = controller;
     setRunning(true);
     const host: RunnerHost = {
       layers,
-      log: appendLog,
+      // A cancelled run's late log lines (an inline tool still finishing) are
+      // dropped rather than mixed into the next run's log.
+      log: (message) => {
+        if (!signal.aborted) appendLog(message);
+      },
       duckdb,
       viewportBounds: viewportBoundsReader(mapControllerRef),
+      signal,
     };
+    let produced = 0;
     try {
-      let produced = 0;
       for (const id of selectedIds) {
         const layer = layers.find((l) => l.id === id);
         if (!layer) continue;
         appendLog(`Running "${tool.name}" on ${layer.name}...`);
-        const output = await runAlgorithmCapture(
-          tool,
-          { ...params, [PRIMARY_INPUT_PARAM]: id },
-          host,
-        );
+        // Race the abort so a cancel settles at once even for a tool that
+        // cannot be interrupted; its output is then never added.
+        const output = await Promise.race([
+          runAlgorithmCapture(tool, { ...params, [PRIMARY_INPUT_PARAM]: id }, host),
+          rejectOnAbort(signal),
+        ]);
         if (output && output.features.length) {
           addGeoJsonLayer(`${tool.name}: ${layer.name}`, output);
           produced++;
@@ -327,9 +342,19 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
       }
       appendLog(`Batch complete: ${produced}/${selectedIds.length} layer(s) produced output`);
     } catch (error) {
+      // Cancelled: layers from inputs that already finished stay (each is a
+      // complete result); the one in flight is dropped. A newer run that
+      // replaced this one reports for itself.
+      if (signal.aborted) {
+        if (abortRef.current === null) {
+          appendLog(t("processing.batchTools.cancelled", { produced, total: selectedIds.length }));
+        }
+        return;
+      }
       appendLog(`Error: ${(error as Error).message}`);
     } finally {
-      setRunning(false);
+      if (abortRef.current === controller) abortRef.current = null;
+      if (abortRef.current === null) setRunning(false);
     }
   }, [
     selectedIds,
@@ -341,7 +366,18 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
     mapControllerRef,
     tool,
     addGeoJsonLayer,
+    t,
   ]);
+
+  const handleCancel = useCallback(() => {
+    const controller = abortRef.current;
+    abortRef.current = null;
+    controller?.abort();
+  }, []);
+
+  // Closing the dialog unmounts this panel: stop the run with it, so a batch
+  // does not keep adding layers behind a closed dialog.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   return (
     <div className="flex flex-col gap-3">
@@ -422,11 +458,17 @@ function BatchPanel({ mapControllerRef }: BatchToolsDialogProps): ReactElement {
         </div>
       </div>
 
-      <div>
+      <div className="flex gap-2">
         <Button onClick={handleRun} disabled={running} className="gap-2">
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {t("processing.batchTools.runBatch")}
         </Button>
+        {running ? (
+          <Button variant="outline" onClick={handleCancel} className="gap-2">
+            <Square className="h-4 w-4" />
+            {t("processing.batchTools.cancel")}
+          </Button>
+        ) : null}
       </div>
 
       <LogView log={log} />

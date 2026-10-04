@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, describe, it, mock } from "node:test";
 import type { Feature, FeatureCollection } from "geojson";
 import { DEFAULT_LAYER_STYLE, setActiveEllipsoidId, type GeoLibreLayer } from "@geolibre/core";
 import {
   VECTOR_TOOLS,
   WORKER_VECTOR_TOOL_IDS,
+  VECTOR_TOOL_WORKER_IDLE_MS,
   canRunVectorToolOnWorker,
+  disposeVectorToolWorker,
   getVectorTool,
   runAlgorithmCapture,
   runAlgorithmInBackground,
+  runModel,
   type ProcessingAlgorithm,
   type ProcessingContext,
 } from "@geolibre/processing";
@@ -90,6 +93,8 @@ function installFakeWorker() {
 }
 
 afterEach(() => {
+  // A clean run parks its worker; drop it so the next test spawns its own.
+  disposeVectorToolWorker();
   if (originalWorker === undefined) delete (globalThis as { Worker?: typeof Worker }).Worker;
   else globalThis.Worker = originalWorker;
   setActiveEllipsoidId("earth");
@@ -236,7 +241,8 @@ describe("runAlgorithmInBackground", () => {
       assert.ok(direct.length > 0);
       assert.deepEqual(worker, direct);
       assert.equal(spawned, 1);
-      assert.equal(terminated, 1);
+      // A clean run parks its worker for the next one instead of terminating it.
+      assert.equal(terminated, 0);
     });
   }
 
@@ -375,7 +381,8 @@ describe("runAlgorithmInBackground", () => {
     const background = recordingContext({ layer: "bogus" }, [BOGUS_LAYER]);
     await assert.rejects(runAlgorithmInBackground(tool, background.ctx), { message });
     assert.deepEqual(background.calls, direct.calls);
-    assert.equal(terminated, 1);
+    // The tool failed, not the worker: it finished the run and stays warm.
+    assert.equal(terminated, 0);
   });
 
   it("falls back inline when the worker cannot be constructed", async () => {
@@ -415,6 +422,189 @@ describe("runAlgorithmInBackground", () => {
       { layers: LAYERS, log: () => {} },
     );
     assert.equal(output?.features.length, 3);
+    assert.equal(spawned, 1);
+  });
+});
+
+/**
+ * A fake worker that runs the tool but withholds its `done`, so a test can
+ * abort a run whose results have already arrived on the main thread.
+ */
+class StallingWorker extends FakeWorker {
+  /** Called once the run's last result message has reached the main thread. */
+  static resultsArrived: () => void = () => {};
+  constructor() {
+    super();
+    super.addEventListener("message", (event: MessageEvent) => {
+      if ((event.data as { type?: string }).type === "result-end") StallingWorker.resultsArrived();
+    });
+  }
+  override addEventListener(type: string, listener: (event: MessageEvent) => void) {
+    if (type !== "message") return super.addEventListener(type, listener);
+    super.addEventListener(type, (event) => {
+      if ((event.data as { type?: string }).type === "done") return;
+      listener(event);
+    });
+  }
+}
+
+describe("runAlgorithmInBackground cancellation", () => {
+  it("leaves the context untouched when aborted after the results arrived", async () => {
+    globalThis.Worker = StallingWorker as unknown as typeof Worker;
+    const arrived = new Promise<void>((resolve) => {
+      StallingWorker.resultsArrived = resolve;
+    });
+    const controller = new AbortController();
+    const { ctx, calls } = recordingContext({ layer: "pts", distance: 25, units: "kilometers" });
+    ctx.signal = controller.signal;
+    const run = runAlgorithmInBackground(getVectorTool("buffer")!, ctx);
+    await arrived;
+    controller.abort();
+    await assert.rejects(run, { name: "AbortError" });
+    assert.deepEqual(calls, [], "no log, result layer or fitBounds from a cancelled run");
+    assert.equal(terminated, 1);
+  });
+
+  it("does not add a result when aborted while the inputs are still being posted", async () => {
+    installFakeWorker();
+    const big = layer(
+      "big",
+      Array.from({ length: VECTOR_TOOL_CHUNK_FEATURES * 3 }, (_, i) =>
+        point(i % 10, Math.floor(i / 10) % 10, { i }),
+      ),
+    );
+    const controller = new AbortController();
+    const { ctx, calls } = recordingContext({ layer: "big" }, [big]);
+    ctx.signal = controller.signal;
+    const run = runAlgorithmInBackground(getVectorTool("centroids")!, ctx);
+    // Abort once the first input chunk is on its way, before `run` is posted.
+    while (!toWorker.some((message) => message.type === "layer-features")) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    controller.abort();
+    await assert.rejects(run, { name: "AbortError" });
+    assert.deepEqual(calls, []);
+    assert.equal(
+      toWorker.some((message) => message.type === "run"),
+      false,
+    );
+    assert.equal(terminated, 1);
+  });
+
+  it("spawns a fresh worker for the run after an aborted one", async () => {
+    installFakeWorker();
+    // Warm a worker with a clean run first.
+    await runAlgorithmInBackground(
+      getVectorTool("centroids")!,
+      recordingContext({ layer: "polys" }).ctx,
+    );
+    assert.equal(spawned, 1);
+    const controller = new AbortController();
+    const aborted = recordingContext({ layer: "polys" });
+    aborted.ctx.signal = controller.signal;
+    const run = runAlgorithmInBackground(getVectorTool("centroids")!, aborted.ctx);
+    controller.abort();
+    await assert.rejects(run, { name: "AbortError" });
+    // The aborted run used (and killed) the warm worker.
+    assert.equal(spawned, 1);
+    assert.equal(terminated, 1);
+    const next = recordingContext({ layer: "polys" });
+    await runAlgorithmInBackground(getVectorTool("centroids")!, next.ctx);
+    assert.equal(spawned, 2);
+    assert.equal(next.calls.filter(([kind]) => kind === "addResultLayer").length, 1);
+  });
+});
+
+describe("warm vector tool worker", () => {
+  it("reuses one worker for consecutive runs, with identical results", async () => {
+    installFakeWorker();
+    for (const [toolId, parameters] of CASES.slice(0, 6)) {
+      const tool = getVectorTool(toolId)!;
+      const direct = recordingContext(parameters);
+      await tool.run(direct.ctx);
+      const background = recordingContext(parameters);
+      await runAlgorithmInBackground(tool, background.ctx);
+      assert.deepEqual(background.calls, direct.calls, toolId);
+    }
+    assert.equal(spawned, 1);
+    assert.equal(terminated, 0);
+  });
+
+  it("does not carry one run's input layers into the next", async () => {
+    const posted: VectorToolWorkerMessage[] = [];
+    const handle = createVectorToolSession((message) => posted.push(message));
+    await handle({ type: "layer", layer: { ...POLYS } });
+    const run = {
+      type: "run" as const,
+      toolId: "centroids",
+      parameters: { layer: "polys" },
+      viewportBounds: null,
+      ellipsoidId: "earth",
+    };
+    await handle(run);
+    assert.ok(posted.some((message) => message.type === "result-start"));
+    // The same run again without re-sending the layer: the session no longer
+    // has it, exactly as a fresh worker would not.
+    const fresh: VectorToolWorkerMessage[] = [];
+    await createVectorToolSession((message) => fresh.push(message))(run);
+    posted.length = 0;
+    await handle(run);
+    assert.deepEqual(posted, fresh);
+    assert.ok(!posted.some((message) => message.type === "result-start"));
+  });
+
+  it("terminates the parked worker after the idle timeout", async () => {
+    installFakeWorker();
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      await runAlgorithmInBackground(
+        getVectorTool("centroids")!,
+        recordingContext({ layer: "polys" }).ctx,
+      );
+      assert.equal(terminated, 0);
+      mock.timers.tick(VECTOR_TOOL_WORKER_IDLE_MS - 1);
+      assert.equal(terminated, 0);
+      mock.timers.tick(1);
+      assert.equal(terminated, 1);
+    } finally {
+      mock.timers.reset();
+    }
+    await runAlgorithmInBackground(
+      getVectorTool("centroids")!,
+      recordingContext({ layer: "polys" }).ctx,
+    );
+    assert.equal(spawned, 2);
+  });
+
+  it("keeps one warm worker when runs overlap", async () => {
+    installFakeWorker();
+    await Promise.all([
+      runAlgorithmInBackground(
+        getVectorTool("centroids")!,
+        recordingContext({ layer: "polys" }).ctx,
+      ),
+      runAlgorithmInBackground(getVectorTool("explode")!, recordingContext({ layer: "polys" }).ctx),
+    ]);
+    assert.equal(spawned, 2);
+    assert.equal(terminated, 1);
+  });
+
+  it("serves a chained Model Builder run from one worker", async () => {
+    installFakeWorker();
+    const results = await runModel(
+      {
+        id: "m",
+        name: "chain",
+        steps: [
+          { id: "s1", toolId: "centroids", parameters: { layer: "polys" } },
+          { id: "s2", toolId: "buffer", parameters: { distance: 10, units: "kilometers" } },
+          { id: "s3", toolId: "convex-hull", parameters: {} },
+        ],
+      },
+      { layers: LAYERS, log: () => {} },
+    );
+    assert.equal(results.length, 3);
+    assert.ok(results.every((result) => !result.error && result.output));
     assert.equal(spawned, 1);
   });
 });
@@ -462,4 +652,51 @@ describe("WORKER_VECTOR_TOOL_IDS", () => {
     const ids = new Set(VECTOR_TOOLS.map((tool) => tool.id));
     for (const id of WORKER_VECTOR_TOOL_IDS) assert.ok(ids.has(id), id);
   });
+
+  it("is the reviewed worker-safe list", () => {
+    assert.deepEqual([...WORKER_VECTOR_TOOL_IDS].sort(), [
+      "aggregate",
+      "attribute-join",
+      "bounding-box",
+      "buffer",
+      "cell-sectors",
+      "centroids",
+      "clip",
+      "convex-hull",
+      "decode-polyline",
+      "detect-stops",
+      "difference",
+      "dissolve",
+      "encode-polyline",
+      "explode",
+      "extract-vertices",
+      "grid",
+      "intersection",
+      "merge-layers",
+      "points-along-geometry",
+      "random-extract",
+      "select-by-location",
+      "select-by-value",
+      "simplify",
+      "smooth",
+      "space-time-proximity",
+      "spatial-join",
+      "trajectory-speed",
+      "union",
+      "voronoi",
+    ]);
+  });
+
+  it("resolves each id to the registry's own tool", () => {
+    for (const id of WORKER_VECTOR_TOOL_IDS) {
+      const tool = getVectorTool(id);
+      assert.ok(tool && canRunVectorToolOnWorkerWhenAvailable(tool), id);
+    }
+  });
 });
+
+/** canRunVectorToolOnWorker with a Worker constructor present. */
+function canRunVectorToolOnWorkerWhenAvailable(tool: ProcessingAlgorithm): boolean {
+  installFakeWorker();
+  return canRunVectorToolOnWorker(tool);
+}

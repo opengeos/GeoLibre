@@ -1,8 +1,9 @@
 /// <reference lib="webworker" />
 // Runs the Turf.js vector tools off the main thread (#2858). Turf has no yield
 // points, so a buffer or overlay over a large layer held the UI for the whole
-// run. One run per worker: vector-tool-runner.ts spawns this for a run and
-// terminates it afterwards (or on abort), so no state carries over.
+// run. vector-tool-runner.ts keeps one of these warm between runs and
+// terminates it on abort or after an idle timeout; the session drops each run's
+// layers when the run ends, so nothing but the loaded modules carries over.
 import {
   createVectorToolSession,
   type VectorToolWorkerMessage,

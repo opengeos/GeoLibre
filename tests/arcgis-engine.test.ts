@@ -35,12 +35,14 @@ import { geojsonLayer } from "./helpers/layer-fixtures";
 // how a hit test resolves back to the app's feature identity.
 
 /**
- * A story chapter location with no bearing or pitch. The type marks both
- * required, but the engine reads them as optional and leaves the camera's
- * orientation alone when they are absent, which is what these tests rely on.
+ * A story chapter location with no bearing or pitch. The engine leaves the
+ * camera's orientation alone when they are absent, which is what these tests
+ * rely on.
  */
-const chapterAt = (center: [number, number], zoom: number) =>
-  ({ center, zoom }) as StoryChapterLocation;
+const chapterAt = (center: [number, number], zoom: number): StoryChapterLocation => ({
+  center,
+  zoom,
+});
 
 interface FakeLayer extends ArcgisLayer {
   kind: string;

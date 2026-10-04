@@ -7,6 +7,7 @@ import {
   type MapViewState,
   type StoryChapterAnimation,
   type StoryChapterLocation,
+  storyLocationView,
 } from "@geolibre/core";
 import type { Cartesian2, CesiumWidget, PointPrimitiveCollection } from "@cesium/engine";
 import type { FeatureCollection, Point, Polygon } from "geojson";
@@ -385,8 +386,16 @@ export class CesiumEngine implements MapEngine {
     const onDiagnostic = options.onDiagnostic;
     this.layerSync = new CesiumLayerSync(Cesium, viewer, undefined, {
       onTilesetFields: publishTilesetFields,
-      onLayerError: ({ layerName, message }) =>
-        onDiagnostic?.({ message: `${layerName}: ${message}`, source: "cesium" }),
+      onLayerError: ({ layerId, layerName, message }) =>
+        onDiagnostic?.({ message: `${layerName}: ${message}`, source: "cesium", layerId }),
+      onTileFailure: ({ layerId, layerName, message, status, loaded, failed }) =>
+        onDiagnostic?.({
+          message: `${layerName}: ${message}`,
+          source: "cesium",
+          layerId,
+          status,
+          tiles: { loaded, failed },
+        }),
     });
     this.terrainExaggeration = viewer.scene.verticalExaggeration ?? 1;
     this.installInputTracking();
@@ -498,7 +507,7 @@ export class CesiumEngine implements MapEngine {
 
   /** Animate to a story-chapter location. See {@link easeToView} on the arc. */
   flyToView(location: StoryChapterLocation): void {
-    this.animateTo(location, FLY_SECONDS);
+    this.animateTo(storyLocationView(location, this.readView()), FLY_SECONDS);
   }
 
   applyStoryChapterCamera(
@@ -508,11 +517,13 @@ export class CesiumEngine implements MapEngine {
   ): void {
     // Auto-rotation is MapLibre-only for now: it drives a per-frame bearing tick
     // against the 2D map, and the globe has no equivalent hook yet.
+    // An absent pitch/bearing keeps the current one, as MapLibre does.
+    const view = storyLocationView(location, this.readView());
     if (animation === "jumpTo") {
-      this.applyView(location);
+      this.applyView(view);
       return;
     }
-    this.animateTo(location, animation === "easeTo" ? EASE_SECONDS : FLY_SECONDS);
+    this.animateTo(view, animation === "easeTo" ? EASE_SECONDS : FLY_SECONDS);
   }
 
   flyTo(camera: FlyToCamera): void {

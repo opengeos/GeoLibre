@@ -81,6 +81,7 @@ import {
   type SupportedLayerKinds,
 } from "./layer-kind";
 import { getPMTilesArchive } from "./pmtiles-archive";
+import { watchImageryTileHealth, type ImageryTileFailure } from "./cesium-imagery-tile-health";
 import { renderMarkerCanvas } from "./markers";
 import { normalizePMTilesUrl } from "./pmtiles-layer";
 import type { Header as PMTilesHeader } from "pmtiles";
@@ -295,6 +296,8 @@ interface LayerEntry {
   abort?: AbortController;
   /** Removes the one-shot tile listener that reads a tileset's attribute names. */
   fieldsListener?: () => void;
+  /** Stops counting an imagery entry's tile loads and failures. */
+  tileHealth?: () => void;
   documentCleanup?: () => void;
   overlayContainer?: HTMLElement;
   /** Static attribution registered for this layer while it is in the scene. */
@@ -945,6 +948,13 @@ export interface CesiumLayerSyncDeps {
    * nothing — the shape an Ion asset takes when the account cannot stream it.
    */
   onLayerError?: (error: { layerId: string; layerName: string; message: string }) => void;
+  /**
+   * Reports one failed imagery tile with the layer's tile tallies so far, so
+   * the app can tell a broken URL or a rejected key (every tile fails) from a
+   * sparse tile set (some tiles are simply absent). Capped per layer; see
+   * `cesium-imagery-tile-health.ts`.
+   */
+  onTileFailure?: (failure: ImageryTileFailure & { layerId: string; layerName: string }) => void;
 }
 
 async function readSharedPMTilesHeader(url: string): Promise<PMTilesRasterHeader | undefined> {
@@ -2879,6 +2889,8 @@ export class CesiumLayerSync {
       // drawing.
       if (this.entries.get(entry.layer.id) === entry) {
         entry.cancelled = true;
+        entry.tileHealth?.();
+        entry.tileHealth = undefined;
         if (entry.handle) {
           viewer.imageryLayers.remove(entry.handle as ImageryLayer, true);
           entry.handle = null;
@@ -3094,6 +3106,14 @@ export class CesiumLayerSync {
     }
     this.imageryRefs.set(imageryLayer, layer.id);
     entry.handle = imageryLayer;
+    const onTileFailure = this.deps.onTileFailure;
+    if (onTileFailure)
+      entry.tileHealth = watchImageryTileHealth(provider, (failure) => {
+        // A rebuilt entry's provider can still settle tiles; only the current
+        // one speaks for the layer.
+        if (this.entries.get(layer.id) !== entry) return;
+        onTileFailure({ ...failure, layerId: layer.id, layerName: layer.name });
+      });
     this.applyAppearance(entry);
     if (isAsync) {
       // Unlike sync()'s reorder this one is unguarded, since the store order
@@ -4061,6 +4081,8 @@ export class CesiumLayerSync {
     }
     entry.fieldsListener?.();
     entry.fieldsListener = undefined;
+    entry.tileHealth?.();
+    entry.tileHealth = undefined;
     this.storyOpacities.delete(entry.layer.id);
     const { handle } = entry;
     if (!handle) return;

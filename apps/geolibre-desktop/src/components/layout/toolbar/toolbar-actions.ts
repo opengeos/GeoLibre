@@ -18,8 +18,10 @@ import {
   openZarrLayerPanel,
   STAC_PLUGIN_ID,
 } from "@geolibre/plugins";
+import { useAppStore } from "@geolibre/core";
 import { rendererCapabilities, resetPrimaryCesiumBuiltInControlState } from "@geolibre/map";
 import { getPluginManager } from "../../../hooks/usePlugins";
+import { isMaptoolkitBasemapActive } from "../../../lib/maptoolkit-basemap";
 import { clearScriptMapControls } from "../../../lib/scripting/ui-controls";
 import type { AddDataKind } from "../AddDataDialog";
 import {
@@ -27,7 +29,9 @@ import {
   type AddLayerHandlers,
   type AppApi,
   type MapControllerRef,
-  NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS,
+  newProjectBuiltInControlVisible,
+  newProjectToolbarControlVisibility,
+  type ToolbarMapControl,
 } from "./constants";
 
 interface AddLayerHandlerDeps {
@@ -84,16 +88,20 @@ export function createAddLayerHandlers({
 
 /**
  * Closes the runtime plugin panels and puts every built-in map control back to
- * its new-project default on the live engine. The caller resets the Controls
- * menu's checkmarks to match.
+ * its new-project default on the live engine.
+ *
+ * Runs after the new project is in the store, so the Maptoolkit logo follows
+ * the basemap it opened with (see {@link newProjectBuiltInControlVisible}).
  *
  * @param appApi - The live app API the panels are driven through.
  * @param mapControllerRef - The live map engine.
+ * @returns The Controls menu's checkmarks matching what was applied, for the
+ *   caller to show.
  */
 export function resetRuntimeControlsForNewProject(
   appApi: AppApi,
   mapControllerRef: MapControllerRef,
-): void {
+): Record<ToolbarMapControl, boolean> {
   closeMaplibreComponentControls(appApi);
   closeRasterLayerPanel(appApi);
   closeVectorLayerPanel(appApi);
@@ -113,10 +121,12 @@ export function resetRuntimeControlsForNewProject(
   for (const control of ALL_BUILT_IN_CONTROL_IDS) {
     mapControllerRef.current?.setBuiltInControlPosition(control, "top-right");
   }
+  const { basemapStyleUrl, layers } = useAppStore.getState();
+  const maptoolkitBasemapActive = isMaptoolkitBasemapActive(basemapStyleUrl, layers);
   for (const control of ALL_BUILT_IN_CONTROL_IDS) {
     mapControllerRef.current?.setBuiltInControlVisible(
       control,
-      NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS.has(control),
+      newProjectBuiltInControlVisible(control, maptoolkitBasemapActive),
     );
   }
   // New Project resets every control to its default, so an earlier scripted
@@ -126,4 +136,5 @@ export function resetRuntimeControlsForNewProject(
   // right after this call. A widget project push does not come through here,
   // so it still keeps the controls a script set.
   clearScriptMapControls();
+  return newProjectToolbarControlVisibility(maptoolkitBasemapActive);
 }

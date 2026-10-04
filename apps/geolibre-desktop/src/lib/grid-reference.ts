@@ -12,6 +12,7 @@
 
 import { utmToLngLat } from "@geolibre/plugins/maplibre-graticule";
 import { parseMgrsReference, utmBandRange } from "@geolibre/plugins/mgrs-reference";
+import { parseLatLon } from "./coordinates";
 
 /** A grid reference resolved to a point. */
 export interface GridReferenceMatch {
@@ -155,4 +156,32 @@ export function parseMgrsInput(text: string): GridReferenceMatch | null {
  */
 export function parseGridReference(text: string): GridReferenceMatch | null {
   return parseMgrsInput(text) ?? parseUtmReference(text);
+}
+
+/** A typed location read as either a lat/lon or a grid reference. */
+export interface LocationInputMatch {
+  /** How the text was read. */
+  kind: "latlon" | GridReferenceMatch["kind"];
+  lat: number;
+  lon: number;
+}
+
+/**
+ * Parse a typed location the way the place search does: a grid reference
+ * (MGRS, USNG or UTM) first, then a lat/lon in DD, DMS or DDM. Grid references
+ * go first because a UTM zone letter (`18S 323394 4307395`) would otherwise be
+ * read as a hemisphere by the lat/lon parser. Used by the Set View dialog's
+ * paste box so it accepts the same inputs as the search box.
+ *
+ * Args:
+ *   text: The text to parse.
+ *
+ * Returns:
+ *   The point and how it was read, or null when the text is neither.
+ */
+export function parseLocationInput(text: string): LocationInputMatch | null {
+  const grid = parseGridReference(text);
+  if (grid) return { kind: grid.kind, lat: grid.lat, lon: grid.lon };
+  const coord = parseLatLon(text);
+  return coord ? { kind: "latlon", lat: coord.lat, lon: coord.lon } : null;
 }

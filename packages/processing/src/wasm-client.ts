@@ -7,7 +7,11 @@
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
 import { convertGeoTiffToCog } from "./cog-convert";
-import { isMultipleWhiteboxDatasetParameter, normalizeVectorOutputFormat } from "./sidecar-client";
+import {
+  identifierWords,
+  isMultipleWhiteboxDatasetParameter,
+  normalizeVectorOutputFormat,
+} from "./sidecar-client";
 import { runWasmToolInBackground } from "./wasm-tool-runner";
 import type {
   RunWhiteboxToolRequest,
@@ -418,6 +422,19 @@ export function fileOutputTargetExtension(
 }
 
 /**
+ * The extension the WASM runner asks a `lidar_out` tool to write. Whitebox
+ * picks its LiDAR writer from the output extension, so a user-typed `.laz`
+ * path gets LASzip-compressed output; anything else (blank, `.las`, an
+ * unrecognized extension) keeps the uncompressed `.las` default.
+ *
+ * @param requested - The user-chosen output path, if any.
+ * @returns `laz` or `las`.
+ */
+export function lidarOutputTargetExtension(requested: unknown): "las" | "laz" {
+  return typeof requested === "string" && /\.laz$/i.test(requested.trim()) ? "laz" : "las";
+}
+
+/**
  * The text/tabular output format a `file_out` parameter declares through its
  * name, description, or `table` data kind, as a bare extension (`csv`/`html`/
  * `json`/...), or `null` when nothing recognizable is found. Shared by the
@@ -439,7 +456,10 @@ export function outputTextFormatHint(param: WhiteboxToolParameter): string | nul
   // tolerance of 0.5 recommended") cannot be mistaken for an extension.
   const recommended = (param.description ?? "").match(/\.([a-z][a-z0-9]*)\s+recommended/i);
   if (recommended) return recommended[1].toLowerCase();
-  const hint = `${param.name ?? ""} ${param.description ?? ""} ${param.type ?? ""}`;
+  // Split the name into words first: `_` is a word character, so `\bcsv\b`
+  // alone never matches inside `output_csv`.
+  const nameWords = identifierWords(param.name ?? "").join(" ");
+  const hint = `${nameWords} ${param.description ?? ""} ${param.type ?? ""}`;
   if (/\bcsv\b/i.test(hint)) return "csv";
   if (/\bhtml\b/i.test(hint)) return "html";
   if (/\bjson\b/i.test(hint)) return "json";
@@ -816,8 +836,11 @@ export async function runWhiteboxToolWasm(request: RunWhiteboxToolRequest): Prom
       }
     } else if (kind === "lidar_out") {
       // LiDAR outputs come back as raw LAS bytes (e.g. a classified copy of the
-      // input); callers decide whether to load or parse them.
-      const file = `${outputBaseName(request.tool_id, name)}.las`;
+      // input); callers decide whether to load or parse them. The tool picks
+      // its writer from the extension, so honour a user-typed `.laz` (LASzip
+      // compressed) instead of always asking for uncompressed `.las`.
+      const ext = lidarOutputTargetExtension(request.parameters[name]);
+      const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
       outputs.push({ name, file, kind: "bytes" });
       args.push(`--${name}=/work/${file}`);
     } else if (kind === "raster_out" || kind === "file_out") {

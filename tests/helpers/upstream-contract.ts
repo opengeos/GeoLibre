@@ -27,7 +27,8 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
  * @returns The absolute package directory.
  */
 export function packageDir(name: string, workspace = "."): string {
-  for (const base of [path.join(REPO_ROOT, workspace), REPO_ROOT]) {
+  // A Set, so the default workspace (the root itself) is checked once.
+  for (const base of new Set([path.join(REPO_ROOT, workspace), REPO_ROOT])) {
     const dir = path.join(base, "node_modules", name);
     if (existsSync(path.join(dir, "package.json"))) return dir;
   }

@@ -1913,12 +1913,19 @@ export const DEFAULT_LEGEND_CONFIG: LegendConfig = Object.freeze({
   >,
 });
 
-/** Camera target captured for a story chapter. */
+/**
+ * Camera target captured for a story chapter. `pitch` and `bearing` are
+ * optional in memory: a location built in code may omit them, and every engine
+ * then keeps that part of the current camera (see `storyLocationView`). A
+ * chapter read from a project file or a CSV never omits them: loading fills an
+ * absent value with 0 (`normalizeStoryChapter`, `parseStoryMapCsv`), so a file
+ * without them still plays north-up and flat, as it always has.
+ */
 export interface StoryChapterLocation {
   center: [number, number];
   zoom: number;
-  pitch: number;
-  bearing: number;
+  pitch?: number;
+  bearing?: number;
 }
 
 /** Where a chapter's text panel sits over the map. */
