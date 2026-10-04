@@ -622,6 +622,41 @@ describe("CesiumEngine terrain correction", () => {
     engine.destroy();
   });
 
+  it("never pulls an animated flight back to the last placement (#2878)", () => {
+    // A flight streams terrain all along its path, so the tile queue drains
+    // mid-air at a new height. Re-applying the seed placement there sent a
+    // drop's fly-to-layer (and a Set View) straight back to the seed view.
+    for (const fly of [
+      (engine: CesiumEngine) => engine.flyTo({ center: [-97.5, 37.5], zoom: 4 }),
+      (engine: CesiumEngine) => engine.fitBounds([-125, 25, -70, 50]),
+      (engine: CesiumEngine) => engine.zoomIn(),
+    ]) {
+      const fakes = makeViewer(0);
+      const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+      engine.applyView({ ...VIEW, zoom: 2 });
+      const placements = fakes.placements;
+      fly(engine);
+      assert.equal(fakes.flights.length, 1, "the flight started");
+      fakes.setGroundHeight(-770);
+      fakes.tileLoadProgressEvent.emit(0);
+      assert.equal(fakes.placements, placements, "the flight's camera is authoritative");
+      engine.destroy();
+    }
+  });
+
+  it("corrects again once a new placement replaces the flight", () => {
+    const fakes = makeViewer(0);
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView(VIEW);
+    engine.fitBounds([-125, 25, -70, 50]);
+    engine.applyView({ ...VIEW, center: [10, 20] });
+    const placements = fakes.placements;
+    fakes.setGroundHeight(1200);
+    fakes.tileLoadProgressEvent.emit(0);
+    assert.equal(fakes.placements, placements + 1, "the new placement is corrected");
+    engine.destroy();
+  });
+
   it("drops the tile listener on destroy", () => {
     const fakes = makeViewer();
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);

@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
-import { dropGeoJsonOnShell, layerRow, setViewAndSettle, waitForSettledZoomNear } from "./helpers";
+import {
+  dropGeoJsonOnShell,
+  layerRow,
+  readStatusZoom,
+  setViewAndSettle,
+  waitForSettledZoomNear,
+} from "./helpers";
 
 /**
  * The per-commit smoke check for each alternate rendering engine: switch the
@@ -27,9 +33,8 @@ import { dropGeoJsonOnShell, layerRow, setViewAndSettle, waitForSettledZoomNear 
 test.describe.configure({ mode: "default" });
 
 /**
- * One polygon spanning the contiguous US, centred where the spec parks the
- * camera, and large enough that a pick at the view's centre lands on it even
- * while the camera flies to the layer.
+ * One polygon spanning the contiguous US, centred where the spec flies the
+ * camera, and large enough that a pick at the view's centre lands on it.
  */
 function area(name: string): string {
   return JSON.stringify({
@@ -122,13 +127,6 @@ for (const engine of ENGINES) {
     await page.goto("/");
     await expect(page.locator(".maplibregl-canvas")).toBeVisible({ timeout: 30_000 });
     await engine.prepare?.(page);
-    // Park the camera over where the polygon will go *before* the swap, on
-    // MapLibre, where Set View lands exactly. The 3D engine then seeds from
-    // that camera, so the pick below needs no flight at all. Driving the
-    // camera on the globe after the drop is what intermittently failed: the
-    // Cesium globe can refuse both the drop's fly-to-layer and a Set View to
-    // the layer's centre (#2878).
-    await setViewAndSettle(page, -97.5, 37.5, 4);
 
     await page.getByRole("button", { name: "View", exact: true }).click();
     await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
@@ -136,14 +134,32 @@ for (const engine of ENGINES) {
     await engine.ready(page);
     // The engine replaces the MapLibre map rather than joining it.
     await expect(page.getByTestId("map-canvas")).toHaveCount(0);
-    // ...and seeded its camera from the shared view.
-    await waitForSettledZoomNear(page, 4);
+    // ...and seeded its camera from the shared (default, world-scale) view.
+    const seeded = await waitForSettledZoomNear(page, 2);
 
     await dropGeoJsonOnShell(page, layerName, area(featureName));
     const row = layerRow(page, layerName);
     await expect(row).toBeVisible({ timeout: 30_000 });
     // The engine compiled the layer instead of flagging it unsupported.
     await expect(row).not.toContainText(/No (ArcGIS|Cesium)/);
+    // Adding the layer flies to it, and the camera comes to rest there rather
+    // than back at the seed view. The globe's terrain correction used to pull
+    // the flight back to the seed mid-air (#2878).
+    let previous = NaN;
+    await expect
+      .poll(
+        async () => {
+          const now = await readStatusZoom(page);
+          const settled = now > seeded + 1 && now === previous;
+          previous = now;
+          return settled;
+        },
+        { timeout: 60_000, intervals: [500] },
+      )
+      .toBe(true);
+    // Then a Set View to the layer's centre lands too: the same pull-back
+    // refused it on the globe (#2878).
+    await setViewAndSettle(page, -97.5, 37.5, 4);
 
     await row.getByRole("button", { name: "Identify features", exact: true }).click();
     const container = page.getByTestId(engine.container);
@@ -154,10 +170,8 @@ for (const engine of ENGINES) {
     const popup = container.locator(engine.popup);
     // A pick resolves only once the engine has built and drawn the layer's
     // geometry, which neither the layer row nor the camera waits for. Retry the
-    // click until the popup answers rather than guess how long that takes. The
-    // content is checked inside the retry too: adding the layer may still start
-    // a short fly-to-layer from the parked camera (the view's centre stays on
-    // the polygon throughout), and a camera move closes an open popup.
+    // click until the popup answers rather than guess how long that takes; the
+    // camera is at rest, so a repeated click cannot move it.
     await expect(async () => {
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
       await expect(popup).toContainText(layerName, { timeout: 5_000 });
