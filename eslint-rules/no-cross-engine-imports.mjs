@@ -77,14 +77,22 @@ const rule = {
     const filename = context.filename ?? context.getFilename();
     const from = engineOf(filename);
     if (!from) return {};
-    const dir = path.dirname(path.resolve(filename));
+    const absolute = path.resolve(filename);
+    const dir = path.dirname(absolute);
+    // The packages/map/src tree the file sits in (its own directory when the
+    // path has no such segment, as for a stray fixture).
+    const marker = `${path.sep}packages${path.sep}map${path.sep}src${path.sep}`;
+    const at = absolute.lastIndexOf(marker);
+    const root = at >= 0 ? absolute.slice(0, at + marker.length - 1) : dir;
 
     function check(node, source) {
       if (typeof source !== "string" || !source.startsWith(".")) return;
-      // Only sibling modules are classified: a relative import that leaves
-      // the directory reaches another package's files, whose names say
-      // nothing about these engines.
-      if (path.dirname(path.resolve(dir, source)) !== dir) return;
+      // Only modules inside that tree are classified: a relative import that
+      // leaves it reaches another package's files, whose names say nothing
+      // about these engines.
+      const relative = path.relative(root, path.resolve(dir, source));
+      if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+        return;
       const to = engineOf(source);
       if (to && to !== from) {
         context.report({ node, messageId: "crossEngine", data: { from, to, source } });

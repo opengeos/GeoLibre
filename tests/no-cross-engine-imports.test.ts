@@ -85,7 +85,12 @@ describe("local/no-cross-engine-imports", () => {
     assert.deepEqual(lint(code, "headless.ts"), []);
   });
 
-  it("ignores relative imports that leave the directory", () => {
+  it("checks imports between subdirectories of the source tree", () => {
+    assert.equal(lint('import { a } from "../cesium-camera";', "arcgis/arcgis-x.ts").length, 1);
+    assert.equal(lint('import { a } from "./cesium/cesium-camera";', "MapboxCanvas.tsx").length, 1);
+  });
+
+  it("ignores relative imports that leave the source tree", () => {
     assert.deepEqual(lint('import { a } from "../../core/src/arcgis-x";', "MapboxCanvas.tsx"), []);
   });
 });
