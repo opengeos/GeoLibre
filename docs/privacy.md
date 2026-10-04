@@ -61,8 +61,8 @@ Settings → Manage Plugins lists plugins from the GeoLibre plugin registry at
 hosted on GitHub Pages and Cloudflare). Opening that dialog downloads the
 registry, and each time GeoLibre starts it downloads the registry's blocklist
 (of plugins pulled for safety) and the files of the plugins you installed from
-it. Like any web server, the registry receives your IP
-address and the files requested.
+it. Like any web server, the registry sees your IP address and which files
+you request.
 
 The registry uses those requests to show how often each plugin is used, as
 public counts on its plugin catalog. It records no more than this:
