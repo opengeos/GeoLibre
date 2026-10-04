@@ -101,11 +101,15 @@ export interface MapCanvasProps {
 }
 
 function setMapLibreIdentifyCursor(map: maplibregl.Map, active: boolean): void {
-  // MapLibre's grab cursor belongs to the interactive canvas container. Its
-  // native crosshair mode covers that container and active/drag states, while
-  // the inline value keeps the canvas itself explicit for other cursor owners.
-  map.getContainer().classList.toggle("maplibregl-crosshair", active);
-  map.getCanvas().style.cursor = active ? "crosshair" : "";
+  // MapLibre's grab cursor belongs to the interactive canvas container, so the
+  // crosshair goes there as well as on the canvas. It is inline rather than
+  // MapLibre's `maplibregl-crosshair` class: that class is BoxZoom's, and every
+  // camera move (jumpTo, easeTo, fitBounds) resets the gesture handlers, which
+  // strips it and hands the container back its grab cursor (#2879). An inline
+  // value also outranks the stylesheet's `:active` grabbing cursor.
+  const cursor = active ? "crosshair" : "";
+  map.getCanvasContainer().style.cursor = cursor;
+  map.getCanvas().style.cursor = cursor;
 }
 
 function createIdentifyMessagePopupElement(layerName: string, message: string): HTMLElement {

@@ -172,10 +172,12 @@ export function MapboxCanvas({
         const current = engine;
         const setIdentifyCursor = (active: boolean) => {
           // Mapbox's grab cursor belongs to the interactive canvas container,
-          // not the canvas itself. Use its supported crosshair mode so every
-          // map surface agrees while Identify owns pointer clicks.
-          map.getContainer().classList.toggle("mapboxgl-crosshair", active);
-          map.getCanvas().style.cursor = active ? "crosshair" : "";
+          // not the canvas itself, so set both. Inline, not the
+          // `mapboxgl-crosshair` class: BoxZoom owns that class and every camera
+          // move resets it away, as on MapLibre (#2879).
+          const cursor = active ? "crosshair" : "";
+          map.getCanvasContainer().style.cursor = cursor;
+          map.getCanvas().style.cursor = cursor;
         };
         const featureSelection: FeatureSelectionState = {
           active: { current: false },

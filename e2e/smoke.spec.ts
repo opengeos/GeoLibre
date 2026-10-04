@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  bindMapLibreMap,
   collectPageProblems,
   dropGeoJson,
   layerRow,
@@ -60,6 +61,14 @@ test("Identify owns the MapLibre cursor across the whole interactive surface", a
   const canvasContainer = page.locator(".maplibregl-canvas-container");
   await row.getByRole("button", { name: "Identify features", exact: true }).click();
   await expect(canvas).toHaveCSS("cursor", "crosshair");
+  await expect(canvasContainer).toHaveCSS("cursor", "crosshair");
+
+  // Every camera move stops MapLibre's gesture handlers, and BoxZoom's reset
+  // strips `maplibregl-crosshair` from the map container. The drop's own
+  // zoom-to-layer can land after Identify turns on, so a camera move must not
+  // hand the container back its grab cursor (#2879).
+  await bindMapLibreMap(page);
+  await page.evaluate(() => window.__geolibreTestMap?.jumpTo({ zoom: 3 }));
   await expect(canvasContainer).toHaveCSS("cursor", "crosshair");
 
   await row.locator('button[aria-label="Layer actions"]').click();

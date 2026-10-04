@@ -83,6 +83,8 @@ export interface TestMapHandle {
   isMoving(): boolean;
   isZooming(): boolean;
   isRotating(): boolean;
+  /** Moves the camera without animating. Like every camera call, it resets the gesture handlers. */
+  jumpTo(options: { center?: [number, number]; zoom?: number }): unknown;
   project(lngLat: [number, number]): { x: number; y: number };
   getCanvas(): HTMLCanvasElement;
   on(type: "movestart", listener: () => void): unknown;
@@ -105,6 +107,7 @@ const TEST_MAP_METHODS = [
   "isMoving",
   "isZooming",
   "isRotating",
+  "jumpTo",
   "project",
   "getCanvas",
   "on",
