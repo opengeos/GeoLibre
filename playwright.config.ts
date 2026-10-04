@@ -1,7 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "./apps/geolibre-desktop/src/lib/storage-keys";
 
-const PORT = 4173;
+// `E2E_PORT` moves the preview server off the default, so a second checkout (or
+// a parallel run) can serve its own build without reusing another one's.
+const PORT = Number(process.env.E2E_PORT) || 4173;
 const BASE_URL = `http://localhost:${PORT}`;
 
 /**
@@ -31,9 +33,28 @@ const CORE_SPECS = [
   "style-manager.spec.ts",
   "identify-restore.spec.ts",
   "deployment-policy.spec.ts",
+  // Project -> Save -> reopen. Moved from `features` after an unexpected save
+  // prompt broke every saving spec and only the nightly run noticed (#2858).
+  "layer-groups.spec.ts",
+  // Holds the Plugins docs to the app's deep-link names, so a new built-in
+  // plugin fails its own PR instead of the next night's run (#2858).
+  "plugin-deep-link.spec.ts",
 ];
 
 const coreMatch = CORE_SPECS.map((spec) => `**/${spec}`);
+
+/**
+ * The per-commit engine smoke pass (`core-engines`): switch to Cesium, then to
+ * ArcGIS, add GeoJSON, identify a feature. The deep engine specs stay nightly;
+ * this catches an engine that no longer mounts or draws project layers at all.
+ *
+ * It is its own project because a software-rendered 3D view saturates the CPU
+ * on its own. Run beside the `core` workers on a 4-vCPU runner it starved them
+ * and itself — clicks and screenshots timing out on both sides — so it runs
+ * alone, one worker, after `core` finishes (#2858). ArcGIS loads its SDK from
+ * js.arcgis.com, the one network dependency in the per-commit gate.
+ */
+const coreEnginesMatch = ["**/engine-smoke.spec.ts"];
 
 // MapLibre needs a WebGL context; force software ANGLE/SwiftShader so the map
 // initializes on headless CI runners without a real GPU.
@@ -87,14 +108,27 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "off",
   },
-  // The two projects partition `e2e/` — nothing is listed twice, so a plain
+  // The projects partition `e2e/` — nothing is listed twice, so a plain
   // `playwright test` still runs every spec exactly once. CI narrows to the
-  // per-commit gate with `--project=core`.
+  // per-commit gate with `--project=core --project=core-engines`.
   projects: [
     { name: "core", testMatch: coreMatch, use: chromium },
+    // Depends on `core` so it starts only once those workers are done, and
+    // caps itself at one worker. `--no-deps` runs it on its own locally.
+    {
+      name: "core-engines",
+      testMatch: coreEnginesMatch,
+      dependencies: ["core"],
+      workers: 1,
+      use: chromium,
+    },
     // `e2e/enterprise-sso/` needs a live API and Keycloak; it has its own
     // config (`e2e/enterprise-sso/playwright.config.ts`) and nightly job.
-    { name: "features", testIgnore: [...coreMatch, "**/enterprise-sso/**"], use: chromium },
+    {
+      name: "features",
+      testIgnore: [...coreMatch, ...coreEnginesMatch, "**/enterprise-sso/**"],
+      use: chromium,
+    },
   ],
   webServer: {
     command: `npm run build && npm run preview -w geolibre-desktop -- --port ${PORT} --strictPort`,

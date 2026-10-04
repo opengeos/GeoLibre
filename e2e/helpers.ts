@@ -86,6 +86,9 @@ export interface TestMapHandle {
   project(lngLat: [number, number]): { x: number; y: number };
   getCanvas(): HTMLCanvasElement;
   on(type: "movestart", listener: () => void): unknown;
+  /** True once the style and every visible source's tiles have loaded. */
+  loaded(): boolean;
+  queryRenderedFeatures(point: [number, number]): { properties: Record<string, unknown> | null }[];
 }
 
 /**
@@ -105,6 +108,8 @@ const TEST_MAP_METHODS = [
   "project",
   "getCanvas",
   "on",
+  "loaded",
+  "queryRenderedFeatures",
 ] as const satisfies readonly (keyof TestMapHandle)[];
 
 declare global {
@@ -173,4 +178,101 @@ export async function bindMapLibreMap(page: Page): Promise<void> {
     },
     TEST_MAP_METHODS as readonly string[],
   );
+}
+
+/**
+ * Waits until the primary map has drawn a feature at a canvas point and has
+ * nothing left to load or animate, then returns.
+ *
+ * A layer appearing in the Layers panel says nothing about the canvas: the drop
+ * flies the camera to the new layer, and the basemap tiles for the zoom it lands
+ * on stream in for a second or more afterwards. A pixel read in that window is
+ * a frame the map is about to replace. Requiring the feature under the point
+ * pins the wait to *after* the fly started (the layer's source is added with
+ * it), and `loaded()` with no camera movement is MapLibre's own "idle" state.
+ *
+ * @param page - The page whose MapLibre map to wait on.
+ * @param name - The `name` property of the feature that must be rendered.
+ * @param at - The point as fractions of the canvas size; defaults to the centre.
+ */
+export async function waitForRenderedFeature(
+  page: Page,
+  name: string,
+  at: [number, number] = [0.5, 0.5],
+): Promise<void> {
+  await bindMapLibreMap(page);
+  await page.waitForFunction(
+    ({ featureName, fx, fy }) => {
+      const map = window.__geolibreTestMap;
+      if (!map || map.isMoving() || !map.loaded()) return false;
+      const canvas = map.getCanvas();
+      const rect = canvas.getBoundingClientRect();
+      return map
+        .queryRenderedFeatures([rect.width * fx, rect.height * fy])
+        .some((feature) => feature.properties?.name === featureName);
+    },
+    { featureName: name, fx: at[0], fy: at[1] },
+    { timeout: 30_000 },
+  );
+}
+
+/**
+ * Drops a GeoJSON file on the desktop shell, the drop target every rendering
+ * engine shares. `dropGeoJson` targets MapLibre's `map-canvas`, which the
+ * Cesium and ArcGIS engines unmount.
+ *
+ * @param page - The page to drop onto.
+ * @param name - The file's base name, which becomes the layer name.
+ * @param text - The GeoJSON document.
+ */
+export async function dropGeoJsonOnShell(page: Page, name: string, text: string): Promise<void> {
+  await page.evaluate(
+    ({ contents, fileName }) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([contents], fileName, { type: "application/geo+json" }));
+      const target = document.querySelector('[data-testid="desktop-shell"]');
+      if (!target) throw new Error("desktop shell drop target not found");
+      for (const type of ["dragenter", "dragover", "drop"])
+        target.dispatchEvent(
+          new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }),
+        );
+    },
+    { contents: text, fileName: `${name}.geojson` },
+  );
+}
+
+/** The status bar's zoom readout as a number, or NaN. Every engine publishes it. */
+export async function readStatusZoom(page: Page): Promise<number> {
+  const text = await page.getByText(/^Zoom:/).textContent();
+  return Number(text?.match(/-?\d+(\.\d+)?/)?.[0] ?? NaN);
+}
+
+/**
+ * Waits for the camera to leave `from` and come to rest, and returns the zoom
+ * it landed on.
+ *
+ * Adding a layer flies the camera to it, and on the 3D engines a pointer event
+ * during that flight cancels it, stranding the camera wherever it had got to.
+ * The status bar zoom only changes per settled camera, so "two equal reads"
+ * alone also holds *before* the flight starts; requiring the value to move off
+ * `from` first is what pins the wait to after it.
+ *
+ * @param page - The page whose status bar to read.
+ * @param from - The zoom read before the action that moves the camera.
+ * @returns The settled zoom.
+ */
+export async function waitForCameraToLand(page: Page, from: number): Promise<number> {
+  let previous = NaN;
+  await expect
+    .poll(
+      async () => {
+        const now = await readStatusZoom(page);
+        const landed = Number.isFinite(now) && now !== from && now === previous;
+        previous = now;
+        return landed;
+      },
+      { timeout: 60_000, intervals: [500] },
+    )
+    .toBe(true);
+  return previous;
 }

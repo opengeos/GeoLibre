@@ -26,7 +26,7 @@
     "test:docker": "python -m pytest docker/tests",
     "test:worker": "npm run typecheck -w geolibre-viewer-worker && npm run typecheck -w geolibre-collab-worker && npm run typecheck -w geolibre-collab-node && npm test -w geolibre-collab-node && npm run typecheck -w geolibre-tiles-worker && npm run typecheck -w geolibre-ai-proxy-worker",
     "test:e2e": "playwright test",
-    "test:e2e:core": "playwright test --project=core",
+    "test:e2e:core": "playwright test --project=core --project=core-engines",
     "test:e2e:features": "playwright test --project=features",
     "test:e2e:sso": "playwright test -c e2e/enterprise-sso/playwright.config.ts",
     "check:rust": "cargo check --manifest-path apps/geolibre-desktop/src-tauri/Cargo.toml",

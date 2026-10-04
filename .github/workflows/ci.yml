@@ -151,7 +151,7 @@ jobs:
         run: npx playwright install-deps chromium
 
       - name: Run E2E core tests
-        run: npm run test:e2e -- --project=core
+        run: npm run test:e2e:core
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
 
