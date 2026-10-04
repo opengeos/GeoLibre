@@ -37,6 +37,7 @@ import { isTauri } from "./tauri-io";
 import type { DeploymentPolicy } from "./deployment-policy";
 import { getDeploymentPolicy } from "./deployment-env";
 import {
+  blocklistedDecision,
   evaluatePlugin,
   type PluginDenialDecision,
   type PluginPolicyDenial,
@@ -303,9 +304,10 @@ export async function assertBundleNotBlocklisted(bundle: ExternalPluginBundle): 
     await computePluginBundleHash(bundle),
   );
   if (blocklisted) {
-    throw new Error(
-      `Plugin '${bundle.manifest.id}' ${bundle.manifest.version} was blocked by the plugin ` +
-        `registry: ${blocklisted.reason}`,
+    throw new PluginPolicyError(
+      bundle.archiveName,
+      blocklistedDecision(bundle.manifest.id, blocklisted.reason),
+      bundle.sourceUrl,
     );
   }
 }
@@ -385,12 +387,12 @@ async function loadPluginUrlBundles(
           const bundleHash = await computePluginBundleHash(bundle);
           const blocklisted = getBlocklistedBundle(bundle.manifest.id, bundleHash);
           if (blocklisted) {
+            const decision = blocklistedDecision(bundle.manifest.id, blocklisted.reason);
             issues.push({
               archiveName: bundle.archiveName,
               sourceUrl: bundle.sourceUrl,
-              message:
-                `Plugin '${bundle.manifest.id}' ${bundle.manifest.version} was blocked by the plugin ` +
-                `registry and was not loaded: ${blocklisted.reason}`,
+              message: decision.reason,
+              policyDenial: decision.denial,
             });
             continue;
           }
@@ -1008,8 +1010,10 @@ async function reloadExternalUrlPluginUncoalesced(
     }
     const blocklisted = getBlocklistedBundle(bundle.manifest.id, bundleHash);
     if (blocklisted) {
-      throw new Error(
-        `Cannot update plugin: '${bundle.manifest.id}' ${bundle.manifest.version} was blocked by the plugin registry: ${blocklisted.reason}`,
+      throw new PluginPolicyError(
+        manifestUrl,
+        blocklistedDecision(bundle.manifest.id, blocklisted.reason),
+        manifestUrl,
       );
     }
     // The timeout only bounds the fetch/stream above; a dynamic import() of a

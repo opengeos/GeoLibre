@@ -524,6 +524,8 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     const loaded = await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
     assert.deepEqual(loaded.loadedPluginIds, []);
     assert.match(loaded.issues[0]?.message ?? "", /blocked by the plugin registry.*Bad release/);
+    // Same translated denial as a whole-plugin block.
+    assert.equal(loaded.issues[0]?.policyDenial?.kind, "blocklisted");
     assert.deepEqual(manager.list(), []);
   });
 
@@ -569,7 +571,12 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
 
     await assert.rejects(
       externalPlugins.installWebPluginArchive(manager, "bad.zip", bytes, app, null),
-      /blocked by the plugin registry: Bad release/,
+      (error: unknown) => {
+        assert.ok(error instanceof externalPlugins.PluginPolicyError);
+        assert.equal(error.policyDenial.kind, "blocklisted");
+        assert.match(error.message, /blocked by the plugin registry: Bad release/);
+        return true;
+      },
     );
     assert.equal((globalThis as Record<string, unknown>)[flag], undefined);
     assert.deepEqual(manager.list(), []);

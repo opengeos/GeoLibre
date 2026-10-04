@@ -30,6 +30,9 @@ const MAX_ENTRIES = 5_000;
 let blockedPlugins = new Map<string, PluginBlocklistEntry>();
 let blockedBundles = new Map<string, PluginBlocklistEntry>();
 let loadPromise: Promise<void> | null = null;
+// The blocklist URL the active list came from, so a failed fetch for another
+// registry never leaves this one's list in force.
+let activeUrl: string | null = null;
 
 // JSON keeps the pair unambiguous whatever characters an id contains.
 const bundleKey = (id: string, hash: string): string => JSON.stringify([id, hash]);
@@ -164,6 +167,7 @@ export async function loadPluginBlocklist(registryUrl: string): Promise<void> {
       // the cache alone rather than unblock everything.
       const cached = readCache(url);
       setPluginBlocklist(cached ?? []);
+      activeUrl = url;
       if (cached) {
         console.warn(`[GeoLibre] ${url} returned 404; keeping the cached plugin blocklist.`);
       }
@@ -179,10 +183,19 @@ export async function loadPluginBlocklist(registryUrl: string): Promise<void> {
       throw new Error('blocklist has no "blocked" array');
     }
     setPluginBlocklist(parsePluginBlocklist(document));
+    activeUrl = url;
     writeCache(url, document);
   } catch (error) {
     const cached = readCache(url);
-    if (cached) setPluginBlocklist(cached);
+    if (cached) {
+      setPluginBlocklist(cached);
+      activeUrl = url;
+    } else if (activeUrl !== url) {
+      // Retain this registry's own active list through a failed refresh, but
+      // never another registry's.
+      setPluginBlocklist([]);
+      activeUrl = url;
+    }
     console.warn(
       `[GeoLibre] Could not fetch the plugin blocklist from ${url}` +
         (cached ? "; using the cached copy." : "; nothing is blocked."),

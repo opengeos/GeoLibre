@@ -50,6 +50,19 @@ function denied(denial: PluginPolicyDenial): PluginDecision {
   return { allowed: false, denial, reason: denialReason(denial) };
 }
 
+/**
+ * The denial for a plugin, or one bundle of it, that the registry's blocklist
+ * names. Shared by the policy gate and the bundle hash checks, so both reach
+ * the UI as the same translated message.
+ *
+ * @param pluginId - The blocked plugin's id.
+ * @param reason - The blocklist entry's reason.
+ * @returns The denial decision.
+ */
+export function blocklistedDecision(pluginId: string, reason: string): PluginDenialDecision {
+  return denied({ kind: "blocklisted", pluginId, reason }) as PluginDenialDecision;
+}
+
 /** Deployment policy gates external code, not built-in plugin registration. */
 export function evaluatePlugin(
   id: string,
@@ -61,7 +74,7 @@ export function evaluatePlugin(
   // drop-ins are exempt.
   const blocklisted = id && source !== "bundled" ? getBlocklistedPlugin(id) : undefined;
   if (blocklisted) {
-    return denied({ kind: "blocklisted", pluginId: id, reason: blocklisted.reason });
+    return blocklistedDecision(id, blocklisted.reason);
   }
   const plugins = policy?.plugins;
   if (!plugins) return { allowed: true };

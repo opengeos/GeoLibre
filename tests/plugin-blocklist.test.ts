@@ -136,6 +136,16 @@ describe("plugin blocklist", () => {
     assert.equal(getBlocklistedPlugin("evil")?.reason, "Malware.");
   });
 
+  it("drops another registry's active list when this one can't be fetched", async () => {
+    respondWith({ version: 1, blocked: [{ id: "evil", reason: "Malware." }] });
+    await loadPluginBlocklist(REGISTRY);
+    assert.ok(getBlocklistedPlugin("evil"));
+
+    globalThis.fetch = (() => Promise.reject(new TypeError("offline"))) as typeof fetch;
+    await loadPluginBlocklist("https://other.example.com/plugin-registry.json");
+    assert.equal(getBlocklistedPlugin("evil"), undefined);
+  });
+
   it("treats a registry with no blocklist as blocking nothing", async () => {
     setPluginBlocklist([{ id: "stale", reason: "x" }]);
     respondWith("Not found", 404);
