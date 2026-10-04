@@ -236,6 +236,7 @@
     "description": "დაათვალიერეთ, დააინსტალირეთ, განაახლეთ და წაშალეთ GeoLibre-ის გარე მოდულები. მოდულები ჩამოთვლილია <registryLink>GeoLibre-ის მოდულების რეესტრში</registryLink>.",
     "policySideloadDisabled": "მოდულების გარე წყაროდან ინსტალაცია (sideloading) გამორთულია განთავსების პოლიტიკით.",
     "policyBlocked": "მოდული „{{pluginId}}“ დაბლოკილია განთავსების პოლიტიკით.",
+    "policyBlocklisted": "პლაგინი „{{pluginId}}“ დაბლოკილია პლაგინების რეესტრის მიერ: {{reason}}",
     "policyNotAllowed": "მოდული „{{pluginId}}“ არ არის დაშვებული განთავსების პოლიტიკით."
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "შენახულია თქვენს ჩამოტვირთვებში სამიზნე CRS-ში. რუკა აჩვენებს მხოლოდ EPSG:4326-ს, ამიტომ დაპროექცირებული შედეგი ფენად არ ემატება."
       },
       "filterBySource": "ფილტრი წყაროთი",
+      "filterByCategory": "კატეგორიით გაფილტვრა",
+      "layerFor": "ფენა: {{name}}",
       "allSources": "ყველა წყარო",
       "geolibreTools": "GeoLibre ხელსაწყოები",
       "whiteboxTools": "Whitebox ხელსაწყოები",

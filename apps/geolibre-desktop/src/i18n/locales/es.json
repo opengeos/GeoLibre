@@ -236,6 +236,7 @@
     "description": "Explore, instale, actualice y elimine complementos externos de GeoLibre. Los complementos se listan en el <registryLink>registro de complementos de GeoLibre</registryLink>.",
     "policySideloadDisabled": "La directiva de implementación deshabilita la carga manual de complementos.",
     "policyBlocked": "La directiva de implementación bloquea el complemento «{{pluginId}}».",
+    "policyBlocklisted": "El registro de plugins bloqueó el plugin '{{pluginId}}': {{reason}}",
     "policyNotAllowed": "La directiva de implementación no permite el complemento «{{pluginId}}»."
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "Guardado en sus descargas en el CRS de destino. El mapa solo muestra EPSG:4326, así que un resultado proyectado no se añade como capa."
       },
       "filterBySource": "Filtrar por origen",
+      "filterByCategory": "Filtrar por categoría",
+      "layerFor": "Capa para {{name}}",
       "allSources": "Todos los orígenes",
       "geolibreTools": "Herramientas de GeoLibre",
       "whiteboxTools": "Herramientas de Whitebox",

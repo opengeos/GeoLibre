@@ -230,6 +230,7 @@
     "description": "浏览、安装、更新和移除外部 GeoLibre 插件。插件列于 <registryLink>GeoLibre 插件注册表</registryLink>。",
     "policySideloadDisabled": "部署策略已禁用插件侧载。",
     "policyBlocked": "插件“{{pluginId}}”已被部署策略阻止。",
+    "policyBlocklisted": "插件“{{pluginId}}”已被插件注册表阻止：{{reason}}",
     "policyNotAllowed": "部署策略不允许插件“{{pluginId}}”。"
   },
   "viewState": {
@@ -5139,6 +5140,8 @@
         "projectedHint": "以目标坐标系保存到您的下载文件夹。地图仅显示 EPSG:4326，因此投影结果不会作为图层添加。"
       },
       "filterBySource": "按来源筛选",
+      "filterByCategory": "按类别筛选",
+      "layerFor": "{{name}} 的图层",
       "allSources": "所有来源",
       "geolibreTools": "GeoLibre 工具",
       "whiteboxTools": "Whitebox 工具",

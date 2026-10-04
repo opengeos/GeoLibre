@@ -230,6 +230,7 @@
     "description": "Duyệt, cài đặt, cập nhật và xóa các plugin GeoLibre bên ngoài. Các plugin được liệt kê trong sổ đăng ký plugin <registryLink>GeoLibre</registryLink>.",
     "policySideloadDisabled": "Việc cài đặt plugin thủ công (sideload) đã bị tắt theo chính sách triển khai.",
     "policyBlocked": "Plugin “{{pluginId}}” bị chặn theo chính sách triển khai.",
+    "policyBlocklisted": "Plugin '{{pluginId}}' đã bị sổ đăng ký plugin chặn: {{reason}}",
     "policyNotAllowed": "Plugin “{{pluginId}}” không được phép theo chính sách triển khai."
   },
   "viewState": {
@@ -5139,6 +5140,8 @@
         "projectedHint": "Đã lưu vào phần tải xuống của bạn trong CRS mục tiêu. Bản đồ chỉ hiển thị EPSG:4326, do đó kết quả được chiếu không được thêm dưới dạng lớp."
       },
       "filterBySource": "Lọc theo nguồn",
+      "filterByCategory": "Lọc theo danh mục",
+      "layerFor": "Lớp cho {{name}}",
       "allSources": "Tất cả các nguồn",
       "geolibreTools": "Công cụ GeoLibre",
       "whiteboxTools": "Công cụ Whitebox",

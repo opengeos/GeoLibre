@@ -230,6 +230,7 @@
     "description": "เรียกดู ติดตั้ง อัปเดต และนำปลั๊กอินภายนอกของ GeoLibre ออก ปลั๊กอินทั้งหมดแสดงอยู่ใน<registryLink>รีจิสทรีปลั๊กอินของ GeoLibre</registryLink>",
     "policySideloadDisabled": "การติดตั้งปลั๊กอินจากภายนอก (sideload) ถูกปิดใช้งานโดยนโยบายการปรับใช้",
     "policyBlocked": "ปลั๊กอิน “{{pluginId}}” ถูกบล็อกโดยนโยบายการปรับใช้",
+    "policyBlocklisted": "ปลั๊กอิน '{{pluginId}}' ถูกบล็อกโดยรีจิสทรีปลั๊กอิน: {{reason}}",
     "policyNotAllowed": "นโยบายการปรับใช้ไม่อนุญาตปลั๊กอิน “{{pluginId}}”"
   },
   "viewState": {
@@ -5139,6 +5140,8 @@
         "projectedHint": "บันทึกไปยังโฟลเดอร์ดาวน์โหลดของคุณในระบบพิกัดปลายทาง แผนที่แสดงผลได้เฉพาะ EPSG:4326 ผลลัพธ์ที่ผ่านการฉายจึงไม่ถูกเพิ่มเป็นเลเยอร์"
       },
       "filterBySource": "กรองตามแหล่งที่มา",
+      "filterByCategory": "กรองตามหมวดหมู่",
+      "layerFor": "เลเยอร์สำหรับ {{name}}",
       "allSources": "ทุกแหล่งที่มา",
       "geolibreTools": "เครื่องมือของ GeoLibre",
       "whiteboxTools": "เครื่องมือของ Whitebox",

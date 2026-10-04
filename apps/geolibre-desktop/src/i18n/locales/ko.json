@@ -230,6 +230,7 @@
     "description": "외부 GeoLibre 플러그인을 찾아보고 설치, 업데이트, 제거합니다. 플러그인은 <registryLink>GeoLibre 플러그인 레지스트리</registryLink>에 등록되어 있습니다.",
     "policySideloadDisabled": "배포 정책에 따라 플러그인 사이드로드가 비활성화되었습니다.",
     "policyBlocked": "플러그인 “{{pluginId}}”은(는) 배포 정책에 의해 차단되었습니다.",
+    "policyBlocklisted": "플러그인 레지스트리에서 플러그인 '{{pluginId}}'을(를) 차단했습니다: {{reason}}",
     "policyNotAllowed": "플러그인 “{{pluginId}}”은(는) 배포 정책에서 허용되지 않습니다."
   },
   "viewState": {
@@ -5139,6 +5140,8 @@
         "projectedHint": "대상 CRS로 다운로드 폴더에 저장됩니다. 지도는 EPSG:4326만 표시하므로 투영된 결과는 레이어로 추가되지 않습니다."
       },
       "filterBySource": "출처별 필터링",
+      "filterByCategory": "카테고리로 필터링",
+      "layerFor": "{{name}} 레이어",
       "allSources": "모든 출처",
       "geolibreTools": "GeoLibre 도구",
       "whiteboxTools": "Whitebox 도구",
