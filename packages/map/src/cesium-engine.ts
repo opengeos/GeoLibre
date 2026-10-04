@@ -583,8 +583,7 @@ export class CesiumEngine implements MapEngine {
     // zero-area Rectangle has no "zoom to fit" — Cesium would derive a
     // nonsensical camera distance from it. Mirrors MapController.fitBounds,
     // including its zoom floor, so a single marker frames the same on both
-    // engines.
-    this.startFlight();
+    // engines. `animateTo` starts its own flight (or none, mid-morph).
     if (west === east && south === north) {
       this.animateTo(
         {
@@ -597,6 +596,7 @@ export class CesiumEngine implements MapEngine {
       );
       return;
     }
+    this.startFlight();
     viewer.camera.flyTo({
       destination: this.Cesium.Rectangle.fromDegrees(west, south, east, north),
       duration: FLY_SECONDS,

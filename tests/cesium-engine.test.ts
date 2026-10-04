@@ -693,6 +693,21 @@ describe("CesiumEngine terrain correction", () => {
     engine.destroy();
   });
 
+  it("does not start a point fit mid-morph", () => {
+    const fakes = makeViewer(0);
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView(VIEW);
+    fakes.setSceneMode(0);
+    engine.fitBounds([10, 20, 10, 20]);
+    fakes.setSceneMode(3);
+    assert.equal(fakes.flights.length, 0, "no flight mid-morph");
+    const placements = fakes.placements;
+    fakes.setGroundHeight(1200);
+    fakes.tileLoadProgressEvent.emit(0);
+    assert.equal(fakes.placements, placements + 1, "the placement is still corrected");
+    engine.destroy();
+  });
+
   it("leaves a moving flight's landing to moveEnd", () => {
     const fakes = makeViewer(0);
     const engine = new CesiumEngine(makeCesium(), fakes.viewer);

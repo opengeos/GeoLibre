@@ -2052,11 +2052,13 @@ export class CesiumLayerSync {
         duration: ZOOM_TO_LAYER_SECONDS,
       }),
     )
-      // Resolves false when the flight was cancelled.
+      // Resolves false when the flight was cancelled. A rejection still ends
+      // the flight the engine was told about, or its terrain correction would
+      // stay off.
       .then((completed) => {
         if (completed) this.deps.onFlyToComplete?.();
       })
-      .catch(() => {});
+      .catch(() => this.deps.onFlyToComplete?.());
     return true;
   }
 
