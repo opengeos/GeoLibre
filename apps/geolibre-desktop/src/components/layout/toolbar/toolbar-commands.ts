@@ -10,6 +10,7 @@ import {
   Compass,
   Crosshair,
   Database,
+  Eye,
   FilePen,
   FilePlus2,
   FolderGit2,
@@ -46,6 +47,7 @@ import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import type { ViewportHistory } from "../../../hooks/useViewportHistory";
 import { IS_MAS_BUILD } from "../../../lib/build-flags";
 import type { Command } from "../../../lib/commands";
+import { useLineOfSightTool } from "../../../lib/line-of-sight-store";
 import { masHidesDataSource } from "../../../lib/mas-build";
 import { pluginDisplayName } from "../../../lib/plugin-display-name";
 import { IS_STORE_BUILD } from "../../../lib/updates";
@@ -491,6 +493,15 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
             keywords: "segment everything slimsam sam automatic mask imagery polygons",
             icon: Sparkles,
             run: () => setSegmentEverythingOpen(true),
+          },
+          // Draws transient MapLibre style layers, so it shares the gate (#2858).
+          {
+            id: "proc.lineOfSight",
+            title: t("toolbar.command.lineOfSight"),
+            group: t("toolbar.commandGroup.processing"),
+            keywords: "line of sight visibility intervisibility terrain elevation profile viewshed",
+            icon: Eye,
+            run: () => useLineOfSightTool.getState().openLineOfSight(),
           },
         ]),
     ...CONVERSION_COMMANDS.map(({ kind, titleKey }) => ({

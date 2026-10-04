@@ -52,6 +52,9 @@ export interface ChartGeometry {
  * @param width - Chart width in pixels
  * @param height - Chart height in pixels
  * @param padding - Optional inner padding; sensible defaults are used otherwise
+ * @param elevationDomain - Optional `[min, max]` the y axis must also cover, for
+ *   a caller that overlays something else on the profile (the line-of-sight
+ *   panel's sight line, which can run above the highest ground)
  * @returns The {@link ChartGeometry} describing scales, paths, and hover lookup
  */
 export function buildChartGeometry(
@@ -59,6 +62,7 @@ export function buildChartGeometry(
   width: number,
   height: number,
   padding: ChartPadding = DEFAULT_PADDING,
+  elevationDomain?: [number, number],
 ): ChartGeometry {
   const plotWidth = Math.max(1, width - padding.left - padding.right);
   const plotHeight = Math.max(1, height - padding.top - padding.bottom);
@@ -68,8 +72,12 @@ export function buildChartGeometry(
   const elevations = points.map((p) => p.elevation);
   const totalDistance = distances.length ? distances[distances.length - 1] : 0;
 
-  const minElevation = elevations.length ? Math.min(...elevations) : 0;
-  const maxElevation = elevations.length ? Math.max(...elevations) : 0;
+  let minElevation = elevations.length ? Math.min(...elevations) : 0;
+  let maxElevation = elevations.length ? Math.max(...elevations) : 0;
+  if (elevationDomain) {
+    minElevation = Math.min(minElevation, elevationDomain[0]);
+    maxElevation = Math.max(maxElevation, elevationDomain[1]);
+  }
   const elevationRange = maxElevation - minElevation;
 
   const xScale = (distance: number): number => {

@@ -73,6 +73,7 @@ import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
+import { LineOfSightPanel } from "./LineOfSightPanel";
 import { MapContextMenu } from "./MapContextMenu";
 import { KnowledgeCardPanel } from "./KnowledgeCardPanel";
 import { KnowledgeCardConsentDialog } from "./KnowledgeCardConsentDialog";
@@ -823,6 +824,10 @@ export function DesktopShell({
                   mapControllerRef={mapControllerRef}
                   mapReadyGeneration={mapReadyGeneration}
                   onExplorePlace={handleExplorePlace}
+                />
+                <LineOfSightPanel
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
                 />
                 <KnowledgeCardPanel
                   place={knowledgePlace}

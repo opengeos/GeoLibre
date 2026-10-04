@@ -272,14 +272,23 @@ export function viewshedToRgba(
 
 // --- Tile assembly (browser) -----------------------------------------------
 
-/** Decode one Terrarium PNG tile to elevations via an offscreen canvas. */
-interface DecodedTile {
+/** A Terrarium tile decoded to elevations. */
+export interface DecodedTile {
   width: number;
   height: number;
   values: Float32Array;
 }
 
-async function decodeTile(
+/**
+ * Fetch one Terrarium PNG tile and decode it to elevations via an offscreen
+ * canvas. Shared with the line-of-sight sampler (`line-of-sight.ts`).
+ *
+ * @param url - The tile URL.
+ * @param signal - Aborts the request.
+ * @param timeoutMs - Gives up on a tile that has not responded by then.
+ * @returns The decoded tile, or null when it could not be fetched or decoded.
+ */
+export async function decodeTile(
   url: string,
   signal?: AbortSignal,
   timeoutMs = TILE_FETCH_TIMEOUT_MS,
@@ -322,7 +331,7 @@ async function decodeTile(
  * Web Mercator Y for a latitude, normalised so 0 is the north edge of the world
  * and 1 the south — the space tile rows are uniformly spaced in.
  */
-function mercatorY(lat: number): number {
+export function mercatorY(lat: number): number {
   const clamped = Math.max(-85.051129, Math.min(85.051129, lat));
   const rad = (clamped * Math.PI) / 180;
   return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2;

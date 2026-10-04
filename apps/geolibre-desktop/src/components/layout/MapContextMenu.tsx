@@ -1,5 +1,5 @@
 import { useAppStore, FEET_PER_METER, METERS_PER_MILE } from "@geolibre/core";
-import type { MapEngine } from "@geolibre/map";
+import { rendererCapabilities, type MapEngine } from "@geolibre/map";
 import { isGeoEditorUsingRightClick } from "@geolibre/plugins";
 import {
   DropdownMenu,
@@ -23,6 +23,7 @@ import {
   MapPin,
   Route,
   Sparkles,
+  Spline,
   ZoomIn,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -40,6 +41,7 @@ import {
   beginQuickAnalysisRun,
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
+import { useLineOfSightTool } from "../../lib/line-of-sight-store";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
 import { runViewshed } from "../../lib/run-viewshed";
 import { RoutingConsentDialog } from "./RoutingConsentDialog";
@@ -338,6 +340,16 @@ export function MapContextMenu({
     [menu, viewshedBusy, t, formatViewshedRadius, mapControllerRef],
   );
 
+  // Line of sight (#2858) draws transient MapLibre style layers, so it is
+  // offered only where the primary map exposes a MapLibre instance.
+  const primaryRenderer = useAppStore((s) => s.primaryRenderer);
+  const lineOfSightAvailable = rendererCapabilities(primaryRenderer).nativeMapInstance;
+  const openLineOfSight = useLineOfSightTool((s) => s.openLineOfSight);
+  const lineOfSightHere = useCallback(() => {
+    if (!menu) return;
+    openLineOfSight({ lng: menu.lng, lat: menu.lat });
+  }, [menu, openLineOfSight]);
+
   const bufferHere = useCallback(
     (preset: QuickBufferPreset) => {
       if (!menu) return;
@@ -510,6 +522,12 @@ export function MapContextMenu({
                   })}
                 </DropdownMenuItem>
               ))}
+              {lineOfSightAvailable ? (
+                <DropdownMenuItem onSelect={lineOfSightHere} className="gap-2">
+                  <Spline className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {t("quickAnalysis.lineOfSightHere")}
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuSeparator />
               {/* Escape hatch when the presets aren't what was wanted: the full
                 dialog, preselected on the same tool. */}

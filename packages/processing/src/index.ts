@@ -356,6 +356,24 @@ export {
   type ViewshedResult,
 } from "./terrain-viewshed";
 export {
+  computeLineOfSight,
+  curvatureDrop,
+  fetchLineOfSightProfile,
+  greatCircleDistance,
+  sampleGreatCircleProfile,
+  DEFAULT_LOS_OBSERVER_HEIGHT_METERS,
+  DEFAULT_LOS_TARGET_HEIGHT_METERS,
+  DEFAULT_REFRACTION_COEFFICIENT,
+  MAX_LINE_OF_SIGHT_METERS,
+  type LineOfSightOptions,
+  type LineOfSightProfile,
+  type LineOfSightResult,
+  type LineOfSightSample,
+  type LineOfSightSegment,
+  type LngLat as LineOfSightPoint,
+  type ProfileSample,
+} from "./line-of-sight";
+export {
   INPUT_NODE_PORT,
   OUTPUT_NODE_PORT,
   graphToLinearSteps,

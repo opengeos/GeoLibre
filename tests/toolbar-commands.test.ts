@@ -52,7 +52,7 @@ const ids = (overrides?: Partial<ToolbarCommandContext>) =>
 // it moved here (#2858). A change to this list changes the command palette,
 // the cheat sheet, and the global shortcuts, so it must be deliberate. Since
 // captured it has only gained the Georeferencer, Field Collection, GPS
-// Tracking, and Simplify Interface commands.
+// Tracking, Simplify Interface, and Line of Sight commands.
 const FULL_REGISTRY_IDS = [
   "project.new",
   "project.open-file",
@@ -100,6 +100,7 @@ const FULL_REGISTRY_IDS = [
   "proc.segmentation",
   "proc.objectDetection",
   "proc.segmentEverything",
+  "proc.lineOfSight",
   "proc.conversion.vector-to-geoparquet",
   "proc.conversion.vector-to-flatgeobuf",
   "proc.conversion.vector-to-shapefile",
@@ -227,6 +228,7 @@ describe("buildToolbarCommands", () => {
       "project.collaborate",
       "proc.objectDetection",
       "proc.segmentEverything",
+      "proc.lineOfSight",
       "proc.earth-engine",
     ]) {
       assert.ok(!gated.includes(id), `${id} should be gated out`);
@@ -240,6 +242,7 @@ describe("buildToolbarCommands", () => {
             "project.collaborate",
             "proc.objectDetection",
             "proc.segmentEverything",
+            "proc.lineOfSight",
             "proc.earth-engine",
           ].includes(id),
       ),
