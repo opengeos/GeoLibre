@@ -140,8 +140,9 @@ test("opens the Style panel from the layer card by keyboard", async ({ page }) =
   const styleButton = (name: string) =>
     layerRow(page, name).getByRole("button", { name: "Open Style panel" });
 
-  // The card is a role="button" wrapper; its key handler must not swallow the
-  // activation of the action buttons nested inside it.
+  // Each action button on the card must activate from the keyboard on its own
+  // (the card used to be a role="button" wrapper whose key handler could
+  // swallow it; it is a plain listitem now).
   await styleButton("first").focus();
   await page.keyboard.press("Enter");
   await expect(stylePanel).toBeVisible();

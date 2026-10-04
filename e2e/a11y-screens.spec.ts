@@ -90,7 +90,7 @@ test("Add Data dialogs", async ({ page }, testInfo) => {
   ] as const) {
     await openMenuItem(page, "Add Data", item);
     await expect(page.getByRole("dialog", { name: title })).toBeVisible();
-    await expectAccessible(page, `add-data-${item}`, testInfo);
+    await expectAccessible(page, `add-data-${item.toLowerCase().replace(/\W+/g, "-")}`, testInfo);
     await closeDialog(page, title);
   }
 });

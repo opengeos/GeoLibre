@@ -23,7 +23,12 @@ const FEATURES = JSON.parse(readFixture("smoke.geojson")) as {
  */
 async function tabTo(page: Page, target: Locator, maxPresses = 80): Promise<void> {
   for (let presses = 0; presses < maxPresses; presses += 1) {
-    if (await target.evaluate((element) => element === document.activeElement)) return;
+    // A short per-check timeout: a target not rendered yet counts as not
+    // focused, so the loop keeps pressing Tab instead of stalling here.
+    const focused = await target
+      .evaluate((element) => element === document.activeElement, undefined, { timeout: 1_000 })
+      .catch(() => false);
+    if (focused) return;
     await page.keyboard.press("Tab");
   }
   await expect(target, `not reached within ${maxPresses} Tab presses`).toBeFocused();

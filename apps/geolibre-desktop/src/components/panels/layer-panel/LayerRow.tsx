@@ -363,6 +363,12 @@ export function LayerRow({
               e.stopPropagation();
               if (layerEditable) beginRename(layer);
             }}
+            // F2 is the keyboard counterpart of the double-click rename.
+            onKeyDown={(e) => {
+              if (e.key !== "F2" || !layerEditable) return;
+              e.preventDefault();
+              beginRename(layer);
+            }}
           >
             {layer.name}
           </button>

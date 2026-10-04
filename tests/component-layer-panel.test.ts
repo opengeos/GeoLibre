@@ -249,6 +249,15 @@ describe("LayerPanel", () => {
     assert.equal(screen.queryAllByRole("textbox", { name: /^Rename / }).length, 0);
   });
 
+  it("starts a rename with F2 on the layer's name button", () => {
+    useAppStore.setState({ layers: [geojsonLayer({ id: "parks", name: "Parks" })] });
+    renderLayerPanel();
+
+    fireEvent.keyDown(within(row("Parks")).getByRole("button", { name: "Parks" }), { key: "F2" });
+
+    assert.ok(screen.getByRole("textbox", { name: "Rename Parks" }));
+  });
+
   it("keeps the old name when a rename is cancelled with Escape", () => {
     useAppStore.setState({ layers: [geojsonLayer({ id: "parks", name: "Parks" })] });
     renderLayerPanel();

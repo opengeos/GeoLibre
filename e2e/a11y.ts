@@ -54,14 +54,17 @@ export async function expectAccessible(
   // colours as they are mid-fade, and a half-faded button reads as a contrast
   // failure that no user ever sees. Looping animations (spinners) never
   // finish, so they are not waited on.
-  await page.waitForFunction(() =>
-    document
-      .getAnimations()
-      .every(
-        (animation) =>
-          animation.playState !== "running" ||
-          animation.effect?.getComputedTiming().iterations === Infinity,
-      ),
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every(
+          (animation) =>
+            animation.playState !== "running" ||
+            animation.effect?.getComputedTiming().iterations === Infinity,
+        ),
+    undefined,
+    { timeout: 10_000 },
   );
   const { violations } = await new AxeBuilder({ page }).analyze();
   await testInfo.attach(`axe-${label}`, {
