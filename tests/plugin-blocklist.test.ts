@@ -136,11 +136,26 @@ describe("plugin blocklist", () => {
     assert.equal(getBlocklistedPlugin("evil")?.reason, "Malware.");
   });
 
-  it("treats a missing blocklist as empty", async () => {
+  it("treats a registry with no blocklist as blocking nothing", async () => {
     setPluginBlocklist([{ id: "stale", reason: "x" }]);
     respondWith("Not found", 404);
     await loadPluginBlocklist(REGISTRY);
     assert.equal(getBlocklistedPlugin("stale"), undefined);
+  });
+
+  it("keeps a cached list through a 404 and doesn't overwrite it", async () => {
+    respondWith({ version: 1, blocked: [{ id: "evil", reason: "Malware." }] });
+    await loadPluginBlocklist(REGISTRY);
+
+    setPluginBlocklist([]);
+    respondWith("Not found", 404);
+    await loadPluginBlocklist(REGISTRY);
+    assert.equal(getBlocklistedPlugin("evil")?.reason, "Malware.");
+
+    setPluginBlocklist([]);
+    globalThis.fetch = (() => Promise.reject(new TypeError("offline"))) as typeof fetch;
+    await loadPluginBlocklist(REGISTRY);
+    assert.equal(getBlocklistedPlugin("evil")?.reason, "Malware.");
   });
 
   it("rejects an oversized blocklist while streaming it", async () => {

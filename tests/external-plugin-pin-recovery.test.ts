@@ -551,4 +551,27 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     assert.deepEqual(loaded.loadedPluginIds, []);
     assert.match(JSON.stringify(loaded.issues), /blocked by the plugin registry: Malware/);
   });
+
+  it("refuses, without evaluating it, a zip whose bundle is blocklisted", async () => {
+    const flag = "__zipBlocklistEvaluated";
+    const entrySource = `globalThis.${flag} = true;\n${served.get(ENTRY_URL) ?? ""}`;
+    const bytes = zipSync({
+      "plugin.json": strToU8(served.get(MANIFEST_URL)!),
+      "entry.js": strToU8(entrySource),
+    });
+    blocklist.setPluginBlocklist([
+      {
+        id: "pin-demo",
+        bundleSha256: await integrity.computePluginBundleHash({ entrySource }),
+        reason: "Bad release.",
+      },
+    ]);
+
+    await assert.rejects(
+      externalPlugins.installWebPluginArchive(manager, "bad.zip", bytes, app, null),
+      /blocked by the plugin registry: Bad release/,
+    );
+    assert.equal((globalThis as Record<string, unknown>)[flag], undefined);
+    assert.deepEqual(manager.list(), []);
+  });
 });

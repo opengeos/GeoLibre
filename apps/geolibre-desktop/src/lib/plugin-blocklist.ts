@@ -134,13 +134,13 @@ function writeCache(url: string, document: unknown): void {
   }
 }
 
-async function fetchBlocklist(url: string): Promise<unknown> {
+async function fetchBlocklist(url: string): Promise<unknown | null> {
   const response = await fetch(url, {
     cache: "no-cache",
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  // A registry without a blocklist answers 404: nothing is blocked.
-  if (response.status === 404) return { blocked: [] };
+  // A registry without a blocklist answers 404 (see loadPluginBlocklist).
+  if (response.status === 404) return null;
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return JSON.parse(await readBodyWithCap(response, MAX_BYTES, "plugin blocklist")) as unknown;
 }
@@ -157,6 +157,18 @@ export async function loadPluginBlocklist(registryUrl: string): Promise<void> {
   if (url === null) return;
   try {
     const document = await fetchBlocklist(url);
+    if (document === null) {
+      // 404. A registry that has never published a blocklist blocks nothing.
+      // But one we have a cached list for is far likelier mid-deploy or
+      // misconfigured than to have withdrawn it, so keep that list and leave
+      // the cache alone rather than unblock everything.
+      const cached = readCache(url);
+      setPluginBlocklist(cached ?? []);
+      if (cached) {
+        console.warn(`[GeoLibre] ${url} returned 404; keeping the cached plugin blocklist.`);
+      }
+      return;
+    }
     // A malformed document is a failed fetch, not an empty list: replacing the
     // active (or cached) list with nothing would unblock everything.
     if (

@@ -133,6 +133,7 @@ import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
+  assertBundleNotBlocklisted,
   installWebPluginArchive,
   listInstalledWebPlugins,
   loadExternalPlugins,
@@ -551,6 +552,8 @@ export async function installPluginArchive(
     if (!decision.allowed) {
       throw new PluginPolicyError(sourcePath, decision);
     }
+    // Refuse a blocklisted release before the install persists it.
+    await assertBundleNotBlocklisted(bundle);
   }
   const pluginId = await invoke<string>("install_external_plugin_archive", {
     sourcePath,

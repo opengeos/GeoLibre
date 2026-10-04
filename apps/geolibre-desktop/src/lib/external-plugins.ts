@@ -221,6 +221,11 @@ export async function loadExternalPlugins(
   for (const { bundle, source } of bundles) {
     try {
       enforcePluginPolicy(bundle.manifest.id, source, policy, bundle.archiveName, bundle.sourceUrl);
+      // URL bundles were hash-checked when fetched; archives and plugin
+      // directories are checked here, before their code runs.
+      if (source === "zip" || source === "directory") {
+        await assertBundleNotBlocklisted(bundle);
+      }
       const loadedFrom = externallyLoadedPluginSources.get(bundle.manifest.id);
       if (loadedFrom !== undefined) {
         // Already loaded by a previous scan; a settings change re-runs the
@@ -282,6 +287,27 @@ export async function loadExternalPlugins(
     loadedPluginIds,
     issues,
   };
+}
+
+/**
+ * Refuse a bundle whose exact code the registry's blocklist names (a single
+ * bad release, blocked by `bundleSha256`). A whole-plugin block is already
+ * refused by the policy gate. Call before the bundle's code is evaluated.
+ *
+ * @param bundle - The bundle about to be imported.
+ * @throws When the bundle is blocklisted.
+ */
+export async function assertBundleNotBlocklisted(bundle: ExternalPluginBundle): Promise<void> {
+  const blocklisted = getBlocklistedBundle(
+    bundle.manifest.id,
+    await computePluginBundleHash(bundle),
+  );
+  if (blocklisted) {
+    throw new Error(
+      `Plugin '${bundle.manifest.id}' ${bundle.manifest.version} was blocked by the plugin ` +
+        `registry: ${blocklisted.reason}`,
+    );
+  }
 }
 
 /**
@@ -687,6 +713,7 @@ export async function installWebPluginArchive(
   }
   const bundle = await bundleFromZipBytes(fileName, bytes);
   enforcePluginPolicy(bundle.manifest.id, "zip", policy, fileName);
+  await assertBundleNotBlocklisted(bundle);
   // importExternalPlugin validates the exported plugin, that it matches the
   // manifest id/name/version, and rejects activeByDefault.
   const plugin = await importExternalPlugin(bundle);
