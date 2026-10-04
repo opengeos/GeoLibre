@@ -697,8 +697,10 @@ manual check, not a Dependabot event:
 
 The desktop CSP (`apps/geolibre-desktop/src-tauri/tauri.conf.json`) does not
 allow all of `https://cdn.jsdelivr.net/npm/`. It lists one version-pinned path
-per package the app executes from jsDelivr, so a compromised or typo-squatted
-package on the CDN cannot run in the desktop app. Each version is owned by
+per package the app executes from jsDelivr. That blocks scripts from any other
+package or version on the CDN; it does not verify what is served at an allowed
+path, so a compromised release at a pinned path still runs, and CSP stops
+checking paths once a request is redirected. Each version is owned by
 something else, so a bump can move the URL the app requests while the CSP keeps
 the old one. The packaged app then hits a CSP block that `tauri dev` never
 shows, because `tauri dev` does not apply the CSP. `tests/tauri-csp.test.ts`
@@ -709,7 +711,7 @@ re-derives every path from its owner and fails when they disagree:
 | `pyodide/v<ver>/full/` | `PYODIDE_VERSION` in `pyodide-config.ts` | Pyodide's `import()` of `pyodide.asm.js` (Python Console) |
 | `npm/@electric-sql/pglite@<ver>/`, `npm/@electric-sql/pglite-postgis@<ver>/` | lockfile | `pglite-loader.cdn.ts` (SQL Workspace → PostGIS) |
 | `npm/onnxruntime-web@<ver>/dist/` | `ORT_VERSION` in `packages/processing/src/ort.ts` | onnxruntime's `import()` of its wasm glue (object detection, SAM) |
-| `npm/@duckdb/duckdb-wasm@<ver>/dist/` | lockfile (`apps/geolibre-desktop`) | `maplibre-gl-components`' DuckDB converter: a blob worker `importScripts()` the worker from `getJsDelivrBundles()` |
+| `npm/@duckdb/duckdb-wasm@<ver>/dist/` | lockfile (`apps/geolibre-desktop`) | `maplibre-gl-components`' DuckDB converter: a blob worker that calls `importScripts()` on the worker URL from `getJsDelivrBundles()` |
 | `npm/@duckdb/duckdb-wasm@1.31.0/`, `npm/sql.js@1.13.0/dist/`, `npm/geojson-vt@4.0.2/`, `npm/vt-pbf@3.1.3/` | URLs hard-coded in `maplibre-gl-vector` | Add Data → Vector Layer (DuckDB, the GeoPackage patch, the MVT fallback) |
 | `npm/apache-arrow@…`, `npm/tslib@…`, `npm/flatbuffers@…`, `npm/pbf@…`, `npm/ieee754@…`, `npm/@mapbox/point-geometry@…`, `npm/@mapbox/vector-tile@…` | jsDelivr's `/+esm` builds of the `maplibre-gl-vector` URLs above | the `import` statements inside those bundles |
 
