@@ -91,8 +91,8 @@ async function readAdminProfileFile(): Promise<AdminProfileFile | null> {
   try {
     // The admin file is optional; a 404 here is the normal "no admin profile"
     // case, so flag the request benign to keep it out of the error diagnostics.
-    const meta = import.meta as ImportMeta & { env?: { BASE_URL?: string } };
-    const response = await fetch(`${meta.env?.BASE_URL ?? "/"}admin-profile.json`, {
+    const base = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL;
+    const response = await fetch(`${base ?? "/"}admin-profile.json`, {
       headers: { [OPTIONAL_RESOURCE_HEADER]: "1" },
     });
     if (!response.ok) return null;
