@@ -1,6 +1,7 @@
 import {
   diffProjects,
   parseProject,
+  useAppStore,
   type GeoLibreProject,
   type LayerDiff,
   type ProjectDiff,
@@ -70,9 +71,18 @@ export function ProjectSnapshotDiff({
 
   // Parsed projects are kept across target switches so the differ's per-feature
   // hash cache (keyed by feature object) hits instead of re-hashing every
-  // embedded feature. The live project is re-read only after a layer restore.
+  // embedded feature. The live project is re-read after a layer restore or
+  // whenever the store's layers change (an Undo, a sync edit), so the diff and
+  // its restore buttons never describe a stale project.
+  const liveLayers = useAppStore((state) =>
+    targetId === CURRENT_PROJECT_TARGET ? state.layers : null,
+  );
   const parsedSnapshots = useRef(new Map<string, GeoLibreProject>());
-  const currentCache = useRef<{ revision: number; project: GeoLibreProject } | null>(null);
+  const currentCache = useRef<{
+    revision: number;
+    layers: typeof liveLayers;
+    project: GeoLibreProject;
+  } | null>(null);
 
   const result = useMemo<DiffResult>(() => {
     const parsed = (snapshot: ProjectHistorySnapshot): GeoLibreProject => {
@@ -93,8 +103,11 @@ export function ProjectSnapshotDiff({
     if (targetId === CURRENT_PROJECT_TARGET) {
       let current: GeoLibreProject;
       try {
-        if (currentCache.current?.revision !== revision) {
-          currentCache.current = { revision, project: getCurrentProject() };
+        if (
+          currentCache.current?.revision !== revision ||
+          currentCache.current.layers !== liveLayers
+        ) {
+          currentCache.current = { revision, layers: liveLayers, project: getCurrentProject() };
         }
         current = currentCache.current.project;
       } catch (error) {
@@ -127,7 +140,7 @@ export function ProjectSnapshotDiff({
       console.error("Could not compare the project snapshots.", error);
       return { ok: false, error: "snapshot" };
     }
-  }, [base, snapshots, targetId, getCurrentProject, formatDate, t, revision]);
+  }, [base, snapshots, targetId, getCurrentProject, formatDate, t, revision, liveLayers]);
 
   const restoreLayer =
     result.ok && result.againstCurrent && onRestoreLayer

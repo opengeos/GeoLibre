@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "./helpers/dom";
+import { act, fireEvent, render, screen, useAppStore, within } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement } from "react";
@@ -125,6 +125,28 @@ describe("ProjectHistoryDialog compare", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Compare the snapshot/ }));
     assert.match(screen.getByRole("alert").textContent ?? "", /Could not read the current project/);
+  });
+
+  it("re-reads the current project when the store's layers change (e.g. Undo)", () => {
+    let current = project([layer("roads"), layer("rivers")]);
+    render(
+      createElement(ProjectHistoryDialog, {
+        open: true,
+        onOpenChange: () => {},
+        snapshots: [older],
+        restoreError: null,
+        onRestore: () => true,
+        getCurrentProject: () => current,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Compare the snapshot/ }));
+    const view = screen.getByTestId("project-snapshot-diff");
+    assert.ok(within(view).getByText("rivers"));
+
+    current = project([layer("roads")]);
+    act(() => useAppStore.setState({ layers: [layer("roads")] }));
+    assert.equal(within(view).queryByText("rivers"), null);
+    assert.ok(within(view).getByText("No differences."));
   });
 
   it("returns to the snapshot list", () => {
