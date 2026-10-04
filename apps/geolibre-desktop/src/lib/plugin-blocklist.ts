@@ -109,18 +109,22 @@ export function pluginBlocklistUrl(registryUrl: string): string | null {
   }
 }
 
-function readCache(): PluginBlocklistEntry[] | null {
+// The cache records which blocklist it holds, so switching registries never
+// applies one registry's list to another's plugins.
+function readCache(url: string): PluginBlocklistEntry[] | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
-    return raw ? parsePluginBlocklist(JSON.parse(raw)) : null;
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { url?: unknown; document?: unknown };
+    return cached.url === url ? parsePluginBlocklist(cached.document) : null;
   } catch {
     return null;
   }
 }
 
-function writeCache(value: unknown): void {
+function writeCache(url: string, document: unknown): void {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(value));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ url, document }));
   } catch {
     // Storage may be unavailable or full; the cache is only for offline starts.
   }
@@ -150,9 +154,9 @@ export async function loadPluginBlocklist(registryUrl: string): Promise<void> {
   try {
     const document = await fetchBlocklist(url);
     setPluginBlocklist(parsePluginBlocklist(document));
-    writeCache(document);
+    writeCache(url, document);
   } catch (error) {
-    const cached = readCache();
+    const cached = readCache(url);
     if (cached) setPluginBlocklist(cached);
     console.warn(
       `[GeoLibre] Could not fetch the plugin blocklist from ${url}` +
