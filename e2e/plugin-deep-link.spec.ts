@@ -6,15 +6,21 @@ import { waitForMap } from "./helpers";
 const PLUGINS_DOC = join(__dirname, "..", "docs", "user-guide", "plugins.md");
 
 /**
- * The link names in the "Open a plugin from a link" table of the Plugins page,
- * one backticked name in the second column of each row.
+ * The link names in the generated plugin reference table of the Plugins page
+ * (between the plugin-reference markers): one backticked name in the "Link
+ * name" column (the third) of each row. Rows whose plugin cannot be opened
+ * from a link say "menu only" there and are skipped.
  */
 function documentedLinkNames(): string[] {
   const doc = readFileSync(PLUGINS_DOC, "utf8");
-  const start = doc.indexOf("## Open a plugin from a link");
-  expect(start, "plugins.md lost its 'Open a plugin from a link' section").toBeGreaterThan(-1);
-  const section = doc.slice(start, doc.indexOf("\n## ", start + 1));
-  return [...section.matchAll(/^\|[^|\n]+\|\s*`([^`]+)`\s*\|$/gm)].map((match) => match[1]).sort();
+  const start = doc.indexOf("<!-- plugin-reference:start -->");
+  const end = doc.indexOf("<!-- plugin-reference:end -->");
+  expect(start, "plugins.md lost its plugin-reference markers").toBeGreaterThan(-1);
+  expect(end, "plugins.md lost its plugin-reference markers").toBeGreaterThan(start);
+  const section = doc.slice(start, end);
+  return [...section.matchAll(/^\|[^|\n]+\|[^|\n]+\|\s*`([^`]+)`\s*\|/gm)]
+    .map((match) => match[1])
+    .sort();
 }
 
 test("?plugin= activates a built-in plugin", async ({ page }) => {

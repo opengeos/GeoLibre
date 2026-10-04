@@ -119,7 +119,7 @@ The dialog warns even before a share token is configured, because uploading a sa
 
 ![The Print Layout composer, with the page settings on the left and a live preview on the right](https://assets.geolibre.app/images/geolibre-print-layout.webp)
 
-**Project → Print Layout...** opens the layout composer, which exports the current map to PNG, PDF, or SVG. It carries a title block with an editable title and footer, a user-editable legend, an explicit map-scale input, page-size controls, a custom print extent, attribute-table and chart blocks, Atlas / map series generation (one page per feature, or a uniform series along a line), SVG export for editing in a vector editor, and Copy to Clipboard. See [Print Layout](print-layout.md) for the full guide.
+**Project → Print Layout...** opens the layout composer, which exports the current map to PNG, PDF, or SVG. It carries an editable title and footer, an info (title) block with project metadata, a user-editable legend, an explicit map-scale input, page-size controls, a custom print extent, attribute-table and chart blocks, Atlas / map series generation (one page per feature, or a uniform series along a line), SVG export for editing in a vector editor, and Copy to Clipboard. See [Print Layout](print-layout.md) for the full guide.
 
 ## Story maps
 

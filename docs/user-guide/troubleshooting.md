@@ -18,8 +18,9 @@ Try these in order:
     - **Windows / Linux**: `Ctrl + Shift + R` (Chrome, Edge, Firefox).
     - **macOS Chrome / Edge / Firefox**: `Cmd + Shift + R`.
     - **macOS Safari**: `Cmd + Option + R`.
-- **Open the app in a private / incognito window** to confirm the problem is
-  cache related. If it works there, the cache is the cause.
+- **Open the app in a private / incognito window**. If it works there, the
+  problem lies in your browser profile, most often the cache; clearing the
+  site's data (next step) confirms it.
 - **Clear the cached files** for the GeoLibre site if a hard refresh is not
   enough, then reload.
 

@@ -101,7 +101,8 @@ bottom shows each tool's own messages.
   results, a GeoTIFF for raster results.
 - The run stops at the first node that fails, and reports
   **Run failed: …**. Outputs added before the failure stay on the map.
-- **Cancel** stops a run in progress.
+- **Cancel** stops the run before the next node starts. A Whitebox tool that
+  is already running finishes first.
 
 ## Saving and sharing models
 
