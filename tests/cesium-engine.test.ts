@@ -644,6 +644,37 @@ describe("CesiumEngine terrain correction", () => {
     }
   });
 
+  it("corrects a landed flight once terrain under it settles", () => {
+    // A flight converts its zoom against the ground loaded when it started, so
+    // it can land too close; the landed view is corrected like a placement.
+    const fakes = makeViewer(0);
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView(VIEW);
+    engine.flyTo({ center: [10, 20], zoom: 6 });
+    fakes.moveEnd.emit();
+    const landed = engine.getLastAppliedView();
+    const placements = fakes.placements;
+    fakes.setGroundHeight(1200);
+    fakes.tileLoadProgressEvent.emit(0);
+    assert.equal(fakes.placements, placements + 1, "the landed view is corrected");
+    assert.deepEqual(engine.getLastAppliedView(), landed, "re-applied as the landed view");
+    engine.destroy();
+  });
+
+  it("leaves a flight the user took over to the user", () => {
+    const fakes = makeViewer(0);
+    const engine = new CesiumEngine(makeCesium(), fakes.viewer);
+    engine.applyView(VIEW);
+    engine.flyTo({ center: [10, 20], zoom: 6 });
+    fakes.fireCanvas("wheel");
+    fakes.moveEnd.emit();
+    const placements = fakes.placements;
+    fakes.setGroundHeight(1200);
+    fakes.tileLoadProgressEvent.emit(0);
+    assert.equal(fakes.placements, placements, "the user's camera is authoritative");
+    engine.destroy();
+  });
+
   it("keeps correcting while a layer fit waits for a flight that never starts", () => {
     // A layer with no bounds in the store hands its fit to the layer sync, which
     // flies only once the layer's Cesium object loads. Until it does, the

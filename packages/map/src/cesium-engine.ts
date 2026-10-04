@@ -336,11 +336,18 @@ export class CesiumEngine implements MapEngine {
    * Whether something other than {@link applyView} has moved the camera since
    * its last placement: user input, a scene-mode morph, or an animated flight
    * (fly-to-layer, Set View, zoom in/out). Unlike {@link userMoved} (which
-   * `moveEnd` consumes) this stays set until the next `applyView`, and it is
-   * what stops the terrain correction from re-applying a placement the camera
-   * has already left. See {@link supersedePlacement}.
+   * `moveEnd` consumes) this stays set until the next `applyView` or until a
+   * flight lands untouched, and it is what stops the terrain correction from
+   * re-applying a placement the camera has already left. See
+   * {@link supersedePlacement}.
    */
   private placementSuperseded = false;
+  /**
+   * Whether an animated flight from {@link startFlight} has not landed yet.
+   * The `moveEnd` that ends it hands the landed view back to the terrain
+   * correction (see {@link adoptLandedFlight}).
+   */
+  private flightPending = false;
 
   /**
    * Zoom bounds from the project's `MapPreferences`, in MapLibre zoom levels.
@@ -388,7 +395,7 @@ export class CesiumEngine implements MapEngine {
     const onDiagnostic = options.onDiagnostic;
     this.layerSync = new CesiumLayerSync(Cesium, viewer, undefined, {
       onTilesetFields: publishTilesetFields,
-      onFlyTo: () => this.supersedePlacement(),
+      onFlyTo: () => this.startFlight(),
       onLayerError: ({ layerId, layerName, message }) =>
         onDiagnostic?.({ message: `${layerName}: ${message}`, source: "cesium", layerId }),
       onTileFailure: ({ layerId, layerName, message, status, loaded, failed }) =>
@@ -462,6 +469,7 @@ export class CesiumEngine implements MapEngine {
     this.lastApplied = view;
     // This placement is ours, so the terrain correction may adjust it.
     this.placementSuperseded = false;
+    this.flightPending = false;
     this.lastGroundHeight = groundHeightAt(this.Cesium, viewer, view.center[0], view.center[1]);
     applyMapViewToCamera(this.Cesium, viewer, view);
     return new Promise((resolve) => {
@@ -575,7 +583,7 @@ export class CesiumEngine implements MapEngine {
     // nonsensical camera distance from it. Mirrors MapController.fitBounds,
     // including its zoom floor, so a single marker frames the same on both
     // engines.
-    this.supersedePlacement();
+    this.startFlight();
     if (west === east && south === north) {
       this.animateTo(
         {
@@ -1441,6 +1449,30 @@ export class CesiumEngine implements MapEngine {
   }
 
   /**
+   * Note that an animated flight is leaving the current placement. The terrain
+   * correction stands down until it lands, then takes over the landed view.
+   */
+  private startFlight(): void {
+    this.supersedePlacement();
+    this.flightPending = true;
+  }
+
+  /**
+   * Make a landed flight's view the placement the terrain correction keeps
+   * honest. A flight converts its target zoom to a distance against whatever
+   * ground had loaded when it started, so it can land too close over terrain
+   * that streams in afterwards; correcting the landed view fixes that the same
+   * way it fixes an `applyView`.
+   */
+  private adoptLandedFlight(): void {
+    const viewer = this.live();
+    const view = this.lastApplied;
+    if (!viewer || !view) return;
+    this.lastGroundHeight = groundHeightAt(this.Cesium, viewer, view.center[0], view.center[1]);
+    this.placementSuperseded = false;
+  }
+
+  /**
    * Animate the camera to `view`. Never marks the project dirty.
    *
    * This matches the 2D map exactly, and the match is the point. `MapController`
@@ -1455,7 +1487,7 @@ export class CesiumEngine implements MapEngine {
   private animateTo(view: MapViewState, seconds?: number): void {
     const viewer = this.live();
     if (!viewer || this.isMorphing()) return;
-    this.supersedePlacement();
+    this.startFlight();
     // Cesium has no "ease to a MapLibre view" primitive, so the flight is
     // expressed the same way applyView expresses a placement — a lookAt in the
     // target's local frame — with `flyTo`'s duration doing the animating.
@@ -1602,7 +1634,11 @@ export class CesiumEngine implements MapEngine {
     };
     const onMoveEnd = () => {
       this.cameraMoving = false;
+      // A flight the user took over mid-air stays theirs.
+      const landedFlight = this.flightPending && !this.userMoved;
+      this.flightPending = false;
       this.publishCameraView();
+      if (landedFlight) this.adoptLandedFlight();
     };
     viewer.camera.moveStart.addEventListener(onMoveStart);
     viewer.camera.moveEnd.addEventListener(onMoveEnd);

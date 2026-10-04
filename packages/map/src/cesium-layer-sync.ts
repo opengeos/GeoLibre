@@ -2035,8 +2035,8 @@ export class CesiumLayerSync {
     const viewer = this.viewer;
     // An I3S scene layer is a `3dtiles` entry, but an I3SDataProvider is not a
     // target `Viewer.flyTo` accepts; it publishes its footprint as a rectangle.
-    this.deps.onFlyTo?.();
     const extent = (handle as { extent?: Rectangle }).extent;
+    this.deps.onFlyTo?.();
     if (extent) {
       viewer.camera.flyTo({ destination: extent, duration: ZOOM_TO_LAYER_SECONDS });
       return true;
