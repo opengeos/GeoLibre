@@ -236,6 +236,7 @@
     "description": "Xarici GeoLibre plaginlərinə baxın, onları quraşdırın, yeniləyin və silin. Plaginlər <registryLink>GeoLibre plagin reyestrində</registryLink> göstərilir.",
     "policySideloadDisabled": "Plaginlərin kənar mənbədən quraşdırılması (sideloading) yerləşdirmə siyasəti ilə söndürülüb.",
     "policyBlocked": "“{{pluginId}}” plagini yerləşdirmə siyasəti ilə bloklanıb.",
+    "policyBlocklisted": "“{{pluginId}}” plagini plagin reyestri tərəfindən bloklandı: {{reason}}",
     "policyNotAllowed": "“{{pluginId}}” plagininə yerləşdirmə siyasəti ilə icazə verilmir."
   },
   "viewState": {
@@ -5282,6 +5283,8 @@
         "projectedHint": "Hədəf CRS-də endirmələr qovluğuna yadda saxlanıldı. Xəritə yalnız EPSG:4326 sistemini göstərir, buna görə proyeksiyalı nəticə lay kimi əlavə edilmir."
       },
       "filterBySource": "Mənbəyə görə süzgəcdən keçir",
+      "filterByCategory": "Kateqoriyaya görə süz",
+      "layerFor": "{{name}} üçün lay",
       "allSources": "Bütün mənbələr",
       "geolibreTools": "GeoLibre alətləri",
       "whiteboxTools": "Whitebox alətləri",

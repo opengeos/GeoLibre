@@ -24,6 +24,8 @@ export interface MapCanvasIdentifyAllLabels {
   pixelReadFailed: string;
   /** Fallback when a WMS GetFeatureInfo request fails without a message. */
   wmsFailed: string;
+  /** A WMS layer whose capabilities mark it `queryable="0"`. */
+  wmsNotQueryable: string;
   /** The geotagged-photo popup's strings; see `createPhotoPopupElement`. */
   photo: PhotoPopupLabels;
 }
@@ -43,6 +45,7 @@ export const DEFAULT_IDENTIFY_ALL_LABELS: MapCanvasIdentifyAllLabels = {
   noData: "No data at this location.",
   pixelReadFailed: "The pixel value could not be read.",
   wmsFailed: "The WMS GetFeatureInfo request failed.",
+  wmsNotQueryable: "This WMS layer does not provide feature information.",
   photo: DEFAULT_PHOTO_POPUP_LABELS,
 };
 

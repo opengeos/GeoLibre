@@ -236,6 +236,7 @@
     "description": "Harici GeoLibre eklentilerine göz atın, kurun, güncelleyin ve kaldırın. Eklentiler <registryLink>GeoLibre eklenti kayıt defterinde</registryLink> listelenir.",
     "policySideloadDisabled": "Eklentilerin harici olarak yüklenmesi dağıtım ilkesi tarafından devre dışı bırakıldı.",
     "policyBlocked": "\"{{pluginId}}\" eklentisi dağıtım ilkesi tarafından engellendi.",
+    "policyBlocklisted": "\"{{pluginId}}\" eklentisi eklenti kayıt defteri tarafından engellendi: {{reason}}",
     "policyNotAllowed": "\"{{pluginId}}\" eklentisine dağıtım ilkesi tarafından izin verilmiyor."
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "İndirilenler klasörünüze hedef KRS'de kaydedildi. Harita yalnızca EPSG:4326'yı gösterdiğinden, projeksiyonu yapılmış bir sonuç katman olarak eklenmez."
       },
       "filterBySource": "Kaynağa göre filtrele",
+      "filterByCategory": "Kategoriye göre filtrele",
+      "layerFor": "{{name}} için katman",
       "allSources": "Tüm kaynaklar",
       "geolibreTools": "GeoLibre araçları",
       "whiteboxTools": "Whitebox araçları",

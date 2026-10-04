@@ -236,6 +236,7 @@
     "description": "Parcourez, installez, mettez à jour et supprimez des extensions GeoLibre externes. Les extensions sont répertoriées dans le <registryLink>registre des extensions GeoLibre</registryLink>.",
     "policySideloadDisabled": "L'installation manuelle d'extensions (sideloading) est désactivée par la stratégie de déploiement.",
     "policyBlocked": "L'extension « {{pluginId}} » est bloquée par la stratégie de déploiement.",
+    "policyBlocklisted": "Le plugin « {{pluginId}} » a été bloqué par le registre des plugins : {{reason}}",
     "policyNotAllowed": "L'extension « {{pluginId}} » n'est pas autorisée par la stratégie de déploiement."
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "Enregistré dans vos téléchargements dans le SRC cible. La carte n'affiche que l'EPSG:4326, donc un résultat projeté n'est pas ajouté comme couche."
       },
       "filterBySource": "Filtrer par source",
+      "filterByCategory": "Filtrer par catégorie",
+      "layerFor": "Couche pour {{name}}",
       "allSources": "Toutes les sources",
       "geolibreTools": "Outils GeoLibre",
       "whiteboxTools": "Outils Whitebox",

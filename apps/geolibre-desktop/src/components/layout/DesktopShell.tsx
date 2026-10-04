@@ -203,6 +203,7 @@ export function DesktopShell({
       noData: t("map.identifyAll.noData"),
       pixelReadFailed: t("map.identifyAll.pixelReadFailed"),
       wmsFailed: t("map.identifyAll.wmsFailed"),
+      wmsNotQueryable: t("map.identifyAll.wmsNotQueryable"),
       photo: {
         photo: t("map.identifyAll.photo"),
         noPreview: t("map.identifyAll.photoNoPreview"),

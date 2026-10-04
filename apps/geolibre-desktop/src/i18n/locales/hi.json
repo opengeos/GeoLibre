@@ -236,6 +236,7 @@
     "description": "बाहरी GeoLibre प्लगइन ब्राउज़ करें, इंस्टॉल करें, अपडेट करें और हटाएँ। प्लगइन <registryLink>GeoLibre प्लगइन रजिस्ट्री</registryLink> में सूचीबद्ध हैं।",
     "policySideloadDisabled": "डिप्लॉयमेंट नीति के कारण प्लगइन साइडलोडिंग अक्षम है।",
     "policyBlocked": "प्लगइन “{{pluginId}}” डिप्लॉयमेंट नीति द्वारा ब्लॉक किया गया है।",
+    "policyBlocklisted": "प्लगइन रजिस्ट्री ने प्लगइन “{{pluginId}}” को ब्लॉक कर दिया: {{reason}}",
     "policyNotAllowed": "डिप्लॉयमेंट नीति प्लगइन “{{pluginId}}” की अनुमति नहीं देती।"
   },
   "viewState": {
@@ -5218,6 +5219,8 @@
         "projectedHint": "लक्ष्य CRS में आपके डाउनलोड में सहेजा गया। मानचित्र केवल EPSG:4326 प्रदर्शित करता है, इसलिए प्रोजेक्टेड परिणाम को लेयर के रूप में नहीं जोड़ा जाता।"
       },
       "filterBySource": "स्रोत के अनुसार फ़िल्टर करें",
+      "filterByCategory": "श्रेणी के अनुसार फ़िल्टर करें",
+      "layerFor": "{{name}} के लिए लेयर",
       "allSources": "सभी स्रोत",
       "geolibreTools": "GeoLibre टूल",
       "whiteboxTools": "Whitebox टूल",

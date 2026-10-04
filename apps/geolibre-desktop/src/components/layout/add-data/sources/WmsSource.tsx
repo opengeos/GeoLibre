@@ -16,6 +16,7 @@ import {
   serviceRequestErrorMessage,
   stripOgcOperationParams,
   wmsCrsChoices,
+  wmsLayersQueryable,
   pickWmsCrs,
   usableWmsCrs,
   wmsLayersAdvertiseCrs,
@@ -327,6 +328,7 @@ export function WmsSource({
           tileSize: wmsTileSize,
           version: wmsVersion,
           crs: await submittedCrs(),
+          queryable: wmsLayersQueryable(layerOptions, wmsLayers),
         }),
       ),
     );

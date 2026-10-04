@@ -125,6 +125,8 @@ export interface WmsLayerParams {
   version: string;
   /** CRS of the requested tiles (default EPSG:3857); see {@link normalizeWmsCrs}. */
   crs?: string;
+  /** False when the capabilities mark every requested layer `queryable="0"`. */
+  queryable?: false;
 }
 
 /**
@@ -167,6 +169,8 @@ export function buildWmsLayer(params: WmsLayerParams): GeoLibreLayer {
       transparent: params.transparent,
       version,
       crs,
+      // Identify skips a layer that answers no GetFeatureInfo (#2887).
+      ...(params.queryable === false ? { queryable: false } : {}),
       ...(attribution ? { attribution } : {}),
     },
     { service: "wms" },

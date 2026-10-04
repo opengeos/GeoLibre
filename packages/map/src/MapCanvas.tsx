@@ -48,6 +48,7 @@ import {
   isAbortError,
   isPixelIdentifyLayer,
   isWmsLayer,
+  isWmsQueryable,
   pixelIdentifyProperties,
   timeSliderBridge,
 } from "./identify-sources";
@@ -716,7 +717,7 @@ export const MapCanvas = memo(function MapCanvas({
 
         const asyncLayers = eligibleLayers.filter(
           (candidate) =>
-            isWmsLayer(candidate) ||
+            (isWmsLayer(candidate) && isWmsQueryable(candidate)) ||
             isPixelIdentifyLayer(candidate) ||
             candidate.type === "cog" ||
             candidate.metadata.sourceKind === NETCDF_IMAGE_SOURCE_KIND,
@@ -972,6 +973,16 @@ export const MapCanvas = memo(function MapCanvas({
               error instanceof Error ? error.message : identifyAllLabels.pixelReadFailed;
             showIdentifyPopup(createIdentifyMessagePopupElement(layer.name, message));
           });
+        return;
+      }
+
+      if (isWmsLayer(layer) && !isWmsQueryable(layer)) {
+        // The capabilities say this layer answers no GetFeatureInfo (#2887).
+        wmsIdentifyAbortController?.abort();
+        selectFeature(null);
+        showIdentifyPopup(
+          createIdentifyMessagePopupElement(layer.name, identifyAllLabels.wmsNotQueryable),
+        );
         return;
       }
 

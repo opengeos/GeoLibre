@@ -230,6 +230,7 @@
     "description": "Jelajahi, pasang, perbarui, dan hapus plugin GeoLibre eksternal. Plugin terdaftar di <registryLink>registri plugin GeoLibre</registryLink>.",
     "policySideloadDisabled": "Pemasangan plugin secara manual (sideload) dinonaktifkan oleh kebijakan penerapan.",
     "policyBlocked": "Plugin \"{{pluginId}}\" diblokir oleh kebijakan penerapan.",
+    "policyBlocklisted": "Plugin \"{{pluginId}}\" diblokir oleh registri plugin: {{reason}}",
     "policyNotAllowed": "Plugin \"{{pluginId}}\" tidak diizinkan oleh kebijakan penerapan."
   },
   "viewState": {
@@ -5139,6 +5140,8 @@
         "projectedHint": "Tersimpan ke unduhan Anda dalam CRS target. Peta hanya menampilkan EPSG:4326, jadi hasil terproyeksi tidak ditambahkan sebagai layer."
       },
       "filterBySource": "Filter berdasarkan sumber",
+      "filterByCategory": "Filter berdasarkan kategori",
+      "layerFor": "Layer untuk {{name}}",
       "allSources": "Semua sumber",
       "geolibreTools": "Alat GeoLibre",
       "whiteboxTools": "Alat Whitebox",
