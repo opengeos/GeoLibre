@@ -230,8 +230,15 @@
     "projectName": "نام پروژه",
     "savedTemplates": "الگوهای ذخیره‌شده",
     "deleteTemplate": "حذف الگو",
+    "examples": "نمونه‌ها",
+    "examplesDescription": "از یک نقشهٔ نمایشی منتشرشده شروع کنید. یک رونوشت باز می‌شود و به اتصال اینترنت نیاز دارد.",
+    "exampleOpenFailed": "باز کردن «{{title}}» ممکن نشد.",
     "basemapLabel": "نقشهٔ پایه",
     "create": "ساختن"
+  },
+  "cvdPreview": {
+    "badge": "پیش‌نمایش دید رنگی: {{mode}}",
+    "turnOff": "خاموش کردن پیش‌نمایش دید رنگی"
   },
   "basemapPicker": {
     "title": "تغییر پس‌زمینه",
@@ -3240,6 +3247,12 @@
       "splitViewGrid2x3": "شبکهٔ ۲ × ۳",
       "splitViewGrid3x3": "شبکهٔ ۳ × ۳",
       "splitViewSync": "هم‌گام‌سازی نماها",
+      "colorVisionPreview": "پیش‌نمایش دید رنگی",
+      "cvdOff": "خاموش",
+      "cvdProtanopia": "پروتانوپیا (کوررنگی قرمز)",
+      "cvdDeuteranopia": "دوترانوپیا (کوررنگی سبز)",
+      "cvdTritanopia": "تریتانوپیا (کوررنگی آبی)",
+      "cvdAchromatopsia": "آکروماتوپسیا (بدون رنگ)",
       "renderingEngine": "موتور ترسیم",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

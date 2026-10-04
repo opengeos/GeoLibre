@@ -15,6 +15,8 @@ The **New project** dialog names the project and picks its starting basemap: the
 
 ![The New project dialog, with a project name field and the basemap gallery](https://assets.geolibre.app/images/geolibre-new-project.webp)
 
+The collapsible **Examples** section lists a few curated starter projects from the [Gallery](../gallery.md). Clicking one downloads it from `assets.geolibre.app` and opens it as an unsaved copy, the same way **Open From → URL** would. It needs an internet connection; if the download fails, the dialog stays open on your current project and says which example could not be opened.
+
 ## Open
 
 **Project → Open From** has two sources:

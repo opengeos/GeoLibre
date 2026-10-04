@@ -12,7 +12,7 @@ The toolbar across the top of the window groups every action into nine menus:
 | --- | --- |
 | **Project** | Create, open, save, share, import, and print projects. See [Projects](projects.md). |
 | **Edit** | Undo and redo, and the feature-selection tools: Select by Expression, Select by Location, zoom to / invert / clear the selection, and Export Selected Features as Layer. |
-| **View** | Choose one of the [four rendering engines](rendering-engines.md), zoom in and out, step through viewport history, reset the camera orientation, set an exact view, create a split view, or open the location in Google Maps / Google Earth. |
+| **View** | Choose one of the [four rendering engines](rendering-engines.md), zoom in and out, step through viewport history, reset the camera orientation, set an exact view, create a split view, preview the map under color vision deficiency, or open the location in Google Maps / Google Earth. |
 | **Add Data** | Add layers from files, web services, cloud formats, 3D data, and databases. See [Adding Data](adding-data.md). |
 | **Processing** | Run vector, raster, conversion, Whitebox, and SQL tools, plus the [AI Assistant](ai-assistant.md). The menu holds [two separate toolboxes](processing.md#two-toolboxes-in-one-menu), so some category names appear twice. See [Processing Tools](processing.md) and [SQL Workspace](sql-workspace.md). |
 | **Controls** | Toggle map controls and component panels (Measure, Bookmark, Minimap, and more). See [Map Controls & Tools](map-controls.md). |
@@ -27,6 +27,8 @@ The **Edit** and **View** menus are the two most easily missed, because their co
 ![The Edit menu: undo and redo above the selection tools](https://assets.geolibre.app/images/geolibre-edit-menu.webp)
 
 ![The View menu: zoom, viewport history, Set View, Split View, and the external-map actions](https://assets.geolibre.app/images/geolibre-view-menu.webp)
+
+**View → Color vision preview** shows the map as it looks with protanopia, deuteranopia, tritanopia, or achromatopsia, so you can check that a palette still reads. It filters only the map (every renderer and split-view pane, plus the on-map legend), not the panels and menus, and shows a badge on the map while it is on; click the badge's **×** or pick **Off** to end it. The preview lasts for the session only and is not saved in the project. Exports are not affected: Print Layout, map image export, and Record Video capture the map's real colors. Only a screenshot of the window shows the simulation, which is why the badge is there.
 
 !!! tip "Toolbar labels"
     On narrow windows the toolbar collapses to icon-only buttons. You can also force icon-only buttons from **Settings → Layout**, or with the `toolbar=icons` URL parameter. See [Embedding & Sharing](embedding.md).

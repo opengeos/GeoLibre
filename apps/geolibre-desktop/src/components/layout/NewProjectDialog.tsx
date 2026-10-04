@@ -19,6 +19,7 @@ import {
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { clearProjectSnapshots } from "../../lib/project-history-store";
+import { STARTER_PROJECTS, type StarterProject } from "../../lib/starter-projects";
 import { CollapsibleSection } from "../CollapsibleSection";
 import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
 import {
@@ -33,6 +34,7 @@ import {
   Label,
   Select,
 } from "@geolibre/ui";
+import { ImageOff, Loader2 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -91,6 +93,58 @@ interface NewProjectDialogProps {
   onOpenChange: (open: boolean) => void;
   onSaveCurrentProject: () => Promise<boolean>;
   onProjectCreated?: () => void;
+  /**
+   * Load a starter project from its raw `.geolibre.json` URL (the Open Project
+   * from URL path). Rejects on failure so the dialog can show the error inline.
+   * When omitted, the Examples section is hidden.
+   */
+  onOpenExample?: (projectUrl: string) => Promise<void>;
+}
+
+interface StarterProjectCardProps {
+  example: StarterProject;
+  loading: boolean;
+  disabled: boolean;
+  onOpen: (example: StarterProject) => void;
+}
+
+function StarterProjectCard({ example, loading, disabled, onOpen }: StarterProjectCardProps) {
+  // Offline (or a moved image) leaves the thumbnail unloadable; show a neutral
+  // placeholder rather than the browser's broken-image glyph.
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-busy={loading}
+      onClick={() => onOpen(example)}
+      className="flex items-start gap-2.5 rounded-md border p-2 text-start transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+      data-testid={`starter-project-${example.id}`}
+    >
+      <div className="relative flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
+        {thumbnailFailed ? (
+          <ImageOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        ) : (
+          <img
+            src={example.thumbnailUrl}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+            onError={() => setThumbnailFailed(true)}
+          />
+        )}
+        {loading ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/70">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          </div>
+        ) : null}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium leading-tight">{example.title}</p>
+        <p className="line-clamp-2 text-xs text-muted-foreground">{example.description}</p>
+      </div>
+    </button>
+  );
 }
 
 export function NewProjectDialog({
@@ -98,6 +152,7 @@ export function NewProjectDialog({
   onOpenChange,
   onSaveCurrentProject,
   onProjectCreated,
+  onOpenExample,
 }: NewProjectDialogProps) {
   const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
@@ -111,6 +166,8 @@ export function NewProjectDialog({
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const customUrlRef = useRef<HTMLInputElement>(null);
+  const [exampleLoadingId, setExampleLoadingId] = useState<string | null>(null);
+  const [exampleError, setExampleError] = useState<{ title: string; detail: string } | null>(null);
 
   const customStyleUrl = customUrl.trim();
   const customIsPmtiles = isPmtilesStyleUrl(customStyleUrl);
@@ -186,6 +243,8 @@ export function NewProjectDialog({
     setCustomFlavor("light");
     setShowSavePrompt(false);
     setIsSaving(false);
+    setExampleLoadingId(null);
+    setExampleError(null);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -259,6 +318,30 @@ export function NewProjectDialog({
     onProjectCreated?.();
     onOpenChange(false);
     resetForm();
+  };
+
+  const handleOpenExample = async (example: StarterProject) => {
+    if (!onOpenExample || exampleLoadingId) return;
+    setExampleLoadingId(example.id);
+    setExampleError(null);
+    try {
+      await onOpenExample(example.projectUrl);
+      void clearProjectSnapshots().catch((error) =>
+        console.error("Could not clear project history for the new project.", error),
+      );
+      onProjectCreated?.();
+      onOpenChange(false);
+      resetForm();
+    } catch (error) {
+      // Offline, a moved file, or a project that fails to parse: keep the
+      // dialog open on the current project and say which example failed.
+      console.error(`Failed to open starter project ${example.projectUrl}`, error);
+      setExampleError({
+        title: example.title,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      setExampleLoadingId(null);
+    }
   };
 
   return (
@@ -350,6 +433,33 @@ export function NewProjectDialog({
                     ))}
                   </div>
                 </div>
+              ) : null}
+
+              {onOpenExample && STARTER_PROJECTS.length > 0 ? (
+                <CollapsibleSection title={t("newProject.examples")}>
+                  <p className="text-xs text-muted-foreground">
+                    {t("newProject.examplesDescription")}
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {STARTER_PROJECTS.map((example) => (
+                      <StarterProjectCard
+                        key={example.id}
+                        example={example}
+                        loading={exampleLoadingId === example.id}
+                        disabled={exampleLoadingId !== null}
+                        onOpen={(item) => void handleOpenExample(item)}
+                      />
+                    ))}
+                  </div>
+                  {exampleError ? (
+                    <div role="alert" className="space-y-0.5 text-xs text-destructive">
+                      <p className="font-medium">
+                        {t("newProject.exampleOpenFailed", { title: exampleError.title })}
+                      </p>
+                      <p className="break-words">{exampleError.detail}</p>
+                    </div>
+                  ) : null}
+                </CollapsibleSection>
               ) : null}
 
               <div className="space-y-4">

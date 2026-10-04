@@ -441,6 +441,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "view.colorVision",
+    menuId: "view",
+    labelKey: "toolbar.item.colorVisionPreview",
+    tier: "intermediate",
+  },
+  {
     // "basic", not "advanced": this is the only control that switches the
     // primary map back to MapLibre, and a preset *hides* items above its tier
     // rather than disabling them. A beginner opening a project saved with

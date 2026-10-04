@@ -230,8 +230,15 @@
     "projectName": "परियोजना का नाम",
     "savedTemplates": "सहेजे गए टेम्पलेट",
     "deleteTemplate": "टेम्पलेट हटाएं",
+    "examples": "उदाहरण",
+    "examplesDescription": "किसी प्रकाशित डेमो मानचित्र से शुरू करें। एक प्रति खुलती है और इंटरनेट कनेक्शन आवश्यक है।",
+    "exampleOpenFailed": "“{{title}}” नहीं खोला जा सका।",
     "basemapLabel": "बेसमैप",
     "create": "बनाएँ"
+  },
+  "cvdPreview": {
+    "badge": "रंग दृष्टि पूर्वावलोकन: {{mode}}",
+    "turnOff": "रंग दृष्टि पूर्वावलोकन बंद करें"
   },
   "basemapPicker": {
     "title": "पृष्ठभूमि बदलें",
@@ -3240,6 +3247,12 @@
       "splitViewGrid2x3": "2 × 3 ग्रिड",
       "splitViewGrid3x3": "3 × 3 ग्रिड",
       "splitViewSync": "दृश्य सिंक करें",
+      "colorVisionPreview": "रंग दृष्टि पूर्वावलोकन",
+      "cvdOff": "बंद",
+      "cvdProtanopia": "प्रोटैनोपिया (लाल-अंधता)",
+      "cvdDeuteranopia": "ड्यूटेरानोपिया (हरा-अंधता)",
+      "cvdTritanopia": "ट्राइटैनोपिया (नीला-अंधता)",
+      "cvdAchromatopsia": "एक्रोमैटोप्सिया (कोई रंग नहीं)",
       "renderingEngine": "रेंडरिंग इंजन",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

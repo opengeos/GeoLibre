@@ -76,6 +76,7 @@ import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { MapContextMenu } from "./MapContextMenu";
 import { KnowledgeCardPanel } from "./KnowledgeCardPanel";
 import { KnowledgeCardConsentDialog } from "./KnowledgeCardConsentDialog";
+import { CvdPreview } from "./CvdPreview";
 import { MapGrid } from "./MapGrid";
 import { PrimaryMapboxCanvas } from "./PrimaryMapboxCanvas";
 import { PrimaryArcgisCanvas } from "./PrimaryArcgisCanvas";
@@ -701,138 +702,144 @@ export function DesktopShell({
             displayName={t("shell.section.map")}
             fallbackClassName="h-full w-full"
           >
-            <MapGrid>
-              {/* The primary map area is one renderer or the other (#2217).
+            {/* Color vision preview filters the map canvases in every pane. */}
+            <CvdPreview>
+              <MapGrid>
+                {/* The primary map area is one renderer or the other (#2217).
                   Everything below that takes `mapControllerRef` is MapLibre-only
                   — it drives a `MapController` that the globe does not have — so
                   it mounts with the 2D map and stays unmounted on the globe,
                   where `PrimaryCesiumCanvas` explains the absence. Renderer-
                   neutral, store-driven overlays sit outside the branch and are
                   available under either engine. */}
-              {mapboxPrimary ? (
-                <PrimaryMapboxCanvas
-                  canUseRemoteElevation={hasElevationConsent}
-                  engineRef={mapControllerRef}
-                  identifyAllLabels={identifyAllLabels}
-                  identifyRasterLayerAt={identifyRasterLayerAt}
-                  onEngineReady={handleMapControllerReady}
-                  onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                />
-              ) : arcgisPrimary ? (
-                <PrimaryArcgisCanvas
-                  canUseRemoteElevation={hasElevationConsent}
-                  engineRef={mapControllerRef}
-                  identifyAllLabels={identifyAllLabels}
-                  identifyRasterLayerAt={identifyRasterLayerAt}
-                  onEngineReady={handleMapControllerReady}
-                  onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                />
-              ) : cesiumPrimary ? (
-                <PrimaryCesiumCanvas
-                  engineRef={mapControllerRef}
-                  onEngineReady={handleMapControllerReady}
-                  onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                />
-              ) : (
-                <>
-                  <MapCanvas
+                {mapboxPrimary ? (
+                  <PrimaryMapboxCanvas
                     canUseRemoteElevation={hasElevationConsent}
-                    controllerRef={mapControllerRef}
+                    engineRef={mapControllerRef}
                     identifyAllLabels={identifyAllLabels}
                     identifyRasterLayerAt={identifyRasterLayerAt}
+                    onEngineReady={handleMapControllerReady}
                     onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                    onControllerReady={handleMapControllerReady}
                   />
-                  <MountWhenOpened isOpen={(ui) => ui.objectDetectionOpen}>
-                    <Suspense fallback={null}>
-                      <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
-                    </Suspense>
-                  </MountWhenOpened>
-                  <MountWhenOpened isOpen={(ui) => ui.segmentEverythingOpen}>
-                    <Suspense fallback={null}>
-                      <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
-                    </Suspense>
-                  </MountWhenOpened>
-                </>
-              )}
-              {/* Renderer-neutral: these use the store or `MapEngine`, so they
+                ) : arcgisPrimary ? (
+                  <PrimaryArcgisCanvas
+                    canUseRemoteElevation={hasElevationConsent}
+                    engineRef={mapControllerRef}
+                    identifyAllLabels={identifyAllLabels}
+                    identifyRasterLayerAt={identifyRasterLayerAt}
+                    onEngineReady={handleMapControllerReady}
+                    onMapDiagnosticEvent={handleMapDiagnosticEvent}
+                  />
+                ) : cesiumPrimary ? (
+                  <PrimaryCesiumCanvas
+                    engineRef={mapControllerRef}
+                    onEngineReady={handleMapControllerReady}
+                    onMapDiagnosticEvent={handleMapDiagnosticEvent}
+                  />
+                ) : (
+                  <>
+                    <MapCanvas
+                      canUseRemoteElevation={hasElevationConsent}
+                      controllerRef={mapControllerRef}
+                      identifyAllLabels={identifyAllLabels}
+                      identifyRasterLayerAt={identifyRasterLayerAt}
+                      onMapDiagnosticEvent={handleMapDiagnosticEvent}
+                      onControllerReady={handleMapControllerReady}
+                    />
+                    <MountWhenOpened isOpen={(ui) => ui.objectDetectionOpen}>
+                      <Suspense fallback={null}>
+                        <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
+                      </Suspense>
+                    </MountWhenOpened>
+                    <MountWhenOpened isOpen={(ui) => ui.segmentEverythingOpen}>
+                      <Suspense fallback={null}>
+                        <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
+                      </Suspense>
+                    </MountWhenOpened>
+                  </>
+                )}
+                {/* Renderer-neutral: these use the store or `MapEngine`, so they
                   stay available on every renderer. */}
-              <MapModeBanner mapControllerRef={mapControllerRef} />
-              <PixelTimeSeriesControl
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-              />
-              <NetcdfSampleMarkers
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-              />
-              {/* Its own boundary: the cube window builds a `WebGLRenderer`,
+                <MapModeBanner mapControllerRef={mapControllerRef} />
+                <PixelTimeSeriesControl
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+                <NetcdfSampleMarkers
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+                {/* Its own boundary: the cube window builds a `WebGLRenderer`,
                   whose constructor throws outright when the browser or driver
                   gives it no context. Sharing the map's boundary would turn a
                   failure to draw one panel into the loss of the whole map. */}
-              <SilentErrorBoundary label="NetCDF 3D cube">
-                <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
-              </SilentErrorBoundary>
-              <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
-              <RemoteCursorsOverlay
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-              />
-              <CommentMapOverlay
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-                onSelectComment={(commentId) => {
-                  setSelectedCommentId(commentId);
-                  openRightPanel(COMMENTS_PANEL_ID);
-                }}
-                showResolved={showResolvedComments}
-              />
-              {/* Isolate the collaboration badge in its own boundary: it renders
+                <SilentErrorBoundary label="NetCDF 3D cube">
+                  <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
+                </SilentErrorBoundary>
+                <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
+                <RemoteCursorsOverlay
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+                <CommentMapOverlay
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                  onSelectComment={(commentId) => {
+                    setSelectedCommentId(commentId);
+                    openRightPanel(COMMENTS_PANEL_ID);
+                  }}
+                  showResolved={showResolvedComments}
+                />
+                {/* Isolate the collaboration badge in its own boundary: it renders
                   over the map, so a fault here must never take down the map. */}
-              <SilentErrorBoundary label="Collaboration status">
-                <CollaborationStatusBadge api={collaboration} mapControllerRef={mapControllerRef} />
-              </SilentErrorBoundary>
-              <MapLegendPanel
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-              />
-              <MapContextMenu
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-                onExplorePlace={handleExplorePlace}
-              />
-              <KnowledgeCardPanel
-                place={knowledgePlace}
-                lang={wikipediaLang(i18n.language)}
-                onClose={() => setKnowledgePlace(null)}
-                onFlyTo={handleKnowledgeFlyTo}
-              />
-              <StoryMapComposeBar
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-              />
-              <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
-              <RasterSubsetPanel
-                layer={rasterSubsetLayer}
-                onClose={() => setRasterSubsetLayer(null)}
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-              />
-              <BasemapExtractPanel
-                open={basemapExtractOpen}
-                onClose={() => setBasemapExtractOpen(false)}
-                mapControllerRef={mapControllerRef}
-                mapReadyGeneration={mapReadyGeneration}
-              />
-              <BoundsRestrictionIndicator />
-              <QuickAnalysisBanner />
-              <NetcdfProfileWindow />
-              <MountWhenOpened isOpen={(ui) => ui.styleManagerOpen}>
-                <Suspense fallback={null}>
-                  <StyleManagerPanel />
-                </Suspense>
-              </MountWhenOpened>
-            </MapGrid>
+                <SilentErrorBoundary label="Collaboration status">
+                  <CollaborationStatusBadge
+                    api={collaboration}
+                    mapControllerRef={mapControllerRef}
+                  />
+                </SilentErrorBoundary>
+                <MapLegendPanel
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+                <MapContextMenu
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                  onExplorePlace={handleExplorePlace}
+                />
+                <KnowledgeCardPanel
+                  place={knowledgePlace}
+                  lang={wikipediaLang(i18n.language)}
+                  onClose={() => setKnowledgePlace(null)}
+                  onFlyTo={handleKnowledgeFlyTo}
+                />
+                <StoryMapComposeBar
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+                <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
+                <RasterSubsetPanel
+                  layer={rasterSubsetLayer}
+                  onClose={() => setRasterSubsetLayer(null)}
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+                <BasemapExtractPanel
+                  open={basemapExtractOpen}
+                  onClose={() => setBasemapExtractOpen(false)}
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+                <BoundsRestrictionIndicator />
+                <QuickAnalysisBanner />
+                <NetcdfProfileWindow />
+                <MountWhenOpened isOpen={(ui) => ui.styleManagerOpen}>
+                  <Suspense fallback={null}>
+                    <StyleManagerPanel />
+                  </Suspense>
+                </MountWhenOpened>
+              </MapGrid>
+            </CvdPreview>
           </SectionErrorBoundary>
           <SectionErrorBoundary
             label="Plugin floating panels"

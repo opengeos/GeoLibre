@@ -230,8 +230,15 @@
     "projectName": "Projektname",
     "savedTemplates": "Gespeicherte Vorlagen",
     "deleteTemplate": "Vorlage löschen",
+    "examples": "Beispiele",
+    "examplesDescription": "Mit einer veröffentlichten Demokarte beginnen. Öffnet eine Kopie und benötigt eine Internetverbindung.",
+    "exampleOpenFailed": "„{{title}}“ konnte nicht geöffnet werden.",
     "basemapLabel": "Hintergrundkarte",
     "create": "Erstellen"
+  },
+  "cvdPreview": {
+    "badge": "Farbsehvorschau: {{mode}}",
+    "turnOff": "Farbsehvorschau ausschalten"
   },
   "basemapPicker": {
     "title": "Hintergrund ändern",
@@ -3240,6 +3247,12 @@
       "splitViewGrid2x3": "2 × 3-Raster",
       "splitViewGrid3x3": "3 × 3-Raster",
       "splitViewSync": "Ansichten synchronisieren",
+      "colorVisionPreview": "Farbsehvorschau",
+      "cvdOff": "Aus",
+      "cvdProtanopia": "Protanopie (Rotblindheit)",
+      "cvdDeuteranopia": "Deuteranopie (Grünblindheit)",
+      "cvdTritanopia": "Tritanopie (Blaublindheit)",
+      "cvdAchromatopsia": "Achromatopsie (keine Farben)",
       "renderingEngine": "Rendering-Engine",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

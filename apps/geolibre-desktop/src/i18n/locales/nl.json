@@ -230,8 +230,15 @@
     "projectName": "Projectnaam",
     "savedTemplates": "Opgeslagen sjablonen",
     "deleteTemplate": "Sjabloon verwijderen",
+    "examples": "Voorbeelden",
+    "examplesDescription": "Begin met een gepubliceerde demokaart. Opent een kopie en vereist een internetverbinding.",
+    "exampleOpenFailed": "Kan ‘{{title}}’ niet openen.",
     "basemapLabel": "Achtergrondkaart",
     "create": "Aanmaken"
+  },
+  "cvdPreview": {
+    "badge": "Voorbeeld kleurenzien: {{mode}}",
+    "turnOff": "Voorbeeld kleurenzien uitschakelen"
   },
   "basemapPicker": {
     "title": "Achtergrond wijzigen",
@@ -3240,6 +3247,12 @@
       "splitViewGrid2x3": "2 × 3-raster",
       "splitViewGrid3x3": "3 × 3-raster",
       "splitViewSync": "Weergaven synchroniseren",
+      "colorVisionPreview": "Voorbeeld kleurenzien",
+      "cvdOff": "Uit",
+      "cvdProtanopia": "Protanopie (roodblind)",
+      "cvdDeuteranopia": "Deuteranopie (groenblind)",
+      "cvdTritanopia": "Tritanopie (blauwblind)",
+      "cvdAchromatopsia": "Achromatopsie (geen kleur)",
       "renderingEngine": "Renderengine",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

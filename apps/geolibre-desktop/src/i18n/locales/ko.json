@@ -228,8 +228,15 @@
     "projectName": "프로젝트 이름",
     "savedTemplates": "저장된 템플릿",
     "deleteTemplate": "템플릿 삭제",
+    "examples": "예제",
+    "examplesDescription": "게시된 데모 지도에서 시작합니다. 사본을 열며 인터넷 연결이 필요합니다.",
+    "exampleOpenFailed": "“{{title}}”을(를) 열 수 없습니다.",
     "basemapLabel": "배경지도",
     "create": "만들기"
+  },
+  "cvdPreview": {
+    "badge": "색각 미리 보기: {{mode}}",
+    "turnOff": "색각 미리 보기 끄기"
   },
   "basemapPicker": {
     "title": "배경 변경",
@@ -3191,6 +3198,12 @@
       "splitViewGrid2x3": "2 × 3 격자",
       "splitViewGrid3x3": "3 × 3 격자",
       "splitViewSync": "보기 동기화",
+      "colorVisionPreview": "색각 미리 보기",
+      "cvdOff": "끔",
+      "cvdProtanopia": "제1색맹(적색맹)",
+      "cvdDeuteranopia": "제2색맹(녹색맹)",
+      "cvdTritanopia": "제3색맹(청색맹)",
+      "cvdAchromatopsia": "전색맹(색 없음)",
       "renderingEngine": "렌더링 엔진",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

@@ -228,8 +228,15 @@
     "projectName": "プロジェクト名",
     "savedTemplates": "保存済みテンプレート",
     "deleteTemplate": "テンプレートを削除",
+    "examples": "サンプル",
+    "examplesDescription": "公開済みのデモマップから始めます。コピーを開きます（インターネット接続が必要です）。",
+    "exampleOpenFailed": "「{{title}}」を開けませんでした。",
     "basemapLabel": "ベースマップ",
     "create": "作成"
+  },
+  "cvdPreview": {
+    "badge": "色覚プレビュー：{{mode}}",
+    "turnOff": "色覚プレビューをオフにする"
   },
   "basemapPicker": {
     "title": "背景を変更",
@@ -3191,6 +3198,12 @@
       "splitViewGrid2x3": "2 × 3 グリッド",
       "splitViewGrid3x3": "3 × 3 グリッド",
       "splitViewSync": "ビューを同期",
+      "colorVisionPreview": "色覚プレビュー",
+      "cvdOff": "オフ",
+      "cvdProtanopia": "1型色覚（P型）",
+      "cvdDeuteranopia": "2型色覚（D型）",
+      "cvdTritanopia": "3型色覚（T型）",
+      "cvdAchromatopsia": "全色盲（色なし）",
       "renderingEngine": "レンダリングエンジン",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

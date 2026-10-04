@@ -230,8 +230,15 @@
     "projectName": "Nom du projet",
     "savedTemplates": "Modèles enregistrés",
     "deleteTemplate": "Supprimer le modèle",
+    "examples": "Exemples",
+    "examplesDescription": "Partir d’une carte de démonstration publiée. Ouvre une copie et nécessite une connexion Internet.",
+    "exampleOpenFailed": "Impossible d’ouvrir « {{title}} ».",
     "basemapLabel": "Fond de carte",
     "create": "Créer"
+  },
+  "cvdPreview": {
+    "badge": "Aperçu de la vision des couleurs : {{mode}}",
+    "turnOff": "Désactiver l’aperçu de la vision des couleurs"
   },
   "basemapPicker": {
     "title": "Changer l’arrière-plan",
@@ -3240,6 +3247,12 @@
       "splitViewGrid2x3": "Grille 2 × 3",
       "splitViewGrid3x3": "Grille 3 × 3",
       "splitViewSync": "Synchroniser les vues",
+      "colorVisionPreview": "Aperçu de la vision des couleurs",
+      "cvdOff": "Désactivé",
+      "cvdProtanopia": "Protanopie (rouge)",
+      "cvdDeuteranopia": "Deutéranopie (vert)",
+      "cvdTritanopia": "Tritanopie (bleu)",
+      "cvdAchromatopsia": "Achromatopsie (aucune couleur)",
       "renderingEngine": "Moteur de rendu",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

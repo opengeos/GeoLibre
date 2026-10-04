@@ -239,8 +239,15 @@
     "projectName": "Project name",
     "savedTemplates": "Saved Templates",
     "deleteTemplate": "Delete template",
+    "examples": "Examples",
+    "examplesDescription": "Start from a published demo map. Opens a copy and needs an internet connection.",
+    "exampleOpenFailed": "Could not open “{{title}}”.",
     "basemapLabel": "Basemap",
     "create": "Create"
+  },
+  "cvdPreview": {
+    "badge": "Color vision preview: {{mode}}",
+    "turnOff": "Turn off color vision preview"
   },
   "basemapPicker": {
     "title": "Change background",
@@ -3252,6 +3259,12 @@
       "splitViewGrid2x3": "2 × 3 grid",
       "splitViewGrid3x3": "3 × 3 grid",
       "splitViewSync": "Sync views",
+      "colorVisionPreview": "Color vision preview",
+      "cvdOff": "Off",
+      "cvdProtanopia": "Protanopia (red-blind)",
+      "cvdDeuteranopia": "Deuteranopia (green-blind)",
+      "cvdTritanopia": "Tritanopia (blue-blind)",
+      "cvdAchromatopsia": "Achromatopsia (no color)",
       "renderingEngine": "Rendering engine",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

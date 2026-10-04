@@ -231,8 +231,15 @@
     "projectName": "项目名称",
     "savedTemplates": "已保存的模板",
     "deleteTemplate": "删除模板",
+    "examples": "示例",
+    "examplesDescription": "从已发布的演示地图开始。将打开一个副本，需要联网。",
+    "exampleOpenFailed": "无法打开“{{title}}”。",
     "basemapLabel": "底图",
     "create": "创建"
+  },
+  "cvdPreview": {
+    "badge": "色觉预览：{{mode}}",
+    "turnOff": "关闭色觉预览"
   },
   "basemapPicker": {
     "title": "更改背景",
@@ -3194,6 +3201,12 @@
       "splitViewGrid2x3": "2 × 3 网格",
       "splitViewGrid3x3": "3 × 3 网格",
       "splitViewSync": "同步视图",
+      "colorVisionPreview": "色觉预览",
+      "cvdOff": "关闭",
+      "cvdProtanopia": "红色盲（Protanopia）",
+      "cvdDeuteranopia": "绿色盲（Deuteranopia）",
+      "cvdTritanopia": "蓝色盲（Tritanopia）",
+      "cvdAchromatopsia": "全色盲（Achromatopsia）",
       "renderingEngine": "渲染引擎",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

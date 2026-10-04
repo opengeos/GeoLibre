@@ -234,8 +234,15 @@
     "projectName": "Название проекта",
     "savedTemplates": "Сохранённые шаблоны",
     "deleteTemplate": "Удалить шаблон",
+    "examples": "Примеры",
+    "examplesDescription": "Начните с опубликованной демонстрационной карты. Откроется копия; требуется подключение к интернету.",
+    "exampleOpenFailed": "Не удалось открыть «{{title}}».",
     "basemapLabel": "Базовая карта",
     "create": "Создать"
+  },
+  "cvdPreview": {
+    "badge": "Предпросмотр цветового зрения: {{mode}}",
+    "turnOff": "Выключить предпросмотр цветового зрения"
   },
   "basemapPicker": {
     "title": "Изменить фон",
@@ -3338,6 +3345,12 @@
       "splitViewGrid2x3": "Сетка 2 × 3",
       "splitViewGrid3x3": "Сетка 3 × 3",
       "splitViewSync": "Синхронизировать виды",
+      "colorVisionPreview": "Предпросмотр цветового зрения",
+      "cvdOff": "Выключено",
+      "cvdProtanopia": "Протанопия (нет красного)",
+      "cvdDeuteranopia": "Дейтеранопия (нет зелёного)",
+      "cvdTritanopia": "Тританопия (нет синего)",
+      "cvdAchromatopsia": "Ахроматопсия (нет цвета)",
       "renderingEngine": "Механизм отрисовки",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",

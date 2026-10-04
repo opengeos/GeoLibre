@@ -230,8 +230,15 @@
     "projectName": "Layihənin adı",
     "savedTemplates": "Yadda saxlanmış şablonlar",
     "deleteTemplate": "Şablonu sil",
+    "examples": "Nümunələr",
+    "examplesDescription": "Dərc edilmiş demo xəritədən başlayın. Surəti açılır və internet bağlantısı tələb olunur.",
+    "exampleOpenFailed": "“{{title}}” açıla bilmədi.",
     "basemapLabel": "Baza xəritə",
     "create": "Yarat"
+  },
+  "cvdPreview": {
+    "badge": "Rəng görmə önizləməsi: {{mode}}",
+    "turnOff": "Rəng görmə önizləməsini söndür"
   },
   "basemapPicker": {
     "title": "Fonu dəyiş",
@@ -3240,6 +3247,12 @@
       "splitViewGrid2x3": "2 × 3 şəbəkə",
       "splitViewGrid3x3": "3 × 3 şəbəkə",
       "splitViewSync": "Görünüşləri sinxronlaşdır",
+      "colorVisionPreview": "Rəng görmə önizləməsi",
+      "cvdOff": "Söndürülüb",
+      "cvdProtanopia": "Protanopiya (qırmızı korluğu)",
+      "cvdDeuteranopia": "Deyteranopiya (yaşıl korluğu)",
+      "cvdTritanopia": "Tritanopiya (mavi korluğu)",
+      "cvdAchromatopsia": "Axromatopsiya (rəng yoxdur)",
       "renderingEngine": "Görüntüləmə mühərriki",
       "rendererMapLibre": "MapLibre",
       "rendererMapbox": "Mapbox",
