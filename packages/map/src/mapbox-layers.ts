@@ -26,7 +26,7 @@ export function isInternalMapboxLayer(spec: LayerSpecification): boolean {
  * ({@link isMapboxPluginLayer}). GeoJSON and vector tiles are `"native"` even
  * though some plugins (search footprints, Overture Maps) draw their own.
  */
-export const MAPBOX_SUPPORTED_LAYER_KINDS: SupportedLayerKinds = Object.freeze({
+export const MAPBOX_SUPPORTED_LAYER_KINDS = Object.freeze({
   geojson: "native",
   "raster-tiles": "native",
   "vector-tiles": "native",
@@ -42,7 +42,7 @@ export const MAPBOX_SUPPORTED_LAYER_KINDS: SupportedLayerKinds = Object.freeze({
   "deckgl-viz": "plugin",
   video: "native",
   image: "native",
-});
+} as const satisfies SupportedLayerKinds);
 
 /**
  * Whether Mapbox can draw a layer through a native plan or a supported plugin.

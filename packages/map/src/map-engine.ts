@@ -347,8 +347,10 @@ export interface MapEngineCapabilities {
    * What the engine's per-kind layer dispatch does with each
    * layer kind (`classifyLayer`): draws it from the store record (`"native"`), leaves it
    * to a plugin control (`"plugin"`), or never draws it (`"unsupported"`).
-   * The table is the engine's own dispatch table (its layer sync reads the
-   * same object), so it describes kinds, not records: whether one record
+   * MapLibre's layer sync and the Cesium and ArcGIS kind checks read this
+   * same object; Mapbox's kind switch is separate, and
+   * tests/layer-support-matrix.test.ts holds every table to its engine's
+   * dispatch. It describes kinds, not records: whether one record
    * draws still depends on its data, which the per-record support checks
    * (`isCesiumSupportedLayerType`, `isMapboxSupportedLayer`,
    * `isArcgisSupportedLayer`) answer. ArcGIS's `"plugin"` kinds draw on its
