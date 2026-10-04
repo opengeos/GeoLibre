@@ -85,4 +85,4 @@ export function isDirectoryParameter(param: WhiteboxToolParameter): boolean {
 // Name words that mark a parameter as a folder. `dir` counts only as a whole
 // name (`dir`), never as one word of a longer one: hydrology tools use it for
 // flow *direction* (`flow_dir`).
-const FOLDER_NAME_WORDS = new Set(["folder", "directory"]);
+const FOLDER_NAME_WORDS = new Set(["folder", "folders", "directory", "directories"]);

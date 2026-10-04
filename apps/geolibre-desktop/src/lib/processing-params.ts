@@ -177,7 +177,9 @@ const PATH_NAME_WORDS = new Set([
   "filenames",
   "filepath",
   "folder",
+  "folders",
   "directory",
+  "directories",
 ]);
 
 /**

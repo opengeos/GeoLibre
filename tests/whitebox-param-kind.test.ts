@@ -119,12 +119,18 @@ describe("isDirectoryParameter", () => {
 
   it("reads a folder word of an untyped snake_case, camelCase or kebab-case name", () => {
     // `_` is a word character, so a `\bfolder\b` rule alone misses these.
-    for (const name of ["output_folder", "outputFolder", "input-directory"]) {
+    for (const name of [
+      "output_folder",
+      "outputFolder",
+      "input-directory",
+      "output_folders",
+      "search_directories",
+    ]) {
       assert.equal(isDirectoryParameter({ name, kind: "string" }), true, name);
     }
     assert.equal(isDirectoryParameter({ name: "dir", kind: "string" }), true);
     assert.equal(isDirectoryParameter({ name: "flow_dir", kind: "string" }), false);
-    assert.equal(isDirectoryParameter({ name: "folders_count_x", kind: "string" }), false);
+    assert.equal(isDirectoryParameter({ name: "subfolder_count", kind: "string" }), false);
   });
 
   it("reads a camelCase folder name on a typed dataset parameter", () => {

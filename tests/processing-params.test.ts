@@ -307,6 +307,8 @@ describe("isPathParameter", () => {
       "out_filename",
       "image_files",
       "inputJSONFile",
+      "output_folders",
+      "search_directories",
     ]) {
       assert.equal(isPathParameter(param(name, { kind: "string" })), true, name);
     }
