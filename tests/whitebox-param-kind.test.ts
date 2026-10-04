@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  identifierWords,
   isDirectoryParameter,
   isMultipleDatasetParameter,
 } from "../apps/geolibre-desktop/src/lib/whitebox-param-kind";
@@ -114,5 +115,29 @@ describe("isDirectoryParameter", () => {
   it("reads an untyped parameter's description", () => {
     assert.equal(isDirectoryParameter({ name: "wd", description: "Working directory." }), true);
     assert.equal(isDirectoryParameter({ name: "file_name", description: "Output file." }), false);
+  });
+
+  it("reads a folder word of an untyped snake_case, camelCase or kebab-case name", () => {
+    // `_` is a word character, so a `\bfolder\b` rule alone misses these.
+    for (const name of ["output_folder", "outputFolder", "input-directory"]) {
+      assert.equal(isDirectoryParameter({ name, kind: "string" }), true, name);
+    }
+    assert.equal(isDirectoryParameter({ name: "dir", kind: "string" }), true);
+    assert.equal(isDirectoryParameter({ name: "flow_dir", kind: "string" }), false);
+    assert.equal(isDirectoryParameter({ name: "folders_count_x", kind: "string" }), false);
+  });
+
+  it("reads a camelCase folder name on a typed dataset parameter", () => {
+    assert.equal(isDirectoryParameter({ name: "outputDirectory", kind: "lidar_out" }), true);
+  });
+});
+
+describe("identifierWords", () => {
+  it("splits snake_case, kebab-case and camelCase into lowercase words", () => {
+    assert.deepEqual(identifierWords("output_folder"), ["output", "folder"]);
+    assert.deepEqual(identifierWords("outputFolder"), ["output", "folder"]);
+    assert.deepEqual(identifierWords("output-folder"), ["output", "folder"]);
+    assert.deepEqual(identifierWords("__CSV_out2File__"), ["csv", "out2", "file"]);
+    assert.deepEqual(identifierWords(""), []);
   });
 });

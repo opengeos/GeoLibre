@@ -63,15 +63,40 @@ export function isMultipleDatasetParameter(param: WhiteboxToolParameter): boolea
  * on desktop). The `dir` abbreviation is left out of the name rule because
  * hydrology tools use it for flow *direction* (`flow_dir_output_path`). An
  * untyped parameter has only its wording to go on, so the description still
- * counts there.
+ * counts there, as does a `folder`/`directory` word of a snake_case, kebab-case
+ * or camelCase name (`output_folder`).
  *
  * @param param - A tool parameter from either catalog.
  * @returns True when the parameter expects a directory path.
  */
 export function isDirectoryParameter(param: WhiteboxToolParameter): boolean {
-  if (/^(raster|vector|lidar|file)_(in|out)$/.test(parameterKind(param))) {
-    return /(^|_)(folder|directory)(_|$)/.test(param.name.toLowerCase());
-  }
+  const namedFolder = identifierWords(param.name ?? "").some((word) => FOLDER_NAME_WORDS.has(word));
+  if (/^(raster|vector|lidar|file)_(in|out)$/.test(parameterKind(param))) return namedFolder;
+  if (namedFolder) return true;
   const text = `${param.name} ${param.description ?? ""} ${param.type ?? ""}`.toLowerCase();
   return /\b(folder|directory|dir)\b/.test(text);
+}
+
+// Name words that mark a parameter as a folder. `dir` counts only as a whole
+// name (`dir`), never as one word of a longer one: hydrology tools use it for
+// flow *direction* (`flow_dir`).
+const FOLDER_NAME_WORDS = new Set(["folder", "directory"]);
+
+/**
+ * The lowercase words of a parameter identifier, split on snake_case,
+ * kebab-case and camelCase boundaries (`outputFolder`, `output_folder` and
+ * `output-folder` all give `["output", "folder"]`).
+ *
+ * A plain `\b` regex cannot do this: `_` is a word character, so `\bfolder\b`
+ * never matches inside `output_folder`.
+ *
+ * @param name - A parameter name (or any identifier-like text).
+ * @returns The identifier's words, lowercased; empty for an empty name.
+ */
+export function identifierWords(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 }

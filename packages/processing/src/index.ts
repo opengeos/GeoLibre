@@ -283,6 +283,7 @@ export {
   type ToolManifest,
   outputBaseName,
   fileOutputTargetExtension,
+  lidarOutputTargetExtension,
   outputTextFormatHint,
   prepareGeographicBufferInput,
   isTiff,
