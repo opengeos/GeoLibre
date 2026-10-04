@@ -32,7 +32,11 @@ import {
   removePluginBundlePin,
   verifyPluginBundleIntegrity,
 } from "./plugin-integrity";
-import { ensurePluginBlocklistLoaded, getBlocklistedBundle } from "./plugin-blocklist";
+import {
+  ensurePluginBlocklistLoaded,
+  getBlocklistedBundle,
+  hasPluginBlocklistEntries,
+} from "./plugin-blocklist";
 import { isTauri } from "./tauri-io";
 import type { DeploymentPolicy } from "./deployment-policy";
 import { getDeploymentPolicy } from "./deployment-env";
@@ -299,6 +303,8 @@ export async function loadExternalPlugins(
  * @throws When the bundle is blocklisted.
  */
 export async function assertBundleNotBlocklisted(bundle: ExternalPluginBundle): Promise<void> {
+  // Nothing to compare against: skip hashing (the usual case).
+  if (!hasPluginBlocklistEntries()) return;
   const blocklisted = getBlocklistedBundle(
     bundle.manifest.id,
     await computePluginBundleHash(bundle),
