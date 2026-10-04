@@ -56,24 +56,32 @@ export function useIdentifyEditActions({
   canEditLayer,
   editFeatureGeometry,
 }: IdentifyEditActionsOptions): MapCanvasIdentifyEditActions {
-  return useMemo(
-    () => ({
-      canEditGeometry: (layer) => {
-        const target = getGeometryEditTargetLayerId();
-        return (
-          canEditLayerGeometry(layer) &&
-          resolveLayerCapabilities(layer).update &&
-          canEditLayer(layer.id) &&
-          // The layer menu disables Edit geometry while another layer is in
-          // an edit session; the popup follows it.
-          (target === null || target === layer.id) &&
-          isPluginEngineSupported(maplibreGeoEditorPlugin, useAppStore.getState().primaryRenderer)
-        );
-      },
-      canEditAttributes: (layer) => canEditLayer(layer.id) && canEditLayerAttributes(layer),
-      // A popup can outlive a permission change, so recheck at click time.
-      editGeometry: ({ layer, featureId }) => {
-        if (!canEditLayer(layer.id)) return;
+  return useMemo(() => {
+    const canEditGeometry = (layer: GeoLibreLayer) => {
+      const target = getGeometryEditTargetLayerId();
+      return (
+        canEditLayerGeometry(layer) &&
+        resolveLayerCapabilities(layer).update &&
+        canEditLayer(layer.id) &&
+        // The layer menu disables Edit geometry while another layer is in
+        // an edit session; the popup follows it.
+        (target === null || target === layer.id) &&
+        isPluginEngineSupported(maplibreGeoEditorPlugin, useAppStore.getState().primaryRenderer)
+      );
+    };
+    const canEditAttributes = (layer: GeoLibreLayer) =>
+      canEditLayer(layer.id) && canEditLayerAttributes(layer);
+    // A popup can outlive the state it was built from (a permission change, a
+    // geometry session started on another layer), so each action re-runs its
+    // gate against the layer's current state when clicked.
+    const currentLayer = (layerId: string) =>
+      useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
+    return {
+      canEditGeometry,
+      canEditAttributes,
+      editGeometry: ({ layer: target, featureId }) => {
+        const layer = currentLayer(target.id);
+        if (!layer || !canEditGeometry(layer)) return;
         const store = useAppStore.getState();
         store.selectLayer(layer.id);
         store.selectFeature(featureId);
@@ -81,8 +89,9 @@ export function useIdentifyEditActions({
         store.setIdentifyLayer(null);
         void editFeatureGeometry(layer.id, featureId);
       },
-      editAttributes: ({ layer, featureId }) => {
-        if (!canEditLayer(layer.id)) return;
+      editAttributes: ({ layer: target, featureId }) => {
+        const layer = currentLayer(target.id);
+        if (!layer || !canEditAttributes(layer)) return;
         const store = useAppStore.getState();
         store.selectLayer(layer.id);
         store.selectFeature(featureId);
@@ -90,7 +99,6 @@ export function useIdentifyEditActions({
         store.setAttributeFilter("");
         store.requestAttributeTableEdit(layer.id);
       },
-    }),
-    [canEditLayer, editFeatureGeometry],
-  );
+    } satisfies MapCanvasIdentifyEditActions;
+  }, [canEditLayer, editFeatureGeometry]);
 }

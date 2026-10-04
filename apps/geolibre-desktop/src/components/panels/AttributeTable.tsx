@@ -770,7 +770,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // text changes (two different filters can yield the same row count yet a
   // different position for the selected row).
   useEffect(() => {
-    if (!attributeTableOpen || !selectedFeatureId) return;
+    // `""` is a valid feature id; only `null` means no selection.
+    if (!attributeTableOpen || selectedFeatureId === null) return;
     const index = sorted.findIndex((row) => row.featureId === selectedFeatureId);
     if (index >= 0) rowVirtualizer.scrollToIndex(index, { align: "auto" });
     // `sorted`/`rowVirtualizer` are rebuilt every render and so are intentionally
