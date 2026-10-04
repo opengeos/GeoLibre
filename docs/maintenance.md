@@ -693,6 +693,65 @@ manual check, not a Dependabot event:
   the `geolibre-arcgis-sdk` service-worker rule in `vite.config.ts`. The
   version is in every URL, so a bump mints new cache entries.
 
+### Desktop CSP `script-src` allowlist
+
+The desktop CSP (`apps/geolibre-desktop/src-tauri/tauri.conf.json`) does not
+allow all of `https://cdn.jsdelivr.net/npm/`. It lists one version-pinned path
+per package the app executes from jsDelivr, so a compromised or typo-squatted
+package on the CDN cannot run in the desktop app. Each version is owned by
+something else, so a bump can move the URL the app requests while the CSP keeps
+the old one. The packaged app then hits a CSP block that `tauri dev` never
+shows, because `tauri dev` does not apply the CSP. `tests/tauri-csp.test.ts`
+re-derives every path from its owner and fails when they disagree:
+
+| `script-src` path | Owner (bump this, then update the CSP) | Loaded by |
+| --- | --- | --- |
+| `pyodide/v<ver>/full/` | `PYODIDE_VERSION` in `pyodide-config.ts` | Pyodide's `import()` of `pyodide.asm.js` (Python Console) |
+| `npm/@electric-sql/pglite@<ver>/`, `npm/@electric-sql/pglite-postgis@<ver>/` | lockfile | `pglite-loader.cdn.ts` (SQL Workspace → PostGIS) |
+| `npm/onnxruntime-web@<ver>/dist/` | `ORT_VERSION` in `packages/processing/src/ort.ts` | onnxruntime's `import()` of its wasm glue (object detection, SAM) |
+| `npm/@duckdb/duckdb-wasm@<ver>/dist/` | lockfile (`apps/geolibre-desktop`) | `maplibre-gl-components`' DuckDB converter: a blob worker `importScripts()` the worker from `getJsDelivrBundles()` |
+| `npm/@duckdb/duckdb-wasm@1.31.0/`, `npm/sql.js@1.13.0/dist/`, `npm/geojson-vt@4.0.2/`, `npm/vt-pbf@3.1.3/` | URLs hard-coded in `maplibre-gl-vector` | Add Data → Vector Layer (DuckDB, the GeoPackage patch, the MVT fallback) |
+| `npm/apache-arrow@…`, `npm/tslib@…`, `npm/flatbuffers@…`, `npm/pbf@…`, `npm/ieee754@…`, `npm/@mapbox/point-geometry@…`, `npm/@mapbox/vector-tile@…` | jsDelivr's `/+esm` builds of the `maplibre-gl-vector` URLs above | the `import` statements inside those bundles |
+
+Blob workers inherit the page's CSP, so `importScripts()` in one is checked
+against `script-src`. Workers started from the app's own files
+(`pyodide-worker.js`, the DuckDB and Whitebox workers) carry no CSP at all:
+Tauri only attaches the policy header to HTML responses. Wasm, wheels, PGlite
+data and the CereusDB/gdal3.js binaries are `fetch`ed, so `connect-src`
+covers them.
+
+When `maplibre-gl-vector` changes a CDN URL, the test's
+`MAPLIBRE_GL_VECTOR_URLS` assertion fails. Re-derive the transitive `/+esm`
+paths by listing each new bundle's imports, for example
+`curl -s https://cdn.jsdelivr.net/npm/vt-pbf@3.1.3/+esm | grep -o '/npm/[^"]*'`,
+recursing into each result, then update `ESM_TRANSITIVE_PATHS` and the CSP
+together. The nginx CSP for the web build (`docker/nginx.conf`) is separate and
+still allows all of jsDelivr.
+
+A self-hosted `VITE_PYODIDE_INDEX_URL` mirror needs no CSP change:
+`pyodide-console.ts` fetches the mirror's entry scripts and runs them from
+`blob:` URLs, and the vector-tools worker is not under the CSP. A rebuilt app
+that loads scripts from any other host needs that host's path added to
+`script-src`.
+
+**`'unsafe-eval'` stays.** `maplibre-gl-vector` builds its CDN loader with
+`new Function("url", "return import(url)")` at module scope, and that module is
+in the startup graph. Without `'unsafe-eval'` the packaged app throws an
+`EvalError` while booting and shows a blank window (verified on the Linux
+WebKitGTK build). Other features compile strings at runtime as well: the
+attribute field calculator (`attribute-expression.ts`), the raster calculator
+(`raster-client.ts`), the AI Assistant's JavaScript tool, the Earth Engine code
+editor, Emscripten embind glue (`maplibre-gl-lidar`, `maplibre-gl-splat`), and
+`ndarray`, Ajv and Mapillary's filter compiler. `'wasm-unsafe-eval'` alone is
+not enough for any of these. Dropping `'unsafe-eval'` starts with an upstream
+`maplibre-gl-vector` change, and then each of these consumers needs a
+replacement.
+
+**`connect-src` keeps `https:` and `http:`.** Users add tile, COG, vector and
+service URLs from arbitrary hosts (XYZ, WMS/WMTS, ArcGIS, STAC, PMTiles), and
+some of those hosts are plain-HTTP servers on a LAN, so no fixed host list can
+cover them. `img-src` keeps `https:` for the same reason.
+
 ### `httpx` (`backend/geolibre_server_api/pyproject.toml`) — private transport pool
 
 The projects server's protection against identity-provider requests to internal

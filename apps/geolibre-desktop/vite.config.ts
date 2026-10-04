@@ -177,11 +177,12 @@ if (NO_EXTERNAL_CDN) {
 // build output. Override with GEOLIBRE_PGLITE_CDN=0 to force-bundle it for a
 // fully offline build. The CDN URLs are pinned to the installed versions so they
 // cannot drift from the lockfile; PGlite resolves its own .wasm/.data/postgis.tar
-// relative to these. jsDelivr is already an allowed script-src in the web
-// (docker/nginx.conf) and desktop (tauri.conf.json) CSPs — it serves Pyodide — so
-// this adds no new external origin. Trade-off: the PostGIS SQL engine needs
-// network on FIRST use. After that, the web build's service worker runtime-caches
-// the jsDelivr-served Pyodide and PGlite/PostGIS engines (see the
+// relative to these. The web CSP (docker/nginx.conf) allows jsDelivr's /npm/
+// tree; the desktop CSP (tauri.conf.json) lists each package's version-pinned
+// path, so a PGlite bump must update that script-src entry too
+// (tests/tauri-csp.test.ts fails until it does). Trade-off: the PostGIS SQL
+// engine needs network on FIRST use. After that, the web build's service worker
+// runtime-caches the jsDelivr-served Pyodide and PGlite/PostGIS engines (see the
 // "geolibre-cdn-engines" CacheFirst rule below), so both the browser SQL and
 // Python features keep working offline. (The desktop Tauri build has no service
 // worker and still fetches these per the same first-use rule.)
@@ -396,8 +397,8 @@ const BUILD_ENV = pruneBuildEnv();
 // app can be hosted there at all. GitHub Pages allows 100 MB per file and needs
 // none of this.
 //
-// jsDelivr is already an allowed script-src in the web (docker/nginx.conf) and
-// desktop CSPs, and maplibre-gl-duckdb already loads its own DuckDB from there,
+// jsDelivr is already an allowed script-src in the web CSP (docker/nginx.conf),
+// and maplibre-gl-duckdb already loads its own DuckDB from there,
 // so this adds no new external origin. The web build's service worker
 // runtime-caches it after first use (the "geolibre-cdn-engines" rule below).
 // Ignored for the two targets that would be made worse by it, which is why this

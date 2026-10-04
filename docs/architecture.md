@@ -154,7 +154,9 @@ The image also bundles the optional Python sidecar (uvicorn) and reverse-proxies
 
 ## Security
 
-- Tauri CSP allowlists tile and style hosts (OpenFreeMap, CARTO).
+- The Tauri CSP pins `script-src` to version-specific jsDelivr paths and keeps
+  `connect-src` open to `https:`/`http:` for user-supplied data URLs; see
+  [Desktop CSP `script-src` allowlist](maintenance.md#desktop-csp-script-src-allowlist).
 - File access uses dialog-selected paths only.
 
 ### Credential storage

@@ -86,7 +86,7 @@ const SCRIPT_FETCH_TIMEOUT_MS = 60_000;
  * Fetch a Pyodide runtime script and run it via a `blob:` URL, then confirm it
  * defined the global it is supposed to.
  *
- * Tauri's `script-src` CSP only allows the jsDelivr CDN origins, so a custom
+ * Tauri's `script-src` CSP only allows the pinned jsDelivr Pyodide path, so a custom
  * `VITE_PYODIDE_INDEX_URL` mirror cannot be reached as a direct `<script src>`
  * nor by Pyodide's own dynamic `import()` — but `connect-src` permits `https:`
  * fetches and `script-src` permits `blob:`, so fetch-then-blob reaches any
