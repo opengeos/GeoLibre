@@ -66,6 +66,7 @@ jobs:
     # The floor is therefore set by the Tauri CLI's generated project format,
     # not by our own code — re-check it when the Tauri CLI is bumped.
     runs-on: macos-15
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:

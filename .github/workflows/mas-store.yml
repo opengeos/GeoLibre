@@ -67,6 +67,7 @@ jobs:
   secrets-gate:
     name: Check signing secrets
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       present: ${{ steps.check.outputs.present }}
     steps:
@@ -103,6 +104,7 @@ jobs:
   build:
     name: Build MAS pkg
     runs-on: macos-latest
+    timeout-minutes: 60
     needs: secrets-gate
     # success() is explicit because a custom job `if:` REPLACES the default
     # success() check on `needs:` rather than ANDing with it. Without it, this

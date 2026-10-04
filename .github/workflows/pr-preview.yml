@@ -71,6 +71,7 @@ jobs:
   build:
     name: Build preview
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       # On `closed` there is nothing to build, but the job still has to run and
       # succeed: it is what triggers stage 2, which removes the published

@@ -59,6 +59,7 @@ jobs:
   resolve:
     name: Resolve pull request
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Only for builds that came from a pull request and actually succeeded. A
     # `workflow_dispatch` build of pr-preview.yml is a build smoke test and
     # publishes nothing, matching the behaviour before the split.
@@ -123,6 +124,7 @@ jobs:
       needs.resolve.outputs.found == 'true' &&
       needs.resolve.outputs.action == 'deploy'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Download the built site
         uses: actions/download-artifact@v8
@@ -193,6 +195,9 @@ jobs:
     needs: resolve
     if: needs.resolve.outputs.found == 'true'
     runs-on: ubuntu-latest
+    # The verifier below polls for up to 10 minutes on top of checkout,
+    # artifact download and the push.
+    timeout-minutes: 20
     # opengeos/pages-preview is a single GitHub Pages site, and Pages builds one
     # commit at a time per repository. Two preview deploys landing together make
     # the older build report `errored` even though its push succeeded, which the
