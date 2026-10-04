@@ -86,6 +86,9 @@ export interface TestMapHandle {
   project(lngLat: [number, number]): { x: number; y: number };
   getCanvas(): HTMLCanvasElement;
   on(type: "movestart", listener: () => void): unknown;
+  /** True once the style and every visible source's tiles have loaded. */
+  loaded(): boolean;
+  queryRenderedFeatures(point: [number, number]): { properties: Record<string, unknown> | null }[];
 }
 
 /**
@@ -105,6 +108,8 @@ const TEST_MAP_METHODS = [
   "project",
   "getCanvas",
   "on",
+  "loaded",
+  "queryRenderedFeatures",
 ] as const satisfies readonly (keyof TestMapHandle)[];
 
 declare global {
@@ -173,4 +178,126 @@ export async function bindMapLibreMap(page: Page): Promise<void> {
     },
     TEST_MAP_METHODS as readonly string[],
   );
+}
+
+/**
+ * Waits until the primary map has drawn a feature at a canvas point and has
+ * nothing left to load or animate, then returns.
+ *
+ * A layer appearing in the Layers panel says nothing about the canvas: the drop
+ * flies the camera to the new layer, and the basemap tiles for the zoom it lands
+ * on stream in for a second or more afterwards. A pixel read in that window is
+ * a frame the map is about to replace. Requiring the feature under the point
+ * pins the wait to *after* the fly started (the layer's source is added with
+ * it), and `loaded()` with no camera movement is MapLibre's own "idle" state.
+ *
+ * @param page - The page whose MapLibre map to wait on.
+ * @param name - The `name` property of the feature that must be rendered.
+ * @param at - The point as fractions of the canvas size; defaults to the centre.
+ */
+export async function waitForRenderedFeature(
+  page: Page,
+  name: string,
+  at: [number, number] = [0.5, 0.5],
+): Promise<void> {
+  await bindMapLibreMap(page);
+  await page.waitForFunction(
+    ({ featureName, fx, fy }) => {
+      const map = window.__geolibreTestMap;
+      if (!map || map.isMoving() || !map.loaded()) return false;
+      const canvas = map.getCanvas();
+      const rect = canvas.getBoundingClientRect();
+      return map
+        .queryRenderedFeatures([rect.width * fx, rect.height * fy])
+        .some((feature) => feature.properties?.name === featureName);
+    },
+    { featureName: name, fx: at[0], fy: at[1] },
+    { timeout: 30_000 },
+  );
+}
+
+/**
+ * Drops a GeoJSON file on the desktop shell, the drop target every rendering
+ * engine shares. `dropGeoJson` targets MapLibre's `map-canvas`, which the
+ * Cesium and ArcGIS engines unmount.
+ *
+ * @param page - The page to drop onto.
+ * @param name - The file's base name, which becomes the layer name.
+ * @param text - The GeoJSON document.
+ */
+export async function dropGeoJsonOnShell(page: Page, name: string, text: string): Promise<void> {
+  await page.evaluate(
+    ({ contents, fileName }) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([contents], fileName, { type: "application/geo+json" }));
+      const target = document.querySelector('[data-testid="desktop-shell"]');
+      if (!target) throw new Error("desktop shell drop target not found");
+      for (const type of ["dragenter", "dragover", "drop"])
+        target.dispatchEvent(
+          new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }),
+        );
+    },
+    { contents: text, fileName: `${name}.geojson` },
+  );
+}
+
+/** The status bar's zoom readout as a number, or NaN. Every engine publishes it. */
+export async function readStatusZoom(page: Page): Promise<number> {
+  const text = await page.getByText(/^Zoom:/).textContent();
+  return Number(text?.match(/-?\d+(\.\d+)?/)?.[0] ?? NaN);
+}
+
+/**
+ * Waits until the status bar reports a settled camera within half a zoom level
+ * of `zoom`, and returns that zoom.
+ *
+ * The status bar zoom changes only per settled camera, so it is waited on *by
+ * value*: "two equal reads" alone also holds before a flight starts. Half a
+ * level, not an exact match, because a view handed to the Cesium or ArcGIS
+ * camera round-trips through a lossy zoom conversion.
+ *
+ * @param page - The page whose status bar to read.
+ * @param zoom - The zoom the camera is expected to settle near.
+ * @returns The settled zoom.
+ */
+export async function waitForSettledZoomNear(page: Page, zoom: number): Promise<number> {
+  let previous = NaN;
+  await expect
+    .poll(
+      async () => {
+        const now = await readStatusZoom(page);
+        const settled = Math.abs(now - zoom) < 0.5 && now === previous;
+        previous = now;
+        return settled;
+      },
+      { timeout: 60_000, intervals: [500] },
+    )
+    .toBe(true);
+  return previous;
+}
+
+/**
+ * Moves the camera with View -> Set View and waits until it is at rest there.
+ *
+ * @param page - The page to drive.
+ * @param lng - Target longitude in degrees.
+ * @param lat - Target latitude in degrees.
+ * @param zoom - Target zoom level.
+ * @returns The settled zoom the status bar reports.
+ */
+export async function setViewAndSettle(
+  page: Page,
+  lng: number,
+  lat: number,
+  zoom: number,
+): Promise<number> {
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Set View/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Set View" });
+  await dialog.locator("#set-view-longitude").fill(String(lng));
+  await dialog.locator("#set-view-latitude").fill(String(lat));
+  await dialog.locator("#set-view-zoom").fill(String(zoom));
+  await dialog.getByRole("button", { name: "Go", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  return waitForSettledZoomNear(page, zoom);
 }
