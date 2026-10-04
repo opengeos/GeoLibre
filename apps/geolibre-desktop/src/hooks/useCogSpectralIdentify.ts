@@ -10,7 +10,7 @@ import {
   removeNetcdfProfileSample,
   setNetcdfProfileSampleProfile,
 } from "../lib/netcdf-profile-store";
-import { fetchRemoteArrayBuffer } from "./usePlugins";
+import { fetchRemoteArrayBuffer } from "../lib/app-api";
 
 /**
  * Charts a clicked pixel's values across every band of a multiband COG
