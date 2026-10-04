@@ -1,6 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import { buildProjectEgressSnapshot } from "../lib/build-project-snapshot";
 import { reserveBuiltInPluginIds } from "../lib/plugin-registry";
+import { ensurePluginBlocklistLoaded, hasPluginBlocklistEntries } from "../lib/plugin-blocklist";
 import {
   addRasterToMap,
   readRasterWindow,
@@ -132,6 +133,7 @@ import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
+  assertBundleNotBlocklisted,
   installWebPluginArchive,
   listInstalledWebPlugins,
   loadExternalPlugins,
@@ -488,6 +490,8 @@ export async function upgradeExternalPlugin(
   expectedVersion?: string,
   expectedHash?: string,
 ): Promise<void> {
+  // Never check an update against a blocklist that is still loading.
+  await ensurePluginBlocklistLoaded();
   const policy = getDeploymentPolicy();
   const bundledManifestUrls = bundledPluginManifestUrls();
   const registryManifestUrls = await registryManifestUrlsForPolicy(
@@ -530,6 +534,7 @@ export async function installPluginArchive(
   if (!isTauriRuntime()) {
     throw new Error("Installing plugin archives requires the desktop app.");
   }
+  await ensurePluginBlocklistLoaded();
   const policy = getDeploymentPolicy();
   // Reject sideloading before even reading the selected archive, and reject its
   // manifest id before the install IPC can persist it in the app-data directory.
@@ -537,12 +542,18 @@ export async function installPluginArchive(
   if (policy?.plugins?.sideload === false && !sideloadDecision.allowed) {
     throw new PluginPolicyError(sourcePath, sideloadDecision);
   }
-  if (policy?.plugins?.allowed !== undefined || policy?.plugins?.blocked?.length) {
+  if (
+    policy?.plugins?.allowed !== undefined ||
+    policy?.plugins?.blocked?.length ||
+    hasPluginBlocklistEntries()
+  ) {
     const bundle = await bundleFromZipBytes(sourcePath, await readFile(sourcePath));
     const decision = evaluatePlugin(bundle.manifest.id, "zip", policy);
     if (!decision.allowed) {
       throw new PluginPolicyError(sourcePath, decision);
     }
+    // Refuse a blocklisted release before the install persists it.
+    await assertBundleNotBlocklisted(bundle);
   }
   const pluginId = await invoke<string>("install_external_plugin_archive", {
     sourcePath,
@@ -881,6 +892,8 @@ async function ensureExternalPluginsLoadedWithSettings(
   // opening a project never fetches or imports third-party plugin code; they
   // reach this scan only after the user trusts them, at which point they are in
   // desktopSettings.pluginManifestUrls (see useProjectPluginTrust / #1062).
+  // The registry's blocklist must be in place before any plugin code loads.
+  await ensurePluginBlocklistLoaded();
   const bundledManifestUrls = bundledPluginManifestUrls();
   const policy = getDeploymentPolicy();
   const additionalPluginDirectories =

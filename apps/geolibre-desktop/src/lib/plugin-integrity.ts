@@ -148,14 +148,16 @@ export type PluginBundleIntegrity =
  * @param url - The plugin manifest URL that produced the bundle.
  * @param bundle - The fetched entry/style sources.
  * @param version - The bundle's manifest version, recorded with the pin.
+ * @param precomputedHash - The bundle's hash, when the caller already has it.
  * @returns The integrity verdict.
  */
 export async function verifyPluginBundleIntegrity(
   url: string,
   bundle: PluginBundleForHashing,
   version?: string,
+  precomputedHash?: string,
 ): Promise<PluginBundleIntegrity> {
-  const currentHash = await computePluginBundleHash(bundle);
+  const currentHash = precomputedHash ?? (await computePluginBundleHash(bundle));
   const pin = readPins()[url];
   if (!pin) {
     pinPluginBundle(url, currentHash, version);

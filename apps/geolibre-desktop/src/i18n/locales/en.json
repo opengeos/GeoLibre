@@ -184,6 +184,7 @@
     "description": "Browse, install, update, and remove external GeoLibre plugins. Plugins are listed in the <registryLink>GeoLibre plugin registry</registryLink>.",
     "policySideloadDisabled": "Plugin sideloading is disabled by deployment policy.",
     "policyBlocked": "Plugin '{{pluginId}}' is blocked by deployment policy.",
+    "policyBlocklisted": "Plugin '{{pluginId}}' was blocked by the plugin registry: {{reason}}",
     "policyNotAllowed": "Plugin '{{pluginId}}' is not allowed by deployment policy."
   },
   "viewState": {

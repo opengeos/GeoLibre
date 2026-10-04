@@ -137,12 +137,26 @@ export async function fetchPluginRegistry(
  * Read a response body as text, enforcing a hard byte ceiling. The
  * Content-Length header is a fast-fail; the streaming reader is the real
  * enforcement for responses that omit it (chunked/compressed). Mirrors the
- * cap in fetchPluginText for plugin assets.
+ * cap in fetchPluginText for plugin assets. Also used for the registry's
+ * blocklist (plugin-blocklist.ts).
+ *
+ * @param response - The response to read.
+ * @param maxBytes - The byte ceiling.
+ * @param label - What is being fetched, for the error message.
+ * @returns The body as text.
  */
-async function readBodyWithCap(response: Response, maxBytes: number): Promise<string> {
+export async function readBodyWithCap(
+  response: Response,
+  maxBytes: number,
+  label = "plugin registry",
+): Promise<string> {
+  const tooLarge = () =>
+    new Error(
+      `Could not fetch ${label}: response exceeds the ${Math.round(maxBytes / (1024 * 1024))} MB size limit.`,
+    );
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
+    throw tooLarge();
   }
   const reader = response.body?.getReader();
   if (!reader) {
@@ -151,7 +165,7 @@ async function readBodyWithCap(response: Response, maxBytes: number): Promise<st
     // without first building the full string.
     const buffer = await response.arrayBuffer();
     if (buffer.byteLength > maxBytes) {
-      throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
+      throw tooLarge();
     }
     return new TextDecoder().decode(buffer);
   }
@@ -163,7 +177,7 @@ async function readBodyWithCap(response: Response, maxBytes: number): Promise<st
       if (done) break;
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
-        throw new Error("Could not fetch plugin registry: response exceeds the 5 MB size limit.");
+        throw tooLarge();
       }
       chunks.push(value);
     }
