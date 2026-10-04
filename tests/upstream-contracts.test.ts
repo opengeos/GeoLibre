@@ -317,18 +317,23 @@ describe("maplibre-gl-vector", () => {
   const text = () => readPublishedText("maplibre-gl-vector", { workspace: "packages/plugins" });
 
   it("still caps remote files at MAX_VECTOR_BYTES", () => {
-    const match = text().match(/MAX_REMOTE_FILE_BYTES\s*=\s*([\d\s*+-]+);/);
+    // Accepts `N` or `B ** E - S` (the 2 GiB - 1 form it ships as), parsed by
+    // hand rather than evaluated.
+    const match = text().match(
+      /MAX_REMOTE_FILE_BYTES\s*=\s*(\d+)(?:\s*\*\*\s*(\d+)\s*-\s*(\d+))?\s*;/,
+    );
     assert.ok(
       match,
       contractMessage(
         "maplibre-gl-vector",
         section,
-        "MAX_REMOTE_FILE_BYTES is gone or no longer a plain arithmetic literal",
+        "MAX_REMOTE_FILE_BYTES is gone or no longer `N` / `B ** E - S`",
         "packages/plugins",
       ),
     );
-    // Only digits, whitespace and + - * reach here, so evaluating it is safe.
-    const upstream = Function(`"use strict"; return (${match[1]});`)() as number;
+    const [, base, exponent, subtrahend] = match;
+    const upstream =
+      exponent === undefined ? Number(base) : Number(base) ** Number(exponent) - Number(subtrahend);
     assert.equal(
       upstream,
       MAX_VECTOR_BYTES,
