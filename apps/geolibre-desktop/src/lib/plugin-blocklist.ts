@@ -31,7 +31,8 @@ let blockedPlugins = new Map<string, PluginBlocklistEntry>();
 let blockedBundles = new Map<string, PluginBlocklistEntry>();
 let loadPromise: Promise<void> | null = null;
 
-const bundleKey = (id: string, hash: string): string => `${id} ${hash}`;
+// JSON keeps the pair unambiguous whatever characters an id contains.
+const bundleKey = (id: string, hash: string): string => JSON.stringify([id, hash]);
 
 /**
  * Normalize an untrusted blocklist document. Malformed entries are dropped
@@ -45,7 +46,10 @@ export function parsePluginBlocklist(value: unknown): PluginBlocklistEntry[] {
   const blocked = (value as { blocked?: unknown }).blocked;
   if (!Array.isArray(blocked)) return [];
   const entries: PluginBlocklistEntry[] = [];
-  for (const item of blocked.slice(0, MAX_ENTRIES)) {
+  for (const item of blocked) {
+    // Cap valid entries, not raw ones, so malformed items can't push valid
+    // entries past the limit.
+    if (entries.length >= MAX_ENTRIES) break;
     if (!item || typeof item !== "object") continue;
     const record = item as Record<string, unknown>;
     const id = typeof record.id === "string" ? record.id.trim().slice(0, 128) : "";
