@@ -248,31 +248,56 @@ export async function readStatusZoom(page: Page): Promise<number> {
 }
 
 /**
- * Waits for the camera to leave `from` and come to rest, and returns the zoom
- * it landed on.
+ * Waits until the status bar reports a settled camera within half a zoom level
+ * of `zoom`, and returns that zoom.
  *
- * Adding a layer flies the camera to it, and on the 3D engines a pointer event
- * during that flight cancels it, stranding the camera wherever it had got to.
- * The status bar zoom only changes per settled camera, so "two equal reads"
- * alone also holds *before* the flight starts; requiring the value to move off
- * `from` first is what pins the wait to after it.
+ * The status bar zoom changes only per settled camera, so it is waited on *by
+ * value*: "two equal reads" alone also holds before a flight starts. Half a
+ * level, not an exact match, because a view handed to the Cesium or ArcGIS
+ * camera round-trips through a lossy zoom conversion.
  *
  * @param page - The page whose status bar to read.
- * @param from - The zoom read before the action that moves the camera.
+ * @param zoom - The zoom the camera is expected to settle near.
  * @returns The settled zoom.
  */
-export async function waitForCameraToLand(page: Page, from: number): Promise<number> {
+export async function waitForSettledZoomNear(page: Page, zoom: number): Promise<number> {
   let previous = NaN;
   await expect
     .poll(
       async () => {
         const now = await readStatusZoom(page);
-        const landed = Number.isFinite(now) && now !== from && now === previous;
+        const settled = Math.abs(now - zoom) < 0.5 && now === previous;
         previous = now;
-        return landed;
+        return settled;
       },
       { timeout: 60_000, intervals: [500] },
     )
     .toBe(true);
   return previous;
+}
+
+/**
+ * Moves the camera with View -> Set View and waits until it is at rest there.
+ *
+ * @param page - The page to drive.
+ * @param lng - Target longitude in degrees.
+ * @param lat - Target latitude in degrees.
+ * @param zoom - Target zoom level.
+ * @returns The settled zoom the status bar reports.
+ */
+export async function setViewAndSettle(
+  page: Page,
+  lng: number,
+  lat: number,
+  zoom: number,
+): Promise<number> {
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Set View/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Set View" });
+  await dialog.locator("#set-view-longitude").fill(String(lng));
+  await dialog.locator("#set-view-latitude").fill(String(lat));
+  await dialog.locator("#set-view-zoom").fill(String(zoom));
+  await dialog.getByRole("button", { name: "Go", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  return waitForSettledZoomNear(page, zoom);
 }

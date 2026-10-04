@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { dropGeoJsonOnShell, layerRow, readStatusZoom, waitForCameraToLand } from "./helpers";
+import { dropGeoJsonOnShell, layerRow, setViewAndSettle, waitForSettledZoomNear } from "./helpers";
 
 /**
  * The per-commit smoke check for each alternate rendering engine: switch the
@@ -27,8 +27,9 @@ import { dropGeoJsonOnShell, layerRow, readStatusZoom, waitForCameraToLand } fro
 test.describe.configure({ mode: "default" });
 
 /**
- * One polygon spanning the contiguous US, large enough that the view's centre
- * lands on it wherever the camera settles after flying to the layer.
+ * One polygon spanning the contiguous US, centred where the spec parks the
+ * camera, and large enough that a pick at the view's centre lands on it even
+ * while the camera flies to the layer.
  */
 function area(name: string): string {
   return JSON.stringify({
@@ -121,6 +122,13 @@ for (const engine of ENGINES) {
     await page.goto("/");
     await expect(page.locator(".maplibregl-canvas")).toBeVisible({ timeout: 30_000 });
     await engine.prepare?.(page);
+    // Park the camera over where the polygon will go *before* the swap, on
+    // MapLibre, where Set View lands exactly. The 3D engine then seeds from
+    // that camera, so the pick below needs no flight at all. Driving the
+    // camera on the globe after the drop is what intermittently failed: the
+    // Cesium globe can refuse both the drop's fly-to-layer and a Set View to
+    // the layer's centre (#2878).
+    await setViewAndSettle(page, -97.5, 37.5, 4);
 
     await page.getByRole("button", { name: "View", exact: true }).click();
     await page.getByRole("menuitem", { name: "Rendering engine", exact: true }).hover();
@@ -128,15 +136,14 @@ for (const engine of ENGINES) {
     await engine.ready(page);
     // The engine replaces the MapLibre map rather than joining it.
     await expect(page.getByTestId("map-canvas")).toHaveCount(0);
+    // ...and seeded its camera from the shared view.
+    await waitForSettledZoomNear(page, 4);
 
-    const before = await readStatusZoom(page);
     await dropGeoJsonOnShell(page, layerName, area(featureName));
     const row = layerRow(page, layerName);
     await expect(row).toBeVisible({ timeout: 30_000 });
     // The engine compiled the layer instead of flagging it unsupported.
     await expect(row).not.toContainText(/No (ArcGIS|Cesium)/);
-    // Adding the layer flies to it; a click mid-flight would cancel the flight.
-    await waitForCameraToLand(page, before);
 
     await row.getByRole("button", { name: "Identify features", exact: true }).click();
     const container = page.getByTestId(engine.container);
@@ -146,15 +153,16 @@ for (const engine of ENGINES) {
     expect(box).not.toBeNull();
     const popup = container.locator(engine.popup);
     // A pick resolves only once the engine has built and drawn the layer's
-    // geometry, which neither the layer row nor the settled camera waits for.
-    // Retry the click until the popup answers rather than guess how long that
-    // takes; the camera is at rest, so a repeated click cannot move it.
+    // geometry, which neither the layer row nor the camera waits for. Retry the
+    // click until the popup answers rather than guess how long that takes. The
+    // content is checked inside the retry too: adding the layer may still start
+    // a short fly-to-layer from the parked camera (the view's centre stays on
+    // the polygon throughout), and a camera move closes an open popup.
     await expect(async () => {
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-      await expect(popup).toBeVisible({ timeout: 5_000 });
+      await expect(popup).toContainText(layerName, { timeout: 5_000 });
+      await expect(popup).toContainText(featureName, { timeout: 1_000 });
     }).toPass({ timeout: 60_000 });
-    await expect(popup).toContainText(layerName);
-    await expect(popup).toContainText(featureName);
 
     await expect(container.getByRole("alert")).toHaveCount(0);
     expect(errors).toEqual([]);
