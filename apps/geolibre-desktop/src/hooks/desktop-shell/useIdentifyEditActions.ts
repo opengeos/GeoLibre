@@ -71,7 +71,9 @@ export function useIdentifyEditActions({
         );
       },
       canEditAttributes: (layer) => canEditLayer(layer.id) && canEditLayerAttributes(layer),
+      // A popup can outlive a permission change, so recheck at click time.
       editGeometry: ({ layer, featureId }) => {
+        if (!canEditLayer(layer.id)) return;
         const store = useAppStore.getState();
         store.selectLayer(layer.id);
         store.selectFeature(featureId);
@@ -80,9 +82,12 @@ export function useIdentifyEditActions({
         void editFeatureGeometry(layer.id, featureId);
       },
       editAttributes: ({ layer, featureId }) => {
+        if (!canEditLayer(layer.id)) return;
         const store = useAppStore.getState();
         store.selectLayer(layer.id);
         store.selectFeature(featureId);
+        // A table filter could hide the row this action opens.
+        store.setAttributeFilter("");
         store.requestAttributeTableEdit(layer.id);
       },
     }),

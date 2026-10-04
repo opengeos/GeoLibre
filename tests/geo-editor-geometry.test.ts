@@ -176,6 +176,18 @@ describe("tagFeatureKeys", () => {
     assert.equal(collection.features[0].properties?.[GEOMETRY_EDIT_FID_PROPERTY], undefined);
   });
 
+  it("gives an id-less feature its array index, as Identify and the table do", () => {
+    // Identify's Edit geometry finds its feature by this tag (#2932).
+    const tagged = tagFeatureKeys({
+      type: "FeatureCollection",
+      features: [point(42), point(undefined), point(undefined)],
+    });
+    assert.deepEqual(
+      tagged.features.map((f) => f.properties?.[GEOMETRY_EDIT_FID_PROPERTY]),
+      ["42", "1", "2"],
+    );
+  });
+
   it("assigns unique ids when the input has duplicate ids", () => {
     const tagged = tagFeatureKeys({
       type: "FeatureCollection",
@@ -226,9 +238,11 @@ describe("reconcileEditedFeatures", () => {
       features: [point(5), point(12), point(undefined)],
     };
     const reconciled = reconcileEditedFeatures(tagFeatureKeys(original));
+    // The id-less feature keeps its array index, the id the attribute table
+    // already gave it, so a save does not renumber it.
     assert.deepEqual(
       reconciled.features.map((f) => String(f.id)),
-      ["5", "12", "0"],
+      ["5", "12", "2"],
     );
   });
 

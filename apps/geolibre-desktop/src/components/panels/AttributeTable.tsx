@@ -641,7 +641,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     hasAttributeSource && layerCaps.update && !isReadOnlyVectorLayer && !isGeometryEditing;
   useEffect(() => {
     if (attributeTableEditLayerId === null) return;
-    if (layer?.id === attributeTableEditLayerId && canEnterEditMode) setIsEditing(true);
+    if (layer?.id === attributeTableEditLayerId && canEnterEditMode) {
+      // A collapsed table would enter edit mode with the row out of sight.
+      setCollapsed(false);
+      setIsEditing(true);
+    }
     requestAttributeTableEdit(null);
   }, [attributeTableEditLayerId, canEnterEditMode, layer?.id, requestAttributeTableEdit]);
 

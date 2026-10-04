@@ -108,7 +108,7 @@ export function tagFeatureKeys(collection: FeatureCollection): FeatureCollection
   let warnedCollision = false;
   return {
     type: "FeatureCollection",
-    features: collection.features.map((feature) => {
+    features: collection.features.map((feature, index) => {
       // Warn once if real data already uses the reserved tag key: that value is
       // overwritten for the session and stripped on save, so the user would
       // otherwise silently lose it.
@@ -123,7 +123,10 @@ export function tagFeatureKeys(collection: FeatureCollection): FeatureCollection
             "property; it will be overwritten for the edit session and removed on save.",
         );
       }
-      const id = ids.take(feature.id);
+      // A feature without an id falls back to its array index, the same id the
+      // attribute table and Identify give it, so an Identify result can find
+      // its feature in the editor (#2932). The allocator still keeps it unique.
+      const id = ids.take(feature.id ?? index);
       return {
         ...feature,
         id,
