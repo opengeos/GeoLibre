@@ -165,6 +165,14 @@ to run the script, but no `npm install`). CI runs lint, `ci:frontend`,
 you add a step to `npm run ci`, add it to one of those groups and CI picks it
 up.
 
+On a pull request, lint and "Build and test" always run. The other jobs (E2E
+core, backend, Rust, containers, and the database and OIDC integration jobs)
+run only when the PR changes a path that feeds them; the `changes` job at the
+top of `ci.yml` holds those path filters. A single **CI passed** job waits for
+all of them and fails if any job failed, so it is the one check to watch, and
+the one branch protection requires. A new CI job must be added to its `needs`
+list, or its failures will not block a merge.
+
 You only need the toolchains for the areas you touched. A docs-only or
 frontend-only change does not require Rust or Python (use `npm run ci:web`),
 though the full `npm run ci` gate does. The backend step needs the sidecar's
@@ -230,8 +238,8 @@ The suite is split into two Playwright projects, which together partition
 
 | Project | Command | What it covers | When it runs |
 | --- | --- | --- | --- |
-| `core` | `npm run test:e2e:core` | The app boots and renders a map, plus the shared UI surfaces: layer panel, attribute table, dialogs, drag-and-drop, theme, RTL, accessibility, PWA shell, project save and reopen, the plugin deep-link docs. | Every push and PR, as the `E2E core (Playwright)` job in `ci.yml`. |
-| `core-engines` | (run by `npm run test:e2e:core`) | One smoke pass per alternate engine (Cesium, ArcGIS): switch to it, add GeoJSON, identify a feature. Runs after `core`, on one worker, because a software-rendered 3D view saturates the CPU. The ArcGIS pass loads the SDK from `js.arcgis.com`. | Every push and PR, as the `E2E core (Playwright)` job in `ci.yml`. |
+| `core` | `npm run test:e2e:core` | The app boots and renders a map, plus the shared UI surfaces: layer panel, attribute table, dialogs, drag-and-drop, theme, RTL, accessibility, PWA shell, project save and reopen, the plugin deep-link docs. | Every push, and every PR that changes a path the web build reads, as the `E2E core (Playwright)` job in `ci.yml`. |
+| `core-engines` | (run by `npm run test:e2e:core`) | One smoke pass per alternate engine (Cesium, ArcGIS): switch to it, add GeoJSON, identify a feature. Runs after `core`, on one worker, because a software-rendered 3D view saturates the CPU. The ArcGIS pass loads the SDK from `js.arcgis.com`. | Every push, and every PR that changes a path the web build reads, as the `E2E core (Playwright)` job in `ci.yml`. |
 | `features` | `npm run test:e2e:features` | Per-feature integration: Mapbox/Cesium engines, STAC, exports, story maps, the scene graph, plugin install. | Nightly and on demand via `e2e-full.yml`, sharded 4x — or on a PR labelled `full-e2e`. |
 
 The split is a wall-clock decision, not a judgement about value: the full suite

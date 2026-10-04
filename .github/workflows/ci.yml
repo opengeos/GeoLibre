@@ -15,40 +15,72 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  audit:
-    name: Dependency audit
+  changes:
+    # Decides which of the path-scoped jobs below a pull request needs. Lint and
+    # "Build and test" always run: the frontend tests read files all over the
+    # repo (backend/, python/, docs/, src-tauri/), so no path is safe to skip
+    # for them. Every other job runs on a PR only when a path that feeds it
+    # changed, and always on push and workflow_dispatch (this job is skipped
+    # there). Each filter includes this workflow file, so a CI edit exercises
+    # every job. When a job starts reading a new part of the repo, add that path
+    # to its filter here.
+    name: Detect changed paths
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      containers: ${{ steps.filter.outputs.containers }}
+      backend: ${{ steps.filter.outputs.backend }}
+      rust: ${{ steps.filter.outputs.rust }}
+      identity: ${{ steps.filter.outputs.identity }}
+      mssql: ${{ steps.filter.outputs.mssql }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Classify changed files
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-
-      # Reads package-lock.json and queries the registry — no install needed, so
-      # this stays fast. Blocking at `high` catches high/critical advisories
-      # without reddening CI for the moderate/low noise Dependabot handles via PR.
-      # Scoped to production deps: `--omit=dev` drops advisories that only reach
-      # local build/dev tooling (e.g. sharp/libvips via wrangler+miniflare, which
-      # never ships in a GeoLibre artifact), while still blocking anything that
-      # reaches users. Dependabot bumps the dev toolchain separately.
-      # Wrapped in scripts/audit-check.mjs because plain `npm audit` cannot accept
-      # a single advisory: see the ALLOWLIST there for the unpatchable, unreachable
-      # findings that would otherwise redden every PR indefinitely.
-      - name: Audit npm dependencies (high and critical)
-        run: npm run audit:ci
+          # `every`: a file counts for a filter only if it matches every pattern
+          # in it, which is what lets the `!` patterns in `web` exclude paths.
+          predicate-quantifier: every
+          filters: |
+            # Anything that can change the web app E2E builds and drives: every
+            # path except the ones listed. The Vite build copies
+            # backend/geolibre_server/geolibre_server/vector_ops.py into the
+            # app, so only the parts of backend/ it never reads are left out.
+            web:
+              - "**"
+              - "!docs/**"
+              - "!**/*.md"
+              - "!python/**"
+              - "!skills/**"
+              - "!docker/**"
+              - "!backend/geolibre_server_api/**"
+              - "!backend/geolibre_server/tests/**"
+              - "!CITATION.cff"
+              - "!mkdocs.yml"
+              - "!requirements-docs.txt"
+            containers:
+              - "{workers/collab-node/**,packages/collab-core/**,patches/**,docker/**,backend/geolibre_server/**,tests/fixtures/deployment-policy/**,schema/**,package.json,package-lock.json,scripts/apply-dependency-patches.mjs,scripts/test-entrypoint.sh,.github/workflows/ci.yml}"
+            backend:
+              - "{backend/**,docker/**,schema/**,tests/fixtures/**,package.json,.github/workflows/ci.yml}"
+            rust:
+              - "{apps/geolibre-desktop/src-tauri/**,package.json,rust-toolchain.toml,.github/workflows/ci.yml}"
+            identity:
+              - "{backend/geolibre_server_api/**,.github/workflows/ci.yml}"
+            mssql:
+              - "{backend/geolibre_server/**,.github/workflows/ci.yml}"
 
   lint:
-    # Lint and types on their own, so a lint-ratchet or type failure reports in
-    # a few minutes. This is also the only CI job that runs `npm run lint`: the
-    # "Build and test" job runs `npm run ci:frontend`, which leaves lint out so
-    # it is not run twice. The type check is `tsc -b` without the Vite build,
-    # the same command as `npm run typecheck:fast`.
+    # Lint and types (plus the npm audit and the CITATION.cff check) on their
+    # own, so a lint-ratchet or type failure reports in a few minutes. This is
+    # also the only CI job that runs `npm run lint`: the "Build and test" job
+    # runs `npm run ci:frontend`, which leaves lint out so it is not run twice.
+    # The type check is `tsc -b` without the Vite build, the same command as
+    # `npm run typecheck:fast`.
     name: Lint and type check
     runs-on: ubuntu-22.04
     timeout-minutes: 15
@@ -64,6 +96,45 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
+
+      # The dependency audit and the CITATION.cff check used to be jobs of their
+      # own; each took seconds, so they ride along here instead of adding a
+      # check (and a runner) to every PR.
+      #
+      # Reads package-lock.json and queries the registry — no install needed, so
+      # this stays fast. Blocking at `high` catches high/critical advisories
+      # without reddening CI for the moderate/low noise Dependabot handles via PR.
+      # Scoped to production deps: `--omit=dev` drops advisories that only reach
+      # local build/dev tooling (e.g. sharp/libvips via wrangler+miniflare, which
+      # never ships in a GeoLibre artifact), while still blocking anything that
+      # reaches users. Dependabot bumps the dev toolchain separately.
+      # Wrapped in scripts/audit-check.mjs because plain `npm audit` cannot accept
+      # a single advisory: see the ALLOWLIST there for the unpatchable, unreachable
+      # findings that would otherwise redden every PR indefinitely.
+      - name: Audit npm dependencies (high and critical)
+        run: npm run audit:ci
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install cffconvert
+        run: python -m pip install cffconvert
+
+      - name: Validate CITATION.cff against the CFF schema
+        run: cffconvert --validate -i CITATION.cff
+
+      - name: Ensure version matches package.json
+        run: |
+          cff_version="$(sed -n 's/^version: *//p' CITATION.cff | tr -d '"' | head -n1)"
+          pkg_version="$(python -c "import json; print(json.load(open('package.json'))['version'])")"
+          echo "CITATION.cff version: $cff_version"
+          echo "package.json version: $pkg_version"
+          if [ "$cff_version" != "$pkg_version" ]; then
+            echo "::error file=CITATION.cff::version ($cff_version) does not match package.json ($pkg_version). Update CITATION.cff version and date-released when bumping the release version."
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -115,6 +186,8 @@ jobs:
     name: E2E core (Playwright)
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.web == 'true') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -165,42 +238,14 @@ jobs:
             test-results/
           retention-days: 7
 
-  citation:
-    name: Validate CITATION.cff
+  containers:
+    # The collaboration relay image and the web image's entrypoint, in one job
+    # since each is about a minute of Docker work.
+    name: Container checks
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Install cffconvert
-        run: python -m pip install cffconvert
-
-      - name: Validate CITATION.cff against the CFF schema
-        run: cffconvert --validate -i CITATION.cff
-
-      - name: Ensure version matches package.json
-        run: |
-          cff_version="$(sed -n 's/^version: *//p' CITATION.cff | tr -d '"' | head -n1)"
-          pkg_version="$(python -c "import json; print(json.load(open('package.json'))['version'])")"
-          echo "CITATION.cff version: $cff_version"
-          echo "package.json version: $pkg_version"
-          if [ "$cff_version" != "$pkg_version" ]; then
-            echo "::error file=CITATION.cff::version ($cff_version) does not match package.json ($pkg_version). Update CITATION.cff version and date-released when bumping the release version."
-            exit 1
-          fi
-
-  collab-image:
-    name: Collab relay image
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 15
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.containers == 'true') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -232,21 +277,12 @@ jobs:
         if: ${{ always() }}
         run: docker logs collab
 
-  entrypoint:
-    name: Container entrypoint
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
       # Runs the real docker/entrypoint.sh, nginx.conf and deployment_policy.py
       # in a small image (no app build) and checks deployment.json end to end:
       # headers, env overrides, good fixtures, and every bad fixture failing boot
       # with its ERROR. Schema drift is caught by docker/tests in the backend job.
       - name: Run the entrypoint harness
+        if: ${{ !cancelled() }}
         run: bash scripts/test-entrypoint.sh
 
   checks:
@@ -313,6 +349,8 @@ jobs:
     name: Backend tests
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -378,6 +416,8 @@ jobs:
     name: Rust check
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -417,50 +457,12 @@ jobs:
       - name: Cargo check the Tauri shell
         run: npm run check:rust
 
-  projects-identity-postgres:
-    name: Identity PostgreSQL concurrency gate
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: geolibre_test
-          POSTGRES_USER: geolibre
-          POSTGRES_PASSWORD: geolibre
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U geolibre -d geolibre_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Install the projects-and-identity API with the postgres extra
-        run: python -m pip install -e "backend/geolibre_server_api[test,postgres]"
-
-      # OAuth code consumption, refresh rotation, family revocation, and legacy
-      # PAT policy creation rely on database uniqueness and row locking. Exercise
-      # those boundaries on PostgreSQL rather than SQLite's process-local writes.
-      - name: Run the postgres-marked concurrency gate
-        env:
-          GEOLIBRE_TEST_POSTGRES_URL: postgresql+psycopg://geolibre:geolibre@127.0.0.1:5432/geolibre_test
-        run: python -m pytest backend/geolibre_server_api/tests -m postgres
-
   sidecar-mssql:
     name: Sidecar SQL Server integration
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.mssql == 'true') }}
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -506,10 +508,28 @@ jobs:
           GEOLIBRE_MSSQL_HOSTS: 127.0.0.1:1433
         run: python -m pytest backend/geolibre_server/tests/test_mssql.py -rs
 
-  projects-identity-oidc-interop:
-    name: Identity OIDC interop
+  identity-integration:
+    # The projects-and-identity API against real services: the PostgreSQL
+    # concurrency gate and the OIDC interop run, sharing one install.
+    name: Identity integration (PostgreSQL, OIDC)
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 15
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.identity == 'true') }}
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: geolibre_test
+          POSTGRES_USER: geolibre
+          POSTGRES_PASSWORD: geolibre
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U geolibre -d geolibre_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -521,14 +541,27 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install the projects-and-identity API
-        run: python -m pip install -e "backend/geolibre_server_api[test]"
+      - name: Install the projects-and-identity API with the postgres extra
+        run: python -m pip install -e "backend/geolibre_server_api[test,postgres]"
+
+      # OAuth code consumption, refresh rotation, family revocation, and legacy
+      # PAT policy creation rely on database uniqueness and row locking. Exercise
+      # those boundaries on PostgreSQL rather than SQLite's process-local writes.
+      - name: Run the postgres-marked concurrency gate
+        env:
+          GEOLIBRE_TEST_POSTGRES_URL: postgresql+psycopg://geolibre:geolibre@127.0.0.1:5432/geolibre_test
+        run: python -m pytest backend/geolibre_server_api/tests -m postgres
 
       # The in-process suite fakes the IdP. This runs discovery, JWKS, the
       # authorization redirect, and the back-channel code exchange against a
       # real OIDC server over TLS, trusted through GEOLIBRE_OIDC_CA_BUNDLE the
       # way an operator trusts an IdP behind a private CA.
+      # `!cancelled()` on the OIDC steps (and the entrypoint harness in
+      # "Container checks"): a merged job still reports both suites when the
+      # first one fails.
       - name: Start mock-oauth2-server with a self-signed certificate
+        id: idp
+        if: ${{ !cancelled() }}
         run: |
           mkdir -p /tmp/idp
           openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=localhost" \
@@ -540,6 +573,7 @@ jobs:
           curl -fsS --cacert /tmp/idp/cert.pem --retry 30 --retry-all-errors --retry-delay 1 https://localhost:8443/geolibre/.well-known/openid-configuration
 
       - name: Run the oidc_interop-marked tests
+        if: ${{ !cancelled() && steps.idp.outcome == 'success' }}
         env:
           GEOLIBRE_TEST_OIDC_ISSUER: https://localhost:8443/geolibre
           GEOLIBRE_OIDC_CA_BUNDLE: /tmp/idp/cert.pem
@@ -548,5 +582,36 @@ jobs:
         run: python -m pytest backend/geolibre_server_api/tests -m oidc_interop
 
       - name: Print mock-oauth2-server logs
-        if: ${{ failure() }}
+        if: ${{ failure() && steps.idp.outcome != 'skipped' }}
         run: docker logs mock-idp
+
+  ci-passed:
+    # The one check to look at (and the one the `main` ruleset requires): green
+    # only when every job above passed or was skipped by `changes`. A failed or
+    # cancelled job, including `changes` itself, turns it red. Add every new CI
+    # job to `needs` here, or a failure in it will not block a merge.
+    name: CI passed
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    if: ${{ always() }}
+    needs:
+      - changes
+      - lint
+      - e2e
+      - containers
+      - checks
+      - backend
+      - rust
+      - sidecar-mssql
+      - identity-integration
+    steps:
+      - name: Check that no job failed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          failed="$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key] | join(", ")')"
+          if [ -n "$failed" ]; then
+            echo "::error::Failed or cancelled: $failed"
+            exit 1
+          fi
