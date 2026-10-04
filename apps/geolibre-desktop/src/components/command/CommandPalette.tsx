@@ -72,7 +72,17 @@ export function CommandPalette({
       return row.kind === "group" ? `group:${row.index}` : row.command.id;
     },
     overscan: 8,
+    // Mount the first rows on the first render, before the list has been
+    // measured, so the palette never opens empty.
+    initialRect: { width: 0, height: 384 },
   });
+  const virtualItems = virtualizer.getVirtualItems();
+  // aria-activedescendant must name an element in the DOM; with virtualization
+  // the active row may not be mounted (e.g. mid-scroll), so point at it only
+  // when it is.
+  const activeRow = rowOfCommand[activeIndex];
+  const activeMounted =
+    activeRow !== undefined && virtualItems.some((item) => item.index === activeRow);
 
   // Reset the query each time the palette opens so it always starts fresh.
   useEffect(() => {
@@ -140,7 +150,9 @@ export function CommandPalette({
             aria-label={t("commandPalette.searchAria")}
             aria-expanded={true}
             aria-controls={listboxId}
-            aria-activedescendant={activeCommand ? optionId(activeCommand) : undefined}
+            aria-activedescendant={
+              activeCommand && activeMounted ? optionId(activeCommand) : undefined
+            }
             className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             placeholder={t("commandPalette.searchPlaceholder")}
             value={query}
@@ -164,7 +176,7 @@ export function CommandPalette({
             </p>
           ) : (
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-              {virtualizer.getVirtualItems().map((item) => {
+              {virtualItems.map((item) => {
                 const row = rows[item.index];
                 return (
                   <div
