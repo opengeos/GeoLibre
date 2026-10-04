@@ -18,6 +18,7 @@ export * from "./document-locale";
 export * from "./label-number-format";
 export * from "./external-native-paint";
 export * from "./attribute-form";
+export * from "./layer-descriptive-metadata";
 export * from "./popup";
 export * from "./joins";
 export * from "./virtual-fields";

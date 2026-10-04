@@ -646,6 +646,91 @@ def clear_popup(project: dict[str, Any], ref: str) -> dict[str, Any]:
     return layer_summary(layer)
 
 
+def set_layer_metadata(
+    project: dict[str, Any],
+    ref: str,
+    *,
+    merge: bool = False,
+    **fields: Any,
+) -> dict[str, Any] | None:
+    """Set a layer's descriptive (catalog) metadata.
+
+    This is what the app's layer Metadata dialog edits and exports as a STAC
+    Item: title, abstract, keywords, license, attribution, contact, lineage,
+    temporal extent and links. See :func:`geolibre.project.layer_metadata`.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+        merge: Keep the layer's existing fields that ``fields`` does not name,
+            instead of replacing the whole block.
+        **fields: Keyword arguments of :func:`geolibre.project.layer_metadata`
+            (``title``, ``abstract``, ``keywords``, ``license``,
+            ``attribution``, ``contact``, ``lineage``, ``temporal_extent``,
+            ``links``).
+
+    Returns:
+        The layer's metadata block after the change, or ``None`` when it ended
+        up empty (and was removed).
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one layer, a
+            field name is unknown, or a value fails validation.
+    """
+    unknown = sorted(set(fields) - set(_METADATA_FIELD_KEYS))
+    if unknown:
+        raise ValueError(f"unknown layer metadata field(s): {', '.join(unknown)}")
+    layer = find_layer(project, ref)
+    built = _project.layer_metadata(**fields) or {}
+    if merge:
+        current = _project.normalize_layer_metadata(layer.get("descriptiveMetadata")) or {}
+        # The keys the caller named replace the stored ones -- including a key
+        # passed as blank, which clears it.
+        named = {_METADATA_FIELD_KEYS[name] for name in fields}
+        built = {
+            **{key: value for key, value in current.items() if key not in named},
+            **built,
+        }
+    metadata = _project.normalize_layer_metadata(built)
+    if metadata is None:
+        layer.pop("descriptiveMetadata", None)
+    else:
+        layer["descriptiveMetadata"] = metadata
+    return copy.deepcopy(metadata)
+
+
+#: Keyword argument of :func:`set_layer_metadata` -> stored camelCase key.
+_METADATA_FIELD_KEYS = {
+    "title": "title",
+    "abstract": "abstract",
+    "keywords": "keywords",
+    "license": "license",
+    "attribution": "attribution",
+    "contact": "contact",
+    "lineage": "lineage",
+    "temporal_extent": "temporalExtent",
+    "links": "links",
+}
+
+
+def clear_layer_metadata(project: dict[str, Any], ref: str) -> dict[str, Any]:
+    """Drop a layer's descriptive metadata.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A layer id or display name.
+
+    Returns:
+        A summary of the updated layer.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one layer.
+    """
+    layer = find_layer(project, ref)
+    layer.pop("descriptiveMetadata", None)
+    return layer_summary(layer)
+
+
 def build_choropleth_style(
     values: list[Any],
     column: str,

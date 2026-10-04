@@ -126,6 +126,7 @@ Give it a directory meant for maps, not your home directory.
 | `remove_layer` | Drop a layer. |
 | `style_layer` | Merge style keys (`fillColor`, `strokeWidth`, `circleRadius`, …). |
 | `set_layer_popup` | Choose the fields a click popup shows, their labels and formats, its width and image height, and an optional hover tooltip. |
+| `set_layer_metadata` | Describe a layer for catalogs (title, abstract, keywords, license, attribution, contact, lineage, temporal extent, links): what the app's Metadata dialog edits and exports as a STAC Item. |
 | `classify_layer` | Build a graduated choropleth from a numeric column. |
 | `list_layer_properties` | List a layer's feature properties with sample values. |
 | `set_layer_filter` | Hide the features that do not match a boolean MapLibre expression (the saved filter Select by Expression → Filter layer writes); omit the expression to clear it. |

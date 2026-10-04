@@ -1265,6 +1265,51 @@ class Map(anywidget.AnyWidget):
         handle = self._resolve_layer(layer)
         self._update_project(lambda project: _authoring.clear_popup(project, handle.id))
 
+    def set_layer_metadata(
+        self, layer: str | Layer, *, merge: bool = False, **fields: Any
+    ) -> dict[str, Any] | None:
+        """Set a layer's descriptive (catalog) metadata.
+
+        The app shows and edits it in the layer's Metadata dialog, exports it
+        as a STAC Item, and writes it into GeoParquet exports.
+
+        Args:
+            layer: The layer, by id, name, or handle.
+            merge: Keep existing fields that ``fields`` does not name.
+            **fields: Any of ``title``, ``abstract``, ``keywords`` (list or
+                comma-separated string), ``license`` (SPDX id or free text),
+                ``attribution``, ``contact`` (mapping with ``name``,
+                ``email``, ``organization``), ``lineage``,
+                ``temporal_extent`` (``(start, end)`` ISO 8601 dates), and
+                ``links`` (URLs or mappings with ``href``, ``rel``, ``title``).
+
+        Returns:
+            The layer's metadata block after the change, or ``None`` when empty.
+
+        Raises:
+            ValueError: If a value fails validation (email, dates, URLs).
+
+        Example:
+            >>> m.set_layer_metadata(
+            ...     "Rivers",
+            ...     title="Rivers of Tennessee",
+            ...     keywords=["hydrology", "rivers"],
+            ...     license="CC-BY-4.0",
+            ...     contact={"name": "Ada", "email": "ada@example.org"},
+            ...     temporal_extent=("2019-01-01", "2019-12-31"),
+            ... )
+        """
+        handle = self._resolve_layer(layer)
+        self._update_project(
+            lambda project: _authoring.set_layer_metadata(project, handle.id, merge=merge, **fields)
+        )
+        return handle.descriptive_metadata or None
+
+    def clear_layer_metadata(self, layer: str | Layer) -> None:
+        """Drop a layer's descriptive metadata."""
+        handle = self._resolve_layer(layer)
+        self._update_project(lambda project: _authoring.clear_layer_metadata(project, handle.id))
+
     def set_layer_filter(self, layer: str | Layer, expression: Any) -> None:
         """Hide a layer's features that do not match a boolean expression.
 
@@ -4072,6 +4117,16 @@ class Layer:
         """This layer's popup/tooltip config, or ``{}`` when it has none."""
         config = self._layer().get("popup")
         return copy.deepcopy(config) if isinstance(config, dict) else {}
+
+    @property
+    def descriptive_metadata(self) -> dict[str, Any]:
+        """This layer's descriptive (catalog) metadata, or ``{}`` when it has none."""
+        block = self._layer().get("descriptiveMetadata")
+        return copy.deepcopy(block) if isinstance(block, dict) else {}
+
+    def set_metadata(self, *, merge: bool = False, **fields: Any) -> dict[str, Any] | None:
+        """Set this layer's descriptive metadata (see :meth:`Map.set_layer_metadata`)."""
+        return self._map.set_layer_metadata(self, merge=merge, **fields)
 
     def set_popup(self, fields: Any = None, **kwargs: Any) -> dict[str, Any]:
         """Configure this layer's popup (see :meth:`Map.set_popup`)."""

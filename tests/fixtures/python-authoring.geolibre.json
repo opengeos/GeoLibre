@@ -127,7 +127,33 @@
           }
         ]
       },
-      "filterExpression": ["all", [">=", ["get", "pop"], 20], ["has", "name"]]
+      "filterExpression": ["all", [">=", ["get", "pop"], 20], ["has", "name"]],
+      "descriptiveMetadata": {
+        "title": "Cities of Tennessee",
+        "abstract": "Two sample cities.",
+        "license": "CC-BY-4.0",
+        "attribution": "GeoLibre",
+        "lineage": "Hand-made for the round-trip test.",
+        "keywords": ["cities", "sample"],
+        "contact": {
+          "name": "Ada",
+          "email": "ada@example.org",
+          "organization": "GeoLibre"
+        },
+        "temporalExtent": {
+          "start": "2019-01-01",
+          "end": "2019-12-31T12:00:00Z"
+        },
+        "links": [
+          {
+            "href": "https://example.org"
+          },
+          {
+            "href": "https://example.org/l",
+            "rel": "license"
+          }
+        ]
+      }
     }
   ],
   "styles": {},

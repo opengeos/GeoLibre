@@ -23,6 +23,7 @@ import {
   readGeoParquetGeoMetadata,
 } from "./geoparquet-crs";
 import { parseGeoParquetMetadata } from "./geoparquet-metadata";
+import { parquetKeyValueMetadataOption } from "./parquet-kv-metadata";
 import { confirmLargeDataset, type DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
 import { readDxfCodepage, recodeCadFeatureCollection } from "./cad-encoding";
 import { featureCollectionFromBatches } from "./duckdb-feature-batches";
@@ -1259,7 +1260,19 @@ export async function convertDuckDbVectorToGeoParquet(
   }
 }
 
-export async function exportDuckDbGeoParquet(geojson: FeatureCollection): Promise<Uint8Array> {
+/**
+ * Write a FeatureCollection to GeoParquet with DuckDB Spatial.
+ *
+ * @param geojson - The features to write.
+ * @param keyValueMetadata - Extra Parquet key-value metadata for the file
+ *   footer (e.g. the layer's descriptive metadata), written beside the `geo`
+ *   key the GeoParquet writer adds.
+ * @returns The Parquet file bytes.
+ */
+export async function exportDuckDbGeoParquet(
+  geojson: FeatureCollection,
+  keyValueMetadata?: Record<string, string>,
+): Promise<Uint8Array> {
   const db = await getDatabase();
   const connection = await db.connect();
   const baseName = exportBaseName();
@@ -1272,7 +1285,9 @@ export async function exportDuckDbGeoParquet(geojson: FeatureCollection): Promis
     await connection.query(
       `COPY (SELECT * FROM ST_Read(${quoteSqlString(
         sourceFile,
-      )})) TO ${quoteSqlString(outputFile)} (FORMAT PARQUET)`,
+      )})) TO ${quoteSqlString(outputFile)} (FORMAT PARQUET${parquetKeyValueMetadataOption(
+        keyValueMetadata,
+      )})`,
     );
     await db.flushFiles();
     return await db.copyFileToBuffer(outputFile);

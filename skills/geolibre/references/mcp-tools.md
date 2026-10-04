@@ -130,6 +130,10 @@ set_layer_popup(path, layer, fields=None, click=None, title=None,
                 title_expression=None, body_expression=None,
                 show_feature_id=None, max_width=None, image_height=None,
                 tooltip=None, merge=False)
+set_layer_metadata(path, layer, title=None, abstract=None, keywords=None,
+                   license=None, attribution=None, contact=None, lineage=None,
+                   temporal_start=None, temporal_end=None, links=None,
+                   merge=True)
 classify_layer(path, layer, column, class_count=5, colormap="viridis",
                scheme="equal-interval")
 list_layer_properties(path, layer)
@@ -161,6 +165,15 @@ draw inside it, both in CSS pixels; a thumbnail keeps its aspect ratio, so raise
 `max_width` too for a landscape photo to use the extra height. `merge=True`
 edits the existing config in place, so a tooltip can be added without restating
 the fields. Run `list_layer_properties` first to get the real column names.
+
+`set_layer_metadata` records a layer's catalog description — what the app's
+Metadata dialog edits, exports as a STAC Item, and writes into GeoParquet
+exports. It changes nothing about how the layer draws. `contact` is an object
+with any of `name`, `email`, `organization`; `license` is an SPDX id
+(`CC-BY-4.0`) or free text; `temporal_start`/`temporal_end` are ISO 8601 dates
+(`2019-01-01`) or date-times; `links` are URLs or `{href, rel, title}` objects.
+A malformed email, date, or URL (or an end before the start) is refused. With
+the default `merge=True`, fields you omit keep their values.
 
 `classify_layer` clamps `class_count` to 2–12. `scheme` is `equal-interval`
 (even value ranges) or `quantile` (even feature counts per class). It needs an

@@ -532,6 +532,55 @@ hid. That holds for the expressions too: `titleExpression` and `bodyExpression`
 are evaluated against the visible properties only, so a `["get", …]` cannot
 pull back a hidden column or one of GeoLibre's internal ones. Raster pixel identify goes through a different path and ignores `popup`.
 
+### Descriptive metadata
+
+A layer may carry a `descriptiveMetadata` block: the catalog description edited
+in the layer's **Metadata** dialog (layer menu → Metadata). It documents the
+data and changes nothing about how the layer renders. It is separate from the
+layer's `metadata` record, which holds internal state the renderers and plugins
+key off.
+
+```json
+{
+  "descriptiveMetadata": {
+    "title": "Rivers of Tennessee",
+    "abstract": "Major rivers digitized from 1:24k topographic maps.",
+    "keywords": ["hydrology", "rivers"],
+    "license": "CC-BY-4.0",
+    "attribution": "© Tennessee GIS",
+    "contact": { "name": "Ada Lovelace", "email": "ada@example.org", "organization": "TN GIS" },
+    "lineage": "Digitized in 2019; generalized with Douglas-Peucker (10 m).",
+    "temporalExtent": { "start": "2019-01-01", "end": "2019-12-31" },
+    "links": [{ "href": "https://example.org/rivers", "rel": "about", "title": "Project page" }]
+  }
+}
+```
+
+Every member is optional and every value is a string (or a list of them).
+`license` is an [SPDX identifier](https://spdx.org/licenses/) or free text.
+`temporalExtent` bounds are ISO 8601 dates (`YYYY-MM-DD`) or date-times;
+either may be left out for an open interval. A link needs an absolute `href`;
+`rel` is a link relation (`related` when omitted) and `title` a label. On load,
+blank members, blank or duplicate (case-insensitive) keywords, and links with no
+`href` are dropped, and a block left with nothing in it is removed — an empty
+`descriptiveMetadata` is never written. Malformed values (an email without a
+domain, an impossible date) are kept so the dialog can show and fix them; the
+dialog refuses to save them.
+
+The dialog's **Export as STAC Item** writes the block as a
+[STAC 1.0](https://github.com/radiantearth/stac-spec/tree/v1.0.0) Item: the
+layer id as `id`, the layer's WGS84 extent as `geometry`/`bbox`, `title` (the
+layer name when unset), `abstract` as `description`, `keywords`, `license`, the
+contact as a `producer` provider, `lineage` as `processing:lineage` (with the
+processing extension declared), the temporal extent as `datetime` or
+`start_datetime`/`end_datetime`, the links, and a `data` asset for a remote
+source URL. A license that is not an SPDX-style identifier is exported as
+`proprietary` with the text in `geolibre:license`; the attribution goes to
+`geolibre:attribution`. A layer with no temporal extent is stamped with the
+export time, since STAC requires a `datetime`. Exporting a vector layer to
+GeoParquet writes the block as JSON into the file's Parquet key-value metadata
+under `geolibre:metadata`, beside the `geo` key.
+
 ## Layer types
 
 | Type             | Status                                                                                             |

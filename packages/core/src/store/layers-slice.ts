@@ -21,6 +21,7 @@ import {
 } from "../layer-style-clipboard";
 import { matchLayerStyleEntry, type LayerStyleFileEntry } from "../layer-style-file";
 import { applyJoinsToLayer, cascadeLayerJoinRefresh } from "../joins";
+import { normalizeLayerDescriptiveMetadata } from "../layer-descriptive-metadata";
 import { scrubPrintLayoutForRemovedLayers } from "../print-layout-config";
 import { identifyStateWithoutLayers } from "./session-slice";
 import {
@@ -30,6 +31,7 @@ import {
   type EditorTrackingConfig,
   type GeoLibreLayer,
   type LayerJoin,
+  type LayerDescriptiveMetadata,
   type LayerPopupConfig,
   type LayerQuickFilter,
   type LayerStyle,
@@ -122,6 +124,13 @@ export interface LayersSlice {
    * `undefined` to restore the default full-property dump.
    */
   setLayerPopup: (id: string, popup: LayerPopupConfig | undefined) => void;
+  /**
+   * Replace the layer's user-authored catalog metadata (title, abstract,
+   * keywords, license, contact, lineage, temporal extent, links). The record
+   * is normalized first; one that cleans to nothing (or `undefined`) removes
+   * the metadata entirely. One call is one undo step.
+   */
+  setLayerDescriptiveMetadata: (id: string, metadata: LayerDescriptiveMetadata | undefined) => void;
   /**
    * Replace the layer's editor tracking configuration (whether creation/edit
    * author and timestamp columns are maintained, and under which names). Pass
@@ -319,6 +328,8 @@ export const createLayersSlice: SliceCreator<LayersSlice> = (set, get) => ({
 
   setLayerAttributeForm: (id, attributeForm) => get().updateLayer(id, { attributeForm }),
   setLayerPopup: (id, popup) => get().updateLayer(id, { popup }),
+  setLayerDescriptiveMetadata: (id, metadata) =>
+    get().updateLayer(id, { descriptiveMetadata: normalizeLayerDescriptiveMetadata(metadata) }),
 
   setLayerEditorTracking: (id, editorTracking) => get().updateLayer(id, { editorTracking }),
 

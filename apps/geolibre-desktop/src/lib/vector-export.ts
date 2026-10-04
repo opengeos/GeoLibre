@@ -4,7 +4,11 @@ export { formatAttributeValue } from "./vector-csv";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { saveBinaryFileWithFallback, saveTextFileWithFallback } from "./tauri-io";
-import { type BinaryVectorExportFormat, exportBinaryVectorLayer } from "./vector-exporter";
+import {
+  type BinaryVectorExportFormat,
+  type BinaryVectorExportOptions,
+  exportBinaryVectorLayer,
+} from "./vector-exporter";
 
 export { KmlCoordinateError, kmlExportErrorMessage } from "./vector-export-errors";
 
@@ -293,8 +297,9 @@ async function exportBinaryLayer(
   geojson: FeatureCollection,
   baseName: string,
   documentName: string,
+  options: BinaryVectorExportOptions = {},
 ): Promise<string | null> {
-  const result = await exportBinaryVectorLayer(geojson, format, baseName, documentName);
+  const result = await exportBinaryVectorLayer(geojson, format, baseName, documentName, options);
   const label = exportFormatLabel(format);
   const extension = exportFileExtension(format);
   return saveBinaryFileWithFallback(result.data, {
@@ -323,11 +328,12 @@ export async function exportVectorLayer(
   baseName: string,
   documentName = baseName,
   precision = 5,
+  options: BinaryVectorExportOptions = {},
 ): Promise<string | null> {
   if (format === "geojson" || format === "csv" || format === "kml" || format === "polyline") {
     return exportTextLayer(format, geojson, baseName, documentName, precision);
   }
-  return exportBinaryLayer(format, geojson, baseName, documentName);
+  return exportBinaryLayer(format, geojson, baseName, documentName, options);
 }
 
 /**

@@ -45,6 +45,7 @@ import {
   runQuickAnalysis,
   type QuickBufferPreset,
 } from "../../../lib/quick-analysis";
+import { layerParquetKeyValueMetadata } from "../../../lib/parquet-kv-metadata";
 import { exportRasterLayer } from "../../../lib/raster-export";
 import type { ExtrusionModelFormat } from "../../../lib/extrusion-model";
 import {
@@ -332,6 +333,8 @@ export function useLayerActions({
           sanitizeExportFileName(layer.name),
           layer.name,
           polylinePrecision,
+          // GeoParquet carries the layer's catalog metadata in its footer.
+          { parquetKeyValueMetadata: layerParquetKeyValueMetadata(layer) },
         );
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {

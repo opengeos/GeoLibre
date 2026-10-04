@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { DEFAULT_LAYER_STYLE, parseProject, validateMapExpression } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  normalizeLayerDescriptiveMetadata,
+  parseProject,
+  validateLayerDescriptiveMetadata,
+  validateMapExpression,
+} from "@geolibre/core";
 
 // Written by the geolibre Python package's authoring functions
 // (python/tests/test_authoring_parity.py pins it to what they produce). Loading
@@ -32,6 +38,17 @@ describe("Python-authored project round trip", () => {
       validateMapExpression(JSON.stringify(source.filterExpression), { expectedType: "boolean" })
         .ok,
     );
+  });
+
+  it("keeps the descriptive metadata, already in its normalized form", () => {
+    assert.ok(layer);
+    assert.ok(source.descriptiveMetadata);
+    assert.deepEqual(layer.descriptiveMetadata, source.descriptiveMetadata);
+    assert.deepEqual(
+      normalizeLayerDescriptiveMetadata(source.descriptiveMetadata),
+      source.descriptiveMetadata,
+    );
+    assert.deepEqual(validateLayerDescriptiveMetadata(layer.descriptiveMetadata), []);
   });
 
   it("keeps every label setting, with no key the app does not know", () => {

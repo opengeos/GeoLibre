@@ -2,11 +2,12 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useLayer, type GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, useLayer, type GeoLibreLayer } from "@geolibre/core";
 import {
   Button,
   Dialog,
@@ -17,9 +18,26 @@ import {
   ScrollArea,
   cn,
 } from "@geolibre/ui";
-import { Copy } from "lucide-react";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import { Copy, FileJson } from "lucide-react";
 import { readRasterInfo } from "../../../lib/raster-info";
+import { exportLayerStacItem } from "../../../lib/layer-stac-export";
 import { layerMetadataPayload, rasterInfoUrl, type RasterInfoState } from "./layer-panel-utils";
+import {
+  draftChangesMetadata,
+  draftIssues,
+  draftToMetadata,
+  metadataToDraft,
+  type LayerMetadataDraft,
+} from "./layer-metadata-draft";
+import { LayerMetadataForm } from "./LayerMetadataForm";
+
+/** Transient note under the dialog's actions (save / STAC export outcome). */
+type MetadataNote = { tone: "success" | "error"; key: MetadataNoteKey } | null;
+type MetadataNoteKey =
+  | "layers.metadataEdit.saved"
+  | "layers.metadataEdit.exportStacSaved"
+  | "layers.metadataEdit.exportStacError";
 
 /**
  * State of the layer metadata dialog: the id of the layer it shows, the copy
@@ -178,6 +196,60 @@ export function useLayerMetadataDialog() {
     };
   }, [metadataLayerId, metadataRasterUrl]);
 
+  // The editable descriptive-metadata form. The draft is re-seeded from the
+  // store whenever the open layer or its stored record changes — a save, an
+  // undo/redo, or opening another layer — so the form always starts from what
+  // the project holds. Edits stay in the draft until Save commits them as one
+  // undoable store update.
+  const storedDescriptive = metadataLayer?.descriptiveMetadata;
+  const [metadataDraft, setMetadataDraft] = useState<LayerMetadataDraft>(() =>
+    metadataToDraft(storedDescriptive),
+  );
+  const [metadataNote, setMetadataNote] = useState<MetadataNote>(null);
+  useEffect(() => {
+    setMetadataDraft(metadataToDraft(storedDescriptive));
+  }, [metadataLayerId, storedDescriptive]);
+  useEffect(() => {
+    setMetadataNote(null);
+  }, [metadataLayerId]);
+  const metadataIssues = useMemo(() => draftIssues(metadataDraft), [metadataDraft]);
+  const metadataDirty = useMemo(
+    () => draftChangesMetadata(metadataDraft, storedDescriptive),
+    [metadataDraft, storedDescriptive],
+  );
+  const updateMetadataDraft = useCallback((draft: LayerMetadataDraft) => {
+    setMetadataDraft(draft);
+    setMetadataNote(null);
+  }, []);
+  const saveMetadataDraft = useCallback(() => {
+    if (!metadataLayerId || draftIssues(metadataDraft).length > 0) return;
+    useAppStore
+      .getState()
+      .setLayerDescriptiveMetadata(metadataLayerId, draftToMetadata(metadataDraft));
+    setMetadataNote({ tone: "success", key: "layers.metadataEdit.saved" });
+  }, [metadataDraft, metadataLayerId]);
+  const discardMetadataDraft = useCallback(() => {
+    setMetadataDraft(metadataToDraft(storedDescriptive));
+    setMetadataNote(null);
+  }, [storedDescriptive]);
+  const exportStacItem = useCallback(
+    async (map: MapLibreMap | undefined) => {
+      if (!metadataLayer) return;
+      try {
+        // Exported from the stored record: unsaved form edits are not part of
+        // the layer yet, so the Item matches what the project file says.
+        const saved = await exportLayerStacItem(metadataLayer, map);
+        if (saved !== null) {
+          setMetadataNote({ tone: "success", key: "layers.metadataEdit.exportStacSaved" });
+        }
+      } catch (error) {
+        console.warn("[GeoLibre] STAC Item export failed", error);
+        setMetadataNote({ tone: "error", key: "layers.metadataEdit.exportStacError" });
+      }
+    },
+    [metadataLayer],
+  );
+
   return {
     metadataLayer,
     openMetadata,
@@ -189,16 +261,30 @@ export function useLayerMetadataDialog() {
     metadataRasterInfo,
     metadataJson,
     copyMetadata,
+    metadataDraft,
+    metadataIssues,
+    metadataDirty,
+    metadataNote,
+    updateMetadataDraft,
+    saveMetadataDraft,
+    discardMetadataDraft,
+    exportStacItem,
   };
 }
 
 interface LayerMetadataDialogProps {
   /** The dialog state from useLayerMetadataDialog. */
   metadata: ReturnType<typeof useLayerMetadataDialog>;
+  /** The live MapLibre map, to read source-backed features for the STAC extent. */
+  getMap?: () => MapLibreMap | undefined;
 }
 
-/** The resizable layer metadata dialog, showing the layer's metadata as JSON. */
-export function LayerMetadataDialog({ metadata }: LayerMetadataDialogProps) {
+/**
+ * The resizable layer metadata dialog: an editable descriptive-metadata form
+ * (title, abstract, keywords, license, contact, lineage, temporal extent,
+ * links) with STAC Item export, above the read-only source details as JSON.
+ */
+export function LayerMetadataDialog({ metadata, getMap }: LayerMetadataDialogProps) {
   const { t } = useTranslation();
   const {
     metadataLayer,
@@ -210,6 +296,14 @@ export function LayerMetadataDialog({ metadata }: LayerMetadataDialogProps) {
     metadataRasterInfo,
     metadataJson,
     copyMetadata,
+    metadataDraft,
+    metadataIssues,
+    metadataDirty,
+    metadataNote,
+    updateMetadataDraft,
+    saveMetadataDraft,
+    discardMetadataDraft,
+    exportStacItem,
   } = metadata;
   return (
     <Dialog
@@ -259,28 +353,86 @@ export function LayerMetadataDialog({ metadata }: LayerMetadataDialogProps) {
           </DialogTitle>
           <DialogDescription>{t("layers.metadataDialogDescription")}</DialogDescription>
         </DialogHeader>
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void exportStacItem(getMap?.())}
+          >
+            <FileJson className="h-4 w-4" />
+            {t("layers.metadataEdit.exportStac")}
+          </Button>
           <Button type="button" variant="outline" size="sm" onClick={copyMetadata}>
             <Copy className="h-4 w-4" />
             {metadataCopied ? t("attributeStats.copiedToClipboard") : t("attributeStats.copy")}
           </Button>
         </div>
-        {metadataRasterInfo && metadataRasterInfo.status !== "ready" && (
-          <p className="text-xs text-muted-foreground">
-            {metadataRasterInfo.status === "loading"
-              ? t("layers.metadataRasterLoading")
-              : t("layers.metadataRasterError")}
-          </p>
-        )}
         {/* A definite initial height lets Radix measure overflow on first
             layout; max-height alone left its viewport unconstrained until
             the resize handle caused a second measurement. */}
         <ScrollArea
           type="auto"
-          className={cn("min-h-0", metadataDialogSize ? "flex-1" : "h-80 shrink-0")}
+          className={cn("min-h-0", metadataDialogSize ? "flex-1" : "h-[60vh] shrink-0")}
         >
-          <pre className="whitespace-pre-wrap break-all text-xs">{metadataJson}</pre>
+          <div className="flex flex-col gap-4 pe-3">
+            <section className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold">
+                {t("layers.metadataEdit.sectionDescription")}
+              </h3>
+              <LayerMetadataForm
+                draft={metadataDraft}
+                issues={metadataIssues}
+                onChange={updateMetadataDraft}
+              />
+            </section>
+            <section className="flex flex-col gap-2">
+              <h3 className="text-sm font-semibold">{t("layers.metadataEdit.sectionSource")}</h3>
+              {metadataRasterInfo && metadataRasterInfo.status !== "ready" && (
+                <p className="text-xs text-muted-foreground">
+                  {metadataRasterInfo.status === "loading"
+                    ? t("layers.metadataRasterLoading")
+                    : t("layers.metadataRasterError")}
+                </p>
+              )}
+              <pre className="whitespace-pre-wrap break-all rounded-md bg-muted/50 p-2 text-xs">
+                {metadataJson}
+              </pre>
+            </section>
+          </div>
         </ScrollArea>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <p
+            aria-live="polite"
+            className={cn(
+              "me-auto text-xs",
+              metadataNote?.tone === "error" ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {metadataNote
+              ? t(metadataNote.key)
+              : metadataDirty
+                ? t("layers.metadataEdit.unsaved")
+                : null}
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={!metadataDirty}
+            onClick={discardMetadataDraft}
+          >
+            {t("layers.metadataEdit.discard")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!metadataDirty || metadataIssues.length > 0}
+            onClick={saveMetadataDraft}
+          >
+            {t("layers.metadataEdit.save")}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

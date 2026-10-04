@@ -904,6 +904,55 @@ export interface AttributeFormConfig {
   fields: AttributeFormFieldConfig[];
 }
 
+/** Point of contact recorded in a layer's {@link LayerDescriptiveMetadata}. */
+export interface LayerMetadataContact {
+  name?: string;
+  email?: string;
+  organization?: string;
+}
+
+/** A related resource recorded in a layer's {@link LayerDescriptiveMetadata}. */
+export interface LayerMetadataLink {
+  /** Absolute URL of the resource. */
+  href: string;
+  /** Relation type (STAC/IANA link relation such as `"license"` or `"related"`). */
+  rel?: string;
+  /** Human-readable label. */
+  title?: string;
+}
+
+/**
+ * Time span the layer's data covers. Each bound is an ISO 8601 date
+ * (`YYYY-MM-DD`) or date-time; either may be omitted for an open interval.
+ */
+export interface LayerMetadataTemporalExtent {
+  start?: string;
+  end?: string;
+}
+
+/**
+ * User-authored, catalog-style description of a layer (issue #2858), edited in
+ * the layer's Metadata dialog and exported as a STAC Item. Distinct from the
+ * internal {@link GeoLibreLayer.metadata} record the renderers and plugins key
+ * off: every field here is free-form documentation that changes nothing about
+ * how the layer renders. Helpers live in `layer-descriptive-metadata.ts`.
+ */
+export interface LayerDescriptiveMetadata {
+  title?: string;
+  /** Free-text summary of the data (STAC `description`, ISO abstract). */
+  abstract?: string;
+  keywords?: string[];
+  /** SPDX license identifier (e.g. `"CC-BY-4.0"`) or free text. */
+  license?: string;
+  /** Credit line for the data's producers. */
+  attribution?: string;
+  contact?: LayerMetadataContact;
+  /** How the data was produced: sources and processing steps. */
+  lineage?: string;
+  temporalExtent?: LayerMetadataTemporalExtent;
+  links?: LayerMetadataLink[];
+}
+
 /**
  * How a popup renders one field's value (issue #2113). `"auto"` reproduces the
  * untyped rendering the Identify popup has always done — sanitized KML
@@ -1245,6 +1294,13 @@ export interface GeoLibreLayer {
    * panel's Popup section. Absent means the default full-property dump.
    */
   popup?: LayerPopupConfig;
+  /**
+   * User-authored catalog metadata (title, abstract, keywords, license,
+   * contact, lineage, temporal extent, links), edited in the layer's Metadata
+   * dialog. Absent when nothing has been entered; an empty record is never
+   * written to a project file.
+   */
+  descriptiveMetadata?: LayerDescriptiveMetadata;
   /**
    * Persistent attribute joins applied to this layer's features, in order.
    * The joined columns are materialized into `geojson` feature properties (so
@@ -2294,6 +2350,8 @@ export interface LayerLibraryEntry {
   attributeForm?: AttributeFormConfig;
   /** Popup/tooltip design to reapply. */
   popup?: LayerPopupConfig;
+  /** User-authored catalog metadata to reapply. */
+  descriptiveMetadata?: LayerDescriptiveMetadata;
   /**
    * Embedded features, present only for a layer whose source cannot be
    * re-read (in-memory features) or whose local file may be unavailable.

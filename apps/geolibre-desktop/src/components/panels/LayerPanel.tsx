@@ -623,7 +623,10 @@ export function LayerPanel({
         setRefreshInterval={refresh.setRefreshInterval}
         setRefreshFailurePolicy={refresh.setRefreshFailurePolicy}
       />
-      <LayerMetadataDialog metadata={metadata} />
+      <LayerMetadataDialog
+        metadata={metadata}
+        getMap={() => mapControllerRef.current?.getMap() ?? undefined}
+      />
       <RemoveLayerDialog layer={layerPendingRemoval} onClose={() => setLayerPendingRemoval(null)} />
       <PasteStyleDialog
         open={pasteStyleLayerId !== null}

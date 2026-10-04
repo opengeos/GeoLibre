@@ -159,6 +159,26 @@ falls back to "all properties" while that list is empty — so `tooltip="name"`
 on its own narrows the click popup to `name`. Pass `popup=` with the fields you
 want on click whenever you pass `tooltip=`.
 
+### Layer metadata
+
+`m.set_layer_metadata(layer, ...)` records the catalog description the app's
+Metadata dialog shows, exports as a STAC Item, and writes into GeoParquet
+exports. Emails, ISO 8601 dates and link URLs are validated; `merge=True` keeps
+fields you do not pass, and `m.clear_layer_metadata(layer)` drops the block.
+
+```python
+m.set_layer_metadata(
+    "Rivers",
+    title="Rivers of Tennessee",
+    abstract="Major rivers digitized from 1:24k topographic maps.",
+    keywords=["hydrology", "rivers"],
+    license="CC-BY-4.0",
+    contact={"name": "Ada", "email": "ada@example.org", "organization": "TN GIS"},
+    temporal_extent=("2019-01-01", "2019-12-31"),
+    links=[{"href": "https://example.org/rivers", "rel": "about"}],
+)
+```
+
 ### In-memory xarray rasters
 
 `add_raster` also accepts an `xarray.DataArray` or `xarray.Dataset`, which needs

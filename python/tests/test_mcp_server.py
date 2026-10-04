@@ -719,6 +719,31 @@ def test_set_layer_popup_records_the_popup_and_image_sizes(server, project_path)
     assert result["popup"]["imageHeight"] == 320
 
 
+def test_set_layer_metadata_merges_and_validates(server, project_path):
+    call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
+    result = call(
+        server,
+        "set_layer_metadata",
+        path=project_path,
+        layer="Cities",
+        title="Cities",
+        keywords=["towns"],
+        temporal_start="2020-01-01",
+    )
+    assert result["descriptiveMetadata"] == {
+        "title": "Cities",
+        "keywords": ["towns"],
+        "temporalExtent": {"start": "2020-01-01"},
+    }
+    merged = call(server, "set_layer_metadata", path=project_path, layer="Cities", license="MIT")
+    assert merged["descriptiveMetadata"]["title"] == "Cities"
+    assert merged["descriptiveMetadata"]["license"] == "MIT"
+    message = call_error(
+        server, "set_layer_metadata", path=project_path, layer="Cities", contact={"email": "x"}
+    )
+    assert "email" in message
+
+
 def test_set_layer_popup_tooltip_flags_the_named_fields(server, project_path):
     call(server, "add_geojson_layer", path=project_path, name="Cities", data=json.dumps(POINT_FC))
     result = call(

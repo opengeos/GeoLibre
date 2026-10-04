@@ -1137,6 +1137,68 @@ def build_server(workspace: Workspace) -> MCPServer:
         return _summarize(file, project, popup=config)
 
     @tool()
+    def set_layer_metadata(
+        path: str,
+        layer: str,
+        title: str | None = None,
+        abstract: str | None = None,
+        keywords: list[str] | None = None,
+        license: str | None = None,
+        attribution: str | None = None,
+        contact: dict[str, str] | None = None,
+        lineage: str | None = None,
+        temporal_start: str | None = None,
+        temporal_end: str | None = None,
+        links: list[Any] | None = None,
+        merge: bool = True,
+    ) -> dict[str, Any]:
+        """Describe a layer for catalogs: title, abstract, keywords, license, and more.
+
+        This is the layer's descriptive metadata the app shows in its Metadata
+        dialog, exports as a STAC Item, and writes into GeoParquet exports. It
+        changes nothing about how the layer draws.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            layer: The layer's id or display name.
+            title: Human-readable title.
+            abstract: Free-text summary of the data.
+            keywords: Keywords describing the data.
+            license: SPDX license identifier (e.g. `CC-BY-4.0`) or free text.
+            attribution: Credit line for the data's producers.
+            contact: Object with any of `name`, `email`, `organization`.
+            lineage: How the data was produced: sources and processing steps.
+            temporal_start: ISO 8601 date (`YYYY-MM-DD`) or date-time the data
+                starts covering.
+            temporal_end: ISO 8601 date or date-time the data stops covering.
+            links: URLs, or objects with `href` plus optional `rel` and `title`.
+            merge: Keep the fields you do not pass (the default). False
+                replaces the whole block with exactly what you pass.
+
+        Returns:
+            The layer's descriptive metadata after the change.
+        """
+        fields: dict[str, Any] = {
+            key: value
+            for key, value in {
+                "title": title,
+                "abstract": abstract,
+                "keywords": keywords,
+                "license": license,
+                "attribution": attribution,
+                "contact": contact,
+                "lineage": lineage,
+                "links": links,
+            }.items()
+            if value is not None
+        }
+        if temporal_start is not None or temporal_end is not None:
+            fields["temporal_extent"] = (temporal_start, temporal_end)
+        with edit(path) as (file, project):
+            metadata = authoring.set_layer_metadata(project, layer, merge=merge, **fields)
+        return _summarize(file, project, descriptiveMetadata=metadata)
+
+    @tool()
     def classify_layer(
         path: str,
         layer: str,

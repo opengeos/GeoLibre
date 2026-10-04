@@ -639,6 +639,19 @@ def build_round_trip_project() -> dict:
         size_expression=["interpolate", ["linear"], ["get", "pop"], 0, 10, 100, 20],
         visibility_expression=[">", ["get", "pop"], 0],
     )
+    authoring.set_layer_metadata(
+        p,
+        "cities",
+        title="Cities of Tennessee",
+        abstract="Two sample cities.",
+        keywords="cities, sample",
+        license="CC-BY-4.0",
+        attribution="GeoLibre",
+        contact={"name": "Ada", "email": "ada@example.org", "organization": "GeoLibre"},
+        lineage="Hand-made for the round-trip test.",
+        temporal_extent=("2019-01-01", "2019-12-31T12:00:00Z"),
+        links=["https://example.org", {"href": "https://example.org/l", "rel": "license"}],
+    )
     authoring.set_plugin_state(
         p, "maplibre-gl-graticule", {"interval": 10, "color": "#888888"}, position="top-left"
     )
