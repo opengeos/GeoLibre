@@ -354,6 +354,17 @@ function bboxGeometry([west, south, east, north]: [number, number, number, numbe
   unknown
 > {
   if (west === east && south === north) return { type: "Point", coordinates: [west, south] };
+  // Degenerate on one axis only (e.g. points sharing one longitude): a line,
+  // not a zero-area polygon.
+  if (west === east || south === north) {
+    return {
+      type: "LineString",
+      coordinates: [
+        [west, south],
+        [east, north],
+      ],
+    };
+  }
   const ring = (w: number, e: number) => [
     [w, south],
     [e, south],

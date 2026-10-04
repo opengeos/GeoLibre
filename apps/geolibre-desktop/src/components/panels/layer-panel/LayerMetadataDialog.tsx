@@ -409,11 +409,14 @@ export function LayerMetadataDialog({ metadata, getMap }: LayerMetadataDialogPro
               metadataNote?.tone === "error" ? "text-destructive" : "text-muted-foreground",
             )}
           >
-            {metadataNote
-              ? t(metadataNote.key)
-              : metadataDirty
-                ? t("layers.metadataEdit.unsaved")
-                : null}
+            {/* An export note must not hide unsaved form edits: the STAC
+                Item is built from the stored record, not the draft. */}
+            {[
+              metadataNote ? t(metadataNote.key) : null,
+              metadataDirty ? t("layers.metadataEdit.unsaved") : null,
+            ]
+              .filter(Boolean)
+              .join(" ")}
           </p>
           <Button
             type="button"

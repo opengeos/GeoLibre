@@ -422,6 +422,14 @@ describe("buildLayerStacItem", () => {
     );
     assert.deepEqual(point.links, []);
     assert.deepEqual(point.geometry, { type: "Point", coordinates: [10, 20] });
+    const line = buildLayerStacItem(makeLayer(), { bbox: [10, 20, 10, 25], now });
+    assert.deepEqual(line.geometry, {
+      type: "LineString",
+      coordinates: [
+        [10, 20],
+        [10, 25],
+      ],
+    });
     const crossing = buildLayerStacItem(makeLayer(), { bbox: [170, -10, -170, 10], now });
     assert.equal(crossing.geometry?.type, "MultiPolygon");
     assert.deepEqual(crossing.bbox, [170, -10, -170, 10]);
