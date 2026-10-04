@@ -86,6 +86,13 @@ describe("scrubForIssueReport", () => {
     );
   });
 
+  it("still strips userinfo from a URL that already carries the marker", () => {
+    assert.equal(
+      scrubForIssueReport("https://user:pass@h.test/a?[REDACTED]"),
+      "https://h.test/a?[REDACTED]",
+    );
+  });
+
   it("is idempotent", () => {
     const once = scrubForIssueReport("token=abc https://x.test/a?key=1");
     assert.equal(scrubForIssueReport(once), once);

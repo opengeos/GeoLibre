@@ -101,6 +101,14 @@ describe("notify", () => {
     assert.equal(visible().length, 1, "the escalated toast persists like an error");
   });
 
+  it("drops the report record when a repeat de-escalates to a non-error", () => {
+    notify.error("failed", { dedupeKey: "job" });
+    assert.ok(visible()[0].diagnostic);
+    notify.warning("retrying", { dedupeKey: "job" });
+    assert.equal(visible()[0].kind, "warning");
+    assert.equal(visible()[0].diagnostic, undefined);
+  });
+
   it("caps the visible count, evicting the oldest non-error first", () => {
     notify.error("first error");
     for (let index = 0; index < MAX_VISIBLE_NOTIFICATIONS; index += 1) {

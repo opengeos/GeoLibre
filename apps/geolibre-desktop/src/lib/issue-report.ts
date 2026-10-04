@@ -69,10 +69,12 @@ const TOKEN_PATTERNS: RegExp[] = [
 const HOME_DIRECTORY = /(\/home\/|\/Users\/|[A-Za-z]:\\Users\\)[^/\\\s"'<>]+/g;
 
 function scrubUrl(raw: string): string {
-  // Already scrubbed (the match stops before the marker's closing bracket).
+  // userinfo (`user:password@host`)
+  let url = raw.replace(/^([a-z][\w+.-]*:\/\/)[^/@]*@/i, "$1");
+  // Already scrubbed: the match stops before the marker's closing bracket,
+  // which the surrounding text still supplies.
   const marker = REDACTED.slice(0, -1);
-  if (raw.endsWith(`?${marker}`) || raw.endsWith(`#${marker}`)) return raw;
-  let url = raw;
+  if (url.endsWith(`?${marker}`) || url.endsWith(`#${marker}`)) return url;
   const fragment = url.indexOf("#");
   const query = url.indexOf("?");
   const cut = [fragment, query].filter((index) => index !== -1);
@@ -80,8 +82,6 @@ function scrubUrl(raw: string): string {
   const separator = query !== -1 && (fragment === -1 || query < fragment) ? "?" : "#";
   const hadSuffix = cut.length > 0;
   if (hadSuffix) url = url.slice(0, Math.min(...cut));
-  // userinfo (`user:password@host`)
-  url = url.replace(/^([a-z][\w+.-]*:\/\/)[^/@]*@/i, "$1");
   return hadSuffix ? `${url}${separator}${REDACTED}` : url;
 }
 

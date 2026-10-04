@@ -162,7 +162,8 @@ function push(kind: NotificationKind, message: string, options: NotifyOptions = 
       durationMs,
       count: existing.count + 1,
       revision: existing.revision + 1,
-      diagnostic: diagnostic ?? existing.diagnostic,
+      // Only an error carries a report; a de-escalated repeat drops it.
+      diagnostic: kind === "error" ? (diagnostic ?? existing.diagnostic) : undefined,
     };
     // Move the repeat to the newest slot so it is the one the eye lands on.
     useNotificationStore.setState({

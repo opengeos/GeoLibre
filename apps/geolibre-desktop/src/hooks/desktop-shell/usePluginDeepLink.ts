@@ -78,6 +78,21 @@ const subscribeToPluginManager = (listener: () => void) => getPluginManager().su
 const getPluginManagerVersion = () => getPluginManager().getVersion();
 
 /**
+ * Logs and surfaces a deep-linked plugin that threw while activating. The link
+ * asked for it by name, so failing silently would leave the user guessing.
+ *
+ * @param id - The plugin id from the `?plugin=` link.
+ * @param error - What activation threw.
+ */
+function reportActivationFailure(id: string, error: unknown): void {
+  console.error(`[GeoLibre] Could not activate the plugin "${id}"`, error);
+  notify.error(i18next.t("notifications.pluginActivateFailed", { id }), {
+    description: error instanceof Error ? error.message : undefined,
+    error,
+  });
+}
+
+/**
  * Activates the built-in plugins a `?plugin=<id>` deep link names, once per
  * page load, e.g. `…/?plugin=swipe` or `…/?plugin=maplibre-gl-time-slider`.
  *
@@ -99,21 +114,6 @@ const getPluginManagerVersion = () => getPluginManager().getVersion();
  * @param options - The map engine, the viewer guard, and the readiness signals.
  * @returns The registry plugins awaiting the user's decision.
  */
-/**
- * Logs and surfaces a deep-linked plugin that threw while activating. The link
- * asked for it by name, so failing silently would leave the user guessing.
- *
- * @param id - The plugin id from the `?plugin=` link.
- * @param error - What activation threw.
- */
-function reportActivationFailure(id: string, error: unknown): void {
-  console.error(`[GeoLibre] Could not activate the plugin "${id}"`, error);
-  notify.error(i18next.t("notifications.pluginActivateFailed", { id }), {
-    description: error instanceof Error ? error.message : undefined,
-    error,
-  });
-}
-
 export function usePluginDeepLink({
   mapControllerRef,
   enforceViewerPlugins,
