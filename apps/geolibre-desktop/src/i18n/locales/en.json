@@ -5140,6 +5140,8 @@
       "title": "Batch tools",
       "description": "Run one vector tool across many layers at once.",
       "runBatch": "Run batch",
+      "cancel": "Cancel",
+      "cancelled": "Cancelled. {{produced}}/{{total}} layer(s) had already been added.",
       "tool": "Tool",
       "sharedParameters": "Shared parameters",
       "noExtraParameters": "This tool has no extra parameters.",
@@ -5391,6 +5393,8 @@
       "sidecarUnavailablePyodide": "The GeoPandas sidecar is not available. Start the sidecar with the vector extra, or switch to Python (Pyodide).",
       "pyodideNote": "Runs GeoPandas in your browser. The first run downloads the Python runtime (one-time, needs an internet connection).",
       "run": "Run",
+      "cancel": "Cancel",
+      "cancelled": "Cancelled. Nothing was added to the map.",
       "outputPlaceholder": "Output will appear here.",
       "resolutionRange": "Resolution (0-{{max}})"
     },

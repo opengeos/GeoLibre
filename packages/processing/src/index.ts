@@ -5,10 +5,8 @@ export {
   calculateBoundsAlgorithm,
   countFeaturesAlgorithm,
 } from "./registry";
+export { VECTOR_TOOLS, getVectorTool, resolveVectorRerun } from "./vector-tool-registry";
 export {
-  VECTOR_TOOLS,
-  getVectorTool,
-  resolveVectorRerun,
   matchFeaturesByLocation,
   decodePolylineTool,
   encodePolylineTool,
@@ -39,6 +37,8 @@ export {
 export {
   runAlgorithmInBackground,
   canRunVectorToolOnWorker,
+  disposeVectorToolWorker,
+  VECTOR_TOOL_WORKER_IDLE_MS,
   WORKER_VECTOR_TOOL_IDS,
 } from "./vector-tool-runner";
 export { NETWORK_TOOLS, getNetworkTool, layerToSequencedPoints } from "./network-tools";
