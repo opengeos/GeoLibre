@@ -126,6 +126,9 @@ function bootSet(dist) {
   // Vite modulepreloads the entry's whole static graph, but only while
   // build.modulePreload is on; follow the static imports too so the boot set
   // stays complete without it (the same graph bootBundleBudgetPlugin walks).
+  // This is a text scan of minified output, so a change in Rolldown's chunk
+  // shape could make it miss imports; the modulepreload list stays the primary
+  // source, and the build's own budget check uses the real module graph.
   for (let i = 0; i < js.length; i += 1) {
     const code = readFileSync(path.join(dist, js[i]), "utf8");
     for (const specifier of staticImports(code)) {

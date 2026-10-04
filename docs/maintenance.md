@@ -887,7 +887,8 @@ worker imports is emitted again even when the main thread has the same module.
 That once shipped h5wasm (libhdf5, ~4.8 MB) twice, once for the local NetCDF
 reader and once inside `netcdf-remote.worker.ts`. The main build now emits h5wasm
 as an explicit chunk and the worker imports it by URL
-(`apps/geolibre-desktop/vite-plugins/shared-h5wasm.ts`). A new worker that
+(`apps/geolibre-desktop/vite-plugins/shared-h5wasm.ts`), and the build fails if
+anything but exactly one `hdf5_hl-*.js` is emitted. A new worker that
 imports a large library should do the same, or accept the duplicate knowingly;
 the bundle report makes a second copy easy to spot.
 

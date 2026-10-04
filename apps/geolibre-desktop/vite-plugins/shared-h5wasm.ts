@@ -43,6 +43,21 @@ export function sharedH5wasmChunkPlugin(): Plugin {
       // the base for its imports, gets a URL it cannot misread.
       return `export const h5wasmChunkUrl = new URL(import.meta.ROLLUP_FILE_URL_${ref}, import.meta.url).href;\n`;
     },
+    // Worker builds land in this bundle as emitted files, so a second h5wasm
+    // copy (a new worker importing it without the shim, or a bundler change
+    // that stops the emitted chunk coalescing with the lazy import) is visible
+    // here. Fail rather than ship 4.8 MB twice again.
+    generateBundle(_, bundle) {
+      const copies = Object.keys(bundle).filter((fileName) =>
+        /(?:^|\/)hdf5_hl-[^/]*\.js$/.test(fileName),
+      );
+      if (copies.length !== 1) {
+        this.error(
+          `Expected exactly one h5wasm chunk (hdf5_hl-*.js), found ${copies.length}: ` +
+            `${copies.join(", ") || "none"}. See vite-plugins/shared-h5wasm.ts.`,
+        );
+      }
+    },
   };
 }
 
