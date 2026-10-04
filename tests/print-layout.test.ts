@@ -24,6 +24,8 @@ function recordingCanvas(): {
   fillRects: { w: number; h: number; fillStyle: string }[];
   imageBoxes: { w: number; h: number }[];
   arcs: number;
+  /** Live count of `drawImage` calls. */
+  readonly drawImages: number;
   polylines: number[];
 } {
   const fills: {

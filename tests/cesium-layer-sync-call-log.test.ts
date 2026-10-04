@@ -384,7 +384,9 @@ const lineAndPoints = collection([
   feature({ type: "Point", coordinates: [1, 1] }, { name: "P1", kind: "b" }),
 ]);
 
-function layer(patch: Partial<GeoLibreLayer> & { style?: Partial<LayerStyle> }): GeoLibreLayer {
+function layer(
+  patch: Omit<Partial<GeoLibreLayer>, "style"> & { style?: Partial<LayerStyle> },
+): GeoLibreLayer {
   return {
     id: "l1",
     name: "layer",

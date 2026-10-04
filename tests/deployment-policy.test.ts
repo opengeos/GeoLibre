@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import Ajv2020 from "ajv/dist/2020";
+import { Ajv2020 } from "ajv/dist/2020";
 import { DEPLOYMENT_CAPABILITIES } from "@geolibre/core";
 import { SERVICE_KINDS } from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
 import { EXPERIENCE_LEVELS } from "../apps/geolibre-desktop/src/hooks/useDesktopSettings";
@@ -23,7 +23,7 @@ const FIXTURES = fileURLToPath(new URL("./fixtures/deployment-policy/", import.m
 const SCHEMA_PATH = fileURLToPath(new URL("../schema/deployment.schema.json", import.meta.url));
 
 const schema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8"));
-const validate = new Ajv2020.default({
+const validate = new Ajv2020({
   allErrors: true,
   strict: true,
   allowUnionTypes: true,
@@ -114,9 +114,8 @@ test("bad cases match expected schema and parser results", (t) => {
       assert.equal(result, null, name);
       continue;
     }
-    const kept = SECTIONS.filter(
-      (s) => json[s] !== undefined && !expected.parser.dropped.includes(s),
-    );
+    const { dropped } = expected.parser;
+    const kept = SECTIONS.filter((s) => json[s] !== undefined && !dropped.includes(s));
     assert.deepEqual(
       Object.keys(result ?? {})
         .filter((k) => k !== "version")
@@ -333,7 +332,7 @@ test("desktop config delivery is authoritative or falls back by read result", as
       warnings: 1,
     },
   ];
-  const globals = globalThis as typeof globalThis & { window?: unknown };
+  const globals = globalThis as unknown as { window?: unknown };
   const previousWindow = globals.window;
   try {
     for (const [index, scenario] of cases.entries()) {

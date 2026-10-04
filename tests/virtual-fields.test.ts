@@ -11,6 +11,7 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { Feature, FeatureCollection } from "geojson";
+import { withNullGeometry } from "./helpers/null-geometry";
 
 function pointFeature(properties: Record<string, unknown>): Feature {
   return {
@@ -21,7 +22,7 @@ function pointFeature(properties: Record<string, unknown>): Feature {
 }
 
 function tableFeature(properties: Record<string, unknown>): Feature {
-  return { type: "Feature", geometry: null, properties };
+  return withNullGeometry({ type: "Feature", geometry: null, properties });
 }
 
 function collection(features: Feature[]): FeatureCollection {

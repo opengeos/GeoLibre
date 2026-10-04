@@ -243,7 +243,7 @@ describe("addArcGISLayer (feature layer)", () => {
     app = {
       // The feature path never touches the map; only fitBounds is exercised.
       getMap: () => null,
-      fitBounds: (bounds) => {
+      fitBounds: (bounds: [number, number, number, number]) => {
         fitBoundsCalls.push(bounds);
       },
     } as unknown as GeoLibreAppAPI;
@@ -454,7 +454,7 @@ describe("addArcGISLayer (feature layer)", () => {
     const view = fakeViewportMap([144, -39, 146, -37]);
     app = {
       getMap: () => view.map,
-      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+      fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
     } as unknown as GeoLibreAppAPI;
 
     const id = await addArcGISLayer(app, {
@@ -520,7 +520,7 @@ describe("addArcGISLayer (feature layer)", () => {
     const view = fakeViewportMap([144, -39, 146, -37]);
     app = {
       getMap: () => view.map,
-      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+      fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
     } as unknown as GeoLibreAppAPI;
 
     const id = await addArcGISLayer(app, {
@@ -564,7 +564,7 @@ describe("addArcGISLayer (feature layer)", () => {
     const view = fakeViewportMap([144, -39, 146, -37]);
     app = {
       getMap: () => view.map,
-      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+      fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
     } as unknown as GeoLibreAppAPI;
 
     const id = await addArcGISLayer(app, {
@@ -603,7 +603,7 @@ describe("addArcGISLayer (feature layer)", () => {
     const view = fakeViewportMap([170, -20, -170, 20]);
     app = {
       getMap: () => view.map,
-      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+      fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
     } as unknown as GeoLibreAppAPI;
 
     const id = await addArcGISLayer(app, {
@@ -652,7 +652,7 @@ describe("addArcGISLayer (feature layer)", () => {
     const view = fakeViewportMap([144, -39, 146, -37]);
     app = {
       getMap: () => view.map,
-      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+      fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
     } as unknown as GeoLibreAppAPI;
     const id = await addArcGISLayer(app, {
       layerType: "feature",
@@ -776,7 +776,7 @@ describe("addArcGISLayer (feature layer)", () => {
     const view = fakeViewportMap([170, -20, -170, 20]);
     app = {
       getMap: () => view.map,
-      fitBounds: (bounds) => fitBoundsCalls.push(bounds),
+      fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
     } as unknown as GeoLibreAppAPI;
 
     const id = await addArcGISLayer(app, {

@@ -88,7 +88,7 @@ describe("extractCopiedLayerStyle", () => {
   it("deep-clones so later edits to the source do not mutate the clipboard", () => {
     const source = vectorLayer({ style: { ...DEFAULT_LAYER_STYLE, fillColor: "#ff0000" } });
     const copied = extractCopiedLayerStyle(source);
-    assert.ok(copied);
+    assert.ok(copied && copied.kind === "vector");
     source.style.fillColor = "#00ff00";
     assert.equal(copied.style.fillColor, "#ff0000");
   });
@@ -386,7 +386,9 @@ describe("store copy/paste actions", () => {
 
     store.copyLayerStyle("a");
     store.copyLayerStyle("x"); // xyz is not copyable
-    assert.equal(useAppStore.getState().copiedLayerStyle?.style.fillColor, "#abcdef");
+    const copied = useAppStore.getState().copiedLayerStyle;
+    assert.ok(copied?.kind === "vector");
+    assert.equal(copied.style.fillColor, "#abcdef");
   });
 
   it("does not paste across style families", () => {

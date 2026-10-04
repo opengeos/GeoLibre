@@ -30,7 +30,7 @@ function element({
   matches?: string[];
   isContentEditable?: boolean;
   inputType?: string;
-} = {}) {
+} = {}): EventTarget {
   const self = {
     tagName,
     isContentEditable,
@@ -43,7 +43,7 @@ function element({
       return parts.includes("input") && inputType ? { type: inputType } : self;
     },
   };
-  return self;
+  return self as unknown as EventTarget;
 }
 
 describe("voice push-to-talk key identity", () => {

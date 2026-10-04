@@ -63,7 +63,9 @@ describe("attribute table sources", () => {
           {
             type: "Feature",
             id: "celestrak-25544",
-            geometry: null,
+            // A CZML row has no geometry; `GeoLibreLayer.geojson` types every
+            // feature with one.
+            geometry: null as never,
             properties: { name: "ISS", catalogNumber: "25544" },
           },
         ],

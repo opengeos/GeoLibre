@@ -413,7 +413,7 @@ function geojsonLayer(features: unknown[], patch: Partial<GeoLibreLayer> = {}): 
     source: {},
     visible: true,
     opacity: 1,
-    style: {},
+    style: { ...DEFAULT_LAYER_STYLE },
     metadata: {},
     geojson: { type: "FeatureCollection", features } as never,
     ...patch,
@@ -433,7 +433,7 @@ describe("CesiumLayerSync per-feature symbology", () => {
         ],
         {
           opacity: 0.5,
-          style: {
+          style: style({
             vectorStyleMode: "categorized",
             vectorStyleProperty: "kind",
             vectorStyleStops: [
@@ -443,7 +443,7 @@ describe("CesiumLayerSync per-feature symbology", () => {
             fillOpacity: 0.8,
             circleRadius: 7,
             strokeWidth: 3,
-          },
+          }),
         },
       ),
     ]);
@@ -470,7 +470,7 @@ describe("CesiumLayerSync per-feature symbology", () => {
     const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => zoom);
     sync.sync([
       geojsonLayer([feature({}, "LineString")], {
-        style: { strokeWidthUnit: "meters", strokeWidth: 100 },
+        style: style({ strokeWidthUnit: "meters", strokeWidth: 100 }),
       }),
     ]);
     await f.flush();
@@ -488,12 +488,12 @@ describe("CesiumLayerSync per-feature symbology", () => {
   it("restyles in place when only the fill opacity changes", async () => {
     const f = makeFakes();
     const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 12);
-    const layer = geojsonLayer([feature({}, "Polygon")], { style: { fillOpacity: 0.5 } });
+    const layer = geojsonLayer([feature({}, "Polygon")], { style: style({ fillOpacity: 0.5 }) });
     sync.sync([layer]);
     await f.flush();
     await f.flush();
     assert.equal(f.dataSources.length, 1);
-    sync.sync([{ ...layer, style: { fillOpacity: 0.1 } }]);
+    sync.sync([{ ...layer, style: style({ fillOpacity: 0.1 }) }]);
     await f.flush();
     assert.equal(f.dataSources.length, 1, "no reload for an opacity-only edit");
     const polygon = f.dataSources[0].entities.values[0].polygon as {
@@ -504,7 +504,11 @@ describe("CesiumLayerSync per-feature symbology", () => {
     sync.sync([
       {
         ...layer,
-        style: { fillOpacity: 0.1, vectorStyleMode: "categorized", vectorStyleProperty: "k" },
+        style: style({
+          fillOpacity: 0.1,
+          vectorStyleMode: "categorized",
+          vectorStyleProperty: "k",
+        }),
       },
     ]);
     await f.flush();
@@ -523,7 +527,7 @@ describe("CesiumLayerSync channel routing", () => {
           feature({ stroke: "#0088ff" }, "Polygon"),
           feature({ "marker-color": "#ff8800", "marker-opacity": 0.5 }),
         ],
-        { opacity: 0.5, style: { simpleStyleEnabled: true, strokeColor: "#ff0000" } },
+        { opacity: 0.5, style: style({ simpleStyleEnabled: true, strokeColor: "#ff0000" }) },
       ),
     ]);
     await f.flush();
@@ -539,7 +543,7 @@ describe("CesiumLayerSync channel routing", () => {
   it("does not reload the data source for a style field the globe never reads", async () => {
     const f = makeFakes();
     const sync = new CesiumLayerSync(f.Cesium as never, f.viewer as never, () => 12);
-    const layer = geojsonLayer([feature({}, "Polygon")], { style: { heatmapRadius: 20 } });
+    const layer = geojsonLayer([feature({}, "Polygon")], { style: style({ heatmapRadius: 20 }) });
     sync.sync([layer]);
     await f.flush();
     await f.flush();
@@ -548,18 +552,18 @@ describe("CesiumLayerSync channel routing", () => {
       // (`pointRenderer` is read by the clustering path, so it is not among them.)
       {
         ...layer,
-        style: {
+        style: style({
           heatmapRadius: 50,
           diagramSize: 30,
           invertedFillEnabled: true,
           blendMode: "multiply",
-        },
+        }),
       },
     ]);
     await f.flush();
     await f.flush();
     assert.equal(f.dataSources.length, 1, "2D-only fields leave the globe alone");
-    sync.sync([{ ...layer, style: { heatmapRadius: 50, strokeWidth: 4 } }]);
+    sync.sync([{ ...layer, style: style({ heatmapRadius: 50, strokeWidth: 4 }) }]);
     await f.flush();
     await f.flush();
     assert.equal(f.dataSources.length, 2, "a field the globe bakes still rebuilds");
@@ -578,7 +582,7 @@ describe("CesiumLayerSync marker sprites", () => {
     });
     sync.sync([
       geojsonLayer([feature({ kind: "park" }), feature({ kind: "water" })], {
-        style: {
+        style: style({
           markerEnabled: true,
           vectorStyleMode: "categorized",
           vectorStyleProperty: "kind",
@@ -586,7 +590,7 @@ describe("CesiumLayerSync marker sprites", () => {
             { value: "park", color: "#00aa00" },
             { value: "water", color: "#0000aa" },
           ],
-        },
+        }),
       }),
     ]);
     await f.flush();
@@ -616,7 +620,7 @@ describe("CesiumLayerSync marker sprites", () => {
     });
     sync.sync([
       geojsonLayer([feature({ kind: "a" })], {
-        style: {
+        style: style({
           markerEnabled: true,
           vectorStyleMode: "rule-based",
           vectorRules: [
@@ -630,7 +634,7 @@ describe("CesiumLayerSync marker sprites", () => {
             },
             { id: "else", label: "Other", filter: "", color: "#00ff00", isElse: true },
           ],
-        },
+        }),
       }),
     ]);
     await f.flush();
@@ -665,7 +669,7 @@ describe("CesiumLayerSync marker sprites", () => {
       }),
     });
     const layer = geojsonLayer([feature({}, "Polygon"), feature({}, "Polygon")], {
-      style: { fillPattern: "hatch", fillOpacity: 0.5 },
+      style: style({ fillPattern: "hatch", fillOpacity: 0.5 }),
     });
     sync.sync([layer]);
     await f.flush();
@@ -689,7 +693,7 @@ describe("CesiumLayerSync marker sprites", () => {
     });
     sync.sync([
       geojsonLayer([feature({}), feature({})], {
-        style: { markerEnabled: true, markerColor: "#ff8800" },
+        style: style({ markerEnabled: true, markerColor: "#ff8800" }),
       }),
     ]);
     await f.flush();
@@ -716,12 +720,12 @@ describe("CesiumLayerSync marker sprites", () => {
       geojsonLayer(
         stops.map((stop) => feature({ kind: stop.value })),
         {
-          style: {
+          style: style({
             markerEnabled: true,
             vectorStyleMode: "categorized",
             vectorStyleProperty: "kind",
             vectorStyleStops: stops,
-          },
+          }),
         },
       ),
     ]);
@@ -768,7 +772,7 @@ describe("CesiumLayerSync marker sprites", () => {
     });
     sync.sync([
       geojsonLayer([feature({ kind: "a" })], {
-        style: {
+        style: style({
           markerEnabled: true,
           vectorStyleMode: "rule-based",
           vectorRules: [
@@ -776,7 +780,7 @@ describe("CesiumLayerSync marker sprites", () => {
             rule("z13", "#0000ff", 13),
             { id: "else", label: "Other", filter: "", color: "#00ff00", isElse: true },
           ],
-        },
+        }),
       }),
     ]);
     await f.flush();

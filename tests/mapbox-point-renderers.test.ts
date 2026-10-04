@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature, FeatureCollection } from "geojson";
+import type { HeatmapLayerSpecification } from "mapbox-gl";
 import {
   compileMapboxLayer,
   mapboxUnsupportedStyleSettings,
@@ -32,7 +33,7 @@ describe("Mapbox point renderers", () => {
       plan.layers.map((spec) => spec.type),
       ["heatmap"],
     );
-    const [heatmap] = plan.layers;
+    const heatmap = plan.layers[0] as HeatmapLayerSpecification;
     assert.equal(heatmap.paint?.["heatmap-radius"], 25);
     assert.equal(heatmap.paint?.["heatmap-opacity"], 0.5);
     assert.match(JSON.stringify(heatmap.paint?.["heatmap-color"]), /heatmap-density/);

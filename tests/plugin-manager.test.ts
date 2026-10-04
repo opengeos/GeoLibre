@@ -8,6 +8,9 @@ import {
 } from "../packages/plugins/src/toolbar-menu-registry";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../packages/plugins/src/types";
 
+/** The panel a plugin hands to `registerRightPanel`. */
+type RightPanel = Parameters<NonNullable<GeoLibreAppAPI["registerRightPanel"]>>[0];
+
 const app = {} as GeoLibreAppAPI;
 
 function testPlugin(patch: Partial<GeoLibrePlugin> = {}): GeoLibrePlugin {
@@ -1007,8 +1010,7 @@ describe("PluginManager panel auto-expand on restore", () => {
 
   it("deactivates an opted-in plugin when its native panel closes", async () => {
     const manager = new PluginManager();
-    let registeredPanel: Parameters<NonNullable<GeoLibreAppAPI["registerRightPanel"]>>[0] | null =
-      null;
+    let registeredPanel = null as RightPanel | null;
     const mockApp = {
       registerRightPanel: (panel: NonNullable<typeof registeredPanel>) => {
         registeredPanel = panel;
@@ -1042,8 +1044,7 @@ describe("PluginManager panel auto-expand on restore", () => {
 
   it("deactivates an opted-in plugin when its panel close hook throws", async () => {
     const manager = new PluginManager();
-    let registeredPanel: Parameters<NonNullable<GeoLibreAppAPI["registerRightPanel"]>>[0] | null =
-      null;
+    let registeredPanel = null as RightPanel | null;
     const mockApp = {
       registerRightPanel: (panel: NonNullable<typeof registeredPanel>) => {
         registeredPanel = panel;
@@ -1070,15 +1071,15 @@ describe("PluginManager panel auto-expand on restore", () => {
 
     manager.activate("throwing-close-panel", mockApp);
     assert.ok(registeredPanel);
-    assert.throws(() => registeredPanel.onExplicitClose?.(), /close failed/);
+    const panel = registeredPanel;
+    assert.throws(() => panel.onExplicitClose?.(), /close failed/);
     await flushTimers(1);
     assert.equal(manager.isActive("throwing-close-panel"), false);
   });
 
   it("keeps a plugin re-activated after its own deactivate closed its panel", async () => {
     const manager = new PluginManager();
-    let registeredPanel: Parameters<NonNullable<GeoLibreAppAPI["registerRightPanel"]>>[0] | null =
-      null;
+    let registeredPanel = null as RightPanel | null;
     const mockApp = {
       registerRightPanel: (panel: NonNullable<typeof registeredPanel>) => {
         registeredPanel = panel;
@@ -1411,7 +1412,7 @@ describe("PluginManager plugin coordination", () => {
         return !manager.isActive(id);
       },
     } as GeoLibreAppAPI;
-    let closer: GeoLibreAppAPI | null = null;
+    let closer = null as GeoLibreAppAPI | null;
     manager.register(
       testPlugin({
         id: "closer",

@@ -28,7 +28,7 @@ describe("annotation toolbar collapse toggle", () => {
         control = nextControl;
         return true;
       },
-      removeMapControl: (removedControl) => removedControl.onRemove(),
+      removeMapControl: (removedControl) => removedControl.onRemove(undefined as never),
       getMap: () => null,
     } as GeoLibreAppAPI;
 

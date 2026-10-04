@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { useAppStore } from "@geolibre/core";
 import { createPluginLayerStyleActions } from "../apps/geolibre-desktop/src/lib/plugin-layer-style";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 // A cut-down GeoServer `GetStyles` answer: a style categorized on one field,
 // shaped like the Liguria land-cover SLD (geoservizi.regione.liguria.it, M5:L4).
@@ -24,7 +25,7 @@ const SLD = `<?xml version="1.0" encoding="UTF-8"?>
 function addLayer(): string {
   return useAppStore.getState().addGeoJsonLayer("Land cover", {
     type: "FeatureCollection",
-    features: [{ type: "Feature", properties: { classe: "1.1.1" }, geometry: null }],
+    features: [{ type: "Feature", properties: { classe: "1.1.1" }, geometry: NULL_GEOMETRY }],
   });
 }
 

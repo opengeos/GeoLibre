@@ -217,7 +217,9 @@ describe("observeDrapeErrors", () => {
     assert.equal(isTransientDrapeError(new Error("AbortError: The user aborted a request.")), true);
     assert.equal(isTransientDrapeError(new Error("Unimplemented type: 5")), false);
     assert.equal(isTransientDrapeError(undefined), false);
-    let listener: ((event: { error?: Error }) => void) | null = null;
+    // Asserted rather than annotated so TS does not narrow it to `null` for good
+    // (the callback assigns it, which control-flow analysis cannot see).
+    let listener = null as ((event: { error?: Error }) => void) | null;
     observeDrapeErrors({ on: (_type, l) => (listener = l) });
     assert.ok(listener, "an error listener keeps MapLibre from logging on its own");
     const warned: unknown[] = [];

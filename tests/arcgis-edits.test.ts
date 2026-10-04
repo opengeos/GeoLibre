@@ -134,7 +134,7 @@ async function load(
     }
     return Response.json(info);
   });
-  const id = await addArcGISLayer({ fitBounds() {} } as GeoLibreAppAPI, {
+  const id = await addArcGISLayer({ fitBounds() {} } as unknown as GeoLibreAppAPI, {
     layerType: "feature",
     sourceType: "url",
     url,

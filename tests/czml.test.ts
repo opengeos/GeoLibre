@@ -9,7 +9,7 @@ import {
   isCzmlLayer,
   parseCzml,
 } from "../packages/core/src";
-import type { GeoLibreLayer } from "../packages/core/src/types";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/types";
 import { CesiumLayerSync, isCesiumSupportedLayerType } from "../packages/map/src/cesium-layer-sync";
 
 // CZML (Cesium Language) dynamic 3D scenes (issue #2290).
@@ -113,7 +113,7 @@ describe("czml layer builder & parser", () => {
       source: { type: "3d-tiles", url: "https://example.com/tileset.json" },
       visible: true,
       opacity: 1,
-      style: {},
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: { sourceKind: "3d-tiles-url" },
     };
     assert.equal(isCzmlLayer(tileset), false);
@@ -134,7 +134,9 @@ function makeGlobe() {
 
   const Cesium = {
     CzmlDataSource: {
-      load: async (czml: unknown) => {
+      // Tests swap in their own loader, each returning just the slice of a
+      // CzmlDataSource the code under test reads.
+      load: async (czml: unknown): Promise<unknown> => {
         calls.czmlLoads.push(czml);
         const clock = {
           startTime: { dayNumber: 2459000, secondsOfDay: 0 },
@@ -475,7 +477,8 @@ describe("CesiumLayerSync with CZML", () => {
       },
     };
     const entity = { id: "sat-1", point };
-    let release: (() => void) | null = null;
+    // Assigned synchronously by the Promise executor.
+    let release!: () => void;
     const loaded = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -513,11 +516,12 @@ describe("CesiumLayerSync with CZML", () => {
     sync.highlight("czml-sats", ["sat-1"]);
     assert.equal(entity.point, point, "nothing to paint until the entities exist");
 
-    release?.();
+    release();
     for (let i = 0; i < 6; i++) await flush();
 
     assert.notEqual(entity.point, point, "the load replays the retained selection");
-    assert.deepEqual((entity.point as { color: { value: unknown } }).color.value, {
+    // assert.equal above narrowed entity.point to the original; it has since been replaced.
+    assert.deepEqual((entity.point as unknown as { color: { value: unknown } }).color.value, {
       css: "#facc15",
     });
 

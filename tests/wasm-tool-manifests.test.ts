@@ -86,10 +86,10 @@ describe("mergeWasmToolManifests", () => {
     // greater_than_or_equal_to, less_than_or_equal_to). They run through the
     // WASM runner like any other, so dropping them left the dialog listing
     // fewer tools than the binary provides.
+    // Whitebox provenance is an unset `source` once a manifest is converted.
     const wasmOnlyWhitebox: WhiteboxTool = {
       id: "buffer_vector",
       display_name: "Buffer Vector",
-      source: "whitebox",
       params: [{ name: "input", data_kind: "vector", io_role: "input" }],
     };
     const merged = mergeWasmToolManifests(
@@ -247,6 +247,7 @@ describe("mergeWasmToolManifests", () => {
     // variogram/cokriging tools and the >=/<= comparisons, which the snapshot
     // has never listed. They execute through the WASM runner (buffer_vector
     // turns 2 points into 2 polygons), so dropping them hid working tools.
+    // Whitebox provenance is an unset `source` once a manifest is converted.
     const wasmOnlyWhitebox: WhiteboxTool = {
       id: "some_wasm_only_whitebox_tool",
       params: [{ name: "input", data_kind: "raster", io_role: "input" }],

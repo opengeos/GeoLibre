@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import { routeWmsLayerThroughNativeProtocol } from "../apps/geolibre-desktop/src/lib/xyz-url";
 import { isHttpWmsUrl, nativeWmsTileUrl } from "../apps/geolibre-desktop/src/lib/native-wms-url";
 
@@ -33,16 +33,20 @@ test("isHttpWmsUrl accepts only syntactically valid HTTP(S) URLs", () => {
 });
 
 test("routeWmsLayerThroughNativeProtocol only changes desktop WMS tiles", () => {
-  const globals = globalThis as typeof globalThis & { window?: unknown };
+  const globals = globalThis as unknown as { window?: unknown };
   const previousWindow = globals.window;
   const tile = "https://example.com/wms?BBOX={bbox-epsg-3857}";
-  const layer = {
+  const layer: GeoLibreLayer = {
     id: "wms",
     name: "WMS",
     type: "wms",
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
     source: { type: "raster", tiles: [tile] },
     metadata: {},
-  } as GeoLibreLayer;
+  };
+  const firstTile = (target: GeoLibreLayer) => (target.source.tiles as string[] | undefined)?.[0];
 
   try {
     globals.window = {};
@@ -51,8 +55,8 @@ test("routeWmsLayerThroughNativeProtocol only changes desktop WMS tiles", () => 
     globals.window = { __TAURI_INTERNALS__: {} };
     const routed = routeWmsLayerThroughNativeProtocol(layer);
     assert.notEqual(routed, layer);
-    assert.match(String(routed.source.tiles?.[0]), /^geolibre-wms:/);
-    assert.equal(layer.source.tiles?.[0], tile);
+    assert.match(String(firstTile(routed)), /^geolibre-wms:/);
+    assert.equal(firstTile(layer), tile);
   } finally {
     if (previousWindow === undefined) delete globals.window;
     else globals.window = previousWindow;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createEmptyProject, serializeProject } from "@geolibre/core";
+import { createEmptyProject, serializeProject, type LayerStyle } from "@geolibre/core";
 import {
   DEFAULT_PROJECT_TITLE,
   DEFAULT_SHARE_BASE_URL,
@@ -230,7 +230,7 @@ describe("uploadProjectToShare", () => {
       },
       visible: true,
       opacity: 1,
-      style: {},
+      style: {} as LayerStyle,
       metadata: {},
     });
 

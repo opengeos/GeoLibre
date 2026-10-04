@@ -39,6 +39,7 @@ python -m pytest backend/geolibre_server/tests/test_x.py::test_y   # a single ba
 npm run test:worker                                # typecheck workers/viewer
 npm run test:e2e                                   # Playwright smoke tests (e2e/) against the built web app
 npm run check:rust                                 # cargo check the Tauri crate
+npm run typecheck:tests                            # tsc over tests/, ratcheted on an error-count baseline (docs/maintenance.md)
 cd python && pytest                                # the geolibre Python package's own suite
 ```
 

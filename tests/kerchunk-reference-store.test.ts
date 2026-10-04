@@ -13,7 +13,7 @@ function utf8(bytes: Uint8Array | undefined): string {
 }
 
 // A minimal fake fetch returning a 206 over a fixed buffer, recording the Range.
-function fakeRangeFetch(buffer: Uint8Array) {
+function fakeRangeFetch(buffer: Uint8Array<ArrayBuffer>) {
   const calls: { url: string; range?: string }[] = [];
   const fetchImpl = async (url: string, init?: { headers?: Record<string, string> }) => {
     const range = init?.headers?.Range;

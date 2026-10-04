@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DEFAULT_LAYER_STYLE,
   PROJECT_CREDENTIAL_FIELDS,
   createEmptyProject,
   redactCredentials,
   redactProjectCredentials,
   serializeProject,
   setRegistryPublishableSettings,
+  type GeoLibreProject,
 } from "@geolibre/core";
+
+/** One plugin's saved settings blob, read as a record (the store types it `unknown`). */
+function pluginSetting(project: GeoLibreProject, id: string): Record<string, unknown> | undefined {
+  return project.plugins?.settings[id] as Record<string, unknown> | undefined;
+}
 
 function credentialProject() {
   const project = createEmptyProject("Credential fixture");
@@ -36,7 +43,7 @@ function credentialProject() {
       },
       visible: true,
       opacity: 1,
-      style: {},
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {
         endpoint: "https://example.com/data?%58-Amz-Signature=signed-secret&format=json",
         brokerRef: "credential-broker://tiles/auth",
@@ -85,7 +92,7 @@ describe("project credential redaction", () => {
       "https://api.mapbox.com/styles/v1/acme/day",
     );
     assert.equal(redactProjectCredentials(original).redactedCount, 10);
-    assert.equal(original.plugins?.settings.external.arbitraryName, "plugin-secret");
+    assert.equal(pluginSetting(original, "external")?.arbitraryName, "plugin-secret");
   });
 
   it("keeps the first-party map controls so an export still renders them", () => {
@@ -156,7 +163,7 @@ describe("project credential redaction", () => {
     const { project } = redactProjectCredentials(original);
 
     assert.ok(!serializeProject(project).includes("swipe-secret"));
-    assert.equal(project.plugins!.settings["maplibre-gl-swipe"].position, 50);
+    assert.equal(pluginSetting(project, "maplibre-gl-swipe")?.position, 50);
   });
 
   it("reports nothing redacted when only publishable plugin settings are present", () => {
@@ -174,6 +181,7 @@ describe("project credential redaction", () => {
     const plugins = {
       manifestUrls: [],
       activePluginIds: ["gods-eye-view"],
+      mapControlPositions: {},
       settings: {
         "gods-eye-view": { earthquakes: true, satellites: true, cctv: false, speed: 1 },
       },
@@ -204,6 +212,7 @@ describe("project credential redaction", () => {
     original.plugins = {
       manifestUrls: [],
       activePluginIds: [],
+      mapControlPositions: {},
       settings: {
         "geolibre-point-cloud-annotation": {
           version: 1,
@@ -249,7 +258,7 @@ describe("project credential redaction", () => {
         },
         visible: true,
         opacity: 1,
-        style: {},
+        style: { ...DEFAULT_LAYER_STYLE },
         metadata: {},
       },
     ];
@@ -430,6 +439,7 @@ describe("registry-declared publishable plugin settings", () => {
     project.plugins = {
       manifestUrls: [],
       activePluginIds: ["ext-plugin"],
+      mapControlPositions: {},
       settings: { "ext-plugin": state },
     };
     return project;
@@ -458,7 +468,7 @@ describe("registry-declared publishable plugin settings", () => {
       const { project, redactedPaths } = redactProjectCredentials(
         withState({ search: "rivers", apiKey: "secret" }),
       );
-      assert.equal(project.plugins!.settings["ext-plugin"].search, "rivers");
+      assert.equal(pluginSetting(project, "ext-plugin")?.search, "rivers");
       assert.ok(!serializeProject(project).includes("secret"));
       assert.ok(redactedPaths.some((path) => path.startsWith("plugins.settings")));
     } finally {
@@ -473,10 +483,11 @@ describe("registry-declared publishable plugin settings", () => {
       project.plugins = {
         manifestUrls: [],
         activePluginIds: [],
+        mapControlPositions: {},
         settings: { "maplibre-gl-components": { html: "<b>x</b>", legend: {} } },
       };
       const { project: out } = redactProjectCredentials(project);
-      assert.equal(out.plugins!.settings["maplibre-gl-components"].html, undefined);
+      assert.equal(pluginSetting(out, "maplibre-gl-components")?.html, undefined);
     } finally {
       setRegistryPublishableSettings([]);
     }

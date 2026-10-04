@@ -18,11 +18,16 @@ before(async () => {
 });
 
 /** Build a minimal in-memory GeoPackage and return its bytes. */
+/** `db.export()`, typed as the plain-ArrayBuffer bytes sql.js actually returns. */
+function exportBytes(db: Database): Uint8Array<ArrayBuffer> {
+  return db.export() as Uint8Array<ArrayBuffer>;
+}
+
 function buildGpkg(options: {
   withOgrContents?: boolean;
   featureCount?: number;
   tableName?: string;
-}): Uint8Array {
+}): Uint8Array<ArrayBuffer> {
   const tableName = options.tableName ?? "places";
   const featureCount = options.featureCount ?? 3;
   const db: Database = new SQL.Database();
@@ -55,7 +60,7 @@ function buildGpkg(options: {
       ":c": featureCount,
     });
   }
-  const bytes = db.export();
+  const bytes = exportBytes(db);
   db.close();
   return bytes;
 }
@@ -109,7 +114,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       INSERT INTO roads (geom) VALUES (NULL), (NULL);
       INSERT INTO rivers (geom) VALUES (NULL), (NULL), (NULL), (NULL);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -136,7 +141,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       );
       INSERT INTO gpkg_ogr_contents VALUES ('roads', 1);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -164,7 +169,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       );
       INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('swamps', NULL);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -189,7 +194,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       INSERT INTO gpkg_geometry_columns VALUES ('mounds', 'geom', 'POLYGON', 4326, 0, 0);
       INSERT INTO mounds (geom) VALUES (NULL), (NULL);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -218,7 +223,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       );
       INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('mounds', NULL);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -245,7 +250,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       );
       INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('places', NULL);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -270,7 +275,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       );
       INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('Über', NULL);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -296,7 +301,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       INSERT INTO gpkg_geometry_columns VALUES ('lakes', 'geom', 'POLYGON', 4326, 0, 0);
       INSERT INTO lakes (geom) VALUES (NULL), (NULL), (NULL);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -321,7 +326,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       );
       INSERT INTO gpkg_ogr_contents (table_name, feature_count) VALUES ('swamps', -1);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -343,7 +348,7 @@ describe("ensureGpkgFeatureCountSync", () => {
       INSERT INTO gpkg_contents VALUES ('ghost_table', 'features', 4326);
       INSERT INTO real_table (geom) VALUES (NULL), (NULL);
     `);
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);
@@ -361,7 +366,7 @@ describe("ensureGpkgFeatureCountSync", () => {
   it("ignores SQLite databases that are not GeoPackages", () => {
     const db: Database = new SQL.Database();
     db.run("CREATE TABLE notes (id INTEGER, body TEXT); INSERT INTO notes VALUES (1, 'hi');");
-    const original = db.export();
+    const original = exportBytes(db);
     db.close();
 
     const patched = ensureGpkgFeatureCountSync(SQL, original);

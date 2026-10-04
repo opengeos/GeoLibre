@@ -78,6 +78,14 @@ jobs:
           npm run build -w @geolibre/embed
           npx tsc -b apps/geolibre-desktop --noEmit
 
+      # tsx runs the tests without checking their types; this does, against a
+      # committed error-count baseline (`--max-errors` in the root package.json)
+      # that can only go down. See "Test type-check ratchet" in
+      # docs/maintenance.md. Runs after the step above, which built the
+      # @geolibre/embed dist/ types some tests import through the app.
+      - name: Type check tests (ratchet)
+        run: npm run typecheck:tests
+
   e2e:
     # Only the `core` Playwright project gates a PR: the app boots and renders a
     # map, and the shared UI surfaces still work. The per-feature specs

@@ -116,7 +116,7 @@ describe("God's Eye View viewport feeds", () => {
     const timestamps = position.cartographicDegrees.filter((_, index) => index % 4 === 0);
     assert.equal(new Set(timestamps).size, timestamps.length);
     assert.equal(
-      result.packets[1].properties?.mode,
+      (result.packets[1].properties as Record<string, unknown> | undefined)?.mode,
       "Simulated positions on OpenStreetMap road geometry",
     );
   });

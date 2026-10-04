@@ -130,7 +130,7 @@ describe("buildBrowserTree", () => {
     const tree = buildBrowserTree({
       services: [],
       recentProjects: [],
-      sectionLabels: { services: "Servicios", recent: "Recientes" },
+      sectionLabels: { services: "Servicios", recent: "Recientes", databases: "Bases de datos" },
     });
     assert.equal(find(tree, "section:services")?.label, "Servicios");
     assert.equal(find(tree, "section:recent")?.label, "Recientes");
@@ -555,7 +555,7 @@ describe("augmentConnections", () => {
     });
 
   function augment(load?: ConnectionLoad): BrowserNode | undefined {
-    const loads = load ? { [CONN]: load } : {};
+    const loads: Record<string, ConnectionLoad> = load ? { [CONN]: load } : {};
     const out = augmentConnections(baseTree(), loads, "Loading tables…");
     return find(out, `connection:${CONN}`);
   }

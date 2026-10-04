@@ -713,7 +713,7 @@ describe("CesiumLayerSync raster bridge routing", () => {
     );
     // MapLibre's own factor for rasterSaturation 0.5; the curve itself is
     // covered by the imageryColorAdjustments suite.
-    assert.ok(Math.abs(added[0].saturation - 1 / 0.501) < 1e-9);
+    assert.ok(Math.abs((added[0].saturation ?? NaN) - 1 / 0.501) < 1e-9);
     assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
     // A symbology change (colormap) rebuilds; an opacity change restyles in place.
     const recoloured = {

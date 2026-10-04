@@ -96,7 +96,7 @@ describe("PLANETARY_BASEMAP_GROUPS (picker sections)", () => {
       "venus",
     ]);
     // Earth, Moon and Mars must never leak into 'other'.
-    for (const id of ["earth", "moon", "mars"]) {
+    for (const id of ["earth", "moon", "mars"] as const) {
       assert.ok(!bodies.has(id), `${id} should not be in 'other'`);
     }
   });

@@ -306,7 +306,8 @@ describe("dimension toolbar", () => {
         control = nextControl;
         return true;
       },
-      removeMapControl: (removedControl) => removedControl.onRemove(),
+      // The fake has no map to hand the control (getMap() is null).
+      removeMapControl: (removedControl) => removedControl.onRemove(null as never),
       getMap: () => null,
     } as GeoLibreAppAPI;
 
@@ -419,7 +420,8 @@ describe("clear all dimensions confirmation", () => {
         control = nextControl;
         return true;
       },
-      removeMapControl: (removedControl) => removedControl.onRemove(),
+      // The fake has no map to hand the control (getMap() is null).
+      removeMapControl: (removedControl) => removedControl.onRemove(null as never),
       getMap: () => null,
     } as GeoLibreAppAPI;
 

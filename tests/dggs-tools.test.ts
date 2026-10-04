@@ -205,7 +205,7 @@ describe("dggs generator", () => {
     const typeParam = createDggsGridTool.parameters.find((p) => p.id === "dggsType");
     assert.ok(typeParam && typeParam.type === "select");
     assert.deepEqual(
-      typeParam.options.map((o) => o.value),
+      typeParam.options?.map((o) => o.value),
       ["h3", "s2", "a5", "dggrid", "dggal"],
     );
   });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { Point } from "geojson";
 import { isGeographicCrs, projectedGeoJsonCrs } from "../apps/geolibre-desktop/src/lib/crs-utils";
 import {
   countDelimitedTextRows,
@@ -63,7 +64,7 @@ describe("delimited text parsing", () => {
     assert.equal(result.totalRows, 3);
     assert.equal(result.skippedRows, 2);
     assert.equal(result.data.features.length, 1);
-    assert.deepEqual(result.data.features[0].geometry.coordinates, [-78.638, 35.779]);
+    assert.deepEqual((result.data.features[0].geometry as Point).coordinates, [-78.638, 35.779]);
   });
 
   it("rejects files with no valid coordinates", () => {
@@ -89,7 +90,7 @@ describe("delimited text parsing", () => {
     );
 
     assert.equal(result.data.features.length, 1);
-    assert.deepEqual(result.data.features[0].geometry.coordinates, [4.9, 52.37]);
+    assert.deepEqual((result.data.features[0].geometry as Point).coordinates, [4.9, 52.37]);
   });
 
   it("builds a non-spatial attribute table when both coordinate fields are blank", () => {

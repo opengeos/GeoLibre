@@ -219,7 +219,7 @@ describe("raster TileJSON import", () => {
   });
 
   it("retains TileJSON metadata through the desktop CORS fallback", async () => {
-    const globals = globalThis as typeof globalThis & { window?: unknown };
+    const globals = globalThis as unknown as { window?: unknown };
     const previousWindow = globals.window;
     const nativeCalls: string[] = [];
     globals.window = {
@@ -247,7 +247,7 @@ describe("raster TileJSON import", () => {
   });
 
   it("still resolves desktop short URLs that redirect to an image template", async () => {
-    const globals = globalThis as typeof globalThis & { window?: unknown };
+    const globals = globalThis as unknown as { window?: unknown };
     const previousWindow = globals.window;
     const nativeCalls: string[] = [];
     globals.window = {

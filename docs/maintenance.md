@@ -810,6 +810,49 @@ loudly; pin ESLint or disable the two rules rather than reaching for
   exactly the new rule's count on the code as it is, say so in the PR, and fix
   those warnings over time like the rest.
 
+## Test type-check ratchet
+
+The frontend tests run under `node --import tsx --test`, and tsx strips types
+without checking them, so a test fake that drifts from the interface it stands
+in for (a renamed property, a new required member, a changed argument) still
+runs and still passes. `npm run typecheck:tests` closes that gap: it runs
+`tsc --noEmit` over three projects in `tests/` and fails when the number of
+errors in test files rises above `--max-errors` (in the root `package.json`).
+It runs in CI's "Lint and type check" job and in `npm run ci` / `ci:web`.
+
+- `tests/tsconfig.json` checks every test against the DOM lib with the Node,
+  React and Vite types and the ambient `.d.ts` files the app and packages
+  compile with. `allowJs` lets tests import the `scripts/*.mjs` they cover with
+  inferred types.
+- `tests/tsconfig.workers.json` checks the tests that import `workers/tiles` or
+  `workers/viewer` against `@cloudflare/workers-types`, and
+  `tests/tsconfig.ai-proxy.json` the ones that import `workers/ai-proxy`
+  against that worker's generated `worker-configuration.d.ts`. The Workers
+  runtime types redeclare the DOM globals, so these tests cannot share the main
+  program. A new test that imports worker source goes in the main project's
+  `exclude` **and** one worker project's list; the script fails if an excluded
+  test is in neither worker project.
+
+Only errors in `tests/` count. A test's imports pull product source into the
+program, and that source is checked by its own workspace's tsconfig; an error
+it reports under the tests' settings (DOM-using `@geolibre/core` code under the
+Workers types, say) is printed for information and not counted.
+
+The limit works like the [lint warning ratchet](#lint-warning-ratchet):
+
+- **A PR adds a type error in a test:** fix it. Build fakes against the real
+  type: spread `DEFAULT_LAYER_STYLE` for a partial `LayerStyle`, use
+  `tests/helpers/layer-fixtures.ts` for a layer, and cast a deliberately partial
+  fake of a large interface (a MapLibre `Map`, a Cesium viewer) once through
+  `unknown` in a small typed helper rather than at every call. Do not raise the
+  limit.
+- **A PR fixes type errors:** lower the limit to the new total the script
+  prints, in the same PR.
+
+Run `node scripts/check-test-typecheck.mjs --max-errors 0 --verbose` to list
+every counted error, or `npx tsc --noEmit -p tests/tsconfig.json` for tsc's own
+output.
+
 ## Dependency updates and the audit allowlist
 
 Dependencies are watched two ways: **Dependabot** (`.github/dependabot.yml`) opens

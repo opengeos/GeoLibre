@@ -24,7 +24,7 @@ function harness() {
     payload: Record<string, unknown>,
     origin = "https://app.test",
     source: unknown = frameWindow,
-    protocolSource = EMBED_API_SOURCE,
+    protocolSource: string = EMBED_API_SOURCE,
   ) => {
     const event = new Event("message");
     Object.defineProperties(event, {

@@ -40,7 +40,7 @@ describe("addPluginWfsLayer", () => {
     assert.equal(layer.geojson?.features[0].properties?.label, "loaded");
     assert.deepEqual((layer.geojson?.features[0].geometry as Point).coordinates, [11, 41]);
     assert.equal(layer.metadata.sourceKind, "wfs-getfeature");
-    const request = new URL(layer.source.url!);
+    const request = new URL(String(layer.source.url));
     assert.equal(request.hash, "", "a fragment would hide the GetFeature parameters");
     assert.equal(request.searchParams.get("token"), "secret");
     assert.equal(request.searchParams.get("request"), "GetFeature");
@@ -83,7 +83,7 @@ describe("addPluginWfsLayer", () => {
     const layer = useAppStore.getState().layers.find((candidate) => candidate.id === id)!;
     assert.deepEqual((layer.geojson?.features[0].geometry as Point).coordinates, [11, 41]);
     assert.equal(layer.geojson?.features[0].properties?.label, "projected");
-    assert.match(layer.source.url!, /outputFormat=application%2Fgml/);
+    assert.match(String(layer.source.url), /outputFormat=application%2Fgml/);
   });
 
   it("rejects invalid inputs and empty results without adding a layer", async () => {

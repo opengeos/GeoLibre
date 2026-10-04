@@ -292,7 +292,10 @@ describe("splitKmlFolderLayers", () => {
 
 describe("sequenceTimeFrames", () => {
   it("steps frames that share a start time together", () => {
-    const frames = sequenceTimeFrames([
+    const frames = sequenceTimeFrames<{
+      timeSpan: { begin: number; end: number | null };
+      visible?: boolean;
+    }>([
       { timeSpan: { begin: T0 + HOUR, end: null } },
       { timeSpan: { begin: T0, end: null } },
       { timeSpan: { begin: T0, end: null } },

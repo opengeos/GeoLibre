@@ -133,7 +133,8 @@ runs the full production build once per invocation; if you already built, add
 `SKIP=npm-build` in front of the command.
 
 `npm run ci:web` is the quick gate for changes that only touch the web app and
-its packages: lint, the i18n catalog check, `typecheck:fast`, and the frontend
+its packages: lint, the i18n catalog check, `typecheck:fast`, the
+[test type check](maintenance.md#test-type-check-ratchet), and the frontend
 unit tests. It needs only Node.
 
 `npm run ci` runs the complete gate that mirrors continuous integration, in this
@@ -143,6 +144,7 @@ order:
 | ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Lint               | `npm run lint`                  | ESLint over `apps/`, `packages/`, `workers/` and `tests/`                                                           |
 | i18n catalog check | `npm run i18n:tools:check`      | The processing-tool strings in `en.json` match the tool registries (regenerate with `npm run i18n:tools`)           |
+| Test type check    | `npm run typecheck:tests`       | `tsc` over `tests/`, gated on a [type-error ratchet](maintenance.md#test-type-check-ratchet)                        |
 | Build              | `npm run build`                 | TypeScript compile (`tsc -b`) and Vite build                                                                        |
 | Frontend tests     | `npm run test:frontend:coverage` | Unit tests under `tests/`, gated on a [coverage floor](maintenance.md#coverage-floors)                              |
 | Worker checks      | `npm run test:worker`           | Type checks all five workers (`viewer`, `collab`, `collab-node`, `tiles`, `ai-proxy`) and runs the `collab-node` tests |

@@ -50,7 +50,10 @@ interface FixtureFeature {
   properties: Record<string, FixtureValue>;
 }
 
-function encodeFlowTile(features: FixtureFeature[], layerName = "Traffic flow"): Uint8Array {
+function encodeFlowTile(
+  features: FixtureFeature[],
+  layerName = "Traffic flow",
+): Uint8Array<ArrayBuffer> {
   const keys: string[] = [];
   const values: FixtureValue[] = [];
   const index = <T>(list: T[], value: T) => {
@@ -309,7 +312,7 @@ describe("God's Eye View Street Traffic with live flow", () => {
     assert.equal(jammed.attributes.features.length, 1);
     const vehicle = jammed.packets.find((packet) => packet.id === "street-traffic-way/1-0");
     assert.ok(vehicle);
-    assert.equal(vehicle.properties?.freeFlowPercent, 30);
+    assert.equal((vehicle.properties as Record<string, unknown> | undefined)?.freeFlowPercent, 30);
     assert.deepEqual(
       (vehicle.point as { color: { rgba: number[] } }).color.rgba,
       trafficFlowColor(0.3, false),
@@ -322,7 +325,11 @@ describe("God's Eye View Street Traffic with live flow", () => {
     // Both flow segments are drawn, the closure among them.
     const lines = jammed.packets.filter((packet) => String(packet.id).startsWith("traffic-flow-"));
     assert.equal(lines.length, 2);
-    assert.ok(lines.some((line) => line.properties?.closure === true));
+    assert.ok(
+      lines.some(
+        (line) => (line.properties as Record<string, unknown> | undefined)?.closure === true,
+      ),
+    );
     assert.ok(lines.every((line) => (line.polyline as { clampToGround: boolean }).clampToGround));
   });
 

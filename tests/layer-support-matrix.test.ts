@@ -205,7 +205,7 @@ describe("classifyLayer", () => {
   });
 
   it("groups the raster tile types, the tile archives and the vector files", () => {
-    const kinds = (types: GeoLibreLayer["type"][]): LayerKind[] =>
+    const kinds = (types: GeoLibreLayer["type"][]): (LayerKind | undefined)[] =>
       types.map((type) => classifyLayer({ type }));
     assert.deepEqual(kinds(["raster", "wms", "wmts", "xyz"]), Array(4).fill("raster-tiles"));
     assert.deepEqual(kinds(["pmtiles", "mbtiles"]), Array(2).fill("tile-archive"));

@@ -7,6 +7,7 @@ import {
   applyProjectToStore,
   normalizeProjectComments,
   useAppStore,
+  DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   type ProjectComment,
 } from "@geolibre/core";
@@ -148,11 +149,11 @@ describe("Anchored, Persistent Comments (#1518)", () => {
     const layer: GeoLibreLayer = {
       id: "cities",
       name: "Cities",
-      type: "circle",
+      type: "geojson",
       source: {},
       visible: true,
       opacity: 1,
-      style: {},
+      style: { ...DEFAULT_LAYER_STYLE },
       metadata: {},
       geojson: {
         type: "FeatureCollection",

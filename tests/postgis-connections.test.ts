@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import {
   postgisBaselineKeys,
   prunePostgisConnections,
@@ -20,7 +20,7 @@ function postgisLayer(id: string, metadata: Record<string, unknown> = {}): GeoLi
     source: { type: "geojson" },
     visible: true,
     opacity: 1,
-    style: {},
+    style: { ...DEFAULT_LAYER_STYLE },
     metadata: {
       sourceKind: "postgis-table",
       postgisTable: "cities",

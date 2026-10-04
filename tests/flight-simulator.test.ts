@@ -628,21 +628,29 @@ function stubHandler(enabled = true): StubHandler {
   return handler;
 }
 
+/** The map interaction handlers the flight engine suspends during flight. */
+const HANDLER_KEYS = [
+  "dragPan",
+  "scrollZoom",
+  "boxZoom",
+  "dragRotate",
+  "keyboard",
+  "doubleClickZoom",
+  "touchZoomRotate",
+  "touchPitch",
+] as const;
+
+/** One enabled stub per entry in {@link HANDLER_KEYS}. */
+function stubHandlers(): Record<(typeof HANDLER_KEYS)[number], StubHandler> {
+  return Object.fromEntries(HANDLER_KEYS.map((key) => [key, stubHandler()])) as Record<
+    (typeof HANDLER_KEYS)[number],
+    StubHandler
+  >;
+}
+
 /** The slice of the MapLibre API the flight engine actually touches. */
 function stubMap() {
-  const handlers: Record<string, StubHandler> = {};
-  for (const key of [
-    "dragPan",
-    "scrollZoom",
-    "boxZoom",
-    "dragRotate",
-    "keyboard",
-    "doubleClickZoom",
-    "touchZoomRotate",
-    "touchPitch",
-  ]) {
-    handlers[key] = stubHandler();
-  }
+  const handlers = stubHandlers();
   const state = {
     maxPitch: 85,
     pitch: 30,
@@ -819,7 +827,7 @@ describe("flight simulator engine", () => {
   it("preserves a custom terrain source that was already active before flight", () => {
     withStubWindow(() => {
       resetStore();
-      const map = stubMap();
+      const map: ReturnType<typeof stubMap> & { getTerrain?: () => { source: string } } = stubMap();
       map.getTerrain = () => ({ source: "custom-terrain" });
       const terrainChanges: boolean[] = [];
       const app = {
@@ -1101,19 +1109,7 @@ interface MapboxStubState {
  * rather than MapLibre's `calculateCameraOptionsFromCameraLngLatAltRotation`.
  */
 function stubMapboxMap() {
-  const handlers: Record<string, StubHandler> = {};
-  for (const key of [
-    "dragPan",
-    "scrollZoom",
-    "boxZoom",
-    "dragRotate",
-    "keyboard",
-    "doubleClickZoom",
-    "touchZoomRotate",
-    "touchPitch",
-  ]) {
-    handlers[key] = stubHandler();
-  }
+  const handlers = stubHandlers();
   const state: MapboxStubState = {
     maxPitch: 85,
     pitch: 30,

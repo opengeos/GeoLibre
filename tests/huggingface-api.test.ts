@@ -677,7 +677,9 @@ describe("sha256Hex", () => {
 
 describe("uploadDatasetFiles", () => {
   /** Routes for a repo where `a.geojson` goes into git and `b.tif` into LFS. */
-  function uploadRoutes(options: { lfsHref?: string | null } = {}) {
+  function uploadRoutes(
+    options: { lfsHref?: string | null } = {},
+  ): Parameters<typeof stubFetch>[0] {
     const upload =
       options.lfsHref === null
         ? {}

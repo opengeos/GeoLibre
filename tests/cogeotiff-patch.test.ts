@@ -68,7 +68,8 @@ describe("@cogeotiff/core dependency patch", () => {
       ifdConfig: { pointer: 4 },
       isLittleEndian: true,
     } as unknown as Parameters<typeof createTag>[0];
-    const tag = createTag(tiff, view, 0);
+    // The inline-tag path never reads `sourceOffset`, so a plain DataView stands in.
+    const tag = createTag(tiff, view as Parameters<typeof createTag>[1], 0);
 
     assert.equal(tag.type, "inline");
     assert.equal(tag.value, "abc");

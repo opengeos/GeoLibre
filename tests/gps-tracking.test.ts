@@ -336,7 +336,7 @@ describe("gps-tracking misc", () => {
         satellitesUsed: 14,
       },
       timestamp: 99,
-    } as GeolocationPosition);
+    } as unknown as GeolocationPosition); // satellitesUsed is a provider extension
     assert.deepEqual(f, {
       lng: 1,
       lat: 2,

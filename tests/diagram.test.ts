@@ -18,6 +18,7 @@ import {
   declutterEntries,
   packDiagramCells,
 } from "../packages/plugins/src/plugins/deckgl-viz/diagrams";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 function style(overrides: Partial<LayerStyle> = {}): LayerStyle {
   return {
@@ -193,7 +194,7 @@ describe("collectDiagramData", () => {
     const data = collectDiagramData(
       collection([
         pointFeature({ a: 0, b: 0 }),
-        { type: "Feature", geometry: null, properties: { a: 1, b: 1 } },
+        { type: "Feature", geometry: NULL_GEOMETRY, properties: { a: 1, b: 1 } },
         pointFeature({ a: 2, b: 2 }),
       ]),
       style(),

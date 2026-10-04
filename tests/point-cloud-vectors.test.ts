@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { WebMercatorViewport } from "@deck.gl/core";
-import { createOffsetProjector } from "../packages/plugins/src/plugins/point-cloud-annotation/selection";
+import {
+  createOffsetProjector,
+  type ProjectionViewport,
+} from "../packages/plugins/src/plugins/point-cloud-annotation/selection";
 import {
   encodeVectors,
   loadVectors,
@@ -122,7 +125,9 @@ describe("snapToPoint", () => {
     offsets.flatMap(([lng, lat, z]) => [lng - ORIGIN[0], lat - ORIGIN[1], z]),
   );
   const data = { positions, coordinateOrigin: ORIGIN, pointCount: 3 };
-  const project = createOffsetProjector(viewport, ORIGIN);
+  // deck.gl declares `getDistanceScales` with the base Viewport's two fields; a
+  // WebMercatorViewport returns math.gl's full set, `unitsPerDegree` included.
+  const project = createOffsetProjector(viewport as unknown as ProjectionViewport, ORIGIN);
 
   it("returns the nearest drawn point with its own elevation", () => {
     const [x, y] = viewport.project([offsets[1][0], offsets[1][1], 20]);

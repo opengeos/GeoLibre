@@ -695,9 +695,9 @@ describe("ArcGIS style companions", () => {
       [classOf(0), classOf(1)],
     );
     assert.equal(classOf(0), classOf(2));
-    const big = classes[0].symbol as { color: number[]; font: { size: string } };
+    const big = classes[0].symbol as unknown as { color: number[]; font: { size: string } };
     assert.equal(big.font.size, "20px");
-    assert.equal((classes[1].symbol as { font: { size: string } }).font.size, "10px");
+    assert.equal((classes[1].symbol as unknown as { font: { size: string } }).font.size, "10px");
     // The SDK has no label priority: the Style panel names the expression.
     assert.deepEqual(arcgisUnsupportedStyleSettings(layer, false), ["labelPriority"]);
     // The 0.25 override replaces the layer's 0.5 opacity.
@@ -763,7 +763,7 @@ describe("ArcGIS text markers", () => {
       [`${ARCGIS_SYMBOL_FIELD} = 't0'`, `${ARCGIS_SYMBOL_FIELD} = 't1'`],
     );
     assert.deepEqual(
-      (text.labelingInfo?.[1].symbol as { color: number[] }).color.slice(0, 3),
+      (text.labelingInfo?.[1].symbol as unknown as { color: number[] }).color.slice(0, 3),
       [255, 0, 0],
     );
   });

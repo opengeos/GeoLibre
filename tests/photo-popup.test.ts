@@ -29,7 +29,7 @@ function withDocument() {
 const PHOTO = "data:image/png;base64,iVBORw0KGgo=";
 
 // linkedom's KeyboardEvent drops `key`, so build a plain event carrying it.
-function keydown(window: Window, key: string): Event {
+function keydown(window: { Event: typeof Event }, key: string): Event {
   const event = new window.Event("keydown", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "key", { value: key });
   return event;

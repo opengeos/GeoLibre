@@ -8,6 +8,7 @@ import {
   sketchesStyleForMassing,
 } from "../packages/plugins/src/plugins/maplibre-geo-editor";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src";
+import { NULL_GEOMETRY } from "./helpers/null-geometry";
 
 const polygon = (properties: Record<string, unknown>) => ({
   type: "Feature" as const,
@@ -49,7 +50,7 @@ describe("maplibreGeoEditorPlugin", () => {
     assert.equal(
       hasMassingFeatures({
         type: "FeatureCollection",
-        features: [{ type: "Feature", properties: { height: 10 }, geometry: null }],
+        features: [{ type: "Feature", properties: { height: 10 }, geometry: NULL_GEOMETRY }],
       }),
       false,
     );

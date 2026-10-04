@@ -84,7 +84,7 @@ describe("desktop settings URL", () => {
   });
 
   it("actually aborts a settings request after its timeout", async () => {
-    let signal: AbortSignal | null = null;
+    let signal = null as AbortSignal | null;
     const fetchImpl = ((_url: string, init?: RequestInit) => {
       signal = init?.signal ?? null;
       return new Promise<Response>((_resolve, reject) => {

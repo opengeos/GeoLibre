@@ -116,7 +116,7 @@ describe("computeFieldStats", () => {
   it("treats an id-like text field as text", () => {
     const data = rows({ name: "Alpha" }, { name: "Beta" }, { name: "Gamma" });
     const stats = computeFieldStats(data, "name");
-    assert.equal(stats.kind, "text");
+    assert.equal(stats?.kind, "text");
   });
 
   it("keeps numeric-looking strings as text", () => {

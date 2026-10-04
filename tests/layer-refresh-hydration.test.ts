@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { createElement } from "react";
 import { act, render, screen, useAppStore, waitFor } from "./helpers/dom";
 import { geojsonLayer } from "./helpers/layer-fixtures";
+import type { FeatureCollection } from "geojson";
 
 const { useLayerRefresh } =
   await import("../apps/geolibre-desktop/src/components/panels/layer-panel/useLayerRefresh");
@@ -19,7 +20,7 @@ function RefreshHost() {
   );
 }
 
-function collection(label: string) {
+function collection(label: string): FeatureCollection {
   return {
     type: "FeatureCollection",
     features: [

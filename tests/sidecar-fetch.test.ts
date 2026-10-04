@@ -72,7 +72,8 @@ describe("native sidecar transport", () => {
         })
       | undefined;
     const transport = createNativeSidecarFetch((_input, init) => {
-      seenInit = init;
+      // Narrowed to the object form of `proxy` the transport passes.
+      seenInit = init as typeof seenInit;
       return Promise.resolve(
         new Response(JSON.stringify({ status: "ok" }), {
           headers: { "Content-Type": "application/json" },

@@ -9,6 +9,7 @@ import {
 import {
   PROVIDER_DOCS_URL,
   PROVIDER_FIELDS,
+  type ProviderField,
 } from "../apps/geolibre-desktop/src/lib/assistant/provider-fields";
 
 // Build a runtime env that fills exactly the chosen fields of a provider. A
@@ -90,7 +91,10 @@ describe("PROVIDER_FIELDS", () => {
 
   it("declares only aliases the resolver actually accepts", () => {
     for (const provider of ASSISTANT_PROVIDER_IDS) {
-      for (const field of PROVIDER_FIELDS[provider]) {
+      // Widened to the interface: `as const` drops `aliases` from fields that
+      // declare none.
+      const fields: readonly ProviderField[] = PROVIDER_FIELDS[provider];
+      for (const field of fields) {
         const required = PROVIDER_FIELDS[provider].filter((f) => f.required).map((f) => f.envKey);
         for (const alias of field.aliases ?? []) {
           // Fill the required fields but swap this field's canonical key for the

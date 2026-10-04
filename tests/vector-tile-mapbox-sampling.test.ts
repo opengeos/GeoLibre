@@ -7,6 +7,7 @@ import { mapboxSourceId } from "../packages/map/src/style-layer-ids";
 it("samples the Mapbox PMTiles source for extrusion height fields", () => {
   const layer = createPMTilesStoreLayer({
     id: "buildings",
+    name: "Buildings",
     url: "https://example.com/buildings.pmtiles",
     tileType: "vector",
     sourceLayers: ["buildings"],
@@ -26,6 +27,7 @@ it("samples the Mapbox PMTiles source for extrusion height fields", () => {
 it("retains MapLibre's external archive source and bounds the sample", () => {
   const layer = createPMTilesStoreLayer({
     id: "buildings",
+    name: "Buildings",
     url: "https://example.com/buildings.pmtiles",
     tileType: "vector",
     sourceLayers: ["buildings"],

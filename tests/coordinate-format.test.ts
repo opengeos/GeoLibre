@@ -13,6 +13,7 @@ import {
   formatCoordinate,
   nextCoordinateFormat,
   normalizeCoordinateFormat,
+  type CoordinateFormat,
 } from "../apps/geolibre-desktop/src/lib/coordinate-format";
 
 // The White House, used by the lab material this was built for.
@@ -35,8 +36,8 @@ describe("normalizeCoordinateFormat", () => {
 
 describe("nextCoordinateFormat", () => {
   it("cycles through every format and returns to the start", () => {
-    let format = COORDINATE_FORMATS[0];
-    const seen = [format];
+    let format: CoordinateFormat = COORDINATE_FORMATS[0];
+    const seen: CoordinateFormat[] = [format];
     for (let i = 0; i < COORDINATE_FORMATS.length - 1; i += 1) {
       format = nextCoordinateFormat(format);
       seen.push(format);

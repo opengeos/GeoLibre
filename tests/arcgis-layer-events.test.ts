@@ -13,6 +13,13 @@ const FEATURE = {
   geometry: { type: "Point" as const, coordinates: [1, 2] },
 };
 
+/** The layer-scoped overloads `installArcgisLayerEvents` adds to the facade. */
+interface LayerScopedEvents {
+  on(type: string, layer: string | string[], listener: (event: never) => unknown): unknown;
+  off(type: string, layer: string | string[], listener: (event: never) => unknown): unknown;
+  once(type: string, layer: string | string[], listener?: (event: never) => unknown): unknown;
+}
+
 function setup(picker?: NativeLayerPicker) {
   class Facade extends Evented {}
   const facade = new Facade() as Evented & Record<string, unknown>;
@@ -32,7 +39,12 @@ function setup(picker?: NativeLayerPicker) {
   });
   const pointer = (type: "click" | "mousemove") =>
     facade.fire(type, { point: { x: 10, y: 20 }, lngLat: { lng: 1, lat: 2 } });
-  return { facade, picks, pointer, setHit: (value: boolean) => (hit = value) };
+  return {
+    facade: facade as typeof facade & LayerScopedEvents,
+    picks,
+    pointer,
+    setHit: (value: boolean) => (hit = value),
+  };
 }
 
 describe("ArcGIS control facade layer events", () => {
@@ -104,7 +116,7 @@ describe("ArcGIS control facade layer events", () => {
 
   it("reports a store feature once when a fill and its outline both mirror it", () => {
     const { facade } = setup();
-    const query = facade.queryRenderedFeatures as (point: unknown, options?: unknown) => unknown[];
+    const query = facade.queryRenderedFeatures as (point?: unknown, options?: unknown) => unknown[];
     assert.equal(query([10, 20]).length, 1, "no layers named: every shadow layer, deduplicated");
     assert.equal(query({ x: 10, y: 20 }, { layers: ["fp-line"] }).length, 1);
     assert.deepEqual(

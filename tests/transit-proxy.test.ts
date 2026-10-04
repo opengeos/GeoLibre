@@ -3,7 +3,8 @@ import { afterEach, describe, it } from "node:test";
 import { tilesWorker } from "../workers/tiles/src/index";
 
 const originalFetch = globalThis.fetch;
-const originalCaches = globalThis.caches;
+// `caches` is a Workers global (`declare const`), not a property of `globalThis`.
+const originalCaches = (globalThis as { caches?: unknown }).caches;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;

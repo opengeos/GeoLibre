@@ -194,7 +194,7 @@ describe("UTM settings project round-trip", () => {
     setGraticuleSettings({ gridType: "geographic" }); // reset to a known state
     setGraticuleSettings({ gridType: "utm", spacingMode: "fixed", spacingMeters: 50000 });
 
-    const state = maplibreGraticulePlugin.getProjectState?.(noopApp) as
+    const state = maplibreGraticulePlugin.getProjectState?.() as
       | Record<string, unknown>
       | undefined;
     assert.equal(state?.gridType, "utm");

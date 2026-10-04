@@ -156,7 +156,7 @@ describe("Mapbox basemap control", () => {
   it("supports Mapbox and restores its native style selection", () => {
     assert.equal(isPluginEngineSupported(plugin, "mapbox"), true);
     const app = fakeApp([]);
-    const mapboxMap = app.getMap() as unknown as NonNullable<
+    const mapboxMap = app.getMap!() as unknown as NonNullable<
       ReturnType<NonNullable<GeoLibreAppAPI["getMapboxMap"]>>
     >;
     app.getMapboxMap = () => mapboxMap;

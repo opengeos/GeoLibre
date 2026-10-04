@@ -331,13 +331,13 @@ describe("running a model graph", () => {
     assert.equal(result.error, undefined);
     assert.deepEqual(Object.keys(ports).sort(), ["layer", "overlay"]);
     assert.equal(
-      (ports.layer as { geojson: { features: { properties: { name: string } }[] } }).geojson
-        .features[0].properties.name,
+      (ports.layer as unknown as { geojson: { features: { properties: { name: string } }[] } })
+        .geojson.features[0].properties.name,
       "roads",
     );
     assert.equal(
-      (ports.overlay as { geojson: { features: { properties: { name: string } }[] } }).geojson
-        .features[0].properties.name,
+      (ports.overlay as unknown as { geojson: { features: { properties: { name: string } }[] } })
+        .geojson.features[0].properties.name,
       "aoi",
     );
   });

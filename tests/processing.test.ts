@@ -967,7 +967,7 @@ describe("processing registry", () => {
         ],
       },
     };
-    let allNullOut: FeatureCollection | null = null;
+    let allNullOut = null as FeatureCollection | null;
     const allNullLogs: string[] = [];
     tool.run({
       layers: [allNull],
@@ -1031,7 +1031,7 @@ describe("processing registry", () => {
         ],
       },
     };
-    let out: FeatureCollection | null = null;
+    let out = null as FeatureCollection | null;
     tool.run({
       layers: [square],
       parameters: { layer: "square", iterations: 1 },
@@ -1079,7 +1079,7 @@ describe("processing registry", () => {
         ],
       },
     };
-    let malformedOut: FeatureCollection | null = null;
+    let malformedOut = null as FeatureCollection | null;
     assert.doesNotThrow(() =>
       tool.run({
         layers: [malformed],
@@ -1348,7 +1348,10 @@ describe("processing registry", () => {
 
     // The guard runs before the diagram-type branch, so Delaunay rejects the
     // same axis-aligned input...
-    const runCollinear = (type: string, feats: typeof points.geojson.features): string[] => {
+    const runCollinear = (
+      type: string,
+      feats: NonNullable<typeof points.geojson>["features"],
+    ): string[] => {
       const out: string[] = [];
       let made = false;
       tool.run({

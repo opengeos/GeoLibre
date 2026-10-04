@@ -4,7 +4,7 @@ import { parseHTML } from "linkedom";
 import { Cartesian2, Event as CesiumEvent, ScreenSpaceEventType } from "@cesium/engine";
 import { useAppStore } from "../packages/core/src/store";
 import { IDENTIFY_ALL_LAYERS_ID } from "../packages/core/src/store";
-import type { GeoLibreLayer } from "../packages/core/src/types";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/types";
 import { installCesiumInteractions } from "../packages/map/src/cesium-interactions";
 
 const original = {
@@ -81,7 +81,7 @@ function setup(options: { imagePopup?: boolean } = {}) {
       metadata: {},
       visible: true,
       opacity: 1,
-      style: {},
+      style: { ...DEFAULT_LAYER_STYLE },
       popup: {
         click,
         hover: true,
