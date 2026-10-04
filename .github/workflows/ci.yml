@@ -252,7 +252,9 @@ jobs:
   checks:
     # The web half of `npm run ci` (`npm run ci:frontend`): i18n and gallery
     # drift checks, the production build, the frontend unit tests with their
-    # coverage floors, and the worker type checks/tests. Lint runs in the "Lint
+    # coverage floors, the untested-module ratchet over that coverage run (see
+    # "Untested module ratchet" in docs/maintenance.md), and the worker type
+    # checks/tests. Lint runs in the "Lint
     # and type check" job above, and the backend and Rust halves of the gate run
     # in their own jobs below, so the three proceed in parallel instead of
     # queueing behind each other here. Together the jobs run every step of
@@ -276,7 +278,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Run frontend CI gate (i18n/gallery checks, build, frontend + worker tests)
+      - name: Run frontend CI gate (i18n/gallery checks, build, frontend + worker tests, untested modules)
         run: npm run ci:frontend
         env:
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}

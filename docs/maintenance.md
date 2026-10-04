@@ -866,7 +866,8 @@ the whole built-in plugin registry, 39 files, dropping function coverage 72.90% 
 to lower the floor (GeoLibre#1888 extracted `lib/plugin-layer-queries.ts`;
 `geo-editor-geometry.ts` in `@geolibre/plugins` is the same pattern). Check what a
 new test _transitively_ imports before assuming a coverage drop means the code got
-worse.
+worse. The [untested module ratchet](#untested-module-ratchet) below
+keeps the large modules that no test loads from staying out of sight.
 
 `test:frontend:coverage` runs through `scripts/coverage-check.mjs` rather than
 calling `node --test` directly. Node still enforces all three floors; the wrapper
@@ -885,6 +886,44 @@ needs `pytest-cov` from the backend `dev` extra. Install the **`test`** extra to
 run the _full_ backend suite — without the optional engines
 (geopandas/rasterio/sedona/httpx) the vector/raster/SQL/ML tests skip themselves
 and CI is green but hollow: `pip install -e "backend/geolibre_server[test]"`.
+
+### Untested module ratchet
+
+Because the report only counts imported files, a large module that no test
+loads is invisible to the floors. `npm run check:untested-modules`
+(`scripts/check-untested-modules.mjs`) makes those visible. It reads the lcov
+report `test:frontend:coverage` writes to `coverage/frontend.lcov`, which lists
+every file the suite loaded directly or transitively, and compares it with every
+source file under `apps/*/src` and `packages/*/src`. Declaration files, `index.*`
+barrels, locale catalogs, and generated files (an `AUTO-GENERATED`,
+`@generated`, or `DO NOT EDIT` header, plus the Whitebox menu catalog) do not
+count. It runs right after the coverage step in `ci:frontend`, so in CI's "Build
+and test" job and in `npm run ci`; `ci:web` skips it because it does not measure
+coverage. Run it locally after `npm run test:frontend:coverage`.
+
+Every untested source file over 500 lines must be listed in
+`scripts/untested-modules-baseline.json` with its line count, and the check
+fails when:
+
+- **A new file over 500 lines appears that no test loads.** Add a test that
+  imports it, or a leaf module extracted from it (see above for why testing the
+  leaf keeps the coverage floors steady). A renamed baseline file shows up as
+  new: move its entry to the new path.
+- **A baseline file grows more than 50 lines past its recorded count** with
+  still no test loading it. Add a test, or put the new code in a tested module.
+
+The baseline only shrinks. When an entry gains a test, drops to 500 lines or
+fewer, or is deleted, the check prints a hint;
+`npm run check:untested-modules -- --prune` removes those entries and lowers the
+counts of entries that shrank, and never adds one. Do that in the same PR so the
+gain is kept. `--write-baseline` rewrites the file from scratch and exists only
+to bootstrap it; do not use it to absorb a new untested module.
+
+The same command also prints, without gating, the backend sidecar modules that
+have no `test_<module>.py` or `test_<module>_*.py` in
+`backend/geolibre_server/tests`. Some are exercised through other test files
+(the route tests drive `app/main.py`), so treat the list as a prompt to check,
+not a count of untested code.
 
 ## Lint warning ratchet
 

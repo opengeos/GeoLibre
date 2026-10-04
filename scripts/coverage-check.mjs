@@ -20,7 +20,7 @@
 // mitigating and fix the measurement: the retry logs both numbers precisely so
 // #1889 can accumulate evidence.
 import { spawn } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,6 +29,10 @@ import { fileURLToPath } from "node:url";
 const LINES = 78;
 const BRANCHES = 78;
 const FUNCTIONS = 63;
+
+// Where the lcov report lands. `scripts/check-untested-modules.mjs` reads its
+// file list to find large modules that no test loads.
+const LCOV_PATH = "coverage/frontend.lcov";
 
 /** The `node --test` invocation this gate wraps. */
 function testRunnerArgs() {
@@ -44,6 +48,12 @@ function testRunnerArgs() {
     "tsx",
     "--test",
     "--experimental-test-coverage",
+    // Spec to stdout (which `classify` parses) plus an lcov file for
+    // `npm run check:untested-modules`.
+    "--test-reporter=spec",
+    "--test-reporter-destination=stdout",
+    "--test-reporter=lcov",
+    `--test-reporter-destination=${LCOV_PATH}`,
     `--test-coverage-lines=${LINES}`,
     `--test-coverage-branches=${BRANCHES}`,
     `--test-coverage-functions=${FUNCTIONS}`,
@@ -122,6 +132,7 @@ export function classify({ status, output }) {
  */
 async function main() {
   const args = testRunnerArgs();
+  mkdirSync(path.dirname(LCOV_PATH), { recursive: true });
   const first = classify(await runSuite(args));
   if (first.ok) return 0;
 

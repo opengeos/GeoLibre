@@ -147,6 +147,7 @@ order:
 | Gallery check      | `npm run gallery:check`          | `docs/gallery.md` and the `docs/demos.md` teaser match `scripts/demo-gallery.json` (regenerate with `npm run gallery`) |
 | Build              | `npm run build`                  | TypeScript compile (`tsc -b`) and Vite build                                                                           |
 | Frontend tests     | `npm run test:frontend:coverage` | Unit tests under `tests/`, gated on a [coverage floor](maintenance.md#coverage-floors)                                 |
+| Untested modules   | `npm run check:untested-modules` | Source files over 500 lines that no test loads, held by a [baseline ratchet](maintenance.md#untested-module-ratchet)   |
 | Worker checks      | `npm run test:worker`            | Type checks all five workers (`viewer`, `collab`, `collab-node`, `tiles`, `ai-proxy`) and runs the `collab-node` tests |
 | Test type check    | `npm run typecheck:tests`        | `tsc` over `tests/`, gated on a [type-error ratchet](maintenance.md#test-type-check-ratchet)                           |
 | Backend tests      | `npm run test:backend:coverage`  | `pytest` for the Python sidecar, gated on a [coverage floor](maintenance.md#coverage-floors)                           |
