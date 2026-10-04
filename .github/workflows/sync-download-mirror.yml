@@ -35,6 +35,9 @@ jobs:
       (github.event.workflow_run.event == 'release' &&
        github.event.workflow_run.conclusion != 'cancelled')
     runs-on: ubuntu-latest
+    # The producer wait below can take up to 90 one-minute polls before the
+    # publication steps run.
+    timeout-minutes: 110
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DOWNLOADS_DEPLOY_KEY: ${{ secrets.DOWNLOADS_DEPLOY_KEY }}

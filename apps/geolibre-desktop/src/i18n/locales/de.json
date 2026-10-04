@@ -8,7 +8,8 @@
     "discard": "Verwerfen",
     "restoreError": "Dieser Snapshot konnte nicht wiederhergestellt werden. Er ist möglicherweise beschädigt oder mit dieser GeoLibre-Version nicht kompatibel.",
     "recoveryTitle": "Nicht gespeicherte Arbeit wiederherstellen?",
-    "recoveryDescription": "GeoLibre wurde nicht ordnungsgemäß beendet. Eine neuere automatische Speicherung von „{{name}}“ ist verfügbar."
+    "recoveryDescription": "GeoLibre wurde nicht ordnungsgemäß beendet. Eine neuere automatische Speicherung von „{{name}}“ ist verfügbar.",
+    "autosavePaused": "Automatisches Speichern ist pausiert: Dieses Projekt ist größer als {{limit}} MB, daher werden keine neuen Snapshots angelegt. Speichern Sie es auf der Festplatte, um Ihre Arbeit zu sichern."
   },
   "browser": {
     "title": "Browser",
@@ -203,7 +204,8 @@
       "ddm": "Grad, Dezimalminuten",
       "utm": "UTM (Zone, Ost-/Nordwert)"
     },
-    "coordinateFormatHint": "Koordinatenformat: {{format}}. Zum Wechseln klicken."
+    "coordinateFormatHint": "Koordinatenformat: {{format}}. Zum Wechseln klicken.",
+    "autosavePaused": "Automatisches Speichern pausiert"
   },
   "fileNamePrompt": {
     "title": "Datei speichern unter",

@@ -79,6 +79,12 @@ mod secure_store {
         Err(UNAVAILABLE.to_string())
     }
 
+    /// Nothing to seal: reads always fail here.
+    #[tauri::command]
+    pub fn secure_store_seal() {}
+
+    pub fn reset_read_gate(_label: &str) {}
+
     #[tauri::command]
     pub async fn secure_store_set(_account: String, _secret: String) -> Result<(), String> {
         Err(UNAVAILABLE.to_string())
@@ -512,9 +518,17 @@ pub fn run() {
             start_earth_engine_oauth,
             poll_earth_engine_oauth,
             secure_store::secure_store_get_many,
+            secure_store::secure_store_seal,
             secure_store::secure_store_set,
             secure_store::secure_store_delete
         ])
+        // A new document in a webview hydrates credentials again, so give it
+        // back its one startup read (secure_store.rs, issue #2858).
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                secure_store::reset_read_gate(webview.label());
+            }
+        })
         .setup(|app| {
             create_main_window(app)?;
             // Nothing on Linux claims the OAuth callback scheme for us.

@@ -6,7 +6,11 @@ const STORE_NAME = "snapshots";
 const METADATA_STORE_NAME = "snapshot-metadata";
 const MAX_SNAPSHOTS = 20;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
-const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
+/**
+ * Largest serialized project autosave keeps. Above it a snapshot is skipped
+ * ("too-large") and the status bar shows autosave as paused.
+ */
+export const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
 
 export interface ProjectHistorySnapshot {
   id: string;

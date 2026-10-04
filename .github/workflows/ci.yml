@@ -18,6 +18,7 @@ jobs:
   audit:
     name: Dependency audit
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -44,11 +45,13 @@ jobs:
 
   lint:
     # Lint and types on their own, so a lint-ratchet or type failure reports in
-    # a few minutes instead of at the end of "Build and test" (which still runs
-    # both through `npm run ci`). The type check is `tsc -b` without the Vite
-    # build, the same command as `npm run typecheck:fast`.
+    # a few minutes. This is also the only CI job that runs `npm run lint`: the
+    # "Build and test" job runs `npm run ci:frontend`, which leaves lint out so
+    # it is not run twice. The type check is `tsc -b` without the Vite build,
+    # the same command as `npm run typecheck:fast`.
     name: Lint and type check
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -87,8 +90,17 @@ jobs:
     # This job was the sole critical path of CI at 29-39 min (everything else
     # finishes in <= 9 min), and ~35.9 min of that was test execution at one
     # worker; the build inside it is only ~16 s.
+    #
+    # It deliberately builds its own copy instead of downloading the "Build and
+    # test" job's dist/ as an artifact. The two builds are the same (same
+    # VITE_GEE_OAUTH_CLIENT_ID, no Cesium/Mapbox/ArcGIS keys in either), but the
+    # Vite build is ~35 s while `needs:` would hold this job until "Build and
+    # test" had installed and built (~1.5 min) and this job still needs its own
+    # `npm ci` for Playwright and `vite preview`. As the longest job left, that
+    # wait would lengthen CI rather than shorten it.
     name: E2E core (Playwright)
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -142,6 +154,7 @@ jobs:
   citation:
     name: Validate CITATION.cff
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -173,6 +186,7 @@ jobs:
   collab-image:
     name: Collab relay image
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -207,6 +221,7 @@ jobs:
   entrypoint:
     name: Container entrypoint
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -216,13 +231,21 @@ jobs:
       # Runs the real docker/entrypoint.sh, nginx.conf and deployment_policy.py
       # in a small image (no app build) and checks deployment.json end to end:
       # headers, env overrides, good fixtures, and every bad fixture failing boot
-      # with its ERROR. Schema drift is caught by docker/tests in the checks job.
+      # with its ERROR. Schema drift is caught by docker/tests in the backend job.
       - name: Run the entrypoint harness
         run: bash scripts/test-entrypoint.sh
 
   checks:
+    # The web half of `npm run ci` (`npm run ci:frontend`): i18n and gallery
+    # drift checks, the production build, the frontend unit tests with their
+    # coverage floors, and the worker type checks/tests. Lint runs in the "Lint
+    # and type check" job above, and the backend and Rust halves of the gate run
+    # in their own jobs below, so the three proceed in parallel instead of
+    # queueing behind each other here. Together the jobs run every step of
+    # `npm run ci`; keep them in step with that script in package.json.
     name: Build and test
     runs-on: ubuntu-22.04
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -236,6 +259,30 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend CI gate (i18n/gallery checks, build, frontend + worker tests)
+        run: npm run ci:frontend
+        env:
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+
+  backend:
+    # The Python half of `npm run ci` (`npm run ci:backend`: sidecar tests with
+    # their coverage floor, plus docker/tests), and the projects-and-identity
+    # server suite. Needs no Node dependencies: `npm run` only reads the root
+    # package.json scripts, so this job deliberately skips setup-node and uses
+    # the runner image's bundled npm. Add setup-node if `ci:backend` ever gains
+    # a step that needs Node itself.
+    name: Backend tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -244,33 +291,6 @@ jobs:
           cache-dependency-path: |
             backend/geolibre_server/pyproject.toml
             backend/geolibre_server_api/pyproject.toml
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          toolchain: stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: apps/geolibre-desktop/src-tauri -> target
-
-      - name: Install Linux desktop dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            patchelf \
-            wget
-
-      - name: Install frontend dependencies
-        run: npm ci
 
       - name: Install backend test dependencies
         # The full test suite needs the optional engines; without them the
@@ -300,7 +320,7 @@ jobs:
       # pip-audit runs in a throwaway venv against a frozen snapshot of the test
       # environment (--exclude-editable drops the local geolibre_server checkout,
       # which isn't on PyPI). This keeps its own dependency resolution from
-      # mutating the environment the "Run CI gate" step below tests against.
+      # mutating the environment the backend test step below runs against.
       - name: Audit Python dependencies (advisory, non-blocking)
         continue-on-error: true
         run: |
@@ -311,20 +331,60 @@ jobs:
             --progress-spinner off \
             --requirement /tmp/backend-freeze.txt
 
-      # Drive the documented `npm run ci` gate directly (lint -> build ->
-      # frontend+worker+backend coverage -> rust) so this workflow cannot drift
-      # from the script in package.json.
-      - name: Run CI gate (lint, build, frontend/worker/backend tests, rust)
-        run: npm run ci
-        env:
-          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+      - name: Run backend CI gate (sidecar coverage, docker/tests)
+        run: npm run ci:backend
 
       - name: Test projects and identity server
         run: python -m pytest backend/geolibre_server_api/tests
 
+  rust:
+    # The Rust half of `npm run ci` (`npm run check:rust`).
+    name: Rust check
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: apps/geolibre-desktop/src-tauri -> target
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      # tauri.conf.json points `frontendDist` at ../dist, which the web build
+      # produces. This job does not build the web app (the "Build and test" job
+      # does), so give the Tauri codegen an empty directory to resolve instead.
+      - name: Stub the web build output
+        run: mkdir -p apps/geolibre-desktop/dist
+
+      - name: Cargo check the Tauri shell
+        run: npm run check:rust
+
   projects-identity-postgres:
     name: Identity PostgreSQL concurrency gate
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:17-alpine
@@ -364,6 +424,7 @@ jobs:
   projects-identity-oidc-interop:
     name: Identity OIDC interop
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

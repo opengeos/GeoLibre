@@ -18,11 +18,42 @@ export function credentialStorageLocation(): CredentialStorageLocation {
   return isDesktopRuntime() ? "keychain" : "browser";
 }
 
-/** Reads the given accounts; accounts with no entry are omitted from the result. */
-export function readSecureCredentials(
+/** Whether this document has used or closed its one credential read. */
+let readsSealed = false;
+
+/**
+ * Reads the given accounts; accounts with no entry are omitted from the result.
+ *
+ * The desktop store answers this once per page load (issue #2858): startup
+ * hydration makes the single read, and every later read fails, because
+ * external plugins share this webview and could otherwise read any saved
+ * token. The read is used up even when it fails.
+ */
+export async function readSecureCredentials(
   accounts: readonly string[],
 ): Promise<Record<string, string>> {
-  return invoke<Record<string, string>>("secure_store_get_many", { accounts: [...accounts] });
+  // Only a read that succeeded is known to have claimed the store's gate. A
+  // failed call may never have reached the command (an IPC error), so it
+  // leaves {@link sealSecureCredentialReads} to close reads explicitly; the
+  // seal is idempotent on the Rust side.
+  const read = await invoke<Record<string, string>>("secure_store_get_many", {
+    accounts: [...accounts],
+  });
+  readsSealed = true;
+  return read;
+}
+
+/**
+ * Closes credential reads for this page load without reading, so a plugin
+ * imported afterwards cannot read saved tokens even if startup hydration never
+ * made its read. A no-op outside the desktop build, which has no credential
+ * store, and after the read was made or closed. Rejects when the store could
+ * not be closed, so the caller can refuse to load untrusted code.
+ */
+export async function sealSecureCredentialReads(): Promise<void> {
+  if (readsSealed || credentialStorageLocation() !== "keychain") return;
+  await invoke("secure_store_seal");
+  readsSealed = true;
 }
 
 const MAX_ACCOUNT_BYTES = 512;

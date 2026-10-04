@@ -87,14 +87,14 @@ export async function hydrateDesktopCredentials(): Promise<void> {
   ];
   // `null` means the read failed and was reported; nothing else touches the
   // keychain during hydration, so a dismissed unlock prompt stays dismissed.
-  let stored: Readonly<Record<string, string>> | null = {};
-  if (accounts.length > 0) {
-    try {
-      stored = await readSecureCredentials(accounts);
-    } catch (error) {
-      reportCredentialStorageError(error);
-      stored = null;
-    }
+  // The read is made even with no accounts (which never prompts): it is this
+  // page load's only one, so making it closes reads before plugins load.
+  let stored: Readonly<Record<string, string>> | null;
+  try {
+    stored = await readSecureCredentials(accounts);
+  } catch (error) {
+    reportCredentialStorageError(error);
+    stored = null;
   }
   try {
     await hydratePostgresConnections(postgresIds, stored);

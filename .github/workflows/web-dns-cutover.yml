@@ -20,6 +20,7 @@ jobs:
     name: Replace the Worker domain with a Pages CNAME
     if: github.repository == 'opengeos/GeoLibre'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Verify DNS access and apply the cutover
         env:

@@ -20,6 +20,7 @@ jobs:
   chrome-extension:
     name: Build Chrome extension
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -55,6 +56,7 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -218,6 +220,7 @@ jobs:
     name: Update Homebrew cask
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # The primary cask is in the official homebrew/homebrew-cask repo, which
     # BrewTestBot auto-bumps via livecheck. This job only updates the self-hosted
     # tap (opengeos/homebrew-geolibre), kept as a fallback.
@@ -283,6 +286,7 @@ jobs:
     name: Publish AUR package
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Fully isolated from the asset build and the Homebrew job: it only `needs`
     # build for the .deb, nothing depends on it, and continue-on-error means a
     # failed AUR push leaves the release (and its other publish targets) green.
@@ -338,6 +342,7 @@ jobs:
     name: Publish Fedora COPR package
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Same isolation as the AUR job: only needs build for the .rpm, nothing
     # depends on it, continue-on-error keeps a COPR failure from reddening the
     # release, and it skips itself when the API token is absent (forks).
@@ -406,6 +411,7 @@ jobs:
     name: Publish to winget
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Isolated like the AUR/COPR jobs: only needs build for the release assets,
     # nothing depends on it, continue-on-error keeps a winget hiccup from
     # failing the release, and it skips itself when WINGET_TOKEN is unset (forks,

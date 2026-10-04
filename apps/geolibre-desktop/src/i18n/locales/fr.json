@@ -8,7 +8,8 @@
     "discard": "Abandonner",
     "restoreError": "Impossible de restaurer cet instantané. Il est peut-être endommagé ou incompatible avec cette version de GeoLibre.",
     "recoveryTitle": "Récupérer le travail non enregistré ?",
-    "recoveryDescription": "GeoLibre ne s'est pas fermé correctement. Un enregistrement automatique plus récent de « {{name}} » est disponible."
+    "recoveryDescription": "GeoLibre ne s'est pas fermé correctement. Un enregistrement automatique plus récent de « {{name}} » est disponible.",
+    "autosavePaused": "L'enregistrement automatique est en pause : ce projet dépasse {{limit}} Mo, aucun nouvel instantané n'est donc conservé. Enregistrez-le sur le disque pour conserver votre travail."
   },
   "browser": {
     "title": "Explorateur",
@@ -203,7 +204,8 @@
       "ddm": "Degrés, minutes décimales",
       "utm": "UTM (fuseau, est/nord)"
     },
-    "coordinateFormatHint": "Format de coordonnées : {{format}}. Cliquez pour changer."
+    "coordinateFormatHint": "Format de coordonnées : {{format}}. Cliquez pour changer.",
+    "autosavePaused": "Enregistrement auto en pause"
   },
   "fileNamePrompt": {
     "title": "Enregistrer le fichier sous",

@@ -46,6 +46,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'full-e2e')
     name: E2E features ${{ matrix.shard }}/4
     runs-on: ubuntu-22.04
+    timeout-minutes: 40
     strategy:
       # One shard failing should not hide results from the other three.
       fail-fast: false
@@ -124,6 +125,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'full-e2e')
     name: E2E enterprise SSO
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
