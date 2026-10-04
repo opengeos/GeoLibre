@@ -8,7 +8,8 @@
     "discard": "破棄",
     "restoreError": "このスナップショットを復元できませんでした。破損しているか、このバージョンの GeoLibre と互換性がない可能性があります。",
     "recoveryTitle": "保存されていない作業を復元しますか？",
-    "recoveryDescription": "GeoLibre が正常に終了しませんでした。「{{name}}」のより新しい自動保存が利用できます。"
+    "recoveryDescription": "GeoLibre が正常に終了しませんでした。「{{name}}」のより新しい自動保存が利用できます。",
+    "autosavePaused": "自動保存は一時停止中です: このプロジェクトは {{limit}} MB を超えているため、新しいスナップショットは保存されません。作業を失わないようにディスクに保存してください。"
   },
   "browser": {
     "title": "ブラウザ",
@@ -201,7 +202,8 @@
       "ddm": "度・十進分",
       "utm": "UTM（ゾーン、東距/北距）"
     },
-    "coordinateFormatHint": "座標形式: {{format}}。クリックで切り替え。"
+    "coordinateFormatHint": "座標形式: {{format}}。クリックで切り替え。",
+    "autosavePaused": "自動保存一時停止中"
   },
   "fileNamePrompt": {
     "title": "名前を付けて保存",

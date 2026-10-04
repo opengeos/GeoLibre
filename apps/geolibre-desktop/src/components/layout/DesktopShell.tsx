@@ -1074,6 +1074,7 @@ export function DesktopShell({
       {layoutOptions.statusBarVisible ? (
         <SectionErrorBoundary label="Status bar" displayName={t("shell.section.statusBar")}>
           <StatusBar
+            autosavePaused={projectHistory.autosavePaused}
             compact={layoutOptions.compact}
             diagnosticsErrorCount={diagnostics.errorCount}
             diagnosticsWarningCount={diagnostics.warningCount}
@@ -1092,6 +1093,7 @@ export function DesktopShell({
           setProjectHistoryOpen(open);
           if (!open) projectHistory.clearRestoreError();
         }}
+        autosavePaused={projectHistory.autosavePaused}
         snapshots={projectHistory.snapshots}
         restoreError={projectHistory.restoreError}
         onRestore={projectHistory.restore}

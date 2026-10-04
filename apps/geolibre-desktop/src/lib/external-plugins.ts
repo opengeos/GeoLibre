@@ -5,6 +5,7 @@ import type {
   PluginManager,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
+import { sealSecureCredentialReads } from "./credential-store";
 import {
   deletePluginArchive,
   getAllPluginArchives,
@@ -529,6 +530,8 @@ async function fetchPluginText(url: string, label: string, signal?: AbortSignal)
  * @returns A promise resolving to the validated {@link GeoLibrePlugin}.
  */
 async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLibrePlugin> {
+  // Plugin code can call any Tauri command; saved credentials must be unreadable first (#2858).
+  await sealSecureCredentialReads();
   const moduleUrl = URL.createObjectURL(
     new Blob([bundle.entrySource], { type: "text/javascript" }),
   );

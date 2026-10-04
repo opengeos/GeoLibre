@@ -8,7 +8,8 @@
     "discard": "Scarta",
     "restoreError": "Impossibile ripristinare questo snapshot. Potrebbe essere danneggiato o incompatibile con questa versione di GeoLibre.",
     "recoveryTitle": "Recuperare il lavoro non salvato?",
-    "recoveryDescription": "GeoLibre non si è chiuso correttamente. È disponibile un salvataggio automatico più recente di \"{{name}}\"."
+    "recoveryDescription": "GeoLibre non si è chiuso correttamente. È disponibile un salvataggio automatico più recente di \"{{name}}\".",
+    "autosavePaused": "Il salvataggio automatico è in pausa: questo progetto supera i {{limit}} MB, quindi non vengono conservati nuovi snapshot. Salvalo su disco per non perdere il tuo lavoro."
   },
   "browser": {
     "title": "Browser",
@@ -203,7 +204,8 @@
       "ddm": "Gradi, primi decimali",
       "utm": "UTM (fuso, est/nord)"
     },
-    "coordinateFormatHint": "Formato coordinate: {{format}}. Fare clic per cambiare."
+    "coordinateFormatHint": "Formato coordinate: {{format}}. Fare clic per cambiare.",
+    "autosavePaused": "Salvataggio automatico in pausa"
   },
   "fileNamePrompt": {
     "title": "Salva file con nome",

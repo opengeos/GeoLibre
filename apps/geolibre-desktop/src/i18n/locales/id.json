@@ -8,7 +8,8 @@
     "discard": "Buang",
     "restoreError": "Snapshot ini tidak dapat dipulihkan. Mungkin rusak atau tidak kompatibel dengan versi GeoLibre ini.",
     "recoveryTitle": "Pulihkan pekerjaan yang belum disimpan?",
-    "recoveryDescription": "GeoLibre tidak ditutup dengan benar. Tersedia simpanan otomatis \"{{name}}\" yang lebih baru."
+    "recoveryDescription": "GeoLibre tidak ditutup dengan benar. Tersedia simpanan otomatis \"{{name}}\" yang lebih baru.",
+    "autosavePaused": "Simpan otomatis dijeda: proyek ini lebih besar dari {{limit}} MB, sehingga snapshot baru tidak disimpan. Simpan proyek ke disk agar pekerjaan Anda tetap aman."
   },
   "browser": {
     "title": "Browser",
@@ -201,7 +202,8 @@
       "ddm": "Derajat, menit desimal",
       "utm": "UTM (zona, timur/utara)"
     },
-    "coordinateFormatHint": "Format koordinat: {{format}}. Klik untuk mengganti."
+    "coordinateFormatHint": "Format koordinat: {{format}}. Klik untuk mengganti.",
+    "autosavePaused": "Simpan otomatis dijeda"
   },
   "fileNamePrompt": {
     "title": "Simpan file sebagai",

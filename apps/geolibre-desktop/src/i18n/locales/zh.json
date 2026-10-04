@@ -8,7 +8,8 @@
     "discard": "放弃",
     "restoreError": "无法恢复此快照。它可能已损坏，或与当前 GeoLibre 版本不兼容。",
     "recoveryTitle": "恢复未保存的工作？",
-    "recoveryDescription": "GeoLibre 未正常关闭。有一份更新的“{{name}}”自动保存可用。"
+    "recoveryDescription": "GeoLibre 未正常关闭。有一份更新的“{{name}}”自动保存可用。",
+    "autosavePaused": "自动保存已暂停：此项目超过 {{limit}} MB，因此不再保留新的快照。请将其保存到磁盘以保留您的工作。"
   },
   "browser": {
     "title": "浏览器",
@@ -204,7 +205,8 @@
       "ddm": "度和十进制分",
       "utm": "UTM（带号、东距/北距）"
     },
-    "coordinateFormatHint": "坐标格式：{{format}}。点击切换。"
+    "coordinateFormatHint": "坐标格式：{{format}}。点击切换。",
+    "autosavePaused": "自动保存已暂停"
   },
   "fileNamePrompt": {
     "title": "文件另存为",
