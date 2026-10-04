@@ -112,9 +112,9 @@ test("Processing toolbox", async ({ page }, testInfo) => {
   await closeDialog(page, "Whitebox Toolbox");
 
   await openMenuItem(page, "Processing", "Whitebox Toolbox");
-  await expect(
-    toolbox.getByRole("textbox", { name: "Search tools or describe a task" }),
-  ).toBeVisible();
+  // "Search tools or describe a task" only when an AI endpoint is configured
+  // (useWhiteboxSemanticSearch); CI builds have none, so match either label.
+  await expect(toolbox.getByRole("textbox", { name: /^Search tools/ })).toBeVisible();
   await expectAccessible(page, "processing-whitebox-toolbox", testInfo);
 });
 
