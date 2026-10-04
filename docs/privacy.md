@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: August 23, 2026_
+_Last updated: October 4, 2026_
 
 GeoLibre Desktop ("GeoLibre", "the app") is an open-source desktop GIS
 application developed by the OpenGeos community. This policy explains how the app
@@ -12,6 +12,9 @@ handle yours.
 GeoLibre runs locally on your device. It does not require an account, and the
 app itself does not collect analytics, telemetry, or usage data. Your geospatial
 data and projects stay on your device unless you choose to share or export them.
+If you install plugins from the plugin registry, the registry counts their use
+anonymously from the requests the app already makes; see
+[Plugins from the plugin registry](#plugins-from-the-plugin-registry) below.
 
 Our websites are separate from the app: geolibre.app and web.geolibre.app measure
 page visits with Google Analytics, as described under
@@ -50,6 +53,33 @@ the request you make, and are governed by their own privacy policies:
 
 GeoLibre does not control these third-party services; please review their privacy
 policies for how they handle data.
+
+## Plugins from the plugin registry
+
+Settings → Manage Plugins lists plugins from the GeoLibre plugin registry at
+<https://plugins.geolibre.app>, operated by the OpenGeos project (currently
+hosted on GitHub Pages and Cloudflare). Opening that dialog downloads the
+registry, and each time GeoLibre starts it downloads the registry's blocklist
+(of plugins pulled for safety) and the files of the plugins you installed from
+it. Like any web server, the registry receives your IP
+address and the files requested.
+
+The registry uses those requests to show how often each plugin is used, as
+public counts on its plugin catalog. It records no more than this:
+
+- a count of launches per plugin per day;
+- for counting distinct weekly users, a hash of the plugin and your IP address
+  (for IPv6, its /64 network), keyed with a secret that changes every week.
+  The hash can't be turned back into an IP without that secret, can't be
+  matched across weeks or plugins, and is deleted when the week ends; only
+  the weekly total is kept.
+
+No IP address, account, or other information about you or your projects is
+stored. The app sends nothing extra for this: the counts come only from the
+plugin downloads it already makes. A deployment that sets its own plugin
+registry (`plugins.registryUrl` in `deployment.json`) doesn't contact
+plugins.geolibre.app and isn't counted. Details:
+<https://plugins.geolibre.app/registry/#usage-statistics>.
 
 ## Website analytics
 
