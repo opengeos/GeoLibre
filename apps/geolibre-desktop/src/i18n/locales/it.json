@@ -2279,7 +2279,8 @@
     "saved": "Salvato",
     "clear": "Cancella",
     "layerName": "Linea di vista ({{distance}})",
-    "chartLabel": "Profilo altimetrico lungo la linea di vista"
+    "chartLabel": "Profilo altimetrico lungo la linea di vista",
+    "legend": "I colori della linea mostrano il terreno che l'osservatore vede (verde) o no (rosso); l'indicatore sopra riguarda la cima del bersaglio."
   },
   "knowledgeCard": {
     "title": "Informazioni sul luogo",

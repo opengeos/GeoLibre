@@ -2279,7 +2279,8 @@
     "saved": "Salva",
     "clear": "Limpar",
     "layerName": "Linha de visada ({{distance}})",
-    "chartLabel": "Perfil de elevação ao longo da linha de visada"
+    "chartLabel": "Perfil de elevação ao longo da linha de visada",
+    "legend": "As cores da linha mostram o terreno que o observador vê (verde) ou não (vermelho); o indicador acima refere-se ao topo do alvo."
   },
   "knowledgeCard": {
     "title": "Informações do lugar",

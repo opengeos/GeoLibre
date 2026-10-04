@@ -2279,7 +2279,8 @@
     "saved": "Kaydedildi",
     "clear": "Temizle",
     "layerName": "Görüş hattı ({{distance}})",
-    "chartLabel": "Görüş hattı boyunca yükseklik profili"
+    "chartLabel": "Görüş hattı boyunca yükseklik profili",
+    "legend": "Hat renkleri gözlemcinin gördüğü (yeşil) veya görmediği (kırmızı) araziyi gösterir; yukarıdaki gösterge hedefin tepesiyle ilgilidir."
   },
   "knowledgeCard": {
     "title": "Yer bilgisi",

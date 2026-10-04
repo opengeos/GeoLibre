@@ -2231,7 +2231,8 @@
     "saved": "Đã lưu",
     "clear": "Xóa",
     "layerName": "Đường ngắm ({{distance}})",
-    "chartLabel": "Mặt cắt độ cao dọc theo đường ngắm"
+    "chartLabel": "Mặt cắt độ cao dọc theo đường ngắm",
+    "legend": "Màu của đường cho biết mặt đất người quan sát nhìn thấy (xanh lá) hay không (đỏ); nhãn phía trên nói về đỉnh của mục tiêu."
   },
   "knowledgeCard": {
     "title": "Thông tin địa điểm",

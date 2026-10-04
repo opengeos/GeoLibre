@@ -2279,7 +2279,8 @@
     "saved": "Enregistrée",
     "clear": "Effacer",
     "layerName": "Ligne de visée ({{distance}})",
-    "chartLabel": "Profil altimétrique le long de la ligne de visée"
+    "chartLabel": "Profil altimétrique le long de la ligne de visée",
+    "legend": "Les couleurs de la ligne indiquent le terrain que l'observateur voit (vert) ou non (rouge) ; l'indicateur ci-dessus concerne le sommet de la cible."
   },
   "knowledgeCard": {
     "title": "Infos sur le lieu",

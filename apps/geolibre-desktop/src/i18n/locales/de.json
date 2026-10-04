@@ -2279,7 +2279,8 @@
     "saved": "Gespeichert",
     "clear": "Leeren",
     "layerName": "Sichtlinie ({{distance}})",
-    "chartLabel": "Höhenprofil entlang der Sichtlinie"
+    "chartLabel": "Höhenprofil entlang der Sichtlinie",
+    "legend": "Die Linienfarben zeigen, welches Gelände der Beobachter sieht (grün) oder nicht (rot); die Anzeige oben betrifft die Zielspitze."
   },
   "knowledgeCard": {
     "title": "Ortsinformationen",

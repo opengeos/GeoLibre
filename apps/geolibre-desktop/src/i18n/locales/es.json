@@ -2279,7 +2279,8 @@
     "saved": "Guardada",
     "clear": "Borrar",
     "layerName": "Línea de visión ({{distance}})",
-    "chartLabel": "Perfil de elevación a lo largo de la línea de visión"
+    "chartLabel": "Perfil de elevación a lo largo de la línea de visión",
+    "legend": "Los colores de la línea muestran el terreno que el observador ve (verde) o no (rojo); la etiqueta de arriba se refiere a la cima del objetivo."
   },
   "knowledgeCard": {
     "title": "Información del lugar",

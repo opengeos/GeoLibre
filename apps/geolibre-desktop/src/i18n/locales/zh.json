@@ -2234,7 +2234,8 @@
     "saved": "已保存",
     "clear": "清除",
     "layerName": "视线（{{distance}}）",
-    "chartLabel": "沿视线的高程剖面"
+    "chartLabel": "沿视线的高程剖面",
+    "legend": "线条颜色表示观察者能看到（绿色）或看不到（红色）的地面；上方标识针对的是目标顶部。"
   },
   "knowledgeCard": {
     "title": "地点信息",

@@ -2231,7 +2231,8 @@
     "saved": "Tersimpan",
     "clear": "Hapus",
     "layerName": "Garis pandang ({{distance}})",
-    "chartLabel": "Profil elevasi di sepanjang garis pandang"
+    "chartLabel": "Profil elevasi di sepanjang garis pandang",
+    "legend": "Warna garis menunjukkan medan yang terlihat (hijau) atau tidak terlihat (merah) oleh pengamat; penanda di atas berlaku untuk puncak target."
   },
   "knowledgeCard": {
     "title": "Info tempat",

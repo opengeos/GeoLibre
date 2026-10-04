@@ -2279,7 +2279,8 @@
     "saved": "Opgeslagen",
     "clear": "Wissen",
     "layerName": "Zichtlijn ({{distance}})",
-    "chartLabel": "Hoogteprofiel langs de zichtlijn"
+    "chartLabel": "Hoogteprofiel langs de zichtlijn",
+    "legend": "De lijnkleuren tonen het terrein dat de waarnemer wel (groen) of niet (rood) ziet; de aanduiding hierboven gaat over de top van het doel."
   },
   "knowledgeCard": {
     "title": "Plaatsinfo",

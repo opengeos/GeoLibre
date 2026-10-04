@@ -124,6 +124,14 @@ describe("computeLineOfSight", () => {
     assert.equal(at(1000).visible, true);
     assert.equal(at(1050).visible, false);
     assert.equal(at(2000).visible, false);
+    // Ground in view up to the wall's face, plus half the straddling step.
+    const firstHidden = result.samples.find((sample) => !sample.visible)!;
+    const step = result.samples[1].distance;
+    assert.ok(
+      Math.abs(result.visibleFraction - (firstHidden.distance - step / 2) / result.totalDistance) <
+        1e-9,
+      `${result.visibleFraction}`,
+    );
     assert.deepEqual(
       result.segments.map((segment) => segment.visible),
       [true, false],

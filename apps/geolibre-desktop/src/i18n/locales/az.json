@@ -2279,7 +2279,8 @@
     "saved": "Saxlanıldı",
     "clear": "Təmizlə",
     "layerName": "Görmə xətti ({{distance}})",
-    "chartLabel": "Görmə xətti boyunca hündürlük profili"
+    "chartLabel": "Görmə xətti boyunca hündürlük profili",
+    "legend": "Xəttin rəngləri müşahidəçinin gördüyü (yaşıl) və ya görmədiyi (qırmızı) relyefi göstərir; yuxarıdakı nişan hədəfin zirvəsinə aiddir."
   },
   "knowledgeCard": {
     "title": "Məkan haqqında məlumat",

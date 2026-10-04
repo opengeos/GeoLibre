@@ -2288,7 +2288,8 @@
     "saved": "Saved",
     "clear": "Clear",
     "layerName": "Line of sight ({{distance}})",
-    "chartLabel": "Elevation profile along the line of sight"
+    "chartLabel": "Elevation profile along the line of sight",
+    "legend": "Line colours show the ground the observer can see (green) or not (red); the badge above is about the target's top."
   },
   "knowledgeCard": {
     "title": "Place info",

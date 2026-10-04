@@ -2231,7 +2231,8 @@
     "saved": "저장됨",
     "clear": "지우기",
     "layerName": "가시선 ({{distance}})",
-    "chartLabel": "가시선을 따른 고도 단면"
+    "chartLabel": "가시선을 따른 고도 단면",
+    "legend": "선의 색은 관측자가 볼 수 있는 지면(녹색)과 볼 수 없는 지면(빨간색)을 나타냅니다. 위의 표시는 대상의 꼭대기에 대한 것입니다."
   },
   "knowledgeCard": {
     "title": "장소 정보",

@@ -400,6 +400,10 @@ function LineOfSightSummary({
         ))}
       </dl>
       <LineOfSightChart result={result} units={units} />
+      {/* The badge answers "can the observer see the target's top"; the line's
+          colours answer "which ground can the observer see". They differ for
+          a tall target behind a ridge, so say which is which. */}
+      <p className="text-xs text-muted-foreground">{t("lineOfSight.legend")}</p>
     </div>
   );
 }

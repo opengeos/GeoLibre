@@ -313,8 +313,11 @@ export function computeLineOfSight(
         firstObstruction = sample;
       }
     }
-    if (i > 0 && visible && samples[i - 1].visible) {
-      visibleLength += sample.distance - samples[i - 1].distance;
+    if (i > 0) {
+      // A step between a visible and a hidden sample counts half: the
+      // boundary lies somewhere inside it.
+      const ends = Number(visible) + Number(samples[i - 1].visible);
+      visibleLength += ((sample.distance - samples[i - 1].distance) * ends) / 2;
     }
     samples.push({ ...sample, visible, sightline: sightlineAt(sample.distance) });
   }
