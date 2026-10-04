@@ -42,8 +42,10 @@ function parseArgs(argv) {
     if (value === undefined) throw new Error(`${flag} needs a value`);
     if (flag === "--dist") options.dist = path.resolve(value);
     else if (flag === "--out") options.out = path.resolve(value);
-    else if (flag === "--top") options.top = Number.parseInt(value, 10);
-    else throw new Error(`Unknown option ${flag}`);
+    else if (flag === "--top") {
+      if (!/^\d+$/.test(value)) throw new Error(`--top needs a whole number, got ${value}`);
+      options.top = Number(value);
+    } else throw new Error(`Unknown option ${flag}`);
     i += 1;
   }
   return options;
@@ -137,17 +139,27 @@ function bootSet(dist) {
 /**
  * Relative specifiers a built chunk imports statically.
  *
- * Matches `import … from "./x.js"`, bare `import "./x.js"` and
- * `export … from "./x.js"` in Vite/Rolldown output. A dynamic
- * `import("./x.js")` is lazy and deliberately not matched.
+ * Matches `import … from "./x.js"` and bare `import "./x.js"` in the
+ * chunk's leading import statements. A dynamic `import("./x.js")` is lazy
+ * and deliberately not matched.
  *
  * @param {string} code - The chunk's source.
  * @returns {string[]} Relative specifiers such as `./react-abc.js`.
  */
 function staticImports(code) {
-  const pattern =
-    /(?:^|[;}\s])(?:import|export)\s*(?:[\w$*{},\s]+?\s*from\s*)?["'](\.{1,2}\/[^"']+)["']/g;
-  return [...code.matchAll(pattern)].map((match) => match[1]);
+  // Rolldown hoists every static import to the top of a chunk, so read only
+  // that leading run of import statements: matching the whole source would
+  // also pick up import-shaped text inside strings and comments.
+  const statement =
+    /\s*(?:\/\*[\s\S]*?\*\/\s*|\/\/[^\n]*\n\s*)*import\s*(?:[\w$*{},\s]+?\s*from\s*)?["']([^"']+)["']\s*;?/y;
+  // Vite prepends a one-line `const __vite__mapDeps=…;` (the dynamic-import
+  // preload table) to chunks that use it, ahead of the imports.
+  statement.lastIndex = code.startsWith("const __vite__mapDeps=") ? code.indexOf("\n") + 1 : 0;
+  const specifiers = [];
+  for (let match = statement.exec(code); match; match = statement.exec(code)) {
+    if (/^\.{1,2}\//.test(match[1])) specifiers.push(match[1]);
+  }
+  return specifiers;
 }
 
 /**

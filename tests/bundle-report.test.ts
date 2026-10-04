@@ -27,8 +27,12 @@ interface Report {
 // lazy-c only through a dynamic one, so it stays out of the boot set.
 const FILES: Record<string, string | Buffer> = {
   "main-a.js":
+    // Vite's preload table comes first, ahead of the imports, in a real entry.
+    'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/lazy-c.js"])))=>i.map(i=>d[i]);\n' +
     'import{f as d}from"./dep-f.js";import"./vendor-b.js";' +
     'const l=()=>import("./lazy-c.js");\n' +
+    // Import-shaped text after the import prelude is not an import.
+    'const s=\'import "./lazy-c.js"\';/* import "./lazy-c.js" */\n' +
     "export const a = 1;\n".repeat(50),
   "vendor-b.js": "export const b = 2;\n".repeat(20),
   "dep-f.js": "export const f = 4;\n".repeat(30),
@@ -116,5 +120,16 @@ describe("bundle-report.mjs", () => {
     assert.ok(report.budget.rawBytes > 0 && report.budget.gzipBytes > 0);
     assert.match(markdown, /## Bundle report/);
     assert.match(markdown, /`assets\/lazy-c\.js`/);
+  });
+
+  it("rejects a --top that is not a whole number", () => {
+    assert.throws(
+      () =>
+        execFileSync(process.execPath, [script, "--top", "abc"], {
+          encoding: "utf8",
+          stdio: "pipe",
+        }),
+      /--top needs a whole number/,
+    );
   });
 });

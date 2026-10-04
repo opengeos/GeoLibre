@@ -1555,6 +1555,8 @@ export default defineConfig({
     // (loaded on every map start) and the tool workers ship unminified.
     // The remote NetCDF worker imports the main build's h5wasm chunk by URL
     // rather than bundling its own 4.8 MB copy (see vite-plugins/shared-h5wasm.ts).
+    // This applies to every worker build: a new worker that imports h5wasm must
+    // also call setH5wasmUrl (src/workers/h5wasm-url.ts) before its first use.
     plugins: () => [
       workerH5wasmFromMainPlugin(path.resolve(__dirname, "src/workers/h5wasm-from-main.ts")),
       selectiveJsMinifyPlugin(),

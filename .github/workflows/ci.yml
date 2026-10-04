@@ -277,9 +277,12 @@ jobs:
 
       # Per-asset raw/gzip sizes and the boot set against its budgets (see
       # "Boot bundle budget" in docs/maintenance.md). Runs whenever the build
-      # produced output, even if a later test in the gate failed.
+      # produced output, even if a later test in the gate failed. Diagnostic
+      # only: the build itself enforces the budgets, so a report-script failure
+      # must not fail the job.
       - name: Bundle size report
         if: ${{ !cancelled() && hashFiles('apps/geolibre-desktop/dist/index.html') != '' }}
+        continue-on-error: true
         run: |
           npm run bundle:report
           cat bundle-report/bundle-report.md >> "$GITHUB_STEP_SUMMARY"
