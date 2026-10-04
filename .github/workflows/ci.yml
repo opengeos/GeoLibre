@@ -74,6 +74,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # A dependency declared by both the app and packages/plugins must carry
+      # the same range, or npm nests a second copy. See "Shared dependency
+      # ranges" in docs/maintenance.md.
+      - name: Check shared dependency ranges
+        run: npm run check:shared-deps
+
       - name: Type check (tsc -b, no Vite build)
         # The app imports @geolibre/embed through its built dist/ types, which
         # the desktop workspace's prebuild normally produces.
