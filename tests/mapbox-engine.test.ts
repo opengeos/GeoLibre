@@ -2508,3 +2508,23 @@ describe("MapboxEngine search result lifecycle", () => {
     assert.doesNotThrow(clearLast);
   });
 });
+
+describe("MapboxEngine story camera", () => {
+  it("leaves an absent pitch or bearing out so mapbox-gl keeps the camera's", () => {
+    // mapbox-gl tests `"bearing" in options`, so an own undefined key would be
+    // read as a NaN target rather than "keep the current value".
+    const { engine, map } = makeEngine();
+    const seen: object[] = [];
+    map.flyTo = (view: object) => void seen.push(view);
+    map.jumpTo = (view: object) => void seen.push(view);
+    engine.flyToView({ center: [1, 2], zoom: 3, pitch: undefined, bearing: undefined });
+    engine.applyStoryChapterCamera({ center: [1, 2], zoom: 3, pitch: 20 }, "jumpTo");
+    assert.deepEqual(
+      seen.map((view) => Object.keys(view).sort()),
+      [
+        ["center", "zoom"],
+        ["center", "duration", "pitch", "zoom"],
+      ],
+    );
+  });
+});

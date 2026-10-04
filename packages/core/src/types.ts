@@ -1857,12 +1857,17 @@ export const DEFAULT_LEGEND_CONFIG: LegendConfig = Object.freeze({
   >,
 });
 
-/** Camera target captured for a story chapter. */
+/**
+ * Camera target captured for a story chapter. `pitch` and `bearing` are
+ * optional: a hand-written or older project may omit them, and each engine
+ * then leaves (or resets) that part of the camera as documented on its
+ * `applyStoryChapterCamera`.
+ */
 export interface StoryChapterLocation {
   center: [number, number];
   zoom: number;
-  pitch: number;
-  bearing: number;
+  pitch?: number;
+  bearing?: number;
 }
 
 /** Where a chapter's text panel sits over the map. */

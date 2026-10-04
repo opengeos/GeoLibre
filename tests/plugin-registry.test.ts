@@ -69,7 +69,7 @@ describe("fetchPluginRegistryShared", () => {
     assert.equal(requests, 2);
   });
 
-  it("keeps a lowercase hex bundleSha256 and drops anything else", async () => {
+  it("keeps a lowercase hex bundleSha256, drops anything else, and treats null as absent", async () => {
     const hash = "ab".repeat(32);
     const entry = (id: string, bundleSha256: unknown) => ({
       id,
@@ -86,6 +86,7 @@ describe("fetchPluginRegistryShared", () => {
             entry("uppercase", hash.toUpperCase()),
             entry("short", "ab".repeat(31)),
             entry("not-a-string", 42),
+            entry("null", null),
           ]),
           { headers: { "Content-Type": "application/json" } },
         ),
@@ -107,8 +108,10 @@ describe("fetchPluginRegistryShared", () => {
         ["uppercase", undefined],
         ["short", undefined],
         ["not-a-string", undefined],
+        ["null", undefined],
       ],
     );
+    // A null hash reads as an absent one, so only the three malformed values warn.
     assert.equal(warnings.length, 3);
     assert.match(warnings[0], /"uppercase"/);
   });

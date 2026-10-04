@@ -1752,6 +1752,16 @@ describe("story map import/export", () => {
     assert.deepEqual(restored.chapters[0].location.center, sample.chapters[0].location.center);
   });
 
+  it("writes an absent pitch or bearing as an empty CSV cell", () => {
+    const sample = createSampleStoryMap();
+    const [first] = sample.chapters;
+    const chapter = { ...first, location: { center: first.location.center, zoom: 4 } };
+    const csv = serializeStoryMapCsv({ ...sample, chapters: [chapter] });
+    assert.ok(!csv.includes("undefined"), csv);
+    const restored = parseStoryMapCsv(csv, null);
+    assert.equal(restored.chapters[0].location.zoom, 4);
+  });
+
   it("imports hand-authored CSV with reordered columns and missing ids", () => {
     const csv = [
       "title,lat,lng,description,zoom",

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { geojsonToCsv } from "../apps/geolibre-desktop/src/lib/vector-csv";
-import { withNullGeometries } from "./helpers/null-geometry";
 
 test("point exports carry longitude and latitude, preserving colliding attributes", () => {
   assert.equal(
@@ -22,26 +21,24 @@ test("point exports carry longitude and latitude, preserving colliding attribute
 
 test("mixed geometry and missing geometries leave coordinates empty without dropping rows", () => {
   assert.equal(
-    geojsonToCsv(
-      withNullGeometries({
-        type: "FeatureCollection",
-        features: [
-          { type: "Feature", properties: null, geometry: { type: "Point", coordinates: [0, 0] } },
-          { type: "Feature", properties: {}, geometry: null },
-          {
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [1, 2],
-                [3, 4],
-              ],
-            },
+    geojsonToCsv({
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: null, geometry: { type: "Point", coordinates: [0, 0] } },
+        { type: "Feature", properties: {}, geometry: null },
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [1, 2],
+              [3, 4],
+            ],
           },
-        ],
-      }),
-    ),
+        },
+      ],
+    }),
     "feature_id,longitude,latitude\n0,0,0\n1,,\n2,,",
   );
 });

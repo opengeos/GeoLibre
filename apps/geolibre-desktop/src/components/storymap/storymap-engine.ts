@@ -1,5 +1,5 @@
 import * as maplibregl from "maplibre-gl";
-import type { StoryChapterLocation } from "@geolibre/core";
+import { storyLocationView, type StoryChapterLocation } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 
 const RENDER_STABILITY_MS = 500;
@@ -117,7 +117,9 @@ export function applyStoryViewAndWait(
     }, 100);
     viewApplied = true;
     try {
-      void Promise.resolve(engine.applyView(location)).then(() => {
+      // An absent pitch/bearing keeps the camera's current one.
+      const view = storyLocationView(location, engine.readView());
+      void Promise.resolve(engine.applyView(view)).then(() => {
         if (settled) return;
         cameraIdle = !engine.isCameraMoving();
         requestAnimationFrame(() => {

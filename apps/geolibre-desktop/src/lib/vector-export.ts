@@ -1,7 +1,7 @@
 import { encodePolyline, type GeoLibreLayer } from "@geolibre/core";
 import { geojsonToCsv } from "./vector-csv";
 export { formatAttributeValue } from "./vector-csv";
-import type { FeatureCollection } from "geojson";
+import type { FeatureCollection, Geometry } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { saveBinaryFileWithFallback, saveTextFileWithFallback } from "./tauri-io";
 import { type BinaryVectorExportFormat, exportBinaryVectorLayer } from "./vector-exporter";
@@ -124,7 +124,7 @@ function shapefileFamily(type: string): ShapefileFamily | null {
  * name, and when the layer mixes geometry types (extra families are dropped to
  * Null shapes). Empty when the layer is fully Shapefile-safe.
  */
-export function shapefileFieldWarnings(geojson: FeatureCollection): string[] {
+export function shapefileFieldWarnings(geojson: FeatureCollection<Geometry | null>): string[] {
   const names = new Set<string>();
   for (const feature of geojson.features) {
     for (const key of Object.keys(feature.properties ?? {})) {

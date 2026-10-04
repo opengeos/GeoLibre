@@ -1,4 +1,5 @@
-// Guards the desktop CSP's jsDelivr `script-src` allowlist (#2858).
+// Guards the jsDelivr `script-src` allowlist of the desktop CSP (#2858) and the
+// web build's nginx CSP (#2875).
 //
 // The Tauri CSP no longer allows all of `https://cdn.jsdelivr.net/npm/`; it
 // lists one version-pinned path per package the app actually executes from the
@@ -7,7 +8,9 @@
 // dependency bump can move the URL the app requests without touching
 // tauri.conf.json. The packaged app then fails at runtime with a CSP block that
 // no other test sees (`tauri dev` does not apply the CSP). This file re-derives
-// every pinned path from its owner and fails when they disagree.
+// every pinned path from its owner and fails when they disagree. The Docker web
+// build (docker/nginx.conf) executes the same scripts, so its app policy must
+// list exactly the same paths.
 //
 // See docs/maintenance.md#desktop-csp-script-src-allowlist.
 
@@ -23,6 +26,25 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const JSDELIVR = "https://cdn.jsdelivr.net/";
 
 /**
+ * Read one directive's source list from a CSP string.
+ *
+ * Args:
+ *   csp: The whole policy.
+ *   name: The directive name, e.g. "script-src".
+ *
+ * Returns:
+ *   The directive's sources, in order.
+ */
+function directiveOf(csp: string, name: string): string[] {
+  const directive = csp
+    .split(";")
+    .map((part) => part.trim().split(/\s+/))
+    .find(([directiveName]) => directiveName === name);
+  assert.ok(directive, `CSP has no ${name} directive`);
+  return directive.slice(1);
+}
+
+/**
  * Read one directive's source list from the desktop CSP.
  *
  * Args:
@@ -35,13 +57,77 @@ function cspDirective(name: string): string[] {
   const conf = JSON.parse(
     readFileSync(path.join(ROOT, "apps/geolibre-desktop/src-tauri/tauri.conf.json"), "utf8"),
   ) as { app: { security: { csp: string } } };
-  const directive = conf.app.security.csp
-    .split(";")
-    .map((part) => part.trim().split(/\s+/))
-    .find(([directiveName]) => directiveName === name);
-  assert.ok(directive, `CSP has no ${name} directive`);
-  return directive.slice(1);
+  return directiveOf(conf.app.security.csp, name);
 }
+
+/**
+ * Read the Content-Security-Policy each nginx `location` block of the web build
+ * sends, as the container serves it with no optional integration configured.
+ *
+ * docker/entrypoint.sh renders the template by replacing each
+ * `__GEOLIBRE_*__` placeholder with a value that carries its own leading space,
+ * or with nothing when the integration is unset, so the placeholders are
+ * dropped here the same way.
+ *
+ * Returns:
+ *   The policy keyed by the `location` line's match (e.g. "/" or
+ *   "^~ /jupyterlite/").
+ */
+function nginxPolicies(): Map<string, string> {
+  const conf = readFileSync(path.join(ROOT, "docker/nginx.conf"), "utf8");
+  const policies = new Map<string, string>();
+  let location: string | undefined;
+  for (const line of conf.split("\n")) {
+    const locationMatch = line.match(/^\s*location\s+(.+?)\s*\{/);
+    if (locationMatch) location = locationMatch[1];
+    const cspMatch = line.match(/^\s*add_header\s+Content-Security-Policy\s+"([^"]*)"/);
+    if (!cspMatch) continue;
+    assert.ok(location, "Content-Security-Policy header outside a location block");
+    assert.ok(!policies.has(location), `location ${location} sets two CSP headers`);
+    policies.set(location, cspMatch[1].replace(/__GEOLIBRE_[A-Z0-9_]+__/g, ""));
+  }
+  return policies;
+}
+
+/**
+ * Read one directive from the CSP an nginx `location` block sends.
+ *
+ * Args:
+ *   location: The `location` match, e.g. "/".
+ *   name: The directive name, e.g. "script-src".
+ *
+ * Returns:
+ *   The directive's sources, in order.
+ */
+function nginxDirective(location: string, name: string): string[] {
+  const policy = nginxPolicies().get(location);
+  assert.ok(policy, `docker/nginx.conf location ${location} sends no CSP`);
+  return directiveOf(policy, name);
+}
+
+/**
+ * Keep only the jsDelivr sources of a directive, sorted.
+ *
+ * Args:
+ *   sources: A directive's source list.
+ *
+ * Returns:
+ *   The sources under https://cdn.jsdelivr.net/, sorted.
+ */
+function jsdelivrSources(sources: string[]): string[] {
+  return sources.filter((source) => source.startsWith(JSDELIVR)).sort();
+}
+
+// Sources that would let a page run any script on jsDelivr.
+const BROAD_JSDELIVR_SOURCES = [
+  "https://cdn.jsdelivr.net",
+  "https://cdn.jsdelivr.net/",
+  "https://cdn.jsdelivr.net/npm/",
+  "https://cdn.jsdelivr.net/pyodide/",
+  "https://cdn.jsdelivr.net/gh/",
+  "https:",
+  "*",
+];
 
 /**
  * Resolve the installed version of a package as seen from a workspace.
@@ -152,22 +238,13 @@ describe("desktop CSP script-src (tauri.conf.json)", () => {
   const scriptSrc = cspDirective("script-src");
 
   it("does not allow whole jsDelivr trees", () => {
-    for (const broad of [
-      "https://cdn.jsdelivr.net",
-      "https://cdn.jsdelivr.net/",
-      "https://cdn.jsdelivr.net/npm/",
-      "https://cdn.jsdelivr.net/pyodide/",
-      "https://cdn.jsdelivr.net/gh/",
-      "https:",
-      "*",
-    ]) {
+    for (const broad of BROAD_JSDELIVR_SOURCES) {
       assert.ok(!scriptSrc.includes(broad), `script-src must not list ${broad}`);
     }
   });
 
   it("pins every jsDelivr script path to the version the app requests", () => {
-    const listed = scriptSrc.filter((source) => source.startsWith(JSDELIVR)).sort();
-    assert.deepEqual(listed, expectedJsdelivrSources());
+    assert.deepEqual(jsdelivrSources(scriptSrc), expectedJsdelivrSources());
   });
 
   it("ends every pinned jsDelivr path with a slash so it matches as a prefix", () => {
@@ -188,6 +265,43 @@ describe("desktop CSP script-src (tauri.conf.json)", () => {
     // 'unsafe-eval' the packaged app renders a blank window. Field and raster
     // calculators, the AI Assistant's JS tool, Earth Engine scripts and
     // Emscripten embind glue (LiDAR, splats) also compile strings at runtime.
+    assert.ok(scriptSrc.includes("'unsafe-eval'"));
+    assert.ok(scriptSrc.includes("'wasm-unsafe-eval'"));
+  });
+});
+
+describe("web build CSP script-src (docker/nginx.conf)", () => {
+  it("sends a CSP from the app and JupyterLite locations", () => {
+    const locations = [...nginxPolicies().keys()];
+    assert.ok(locations.includes("/"), "the app location sends no CSP");
+    assert.ok(locations.includes("^~ /jupyterlite/"), "the JupyterLite location sends no CSP");
+  });
+
+  it("does not allow whole jsDelivr trees for the app", () => {
+    const scriptSrc = nginxDirective("/", "script-src");
+    for (const broad of BROAD_JSDELIVR_SOURCES) {
+      assert.ok(!scriptSrc.includes(broad), `script-src must not list ${broad}`);
+    }
+  });
+
+  it("pins the same jsDelivr script paths as the desktop CSP", () => {
+    // The web build runs the same bundle and loads the same CDN scripts, so the
+    // pinned set must match exactly.
+    const listed = jsdelivrSources(nginxDirective("/", "script-src"));
+    assert.deepEqual(listed, expectedJsdelivrSources());
+    assert.deepEqual(listed, jsdelivrSources(cspDirective("script-src")));
+  });
+
+  it("allows only Pyodide from jsDelivr for the JupyterLite site", () => {
+    // jupyterlite-pyodide-kernel loads pyodide/v<ver>/full/pyodide.js, with the
+    // version set by whichever kernel release pip resolves at image build time,
+    // so this one stays unpinned; nothing in the site loads from /npm/.
+    const scriptSrc = nginxDirective("^~ /jupyterlite/", "script-src");
+    assert.deepEqual(jsdelivrSources(scriptSrc), [`${JSDELIVR}pyodide/`]);
+  });
+
+  it("keeps 'unsafe-eval' and 'wasm-unsafe-eval' for the app", () => {
+    const scriptSrc = nginxDirective("/", "script-src");
     assert.ok(scriptSrc.includes("'unsafe-eval'"));
     assert.ok(scriptSrc.includes("'wasm-unsafe-eval'"));
   });

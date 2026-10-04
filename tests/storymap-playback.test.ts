@@ -8,6 +8,7 @@ import {
   parseProject,
   serializeProject,
   storyLayerOpacityFactor,
+  storyLocationView,
   storyVisibleLayers,
   useAppStore,
   type GeoLibreLayer,
@@ -119,5 +120,30 @@ describe("store storymapLayerOpacity", () => {
     store.setStorymapLayerOpacity({ a: 0 });
     useAppStore.getState().loadProject(parseProject(serializeProject(createEmptyProject("Plain"))));
     assert.deepEqual(useAppStore.getState().ui.storymapLayerOpacity, {});
+  });
+});
+
+describe("storyLocationView", () => {
+  const current = { pitch: 45, bearing: 30 };
+
+  it("keeps the chapter's own pitch and bearing", () => {
+    assert.deepEqual(
+      storyLocationView({ center: [1, 2], zoom: 3, pitch: 0, bearing: 0 }, current),
+      {
+        center: [1, 2],
+        zoom: 3,
+        pitch: 0,
+        bearing: 0,
+      },
+    );
+  });
+
+  it("fills an absent pitch or bearing from the current camera", () => {
+    assert.deepEqual(storyLocationView({ center: [1, 2], zoom: 3, bearing: 90 }, current), {
+      center: [1, 2],
+      zoom: 3,
+      pitch: 45,
+      bearing: 90,
+    });
   });
 });

@@ -855,7 +855,8 @@ function ChapterCard({
   onPreview,
   onCompose,
 }: ChapterCardProps) {
-  const { center, zoom, pitch, bearing } = chapter.location;
+  // A chapter without a pitch/bearing keeps the camera's; show those as 0.
+  const { center, zoom, pitch = 0, bearing = 0 } = chapter.location;
   return (
     <div className="rounded-md border">
       <div className="flex items-center gap-1 px-2 py-1.5">
