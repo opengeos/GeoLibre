@@ -27,11 +27,19 @@ const CHUNK_URL_MODULE = /\/src\/lib\/h5wasm-chunk-url\.ts$/;
  * @returns The Vite plugin.
  */
 export function sharedH5wasmChunkPlugin(): Plugin {
+  // Whether load() replaced src/lib/h5wasm-chunk-url.ts this build. If the file
+  // moves and CHUNK_URL_MODULE stops matching, the main thread still gets its
+  // one h5wasm chunk but the worker is sent a null URL and throws at runtime.
+  let urlModuleReplaced = false;
   return {
     name: "geolibre-shared-h5wasm-chunk",
     apply: "build",
+    buildStart() {
+      urlModuleReplaced = false;
+    },
     load(id) {
       if (!CHUNK_URL_MODULE.test(id)) return null;
+      urlModuleReplaced = true;
       const ref = this.emitFile({
         type: "chunk",
         id: "h5wasm",
@@ -48,6 +56,13 @@ export function sharedH5wasmChunkPlugin(): Plugin {
     // that stops the emitted chunk coalescing with the lazy import) is visible
     // here. Fail rather than ship 4.8 MB twice again.
     generateBundle(_, bundle) {
+      if (!urlModuleReplaced) {
+        this.error(
+          "src/lib/h5wasm-chunk-url.ts was not replaced with the h5wasm chunk URL, so " +
+            "the remote NetCDF worker could not load h5wasm. Update CHUNK_URL_MODULE " +
+            "in vite-plugins/shared-h5wasm.ts if the file moved.",
+        );
+      }
       const copies = Object.keys(bundle).filter((fileName) =>
         /(?:^|\/)hdf5_hl-[^/]*\.js$/.test(fileName),
       );
