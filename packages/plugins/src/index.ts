@@ -220,6 +220,7 @@ export {
   buildInlineZarrStore,
   composeColormappedImage,
   composeRgbImage,
+  crossesAntimeridian,
   gridBounds,
   gridPixelAt,
   gridValueAt,
@@ -236,9 +237,11 @@ export {
   type LocalNetcdfImage,
   type LocalNetcdfVariable,
   type LocalNetcdfLayerRefs,
+  type LocalNetcdfLayerRefsOptions,
   type LocalNetcdfRgbImage,
   type LocalNetcdfRgbOptions,
   type LocalNetcdfWindow,
+  type InlineZarrAxis,
   type InlineZarrGrid,
 } from "./plugins/local-netcdf";
 export {

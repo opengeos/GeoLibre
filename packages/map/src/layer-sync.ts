@@ -2875,23 +2875,35 @@ function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId
 
 type CornerCoordinates = [[number, number], [number, number], [number, number], [number, number]];
 
-/** Validate persisted overlay corners (video/image): four in-range [lng, lat] pairs. */
-function isCornerCoordinates(value: unknown): value is CornerCoordinates {
-  return (
-    Array.isArray(value) &&
-    value.length === 4 &&
-    value.every(
+/**
+ * Validate persisted overlay corners (video/image): four [lng, lat] pairs.
+ *
+ * A corner may lie up to one world past ±180, so a quad can cross the
+ * antimeridian (a NetCDF grid on 150E..250E is stored as 210W..110W). Its
+ * centre must stay within -180..180, though: MapLibre files an image source
+ * under the tile holding that centre and throws for a tile outside the world.
+ */
+export function isCornerCoordinates(value: unknown): value is CornerCoordinates {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 4 ||
+    !value.every(
       (corner) =>
         Array.isArray(corner) &&
         corner.length === 2 &&
         Number.isFinite(corner[0]) &&
         Number.isFinite(corner[1]) &&
-        corner[0] >= -180 &&
-        corner[0] <= 180 &&
+        corner[0] >= -360 &&
+        corner[0] <= 360 &&
         corner[1] >= -90 &&
         corner[1] <= 90,
     )
-  );
+  ) {
+    return false;
+  }
+  const lngs = (value as CornerCoordinates).map((corner) => corner[0]);
+  const centre = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+  return centre >= -180 && centre <= 180 && Math.max(...lngs) - Math.min(...lngs) <= 360;
 }
 
 /**

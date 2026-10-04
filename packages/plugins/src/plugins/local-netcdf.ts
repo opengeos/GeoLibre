@@ -137,6 +137,27 @@ export interface LocalNetcdfAxis {
   units?: string;
   /** The coordinate variable's CF `long_name`. */
   longName?: string;
+  /** The coordinate variable's CF `calendar`, for a time axis. */
+  calendar?: string;
+}
+
+/**
+ * The largest cube {@link LocalNetcdfFile.buildLayerRefs} inlines whole to keep
+ * an axis selectable, in raw bytes. Every step is held in memory twice over (the
+ * planes, then their base64 chunks), so a bigger cube keeps only the selected
+ * slice instead.
+ */
+export const MAX_INLINE_CUBE_BYTES = 64 * 1024 * 1024;
+
+/** Options for {@link LocalNetcdfFile.buildLayerRefs}. */
+export interface LocalNetcdfLayerRefsOptions {
+  /**
+   * A leading dimension to keep in the store rather than fix from the selector
+   * — a time axis, so the Time Slider can step it. Ignored when the variable
+   * has no such dimension, or the whole cube would exceed
+   * {@link MAX_INLINE_CUBE_BYTES}.
+   */
+  keepAxis?: string;
 }
 
 /** Result of building a Zarr store from a local variable slice. */
@@ -154,6 +175,13 @@ export interface LocalNetcdfLayerRefs {
    * reflectance grid as a uniform blank.
    */
   clim: [number, number] | null;
+  /**
+   * The selector to hand the renderer with these refs: the kept axis at the
+   * requested step, or empty for a plain 2-D store. Always pass it — even
+   * empty — because the Zarr control otherwise falls back to its own default
+   * selector, which names dimensions this store does not have.
+   */
+  selector: Record<string, number>;
 }
 
 /** How to compose three slices of one variable into an RGB image. */
@@ -274,8 +302,16 @@ export interface LocalNetcdfFile {
    * values where the file provides them. Empty for a plain 2-D grid.
    */
   listAxes(variable: string): LocalNetcdfAxis[];
-  /** Build a self-contained Zarr v2 store for one 2-D slice of a variable. */
-  buildLayerRefs(variable: string, selector?: Record<string, number>): LocalNetcdfLayerRefs;
+  /**
+   * Build a self-contained Zarr v2 store for one 2-D slice of a variable — or,
+   * with `options.keepAxis`, for the whole stack along that axis, so the axis
+   * stays selectable after the layer is added.
+   */
+  buildLayerRefs(
+    variable: string,
+    selector?: Record<string, number>,
+    options?: LocalNetcdfLayerRefsOptions,
+  ): LocalNetcdfLayerRefs;
   /** Compose three slices of one variable into a georeferenced RGB image. */
   buildRgbImage(variable: string, options: LocalNetcdfRgbOptions): LocalNetcdfRgbImage;
   /**
@@ -521,45 +557,31 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     return { name, size, ...(this.findAxisCoordinate(name, size, variable) ?? {}) };
   }
 
-  buildLayerRefs(variable: string, selector: Record<string, number> = {}): LocalNetcdfLayerRefs {
+  buildLayerRefs(
+    variable: string,
+    selector: Record<string, number> = {},
+    options: LocalNetcdfLayerRefsOptions = {},
+  ): LocalNetcdfLayerRefs {
     const { ds, shape, dims } = this.openVariable(variable);
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
-
-    const sliceData = this.readPlane(
-      ds,
+    const whole = resolveWindow(undefined, ny, nx);
+    const { lat, lon } = this.readCoordinates(ny, nx, variable);
+    return assembleLayerRefs({
+      variable,
       shape,
       dims,
       selector,
-      variable,
-      resolveWindow(undefined, ny, nx),
-    );
-    const fillValue = h5FillValue(ds);
-    const { lat, lon } = this.readCoordinates(ny, nx, variable);
-    const { refs, bounds } = buildInlineZarrStore({
-      variable,
-      ny,
-      nx,
-      data: sliceData,
+      keepAxis: options.keepAxis,
       dtype: h5ZarrDtype(ds.metadata),
-      lat: lat.data,
-      latDtype: lat.dtype,
-      lon: lon.data,
-      lonDtype: lon.dtype,
-      fillValue,
+      readPlane: (planeSelector) => this.readPlane(ds, shape, dims, planeSelector, variable, whole),
+      describeAxis: (name, size) => this.describeAxis(name, size, variable),
+      lat,
+      lon,
+      fillValue: h5FillValue(ds),
       scaleFactor: h5NumericAttr(ds, "scale_factor"),
       addOffset: h5NumericAttr(ds, "add_offset"),
     });
-    return {
-      refs,
-      variable,
-      bounds,
-      clim: percentileClim(sliceData, {
-        fillValue,
-        scale: h5NumericAttr(ds, "scale_factor"),
-        offset: h5NumericAttr(ds, "add_offset"),
-      }),
-    };
   }
 
   buildRgbImage(variable: string, options: LocalNetcdfRgbOptions): LocalNetcdfRgbImage {
@@ -766,7 +788,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
     name: string,
     size: number,
     variablePath: string,
-  ): Pick<LocalNetcdfAxis, "values" | "units" | "longName"> | null {
+  ): Pick<LocalNetcdfAxis, "values" | "units" | "longName" | "calendar"> | null {
     const slash = variablePath.lastIndexOf("/");
     const group = slash >= 0 ? variablePath.slice(0, slash) : "";
     for (const path of group ? [`${group}/${name}`, name] : [name]) {
@@ -787,6 +809,7 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
         values: Array.from(scaled, Number),
         ...optionalText("units", h5StringAttr(entity, "units")),
         ...optionalText("longName", h5StringAttr(entity, "long_name")),
+        ...optionalText("calendar", h5StringAttr(entity, "calendar")),
       };
     }
     return null;
@@ -938,50 +961,36 @@ class Netcdf3File implements LocalNetcdfFile {
     return { name, size, ...(this.findAxisCoordinate(name, size) ?? {}) };
   }
 
-  buildLayerRefs(variable: string, selector: Record<string, number> = {}): LocalNetcdfLayerRefs {
+  buildLayerRefs(
+    variable: string,
+    selector: Record<string, number> = {},
+    options: LocalNetcdfLayerRefsOptions = {},
+  ): LocalNetcdfLayerRefs {
     const { v, shape, dims, info } = this.openVariable(variable);
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
-
-    const sliceData = this.readPlane(
-      v,
-      shape,
-      dims,
-      info,
-      selector,
-      resolveWindow(undefined, ny, nx),
-    );
-    const fillValue = normalizeFillValue(
-      nc3NumericAttr(v, "_FillValue", true) ?? nc3NumericAttr(v, "missing_value", true),
-    );
+    const whole = resolveWindow(undefined, ny, nx);
     const lat = this.readCoordinate(LAT_NAMES, ny, LAT_RANGE);
     const lon = this.readCoordinate(LON_NAMES, nx, LON_RANGE);
     if (!lat || !lon) throw new Error(NO_COORDINATES_MESSAGE);
 
-    const { refs, bounds } = buildInlineZarrStore({
+    return assembleLayerRefs({
       variable,
-      ny,
-      nx,
-      data: sliceData,
+      shape,
+      dims,
+      selector,
+      keepAxis: options.keepAxis,
       dtype: info.dtype,
-      lat: lat.data,
-      latDtype: lat.dtype,
-      lon: lon.data,
-      lonDtype: lon.dtype,
-      fillValue,
+      readPlane: (planeSelector) => this.readPlane(v, shape, dims, info, planeSelector, whole),
+      describeAxis: (name, size) => this.describeAxis(name, size),
+      lat,
+      lon,
+      fillValue: normalizeFillValue(
+        nc3NumericAttr(v, "_FillValue", true) ?? nc3NumericAttr(v, "missing_value", true),
+      ),
       scaleFactor: nc3NumericAttr(v, "scale_factor"),
       addOffset: nc3NumericAttr(v, "add_offset"),
     });
-    return {
-      refs,
-      variable,
-      bounds,
-      clim: percentileClim(sliceData, {
-        fillValue,
-        scale: nc3NumericAttr(v, "scale_factor"),
-        offset: nc3NumericAttr(v, "add_offset"),
-      }),
-    };
   }
 
   buildRgbImage(variable: string, options: LocalNetcdfRgbOptions): LocalNetcdfRgbImage {
@@ -1149,7 +1158,7 @@ class Netcdf3File implements LocalNetcdfFile {
   private findAxisCoordinate(
     name: string,
     size: number,
-  ): Pick<LocalNetcdfAxis, "values" | "units" | "longName"> | null {
+  ): Pick<LocalNetcdfAxis, "values" | "units" | "longName" | "calendar"> | null {
     const v = this.variables().find((x) => x.name === name);
     if (!v) return null;
     const shape = this.shape(v);
@@ -1165,6 +1174,7 @@ class Netcdf3File implements LocalNetcdfFile {
       values: Array.from(scaled, Number),
       ...optionalText("units", nc3StringAttr(v, "units")),
       ...optionalText("longName", nc3StringAttr(v, "long_name")),
+      ...optionalText("calendar", nc3StringAttr(v, "calendar")),
     };
   }
 
@@ -1391,7 +1401,115 @@ function normalizeFillValue(value: number | undefined): number | string | null {
 
 // --- Zarr v2 emission ---------------------------------------------------------
 
-/** A single georeferenced 2-D grid ready to inline as a Zarr v2 store. */
+/** What {@link assembleLayerRefs} needs from either file backend. */
+interface LayerRefsSource {
+  variable: string;
+  shape: number[];
+  dims: string[];
+  selector: Record<string, number>;
+  keepAxis?: string;
+  /** Zarr v2 dtype of the variable (e.g. `<f4`). */
+  dtype: string;
+  /** Read one whole 2-D plane, every leading dimension fixed by the selector. */
+  readPlane: (selector: Record<string, number>) => TypedArrayLike;
+  describeAxis: (name: string, size: number) => LocalNetcdfAxis;
+  lat: Coordinate;
+  lon: Coordinate;
+  fillValue: number | string | null;
+  scaleFactor?: number;
+  addOffset?: number;
+}
+
+/**
+ * The backend-independent half of `buildLayerRefs`: read the plane (or, with a
+ * kept axis that fits {@link MAX_INLINE_CUBE_BYTES}, every plane along it) and
+ * wrap it in an inline Zarr store.
+ *
+ * A kept axis is what lets a `(time, lat, lon)` variable stay a cube: the store
+ * then declares `time` as a dimension with its CF coordinate, so the renderer
+ * accepts a `time` selector and the Time Slider can step it. A 2-D store has no
+ * selectable dimensions at all.
+ *
+ * @param source The variable's shape, readers, coordinates, and packing.
+ * @returns The refs, extent, color limits, and the selector to render them with.
+ */
+function assembleLayerRefs(source: LayerRefsSource): LocalNetcdfLayerRefs {
+  const { shape, dims, selector } = source;
+  const ny = shape[shape.length - 2];
+  const nx = shape[shape.length - 1];
+  const position =
+    source.keepAxis === undefined
+      ? -1
+      : dims.slice(0, Math.max(0, shape.length - 2)).indexOf(source.keepAxis);
+  const steps = position >= 0 ? shape[position] : 1;
+  const bytesPerValue = Number(source.dtype.slice(2)) || 8;
+  const keep = position >= 0 && steps * ny * nx * bytesPerValue <= MAX_INLINE_CUBE_BYTES;
+
+  let data: TypedArrayLike;
+  let shown: TypedArrayLike;
+  let leadingAxis: InlineZarrAxis | undefined;
+  let rendererSelector: Record<string, number> = {};
+  if (keep) {
+    const axisName = dims[position];
+    const step = clampIndex(selector[axisName] ?? 0, steps);
+    const planeSize = ny * nx;
+    let stack: TypedArrayLike | null = null;
+    for (let index = 0; index < steps; index++) {
+      const plane = source.readPlane({ ...selector, [axisName]: index });
+      stack ??= makeLike(plane, steps * planeSize);
+      stack.set(plane.subarray(0, planeSize), index * planeSize);
+    }
+    data = stack as TypedArrayLike;
+    shown = data.subarray(step * planeSize, (step + 1) * planeSize);
+    const axis = source.describeAxis(axisName, steps);
+    const attrs: Record<string, unknown> = {};
+    if (axis.units) attrs.units = axis.units;
+    if (axis.calendar) attrs.calendar = axis.calendar;
+    if (axis.longName) attrs.long_name = axis.longName;
+    leadingAxis = {
+      name: axisName,
+      // An axis with no coordinate variable is still selectable by index.
+      values: axis.values ?? Array.from({ length: steps }, (_, index) => index),
+      attrs,
+    };
+    rendererSelector = { [axisName]: step };
+  } else {
+    data = source.readPlane(selector);
+    shown = data;
+  }
+
+  const { refs, bounds } = buildInlineZarrStore({
+    variable: source.variable,
+    ny,
+    nx,
+    data,
+    dtype: source.dtype,
+    lat: source.lat.data,
+    latDtype: source.lat.dtype,
+    lon: source.lon.data,
+    lonDtype: source.lon.dtype,
+    fillValue: source.fillValue,
+    scaleFactor: source.scaleFactor,
+    addOffset: source.addOffset,
+    ...(leadingAxis ? { leadingAxis } : {}),
+  });
+  return {
+    refs,
+    variable: source.variable,
+    bounds,
+    clim: percentileClim(shown, {
+      fillValue: source.fillValue,
+      scale: source.scaleFactor,
+      offset: source.addOffset,
+    }),
+    selector: rendererSelector,
+  };
+}
+
+/**
+ * A georeferenced 2-D grid (or a stack of them along one leading axis) ready to
+ * inline as a Zarr v2 store.
+ */
 export interface InlineZarrGrid {
   /** Variable (array) name to render. */
   variable: string;
@@ -1417,6 +1535,26 @@ export interface InlineZarrGrid {
   scaleFactor?: number;
   /** Optional `add_offset` attribute (applied by the renderer). */
   addOffset?: number;
+  /**
+   * A leading axis to keep selectable (a time axis, say). `data` then holds
+   * `values.length` stacked `ny * nx` planes, written one chunk per step so the
+   * renderer reads only the step it shows.
+   */
+  leadingAxis?: InlineZarrAxis;
+}
+
+/** A leading (non-spatial) axis carried into an inline Zarr store. */
+export interface InlineZarrAxis {
+  /** Dimension name, also the coordinate array's key (e.g. `time`). */
+  name: string;
+  /** Coordinate values, one per step. */
+  values: ArrayLike<number>;
+  /**
+   * Attributes for the coordinate array. A time axis needs its CF `units` (and
+   * `calendar`) here: they are what the Time Slider decodes the raw numbers
+   * with.
+   */
+  attrs?: Record<string, unknown>;
 }
 
 /**
@@ -1458,6 +1596,14 @@ export function buildInlineZarrStore(grid: InlineZarrGrid): {
   if (grid.variable === "lat" || grid.variable === "lon") {
     throw new Error(`Variable name "${grid.variable}" collides with a coordinate array.`);
   }
+  const axis = grid.leadingAxis;
+  if (axis && (axis.name === "lat" || axis.name === "lon" || axis.name === grid.variable)) {
+    throw new Error(`Axis name "${axis.name}" collides with another array.`);
+  }
+  const steps = axis ? axis.values.length : 1;
+  if (grid.data.length < steps * grid.ny * grid.nx) {
+    throw new Error("The grid data is smaller than its shape.");
+  }
   const refs: KerchunkRefs = { ".zgroup": '{"zarr_format":2}' };
 
   // The map spans -180..180. Data on a 0..360 longitude grid would otherwise
@@ -1467,17 +1613,28 @@ export function buildInlineZarrStore(grid: InlineZarrGrid): {
   const lon = rolled?.lon ?? grid.lon;
   const lonDtype = rolled ? "<f8" : grid.lonDtype;
 
-  const attrs: Record<string, unknown> = { _ARRAY_DIMENSIONS: ["lat", "lon"] };
+  const attrs: Record<string, unknown> = {
+    _ARRAY_DIMENSIONS: axis ? [axis.name, "lat", "lon"] : ["lat", "lon"],
+  };
   if (grid.scaleFactor !== undefined) attrs.scale_factor = grid.scaleFactor;
   if (grid.addOffset !== undefined) attrs.add_offset = grid.addOffset;
 
   writeZarrArray(refs, grid.variable, {
-    shape: [grid.ny, grid.nx],
+    shape: axis ? [steps, grid.ny, grid.nx] : [grid.ny, grid.nx],
+    ...(axis ? { chunks: [1, grid.ny, grid.nx] } : {}),
     dtype: grid.dtype,
     data: typedArrayBytes(data),
     fillValue: grid.fillValue ?? null,
     attrs,
   });
+  if (axis) {
+    writeZarrArray(refs, axis.name, {
+      shape: [steps],
+      dtype: "<f8",
+      data: typedArrayBytes(Float64Array.from(axis.values, Number)),
+      attrs: { ...axis.attrs, _ARRAY_DIMENSIONS: [axis.name] },
+    });
+  }
   writeZarrArray(refs, "lat", {
     shape: [grid.ny],
     dtype: grid.latDtype,
@@ -1500,9 +1657,16 @@ export function buildInlineZarrStore(grid: InlineZarrGrid): {
  * first and last entry — without that a single-row grid would have zero height
  * and `fitBounds` would refuse it.
  *
+ * The one exception to clamping is a grid whose centres themselves run past
+ * ±180 without closing the circle: a regional grid across the antimeridian,
+ * kept contiguous by {@link planLongitudeAxis}. Its outer edge stays past ±180
+ * (MapLibre image sources and `fitBounds` both read that as "continue on into
+ * the next world"), because clamping it would squeeze the grid into one half.
+ *
  * @param lat Latitude cell centres.
  * @param lon Longitude cell centres.
- * @returns `[west, south, east, north]`, clamped to valid WGS84 ranges.
+ * @returns `[west, south, east, north]`, clamped to valid WGS84 ranges except
+ *   for an antimeridian-crossing grid's longitudes.
  */
 export function gridBounds(
   lat: ArrayLike<number>,
@@ -1510,7 +1674,33 @@ export function gridBounds(
 ): [number, number, number, number] {
   const [south, north] = centresToEdges(lat);
   const [west, east] = centresToEdges(lon);
-  return [Math.max(-180, west), Math.max(-90, south), Math.min(180, east), Math.min(90, north)];
+  const southNorth = [Math.max(-90, south), Math.min(90, north)] as const;
+  let minCentre = Infinity;
+  let maxCentre = -Infinity;
+  for (let i = 0; i < lon.length; i++) {
+    const v = Number(lon[i]);
+    if (!Number.isFinite(v)) continue;
+    if (v < minCentre) minCentre = v;
+    if (v > maxCentre) maxCentre = v;
+  }
+  if ((maxCentre > 180 || minCentre < -180) && east - west < 360) {
+    return [west, southNorth[0], east, southNorth[1]];
+  }
+  return [Math.max(-180, west), southNorth[0], Math.min(180, east), southNorth[1]];
+}
+
+/**
+ * Whether an extent runs past the antimeridian, either edge beyond ±180.
+ *
+ * The Zarr renderer cannot draw such a grid — it wraps the far edge back to the
+ * other side of the map and stretches the data across the whole world — so
+ * callers send these to the image path instead.
+ *
+ * @param bounds `[west, south, east, north]`, as {@link gridBounds} reports it.
+ * @returns True when the west edge lies past -180 or the east edge past 180.
+ */
+export function crossesAntimeridian(bounds: readonly [number, number, number, number]): boolean {
+  return bounds[0] < -180 || bounds[2] > 180;
 }
 
 /** Min/max of cell centres, expanded by half the mean cell size. */
@@ -1531,74 +1721,153 @@ function centresToEdges(values: ArrayLike<number>): [number, number] {
 }
 
 /**
- * Roll a grid whose longitude runs 0..360 into a -180..180 layout, reordering
- * both the longitude coordinate and the data columns. Returns null (no change)
- * for grids already on a -180..180 (or non-monotonic) longitude axis.
+ * Move a grid whose longitude runs 0..360 (or crosses the antimeridian) onto
+ * the map's -180..180 layout — see {@link planLongitudeAxis} — rotating the
+ * data columns of every plane when the plan calls for it. Returns null (no
+ * change) for grids already drawable as they are.
  *
- * @param grid The grid to inspect.
- * @returns The rolled data and longitude, or null if no roll is needed.
+ * @param grid The grid to inspect; `data` may hold several stacked planes.
+ * @returns The (possibly rotated) data and new longitude, or null if no change
+ *   is needed.
  */
 function rollLongitude(grid: InlineZarrGrid): { data: TypedArrayLike; lon: Float64Array } | null {
-  const { nx, ny } = grid;
-  const split = longitudeRollSplit(grid.lon, nx);
-  if (split === null) return null;
+  const { nx } = grid;
+  const plan = planLongitudeAxis(grid.lon, nx);
+  if (plan === null) return null;
+  // A shift renames the columns without moving them.
+  if (plan.split === 0) return { data: grid.data, lon: plan.lon };
 
-  const newLon = rollLongitudeValues(grid.lon, split);
+  const { split } = plan;
   const src = grid.data;
   const dst = emptyLike(src);
-  for (let r = 0; r < ny; r++) {
+  // Every row of every plane rotates the same way.
+  const rows = Math.floor(src.length / nx);
+  for (let r = 0; r < rows; r++) {
     const row = r * nx;
     for (let j = 0; j < nx - split; j++) dst[row + j] = src[row + split + j];
     for (let j = 0; j < split; j++) dst[row + nx - split + j] = src[row + j];
   }
-  return { data: dst, lon: newLon };
+  return { data: dst, lon: plan.lon };
 }
 
 /**
- * The column a 0..360 longitude axis has to be rotated about to become
- * -180..180, or null when the axis needs no roll.
+ * How a longitude axis has to change before a grid can be drawn as one
+ * contiguous, evenly spaced quad on a -180..180 map.
  *
- * Shared by the Zarr and RGB paths so a global grid lands in the same place
- * whichever one draws it.
+ * `split` is the column the data rotates about (0 for none) and `lon` the new
+ * cell centres, in the rotated column order.
+ */
+interface LongitudePlan {
+  split: number;
+  lon: Float64Array;
+}
+
+/**
+ * Plan the longitude fix-up for a grid, or null when it draws as it is.
+ *
+ * Shared by the Zarr and image paths so a grid lands in the same place
+ * whichever one draws it. Four layouts are recognised, all on a strictly
+ * increasing axis apart from the last:
+ *
+ * - **0..360, wholly east of 180** (NCEP's 200E..330E): shifted by -360, no
+ *   reordering. Before this, the west edge read 198.75 against an east edge
+ *   clamped to 180, and the layer drew nothing at all.
+ * - **0..360, global**: rotated about 180 so it runs -180..180.
+ * - **0..360, regional across 180** (150E..250E): kept contiguous. Rotating it
+ *   would butt its two halves against opposite edges of the map with the gap
+ *   between them painted over, so the quad keeps one run of longitudes that
+ *   passes ±180 (see {@link centredOnMap} for which side).
+ * - **-180..180, across the antimeridian** (170..180, -180..-170): the columns
+ *   after the jump get +360 so the axis is contiguous again, as above.
+ *
+ * Anything else (a non-finite entry, a decreasing axis, an inclusive 0..360
+ * axis whose 0/360 seam column would need de-duplicating) is left untouched.
  *
  * @param lon The longitude cell centres.
  * @param nx Their count.
- * @returns The index of the first entry at or past 180, or null.
+ * @returns The plan, or null when the axis needs no change.
  */
-function longitudeRollSplit(lon: ArrayLike<number>, nx: number): number | null {
+function planLongitudeAxis(lon: ArrayLike<number>, nx: number): LongitudePlan | null {
+  if (nx < 2) return null;
   let min = Infinity;
   let max = -Infinity;
-  let ascending = true;
+  let drops = 0;
+  let dropAt = -1;
   for (let i = 0; i < nx; i++) {
     const v = Number(lon[i]);
-    // A non-finite entry disables rolling (leaving the array untouched) rather
-    // than silently mis-splitting: NaN comparisons are always false.
-    if (!Number.isFinite(v)) {
-      ascending = false;
-      continue;
-    }
+    // A non-finite entry disables any change (leaving the array untouched)
+    // rather than silently mis-splitting: NaN comparisons are always false.
+    if (!Number.isFinite(v)) return null;
     if (v < min) min = v;
     if (v > max) max = v;
-    if (i > 0 && v <= Number(lon[i - 1])) ascending = false;
+    if (i > 0 && v <= Number(lon[i - 1])) {
+      drops++;
+      dropAt = i;
+    }
   }
-  // Only the clean, common case: strictly-increasing longitudes in [0, 360)
-  // that cross the 180 meridian. Grids that reach exactly 360 (an inclusive
-  // 0..360 axis, sometimes with a duplicated 0/360 seam column) are left
-  // un-rolled: rolling them correctly needs seam handling that is out of scope
-  // here, and they render at their native longitudes rather than incorrectly.
-  if (!ascending || min < 0 || max <= 180 || max >= 360) return null;
-  let split = 0;
-  while (split < nx && Number(lon[split]) < 180) split++;
-  return split === 0 || split >= nx ? null : split;
+
+  if (drops === 0) {
+    // Wholly east of 180 on a 0..360 axis: one shift, no reordering.
+    if (min >= 180 && max <= 360) {
+      return { split: 0, lon: Float64Array.from({ length: nx }, (_, i) => Number(lon[i]) - 360) };
+    }
+    // Grids that reach exactly 360 (an inclusive 0..360 axis, sometimes with a
+    // duplicated 0/360 seam column) are left alone: placing them correctly
+    // needs seam handling that is out of scope here.
+    if (min < 0 || max <= 180 || max >= 360) return null;
+    const step = (max - min) / (nx - 1);
+    // Global: the axis plus one cell closes the circle. Half a cell of slack
+    // absorbs float32 coordinate noise.
+    if (max - min + step >= 360 - step / 2) {
+      let split = 0;
+      while (split < nx && Number(lon[split]) < 180) split++;
+      if (split === 0 || split >= nx) return null;
+      const rolled = new Float64Array(nx);
+      for (let j = 0; j < nx - split; j++) rolled[j] = Number(lon[split + j]) - 360;
+      for (let j = 0; j < split; j++) rolled[nx - split + j] = Number(lon[j]);
+      return { split, lon: rolled };
+    }
+    // Regional across 180: already contiguous, so only its world copy can
+    // need changing.
+    return centredOnMap(Float64Array.from({ length: nx }, (_, i) => Number(lon[i])));
+  }
+
+  // A -180..180 axis that crosses the antimeridian increases, jumps back by
+  // nearly 360 once, and increases again without reaching where it started.
+  if (
+    drops === 1 &&
+    min >= -180 &&
+    max <= 180 &&
+    Number(lon[dropAt - 1]) - Number(lon[dropAt]) > 180 &&
+    Number(lon[nx - 1]) < Number(lon[0])
+  ) {
+    return centredOnMap(
+      Float64Array.from({ length: nx }, (_, i) => Number(lon[i]) + (i >= dropAt ? 360 : 0)),
+    );
+  }
+  return null;
 }
 
-/** Rotate a longitude axis about `split`, wrapping the tail to negative degrees. */
-function rollLongitudeValues(lon: ArrayLike<number>, split: number): Float64Array {
-  const nx = lon.length;
-  const rolled = new Float64Array(nx);
-  for (let j = 0; j < nx - split; j++) rolled[j] = Number(lon[split + j]) - 360;
-  for (let j = 0; j < split; j++) rolled[nx - split + j] = Number(lon[j]);
-  return rolled;
+/**
+ * Express a contiguous antimeridian-crossing axis in the world copy whose
+ * centre lies within -180..180, as a plan that moves no columns.
+ *
+ * MapLibre accepts image-source corners past ±180, but it files the source
+ * under the tile holding the quad's centre, and a centre past 180 lands on a
+ * tile outside the world ("x=2, y=0, z=1 outside of bounds") — the layer is then
+ * silently never drawn. 150E..250E therefore becomes 210W..110W, whose centre
+ * (160W) is on the map, and the quad's west edge runs past -180 instead.
+ *
+ * @param lon The contiguous longitude centres, possibly past 180; shifted in
+ *   place when their centre is.
+ * @returns A plan that moves no columns.
+ */
+function centredOnMap(lon: Float64Array): LongitudePlan {
+  const centre = (lon[0] + lon[lon.length - 1]) / 2;
+  if (centre > 180) {
+    for (let i = 0; i < lon.length; i++) lon[i] -= 360;
+  }
+  return { split: 0, lon };
 }
 
 /** Allocate a new, zero-filled typed array of the same kind and length. */
@@ -1609,6 +1878,11 @@ function emptyLike(a: TypedArrayLike): TypedArrayLike {
 
 interface ZarrArraySpec {
   shape: number[];
+  /**
+   * Chunk shape; defaults to the whole array. Only the first axis may be split
+   * (`[1, ...rest of shape]`), which is all a stack of planes needs.
+   */
+  chunks?: number[];
   dtype: string;
   data: Uint8Array;
   fillValue?: number | string | null;
@@ -1621,10 +1895,11 @@ interface ZarrArraySpec {
  * is `name/0`, `name/0.0`, ... depending on rank.
  */
 function writeZarrArray(refs: KerchunkRefs, name: string, spec: ZarrArraySpec): void {
+  const chunks = spec.chunks ?? spec.shape;
   refs[`${name}/.zarray`] = JSON.stringify({
     zarr_format: 2,
     shape: spec.shape,
-    chunks: spec.shape,
+    chunks,
     dtype: spec.dtype,
     compressor: null,
     fill_value: spec.fillValue ?? null,
@@ -1632,8 +1907,17 @@ function writeZarrArray(refs: KerchunkRefs, name: string, spec: ZarrArraySpec): 
     order: "C",
   });
   refs[`${name}/.zattrs`] = JSON.stringify(spec.attrs);
-  const chunkKey = `${name}/${spec.shape.map(() => "0").join(".")}`;
-  refs[chunkKey] = `base64:${base64Encode(spec.data)}`;
+  const trailingZeros = spec.shape
+    .slice(1)
+    .map(() => ".0")
+    .join("");
+  const count = Math.max(1, Math.ceil(spec.shape[0] / chunks[0]));
+  const chunkBytes = spec.data.byteLength / count;
+  for (let i = 0; i < count; i++) {
+    const bytes =
+      count === 1 ? spec.data : spec.data.subarray(i * chunkBytes, (i + 1) * chunkBytes);
+    refs[`${name}/${i}${trailingZeros}`] = `base64:${base64Encode(bytes)}`;
+  }
 }
 
 type TypedArrayLike =
@@ -1988,11 +2272,12 @@ function imageLayout(input: {
   frame: () => Pick<LocalNetcdfImage, "bounds" | "coordinates">;
 } {
   const { ny, nx } = input;
-  // A 0..360 grid is rolled the same way the Zarr path rolls it, so the image
-  // does not land in the wrong hemisphere.
-  const split = longitudeRollSplit(input.lon, nx);
-  const columnOf = (x: number): number => (split === null ? x : (x + split) % nx);
-  const rolledLon = split === null ? input.lon : rollLongitudeValues(input.lon, split);
+  // A 0..360 grid is rolled or shifted the same way the Zarr path does it, so
+  // the image does not land in the wrong hemisphere (or nowhere at all).
+  const plan = planLongitudeAxis(input.lon, nx);
+  const split = plan?.split ?? 0;
+  const columnOf = (x: number): number => (split === 0 ? x : (x + split) % nx);
+  const rolledLon = plan?.lon ?? input.lon;
 
   const latDescending = axisDescends(input.lat, ny);
   const lonDescending = axisDescends(rolledLon, nx);

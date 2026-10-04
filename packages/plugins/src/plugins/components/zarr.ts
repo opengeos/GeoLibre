@@ -345,7 +345,12 @@ export async function addCloudNetcdfLayer(
       await control.addLayer(options.url, options.variable, {
         store,
         zarrVersion: 2,
-        selector: options.selector,
+        // Never undefined. The control reads a missing selector as "use mine",
+        // and its own is the CarbonPlan sample's `{ band, month }` (or whatever
+        // the panel last used), which a NetCDF cube does not have: the renderer
+        // then throws "selector 'band', 'month' does not name a dimension" and
+        // the layer never draws.
+        selector: options.selector ?? {},
         clim: options.clim,
         colormap: resolveZarrColormap(options.colormap),
         opacity: options.opacity,
@@ -643,7 +648,8 @@ async function addZarrLayerExclusively(
     // emitting "error" rather than rejecting, so both outcomes are already
     // recorded above by the time this returns.
     await control.addLayer(url, variable, {
-      selector: options.selector,
+      // Never undefined: see addCloudNetcdfLayer.
+      selector: options.selector ?? {},
       clim: options.clim,
       colormap: resolveZarrColormap(options.colormap),
       opacity: options.opacity,
