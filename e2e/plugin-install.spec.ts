@@ -42,6 +42,24 @@ function buildPluginZip(): Buffer {
   return Buffer.from(archive);
 }
 
+/**
+ * Opens the toolbar's Plugins menu and its Installed submenu, where external
+ * plugins have been listed since #2851. Pass `installed: true` when a plugin is
+ * expected: external plugins load asynchronously, so this waits for the
+ * submenu. Otherwise it opens the submenu only if present, because it exists
+ * only while an external plugin is loaded, and an absent plugin still checks out.
+ */
+async function openPluginsMenu(
+  page: Page,
+  { label = "Plugins", installedLabel = "Installed", installed = false } = {},
+) {
+  await page.getByRole("button", { name: label, exact: true }).click();
+  await expect(page.getByRole("menu").first()).toBeVisible();
+  const submenu = page.getByRole("menuitem", { name: new RegExp(`^${installedLabel}( ✓)?$`) });
+  if (installed) await expect(submenu).toBeVisible();
+  if ((await submenu.count()) > 0) await submenu.hover();
+}
+
 /** Open Manage Plugins from Settings and switch to its Settings tab. */
 async function openManagePluginsSettings(page: Page, locale: "en" | "zh" = "en") {
   const labels =
@@ -86,7 +104,7 @@ test("installs a plugin from an uploaded zip, persists it across reload, and uni
   // Close the dialog and confirm the plugin registered (it shows in the
   // toolbar's Plugins menu, which lists registered plugins by name).
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Plugins", exact: true }).click();
+  await openPluginsMenu(page, { installed: true });
   await expect(page.getByRole("menu").getByText(PLUGIN_NAME)).toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -94,7 +112,7 @@ test("installs a plugin from an uploaded zip, persists it across reload, and uni
   //    IndexedDB, so the plugin is registered again and still listed.
   await page.reload();
   await expect(page.getByTestId("map-canvas")).toBeVisible();
-  await page.getByRole("button", { name: "Plugins", exact: true }).click();
+  await openPluginsMenu(page, { installed: true });
   await expect(page.getByRole("menu").getByText(PLUGIN_NAME)).toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -107,7 +125,7 @@ test("installs a plugin from an uploaded zip, persists it across reload, and uni
 
   // It no longer appears in the Plugins menu either.
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Plugins", exact: true }).click();
+  await openPluginsMenu(page);
   await expect(page.getByRole("menu").getByText(PLUGIN_NAME)).toHaveCount(0);
 });
 
@@ -135,7 +153,7 @@ test("deployment defaultActive applies to fresh projects but respects explicit d
   await expect(page.locator("#e2e-sample-plugin-active")).toBeAttached();
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "Plugins", exact: true }).click();
+  await openPluginsMenu(page, { installed: true });
   await page.getByRole("menuitem", { name: new RegExp(`^${PLUGIN_NAME}`) }).click();
   await expect(page.locator("#e2e-sample-plugin-active")).toHaveCount(0);
 
@@ -145,7 +163,10 @@ test("deployment defaultActive applies to fresh projects but respects explicit d
   await page.getByRole("menuitem", { name: "New...", exact: true }).click();
   const newProjectDialog = page.getByRole("dialog", { name: "New project" });
   const discardButton = page.getByRole("button", { name: "Do not save", exact: true });
-  if (await discardButton.isVisible().catch(() => false)) await discardButton.click();
+  // The unsaved-changes prompt (when it shows) opens a beat after the menu
+  // closes, so wait for it or the dialog instead of probing once.
+  await expect(discardButton.or(newProjectDialog)).toBeVisible();
+  if (await discardButton.isVisible()) await discardButton.click();
   await expect(newProjectDialog).toBeVisible();
   await newProjectDialog.getByRole("button", { name: "Create", exact: true }).click();
   await expect
@@ -185,7 +206,7 @@ test("blocked archive installs report denial without registering or persisting t
   await expect(dialog.getByRole("button", { name: `卸载 ${PLUGIN_NAME}` })).toHaveCount(0);
   await page.reload();
   await expect(page.getByTestId("map-canvas")).toBeVisible();
-  await page.getByRole("button", { name: "插件", exact: true }).click();
+  await openPluginsMenu(page, { label: "插件", installedLabel: "已安装" });
   await expect(page.getByRole("menu").getByText(PLUGIN_NAME)).toHaveCount(0);
 });
 
@@ -263,7 +284,7 @@ test("sideload=false hides installation controls and ignores project manifest UR
   await expect(page.getByRole("dialog", { name: "Load plugins from this project?" })).toHaveCount(
     0,
   );
-  await page.getByRole("button", { name: "Plugins", exact: true }).click();
+  await openPluginsMenu(page);
   await expect(page.getByRole("menu").getByText(PLUGIN_NAME)).toHaveCount(0);
   expect(pluginRequests).toEqual([]);
 });
@@ -347,7 +368,7 @@ for (const registryResult of ["delisted", "unavailable", "blocked-id"] as const)
     }, manifestUrl);
     await page.goto("/");
     await expect(page.getByTestId("map-canvas")).toBeVisible();
-    await page.getByRole("button", { name: "Plugins", exact: true }).click();
+    await openPluginsMenu(page, { installed: true });
     await page.getByRole("menuitem", { name: new RegExp(`^${PLUGIN_NAME}`) }).click();
     await expect(page.locator("#registry-plugin-active")).toBeAttached();
     const initialPluginRequests = [...pluginRequests];
@@ -359,7 +380,7 @@ for (const registryResult of ["delisted", "unavailable", "blocked-id"] as const)
     await page.getByRole("menuitem", { name: "Language", exact: true }).hover();
     await page.getByRole("menuitemradio", { name: "Deutsch (German)", exact: true }).click();
     await expect(page.locator("#registry-plugin-active")).toHaveCount(0);
-    await page.getByRole("button", { name: "Plugins", exact: true }).click();
+    await openPluginsMenu(page, { installedLabel: "Installiert" });
     await expect(page.getByRole("menuitem", { name: PLUGIN_NAME, exact: true })).toHaveCount(0);
     expect(pluginRequests).toEqual(initialPluginRequests);
   });
@@ -412,7 +433,7 @@ test("external plugins reproject coordinates with the host's shared proj4", asyn
   });
   await expect(dialog.getByText(`Installed plugin "${manifest.id}".`)).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Plugins", exact: true }).click();
+  await openPluginsMenu(page, { installed: true });
   await page.getByRole("menu").getByText(manifest.name, { exact: true }).click();
 
   const output = page.locator("#e2e-proj4-result");
