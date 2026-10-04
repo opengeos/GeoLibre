@@ -1074,7 +1074,7 @@ def _metadata_instant(value: str, bound: str) -> Any:
     text = value.strip()
     if _METADATA_DATE_RE.match(text):
         text = f"{text}T{'00:00:00' if bound == 'start' else '23:59:59'}+00:00"
-    parsed = _dt.datetime.fromisoformat(text.replace(" ", "T").replace("z", "Z"))
+    parsed = _dt.datetime.fromisoformat(text.upper().replace(" ", "T"))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=_dt.timezone.utc)
 
 

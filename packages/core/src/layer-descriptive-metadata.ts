@@ -222,9 +222,14 @@ export function metadataDateToRfc3339(value: string, bound: "start" | "end"): st
     return `${text}T${bound === "start" ? "00:00:00" : "23:59:59"}Z`;
   }
   // A compact `+HHMM` offset passes validation but is not an ECMAScript
-  // date-time format, so spell it `+HH:MM` before parsing.
-  const normalized = text.replace(" ", "T").replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
-  const hasOffset = /(Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  // date-time format, so spell it `+HH:MM` before parsing. The pattern is
+  // case-insensitive, but ECMAScript only promises to read an upper-case `T`
+  // and `Z`, so upper-case the text first.
+  const normalized = text
+    .toUpperCase()
+    .replace(" ", "T")
+    .replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+  const hasOffset = /(Z|[+-]\d{2}:\d{2})$/.test(normalized);
   const parsed = new Date(hasOffset ? normalized : `${normalized}Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }

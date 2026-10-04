@@ -179,6 +179,11 @@ describe("metadata field validation", () => {
       metadataDateToRfc3339("2020-05-01T12:30:00+0200", "start"),
       "2020-05-01T10:30:00.000Z",
     );
+    // Lower-case `t`/`z` validate, so they must convert too.
+    assert.equal(
+      metadataDateToRfc3339("2020-05-01t12:30:00z", "start"),
+      "2020-05-01T12:30:00.000Z",
+    );
     assert.equal(metadataDateToRfc3339("nope", "start"), null);
   });
 
