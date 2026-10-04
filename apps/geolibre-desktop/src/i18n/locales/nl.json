@@ -8266,12 +8266,28 @@
     "copyJson": "JSON kopiëren",
     "copied": "Gekopieerd",
     "clear": "Wissen",
+    "reportIssue": "Probleem melden",
     "emptyAll": "Geen diagnostiek vastgelegd.",
     "emptyError": "Geen foutdiagnostiek vastgelegd.",
     "emptyWarning": "Geen waarschuwingsdiagnostiek vastgelegd.",
     "emptyInfo": "Geen informatiediagnostiek vastgelegd.",
     "emptyNetwork": "Geen netwerkdiagnostiek vastgelegd.",
     "emptyNetworkError": "Geen netwerkfoutdiagnostiek vastgelegd."
+  },
+  "notifications": {
+    "regionLabel": "Meldingen",
+    "dismiss": "Melding sluiten",
+    "reportIssue": "Probleem melden",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "Laag \"{{name}}\" kon niet worden geladen",
+    "layerLoadFailedHint": "Controleer de URL, je netwerkverbinding en een eventueel vereiste API-sleutel. Details staan in het paneel Diagnostiek.",
+    "fileReadFailed": "\"{{name}}\" kon niet worden gelezen en is overgeslagen.",
+    "libraryLayerRestoreFailed": "\"{{name}}\" kon niet worden toegevoegd vanuit Mijn gegevens.",
+    "localLayersDropped_one": "{{count}} laag verwijderd: het bestand kon niet worden gelezen ({{path}}).",
+    "localLayersDropped_other": "{{count}} lagen verwijderd: het bestand kon niet worden gelezen ({{path}}).",
+    "pluginActivateFailed": "De plug-in \"{{id}}\" uit de link kon niet worden gestart.",
+    "pluginMenuActionFailed": "De menuactie \"{{name}}\" is mislukt.",
+    "recordingOverlaysSkipped": "De kaartpanelen konden niet worden vastgelegd, dus de opname toont alleen de kaart."
   },
   "shell": {
     "workspaceTitle": "GeoLibre-kaartwerkruimte",

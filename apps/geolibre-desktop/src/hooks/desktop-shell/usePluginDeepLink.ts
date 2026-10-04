@@ -1,4 +1,5 @@
 import type { MapEngine } from "@geolibre/map";
+import i18next from "i18next";
 import { VIEWER_BLOCKED_PLUGIN_IDS } from "@geolibre/plugins";
 import {
   useCallback,
@@ -15,6 +16,7 @@ import {
   pluginDeepLinkNames,
 } from "../../lib/plugin-deep-link";
 import { pluginManifestUrlsForIds } from "../../lib/external-plugins";
+import { notify } from "../../lib/notify";
 import {
   fetchPluginRegistry,
   pinRegistryEntryBundle,
@@ -97,6 +99,21 @@ const getPluginManagerVersion = () => getPluginManager().getVersion();
  * @param options - The map engine, the viewer guard, and the readiness signals.
  * @returns The registry plugins awaiting the user's decision.
  */
+/**
+ * Logs and surfaces a deep-linked plugin that threw while activating. The link
+ * asked for it by name, so failing silently would leave the user guessing.
+ *
+ * @param id - The plugin id from the `?plugin=` link.
+ * @param error - What activation threw.
+ */
+function reportActivationFailure(id: string, error: unknown): void {
+  console.error(`[GeoLibre] Could not activate the plugin "${id}"`, error);
+  notify.error(i18next.t("notifications.pluginActivateFailed", { id }), {
+    description: error instanceof Error ? error.message : undefined,
+    error,
+  });
+}
+
 export function usePluginDeepLink({
   mapControllerRef,
   enforceViewerPlugins,
@@ -148,7 +165,7 @@ export function usePluginDeepLink({
             console.warn(`[GeoLibre] The plugin "${id}" from the ?plugin= link did not activate.`);
           }
         } catch (error) {
-          console.error(`[GeoLibre] Could not activate the plugin "${id}"`, error);
+          reportActivationFailure(id, error);
         }
       }
       await resolveRegistryNames(targets.unknown);
@@ -197,7 +214,7 @@ export function usePluginDeepLink({
                 `[GeoLibre] The plugin "${entry.id}" from the ?plugin= link did not activate.`,
               );
             } catch (error) {
-              console.error(`[GeoLibre] Could not activate the plugin "${entry.id}"`, error);
+              reportActivationFailure(entry.id, error);
             }
           } else if (loaded) {
             // The id belongs to a plugin this entry would not replace.
@@ -268,7 +285,7 @@ export function usePluginDeepLink({
             console.warn(`[GeoLibre] The plugin "${id}" from the ?plugin= link did not activate.`);
           }
         } catch (error) {
-          console.error(`[GeoLibre] Could not activate the plugin "${id}"`, error);
+          reportActivationFailure(id, error);
         }
       }
     })();

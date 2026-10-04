@@ -8330,12 +8330,28 @@
     "copyJson": "JSON-u kopyala",
     "copied": "Kopyalandı",
     "clear": "Təmizlə",
+    "reportIssue": "Problem bildir",
     "emptyAll": "Heç bir diaqnostika məlumatı qeydə alınmayıb.",
     "emptyError": "Heç bir xəta diaqnostikası qeydə alınmayıb.",
     "emptyWarning": "Heç bir xəbərdarlıq diaqnostikası qeydə alınmayıb.",
     "emptyInfo": "Heç bir məlumat diaqnostikası qeydə alınmayıb.",
     "emptyNetwork": "Heç bir şəbəkə diaqnostikası qeydə alınmayıb.",
     "emptyNetworkError": "Heç bir şəbəkə xətası diaqnostikası qeydə alınmayıb."
+  },
+  "notifications": {
+    "regionLabel": "Bildirişlər",
+    "dismiss": "Bildirişi bağla",
+    "reportIssue": "Problem bildir",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "\"{{name}}\" layı yüklənmədi",
+    "layerLoadFailedHint": "URL-i, şəbəkə bağlantınızı və tələb olunan API açarını yoxlayın. Təfərrüatlar Diaqnostika panelindədir.",
+    "fileReadFailed": "\"{{name}}\" oxuna bilmədi, ona görə də ötürüldü.",
+    "libraryLayerRestoreFailed": "\"{{name}}\" Verilənlərim bölməsindən əlavə edilə bilmədi.",
+    "localLayersDropped_one": "{{count}} lay silindi: onun faylı oxuna bilmədi ({{path}}).",
+    "localLayersDropped_other": "{{count}} lay silindi: onların faylı oxuna bilmədi ({{path}}).",
+    "pluginActivateFailed": "\"{{id}}\" plagini keçiddən başladıla bilmədi.",
+    "pluginMenuActionFailed": "\"{{name}}\" menyu əməliyyatı uğursuz oldu.",
+    "recordingOverlaysSkipped": "Xəritə panelləri çəkilə bilmədi, ona görə də yazıda yalnız xəritə göstərilir."
   },
   "shell": {
     "workspaceTitle": "GeoLibre xəritə iş sahəsi",

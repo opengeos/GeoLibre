@@ -8266,12 +8266,28 @@
     "copyJson": "Copier le JSON",
     "copied": "Copié",
     "clear": "Effacer",
+    "reportIssue": "Signaler un problème",
     "emptyAll": "Aucun diagnostic capturé.",
     "emptyError": "Aucun diagnostic d'erreur capturé.",
     "emptyWarning": "Aucun diagnostic d'avertissement capturé.",
     "emptyInfo": "Aucun diagnostic d'information capturé.",
     "emptyNetwork": "Aucun diagnostic réseau capturé.",
     "emptyNetworkError": "Aucun diagnostic d'erreur réseau capturé."
+  },
+  "notifications": {
+    "regionLabel": "Notifications",
+    "dismiss": "Fermer la notification",
+    "reportIssue": "Signaler un problème",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "Impossible de charger la couche « {{name}} »",
+    "layerLoadFailedHint": "Vérifiez l’URL, votre connexion réseau et toute clé d’API requise. Les détails se trouvent dans le panneau Diagnostics.",
+    "fileReadFailed": "Impossible de lire « {{name}} », le fichier a donc été ignoré.",
+    "libraryLayerRestoreFailed": "Impossible d’ajouter « {{name}} » depuis Mes données.",
+    "localLayersDropped_one": "{{count}} couche supprimée : son fichier n’a pas pu être lu ({{path}}).",
+    "localLayersDropped_other": "{{count}} couches supprimées : leur fichier n’a pas pu être lu ({{path}}).",
+    "pluginActivateFailed": "Impossible de démarrer l’extension « {{id}} » depuis le lien.",
+    "pluginMenuActionFailed": "L’action de menu « {{name}} » a échoué.",
+    "recordingOverlaysSkipped": "Les panneaux de la carte n’ont pas pu être capturés ; l’enregistrement ne montre donc que la carte."
   },
   "shell": {
     "workspaceTitle": "Espace de travail cartographique GeoLibre",

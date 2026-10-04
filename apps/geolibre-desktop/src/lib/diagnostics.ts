@@ -2,7 +2,12 @@ import { useSyncExternalStore } from "react";
 import { classifyFetchFailure } from "./fetch-error";
 import { isTauri } from "./is-tauri";
 
-export type DiagnosticCategory = "console" | "map" | "network" | "runtime";
+/**
+ * Where a record came from. `"app"` is a handled failure the app reported to
+ * the user (an error notification, see `notify.ts`); the others are captured
+ * automatically from the console, the map engine, fetch, and global handlers.
+ */
+export type DiagnosticCategory = "app" | "console" | "map" | "network" | "runtime";
 export type DiagnosticLevel = "error" | "info" | "warning";
 
 export interface DiagnosticRecord {
@@ -324,9 +329,16 @@ function getSnapshot(): DiagnosticsSnapshot {
   return snapshot;
 }
 
-export function appendDiagnostic(input: DiagnosticInput): void {
+/**
+ * Records a diagnostic entry (redacting URLs in every free-text field).
+ *
+ * @param input - The entry to record.
+ * @returns The stored record, or `null` when the entry was filtered out (an
+ *   info-level network entry while request logging is off).
+ */
+export function appendDiagnostic(input: DiagnosticInput): DiagnosticRecord | null {
   if (input.category === "network" && input.level === "info" && !captureNetworkInfo) {
-    return;
+    return null;
   }
 
   const record: DiagnosticRecord = {
@@ -344,6 +356,7 @@ export function appendDiagnostic(input: DiagnosticInput): void {
 
   records = [record, ...records].slice(0, MAX_DIAGNOSTIC_RECORDS);
   emitChange();
+  return record;
 }
 
 export function clearDiagnostics(): void {

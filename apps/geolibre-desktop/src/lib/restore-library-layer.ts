@@ -12,6 +12,7 @@
 // is exactly what the project-load path relies on, so invoking one for a single
 // new layer is safe.
 
+import i18next from "i18next";
 import {
   controlRendersLayer,
   isExternalNativeLayerRecord,
@@ -31,6 +32,7 @@ import {
   VECTOR_SOURCE_KIND,
   type GeoLibreAppAPI,
 } from "@geolibre/plugins";
+import { notify } from "./notify";
 
 /**
  * `metadata.sourceKind` values of the control-painted layer kinds whose restore
@@ -136,5 +138,8 @@ export async function restoreLibraryLayer(
     await restore(app);
   } catch (error) {
     console.error("[GeoLibre] Failed to restore a layer added from My Data", error);
+    notify.error(i18next.t("notifications.libraryLayerRestoreFailed", { name: layer.name }), {
+      error,
+    });
   }
 }

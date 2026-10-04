@@ -8266,12 +8266,28 @@
     "copyJson": "رونوشت JSON",
     "copied": "رونوشت شد",
     "clear": "پاک کردن",
+    "reportIssue": "گزارش مشکل",
     "emptyAll": "هیچ عیب‌یابی‌ای ثبت نشد.",
     "emptyError": "هیچ عیب‌یابی خطایی ثبت نشد.",
     "emptyWarning": "هیچ عیب‌یابی هشداری ثبت نشد.",
     "emptyInfo": "هیچ عیب‌یابی اطلاعاتی ثبت نشد.",
     "emptyNetwork": "هیچ عیب‌یابی شبکه‌ای ثبت نشد.",
     "emptyNetworkError": "هیچ عیب‌یابی خطای شبکه‌ای ثبت نشد."
+  },
+  "notifications": {
+    "regionLabel": "اعلان‌ها",
+    "dismiss": "بستن اعلان",
+    "reportIssue": "گزارش مشکل",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "لایه «{{name}}» بارگذاری نشد",
+    "layerLoadFailedHint": "نشانی URL، اتصال شبکه و هر کلید API لازم را بررسی کنید. جزئیات در پنل عیب‌یابی است.",
+    "fileReadFailed": "«{{name}}» خوانده نشد، بنابراین از آن صرف‌نظر شد.",
+    "libraryLayerRestoreFailed": "افزودن «{{name}}» از داده‌های من ممکن نشد.",
+    "localLayersDropped_one": "{{count}} لایه حذف شد: فایل آن خوانده نشد ({{path}}).",
+    "localLayersDropped_other": "{{count}} لایه حذف شد: فایل آن‌ها خوانده نشد ({{path}}).",
+    "pluginActivateFailed": "افزونه «{{id}}» از پیوند اجرا نشد.",
+    "pluginMenuActionFailed": "عملیات منوی «{{name}}» ناموفق بود.",
+    "recordingOverlaysSkipped": "پنل‌های نقشه ضبط نشدند، بنابراین ضبط فقط نقشه را نشان می‌دهد."
   },
   "shell": {
     "workspaceTitle": "فضای کاری نقشهٔ GeoLibre",

@@ -8177,12 +8177,27 @@
     "copyJson": "JSON 복사",
     "copied": "복사됨",
     "clear": "지우기",
+    "reportIssue": "문제 신고",
     "emptyAll": "수집된 진단 정보가 없습니다.",
     "emptyError": "수집된 오류 진단 정보가 없습니다.",
     "emptyWarning": "수집된 경고 진단 정보가 없습니다.",
     "emptyInfo": "수집된 정보 진단 정보가 없습니다.",
     "emptyNetwork": "수집된 네트워크 진단 정보가 없습니다.",
     "emptyNetworkError": "수집된 네트워크 오류 진단 정보가 없습니다."
+  },
+  "notifications": {
+    "regionLabel": "알림",
+    "dismiss": "알림 닫기",
+    "reportIssue": "문제 신고",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "레이어 \"{{name}}\"을(를) 불러오지 못했습니다",
+    "layerLoadFailedHint": "URL, 네트워크 연결 및 필요한 API 키를 확인하세요. 자세한 내용은 진단 패널에 있습니다.",
+    "fileReadFailed": "\"{{name}}\"을(를) 읽을 수 없어 건너뛰었습니다.",
+    "libraryLayerRestoreFailed": "내 데이터에서 \"{{name}}\"을(를) 추가할 수 없습니다.",
+    "localLayersDropped_other": "레이어 {{count}}개를 제거했습니다: 파일을 읽을 수 없습니다({{path}}).",
+    "pluginActivateFailed": "링크에서 플러그인 \"{{id}}\"을(를) 시작할 수 없습니다.",
+    "pluginMenuActionFailed": "메뉴 작업 \"{{name}}\"이(가) 실패했습니다.",
+    "recordingOverlaysSkipped": "지도 패널을 캡처할 수 없어 녹화에는 지도만 표시됩니다."
   },
   "shell": {
     "workspaceTitle": "GeoLibre 지도 작업 공간",

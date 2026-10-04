@@ -8177,12 +8177,27 @@
     "copyJson": "Salin JSON",
     "copied": "Tersalin",
     "clear": "Bersihkan",
+    "reportIssue": "Laporkan masalah",
     "emptyAll": "Tidak ada diagnostik yang terekam.",
     "emptyError": "Tidak ada diagnostik kesalahan yang terekam.",
     "emptyWarning": "Tidak ada diagnostik peringatan yang terekam.",
     "emptyInfo": "Tidak ada diagnostik informasi yang terekam.",
     "emptyNetwork": "Tidak ada diagnostik jaringan yang terekam.",
     "emptyNetworkError": "Tidak ada diagnostik kesalahan jaringan yang terekam."
+  },
+  "notifications": {
+    "regionLabel": "Notifikasi",
+    "dismiss": "Tutup notifikasi",
+    "reportIssue": "Laporkan masalah",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "Layer \"{{name}}\" gagal dimuat",
+    "layerLoadFailedHint": "Periksa URL, koneksi jaringan Anda, dan kunci API yang diperlukan. Detailnya ada di panel Diagnostik.",
+    "fileReadFailed": "Tidak dapat membaca \"{{name}}\", jadi file itu dilewati.",
+    "libraryLayerRestoreFailed": "Tidak dapat menambahkan \"{{name}}\" dari Data Saya.",
+    "localLayersDropped_other": "{{count}} layer dihapus: file-nya tidak dapat dibaca ({{path}}).",
+    "pluginActivateFailed": "Tidak dapat memulai plugin \"{{id}}\" dari tautan.",
+    "pluginMenuActionFailed": "Aksi menu \"{{name}}\" gagal.",
+    "recordingOverlaysSkipped": "Panel peta tidak dapat ditangkap, jadi rekaman hanya menampilkan peta."
   },
   "shell": {
     "workspaceTitle": "Ruang kerja peta GeoLibre",

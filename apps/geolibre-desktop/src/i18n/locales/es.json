@@ -8266,12 +8266,28 @@
     "copyJson": "Copiar JSON",
     "copied": "Copiado",
     "clear": "Limpiar",
+    "reportIssue": "Informar de un problema",
     "emptyAll": "No se ha capturado ningún diagnóstico.",
     "emptyError": "No se ha capturado ningún diagnóstico de error.",
     "emptyWarning": "No se ha capturado ningún diagnóstico de advertencia.",
     "emptyInfo": "No se ha capturado ningún diagnóstico informativo.",
     "emptyNetwork": "No se ha capturado ningún diagnóstico de red.",
     "emptyNetworkError": "No se ha capturado ningún diagnóstico de error de red."
+  },
+  "notifications": {
+    "regionLabel": "Notificaciones",
+    "dismiss": "Descartar notificación",
+    "reportIssue": "Informar de un problema",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "No se pudo cargar la capa «{{name}}»",
+    "layerLoadFailedHint": "Comprueba la URL, tu conexión de red y cualquier clave de API necesaria. Los detalles están en el panel de Diagnóstico.",
+    "fileReadFailed": "No se pudo leer «{{name}}», así que se omitió.",
+    "libraryLayerRestoreFailed": "No se pudo añadir «{{name}}» desde Mis datos.",
+    "localLayersDropped_one": "Se eliminó {{count}} capa: no se pudo leer su archivo ({{path}}).",
+    "localLayersDropped_other": "Se eliminaron {{count}} capas: no se pudo leer su archivo ({{path}}).",
+    "pluginActivateFailed": "No se pudo iniciar el complemento «{{id}}» desde el enlace.",
+    "pluginMenuActionFailed": "Falló la acción de menú «{{name}}».",
+    "recordingOverlaysSkipped": "No se pudieron capturar los paneles del mapa, así que la grabación muestra solo el mapa."
   },
   "shell": {
     "workspaceTitle": "Espacio de trabajo del mapa de GeoLibre",

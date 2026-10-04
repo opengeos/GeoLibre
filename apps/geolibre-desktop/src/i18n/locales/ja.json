@@ -8177,12 +8177,27 @@
     "copyJson": "JSON をコピー",
     "copied": "コピーしました",
     "clear": "クリア",
+    "reportIssue": "問題を報告",
     "emptyAll": "診断情報は記録されていません。",
     "emptyError": "エラーの診断情報は記録されていません。",
     "emptyWarning": "警告の診断情報は記録されていません。",
     "emptyInfo": "情報の診断情報は記録されていません。",
     "emptyNetwork": "ネットワークの診断情報は記録されていません。",
     "emptyNetworkError": "ネットワークエラーの診断情報は記録されていません。"
+  },
+  "notifications": {
+    "regionLabel": "通知",
+    "dismiss": "通知を閉じる",
+    "reportIssue": "問題を報告",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "レイヤー「{{name}}」を読み込めませんでした",
+    "layerLoadFailedHint": "URL、ネットワーク接続、必要な API キーを確認してください。詳細は診断パネルにあります。",
+    "fileReadFailed": "「{{name}}」を読み込めなかったため、スキップしました。",
+    "libraryLayerRestoreFailed": "マイデータから「{{name}}」を追加できませんでした。",
+    "localLayersDropped_other": "{{count}} 個のレイヤーを削除しました: ファイルを読み込めませんでした ({{path}})。",
+    "pluginActivateFailed": "リンクからプラグイン「{{id}}」を起動できませんでした。",
+    "pluginMenuActionFailed": "メニュー操作「{{name}}」が失敗しました。",
+    "recordingOverlaysSkipped": "マップのパネルをキャプチャできなかったため、録画にはマップのみが表示されます。"
   },
   "shell": {
     "workspaceTitle": "GeoLibre マップワークスペース",

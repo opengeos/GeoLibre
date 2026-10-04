@@ -85,6 +85,8 @@ import { useCommandBridge } from "../../hooks/useCommandBridge";
 import { useEmbedApi } from "../../hooks/useEmbedApi";
 import { useJupyterRelay } from "../../hooks/useJupyterRelay";
 import { appendDiagnostic, useDiagnosticsSnapshot } from "../../lib/diagnostics";
+import { layerToNotifyForMapError } from "../../lib/map-error-notification";
+import { notify } from "../../lib/notify";
 import { useCredentialStorageStatus } from "../../lib/credential-store";
 import { SectionErrorBoundary, SilentErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
@@ -460,17 +462,32 @@ export function DesktopShell({
   });
   useMapControlLabels(mapControllerRef, mapReadyGeneration, t);
 
-  const handleMapDiagnosticEvent = useCallback((event: MapDiagnosticEvent) => {
-    appendDiagnostic({
-      category: "map",
-      level: "error",
-      message: event.message,
-      detail: event.detail,
-      source: event.source,
-      status: event.status,
-      url: event.url,
-    });
-  }, []);
+  // Layers already toasted about this session: a broken tile source errors on
+  // every pan, and one notification per layer is enough (the rest stay in
+  // Diagnostics).
+  const notifiedMapErrorLayersRef = useRef(new Set<string>());
+  const handleMapDiagnosticEvent = useCallback(
+    (event: MapDiagnosticEvent) => {
+      const record = appendDiagnostic({
+        category: "map",
+        level: "error",
+        message: event.message,
+        detail: event.detail,
+        source: event.source,
+        status: event.status,
+        url: event.url,
+      });
+      const layer = layerToNotifyForMapError(event, useAppStore.getState().layers);
+      if (!layer || notifiedMapErrorLayersRef.current.has(layer.id)) return;
+      notifiedMapErrorLayersRef.current.add(layer.id);
+      notify.error(t("notifications.layerLoadFailed", { name: layer.name }), {
+        description: t("notifications.layerLoadFailedHint"),
+        dedupeKey: `map-layer:${layer.id}`,
+        diagnostic: record,
+      });
+    },
+    [t],
+  );
 
   const { addDroppedPhotos, addDroppedRasters, addFilePath, finishDrop } = useLayerImport({
     mapControllerRef,

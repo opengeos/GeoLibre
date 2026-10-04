@@ -1,4 +1,6 @@
 import { hasPathTraversal, useAppStore, type GeoLibreLayer } from "@geolibre/core";
+import i18next from "i18next";
+import { notify } from "./notify";
 import {
   isAbsoluteLocalPath,
   isLoadedVectorLayer,
@@ -99,4 +101,9 @@ function dropLayers(layers: GeoLibreLayer[], path: string): void {
     );
     useAppStore.getState().removeLayer(layer.id);
   }
+  // Otherwise the layers just vanish from the reopened project.
+  notify.warning(i18next.t("notifications.localLayersDropped", { count: layers.length, path }), {
+    durationMs: null,
+    dedupeKey: `local-layers-dropped:${path}`,
+  });
 }

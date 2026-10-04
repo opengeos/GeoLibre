@@ -8170,6 +8170,7 @@
     "countTotal_other": "{{count}} tổng cộng",
     "copied": "Đã sao chép",
     "clear": "Thông thoáng",
+    "reportIssue": "Báo cáo sự cố",
     "emptyAll": "Không có chẩn đoán nào được ghi lại.",
     "emptyError": "Không có chẩn đoán lỗi nào được ghi lại.",
     "emptyWarning": "Không có chẩn đoán cảnh báo nào được ghi lại.",
@@ -8183,6 +8184,20 @@
     "logAllRequests": "Ghi lại tất cả các yêu cầu mạng",
     "logAllRequestsHint": "Ghi lại các yêu cầu mạng thành công và bị hủy bỏ kể từ bây giờ; các yêu cầu được thực hiện khi quá trình đăng nhập bị tắt sẽ không được lấp đầy. Tắt theo mặc định vì việc ghi nhật ký mọi yêu cầu sẽ làm chậm ứng dụng.",
     "copyJson": "Sao chép JSON"
+  },
+  "notifications": {
+    "regionLabel": "Thông báo",
+    "dismiss": "Đóng thông báo",
+    "reportIssue": "Báo cáo sự cố",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "Không thể tải lớp \"{{name}}\"",
+    "layerLoadFailedHint": "Hãy kiểm tra URL, kết nối mạng và khóa API cần thiết (nếu có). Chi tiết có trong bảng Chẩn đoán.",
+    "fileReadFailed": "Không thể đọc \"{{name}}\" nên tệp đã bị bỏ qua.",
+    "libraryLayerRestoreFailed": "Không thể thêm \"{{name}}\" từ Dữ liệu của tôi.",
+    "localLayersDropped_other": "Đã xóa {{count}} lớp: không thể đọc tệp của chúng ({{path}}).",
+    "pluginActivateFailed": "Không thể khởi động plugin \"{{id}}\" từ liên kết.",
+    "pluginMenuActionFailed": "Thao tác menu \"{{name}}\" không thành công.",
+    "recordingOverlaysSkipped": "Không thể chụp các bảng bản đồ nên bản ghi chỉ hiển thị bản đồ."
   },
   "shell": {
     "section": {

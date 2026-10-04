@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCallback, useState } from "react";
 import { DesktopShell } from "./components/layout/DesktopShell";
+import { NotificationRegion } from "./components/layout/NotificationRegion";
 import { OnboardingDialog } from "./components/layout/OnboardingDialog";
 import { UpdateNotificationModal } from "./components/layout/UpdateNotificationModal";
 import { useDesktopSettingsPersistence } from "./hooks/useDesktopSettings";
@@ -93,6 +94,9 @@ export default function App() {
           <OnboardingDialog open={showOnboarding} onClose={dismissOnboarding} />
         </>
       )}
+      {/* Mounted once, outside the startup-restore branch, so a failure raised
+          while the shell is unmounted still reaches the user. */}
+      <NotificationRegion />
       <UpdateNotificationModal
         pending={pendingUpdate}
         onRemindLater={remindLater}

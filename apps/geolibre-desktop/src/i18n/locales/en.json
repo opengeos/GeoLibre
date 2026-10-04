@@ -8348,12 +8348,28 @@
     "copyJson": "Copy JSON",
     "copied": "Copied",
     "clear": "Clear",
+    "reportIssue": "Report issue",
     "emptyAll": "No diagnostics captured.",
     "emptyError": "No error diagnostics captured.",
     "emptyWarning": "No warning diagnostics captured.",
     "emptyInfo": "No info diagnostics captured.",
     "emptyNetwork": "No network diagnostics captured.",
     "emptyNetworkError": "No network error diagnostics captured."
+  },
+  "notifications": {
+    "regionLabel": "Notifications",
+    "dismiss": "Dismiss notification",
+    "reportIssue": "Report issue",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "Layer \"{{name}}\" failed to load",
+    "layerLoadFailedHint": "Check the URL, your network connection, and any required API key. Details are in the Diagnostics panel.",
+    "fileReadFailed": "Could not read \"{{name}}\", so it was skipped.",
+    "libraryLayerRestoreFailed": "Could not add \"{{name}}\" from My Data.",
+    "localLayersDropped_one": "Removed {{count}} layer: its file could not be read ({{path}}).",
+    "localLayersDropped_other": "Removed {{count}} layers: their file could not be read ({{path}}).",
+    "pluginActivateFailed": "Could not start the plugin \"{{id}}\" from the link.",
+    "pluginMenuActionFailed": "The menu action \"{{name}}\" failed.",
+    "recordingOverlaysSkipped": "The map panels could not be captured, so the recording shows only the map."
   },
   "shell": {
     "workspaceTitle": "GeoLibre map workspace",

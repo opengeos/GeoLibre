@@ -8266,12 +8266,28 @@
     "copyJson": "Copia JSON",
     "copied": "Copiato",
     "clear": "Svuota",
+    "reportIssue": "Segnala un problema",
     "emptyAll": "Nessun dato diagnostico acquisito.",
     "emptyError": "Nessun dato diagnostico di errore acquisito.",
     "emptyWarning": "Nessun dato diagnostico di avviso acquisito.",
     "emptyInfo": "Nessun dato diagnostico informativo acquisito.",
     "emptyNetwork": "Nessun dato diagnostico di rete acquisito.",
     "emptyNetworkError": "Nessun dato diagnostico di errore di rete acquisito."
+  },
+  "notifications": {
+    "regionLabel": "Notifiche",
+    "dismiss": "Chiudi notifica",
+    "reportIssue": "Segnala un problema",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "Impossibile caricare il layer \"{{name}}\"",
+    "layerLoadFailedHint": "Controlla l'URL, la connessione di rete e l'eventuale chiave API richiesta. I dettagli sono nel pannello Diagnostica.",
+    "fileReadFailed": "Impossibile leggere \"{{name}}\", quindi è stato saltato.",
+    "libraryLayerRestoreFailed": "Impossibile aggiungere \"{{name}}\" da I miei dati.",
+    "localLayersDropped_one": "{{count}} layer rimosso: non è stato possibile leggere il suo file ({{path}}).",
+    "localLayersDropped_other": "{{count}} layer rimossi: non è stato possibile leggere il loro file ({{path}}).",
+    "pluginActivateFailed": "Impossibile avviare il plugin \"{{id}}\" dal link.",
+    "pluginMenuActionFailed": "L'azione di menu \"{{name}}\" non è riuscita.",
+    "recordingOverlaysSkipped": "Non è stato possibile acquisire i pannelli della mappa, quindi la registrazione mostra solo la mappa."
   },
   "shell": {
     "workspaceTitle": "Area di lavoro cartografica di GeoLibre",

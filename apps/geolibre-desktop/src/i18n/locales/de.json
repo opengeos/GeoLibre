@@ -8266,12 +8266,28 @@
     "copyJson": "JSON kopieren",
     "copied": "Kopiert",
     "clear": "Leeren",
+    "reportIssue": "Problem melden",
     "emptyAll": "Keine Diagnosedaten erfasst.",
     "emptyError": "Keine Fehler-Diagnosedaten erfasst.",
     "emptyWarning": "Keine Warnungs-Diagnosedaten erfasst.",
     "emptyInfo": "Keine Info-Diagnosedaten erfasst.",
     "emptyNetwork": "Keine Netzwerk-Diagnosedaten erfasst.",
     "emptyNetworkError": "Keine Netzwerkfehler-Diagnosedaten erfasst."
+  },
+  "notifications": {
+    "regionLabel": "Benachrichtigungen",
+    "dismiss": "Benachrichtigung schließen",
+    "reportIssue": "Problem melden",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "Layer \"{{name}}\" konnte nicht geladen werden",
+    "layerLoadFailedHint": "Prüfen Sie die URL, Ihre Netzwerkverbindung und einen ggf. erforderlichen API-Schlüssel. Details stehen im Diagnose-Bereich.",
+    "fileReadFailed": "\"{{name}}\" konnte nicht gelesen werden und wurde übersprungen.",
+    "libraryLayerRestoreFailed": "\"{{name}}\" konnte nicht aus Meine Daten hinzugefügt werden.",
+    "localLayersDropped_one": "{{count}} Layer wurde entfernt: Seine Datei konnte nicht gelesen werden ({{path}}).",
+    "localLayersDropped_other": "{{count}} Layer wurden entfernt: Ihre Datei konnte nicht gelesen werden ({{path}}).",
+    "pluginActivateFailed": "Das Plugin \"{{id}}\" aus dem Link konnte nicht gestartet werden.",
+    "pluginMenuActionFailed": "Die Menüaktion \"{{name}}\" ist fehlgeschlagen.",
+    "recordingOverlaysSkipped": "Die Kartenpanels konnten nicht erfasst werden, daher zeigt die Aufnahme nur die Karte."
   },
   "shell": {
     "workspaceTitle": "GeoLibre-Kartenarbeitsbereich",

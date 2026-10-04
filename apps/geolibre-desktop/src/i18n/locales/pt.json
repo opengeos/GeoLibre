@@ -8266,12 +8266,28 @@
     "copyJson": "Copiar JSON",
     "copied": "Copiado",
     "clear": "Limpar",
+    "reportIssue": "Relatar problema",
     "emptyAll": "Nenhum diagnóstico capturado.",
     "emptyError": "Nenhum diagnóstico de erro capturado.",
     "emptyWarning": "Nenhum diagnóstico de aviso capturado.",
     "emptyInfo": "Nenhum diagnóstico informativo capturado.",
     "emptyNetwork": "Nenhum diagnóstico de rede capturado.",
     "emptyNetworkError": "Nenhum diagnóstico de erro de rede capturado."
+  },
+  "notifications": {
+    "regionLabel": "Notificações",
+    "dismiss": "Dispensar notificação",
+    "reportIssue": "Relatar problema",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "Não foi possível carregar a camada \"{{name}}\"",
+    "layerLoadFailedHint": "Verifique a URL, sua conexão de rede e qualquer chave de API necessária. Os detalhes estão no painel Diagnósticos.",
+    "fileReadFailed": "Não foi possível ler \"{{name}}\", então ele foi ignorado.",
+    "libraryLayerRestoreFailed": "Não foi possível adicionar \"{{name}}\" de Meus dados.",
+    "localLayersDropped_one": "{{count}} camada removida: não foi possível ler seu arquivo ({{path}}).",
+    "localLayersDropped_other": "{{count}} camadas removidas: não foi possível ler o arquivo delas ({{path}}).",
+    "pluginActivateFailed": "Não foi possível iniciar o plugin \"{{id}}\" pelo link.",
+    "pluginMenuActionFailed": "A ação de menu \"{{name}}\" falhou.",
+    "recordingOverlaysSkipped": "Não foi possível capturar os painéis do mapa, então a gravação mostra apenas o mapa."
   },
   "shell": {
     "workspaceTitle": "Espaço de trabalho do mapa do GeoLibre",

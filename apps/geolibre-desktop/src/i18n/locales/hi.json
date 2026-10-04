@@ -8266,12 +8266,28 @@
     "copyJson": "JSON कॉपी करें",
     "copied": "कॉपी हो गया",
     "clear": "साफ़ करें",
+    "reportIssue": "समस्या की रिपोर्ट करें",
     "emptyAll": "कोई डायग्नोस्टिक्स दर्ज नहीं हुए।",
     "emptyError": "कोई त्रुटि डायग्नोस्टिक्स दर्ज नहीं हुए।",
     "emptyWarning": "कोई चेतावनी डायग्नोस्टिक्स दर्ज नहीं हुए।",
     "emptyInfo": "कोई सूचना डायग्नोस्टिक्स दर्ज नहीं हुए।",
     "emptyNetwork": "कोई नेटवर्क डायग्नोस्टिक्स दर्ज नहीं हुए।",
     "emptyNetworkError": "कोई नेटवर्क त्रुटि डायग्नोस्टिक्स दर्ज नहीं हुए।"
+  },
+  "notifications": {
+    "regionLabel": "सूचनाएँ",
+    "dismiss": "सूचना हटाएँ",
+    "reportIssue": "समस्या की रिपोर्ट करें",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "लेयर \"{{name}}\" लोड नहीं हो सकी",
+    "layerLoadFailedHint": "URL, अपना नेटवर्क कनेक्शन और कोई भी आवश्यक API कुंजी जाँचें। विवरण डायग्नोस्टिक्स पैनल में हैं।",
+    "fileReadFailed": "\"{{name}}\" पढ़ी नहीं जा सकी, इसलिए उसे छोड़ दिया गया।",
+    "libraryLayerRestoreFailed": "मेरा डेटा से \"{{name}}\" नहीं जोड़ी जा सकी।",
+    "localLayersDropped_one": "{{count}} लेयर हटा दी गई: उसकी फ़ाइल पढ़ी नहीं जा सकी ({{path}})।",
+    "localLayersDropped_other": "{{count}} लेयर हटा दी गईं: उनकी फ़ाइल पढ़ी नहीं जा सकी ({{path}})।",
+    "pluginActivateFailed": "लिंक से प्लगइन \"{{id}}\" शुरू नहीं किया जा सका।",
+    "pluginMenuActionFailed": "मेनू क्रिया \"{{name}}\" विफल रही।",
+    "recordingOverlaysSkipped": "मानचित्र पैनल कैप्चर नहीं किए जा सके, इसलिए रिकॉर्डिंग में केवल मानचित्र दिखता है।"
   },
   "shell": {
     "workspaceTitle": "GeoLibre मानचित्र कार्यक्षेत्र",

@@ -8266,12 +8266,28 @@
     "copyJson": "JSON'u kopyala",
     "copied": "Kopyalandı",
     "clear": "Temizle",
+    "reportIssue": "Sorun bildir",
     "emptyAll": "Hiç tanılama verisi yakalanmadı.",
     "emptyError": "Hiç hata tanılama verisi yakalanmadı.",
     "emptyWarning": "Hiç uyarı tanılama verisi yakalanmadı.",
     "emptyInfo": "Hiç bilgi tanılama verisi yakalanmadı.",
     "emptyNetwork": "Hiç ağ tanılama verisi yakalanmadı.",
     "emptyNetworkError": "Hiç ağ hatası tanılama verisi yakalanmadı."
+  },
+  "notifications": {
+    "regionLabel": "Bildirimler",
+    "dismiss": "Bildirimi kapat",
+    "reportIssue": "Sorun bildir",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "\"{{name}}\" katmanı yüklenemedi",
+    "layerLoadFailedHint": "URL'yi, ağ bağlantınızı ve gerekli API anahtarını kontrol edin. Ayrıntılar Tanılama panelindedir.",
+    "fileReadFailed": "\"{{name}}\" okunamadı, bu yüzden atlandı.",
+    "libraryLayerRestoreFailed": "\"{{name}}\" Verilerim'den eklenemedi.",
+    "localLayersDropped_one": "{{count}} katman kaldırıldı: dosyası okunamadı ({{path}}).",
+    "localLayersDropped_other": "{{count}} katman kaldırıldı: dosyaları okunamadı ({{path}}).",
+    "pluginActivateFailed": "\"{{id}}\" eklentisi bağlantıdan başlatılamadı.",
+    "pluginMenuActionFailed": "\"{{name}}\" menü eylemi başarısız oldu.",
+    "recordingOverlaysSkipped": "Harita panelleri yakalanamadı, bu yüzden kayıt yalnızca haritayı gösteriyor."
   },
   "shell": {
     "workspaceTitle": "GeoLibre harita çalışma alanı",

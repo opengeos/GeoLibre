@@ -8414,6 +8414,7 @@
     "copyJson": "העתק JSON",
     "copied": "הועתק",
     "clear": "נקה",
+    "reportIssue": "דיווח על בעיה",
     "emptyAll": "לא נאספו נתוני אבחון.",
     "emptyError": "לא נאספו נתוני אבחון של שגיאות.",
     "emptyWarning": "לא נאספו נתוני אבחון של אזהרות.",
@@ -8425,6 +8426,22 @@
     "countWarnings_two": "{{count}} אזהרות",
     "countNetwork_two": "{{count}} בקשות רשת",
     "countNetworkErrors_two": "{{count}} שגיאות רשת"
+  },
+  "notifications": {
+    "regionLabel": "התראות",
+    "dismiss": "סגירת ההתראה",
+    "reportIssue": "דיווח על בעיה",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "טעינת השכבה \"{{name}}\" נכשלה",
+    "layerLoadFailedHint": "בדקו את כתובת ה-URL, את חיבור הרשת ואת מפתח ה-API הנדרש, אם יש. הפרטים נמצאים בחלונית האבחון.",
+    "fileReadFailed": "לא ניתן היה לקרוא את \"{{name}}\", ולכן הוא דולג.",
+    "libraryLayerRestoreFailed": "לא ניתן היה להוסיף את \"{{name}}\" מהנתונים שלי.",
+    "localLayersDropped_one": "שכבה אחת ({{count}}) הוסרה: לא ניתן היה לקרוא את הקובץ שלה ({{path}}).",
+    "localLayersDropped_two": "{{count}} שכבות הוסרו: לא ניתן היה לקרוא את הקובץ שלהן ({{path}}).",
+    "localLayersDropped_other": "{{count}} שכבות הוסרו: לא ניתן היה לקרוא את הקובץ שלהן ({{path}}).",
+    "pluginActivateFailed": "לא ניתן היה להפעיל את התוסף \"{{id}}\" מהקישור.",
+    "pluginMenuActionFailed": "פעולת התפריט \"{{name}}\" נכשלה.",
+    "recordingOverlaysSkipped": "לא ניתן היה ללכוד את חלוניות המפה, ולכן ההקלטה מציגה את המפה בלבד."
   },
   "shell": {
     "workspaceTitle": "סביבת עבודת המפה של GeoLibre",

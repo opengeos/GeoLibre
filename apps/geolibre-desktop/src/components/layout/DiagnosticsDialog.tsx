@@ -8,7 +8,7 @@ import {
   DialogTitle,
   ScrollArea,
 } from "@geolibre/ui";
-import { Clipboard, Trash2 } from "lucide-react";
+import { Bug, Clipboard, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -18,6 +18,7 @@ import {
   type DiagnosticLevel,
   type DiagnosticsSnapshot,
 } from "../../lib/diagnostics";
+import { reportIssue } from "../../lib/report-issue";
 
 interface DiagnosticsDialogProps {
   diagnostics: DiagnosticsSnapshot;
@@ -271,6 +272,16 @@ export function DiagnosticsDialog({ diagnostics, open, onOpenChange }: Diagnosti
                     {record.method ? <span>{record.method}</span> : null}
                     {record.status ? <span>HTTP {record.status}</span> : null}
                     {record.durationMs != null ? <span>{record.durationMs} ms</span> : null}
+                    {record.level === "error" ? (
+                      <button
+                        type="button"
+                        className="ms-auto inline-flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => reportIssue(record)}
+                      >
+                        <Bug aria-hidden="true" className="h-3 w-3" />
+                        {t("diagnostics.reportIssue")}
+                      </button>
+                    ) : null}
                   </div>
                   <div className="break-words text-sm">{record.message}</div>
                   {record.url ? (

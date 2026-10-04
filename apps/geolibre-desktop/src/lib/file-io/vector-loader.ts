@@ -45,6 +45,7 @@ import {
   VECTOR_FILE_DIALOG_EXTENSIONS,
 } from "./paths";
 import { loadShapefileZip } from "./shapefile-zip";
+import { notifyFileReadFailed } from "./notify-read-failure";
 import { toArrayBuffer } from "./shared";
 import {
   isDelimitedTextFileName,
@@ -362,6 +363,7 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
       });
     } catch (error) {
       console.warn(`Could not read the selected file "${path}".`, error);
+      notifyFileReadFailed(path, error);
     }
   }
   return picked;

@@ -8180,12 +8180,27 @@
     "copyJson": "复制 JSON",
     "copied": "已复制",
     "clear": "清空",
+    "reportIssue": "报告问题",
     "emptyAll": "未捕获任何诊断信息。",
     "emptyError": "未捕获任何错误诊断信息。",
     "emptyWarning": "未捕获任何警告诊断信息。",
     "emptyInfo": "未捕获任何信息类诊断信息。",
     "emptyNetwork": "未捕获任何网络诊断信息。",
     "emptyNetworkError": "未捕获任何网络错误诊断信息。"
+  },
+  "notifications": {
+    "regionLabel": "通知",
+    "dismiss": "关闭通知",
+    "reportIssue": "报告问题",
+    "repeated": "×{{count}}",
+    "layerLoadFailed": "图层“{{name}}”加载失败",
+    "layerLoadFailedHint": "请检查 URL、网络连接以及所需的 API 密钥。详细信息见诊断面板。",
+    "fileReadFailed": "无法读取“{{name}}”，已跳过。",
+    "libraryLayerRestoreFailed": "无法从我的数据添加“{{name}}”。",
+    "localLayersDropped_other": "已移除 {{count}} 个图层：无法读取其文件（{{path}}）。",
+    "pluginActivateFailed": "无法从链接启动插件“{{id}}”。",
+    "pluginMenuActionFailed": "菜单操作“{{name}}”失败。",
+    "recordingOverlaysSkipped": "无法捕获地图面板，因此录制内容仅显示地图。"
   },
   "shell": {
     "workspaceTitle": "GeoLibre 地图工作区",

@@ -15,6 +15,7 @@ import {
 } from "@geolibre/processing";
 import type { TFunction } from "i18next";
 import { useEffect, type RefObject } from "react";
+import { notify } from "../../lib/notify";
 import { isTauri, pickLocalRasterFiles, readRasterFileAtPath } from "../../lib/tauri-io";
 import { createAppAPI } from "../usePlugins";
 
@@ -74,10 +75,11 @@ export function useRasterFileHandlers(
           bytes = await readBytes();
         } catch (error) {
           console.error("[GeoLibre] Failed to read raster for conversion", error);
-          window.alert(
+          notify.error(
             bytesAreRemote
               ? t("raster.rasterDownloadFailed", { name })
               : t("raster.cogConvertFailed", { name }),
+            { error },
           );
           return;
         }
@@ -88,7 +90,8 @@ export function useRasterFileHandlers(
         // otherwise trigger. isTiff accepts BigTIFF too, matching the wasm
         // reader/converter, so a valid >4 GiB raster is not wrongly rejected.
         if (!isTiff(bytes)) {
-          window.alert(t("raster.rasterNotGeotiff", { name }));
+          // A data problem, not an app fault, so a warning (no "Report issue").
+          notify.warning(t("raster.rasterNotGeotiff", { name }));
           return;
         }
         const info = await readGeoTiffInfo(bytes);
@@ -98,7 +101,7 @@ export function useRasterFileHandlers(
           console.warn(
             `[GeoLibre] Skipping in-browser COG conversion for "${name}": ${samples.toLocaleString()} decoded samples exceed the safe memory limit.`,
           );
-          window.alert(t("raster.cogConvertTooLarge", { name }));
+          notify.warning(t("raster.cogConvertTooLarge", { name }));
           return;
         }
         if (!bytesAreRemote) {
@@ -127,7 +130,7 @@ export function useRasterFileHandlers(
         dismiss();
       } catch (error) {
         console.error("[GeoLibre] Failed to convert GeoTIFF to COG", error);
-        window.alert(t("raster.cogConvertFailed", { name }));
+        notify.error(t("raster.cogConvertFailed", { name }), { error });
       }
     });
     return () => setNonTiledRasterHandler(null);

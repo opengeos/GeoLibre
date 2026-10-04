@@ -7,6 +7,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import i18next from "i18next";
+import { notifyFileReadFailed } from "./notify-read-failure";
 import type { GeotaggedPhotoResult } from "../geotagged-photos";
 // Only the filename predicates are imported statically; the importer itself is
 // loaded with `import()` when photos are read, keeping it off the boot path.
@@ -123,6 +124,7 @@ export async function pickLocalRasterFiles(): Promise<{ file: File | string; pat
       picked.push({ file: await readRasterFileAtPath(path), path });
     } catch (error) {
       console.warn(`Could not read the selected raster "${path}".`, error);
+      notifyFileReadFailed(path, error);
     }
   }
   return picked;
@@ -175,6 +177,7 @@ export async function pickImageFilesWithFallback(): Promise<File[]> {
         files.push(new File([bytes], browserSafeFileName(path)));
       } catch (error) {
         console.warn(`Could not read the selected image "${path}".`, error);
+        notifyFileReadFailed(path, error);
       }
     }
     return files;
@@ -223,6 +226,7 @@ export async function loadDroppedPhotoPaths(paths: string[]): Promise<GeotaggedP
       files.push(new File([toArrayBuffer(await readFile(path))], browserSafeFileName(path)));
     } catch (error) {
       console.warn(`Could not read dropped image "${path}".`, error);
+      notifyFileReadFailed(path, error);
     }
   }
   if (!files.length) return null;
