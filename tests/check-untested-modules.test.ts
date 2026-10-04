@@ -145,10 +145,23 @@ describe("check-untested-modules helpers", () => {
   it("matches backend modules to test_<module>.py and test_<module>_*.py", () => {
     assert.deepEqual(
       backendModulesWithoutTests(
-        ["main", "vector", "whitebox", "sql"],
+        ["app/main.py", "app/vector.py", "app/whitebox.py", "app/sql.py"],
         ["test_vector.py", "test_whitebox_endpoints.py", "conftest.py", "test_sql.py"],
       ),
-      ["main"],
+      ["app/main.py"],
+    );
+  });
+
+  it("credits a test file to the longest module name it matches", () => {
+    // test_vector_io.py belongs to vector_io.py, so vector.py stays untested.
+    assert.deepEqual(
+      backendModulesWithoutTests(["vector.py", "vector_io.py"], ["test_vector_io.py"]),
+      ["vector.py"],
+    );
+    // A suffix that names no module still credits the shorter module.
+    assert.deepEqual(
+      backendModulesWithoutTests(["vector.py", "vector_io.py"], ["test_vector_golden.py"]),
+      ["vector_io.py"],
     );
   });
 });

@@ -178,25 +178,47 @@ export function prunedBaseline(baseline, result) {
 
 /**
  * Backend modules with no test file named after them: `foo.py` counts as
- * covered by `test_foo.py` or `test_foo_*.py`. A report, not a gate.
+ * covered by `test_foo.py` or `test_foo_*.py`. Each test file is credited to
+ * the longest module name it matches, so `test_vector_io.py` covers
+ * `vector_io.py` and not `vector.py`. Modules that share a basename in
+ * different directories are matched together, since a test file name cannot
+ * tell them apart. A report, not a gate.
  *
- * @param {string[]} modules Module basenames without `.py`.
+ * @param {string[]} modules Module paths ending in `.py`.
  * @param {string[]} testFiles Test file basenames.
- * @returns {string[]}
+ * @returns {string[]} The module paths no test file is credited to.
  */
 export function backendModulesWithoutTests(modules, testFiles) {
-  const stems = testFiles
-    .filter((name) => name.startsWith("test_") && name.endsWith(".py"))
-    .map((name) => name.slice("test_".length, -".py".length));
-  return modules.filter(
-    (module) => !stems.some((stem) => stem === module || stem.startsWith(`${module}_`)),
-  );
+  const names = [...new Set(modules.map((file) => path.posix.basename(file, ".py")))];
+  const covered = new Set();
+  for (const testFile of testFiles) {
+    if (!testFile.startsWith("test_") || !testFile.endsWith(".py")) continue;
+    const stem = testFile.slice("test_".length, -".py".length);
+    const owner = names
+      .filter((name) => stem === name || stem.startsWith(`${name}_`))
+      .sort((a, b) => b.length - a.length)[0];
+    if (owner) covered.add(owner);
+  }
+  return modules.filter((file) => !covered.has(path.posix.basename(file, ".py")));
 }
 
+/**
+ * A copy of a record with its keys in sorted order, for stable JSON output.
+ *
+ * @param {Record<string, number>} record
+ * @returns {Record<string, number>}
+ */
 function sortKeys(record) {
   return Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
 }
 
+/**
+ * Every file under a directory, skipping `node_modules` and dot entries.
+ *
+ * @param {string} dir Directory to walk.
+ * @param {string[]} out Accumulator the paths are pushed onto.
+ * @returns {string[]} `out`.
+ */
 function walk(dir, out) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
@@ -207,7 +229,12 @@ function walk(dir, out) {
   return out;
 }
 
-/** In-scope frontend source files with their line counts. */
+/**
+ * In-scope frontend source files with their line counts.
+ *
+ * @param {string} root Absolute repo root.
+ * @returns {Record<string, number>}
+ */
 function collectSources(root) {
   const sizes = {};
   for (const top of SOURCE_ROOTS) {
@@ -228,6 +255,12 @@ function collectSources(root) {
   return sizes;
 }
 
+/**
+ * Repo-relative paths of backend sidecar modules with no test named after them.
+ *
+ * @param {string} root Absolute repo root.
+ * @returns {string[]}
+ */
 function backendReport(root) {
   const pkgDir = path.join(root, BACKEND_PACKAGE);
   const testDir = path.join(root, BACKEND_TESTS);
@@ -236,16 +269,15 @@ function backendReport(root) {
     .filter((full) => full.endsWith(".py") && path.basename(full) !== "__init__.py")
     .map((full) => path.relative(root, full).split(path.sep).join("/"))
     .sort();
-  const testFiles = readdirSync(testDir);
-  const missing = new Set(
-    backendModulesWithoutTests(
-      modules.map((file) => path.posix.basename(file, ".py")),
-      testFiles,
-    ),
-  );
-  return modules.filter((file) => missing.has(path.posix.basename(file, ".py")));
+  return backendModulesWithoutTests(modules, readdirSync(testDir));
 }
 
+/**
+ * Run the check.
+ *
+ * @param {string[]} argv Command-line flags (`--prune`, `--write-baseline`).
+ * @returns {number} The process exit code.
+ */
 function main(argv) {
   const root = process.cwd();
   const prune = argv.includes("--prune");
@@ -273,7 +305,18 @@ function main(argv) {
     );
     return 0;
   }
-  const baseline = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, "utf8")) : {};
+  let baseline = {};
+  if (existsSync(baselineFile)) {
+    try {
+      baseline = JSON.parse(readFileSync(baselineFile, "utf8"));
+    } catch (error) {
+      console.error(
+        `check-untested-modules: could not parse ${BASELINE_PATH}: ${error.message}. ` +
+          "Fix the file (a leftover merge conflict?) or restore it from git.",
+      );
+      return 1;
+    }
+  }
   const result = compareToBaseline({ untested, baseline, tested, sizes });
 
   const tracked = Object.keys(untested).length;
