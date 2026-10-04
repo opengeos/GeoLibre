@@ -47,7 +47,7 @@ function subcatKey(label: string): string {
 // `com.apple.security.network.server` entitlement — App Review rejected it
 // otherwise. Module scope, like IS_MAS_BUILD: the build flag and user agent it
 // reads are fixed for the session, so there is nothing to recompute per render.
-// TopToolbar's command-palette gate reads the same constant.
+// The command palette's gate (useToolbarCommands) reads the same constant.
 export const EARTH_ENGINE_AVAILABLE = isEarthEngineAvailable();
 
 interface ProcessingMenuProps {

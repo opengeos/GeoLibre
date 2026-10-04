@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -16,6 +16,10 @@ function source(path: string): string {
 
 const DESKTOP_SHELL = "apps/geolibre-desktop/src/components/layout/DesktopShell.tsx";
 const TOP_TOOLBAR = "apps/geolibre-desktop/src/components/layout/TopToolbar.tsx";
+const TOOLBAR_HOOKS_DIR = "apps/geolibre-desktop/src/hooks/toolbar";
+const TOOLBAR_HOOKS = readdirSync(
+  fileURLToPath(new URL(`../${TOOLBAR_HOOKS_DIR}`, import.meta.url)),
+).map((name) => `${TOOLBAR_HOOKS_DIR}/${name}`);
 
 describe("terrain restore is independent of toolbar visibility", () => {
   it("DesktopShell applies the preference itself", () => {
@@ -37,10 +41,14 @@ describe("terrain restore is independent of toolbar visibility", () => {
   });
 
   it("TopToolbar no longer owns the terrain restore", () => {
-    assert.doesNotMatch(
-      source(TOP_TOOLBAR),
-      /setBuiltInControlVisible\(\s*"terrain"/,
-      `${TOP_TOOLBAR} is unmounted by ?maponly and must not apply terrain`,
-    );
+    // The toolbar's state lives in hooks/toolbar/ (#2858); those hooks mount
+    // with it, so they are chrome-gated too.
+    for (const path of [TOP_TOOLBAR, ...TOOLBAR_HOOKS]) {
+      assert.doesNotMatch(
+        source(path),
+        /setBuiltInControlVisible\(\s*"terrain"/,
+        `${path} is unmounted by ?maponly and must not apply terrain`,
+      );
+    }
   });
 });
