@@ -77,8 +77,10 @@ public counts on its plugin catalog. It records no more than this:
 No IP address, account, or other information about you or your projects is
 stored. The app sends nothing extra for this: the counts come only from the
 plugin downloads it already makes. A deployment that sets its own plugin
-registry (`plugins.registryUrl` in `deployment.json`) doesn't contact
-plugins.geolibre.app and isn't counted. Details:
+registry (`plugins.registryUrl` in `deployment.json`) contacts
+plugins.geolibre.app only for plugin files its registry points to there; those
+downloads are counted like any other, so a deployment that wants none should
+host the plugin files itself. Details:
 <https://plugins.geolibre.app/registry/#usage-statistics>.
 
 ## Website analytics
