@@ -856,6 +856,8 @@ export function reloadExternalUrlPlugin(
     policy?: DeploymentPolicy | null;
     source?: PluginSource;
     expectedVersion?: string;
+    /** Registry-announced bundle hash; a download that differs is refused. */
+    expectedHash?: string;
   } = {},
 ): Promise<GeoLibrePlugin> {
   const inFlight = inFlightUrlUpgrades.get(manifestUrl);
@@ -877,6 +879,8 @@ async function reloadExternalUrlPluginUncoalesced(
     policy?: DeploymentPolicy | null;
     source?: PluginSource;
     expectedVersion?: string;
+    /** Registry-announced bundle hash; a download that differs is refused. */
+    expectedHash?: string;
   },
 ): Promise<GeoLibrePlugin> {
   const policy = options.policy === undefined ? getDeploymentPolicy() : options.policy;
@@ -904,6 +908,7 @@ async function reloadExternalUrlPluginUncoalesced(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   let bundle: ExternalPluginBundle;
+  let bundleHash: string;
   let plugin: GeoLibrePlugin;
   try {
     bundle = await loadPluginUrlBundle(
@@ -920,6 +925,14 @@ async function reloadExternalUrlPluginUncoalesced(
     ) {
       throw new Error(
         `Cannot update plugin: expected version ${options.expectedVersion} but the registry now serves ${bundle.manifest.version}. Refresh the plugin list and try again.`,
+      );
+    }
+    // Hash before importing: code that doesn't match the reviewed bundle the
+    // registry announced must never be evaluated.
+    bundleHash = await computePluginBundleHash(bundle);
+    if (options.expectedHash !== undefined && bundleHash !== options.expectedHash) {
+      throw new Error(
+        `Cannot update plugin: the code downloaded from '${manifestUrl}' does not match the version the registry lists. It may still be publishing; refresh the plugin list and try again in a few minutes.`,
       );
     }
     // The timeout only bounds the fetch/stream above; a dynamic import() of a
@@ -940,10 +953,9 @@ async function reloadExternalUrlPluginUncoalesced(
         `Cannot update plugin: '${plugin.id}' does not match the held-back plugin '${heldBack.pluginId}' or is already registered. Reinstall it manually.`,
       );
     }
-    const newHash = await computePluginBundleHash(bundle);
     manager.register(plugin);
     externallyLoadedPluginSources.set(plugin.id, manifestUrl);
-    pinPluginBundle(manifestUrl, newHash, bundle.manifest.version);
+    pinPluginBundle(manifestUrl, bundleHash, bundle.manifest.version);
     heldBackBundles.delete(manifestUrl);
     if (bundle.styleSource) {
       injectExternalPluginStyle(plugin.id, bundle.styleSource);
@@ -982,7 +994,7 @@ async function reloadExternalUrlPluginUncoalesced(
   externallyLoadedPluginSources.set(plugin.id, manifestUrl);
   // Explicit user reload: accept this version as the new trusted baseline so the
   // next auto-scan doesn't flag it as changed.
-  pinPluginBundle(manifestUrl, await computePluginBundleHash(bundle), bundle.manifest.version);
+  pinPluginBundle(manifestUrl, bundleHash, bundle.manifest.version);
   if (bundle.styleSource) {
     injectExternalPluginStyle(plugin.id, bundle.styleSource);
   }

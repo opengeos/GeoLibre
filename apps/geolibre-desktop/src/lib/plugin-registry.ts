@@ -6,6 +6,7 @@
 
 import { isAllowedPluginManifestUrl, setRegistryPublishableSettings } from "@geolibre/core";
 import { getDeploymentPolicy } from "./deployment-env";
+import { pinPluginBundle } from "./plugin-integrity";
 
 /** A single curated plugin in the marketplace registry. */
 export interface PluginRegistryEntry {
@@ -25,6 +26,12 @@ export interface PluginRegistryEntry {
    * `null` keeps the plugin's whole state. Absent means nothing is kept.
    */
   publishableSettings?: string[] | null;
+  /**
+   * SHA-256 of the published bundle, in the form `computePluginBundleHash`
+   * produces. When present, installing and updating check the downloaded code
+   * against it instead of trusting whatever the URL serves first.
+   */
+  bundleSha256?: string;
 }
 
 export interface PluginRegistry {
@@ -262,7 +269,29 @@ function normalizeEntry(value: unknown, registryUrl: string): PluginRegistryEntr
     categories: stringArray(record.categories),
     minGeoLibreVersion: trimmedString(record.minGeoLibreVersion, 64) || undefined,
     publishableSettings: normalizePublishableSettings(record.publishableSettings),
+    bundleSha256: bundleHashOrUndefined(record.bundleSha256),
   };
+}
+
+// A bundle hash is a lowercase hex SHA-256. Anything else is ignored, so the
+// entry falls back to trust-on-first-use rather than pinning a value no bundle
+// can ever match.
+function bundleHashOrUndefined(value: unknown): string | undefined {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value) ? value : undefined;
+}
+
+/**
+ * Pin the bundle hash a registry entry announces, before its manifest URL is
+ * installed. The first load then checks the downloaded code against the
+ * reviewed hash instead of trusting whatever the URL serves first: a mismatch
+ * is held back like any other changed bundle.
+ *
+ * @param entry - The registry entry being installed.
+ */
+export function pinRegistryEntryBundle(entry: PluginRegistryEntry): void {
+  if (entry.bundleSha256) {
+    pinPluginBundle(entry.manifestUrl, entry.bundleSha256, entry.version);
+  }
 }
 
 // Trim and, when a cap is given, bound the length so untrusted registry data

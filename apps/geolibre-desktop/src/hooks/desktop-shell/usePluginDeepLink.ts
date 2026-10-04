@@ -17,6 +17,7 @@ import {
 import { pluginManifestUrlsForIds } from "../../lib/external-plugins";
 import {
   fetchPluginRegistry,
+  pinRegistryEntryBundle,
   satisfiesMinVersion,
   type PluginRegistryEntry,
 } from "../../lib/plugin-registry";
@@ -275,6 +276,8 @@ export function usePluginDeepLink({
 
   const trust = useCallback(() => {
     if (pending.length === 0) return;
+    // Pin each reviewed hash before the URLs are installed and loaded.
+    pending.forEach(pinRegistryEntryBundle);
     const current = useDesktopSettingsStore.getState().desktopSettings;
     useDesktopSettingsStore.getState().setDesktopSettings({
       ...current,

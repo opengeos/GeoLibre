@@ -563,6 +563,7 @@ export async function upgradeExternalPlugin(
   manifestUrl: string,
   mapControllerRef: RefObject<MapEngine | null>,
   expectedVersion?: string,
+  expectedHash?: string,
 ): Promise<void> {
   const policy = getDeploymentPolicy();
   const bundledManifestUrls = bundledPluginManifestUrls();
@@ -580,6 +581,7 @@ export async function upgradeExternalPlugin(
     policy,
     source,
     expectedVersion,
+    expectedHash,
   });
   // A held-back bundle that just loaded is no longer a failure.
   if (externalPluginHeldBack.has(manifestUrl) || externalPluginLoadIssues.has(manifestUrl)) {

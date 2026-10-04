@@ -68,4 +68,38 @@ describe("fetchPluginRegistryShared", () => {
     await assert.rejects(fetchPluginRegistryShared(url), /HTTP 503/);
     assert.equal(requests, 2);
   });
+
+  it("keeps a lowercase hex bundleSha256 and drops anything else", async () => {
+    const hash = "ab".repeat(32);
+    const entry = (id: string, bundleSha256: unknown) => ({
+      id,
+      name: id,
+      version: "1.0.0",
+      manifestUrl: `https://example.com/${id}/plugin.json`,
+      bundleSha256,
+    });
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify([
+            entry("valid", hash),
+            entry("uppercase", hash.toUpperCase()),
+            entry("short", "ab".repeat(31)),
+            entry("not-a-string", 42),
+          ]),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      )) as typeof fetch;
+
+    const registry = await fetchPluginRegistryShared("https://example.com/hash-registry.json");
+    assert.deepEqual(
+      registry.entries.map((e) => [e.id, e.bundleSha256]),
+      [
+        ["valid", hash],
+        ["uppercase", undefined],
+        ["short", undefined],
+        ["not-a-string", undefined],
+      ],
+    );
+  });
 });

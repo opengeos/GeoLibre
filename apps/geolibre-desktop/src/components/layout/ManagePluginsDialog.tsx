@@ -56,6 +56,7 @@ import {
 import {
   fetchPluginRegistry,
   isNewerVersion,
+  pinRegistryEntryBundle,
   satisfiesMinVersion,
   type PluginRegistryEntry,
 } from "../../lib/plugin-registry";
@@ -296,6 +297,9 @@ export function ManagePluginsDialog({
       } else if (getDeploymentPolicy()?.plugins?.sideload === false) {
         return;
       }
+      // Pin the reviewed hash first, so the load that the settings change
+      // triggers checks the download against it.
+      if (registryEntry) pinRegistryEntryBundle(registryEntry);
       const current = useDesktopSettingsStore.getState().desktopSettings;
       setDesktopSettings({
         ...current,
@@ -325,7 +329,12 @@ export function ManagePluginsDialog({
       try {
         // A held-back bundle is consented to at the version the card showed.
         const expectedVersion = isHeldBackUpdate(entry) ? entry.version : undefined;
-        await upgradeExternalPlugin(entry.manifestUrl, mapControllerRef, expectedVersion);
+        await upgradeExternalPlugin(
+          entry.manifestUrl,
+          mapControllerRef,
+          expectedVersion,
+          entry.bundleSha256,
+        );
       } catch (error: unknown) {
         setActionError({
           id: entry.id,

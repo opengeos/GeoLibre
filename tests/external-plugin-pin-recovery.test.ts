@@ -10,6 +10,7 @@ import { setDeploymentPolicy } from "../apps/geolibre-desktop/src/lib/deployment
 // lazily in `before`, after the shims below are installed.
 type ExternalPlugins = typeof import("../apps/geolibre-desktop/src/lib/external-plugins");
 type PluginIntegrity = typeof import("../apps/geolibre-desktop/src/lib/plugin-integrity");
+type PluginRegistry = typeof import("../apps/geolibre-desktop/src/lib/plugin-registry");
 
 const app = {} as GeoLibreAppAPI;
 const MANIFEST_URL = "http://localhost:7777/pin-demo/plugin.json";
@@ -91,6 +92,7 @@ function installBrowserShims(): void {
 describe("recovering a URL plugin blocked by its integrity pin", () => {
   let externalPlugins: ExternalPlugins;
   let integrity: PluginIntegrity;
+  let registry: PluginRegistry;
   let PluginManagerCtor: typeof PluginManager;
   let manager: PluginManager;
 
@@ -98,6 +100,7 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     installBrowserShims();
     externalPlugins = await import("../apps/geolibre-desktop/src/lib/external-plugins");
     integrity = await import("../apps/geolibre-desktop/src/lib/plugin-integrity");
+    registry = await import("../apps/geolibre-desktop/src/lib/plugin-registry");
     ({ PluginManager: PluginManagerCtor } = await import("../packages/plugins/src/plugin-manager"));
   });
 
@@ -421,5 +424,70 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     externalPlugins.unloadRemovedUrlPlugins(manager, [MANIFEST_URL], app);
     assert.equal(integrity.getPluginBundlePin(MANIFEST_URL), pinned);
     assert.equal(manager.list().length, 1);
+  });
+
+  // The hash of the bundle `pluginBundle()` serves, as the registry publishes it.
+  async function servedBundleHash(): Promise<string> {
+    return integrity.computePluginBundleHash({ entrySource: served.get(ENTRY_URL) ?? "" });
+  }
+
+  function registryEntry(bundleSha256: string) {
+    return {
+      id: "pin-demo",
+      name: "Pin Demo",
+      version: "1.0.0",
+      manifestUrl: MANIFEST_URL,
+      bundleSha256,
+    };
+  }
+
+  it("a registry install loads a bundle that matches the announced hash", async () => {
+    registry.pinRegistryEntryBundle(registryEntry(await servedBundleHash()));
+
+    const loaded = await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    assert.deepEqual(loaded.issues, []);
+    assert.deepEqual(loaded.loadedPluginIds, ["pin-demo"]);
+  });
+
+  it("a registry install holds back a bundle that differs from the announced hash", async () => {
+    registry.pinRegistryEntryBundle(registryEntry("0".repeat(64)));
+
+    const loaded = await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    assert.deepEqual(loaded.loadedPluginIds, []);
+    assert.equal(loaded.issues[0]?.integrityStatus, "changed");
+    assert.deepEqual(manager.list(), []);
+  });
+
+  it("an update refuses, without evaluating it, a bundle that differs from the registry hash", async () => {
+    // Held back at 0.9.0; the URL now serves code the registry did not review.
+    integrity.pinPluginBundle(MANIFEST_URL, "0".repeat(64), "0.9.0");
+    await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    const flag = "__pinDemoEvaluated";
+    served.set(ENTRY_URL, `globalThis.${flag} = true;\n${served.get(ENTRY_URL) ?? ""}`);
+    const registryHash = "1".repeat(64);
+
+    await assert.rejects(
+      externalPlugins.reloadExternalUrlPlugin(manager, MANIFEST_URL, app, {
+        expectedHash: registryHash,
+      }),
+      /does not match the version the registry lists/,
+    );
+    assert.equal((globalThis as Record<string, unknown>)[flag], undefined);
+    assert.deepEqual(manager.list(), []);
+    // The old pin stands, so the rejected code stays held back.
+    assert.equal(integrity.getPluginBundlePin(MANIFEST_URL), "0".repeat(64));
+  });
+
+  it("an update accepts a bundle that matches the registry hash and pins it", async () => {
+    integrity.pinPluginBundle(MANIFEST_URL, "0".repeat(64), "0.9.0");
+    await externalPlugins.loadExternalPlugins(manager, [], [MANIFEST_URL]);
+    const registryHash = await servedBundleHash();
+
+    const plugin = await externalPlugins.reloadExternalUrlPlugin(manager, MANIFEST_URL, app, {
+      expectedHash: registryHash,
+    });
+    assert.equal(plugin.id, "pin-demo");
+    assert.equal(integrity.getPluginBundlePin(MANIFEST_URL), registryHash);
+    assert.equal(integrity.getPluginBundlePinVersion(MANIFEST_URL), "1.0.0");
   });
 });
