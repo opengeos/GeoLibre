@@ -121,7 +121,47 @@ function bootSet(dist) {
     const file = resolveBuiltUrl(dist, url);
     if (file && !target.includes(file)) target.push(file);
   }
+  // Vite modulepreloads the entry's whole static graph, but only while
+  // build.modulePreload is on; follow the static imports too so the boot set
+  // stays complete without it (the same graph bootBundleBudgetPlugin walks).
+  for (let i = 0; i < js.length; i += 1) {
+    const code = readFileSync(path.join(dist, js[i]), "utf8");
+    for (const specifier of staticImports(code)) {
+      const file = path.posix.normalize(path.posix.join(path.posix.dirname(js[i]), specifier));
+      if (!js.includes(file) && existsSync(path.join(dist, file))) js.push(file);
+    }
+  }
   return { js, css };
+}
+
+/**
+ * Relative specifiers a built chunk imports statically.
+ *
+ * Matches `import … from "./x.js"`, bare `import "./x.js"` and
+ * `export … from "./x.js"` in Vite/Rolldown output. A dynamic
+ * `import("./x.js")` is lazy and deliberately not matched.
+ *
+ * @param {string} code - The chunk's source.
+ * @returns {string[]} Relative specifiers such as `./react-abc.js`.
+ */
+function staticImports(code) {
+  const pattern =
+    /(?:^|[;}\s])(?:import|export)\s*(?:[\w$*{},\s]+?\s*from\s*)?["'](\.{1,2}\/[^"']+)["']/g;
+  return [...code.matchAll(pattern)].map((match) => match[1]);
+}
+
+/**
+ * Every file under a directory, recursively.
+ *
+ * @param {string} dir - Absolute directory path.
+ * @returns {string[]} Absolute file paths.
+ */
+function listFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return listFiles(full);
+    return entry.isFile() ? [full] : [];
+  });
 }
 
 /**
@@ -160,12 +200,12 @@ function buildReport(dist) {
   }
   const budget = JSON.parse(readFileSync(path.join(APP_DIR, "boot-budget.json"), "utf8"));
   const assetsDir = path.join(dist, "assets");
-  const assets = readdirSync(assetsDir)
-    .filter((name) => /\.(?:m?js|wasm)$/.test(name))
-    .map((name) => ({
-      file: `assets/${name}`,
-      kind: name.endsWith(".wasm") ? "wasm" : "js",
-      ...measure(path.join(assetsDir, name)),
+  const assets = listFiles(assetsDir)
+    .filter((full) => /\.(?:m?js|wasm)$/.test(full))
+    .map((full) => ({
+      file: path.relative(dist, full).split(path.sep).join("/"),
+      kind: full.endsWith(".wasm") ? "wasm" : "js",
+      ...measure(full),
     }))
     .sort((a, b) => b.raw - a.raw || a.file.localeCompare(b.file));
 

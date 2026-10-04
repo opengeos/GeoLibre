@@ -131,6 +131,36 @@ describe("openRemoteNetcdfFile startup", () => {
     });
   });
 
+  it("tells the worker where to load h5wasm from in the open request", async () => {
+    // A production worker build has no h5wasm of its own; it imports the main
+    // build's chunk from this URL (vite-plugins/shared-h5wasm.ts) and throws
+    // without it. Outside a build the URL is null and the worker imports h5wasm
+    // normally, but the field must still travel with `open`.
+    const sent: Array<Record<string, unknown>> = [];
+    class RecordingWorker {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: { message: string }) => void) | null = null;
+      constructor() {
+        setTimeout(() => this.onmessage?.({ data: { ready: true } }), 0);
+      }
+      postMessage(message: Record<string, unknown> & { id: number }): void {
+        sent.push(message);
+        setTimeout(() => this.onmessage?.({ data: { id: message.id, ok: true, result: [] } }), 0);
+      }
+      terminate(): void {}
+    }
+
+    await withWorkerStub(RecordingWorker, async () => {
+      const file = await openRemoteNetcdfFile("https://example.com/scene.nc");
+      file.close();
+    });
+    const open = sent.find((message) => message.type === "open");
+    assert.ok(open, "no open request was sent");
+    assert.ok("h5wasmUrl" in open, "the open request does not carry h5wasmUrl");
+    assert.equal(open.h5wasmUrl, null);
+    assert.equal(open.url, "https://example.com/scene.nc");
+  });
+
   it("fails the in-flight reads when the file is closed", async () => {
     /** A worker that answers `open` but never replies to anything after it. */
     class SilentWorker {

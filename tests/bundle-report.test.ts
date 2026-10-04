@@ -22,6 +22,23 @@ interface Report {
   assets: Array<{ file: string; kind: string; raw: number; gzip: number; boot: boolean }>;
 }
 
+// The fake build's assets/. index.html names only main-a (entry) and vendor-b
+// (modulepreload); dep-f is reached only through main-a's static import, and
+// lazy-c only through a dynamic one, so it stays out of the boot set.
+const FILES: Record<string, string | Buffer> = {
+  "main-a.js":
+    'import{f as d}from"./dep-f.js";import"./vendor-b.js";' +
+    'const l=()=>import("./lazy-c.js");\n' +
+    "export const a = 1;\n".repeat(50),
+  "vendor-b.js": "export const b = 2;\n".repeat(20),
+  "dep-f.js": "export const f = 4;\n".repeat(30),
+  "lazy-c.js": "export const c = 3;\n".repeat(200),
+  "engine-d.wasm": Buffer.alloc(4096, 7),
+  "nested/worker-g.js": "export const g = 5;\n".repeat(40),
+  "main-e.css": "body{color:red}\n",
+};
+const size = (file: string): number => Buffer.byteLength(FILES[file]);
+
 const work = mkdtempSync(path.join(tmpdir(), "bundle-report-"));
 after(() => rmSync(work, { recursive: true, force: true }));
 
@@ -34,12 +51,10 @@ after(() => rmSync(work, { recursive: true, force: true }));
 function runReport(base: string): { report: Report; markdown: string } {
   const dist = mkdtempSync(path.join(work, "dist-"));
   const out = path.join(dist, "..", `${path.basename(dist)}-out`);
-  mkdirSync(path.join(dist, "assets"));
-  writeFileSync(path.join(dist, "assets", "main-a.js"), "export const a = 1;\n".repeat(50));
-  writeFileSync(path.join(dist, "assets", "vendor-b.js"), "export const b = 2;\n".repeat(20));
-  writeFileSync(path.join(dist, "assets", "lazy-c.js"), "export const c = 3;\n".repeat(200));
-  writeFileSync(path.join(dist, "assets", "engine-d.wasm"), Buffer.alloc(4096, 7));
-  writeFileSync(path.join(dist, "assets", "main-e.css"), "body{color:red}\n");
+  mkdirSync(path.join(dist, "assets", "nested"), { recursive: true });
+  for (const [file, content] of Object.entries(FILES)) {
+    writeFileSync(path.join(dist, "assets", file), content);
+  }
   writeFileSync(
     path.join(dist, "index.html"),
     [
@@ -65,17 +80,17 @@ describe("bundle-report.mjs", () => {
       const { report } = runReport(base);
       assert.deepEqual(
         report.boot.js.files.map((f) => f.file),
-        ["assets/main-a.js", "assets/vendor-b.js"],
+        ["assets/main-a.js", "assets/vendor-b.js", "assets/dep-f.js"],
       );
       assert.deepEqual(
         report.boot.css.files.map((f) => f.file),
         ["assets/main-e.css"],
       );
-      assert.equal(report.boot.js.raw, 20 * 50 + 20 * 20);
+      assert.equal(report.boot.js.raw, size("main-a.js") + size("vendor-b.js") + size("dep-f.js"));
     });
   }
 
-  it("lists every JS and WASM asset with raw and gzip sizes", () => {
+  it("lists every JS and WASM asset with raw and gzip sizes, nested ones included", () => {
     const { report, markdown } = runReport("/");
     assert.deepEqual(
       report.assets.map((a) => [a.file, a.kind, a.boot]),
@@ -83,6 +98,8 @@ describe("bundle-report.mjs", () => {
         ["assets/engine-d.wasm", "wasm", false],
         ["assets/lazy-c.js", "js", false],
         ["assets/main-a.js", "js", true],
+        ["assets/nested/worker-g.js", "js", false],
+        ["assets/dep-f.js", "js", true],
         ["assets/vendor-b.js", "js", true],
       ],
     );
@@ -90,7 +107,12 @@ describe("bundle-report.mjs", () => {
       assert.ok(asset.gzip > 0 && asset.gzip < asset.raw, `${asset.file} gzip size`);
     }
     assert.equal(report.totals.wasm.raw, 4096);
-    assert.equal(report.totals.js.raw, 20 * (50 + 20 + 200));
+    assert.equal(
+      report.totals.js.raw,
+      ["main-a.js", "vendor-b.js", "dep-f.js", "lazy-c.js", "nested/worker-g.js"]
+        .map(size)
+        .reduce((a, b) => a + b),
+    );
     assert.ok(report.budget.rawBytes > 0 && report.budget.gzipBytes > 0);
     assert.match(markdown, /## Bundle report/);
     assert.match(markdown, /`assets\/lazy-c\.js`/);
