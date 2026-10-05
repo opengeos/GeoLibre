@@ -1369,6 +1369,62 @@ describe("PluginManager plugin coordination", () => {
     assert.deepEqual(preference, [{ on: true }]);
   });
 
+  it("keeps a session-scoped plugin active through project loads and map swaps", () => {
+    const manager = new PluginManager();
+    const calls: string[] = [];
+    let renderer: "maplibre" | "cesium" | "mapbox" = "maplibre";
+    const api = { getMapRenderer: () => renderer } as GeoLibreAppAPI;
+    manager.register(
+      testPlugin({
+        id: "browser",
+        sessionScoped: true,
+        engines: ["maplibre", "cesium"],
+        activate: () => {
+          calls.push("activate:browser");
+        },
+        deactivate: () => {
+          calls.push("deactivate:browser");
+        },
+      }),
+    );
+    manager.register(
+      testPlugin({
+        id: "project-tool",
+        deactivate: () => {
+          calls.push("deactivate:project-tool");
+        },
+      }),
+    );
+    const empty = { manifestUrls: [], activePluginIds: [], mapControlPositions: {}, settings: {} };
+    manager.restoreProjectState(empty, api);
+    manager.activate("browser", api);
+    manager.activate("project-tool", api);
+    calls.length = 0;
+
+    // A project that lists neither plugin closes only the project's one.
+    manager.restoreProjectState(empty, api);
+    assert.equal(manager.isActive("browser"), true);
+    assert.equal(manager.isActive("project-tool"), false);
+    // A replaced map on a supported renderer leaves it running too.
+    renderer = "cesium";
+    manager.restoreProjectState(empty, api, { mapReplaced: true });
+    assert.equal(manager.isActive("browser"), true);
+    assert.deepEqual(calls, ["deactivate:project-tool"]);
+    // One it does not support still tears it down.
+    renderer = "mapbox";
+    manager.restoreProjectState(empty, api, { mapReplaced: true });
+    assert.equal(manager.isActive("browser"), false);
+  });
+
+  it("leaves a session-scoped plugin out of the saved active plugins", () => {
+    const manager = new PluginManager();
+    manager.register(testPlugin({ id: "browser", sessionScoped: true }));
+    manager.register(testPlugin({ id: "project-tool" }));
+    manager.activate("browser", app);
+    manager.activate("project-tool", app);
+    assert.deepEqual(manager.getProjectState().activePluginIds, ["project-tool"]);
+  });
+
   it("prevents recursive activation across coordinating plugins", async () => {
     const manager = new PluginManager();
     let firstCalls = 0;

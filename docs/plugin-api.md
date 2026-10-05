@@ -56,6 +56,12 @@ export interface GeoLibrePlugin {
   ) => boolean | void;
   getProjectState?: () => unknown;
   applyProjectState?: (app: GeoLibreAppAPI, state: unknown) => boolean | void;
+  /**
+   * A workspace tool, not part of a project (e.g. the S3 Browser panel):
+   * project loads and map swaps leave it running, and it is never saved in
+   * the project's active plugins. Only for plugins with no map controls.
+   */
+  sessionScoped?: boolean;
 }
 
 // Resolved by app.getDeckGL(): GeoLibre's own deck.gl modules, so a plugin

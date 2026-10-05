@@ -151,6 +151,8 @@ export interface StartupSettings {
    * added to the map. Null when none is set.
    */
   layerStyles: StartupLayerStyles | null;
+  /** Open the S3 Browser panel when the app starts (not in the read-only viewer). */
+  openS3Browser: boolean;
 }
 
 /**
@@ -297,6 +299,7 @@ export const DEFAULT_STARTUP_SETTINGS: StartupSettings = {
   center: [...createDefaultMapView().center],
   zoom: createDefaultMapView().zoom,
   layerStyles: null,
+  openS3Browser: false,
 };
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
@@ -397,6 +400,7 @@ function normalizeStartupSettings(startup: unknown): StartupSettings {
     center: view.center,
     zoom: view.zoom,
     layerStyles: normalizeStartupLayerStyles(candidate.layerStyles),
+    openS3Browser: candidate.openS3Browser === true,
   };
 }
 

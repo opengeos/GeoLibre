@@ -22,6 +22,7 @@ describe("startup project settings", () => {
       center: [-100, 40],
       zoom: 2,
       layerStyles: null,
+      openS3Browser: false,
     });
   });
 
@@ -45,6 +46,7 @@ describe("startup project settings", () => {
         center: [-84.388, 33.749],
         zoom: 10.25,
         layerStyles: null,
+        openS3Browser: false,
       },
     );
   });
@@ -54,6 +56,17 @@ describe("startup project settings", () => {
     assert.equal(
       normalizeDesktopSettings({ startup: { globeByDefault: "no" } }).startup.globeByDefault,
       true,
+    );
+  });
+
+  it("opens the S3 Browser at startup only when explicitly enabled", () => {
+    assert.equal(
+      normalizeDesktopSettings({ startup: { openS3Browser: true } }).startup.openS3Browser,
+      true,
+    );
+    assert.equal(
+      normalizeDesktopSettings({ startup: { openS3Browser: "yes" } }).startup.openS3Browser,
+      false,
     );
   });
 

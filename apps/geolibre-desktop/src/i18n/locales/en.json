@@ -2547,6 +2547,8 @@
       "noProjectSelected": "No project selected",
       "globeByDefault": "Enable 3D globe by default",
       "globeByDefaultHint": "Used for the untitled workspace when no startup project or project link is provided.",
+      "openS3Browser": "Open the S3 Browser at startup",
+      "openS3BrowserHint": "Show the S3 Browser panel each time GeoLibre starts. It stays open when you open a project.",
       "defaultView": "Default map view",
       "defaultViewHint": "Set the center and zoom for the untitled workspace.",
       "longitude": "Center longitude",

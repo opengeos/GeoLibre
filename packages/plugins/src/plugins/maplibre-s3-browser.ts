@@ -732,6 +732,8 @@ function createS3BrowserPlugin(): GeoLibrePlugin {
     name: "S3 Browser",
     version: "0.1.0",
     engines: ["maplibre", "cesium", "mapbox", "arcgis"],
+    // Opening a project from the panel must not close it.
+    sessionScoped: true,
     activate: (app: GeoLibreAppAPI) => {
       appRef = app;
       mountedPanels.add(remount);

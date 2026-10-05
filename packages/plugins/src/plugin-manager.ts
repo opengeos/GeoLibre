@@ -37,6 +37,11 @@ export class PluginManager {
     return isPluginEngineSupported(this.plugins.get(id), app.getMapRenderer?.() ?? "maplibre");
   }
 
+  /** Whether a session-scoped plugin stays active through a restore on this renderer. */
+  private keepsSessionActivation(id: string, app: GeoLibreAppAPI): boolean {
+    return Boolean(this.plugins.get(id)?.sessionScoped) && this.supportsEngine(id, app);
+  }
+
   private scopeAppToPlugin(
     app: GeoLibreAppAPI,
     id: string,
@@ -239,8 +244,11 @@ export class PluginManager {
       // persist project state must overwrite manifestUrls with the real list
       // (see TopToolbar.handleSave and persistProjectPluginState).
       manifestUrls: [],
+      // A session-scoped plugin's activation is not part of the project.
       activePluginIds: Array.from(this.plugins.keys()).filter(
-        (id) => this.active.has(id) || this.deferredActive.has(id),
+        (id) =>
+          !this.plugins.get(id)?.sessionScoped &&
+          (this.active.has(id) || this.deferredActive.has(id)),
       ),
       mapControlPositions,
       settings,
@@ -558,7 +566,11 @@ export class PluginManager {
     // the middle map restored lands on the same renderer kind, so the kind
     // alone cannot tell; the caller says when the map itself was replaced.
     if (this.renderer !== null && (renderer !== this.renderer || options.mapReplaced)) {
-      for (const id of Array.from(this.active)) this.deactivate(id, app);
+      for (const id of Array.from(this.active)) {
+        // A session-scoped plugin owns no map controls, so the new map does
+        // not need it rebuilt (and the saved project would not bring it back).
+        if (!this.keepsSessionActivation(id, app)) this.deactivate(id, app);
+      }
     }
     this.renderer = renderer;
     this.deferredState = state;
@@ -625,8 +637,9 @@ export class PluginManager {
     // Deactivate first so plugins that should be inactive tear down their live
     // controls before we touch positions or settings. This keeps the order of
     // operations from rebuilding a control only to remove it on the next pass.
+    // A session-scoped plugin the project does not list stays as it is.
     for (const id of Array.from(this.active)) {
-      if (targetActive.has(id)) continue;
+      if (targetActive.has(id) || this.keepsSessionActivation(id, app)) continue;
       const plugin = this.plugins.get(id);
       if (!plugin) continue;
       this.deactivate(id, app);

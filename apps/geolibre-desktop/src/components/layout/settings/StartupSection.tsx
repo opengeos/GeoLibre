@@ -161,6 +161,20 @@ export function StartupSection({ mapControllerRef }: StartupSectionProps) {
           </span>
         </span>
       </label>
+      <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+        <input
+          className="mt-0.5 h-4 w-4"
+          type="checkbox"
+          checked={draftDesktopSettings.startup.openS3Browser}
+          onChange={(event) => updateDraftStartupSettings({ openS3Browser: event.target.checked })}
+        />
+        <span className="space-y-1">
+          <span className="block">{t("settings.startup.openS3Browser")}</span>
+          <span className="block text-xs text-muted-foreground">
+            {t("settings.startup.openS3BrowserHint")}
+          </span>
+        </span>
+      </label>
       <div className="space-y-3 rounded-md border p-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
