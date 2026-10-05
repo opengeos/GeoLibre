@@ -350,6 +350,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   }
   const addable: AddableEntry[] = [];
 
+  // Open project buttons of the folder shown; at most one open runs at a time.
+  const openProjects: HTMLButtonElement[] = [];
+  let openingProject = false;
+  let projectAbort: AbortController | null = null;
+
   function syncEntry(entry: AddableEntry): void {
     const onMap = isOnMap(entry.object, entry.location.bucket);
     entry.add.textContent = entry.pending ? labels.adding : onMap ? labels.added : labels.add;
@@ -516,19 +521,30 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
       // batch of layers.
       if (app?.openProjectFromUrl) {
         const openProject = button(labels.openProject, CSS.action);
+        openProjects.push(openProject);
+        openProject.disabled = openingProject;
         openProject.addEventListener("click", () => {
           const openProjectFromUrl = app.openProjectFromUrl;
-          if (!openProjectFromUrl) return;
-          openProject.disabled = true;
+          if (!openProjectFromUrl || openingProject) return;
+          // One open at a time, cancelled with the panel: a project replaces
+          // the whole map, so a slower second open must not overwrite the first.
+          const abort = new AbortController();
+          projectAbort = abort;
+          openingProject = true;
+          for (const other of openProjects) other.disabled = true;
           openProject.textContent = labels.openingProject;
           setStatus("");
-          openProjectFromUrl(object.uri)
+          openProjectFromUrl(object.uri, abort.signal)
             .catch((error: unknown) => {
-              showFailures([labels.openProjectFailed(object.name, errorMessage(error))]);
+              if (!abort.signal.aborted) {
+                showFailures([labels.openProjectFailed(object.name, errorMessage(error))]);
+              }
             })
             .finally(() => {
-              openProject.disabled = false;
+              if (projectAbort === abort) projectAbort = null;
+              openingProject = false;
               openProject.textContent = labels.openProject;
+              for (const other of openProjects) other.disabled = false;
             });
         });
         actions.append(openProject);
@@ -582,6 +598,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     more.style.display = "none";
     list.replaceChildren();
     addable.length = 0;
+    openProjects.length = 0;
     syncSelectionBar();
     accessLine.textContent = "";
     setStatus(labels.loading);
@@ -606,6 +623,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
       continuationToken = undefined;
       list.replaceChildren();
       addable.length = 0;
+      openProjects.length = 0;
       input.value = formatS3BrowseLocation(location);
       writeLastLocation(input.value);
       describeAccess(location.bucket);
@@ -673,6 +691,7 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
 
   return () => {
     controller?.abort();
+    projectAbort?.abort();
     unsubscribeLayers();
     root.remove();
   };

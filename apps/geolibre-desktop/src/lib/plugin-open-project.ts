@@ -1,12 +1,12 @@
 import {
   explainS3ReadError,
-  isCredentialedS3Url,
   parseProject,
   parseS3Url,
   resolveReadableUrl,
   s3ObjectHttpsUrl,
   useAppStore,
 } from "@geolibre/core";
+import { readLimitedBody } from "../components/layout/add-data/helpers";
 import { fetchUrlBytes } from "./native-http";
 import { isTauri } from "./tauri-io";
 import { resolveProjectXyzLayers } from "./xyz-url";
@@ -34,29 +34,33 @@ export async function openProjectFromUrlForPlugin(
   signal?: AbortSignal,
 ): Promise<void> {
   const location = parseS3Url(sourceUrl);
-  const credentialed = isCredentialedS3Url(sourceUrl);
   const readUrl = location ? await resolveReadableUrl(sourceUrl, signal) : sourceUrl;
+  // Whether the read was actually signed: a covered bucket whose credentials
+  // cannot be resolved falls back to the anonymous URL, which can be remembered.
+  const credentialed = readUrl !== sourceUrl && /[?&]x-amz-signature=/i.test(readUrl);
   // The URL a later reopen can use: the anonymous object URL for public S3.
   const rememberedUrl = credentialed ? null : location ? s3ObjectHttpsUrl(location) : sourceUrl;
 
   let text: string;
   try {
     if (isTauri()) {
-      const bytes = await fetchUrlBytes(readUrl, { context: "Open project" });
+      const bytes = await fetchUrlBytes(readUrl, {
+        context: "Open project",
+        maxBytes: MAX_PROJECT_BYTES,
+      });
       const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       if (array.byteLength > MAX_PROJECT_BYTES) throw new Error("tooLarge");
       text = new TextDecoder().decode(array);
     } else {
       const response = await fetch(readUrl, { signal });
       if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
-      const length = Number(response.headers.get("content-length"));
-      if (length > MAX_PROJECT_BYTES) throw new Error("tooLarge");
-      text = await response.text();
-      if (text.length > MAX_PROJECT_BYTES) throw new Error("tooLarge");
+      // Counted as the body streams in, so an oversized object is never
+      // buffered whole.
+      text = new TextDecoder().decode(await readLimitedBody(response, MAX_PROJECT_BYTES));
     }
   } catch (error) {
     if (signal?.aborted) return;
-    if (error instanceof Error && error.message === "tooLarge") {
+    if (error instanceof Error && /tooLarge|download limit/.test(error.message)) {
       throw new Error("Project file is too large to load (over 25 MB).");
     }
     throw location ? await explainS3ReadError(sourceUrl, error, translate) : error;
