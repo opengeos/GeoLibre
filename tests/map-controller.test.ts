@@ -1509,7 +1509,13 @@ describe("MapController camera and query helpers", () => {
 
   it("reports a layer with no known extent instead of moving the camera", () => {
     const { map, fake } = makeFakeMap();
-    (map as { querySourceFeatures: unknown }).querySourceFeatures = () => [];
+    // The source exists but has no features loaded yet.
+    let queried = 0;
+    (map as { querySourceFeatures: unknown }).querySourceFeatures = () => {
+      queried += 1;
+      return [];
+    };
+    (map as { getSource: unknown }).getSource = () => ({});
     const controller = controllerWith(map);
     const layer = pointLayer("xyz-tiles", {
       type: "vector-tiles",
@@ -1524,6 +1530,7 @@ describe("MapController camera and query helpers", () => {
 
     assert.equal(controller.fitLayer(layer), false);
     assert.ok(!fake.calls.some((c) => c.method === "fitBounds" || c.method === "flyTo"));
+    assert.ok(queried > 0, "queried the loaded features before giving up");
   });
 
   it("frames a scenegraph model layer at a tilt so it is not edge-on", () => {
