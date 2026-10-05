@@ -142,6 +142,26 @@ describe("Elevation Profile docked panel", () => {
     }
   });
 
+  it("saves no project state while the plugin is untouched", () => {
+    const document = installDom();
+    const host = fakeHost(document);
+    // New Project reset: caches the defaults but must not write them out.
+    plugin.applyProjectState?.(host, undefined);
+    assert.equal(plugin.getProjectState?.(), undefined);
+    // A real drawn line is still saved.
+    plugin.applyProjectState?.(host, {
+      collapsed: false,
+      unitSystem: "metric",
+      line: [
+        [0, 0],
+        [1, 1],
+      ],
+      elevations: null,
+    } as never);
+    assert.ok(plugin.getProjectState?.());
+    plugin.applyProjectState?.(host, undefined);
+  });
+
   it("refuses to activate on a host without a dock", () => {
     const document = installDom();
     const host = fakeHost(document, false);
