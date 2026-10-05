@@ -69,7 +69,9 @@ function getStreetViewCredentials(): Pick<
  * Save the keys the user applies in the control's API keys inputs. The control
  * keeps them only in memory, so without this they are lost when the panel
  * closes or the app restarts. Its Apply button calls `this.setApiKeys`, so
- * wrapping the instance method catches every apply. A value equal to the env
+ * wrapping the instance method catches every apply. That relies on the form
+ * looking the method up at submit time; tests/streetview-plugin.test.ts submits
+ * the real form so an upstream change that captures it earlier fails there. A value equal to the env
  * key is not an override, so it (like a cleared field) deletes the saved key
  * rather than copying the env key into the credential store.
  *

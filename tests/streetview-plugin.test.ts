@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { parseHTML } from "linkedom";
 import type { StreetViewControl } from "maplibre-gl-streetview";
 import {
   maplibreStreetViewPlugin as plugin,
@@ -116,6 +117,42 @@ describe("streetViewMarkerFactory", () => {
 });
 
 describe("Street View API keys", () => {
+  // The control's Keys form is real DOM, so give it a minimal document.
+  const dom = parseHTML("<html><body></body></html>");
+  const globals = globalThis as unknown as Record<string, unknown>;
+  for (const key of ["document", "window", "HTMLElement", "Event"]) {
+    globals[key] ??=
+      key === "window"
+        ? dom.window
+        : ((dom as unknown as Record<string, unknown>)[key] ??
+          (dom.window as unknown as Record<string, unknown>)[key]);
+  }
+  globals.requestAnimationFrame ??= (callback: () => void) => setTimeout(callback, 0);
+  globals.ResizeObserver ??= class {
+    observe() {}
+    disconnect() {}
+    unobserve() {}
+  };
+
+  /**
+   * Types `values` into the control's Keys form and submits it, as the Apply
+   * keys button does, so the test covers the upstream form-to-setApiKeys wiring.
+   */
+  function applyThroughForm(control: StreetViewControl, values: Record<string, string>): void {
+    const container = dom.document.createElement("div");
+    const map = { getContainer: () => container, on() {}, off() {}, once() {} };
+    const element = control.onAdd(map as never);
+    container.appendChild(element);
+    const form = container.querySelector("form[aria-label='Street view API keys']");
+    assert.ok(form, "the control renders its API keys form");
+    for (const [label, value] of Object.entries(values)) {
+      const input = form.querySelector<HTMLInputElement>(`input[aria-label='${label}']`);
+      assert.ok(input, `no ${label} input`);
+      input.value = value;
+    }
+    form.dispatchEvent(new dom.window.Event("submit", { cancelable: true }));
+  }
+
   /** A fake app with an in-memory `app.credentials` that records each added control. */
   function appWithCredentials(saved: Map<string, string>) {
     const controls: StreetViewControl[] = [];
@@ -154,7 +191,10 @@ describe("Street View API keys", () => {
       // Unset keys reach the control as "", which its inputs show as empty
       // (undefined would render as the literal text "undefined").
       assert.deepEqual(keysOf(controls[0]), { googleApiKey: "", mapillaryAccessToken: "" });
-      controls[0].setApiKeys({ googleApiKey: " g-key ", mapillaryAccessToken: "m-token" });
+      applyThroughForm(controls[0], {
+        "Google Maps API key": " g-key ",
+        "Mapillary access token": "m-token",
+      });
       assert.deepEqual(Object.fromEntries(saved), { google: "g-key", mapillary: "m-token" });
     } finally {
       plugin.deactivate?.(app);
