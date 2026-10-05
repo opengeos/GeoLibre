@@ -184,14 +184,17 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
         // Serialized in slices that hand the main thread back between layers,
         // so a large project is not one long freeze. The key is read now: the
         // project may be switched while the slices run.
+        // The timestamp is taken now too, so a slow serialization cannot file
+        // an older edit as newer than a later autosave.
         const projectKey = currentProjectKey();
+        const createdAt = new Date().toISOString();
         void serializeProjectWithLayerCacheAsync(
           snapshot,
           layerSources,
           layerCacheRef.current,
         ).then(
           (content) =>
-            addProjectSnapshot(content, projectKey).then(settle, (error) => {
+            addProjectSnapshot(content, projectKey, createdAt).then(settle, (error) => {
               console.error("Could not autosave the project.", error);
               settle("failed");
             }),

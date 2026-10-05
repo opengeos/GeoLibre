@@ -1062,6 +1062,9 @@ function update(): void {
  * `idle`, which also runs the full {@link update} as the fallback.
  */
 function redrawWhenStyleSwaps(activeMap: MapLibreMap): void {
+  // A second swap before the first settles replaces the pending listener rather
+  // than stacking another one.
+  stopStyleHeal?.();
   const heal = () => {
     if (map !== activeMap) {
       activeMap.off("styledata", heal);
@@ -1082,9 +1085,18 @@ function redrawWhenStyleSwaps(activeMap: MapLibreMap): void {
       // The style is still loading; the next styledata (or idle) retries.
     }
   };
+  const stop = () => {
+    activeMap.off("styledata", heal);
+    activeMap.off("idle", stop);
+    if (stopStyleHeal === stop) stopStyleHeal = null;
+  };
+  stopStyleHeal = stop;
   activeMap.on("styledata", heal);
-  activeMap.once("idle", () => activeMap.off("styledata", heal));
+  activeMap.once("idle", stop);
 }
+
+/** Detaches the pending {@link redrawWhenStyleSwaps} listeners, if any. */
+let stopStyleHeal: (() => void) | null = null;
 
 function teardownLayers(activeMap: MapLibreMap): void {
   if (activeMap.getLayer(LABEL_LAYER_ID)) activeMap.removeLayer(LABEL_LAYER_ID);
@@ -1503,6 +1515,7 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     moveHandler = null;
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
+    stopStyleHeal?.();
     if (control) {
       app.removeMapControl(control);
       control = null;

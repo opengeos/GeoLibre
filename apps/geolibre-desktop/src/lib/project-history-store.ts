@@ -188,6 +188,7 @@ function createSnapshotId(): string {
 export async function addProjectSnapshot(
   content: string,
   projectKey?: string,
+  createdAt = new Date().toISOString(),
 ): Promise<AddProjectSnapshotResult> {
   if (!available()) return "duplicate";
   const size = new Blob([content]).size;
@@ -203,7 +204,7 @@ export async function addProjectSnapshot(
   if (existing[0]?.contentHash === contentHash) return "duplicate";
   const snapshot: ProjectHistorySnapshot = {
     id: createSnapshotId(),
-    createdAt: new Date().toISOString(),
+    createdAt,
     content,
     size,
     name: project.name,
