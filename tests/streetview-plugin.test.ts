@@ -143,10 +143,10 @@ describe("Street View API keys", () => {
     const map = { getContainer: () => container, on() {}, off() {}, once() {} };
     const element = control.onAdd(map as never);
     container.appendChild(element);
-    const form = container.querySelector("form[aria-label='Street view API keys']");
+    const form: Element | null = container.querySelector("form[aria-label='Street view API keys']");
     assert.ok(form, "the control renders its API keys form");
     for (const [label, value] of Object.entries(values)) {
-      const input = form.querySelector<HTMLInputElement>(`input[aria-label='${label}']`);
+      const input: HTMLInputElement | null = form.querySelector(`input[aria-label='${label}']`);
       assert.ok(input, `no ${label} input`);
       input.value = value;
     }
