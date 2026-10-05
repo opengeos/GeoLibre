@@ -851,6 +851,8 @@ VITE_MAPILLARY_ACCESS_TOKEN=your_mapillary_access_token
 
 For Google Street View, enable the Maps Embed API for the key in Google Cloud. For Google Photorealistic 3D Tiles, enable the Map Tiles API. For local shell testing, `GOOGLE_MAPS_API_KEY` is also accepted by the desktop Vite build. For Mapillary, create an app in the Mapillary developer dashboard and use its client access token.
 
+You can also enter either key in the Street View panel's API key inputs and apply it. A key applied there is saved (in the OS credential store on desktop, in browser storage on the web), survives closing the panel and restarting the app, and takes precedence over the matching environment variable. Clear the field and apply to remove it.
+
 Restart `npm run dev` or `npm run tauri:dev` after changing environment variables.
 
 ## Optional basemap credentials

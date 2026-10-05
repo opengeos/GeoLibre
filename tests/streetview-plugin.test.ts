@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { StreetViewControl } from "maplibre-gl-streetview";
 import {
   maplibreStreetViewPlugin as plugin,
   streetViewMarkerFactory,
@@ -111,5 +112,65 @@ describe("streetViewMarkerFactory", () => {
     const marker = create!({ element, anchor: "center" });
     assert.ok(marker instanceof FakeMapboxMarker, "MapLibre's Marker throws on a mapbox-gl map");
     assert.deepEqual(built, [{ element, anchor: "center" }]);
+  });
+});
+
+describe("Street View API keys", () => {
+  /** A fake app with an in-memory `app.credentials` that records each added control. */
+  function appWithCredentials(saved: Map<string, string>) {
+    const controls: StreetViewControl[] = [];
+    const app = {
+      addMapControl: (control: StreetViewControl) => {
+        controls.push(control);
+        return true;
+      },
+      removeMapControl: () => {},
+      credentials: {
+        get: (name: string) => saved.get(name) ?? "",
+        set: (name: string, value: string) => {
+          if (value) saved.set(name, value);
+          else saved.delete(name);
+          return true;
+        },
+        location: () => "browser",
+      },
+    } as unknown as GeoLibreAppAPI;
+    return { app, controls };
+  }
+
+  /** The keys a control currently holds (the upstream options are private). */
+  function keysOf(control: StreetViewControl) {
+    const { googleApiKey, mapillaryAccessToken } = (
+      control as unknown as { _options: Record<string, string | undefined> }
+    )._options;
+    return { googleApiKey, mapillaryAccessToken };
+  }
+
+  it("saves keys applied in the panel and seeds them on reactivation", () => {
+    const saved = new Map<string, string>();
+    const { app, controls } = appWithCredentials(saved);
+    plugin.activate(app);
+    try {
+      // Unset keys reach the control as "", which its inputs show as empty
+      // (undefined would render as the literal text "undefined").
+      assert.deepEqual(keysOf(controls[0]), { googleApiKey: "", mapillaryAccessToken: "" });
+      controls[0].setApiKeys({ googleApiKey: " g-key ", mapillaryAccessToken: "m-token" });
+      assert.deepEqual(Object.fromEntries(saved), { google: "g-key", mapillary: "m-token" });
+    } finally {
+      plugin.deactivate?.(app);
+    }
+
+    plugin.activate(app);
+    try {
+      assert.deepEqual(keysOf(controls[1]), {
+        googleApiKey: "g-key",
+        mapillaryAccessToken: "m-token",
+      });
+      // Clearing a key deletes the saved one; an omitted key is left alone.
+      controls[1].setApiKeys({ googleApiKey: null });
+      assert.deepEqual(Object.fromEntries(saved), { mapillary: "m-token" });
+    } finally {
+      plugin.deactivate?.(app);
+    }
   });
 });
