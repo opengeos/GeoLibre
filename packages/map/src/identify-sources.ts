@@ -504,23 +504,19 @@ function wmsExceptionMessage(value: string): string {
   return normalizeText(inner ?? "") || normalizeText(value);
 }
 
-const HTML_ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-};
-
-/** Decodes numeric and the common named character references in a title. */
-function decodeHtmlEntities(value: string): string {
-  return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => {
-    if (name[0] !== "#") return HTML_ENTITIES[name.toLowerCase()] ?? entity;
-    const code =
-      name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : Number(name.slice(1));
-    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : entity;
-  });
+/**
+ * An error page title as plain text: any tags dropped, then every character
+ * reference decoded by the HTML parser, so a named one such as `&agrave;` on an
+ * Italian server reads as the letter.
+ */
+function htmlTitleText(title: string): string {
+  const markupFree = title.replace(/<[^>]*>/g, "");
+  if (typeof DOMParser === "undefined") return markupFree;
+  const document = new DOMParser().parseFromString(
+    `<!doctype html><html><body>${markupFree}</body></html>`,
+    "text/html",
+  );
+  return document.body.textContent ?? markupFree;
 }
 
 /**
@@ -536,7 +532,7 @@ function wmsHttpErrorMessage(response: Response, text: string): string {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   const isMarkup = /html|xml/.test(contentType) || text.trimStart().startsWith("<");
   const characters = Array.from(
-    normalizeText(title !== undefined ? decodeHtmlEntities(title) : isMarkup ? "" : text),
+    normalizeText(title !== undefined ? htmlTitleText(title) : isMarkup ? "" : text),
   );
   // Truncated by code point, so a character outside the BMP is never split.
   const detail =

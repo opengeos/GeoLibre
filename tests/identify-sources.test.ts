@@ -373,15 +373,22 @@ describe("fetchWmsIdentifyProperties and queryable (#2887)", () => {
     );
   });
 
-  it("decodes character references in the error page title", async () => {
+  it("reads the error page title as plain text", async () => {
     globalThis.fetch = (async () =>
-      new Response("<html><head><title>Richiesta non valida &amp; rifiutata &#232;</title>", {
-        status: 400,
-      })) as typeof fetch;
-    await assert.rejects(
-      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
-      /^Error: WMS GetFeatureInfo failed: HTTP 400 \(Richiesta non valida & rifiutata è\)$/,
-    );
+      new Response(
+        "<html><head><title>Localit&agrave; <b>non</b> valida &amp; rifiutata &#232;</title>",
+        { status: 400 },
+      )) as typeof fetch;
+    const original = globalThis.DOMParser;
+    globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
+    try {
+      await assert.rejects(
+        fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+        /^Error: WMS GetFeatureInfo failed: HTTP 400 \(Località non valida & rifiutata è\)$/,
+      );
+    } finally {
+      globalThis.DOMParser = original;
+    }
   });
 
   it("prefers a WMS exception over an HTTP error page", async () => {
