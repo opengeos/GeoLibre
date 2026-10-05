@@ -901,6 +901,8 @@ VITE_STADIA_API_KEY=your_stadia_api_key         # https://client.stadiamaps.com
 
 Protomaps reuses the key described in [Optional basemap credentials](#optional-basemap-credentials) above — set it once and both places pick it up. Until each key is set, the panel shows a "Get a … API key" prompt in place of the basemap rather than loading tiles.
 
+Any of these keys can instead be typed into the panel's **API keys** view (the key button in its header). A key entered there is saved (in the OS credential store on desktop, in browser storage on the web), survives closing the panel and restarting the app, and takes precedence over the matching environment variable. Clear the field to remove it.
+
 ## Basemaps in mainland China
 
 GeoLibre's default basemaps (OpenFreeMap, Protomaps) are hosted outside mainland China with no presence inside it, so from there they range from slow to unreachable, as does most of the Basemaps control's catalog. Two places offer basemaps served from inside China.

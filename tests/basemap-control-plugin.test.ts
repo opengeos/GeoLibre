@@ -4,6 +4,7 @@ import { parseHTML } from "linkedom";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import {
   BASEMAP_CONTROL_PLUGIN_ID,
+  PANEL_CREDENTIAL_FIELDS,
   getActiveBasemapControl,
   maplibreBasemapControlPlugin as plugin,
 } from "../packages/plugins/src/plugins/maplibre-basemap-control";
@@ -170,5 +171,78 @@ describe("Mapbox basemap control", () => {
     } finally {
       plugin.deactivate?.(app);
     }
+  });
+});
+
+describe("Basemap control API keys", () => {
+  /** A fake app with an in-memory `app.credentials`, plus the panel it renders into. */
+  function appWithCredentials(saved: Map<string, string>) {
+    const app = fakeApp([]);
+    let panel: HTMLElement | null = null;
+    const registerRightPanel = app.registerRightPanel!;
+    app.registerRightPanel = (registration) =>
+      registerRightPanel({
+        ...registration,
+        render: (container) => {
+          panel = container;
+          return registration.render(container);
+        },
+      });
+    app.credentials = {
+      get: (name) => saved.get(name) ?? "",
+      set: (name, value) => {
+        if (value) saved.set(name, value);
+        else saved.delete(name);
+        return true;
+      },
+      location: () => "browser",
+    };
+    return { app, getPanel: () => panel! };
+  }
+
+  /** Types `value` into the control's credential input wrapped by `className`. */
+  function typeInto(panel: HTMLElement, className: string, value: string): void {
+    const input = panel.querySelector<HTMLInputElement>(`.${className} input`);
+    assert.ok(input, `no input under .${className}`);
+    input.value = value;
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  }
+
+  afterEach(() => {
+    if (getActiveBasemapControl()) plugin.deactivate?.(fakeApp([]));
+  });
+
+  it("maps every upstream credential field", () => {
+    const saved = new Map<string, string>();
+    const { app, getPanel } = appWithCredentials(saved);
+    plugin.activate(app);
+    // Open the API keys view so every provider's field is rendered.
+    getPanel().querySelector<HTMLElement>("[aria-label='API keys']")?.click();
+    const upstream = [...getPanel().querySelectorAll(".basemap-control-input")]
+      .map((input) => input.parentElement?.className ?? "")
+      .filter((className) => /^basemap-control-[a-z-]+-(key|token|region)$/.test(className));
+    // A failed match (renamed wrappers, view not opened) fails here, not silently.
+    assert.ok(upstream.length >= 10, `found only ${upstream.join(", ")}`);
+    const mapped: string[] = PANEL_CREDENTIAL_FIELDS.map((field) => field.className);
+    for (const className of upstream) assert.ok(mapped.includes(className), className);
+  });
+
+  it("saves a key typed in the panel and seeds it on reactivation", () => {
+    const saved = new Map<string, string>();
+    const { app, getPanel } = appWithCredentials(saved);
+    plugin.activate(app);
+    getPanel().querySelector<HTMLElement>("[aria-label='API keys']")?.click();
+    typeInto(getPanel(), "basemap-control-maptiler-key", " my-maptiler-key ");
+    assert.equal(saved.get("maptiler"), "my-maptiler-key");
+
+    plugin.deactivate?.(app);
+    plugin.activate(app);
+    getPanel().querySelector<HTMLElement>("[aria-label='API keys']")?.click();
+    const input = getPanel().querySelector<HTMLInputElement>(".basemap-control-maptiler-key input");
+    assert.equal(input?.value, "my-maptiler-key");
+
+    // Clearing the field deletes the saved key.
+    typeInto(getPanel(), "basemap-control-maptiler-key", "");
+    assert.equal(saved.has("maptiler"), false);
   });
 });

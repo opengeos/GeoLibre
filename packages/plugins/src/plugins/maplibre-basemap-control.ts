@@ -109,6 +109,66 @@ function getStyleProviderCredentials(): {
   };
 }
 
+/**
+ * The control's credential inputs (the API keys view and the inline field shown
+ * beside a missing-key error share these wrapper classes), each mapped to the
+ * `app.credentials` name the value is saved under and the control option it
+ * seeds. The control keeps a typed key only in memory and emits no event for it,
+ * so GeoLibre watches the inputs to keep keys across panel closes and restarts.
+ * The names are stored in users' keychains: renaming one orphans saved keys.
+ */
+export const PANEL_CREDENTIAL_FIELDS = [
+  { className: "basemap-control-carto-key", name: "carto", option: "cartoApiKey" },
+  { className: "basemap-control-maptiler-key", name: "maptiler", option: "mapTilerApiKey" },
+  { className: "basemap-control-mapbox-token", name: "mapbox", option: "mapboxAccessToken" },
+  { className: "basemap-control-protomaps-key", name: "protomaps", option: "protomapsApiKey" },
+  { className: "basemap-control-stadia-key", name: "stadia", option: "stadiaApiKey" },
+  { className: "basemap-control-tianditu-key", name: "tianditu", option: "tiandituApiKey" },
+  { className: "basemap-control-tomtom-key", name: "tomtom", option: "tomtomApiKey" },
+  { className: "basemap-control-here-key", name: "here", option: "hereApiKey" },
+  { className: "basemap-control-google-key", name: "google", option: "googleMapsApiKey" },
+  { className: "basemap-control-amazon-key", name: "amazon", option: "amazonApiKey" },
+  { className: "basemap-control-aws-region", name: "aws-region", option: "awsRegion" },
+] as const satisfies readonly {
+  className: string;
+  name: string;
+  option: keyof BasemapControlOptions;
+}[];
+
+type PanelCredentialOption = (typeof PANEL_CREDENTIAL_FIELDS)[number]["option"];
+
+/** Keys the user saved in the panel, keyed by control option; unset ones are omitted. */
+function getSavedPanelCredentials(
+  app: GeoLibreAppAPI,
+): Partial<Record<PanelCredentialOption, string>> {
+  const saved: Partial<Record<PanelCredentialOption, string>> = {};
+  for (const field of PANEL_CREDENTIAL_FIELDS) {
+    const value = app.credentials?.get(field.name).trim();
+    if (value) saved[field.option] = value;
+  }
+  return saved;
+}
+
+/**
+ * Save every edit to a credential input through `app.credentials`, so a key
+ * typed in the panel survives closing it and restarting the app. Clearing the
+ * field deletes the saved key, letting an env-configured one apply again.
+ * Returns a disposer.
+ */
+function persistPanelCredentials(app: GeoLibreAppAPI, container: HTMLElement): () => void {
+  const handleInput = (event: Event) => {
+    const input = event.target as HTMLInputElement | null;
+    const wrapper = input?.parentElement;
+    if (!input || !wrapper) return;
+    const field = PANEL_CREDENTIAL_FIELDS.find((f) => wrapper.classList.contains(f.className));
+    // The result is ignored: on a failed write the host keeps the key for this
+    // session and raises the credential-storage warning on desktop.
+    if (field) app.credentials?.set(field.name, input.value.trim());
+  };
+  container.addEventListener("input", handleInput);
+  return () => container.removeEventListener("input", handleInput);
+}
+
 const PANEL_ID = "basemaps-panel";
 let unregisterPanel: (() => void) | null = null;
 let removeRuntimeEnvListener: (() => void) | null = null;
@@ -193,8 +253,9 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
           app.closeRightPanel?.(PANEL_ID),
         );
         if (!unmount) return;
+        const stopPersistingCredentials = persistPanelCredentials(app, container);
         basemapControl = control;
-        addRuntimeEnvListener();
+        addRuntimeEnvListener(app);
         // Re-link raster basemap layers restored from a reopened project (or kept
         // from a previous activation in this session) so that a later switch to a
         // style basemap or a removal can unregister them (the module state does not
@@ -224,6 +285,7 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
         });
         control.expand();
         return () => {
+          stopPersistingCredentials();
           releaseControl();
           unmount();
         };
@@ -291,9 +353,7 @@ function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
     // just reports a missing-key error instead of loading tiles. Amazon is
     // spread only when its key is set, so an unset key leaves the control's own
     // region default in place.
-    ...getTrafficOverlayCredentials(),
-    ...(getAmazonCredentials() ?? {}),
-    ...getStyleProviderCredentials(),
+    ...getProviderCredentials(app),
     // A style basemap (e.g. OpenFreeMap 3D) swaps the whole map style and so
     // discards every stacked raster basemap. In stack mode that silently wiped
     // a carefully assembled stack, so confirm before the rasters are lost. See
@@ -312,34 +372,47 @@ function getBasemapControlOptions(app: GeoLibreAppAPI): BasemapControlOptions {
 }
 
 /**
+ * Every provider credential the control is seeded with: runtime env first, then
+ * the keys the user saved in the panel, which win (as the Mapillary plugin's
+ * pasted token beats its env default).
+ */
+function getProviderCredentials(app: GeoLibreAppAPI) {
+  return {
+    ...getTrafficOverlayCredentials(),
+    ...(getAmazonCredentials() ?? {}),
+    ...getStyleProviderCredentials(),
+    ...getSavedPanelCredentials(app),
+  };
+}
+
+/**
  * Push updated provider keys into the live control when the user edits their
  * runtime environment variables, so a newly entered key takes effect without
  * reopening the project. The control's setters re-resolve tile templates in
  * place, so the panel state (and any stacked basemaps) is preserved.
  */
-function addRuntimeEnvListener(): void {
+function addRuntimeEnvListener(app: GeoLibreAppAPI): void {
   if (removeRuntimeEnvListener || typeof window === "undefined") return;
 
   const handleRuntimeEnvChange = () => {
     if (!basemapControl) return;
-    const { googleMapsApiKey, tomtomApiKey, hereApiKey } = getTrafficOverlayCredentials();
-    basemapControl.setGoogleMapsApiKey(googleMapsApiKey);
-    basemapControl.setTomTomApiKey(tomtomApiKey);
-    basemapControl.setHereApiKey(hereApiKey);
-    // Only push Amazon credentials when a key is configured via env, so an
-    // unrelated env change never clears a key entered in the panel. The region
-    // is left undefined when unset, keeping the control's own default.
-    const amazon = getAmazonCredentials();
-    if (amazon) {
-      basemapControl.setAmazonCredentials(amazon.amazonApiKey, amazon.awsRegion);
+    // A key saved in the panel still wins over env (see getProviderCredentials).
+    const credentials = getProviderCredentials(app);
+    basemapControl.setGoogleMapsApiKey(credentials.googleMapsApiKey);
+    basemapControl.setTomTomApiKey(credentials.tomtomApiKey);
+    basemapControl.setHereApiKey(credentials.hereApiKey);
+    // The rest are pushed only when set, so an unrelated env change never clears
+    // a key typed in the panel this session. The Amazon region is left undefined
+    // when unset, keeping the control's own default.
+    if (credentials.amazonApiKey) {
+      basemapControl.setAmazonCredentials(credentials.amazonApiKey, credentials.awsRegion);
     }
-    // Same rule for the style-provider keys: push only what the user actually set.
-    const { protomapsApiKey, stadiaApiKey, mapboxAccessToken, tiandituApiKey } =
-      getStyleProviderCredentials();
-    if (protomapsApiKey) basemapControl.setProtomapsApiKey(protomapsApiKey);
-    if (stadiaApiKey) basemapControl.setStadiaApiKey(stadiaApiKey);
-    if (mapboxAccessToken) basemapControl.setMapboxAccessToken(mapboxAccessToken);
-    if (tiandituApiKey) basemapControl.setTiandituApiKey(tiandituApiKey);
+    if (credentials.protomapsApiKey) basemapControl.setProtomapsApiKey(credentials.protomapsApiKey);
+    if (credentials.stadiaApiKey) basemapControl.setStadiaApiKey(credentials.stadiaApiKey);
+    if (credentials.mapboxAccessToken) {
+      basemapControl.setMapboxAccessToken(credentials.mapboxAccessToken);
+    }
+    if (credentials.tiandituApiKey) basemapControl.setTiandituApiKey(credentials.tiandituApiKey);
   };
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
