@@ -407,6 +407,22 @@ export const BUILTIN_SERVICES: readonly ServiceLibraryEntry[] = [
     },
   },
   {
+    id: "builtin-wms-nlcd-land-cover",
+    name: "NLCD 2021 Land Cover (MRLC)",
+    category: "Land cover",
+    kind: "wms",
+    builtin: true,
+    fields: {
+      endpoint: "https://www.mrlc.gov/geoserver/mrlc_display/wms",
+      layers: "NLCD_2021_Land_Cover_L48",
+      styles: "",
+      format: "image/png",
+      transparent: true,
+      tileSize: "256",
+      version: "1.1.1",
+    },
+  },
+  {
     id: "builtin-xyz-usgs-imagery",
     name: "USGS Imagery",
     category: "Imagery",

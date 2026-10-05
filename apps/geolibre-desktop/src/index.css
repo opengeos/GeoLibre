@@ -1933,6 +1933,13 @@ body,
   color: hsl(var(--popover-foreground)) !important;
 }
 
+/* The rendered HTML control (not its editor) keeps a white panel in every
+   theme, so the root's dark `color-scheme` would draw a black scrollbar on it.
+   Pin the content area to the light scheme to match its background. */
+.maplibre-gl-html-control-content {
+  color-scheme: light;
+}
+
 .dark .geolibre-colorbar-control,
 .dark .geolibre-legend-control,
 .dark .geolibre-html-control,

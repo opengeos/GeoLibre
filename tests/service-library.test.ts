@@ -353,3 +353,14 @@ describe("deployment service library", () => {
     assert.deepEqual(listAllServices([]), BUILTIN_SERVICES);
   });
 });
+
+describe("built-in NLCD land cover service", () => {
+  it("is a WMS preset that targets the MRLC NLCD 2021 layer", () => {
+    const nlcd = BUILTIN_SERVICES.find((e) => e.id === "builtin-wms-nlcd-land-cover");
+    assert.ok(nlcd);
+    assert.equal(nlcd.kind, "wms");
+    assert.equal(nlcd.builtin, true);
+    assert.equal(nlcd.fields.endpoint, "https://www.mrlc.gov/geoserver/mrlc_display/wms");
+    assert.equal(nlcd.fields.layers, "NLCD_2021_Land_Cover_L48");
+  });
+});
