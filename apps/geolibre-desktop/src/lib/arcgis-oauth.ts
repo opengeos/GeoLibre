@@ -11,6 +11,7 @@
 import type { ParseKeys } from "i18next";
 import { create } from "zustand";
 import { isDesktopRuntime } from "./is-mobile";
+import { isTauri } from "./is-tauri";
 import {
   DESKTOP_SHARE_CALLBACK,
   NativeShareCallbackError,
@@ -47,6 +48,7 @@ export type ArcGISAuthErrorCode =
   | "not-signed-in"
   | "session-expired"
   | "network-error"
+  | "unsupported"
   | "restart-required";
 
 /** Typed failure so the UI can show guidance instead of a raw code. */
@@ -59,6 +61,14 @@ export class ArcGISAuthError extends Error {
     this.name = "ArcGISAuthError";
     this.code = code;
   }
+}
+
+/**
+ * Whether this build can complete a sign-in: the browser (popup) and the
+ * desktop app (deep link). The mobile apps have neither redirect target.
+ */
+export function supportsArcGISSignIn(): boolean {
+  return !isTauri() || isDesktopRuntime();
 }
 
 /** The catalog key for each failure the UI words specifically. */
@@ -286,6 +296,7 @@ export async function signInToArcGIS(options: {
   if (!portal) throw new ArcGISAuthError("invalid-portal");
   const clientId = options.clientId.trim();
   if (!clientId) throw new ArcGISAuthError("client-id-required");
+  if (!supportsArcGISSignIn()) throw new ArcGISAuthError("unsupported");
   if (pendingFlow) throw new ArcGISAuthError("already-pending");
   if (!window.crypto?.subtle) throw new ArcGISAuthError("crypto-unavailable");
 

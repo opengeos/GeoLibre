@@ -18,6 +18,7 @@ import { createAppAPI } from "../../../../hooks/usePlugins";
 import {
   arcgisAuthErrorKey,
   getArcGISAccessToken,
+  supportsArcGISSignIn,
   tryGetArcGISAccessToken,
 } from "../../../../lib/arcgis-oauth";
 import { serviceRequestErrorMessage } from "../helpers";
@@ -110,10 +111,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     [],
   );
 
-  /**
-   * The token for the next request: a fresh sign-in token, the typed token, or
-   * none. A sign-in that cannot be renewed surfaces as a message to sign in again.
-   */
+  /** The token for the next request: a fresh sign-in token, the typed token, or none. */
   const resolveToken = async (): Promise<string | undefined> => {
     if (authMode === "sign-in") {
       try {
@@ -260,8 +258,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     setArcgisSplitSublayers(serviceFieldBoolean(fields, "splitSublayers", false));
     setArcgisRenderingRule(serviceFieldString(fields, "renderingRule"));
     // Tokens are never saved, so clear any token typed for a previous entry to
-    // avoid sending it to the newly selected service's endpoint. A sign-in is
-    // tied to a portal, so it is dropped as a choice too (the session stays).
+    // avoid sending it to the newly selected service's endpoint.
     setArcgisAccessToken("");
     setAuthMode("none");
   };
@@ -302,8 +299,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
         splitSublayers,
         sublayers: arcgisSublayers.trim() || undefined,
         token: await resolveToken(),
-        // Later edits and refreshes ask for a current token: a sign-in token
-        // lasts about half an hour and is renewed on demand.
+        // Sign-in tokens expire in about 30 minutes; later requests renew them.
         tokenProvider:
           authMode === "sign-in" ? () => tryGetArcGISAccessToken(arcgisPortalUrl) : undefined,
         url: arcgisUrl.trim() || undefined,
@@ -422,7 +418,9 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
             }}
           >
             <option value="none">{t("addData.arcgis.authNone")}</option>
-            <option value="sign-in">{t("addData.arcgis.authSignIn")}</option>
+            {supportsArcGISSignIn() ? (
+              <option value="sign-in">{t("addData.arcgis.authSignIn")}</option>
+            ) : null}
             <option value="token">{t("addData.arcgis.authToken")}</option>
           </Select>
         </div>
