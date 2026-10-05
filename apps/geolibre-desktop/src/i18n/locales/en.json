@@ -728,6 +728,7 @@
       "signInErrorTimeout": "Sign-in timed out. Try again.",
       "signInErrorExpired": "The ArcGIS session expired. Sign in again.",
       "signInErrorNetwork": "Could not reach the ArcGIS portal. Check the connection and try again.",
+      "signInErrorRestart": "GeoLibre is still starting. Try signing in again in a moment.",
       "cancelSignIn": "Cancel"
     },
     "gpx": {

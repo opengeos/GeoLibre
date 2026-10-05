@@ -20,6 +20,7 @@ import {
 } from "./native-share-auth";
 import {
   deriveCallbackUrl,
+  waitForDesktopOAuthReady,
   randomUrlSafeToken,
   s256Challenge,
   validateCallbackPayload,
@@ -82,6 +83,7 @@ const AUTH_ERROR_KEYS: Partial<Record<ArcGISAuthErrorCode, ParseKeys>> = {
   timeout: "addData.arcgis.signInErrorTimeout",
   "session-expired": "addData.arcgis.signInErrorExpired",
   "network-error": "addData.arcgis.signInErrorNetwork",
+  "restart-required": "addData.arcgis.signInErrorRestart",
   "not-signed-in": "addData.arcgis.signInErrorExpired",
 };
 
@@ -337,8 +339,10 @@ export async function signInToArcGIS(options: {
     let code: string;
     if (desktop) {
       try {
-        // Throws when the shared deep-link receiver is busy (a Share sign-in is
-        // pending) or has not started yet.
+        // The deep-link receiver starts asynchronously after launch.
+        await waitForDesktopOAuthReady();
+        // Throws "malformed" while another flow (a Share sign-in) holds the
+        // shared receiver.
         const waiter = waitForNativeShareCode(state, NO_ISSUER, SIGN_IN_TIMEOUT_MS);
         nativeWaiter = waiter;
         void waiter.code.catch(() => {});
@@ -356,12 +360,13 @@ export async function signInToArcGIS(options: {
                 ? "timeout"
                 : error.code === "restart-required"
                   ? "restart-required"
-                  : error.code === "malformed"
+                  : error.code === "malformed" && !nativeWaiter
                     ? "already-pending"
                     : "exchange-failed",
           );
         }
-        throw new ArcGISAuthError("exchange-failed");
+        // Startup readiness failed (a ShareOAuthError): the receiver is not usable.
+        throw new ArcGISAuthError("restart-required");
       }
     } else {
       popup!.location.href = authorizeUrl.toString();

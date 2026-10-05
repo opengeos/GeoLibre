@@ -401,7 +401,7 @@ export function configureShareOAuthReadiness(ready: Promise<void>): void {
   void desktopOAuthReady.catch(() => {});
 }
 
-async function waitForDesktopOAuthReady(): Promise<void> {
+export async function waitForDesktopOAuthReady(): Promise<void> {
   if (!desktopOAuthReady) throw new ShareOAuthError("setup-failed");
   await desktopOAuthReady;
 }
