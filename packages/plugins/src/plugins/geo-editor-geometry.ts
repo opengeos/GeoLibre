@@ -131,6 +131,10 @@ export function tagFeatureKeys(collection: FeatureCollection): FeatureCollection
       // A feature without an id falls back to its array index, the same id the
       // attribute table and Identify give it, so an Identify result can find
       // its feature in the editor (#2932). The allocator still keeps it unique.
+      // Known limitation: when that index is another feature's explicit id,
+      // the app-wide `feature.id ?? index` scheme already gives both features
+      // the same id, so this one gets a fresh tag and an id-based lookup
+      // (findGeometryEditFeature) resolves to the explicit-id feature.
       const id = explicitIds[index] ?? ids.take(index);
       return {
         ...feature,
