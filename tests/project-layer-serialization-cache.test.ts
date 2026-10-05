@@ -6,6 +6,7 @@ import {
   projectFromStore,
   serializeProject,
   serializeProjectWithLayerCache,
+  serializeProjectWithLayerCacheAsync,
   type GeoLibreLayer,
   type GeoLibreProject,
   type MapViewState,
@@ -164,5 +165,52 @@ describe("serializeProjectWithLayerCache", () => {
     // Nothing was stored, so a matching call serializes both layers again.
     serializeProjectWithLayerCache(project, layers, cache);
     assert.deepEqual(Object.fromEntries(counts), { a: 3, b: 3 });
+  });
+});
+
+describe("serializeProjectWithLayerCacheAsync", () => {
+  it("writes the same text as the synchronous serializer", async () => {
+    const { layers, view } = fixture();
+    const project = snapshotOf(layers, view);
+    const text = await serializeProjectWithLayerCacheAsync(
+      project,
+      layers,
+      createProjectLayerSerializationCache(),
+    );
+    assert.equal(text, serializeProject(project));
+  });
+
+  it("hands the thread back between layers once a slice runs long", async () => {
+    const { layers, view } = fixture();
+    const project = snapshotOf(layers, view);
+    const realNow = Date.now;
+    let clock = 0;
+    // Every clock read advances 10 ms, so each layer's slice overruns its budget.
+    Date.now = () => (clock += 10);
+    let yields = 0;
+    try {
+      await serializeProjectWithLayerCacheAsync(
+        project,
+        layers,
+        createProjectLayerSerializationCache(),
+        async () => {
+          yields += 1;
+        },
+      );
+    } finally {
+      Date.now = realNow;
+    }
+    assert.equal(yields, layers.length);
+  });
+
+  it("does not yield when every layer comes from the cache", async () => {
+    const { layers, view } = fixture();
+    const cache = createProjectLayerSerializationCache();
+    await serializeProjectWithLayerCacheAsync(snapshotOf(layers, view), layers, cache);
+    let yields = 0;
+    await serializeProjectWithLayerCacheAsync(snapshotOf(layers, view), layers, cache, async () => {
+      yields += 1;
+    });
+    assert.equal(yields, 0);
   });
 });

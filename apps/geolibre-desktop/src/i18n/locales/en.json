@@ -8210,6 +8210,9 @@
     "metadataEdit": {
       "sectionDescription": "Description",
       "sectionSource": "Source details",
+      "discardPrompt": "Discard your unsaved metadata edits?",
+      "keepEditing": "Keep editing",
+      "discardAndClose": "Discard and close",
       "title": "Title",
       "abstract": "Abstract",
       "keywords": "Keywords",

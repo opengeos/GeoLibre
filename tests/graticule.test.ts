@@ -11,9 +11,11 @@ import {
   maplibreGraticulePlugin,
   normalizeGraticuleSettings,
   setGraticuleSettings,
+  splitAtLatitudes,
   utmLatBand,
   utmZoneDesignation,
   utmZoneForLon,
+  utmZoneSpans,
 } from "../packages/plugins/src/plugins/maplibre-graticule";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
@@ -167,6 +169,54 @@ describe("UTM grid helpers", () => {
   it("builds a zone designation from longitude and latitude", () => {
     assert.equal(utmZoneDesignation(12, 42), "33T");
     assert.equal(utmZoneDesignation(21, -33), "34H");
+  });
+
+  it("splits a latitude band at the Norway/Svalbard exception latitudes", () => {
+    const band = { south: 50, north: 80, useSouth: false };
+    const segments = splitAtLatitudes(band, [56, 64, 72]);
+    assert.deepEqual(
+      segments.map((s) => [s.south, s.north]),
+      [
+        [50, 56],
+        [56, 64],
+        [64, 72],
+        [72, 80],
+      ],
+    );
+    assert.equal(splitAtLatitudes({ south: 56, north: 64 }, [56, 64]).length, 1);
+  });
+
+  it("lays out Norway's widened zone 32 and Svalbard's zones", () => {
+    const zones = (south: number, north: number, west = -10, east = 45) =>
+      utmZoneSpans({ south, north }, west, east).map((s) => [s.zone, s.zoneWest, s.zoneEast]);
+    // Regular 6° zones below 56°N.
+    assert.deepEqual(zones(48, 56, 0, 12), [
+      [31, 0, 6],
+      [32, 6, 12],
+    ]);
+    // 32V spans 3°-12°E and 31V shrinks to 0°-3°E.
+    assert.deepEqual(zones(56, 64, 0, 18), [
+      [31, 0, 3],
+      [32, 3, 12],
+      [33, 12, 18],
+    ]);
+    // Svalbard: 31X, 33X, 35X, 37X widened, 32X/34X/36X absent.
+    assert.deepEqual(zones(72, 84, 0, 45), [
+      [31, 0, 9],
+      [33, 9, 21],
+      [35, 21, 33],
+      [37, 33, 42],
+      [38, 42, 48],
+    ]);
+  });
+
+  it("repeats zones per world copy for an antimeridian view", () => {
+    const spans = utmZoneSpans({ south: 0, north: 8 }, 170, 190);
+    assert.deepEqual(
+      spans.map((s) => s.zone),
+      [59, 60, 1, 2],
+    );
+    assert.equal(spans[2].zoneWest, 180);
   });
 
   it("formats metric easting/northing labels", () => {

@@ -221,6 +221,25 @@ export function useLayerMetadataDialog() {
     setMetadataDraft(draft);
     setMetadataNote(null);
   }, []);
+  // Closing with unsaved form edits asks first instead of silently dropping
+  // them. The prompt is cleared whenever the dialog moves to another layer or
+  // the edits stop being unsaved (a save, a discard).
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  useEffect(() => {
+    if (!metadataDirty) setConfirmingClose(false);
+  }, [metadataDirty]);
+  useEffect(() => {
+    setConfirmingClose(false);
+  }, [metadataLayerId]);
+  const requestCloseMetadata = useCallback(() => {
+    if (metadataDirty) setConfirmingClose(true);
+    else closeMetadata();
+  }, [metadataDirty, closeMetadata]);
+  const keepEditingMetadata = useCallback(() => setConfirmingClose(false), []);
+  const discardAndCloseMetadata = useCallback(() => {
+    setConfirmingClose(false);
+    closeMetadata();
+  }, [closeMetadata]);
   const saveMetadataDraft = useCallback(() => {
     if (!metadataLayerId || draftIssues(metadataDraft).length > 0) return;
     useAppStore
@@ -269,6 +288,10 @@ export function useLayerMetadataDialog() {
     saveMetadataDraft,
     discardMetadataDraft,
     exportStacItem,
+    confirmingClose,
+    requestCloseMetadata,
+    keepEditingMetadata,
+    discardAndCloseMetadata,
   };
 }
 
@@ -288,7 +311,6 @@ export function LayerMetadataDialog({ metadata, getMap }: LayerMetadataDialogPro
   const { t } = useTranslation();
   const {
     metadataLayer,
-    closeMetadata,
     metadataCopied,
     metadataDialogRef,
     metadataDialogSize,
@@ -304,12 +326,16 @@ export function LayerMetadataDialog({ metadata, getMap }: LayerMetadataDialogPro
     saveMetadataDraft,
     discardMetadataDraft,
     exportStacItem,
+    confirmingClose,
+    requestCloseMetadata,
+    keepEditingMetadata,
+    discardAndCloseMetadata,
   } = metadata;
   return (
     <Dialog
       open={!!metadataLayer}
       onOpenChange={(open: boolean) => {
-        if (!open) closeMetadata();
+        if (!open) requestCloseMetadata();
       }}
     >
       <DialogContent
@@ -401,6 +427,21 @@ export function LayerMetadataDialog({ metadata, getMap }: LayerMetadataDialogPro
             </section>
           </div>
         </ScrollArea>
+        {confirmingClose && (
+          <div
+            role="alertdialog"
+            aria-label={t("layers.metadataEdit.discardPrompt")}
+            className="flex flex-wrap items-center justify-end gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-2"
+          >
+            <p className="me-auto text-xs">{t("layers.metadataEdit.discardPrompt")}</p>
+            <Button type="button" variant="outline" size="sm" onClick={keepEditingMetadata}>
+              {t("layers.metadataEdit.keepEditing")}
+            </Button>
+            <Button type="button" variant="destructive" size="sm" onClick={discardAndCloseMetadata}>
+              {t("layers.metadataEdit.discardAndClose")}
+            </Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-end gap-2">
           <p
             aria-live="polite"

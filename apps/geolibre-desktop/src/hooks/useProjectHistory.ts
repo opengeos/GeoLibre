@@ -3,6 +3,7 @@ import {
   parseProject,
   registerProjectRestoreHistory,
   serializeProjectWithLayerCache,
+  serializeProjectWithLayerCacheAsync,
   useAppStore,
   type GeoLibreProject,
 } from "@geolibre/core";
@@ -162,13 +163,10 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
           if (autosaveStatus.isCurrent(attempt)) noticeAutosaveOutcome(outcome);
           autosaveStatus.settle(attempt, outcome, useAppStore.getState().isDirty);
         };
-        // Serialization runs synchronously, so its failure cannot be caught
-        // by the promise chain below. A project embedding a large vector layer
-        // serializes to more than V8's 536,870,888-byte string cap and throws
-        // `RangeError: Invalid string length`, which previously escaped as an
-        // unhandled error on every autosave tick. Autosave is best-effort — a
-        // project too large to snapshot must degrade to "no crash recovery",
-        // never to a crash.
+        // A project embedding a large vector layer serializes to more than V8's
+        // 536,870,888-byte string cap and throws `RangeError: Invalid string
+        // length`. Autosave is best-effort — a project too large to snapshot
+        // must degrade to "no crash recovery", never to a crash.
         // Built and serialized in separate steps so the two failures are not
         // conflated: a snapshot that cannot be constructed is a genuine error,
         // while one too large to stringify is an expected limit.
@@ -183,26 +181,36 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
           settle("failed");
           return;
         }
-        let content: string;
-        try {
-          content = serializeProjectWithLayerCache(snapshot, layerSources, layerCacheRef.current);
-        } catch (error) {
-          // Only the string-length cap means "too large"; anything else is a
-          // real serialization bug and must not be filed under a size problem,
-          // or that class of failure becomes invisible in the wild.
-          if (error instanceof RangeError) {
-            console.warn("Project autosave skipped: the project is too large to serialize.", error);
-            settle("unserializable");
-          } else {
-            console.error("Could not autosave the project.", error);
-            settle("failed");
-          }
-          return;
-        }
-        void addProjectSnapshot(content, currentProjectKey()).then(settle, (error) => {
-          console.error("Could not autosave the project.", error);
-          settle("failed");
-        });
+        // Serialized in slices that hand the main thread back between layers,
+        // so a large project is not one long freeze. The key is read now: the
+        // project may be switched while the slices run.
+        const projectKey = currentProjectKey();
+        void serializeProjectWithLayerCacheAsync(
+          snapshot,
+          layerSources,
+          layerCacheRef.current,
+        ).then(
+          (content) =>
+            addProjectSnapshot(content, projectKey).then(settle, (error) => {
+              console.error("Could not autosave the project.", error);
+              settle("failed");
+            }),
+          (error) => {
+            // Only the string-length cap means "too large"; anything else is a
+            // real serialization bug and must not be filed under a size problem,
+            // or that class of failure becomes invisible in the wild.
+            if (error instanceof RangeError) {
+              console.warn(
+                "Project autosave skipped: the project is too large to serialize.",
+                error,
+              );
+              settle("unserializable");
+            } else {
+              console.error("Could not autosave the project.", error);
+              settle("failed");
+            }
+          },
+        );
       }, AUTOSAVE_DELAY_MS);
     });
     return () => {

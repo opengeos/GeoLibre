@@ -317,13 +317,73 @@ export function serializeProjectWithLayerCache(
   layerSources: readonly object[],
   cache: ProjectLayerSerializationCache,
 ): string {
+  const steps = serializeProjectWithLayerCacheSteps(project, layerSources, cache);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
+/** Time a main-thread serialization slice may run before it yields (ms). */
+const SERIALIZE_SLICE_MS = 8;
+
+/** Resolve on a macrotask, letting input and paint run in between slices. */
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * {@link serializeProjectWithLayerCache} that hands the main thread back
+ * between layers, so autosave on a project with several large layers is many
+ * short tasks instead of one 300-400 ms freeze (GeoLibre#2869).
+ *
+ * The cache makes a camera move free, so the cost lands on the first autosave
+ * and on edits to a big layer: each layer that misses the cache is serialized
+ * in its own slice, and the thread is released once a slice has run longer than
+ * a few milliseconds. A single huge layer is still one slice. The result is
+ * identical to the synchronous call. `project` and `layerSources` must not be
+ * mutated while this runs; the store replaces records rather than editing them,
+ * so a snapshot taken from it stays valid.
+ *
+ * @param project Project to serialize, as built from `layerSources`.
+ * @param layerSources Immutable source record for each entry of
+ *   `project.layers`, in the same order, used as the cache key.
+ * @param cache Cache shared between calls.
+ * @param yieldFn Hands the thread back; replaced in tests.
+ * @returns The same text {@link serializeProject} returns for `project`.
+ */
+export async function serializeProjectWithLayerCacheAsync(
+  project: GeoLibreProject,
+  layerSources: readonly object[],
+  cache: ProjectLayerSerializationCache,
+  yieldFn: () => Promise<void> = yieldToMainThread,
+): Promise<string> {
+  const steps = serializeProjectWithLayerCacheSteps(project, layerSources, cache);
+  let sliceStart = Date.now();
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+    if (Date.now() - sliceStart >= SERIALIZE_SLICE_MS) {
+      await yieldFn();
+      sliceStart = Date.now();
+    }
+  }
+}
+
+/** Shared body of the sync and async serializers; yields once per layer text built. */
+function* serializeProjectWithLayerCacheSteps(
+  project: GeoLibreProject,
+  layerSources: readonly object[],
+  cache: ProjectLayerSerializationCache,
+): Generator<void, string, void> {
   if (layerSources.length !== project.layers.length) return serializeProject(project);
   const layers = project.layers.map(portableLayer);
   // Presets are keyed by layer object, so a record listed twice would get one
   // index's text in both places. The store never does that; bypass if it does.
   if (new Set(layers).size !== layers.length) return serializeProject(project);
   const presets = new Map<object, string>();
-  layers.forEach((layer, index) => {
+  for (let index = 0; index < layers.length; index += 1) {
+    const layer = layers[index];
     const source = layerSources[index];
     const cached = cache.get(source);
     // The layer is serialized under its array index as the key (a `toJSON`
@@ -333,9 +393,10 @@ export function serializeProjectWithLayerCache(
       // Depth 2: the root object is depth 0 and its `layers` array depth 1.
       text = serializeProjectValue(layer, 2, String(index), new Set()) ?? "null";
       cache.set(source, { index, text });
+      yield;
     }
     presets.set(layer, text);
-  });
+  }
   return serializeProjectValue({ ...project, layers }, 0, "", new Set(), presets) ?? "null";
 }
 
