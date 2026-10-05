@@ -2,7 +2,7 @@
 
 # Gallery
 
-100 interactive maps built from public open data, grouped by theme.
+105 interactive maps built from public open data, grouped by theme.
 Each is a single `.geolibre.json` project authored with the
 [Python package](python.md) and shared on share.geolibre.app: choropleths,
 heatmaps, clusters, great-circle flows, 3D extrusions, before-and-after swipes,
@@ -61,7 +61,7 @@ Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Cl
 
 ## Natural hazards
 
-11 projects · [Filter by the `natural-hazards` tag](https://share.geolibre.app/explore?tag=natural-hazards)
+14 projects · [Filter by the `natural-hazards` tag](https://share.geolibre.app/explore?tag=natural-hazards)
 
 <table>
   <tr>
@@ -106,11 +106,19 @@ Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Cl
   </tr>
   <tr>
     <td width="50%"><a href="https://share.geolibre.app/giswqs/us-hail-reports-2025"><img src="https://assets.geolibre.app/images/us-hail-reports-2025.webp" alt="GeoLibre map: US hail reports 2025" loading="lazy"></a></td>
-    <td width="50%"></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/valencia-floods-october-2024"><img src="https://assets.geolibre.app/images/valencia-floods-october-2024.webp" alt="GeoLibre map: Valencia floods, October 2024" loading="lazy"></a></td>
   </tr>
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/us-hail-reports-2025">US hail reports 2025</a></b><br>Weather · 9,205 hail reports weighted by hailstone size<br><small>Data: NOAA NCEI Storm Events</small></td>
-    <td></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/valencia-floods-october-2024">Valencia floods, October 2024</a></b><br>Floods · Swipe radar water maps from before and after the October 2024 flash floods<br><small>Data: NASA OPERA DSWx-S1</small></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/canada-wildfire-season-2023"><img src="https://assets.geolibre.app/images/canada-wildfire-season-2023.webp" alt="GeoLibre map: Canada wildfire season 2023" loading="lazy"></a></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/los-angeles-fire-scars-january-2025"><img src="https://assets.geolibre.app/images/los-angeles-fire-scars-january-2025.webp" alt="GeoLibre map: Los Angeles fire scars, January 2025" loading="lazy"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/canada-wildfire-season-2023">Canada wildfire season 2023</a></b><br>Wildfire · Burn scars of the 2023 season across Quebec, Alberta and the north<br><small>Data: NASA OPERA DIST-ANN</small></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/los-angeles-fire-scars-january-2025">Los Angeles fire scars, January 2025</a></b><br>Wildfire · Swipe vegetation disturbance before and after the Palisades fire<br><small>Data: NASA OPERA DIST-ALERT</small></td>
   </tr>
 </table>
 
@@ -155,7 +163,7 @@ Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Cl
 
 ## Oceans and water
 
-9 projects · [Filter by the `oceans-water` tag](https://share.geolibre.app/explore?tag=oceans-water)
+10 projects · [Filter by the `oceans-water` tag](https://share.geolibre.app/explore?tag=oceans-water)
 
 <table>
   <tr>
@@ -192,11 +200,11 @@ Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Cl
   </tr>
   <tr>
     <td width="50%"><a href="https://share.geolibre.app/giswqs/ocean-salinity-from-space"><img src="https://assets.geolibre.app/images/ocean-salinity-from-space.webp" alt="GeoLibre map: Ocean salinity from space" loading="lazy"></a></td>
-    <td width="50%"></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/amazon-river-water-extent-2024"><img src="https://assets.geolibre.app/images/amazon-river-water-extent-2024.webp" alt="GeoLibre map: Amazon river water extent 2024" loading="lazy"></a></td>
   </tr>
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/ocean-salinity-from-space">Ocean salinity from space</a></b><br>Oceans · Sea surface salinity measured from orbit, on the globe<br><small>Data: NASA GIBS (SMAP)</small></td>
-    <td></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/amazon-river-water-extent-2024">Amazon river water extent 2024</a></b><br>Rivers · 30 m surface water along the Amazon and its tributaries in 2024<br><small>Data: NASA OPERA DSWx-HLS</small></td>
   </tr>
 </table>
 
@@ -366,7 +374,7 @@ Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Cl
 
 ## Space and Earth observation
 
-5 projects · [Filter by the `space` tag](https://share.geolibre.app/explore?tag=space)
+6 projects · [Filter by the `space` tag](https://share.geolibre.app/explore?tag=space)
 
 <table>
   <tr>
@@ -387,11 +395,11 @@ Jump to a theme: [Health](#health) · [Natural hazards](#natural-hazards) · [Cl
   </tr>
   <tr>
     <td width="50%"><a href="https://share.geolibre.app/giswqs/aurora-forecast"><img src="https://assets.geolibre.app/images/aurora-forecast.webp" alt="GeoLibre map: Aurora forecast" loading="lazy"></a></td>
-    <td width="50%"></td>
+    <td width="50%"><a href="https://share.geolibre.app/giswqs/alps-seen-by-sentinel-1-radar"><img src="https://assets.geolibre.app/images/alps-seen-by-sentinel-1-radar.webp" alt="GeoLibre map: Alps seen by Sentinel-1 radar" loading="lazy"></a></td>
   </tr>
   <tr>
     <td align="center"><b><a href="https://share.geolibre.app/giswqs/aurora-forecast">Aurora forecast</a></b><br>Space weather · The chance of seeing an aurora, a snapshot of the OVATION model<br><small>Data: NOAA SWPC</small></td>
-    <td></td>
+    <td align="center"><b><a href="https://share.geolibre.app/giswqs/alps-seen-by-sentinel-1-radar">Alps seen by Sentinel-1 radar</a></b><br>Radar · False-color radar backscatter that sees through cloud, lakes in black<br><small>Data: NASA OPERA RTC-S1</small></td>
   </tr>
 </table>
 

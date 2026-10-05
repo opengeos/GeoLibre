@@ -82,7 +82,7 @@ The deep-space starfield behind each globe comes from the
 ## Open data showcase
 
 <!-- demo-gallery-teaser:start -->
-100 interactive maps built from public open data, from air quality and
+105 interactive maps built from public open data, from air quality and
 earthquakes to Roman roads and the aurora, each a single `.geolibre.json`
 project you can open live, explore, and fork. A few highlights:
 

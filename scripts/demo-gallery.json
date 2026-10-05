@@ -960,6 +960,51 @@
       "topic": "Weather",
       "caption": "9,205 hail reports weighted by hailstone size",
       "source": "NOAA NCEI Storm Events"
+    },
+    {
+      "number": 101,
+      "slug": "alps-seen-by-sentinel-1-radar",
+      "title": "Alps seen by Sentinel-1 radar",
+      "theme": "space",
+      "topic": "Radar",
+      "caption": "False-color radar backscatter that sees through cloud, lakes in black",
+      "source": "NASA OPERA RTC-S1"
+    },
+    {
+      "number": 102,
+      "slug": "valencia-floods-october-2024",
+      "title": "Valencia floods, October 2024",
+      "theme": "natural-hazards",
+      "topic": "Floods",
+      "caption": "Swipe radar water maps from before and after the October 2024 flash floods",
+      "source": "NASA OPERA DSWx-S1"
+    },
+    {
+      "number": 103,
+      "slug": "canada-wildfire-season-2023",
+      "title": "Canada wildfire season 2023",
+      "theme": "natural-hazards",
+      "topic": "Wildfire",
+      "caption": "Burn scars of the 2023 season across Quebec, Alberta and the north",
+      "source": "NASA OPERA DIST-ANN"
+    },
+    {
+      "number": 104,
+      "slug": "los-angeles-fire-scars-january-2025",
+      "title": "Los Angeles fire scars, January 2025",
+      "theme": "natural-hazards",
+      "topic": "Wildfire",
+      "caption": "Swipe vegetation disturbance before and after the Palisades fire",
+      "source": "NASA OPERA DIST-ALERT"
+    },
+    {
+      "number": 105,
+      "slug": "amazon-river-water-extent-2024",
+      "title": "Amazon river water extent 2024",
+      "theme": "oceans-water",
+      "topic": "Rivers",
+      "caption": "30 m surface water along the Amazon and its tributaries in 2024",
+      "source": "NASA OPERA DSWx-HLS"
     }
   ]
 }
