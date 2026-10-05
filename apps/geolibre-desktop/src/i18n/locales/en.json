@@ -726,7 +726,9 @@
       "signInErrorPopup": "The sign-in window was blocked. Allow pop-ups for this site and try again.",
       "signInErrorCancelled": "Sign-in was cancelled.",
       "signInErrorTimeout": "Sign-in timed out. Try again.",
-      "signInErrorExpired": "The ArcGIS session expired. Sign in again."
+      "signInErrorExpired": "The ArcGIS session expired. Sign in again.",
+      "signInErrorNetwork": "Could not reach the ArcGIS portal. Check the connection and try again.",
+      "cancelSignIn": "Cancel"
     },
     "gpx": {
       "defaultName": "GPX Layer",

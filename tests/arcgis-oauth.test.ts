@@ -167,6 +167,22 @@ describe("ArcGIS sign-in session", () => {
     );
   });
 
+  it("keeps the session through a transient refresh failure", async () => {
+    tokenBodies = [{ access_token: "at-1", refresh_token: "rt-1", expires_in: 1, username: "ada" }];
+    await signInToArcGIS({ portalUrl: "", clientId: "cid" });
+    const okFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new TypeError("offline");
+    }) as typeof fetch;
+    await assert.rejects(
+      getArcGISAccessToken(""),
+      (e) => e instanceof ArcGISAuthError && e.code === "network-error",
+    );
+    globalThis.fetch = okFetch;
+    tokenBodies = [{ access_token: "at-2", expires_in: 1800 }];
+    assert.equal(await getArcGISAccessToken(""), "at-2");
+  });
+
   it("signs out and revokes the refresh token", async () => {
     tokenBodies = [{ access_token: "at-1", refresh_token: "rt-1", expires_in: 1800 }];
     await signInToArcGIS({ portalUrl: "", clientId: "cid" });

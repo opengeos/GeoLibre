@@ -64,7 +64,7 @@ the refresh token, including for saving edits and refreshing layers. If it canno
 be renewed you are asked to sign in again. Select **Sign out** to end it and
 revoke the refresh token. The session, tokens and sign-in choice are never saved
 in the project or the service library, and manual access tokens remain available.
-The session is not kept across app restarts yet.
+Vector tile, map service and image service layers carry the token they were added with, which lasts about half an hour, so re-add them after that. The session is not kept across app restarts yet.
 
 ## Current scope
 

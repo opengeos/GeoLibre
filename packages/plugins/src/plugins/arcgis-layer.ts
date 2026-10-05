@@ -191,7 +191,7 @@ export interface ArcGISLayerOptions {
    * Supplies a current access token for this layer's later requests (edits,
    * refresh), for a connection whose token expires and is renewed, such as an
    * ArcGIS sign-in. Kept in memory with the layer's edit options and never
-   * persisted. When it returns a token it replaces `token`.
+   * persisted. Once set it replaces `token` entirely, so a provider that returns nothing (signed out) sends no token.
    */
   tokenProvider?: () => Promise<string | undefined>;
   url?: string;
@@ -2671,11 +2671,12 @@ function createArcGISLayerId(): string {
 // Credentials belong to the live connection, never to project metadata.
 const arcgisEditOptions = new Map<string, ArcGISLayerOptions>();
 
-/** Resolve `options.tokenProvider` into `options.token`, leaving a static token when it yields none. */
+/** Resolve `options.tokenProvider` into `options.token`. */
 async function withFreshArcGISToken(options: ArcGISLayerOptions): Promise<ArcGISLayerOptions> {
   if (!options.tokenProvider) return options;
-  const token = await options.tokenProvider();
-  return token ? { ...options, token } : options;
+  // With a provider the token is the provider's alone: after a sign-out the
+  // initial token must not keep being sent while the service still accepts it.
+  return { ...options, token: await options.tokenProvider() };
 }
 const arcgisSavingLayers = new Set<string>();
 

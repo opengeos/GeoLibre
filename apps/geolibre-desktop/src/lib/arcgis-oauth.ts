@@ -46,6 +46,7 @@ export type ArcGISAuthErrorCode =
   | "exchange-failed"
   | "not-signed-in"
   | "session-expired"
+  | "network-error"
   | "restart-required";
 
 /** Typed failure so the UI can show guidance instead of a raw code. */
@@ -70,6 +71,7 @@ const AUTH_ERROR_KEYS: Partial<Record<ArcGISAuthErrorCode, ParseKeys>> = {
   "access-denied": "addData.arcgis.signInErrorCancelled",
   timeout: "addData.arcgis.signInErrorTimeout",
   "session-expired": "addData.arcgis.signInErrorExpired",
+  "network-error": "addData.arcgis.signInErrorNetwork",
   "not-signed-in": "addData.arcgis.signInErrorExpired",
 };
 
@@ -195,10 +197,11 @@ function parseTokenResponse(body: unknown, previous?: Session): TokenResponse {
 }
 
 async function postToken(portal: string, params: Record<string, string>): Promise<unknown> {
+  let response: Response;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), TOKEN_REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(arcgisOAuthEndpoint(portal, "token"), {
+    response = await fetch(arcgisOAuthEndpoint(portal, "token"), {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: new URLSearchParams({ f: "json", ...params }),
@@ -206,11 +209,17 @@ async function postToken(portal: string, params: Record<string, string>): Promis
       redirect: "error",
       signal: controller.signal,
     });
+  } catch {
+    // The portal was never reached (offline, timeout, redirect): not a verdict
+    // on the credentials, so a signed-in session is kept for a later retry.
+    throw new ArcGISAuthError("network-error");
+  } finally {
+    window.clearTimeout(timeout);
+  }
+  try {
     return await response.json();
   } catch {
     throw new ArcGISAuthError("exchange-failed");
-  } finally {
-    window.clearTimeout(timeout);
   }
 }
 
@@ -316,16 +325,18 @@ export async function signInToArcGIS(options: {
 
     let code: string;
     if (desktop) {
-      const waiter = waitForNativeShareCode(state, NO_ISSUER, SIGN_IN_TIMEOUT_MS);
-      nativeWaiter = waiter;
-      void waiter.code.catch(() => {});
       try {
+        // Throws when the shared deep-link receiver is busy (a Share sign-in is
+        // pending) or has not started yet.
+        const waiter = waitForNativeShareCode(state, NO_ISSUER, SIGN_IN_TIMEOUT_MS);
+        nativeWaiter = waiter;
+        void waiter.code.catch(() => {});
         const { openUrl } = await import("@tauri-apps/plugin-opener");
         await openUrl(authorizeUrl.toString());
         code = await waiter.code;
       } catch (error) {
         if (cancelled) throw new ArcGISAuthError("cancelled");
-        waiter.cancel();
+        nativeWaiter?.cancel();
         if (error instanceof NativeShareCallbackError) {
           throw new ArcGISAuthError(
             error.code === "access-denied"
@@ -334,7 +345,9 @@ export async function signInToArcGIS(options: {
                 ? "timeout"
                 : error.code === "restart-required"
                   ? "restart-required"
-                  : "exchange-failed",
+                  : error.code === "malformed"
+                    ? "already-pending"
+                    : "exchange-failed",
           );
         }
         throw new ArcGISAuthError("exchange-failed");
@@ -412,6 +425,8 @@ export async function getArcGISAccessToken(portalUrl: string | undefined): Promi
       session.refreshToken = tokens.refreshToken;
       return session.accessToken;
     } catch (error) {
+      // A transport failure leaves a still-usable refresh token in place.
+      if (error instanceof ArcGISAuthError && error.code === "network-error") throw error;
       if (sessions.get(portal) === session) {
         sessions.delete(portal);
         publishConnections();
@@ -428,16 +443,24 @@ export async function getArcGISAccessToken(portalUrl: string | undefined): Promi
 }
 
 /**
- * Like {@link getArcGISAccessToken}, but returns undefined instead of throwing,
- * for a layer's token provider that falls back to whatever token it already has.
+ * Like {@link getArcGISAccessToken}, but returns undefined when signed out or
+ * expired, for a layer's token provider. A transient network failure still throws.
  */
 export async function tryGetArcGISAccessToken(
   portalUrl: string | undefined,
 ): Promise<string | undefined> {
   try {
     return await getArcGISAccessToken(portalUrl);
-  } catch {
-    return undefined;
+  } catch (error) {
+    // Signed out or expired means "no token"; a transient failure is the
+    // caller's to see, so the request is not silently sent unauthenticated.
+    if (
+      error instanceof ArcGISAuthError &&
+      (error.code === "not-signed-in" || error.code === "session-expired")
+    ) {
+      return undefined;
+    }
+    throw error;
   }
 }
 
@@ -448,6 +471,8 @@ export async function signOutOfArcGIS(portalUrl: string | undefined): Promise<vo
   if (!portal || !session) return;
   sessions.delete(portal);
   publishConnections();
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), TOKEN_REQUEST_TIMEOUT_MS);
   try {
     await fetch(arcgisOAuthEndpoint(portal, "revokeToken"), {
       method: "POST",
@@ -459,9 +484,14 @@ export async function signOutOfArcGIS(portalUrl: string | undefined): Promise<vo
         token_type_hint: session.refreshToken ? "refresh_token" : "access_token",
       }),
       credentials: "omit",
+      // A redirect would replay the refresh token to another origin.
+      redirect: "error",
+      signal: controller.signal,
     });
   } catch {
     // The session is already gone locally; revocation is best effort.
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
