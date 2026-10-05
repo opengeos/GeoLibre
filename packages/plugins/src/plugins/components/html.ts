@@ -90,15 +90,18 @@ export async function openHtmlPanelWithEntry(
           htmlPosition: options.htmlPosition ?? "bottom-left",
           collapsible: true,
         };
-        const duplicate = current.htmls.some(
+        const existingIndex = current.htmls.findIndex(
           (existing) => existing.title === entry.title && existing.html === entry.html,
         );
-        const htmls = duplicate ? current.htmls : [...current.htmls, entry];
+        const htmls = existingIndex >= 0 ? current.htmls : [...current.htmls, entry];
+        // Select the entry the top-level fields describe: the matching one on a
+        // repeat click, the freshly appended last one otherwise.
+        const selectedHtmlIndex = existingIndex >= 0 ? existingIndex : htmls.length - 1;
         restoreGuiControlState(control, {
           ...current,
           ...entry,
           hasHtmlControl: true,
-          selectedHtmlIndex: htmls.length - 1,
+          selectedHtmlIndex,
           htmls,
         });
         control.show();

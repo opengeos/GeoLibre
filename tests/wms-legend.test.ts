@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { after, afterEach, describe, it } from "node:test";
 import { DOMParser } from "linkedom";
 import {
   findCapabilitiesLegendUrl,
   parseLegendImageUrl,
+  resolveWmsLegends,
   savedLegendImageUrl,
   wmsGetLegendGraphicUrl,
   wmsLegendHtml,
@@ -149,5 +150,54 @@ describe("WMS legend", () => {
     assert.equal(savedLegendImageUrl(layer("javascript:alert(1)")), null);
     assert.equal(savedLegendImageUrl(layer(42)), null);
     assert.equal(savedLegendImageUrl(wmsLayer({ url: "https://x/s", layers: "a" })), null);
+  });
+});
+
+describe("resolveWmsLegends", () => {
+  const originalFetch = globalThis.fetch;
+  const originalDOMParser = globalThis.DOMParser;
+  // Node has no DOMParser; the lookup parses the capabilities with the global one.
+  globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+  after(() => {
+    globalThis.DOMParser = originalDOMParser;
+  });
+  const source = {
+    endpoint: "https://wms.example/s",
+    layers: ["dtm", "bare"],
+    styles: ["", ""],
+    version: "1.1.1",
+  };
+  const capsResponse = () =>
+    new Response(CAPS, { status: 200, headers: { "content-type": "text/xml" } });
+
+  it("uses the advertised LegendURL and falls back to GetLegendGraphic per layer", async () => {
+    globalThis.fetch = (async () => capsResponse()) as typeof fetch;
+    const [dtm, bare] = await resolveWmsLegends(source);
+    assert.equal(dtm.url, "https://wms.example/legend/default.png");
+    assert.equal(new URL(bare.url).searchParams.get("REQUEST"), "GetLegendGraphic");
+    assert.equal(new URL(bare.url).searchParams.get("LAYER"), "bare");
+  });
+
+  it("falls back to GetLegendGraphic for every layer when capabilities are unreachable", async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    const entries = await resolveWmsLegends(source);
+    assert.equal(entries.length, 2);
+    for (const entry of entries) {
+      assert.equal(new URL(entry.url).searchParams.get("REQUEST"), "GetLegendGraphic");
+    }
+  });
+
+  it("rethrows when the lookup was aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    globalThis.fetch = (async () => {
+      throw new DOMException("aborted", "AbortError");
+    }) as typeof fetch;
+    await assert.rejects(resolveWmsLegends(source, controller.signal));
   });
 });

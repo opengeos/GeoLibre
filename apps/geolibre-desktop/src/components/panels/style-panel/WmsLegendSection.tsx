@@ -46,6 +46,10 @@ export function WmsLegendSection({
   const [addedToMap, setAddedToMap] = useState<boolean | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  // The layer the section currently shows, so a slow "Add to map" for a layer
+  // that was since deselected cannot write its status under the new one.
+  const layerIdRef = useRef(layer.id);
+  const [adding, setAdding] = useState(false);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const savedUrl = savedLegendImageUrl(layer);
   const [draftUrl, setDraftUrl] = useState("");
@@ -55,6 +59,8 @@ export function WmsLegendSection({
   // cancels a lookup still in flight, so a late answer cannot land on the
   // wrong layer.
   useEffect(() => {
+    layerIdRef.current = layer.id;
+    setAdding(false);
     setEntries(null);
     setLoadFailed(false);
     setFailed(new Set());
@@ -112,13 +118,18 @@ export function WmsLegendSection({
 
   const addToMap = async () => {
     const shown = shownEntries.filter((entry) => !failed.has(entry.url));
-    if (shown.length === 0) return;
-    setAddedToMap(
-      await openHtmlPanelWithEntry(createAppAPI(mapControllerRef), {
+    if (shown.length === 0 || adding) return;
+    const requestedFor = layer.id;
+    setAdding(true);
+    try {
+      const added = await openHtmlPanelWithEntry(createAppAPI(mapControllerRef), {
         title: t("style.raster.legend.mapTitle", { layer: layer.name }),
         html: wmsLegendHtml(shown),
-      }),
-    );
+      });
+      if (layerIdRef.current === requestedFor) setAddedToMap(added);
+    } finally {
+      if (layerIdRef.current === requestedFor) setAdding(false);
+    }
   };
 
   return (
@@ -193,7 +204,14 @@ export function WmsLegendSection({
       )}
       {hasLegend && (
         <div className="space-y-1">
-          <Button type="button" size="sm" variant="outline" className="w-full" onClick={addToMap}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full"
+            disabled={adding}
+            onClick={addToMap}
+          >
             {t("style.raster.legend.addToMap")}
           </Button>
           {addedToMap !== null && (
