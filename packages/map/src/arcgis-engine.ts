@@ -1153,7 +1153,7 @@ export class ArcgisEngine implements MapEngine {
     });
     void view.goTo(extent, { duration: 800 }).catch(reportGoToFailure);
   }
-  fitLayer(layer: GeoLibreLayer): void {
+  fitLayer(layer: GeoLibreLayer): boolean {
     const center = layer.metadata.center;
     const hasCenter =
       Array.isArray(center) &&
@@ -1168,7 +1168,7 @@ export class ArcgisEngine implements MapEngine {
         zoom: Math.max(viewZoom(this.view), 14),
         ...(this.view.type === "3d" ? { pitch: Math.max(this.view.camera?.tilt ?? 0, 60) } : {}),
       });
-      return;
+      return true;
     }
     const bounds = getLayerBounds(layer);
     if (bounds) {
@@ -1185,22 +1185,23 @@ export class ArcgisEngine implements MapEngine {
           center: [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2],
           zoom: minRenderZoom,
         });
-        return;
+        return true;
       }
       this.fitBounds(bounds);
-      return;
+      return true;
     }
     if (hasCenter) {
       this.flyTo({
         center: [center[0] as number, center[1] as number],
         zoom: typeof layer.metadata.zoom === "number" ? layer.metadata.zoom : 16,
       });
-      return;
+      return true;
     }
     // A service layer knows its own extent once loaded.
     const native = this.natives.get(layer.id)?.layers[0];
-    if (native?.fullExtent)
-      void this.view?.goTo(native.fullExtent, { duration: 800 }).catch(reportGoToFailure);
+    if (!native?.fullExtent) return false;
+    void this.view?.goTo(native.fullExtent, { duration: 800 }).catch(reportGoToFailure);
+    return true;
   }
   /**
    * The zoom at which `bounds` fills the view, in Web Mercator, or null before

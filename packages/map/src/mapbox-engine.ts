@@ -57,6 +57,7 @@ import { installSelectionDragGuard } from "./selection-drag-guard";
 import { hasZoomDependentClusterFilter } from "./cluster-input";
 import { resolveTextFontFromStyleLayers } from "./text-font";
 import { getLayerBounds } from "./geojson-loader";
+import { loadedVectorTileFeatureBounds } from "./loaded-feature-bounds";
 import { captureEngineImage } from "./map-capture";
 import { drawExtentOnCanvas } from "./extent-drawing";
 import { globeSafeMaxZoom } from "./globe-fit-bounds";
@@ -642,18 +643,22 @@ export class MapboxEngine implements MapEngine {
       { padding: FIT_BOUNDS_PADDING, duration: 800, ...(maxZoom === null ? {} : { maxZoom }) },
     );
   }
-  fitLayer(layer: GeoLibreLayer): void {
+  fitLayer(layer: GeoLibreLayer): boolean {
     // getLayerBounds already falls through to layer.source.bounds →
     // layer.metadata.bounds with the same finite-number check, so the only
-    // addition for Mapbox is the source *plan* bounds (the id of the compiled
-    // native source), which getLayerBounds cannot reach.
-    const bounds = getLayerBounds(layer) ?? this.getLayerSourceBounds(layer);
+    // additions for Mapbox are the source *plan* bounds (the id of the compiled
+    // native source), which getLayerBounds cannot reach, and, for a bare
+    // vector-tile template with no bounds at all, its loaded features' extent.
+    const map = this.map;
+    const bounds =
+      getLayerBounds(layer) ??
+      this.getLayerSourceBounds(layer) ??
+      loadedVectorTileFeatureBounds(map, layer, this.getLayerSourceIds(layer));
     if (bounds) {
       this.fitBounds(bounds);
-      return;
+      return true;
     }
-    const map = this.map;
-    if (!map) return;
+    if (!map) return false;
     const center = layer.metadata.center;
     if (
       Array.isArray(center) &&
@@ -666,7 +671,9 @@ export class MapboxEngine implements MapEngine {
         // Match MapController.fitLayer: a tileset is looked at in perspective.
         ...(layer.type === "3d-tiles" ? { pitch: Math.max(map.getPitch(), 60) } : {}),
       });
+      return true;
     }
+    return false;
   }
   /** The map viewport in CSS pixels, or null when the canvas has not been
    * laid out yet — a zero size would make any derived ceiling nonsense. */
@@ -676,12 +683,15 @@ export class MapboxEngine implements MapEngine {
     const height = canvas?.clientHeight ?? 0;
     return width > 0 && height > 0 ? { width, height } : null;
   }
+  /** The native source ids a layer's compiled plan draws from. */
+  private getLayerSourceIds(layer: GeoLibreLayer): string[] {
+    const plan = this.plans.get(layer.id);
+    return plan ? [plan.sourceId, ...Object.keys(plan.additionalSources ?? {})] : [];
+  }
   /** Bounds a layer advertises about itself from its source, if any. */
   private getLayerSourceBounds(layer: GeoLibreLayer): [number, number, number, number] | null {
     const map = this.map;
-    const plan = this.plans.get(layer.id);
-    const ids = plan ? [plan.sourceId, ...Object.keys(plan.additionalSources ?? {})] : [];
-    for (const id of ids) {
+    for (const id of this.getLayerSourceIds(layer)) {
       const source = map?.getSource(id) as
         | { bounds?: [number, number, number, number] }
         | undefined;

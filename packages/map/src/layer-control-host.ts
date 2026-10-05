@@ -12,6 +12,10 @@ import {
   type LayerState,
 } from "maplibre-gl-layer-control";
 import { getLayerBounds } from "./geojson-loader";
+import {
+  loadedVectorTileFeatureBounds,
+  type SourceFeatureQueryable,
+} from "./loaded-feature-bounds";
 
 /**
  * Engine-neutral host for the on-map layer control (`maplibre-gl-layer-control`).
@@ -45,6 +49,7 @@ export interface LayerControlStyleMap {
   getStyle(): { layers?: Array<{ id: string; metadata?: unknown }> } | undefined | null;
   getSource(id: string): unknown;
   getContainer(): HTMLElement;
+  querySourceFeatures?: SourceFeatureQueryable["querySourceFeatures"];
 }
 
 /** What an engine tells the host about itself. */
@@ -801,9 +806,17 @@ export class LayerControlHost {
         if (!layer) return null;
         // GeoJSON-backed layers derive bounds from their features; other
         // layer types fall back to their source bounds (TileJSON) when
-        // advertised, and return null (no zoom-to-bounds) otherwise.
+        // advertised, then (a bare vector-tile template) to the extent of the
+        // features loaded so far, and return null (no zoom-to-bounds) otherwise.
         return (
-          getLayerBounds(layer) ?? getLayerMetadataBounds(layer) ?? this.getLayerSourceBounds(layer)
+          getLayerBounds(layer) ??
+          getLayerMetadataBounds(layer) ??
+          this.getLayerSourceBounds(layer) ??
+          loadedVectorTileFeatureBounds(
+            this.adapter.getMap(),
+            layer,
+            this.adapter.getSourceIds(layer),
+          )
         );
       },
       getNativeLayerIds: nativeIdsById,

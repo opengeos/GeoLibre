@@ -78,7 +78,7 @@ import {
 } from "./map-identify-lifecycle";
 import { applySelectionHighlight, resolveHighlightIds, selectionFitKey } from "./map-selection";
 import { createMapResizeScheduler } from "./map-resize";
-import type { MapDiagnosticEvent } from "./map-diagnostic";
+import { type MapDiagnosticEvent, summarizeDiagnosticTile } from "./map-diagnostic";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "maplibre-gl-layer-control/style.css";
 import "./layer-control-overrides.css";
@@ -224,7 +224,7 @@ function mapErrorDiagnosticEvent(event: maplibregl.ErrorEvent): MapDiagnosticEve
       url,
       dataType: eventRecord?.dataType,
       sourceDataType: eventRecord?.sourceDataType,
-      tile: eventRecord?.tile,
+      tile: summarizeDiagnosticTile(eventRecord?.tile),
       error: event.error,
     }),
     source,

@@ -90,8 +90,12 @@ export interface MapEngine {
   resetPitch(): void;
   /** Frame `bounds` (`[west, south, east, north]`) with the standard padding. */
   fitBounds(bounds: [number, number, number, number]): void;
-  /** Frame a layer's extent. No-op for a layer whose extent is unknown. */
-  fitLayer(layer: GeoLibreLayer): void;
+  /**
+   * Frame a layer's extent. Returns false, without moving the camera, when the
+   * layer's extent is unknown, so a caller can tell the user why nothing moved.
+   * An engine that hands the fit to an asynchronous loader returns true.
+   */
+  fitLayer(layer: GeoLibreLayer): boolean;
   /** The projection the map is currently drawing in. */
   readProjection(): MapProjection;
   /** Apply min/max zoom, max pitch, and bounds constraints from the project. */

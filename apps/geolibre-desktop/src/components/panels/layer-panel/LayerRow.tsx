@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { layerFilteredHintKey } from "../../../lib/layer-filter-hint";
 import { getLayerRefreshConfig } from "../../../lib/layer-refresh";
+import { notify } from "../../../lib/notify";
 import { LayerSwatchIcon } from "../LayerSwatchIcon";
 import {
   hasNativeIdentifyLayers,
@@ -541,7 +542,13 @@ export function LayerRow({
           aria-label={t("layers.zoomToLayer")}
           onClick={(e) => {
             e.stopPropagation();
-            mapControllerRef.current?.fitLayer(layer);
+            const controller = mapControllerRef.current;
+            // A layer with no known extent (e.g. a bare `{z}/{x}/{y}` vector
+            // tile URL viewed nowhere near its data) cannot be framed; say so
+            // rather than leave the button looking broken.
+            if (controller && !controller.fitLayer(layer)) {
+              notify.info(t("layers.zoomToLayerUnknownExtent", { name: layer.name }));
+            }
           }}
         >
           <ZoomIn className="h-3.5 w-3.5" />

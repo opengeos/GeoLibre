@@ -8029,6 +8029,7 @@
     "moveUp": "Move up",
     "moveDown": "Move down",
     "zoomToLayer": "Zoom to layer",
+    "zoomToLayerUnknownExtent": "The extent of \"{{name}}\" is unknown. Pan the map to where its data is, then try Zoom to layer again.",
     "layerActions": "Layer actions",
     "exportSketchesAsLayer": "Export Sketches as new layer",
     "exportSketchesKeep": "Keep features in Sketches",
