@@ -7405,6 +7405,14 @@
       "add": "Add"
     },
     "raster": {
+      "legend": {
+        "heading": "Legend",
+        "get": "Get legend",
+        "refresh": "Reload legend",
+        "loading": "Looking up legend…",
+        "failed": "The server did not return a legend for this layer.",
+        "alt": "Legend for {{layer}}"
+      },
       "greyscale": "Greyscale",
       "greyscaleHint": "Toggle a greyscale basemap (drives saturation to its minimum)",
       "reset": "Reset",
