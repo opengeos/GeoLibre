@@ -923,7 +923,7 @@
         "sql": "שם משתמש וסיסמה של SQL Server",
         "windows": "אימות Windows",
         "entra_password": "שם משתמש וסיסמה של Microsoft Entra",
-        "entra_sp": "שירות עיקרי של Microsoft Entra",
+        "entra_sp": "Microsoft Entra Service Principal",
         "entra_interactive": "Microsoft Entra אינטראקטיבי",
         "msi": "זהות מנוהלת",
         "token": "אסימון גישה"
