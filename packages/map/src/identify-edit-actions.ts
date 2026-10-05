@@ -31,6 +31,8 @@ export interface IdentifyEditActionLabels {
 
 /**
  * Build the Edit geometry / Edit attributes buttons for one Identify result.
+ * Callers place the row above the attribute rows, so a feature with many
+ * attributes does not push the actions out of sight.
  *
  * @param layer The layer that owns the identified feature.
  * @param featureId The identified feature's id, or null when it is unknown.
@@ -72,7 +74,7 @@ export function createIdentifyEditActionsElement(
   }
   if (buttons.length === 0) return null;
   const row = document.createElement("div");
-  row.className = "geolibre-identify-edit-actions mt-2 flex flex-wrap items-center gap-1 text-xs";
+  row.className = "geolibre-identify-edit-actions mb-2 flex flex-wrap items-center gap-1 text-xs";
   row.append(...buttons);
   return row;
 }

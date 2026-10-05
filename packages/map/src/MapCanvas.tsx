@@ -1113,7 +1113,8 @@ export const MapCanvas = memo(function MapCanvas({
         // Programmatic: the edit action owns the selection from here.
         () => removeIdentifyPopup(),
       );
-      if (editRow) content.appendChild(editRow);
+      // Under the title, above the attribute rows.
+      if (editRow) content.firstElementChild?.after(editRow);
       showResolvedHitPopup(content, featureId);
     };
 

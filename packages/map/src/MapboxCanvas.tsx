@@ -1024,7 +1024,8 @@ export function MapboxCanvas({
             identifyAllLabelsRef.current,
             () => removeIdentifyPopup(),
           );
-          if (editRow) content.appendChild(editRow);
+          // Under the title, above the attribute rows.
+          if (editRow) content.firstElementChild?.after(editRow);
           const nextPopup = new gl.Popup({
             className: "geolibre-identify-popup",
             closeButton: true,

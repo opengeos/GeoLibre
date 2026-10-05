@@ -106,6 +106,11 @@ describe("Identify edit actions (#2932)", () => {
       buttons.map((button) => button.textContent),
       ["Edit geometry", "Edit attributes"],
     );
+    // The row sits above the attribute rows, so long attribute lists cannot
+    // push it out of view.
+    const editRow = buttons[0].parentElement!;
+    assert.equal(editRow.previousElementSibling?.textContent, "Feature 1");
+    assert.match(editRow.nextElementSibling?.textContent ?? "", /name\s*Tulsa/);
     buttons[0].dispatchEvent(new window.Event("click"));
     buttons[1].dispatchEvent(new window.Event("click"));
     assert.deepEqual(calls, ["geometry:cities:87", "attributes:cities:87"]);

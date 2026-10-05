@@ -1976,7 +1976,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                       data-index={virtualRow.index}
                       ref={rowVirtualizer.measureElement}
                       data-state={selected ? "selected" : undefined}
-                      className="cursor-pointer select-none"
+                      // The shared row's selected tint (bg-muted) nearly
+                      // vanishes in the dark theme and behind edit-mode
+                      // inputs, so selection here uses the primary color.
+                      className="cursor-pointer select-none data-[state=selected]:bg-primary/20 data-[state=selected]:hover:bg-primary/25 [&[data-state=selected]_input]:border-primary/70"
                       // Shift-click would otherwise select the page text between
                       // rows; suppress that so range picks stay clean.
                       onMouseDown={(event) => {

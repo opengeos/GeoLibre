@@ -181,6 +181,15 @@ export function createGlobalIdentifyPopupElement(
         onActivate(hit);
       });
       featureContainer.appendChild(featureButton);
+      const editRow = createIdentifyEditActionsElement(
+        layer,
+        hit.featureId,
+        editActions,
+        labels,
+        beforeEditAction,
+      );
+      // Above the attribute rows, so a long attribute list cannot hide it.
+      if (editRow) featureContainer.appendChild(editRow);
       featureContainer.appendChild(
         createIdentifyPopupRows(
           hit.properties,
@@ -194,14 +203,6 @@ export function createGlobalIdentifyPopupElement(
           false,
         ),
       );
-      const editRow = createIdentifyEditActionsElement(
-        layer,
-        hit.featureId,
-        editActions,
-        labels,
-        beforeEditAction,
-      );
-      if (editRow) featureContainer.appendChild(editRow);
       section.appendChild(featureContainer);
     }
     body.appendChild(section);
