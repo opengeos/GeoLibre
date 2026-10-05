@@ -168,11 +168,14 @@ export function createS3BrowserClient(
    */
   async function fetchSigned(
     sign: () => Promise<string>,
+    target: { bucket?: string; connectionId?: string },
     signal?: AbortSignal,
   ): Promise<{ status: number; body: string }> {
     const response = await fetchText(await sign(), signal);
     if (signer?.invalidateCredentials && isExpiredCredentialError(response.status, response.body)) {
-      signer.invalidateCredentials();
+      // The native fetch ignores the signal, so a cancelled listing stops here.
+      signal?.throwIfAborted();
+      signer.invalidateCredentials(target);
       return fetchText(await sign(), signal);
     }
     return response;
@@ -181,11 +184,15 @@ export function createS3BrowserClient(
   return {
     async listBuckets(connectionId, signal) {
       if (!signer) throw new Error("No S3 connection is configured.");
-      const response = await fetchSigned(async () => {
-        const signed = await signer.presign({ bucket: "", key: "", connectionId }, signal);
-        if (!signed) throw new Error("No S3 connection is configured.");
-        return signed.href;
-      }, signal);
+      const response = await fetchSigned(
+        async () => {
+          const signed = await signer.presign({ bucket: "", key: "", connectionId }, signal);
+          if (!signed) throw new Error("No S3 connection is configured.");
+          return signed.href;
+        },
+        { connectionId },
+        signal,
+      );
       if (response.status !== 200) throw errorFrom(response.status, response.body);
       return parseS3BucketList(response.body).sort((a, b) => a.localeCompare(b));
     },
@@ -198,7 +205,11 @@ export function createS3BrowserClient(
         prefix: location.prefix,
         ...(continuationToken ? { "continuation-token": continuationToken } : {}),
       };
-      let response = await fetchSigned(() => listUrl(location, query, signal), signal);
+      let response = await fetchSigned(
+        () => listUrl(location, query, signal),
+        { bucket: location.bucket },
+        signal,
+      );
       if (response.status !== 200 && !signer?.covers(location.bucket)) {
         // An anonymous request to the wrong regional endpoint is answered with
         // the right one; retry there once.

@@ -376,10 +376,11 @@ export interface S3UrlSigner {
    */
   fetchText?(url: string, signal?: AbortSignal): Promise<{ status: number; body: string }>;
   /**
-   * Drops cached credentials and signed URLs, so the next `presign` resolves
-   * them afresh. Called when S3 refuses a request as expired.
+   * Drops the cached credentials and signed URLs of the connection that
+   * serves `target`, so the next `presign` resolves them afresh. Called when S3
+   * refuses a request as expired.
    */
-  invalidateCredentials?(): void;
+  invalidateCredentials?(target: { bucket?: string; connectionId?: string }): void;
   /** The persisted location (`s3://bucket/prefix/`) the S3 browser opens at, or "". */
   defaultLocation?(): string;
   /** Persists the S3 browser's default location; "" clears it. */

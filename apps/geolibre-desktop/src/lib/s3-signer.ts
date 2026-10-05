@@ -53,6 +53,8 @@ const signedUrlCache = new Map<string, S3SignedUrl>();
  * same bucket name on two endpoints (AWS and a MinIO, say) is two buckets.
  */
 const bucketRegions = new Map<string, string>();
+/** Bumped by every invalidation, so a presign already in flight does not cache its stale result. */
+let cacheGeneration = 0;
 const pendingRegionProbes = new Map<string, Promise<string | null>>();
 
 function regionKey(connection: S3Connection, bucket: string): string {
@@ -162,6 +164,7 @@ export function resolveS3ConnectionCredentials(
 
 /** Forgets cached credentials and signed URLs (after a sign-in or a settings change). */
 export function clearS3SignerCaches(): void {
+  cacheGeneration += 1;
   credentialCache.clear();
   signedUrlCache.clear();
 }
@@ -295,7 +298,18 @@ export function createS3Signer(
     connections: () =>
       getConnections().map(({ id, name, buckets }) => ({ id, name, buckets: [...buckets] })),
     fetchText,
-    invalidateCredentials: clearS3SignerCaches,
+    invalidateCredentials({ bucket, connectionId }) {
+      const connection = connectionId
+        ? getConnections().find((candidate) => candidate.id === connectionId)
+        : matchS3Connection(getConnections(), bucket ?? "");
+      if (!connection) return;
+      cacheGeneration += 1;
+      credentialCache.delete(connection.id);
+      const prefix = `${connection.id}\u0000`;
+      for (const key of [...signedUrlCache.keys()]) {
+        if (key.startsWith(prefix)) signedUrlCache.delete(key);
+      }
+    },
     async presign(request, signal) {
       const connection = request.connectionId
         ? (getConnections().find((candidate) => candidate.id === request.connectionId) ?? null)
@@ -316,6 +330,7 @@ export function createS3Signer(
         }
         return { href: url.href, expiresAt: Number.POSITIVE_INFINITY };
       }
+      const generation = cacheGeneration;
       const key = cacheKey(connection, request);
       const cached = key ? signedUrlCache.get(key) : undefined;
       if (cached && cached.expiresAt - EXPIRY_MARGIN_MS > Date.now()) return cached;
@@ -337,7 +352,7 @@ export function createS3Signer(
       const expiresIn = lifetime();
       const href = await presignFor(connection, credentials, request, region, expiresIn);
       const signed = { href, expiresAt: Date.now() + expiresIn * 1000 };
-      if (key) rememberSignedUrl(key, signed);
+      if (key && generation === cacheGeneration) rememberSignedUrl(key, signed);
       return signed;
     },
   };

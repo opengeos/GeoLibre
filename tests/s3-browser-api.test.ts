@@ -43,15 +43,21 @@ describe("S3 browser client", () => {
   it("re-signs once after S3 reports expired credentials", async () => {
     let invalidated = 0;
     let signs = 0;
+    let cachedHref: string | null = null;
     const signer: S3UrlSigner = {
       covers: () => true,
       connections: () => [],
       invalidateCredentials: () => {
         invalidated += 1;
+        cachedHref = null;
       },
+      // Like the real signer, hands back the same URL until it is invalidated.
       presign: async () => {
-        signs += 1;
-        return { href: `https://b.s3.amazonaws.com/?sig=${signs}`, expiresAt: Infinity };
+        if (!cachedHref) {
+          signs += 1;
+          cachedHref = `https://b.s3.amazonaws.com/?sig=${signs}`;
+        }
+        return { href: cachedHref, expiresAt: Infinity };
       },
       fetchText: async (url) =>
         url.endsWith("sig=1")
