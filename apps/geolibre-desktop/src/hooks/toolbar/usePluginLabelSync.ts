@@ -391,6 +391,7 @@ export function usePluginLabelSync(): void {
       project: t("s3Browser.project"),
       openProject: t("s3Browser.openProject"),
       openingProject: t("s3Browser.openingProject"),
+      openProjectUnsupported: t("s3Browser.openProjectUnsupported"),
       openProjectFailed: (name, message) => t("s3Browser.openProjectFailed", { name, message }),
       select: t("s3Browser.select"),
       selectAll: t("s3Browser.selectAll"),

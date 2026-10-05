@@ -4617,6 +4617,7 @@
     "project": "project",
     "openProject": "Open project",
     "openingProject": "Opening…",
+    "openProjectUnsupported": "This app cannot open projects from here.",
     "openProjectFailed": "Could not open {{name}}: {{message}}",
     "select": "Select",
     "selectAll": "Select all",

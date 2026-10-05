@@ -58,7 +58,6 @@ import { fetchNativeWithWebviewFallback } from "./native-fetch-fallback";
 import { fetchUrlBytes } from "./native-http";
 import { nativeWmsTileUrl } from "./native-wms-url";
 import { openExternalLink } from "./open-external";
-import { openProjectFromUrlForPlugin } from "./plugin-open-project";
 import type { pluginCredentialHost } from "./plugin-credentials";
 import { createPluginLayerGroupActions } from "./plugin-layer-groups";
 import { pluginLayerMetadata } from "./plugin-layer-metadata";
@@ -66,6 +65,7 @@ import { createPluginLayerQueries } from "./plugin-layer-queries";
 import { createPluginLayerStyleActions } from "./plugin-layer-style";
 import { createPluginLocaleApi, type PluginLocaleI18n } from "./plugin-locale";
 import { createPluginHttpSend, createPluginNativeFetch } from "./plugin-native-fetch";
+import { openProjectFromUrlForPlugin } from "./plugin-open-project";
 import { addPluginWfsLayer } from "./plugin-wfs-layer";
 import {
   browserSaveFallsBackToDownload,

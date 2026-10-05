@@ -63,6 +63,7 @@ export interface S3BrowserLabels {
   project: string;
   openProject: string;
   openingProject: string;
+  openProjectUnsupported: string;
   openProjectFailed: (name: string, message: string) => string;
   select: string;
   selectAll: string;
@@ -99,6 +100,7 @@ export const DEFAULT_S3_BROWSER_LABELS: S3BrowserLabels = {
   project: "project",
   openProject: "Open project",
   openingProject: "Opening…",
+  openProjectUnsupported: "This app cannot open projects from here.",
   openProjectFailed: (name, message) => `Could not open ${name}: ${message}`,
   select: "Select",
   selectAll: "Select all",
@@ -358,8 +360,9 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
   function syncEntry(entry: AddableEntry): void {
     const onMap = isOnMap(entry.object, entry.location.bucket);
     entry.add.textContent = entry.pending ? labels.adding : onMap ? labels.added : labels.add;
-    entry.add.disabled = entry.pending || onMap;
-    entry.select.disabled = entry.pending || onMap;
+    // No adds while a project opens: they would land in the project it replaces.
+    entry.add.disabled = entry.pending || onMap || openingProject;
+    entry.select.disabled = entry.pending || onMap || openingProject;
     if (entry.select.disabled) entry.select.checked = false;
   }
 
@@ -372,11 +375,11 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     const selectable = selectableEntries();
     const selected = selectable.filter((entry) => entry.select.checked);
     selectionBar.style.display = addable.length > 0 ? "flex" : "none";
-    selectAll.disabled = selectable.length === 0 || batchRunning;
+    selectAll.disabled = selectable.length === 0 || batchRunning || openingProject;
     selectAll.checked = selectable.length > 0 && selected.length === selectable.length;
     selectAll.indeterminate = selected.length > 0 && selected.length < selectable.length;
     addSelected.textContent = labels.addSelected(selected.length);
-    addSelected.disabled = selected.length === 0 || batchRunning;
+    addSelected.disabled = selected.length === 0 || batchRunning || openingProject;
   }
 
   function syncAll(): void {
@@ -532,9 +535,15 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
           projectAbort = abort;
           openingProject = true;
           for (const other of openProjects) other.disabled = true;
+          syncAll();
           openProject.textContent = labels.openingProject;
           setStatus("");
-          openProjectFromUrl(object.uri, abort.signal)
+          // Let adds already queued finish first, so none lands in the new
+          // project (the queue never rejects).
+          void addQueue
+            .then(() =>
+              abort.signal.aborted ? undefined : openProjectFromUrl(object.uri, abort.signal),
+            )
             .catch((error: unknown) => {
               if (!abort.signal.aborted) {
                 showFailures([labels.openProjectFailed(object.name, errorMessage(error))]);
@@ -545,9 +554,12 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
               openingProject = false;
               openProject.textContent = labels.openProject;
               for (const other of openProjects) other.disabled = false;
+              syncAll();
             });
         });
         actions.append(openProject);
+      } else {
+        card.append(el("div", CSS.sub, labels.openProjectUnsupported));
       }
     } else if (app && canAdd(object)) {
       if (!object.pointCloud && isTooLargeToOpen(object.format, object.size)) {

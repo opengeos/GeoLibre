@@ -38,8 +38,15 @@ export async function openProjectFromUrlForPlugin(
   // Whether the read was actually signed: a covered bucket whose credentials
   // cannot be resolved falls back to the anonymous URL, which can be remembered.
   const credentialed = readUrl !== sourceUrl && /[?&]x-amz-signature=/i.test(readUrl);
-  // The URL a later reopen can use: the anonymous object URL for public S3.
-  const rememberedUrl = credentialed ? null : location ? s3ObjectHttpsUrl(location) : sourceUrl;
+  // The URL a later reopen can use: an `s3://` URI becomes its anonymous object
+  // URL, an `http(s)` URL is kept as given (a `versionId` included), and
+  // anything that depends on a temporary signature is not remembered.
+  const rememberedUrl =
+    credentialed || /[?&]x-amz-signature=/i.test(sourceUrl)
+      ? null
+      : location && /^s3:/i.test(sourceUrl)
+        ? s3ObjectHttpsUrl(location)
+        : sourceUrl;
 
   let text: string;
   try {
@@ -49,7 +56,6 @@ export async function openProjectFromUrlForPlugin(
         maxBytes: MAX_PROJECT_BYTES,
       });
       const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-      if (array.byteLength > MAX_PROJECT_BYTES) throw new Error("tooLarge");
       text = new TextDecoder().decode(array);
     } else {
       const response = await fetch(readUrl, { signal });
