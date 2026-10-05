@@ -6,6 +6,12 @@ type Callback =
   | { state: string; issuer: string; code: string; error?: never }
   | { state: string; issuer: string; error: string; code?: never };
 
+/**
+ * Sentinel issuer for a flow whose server sends no `iss` (RFC 9207) parameter,
+ * such as an ArcGIS portal. The callback must then carry none either.
+ */
+export const NO_ISSUER = "";
+
 type CallbackFailure =
   | "malformed"
   | "state-mismatch"
@@ -21,7 +27,7 @@ export class NativeShareCallbackError extends Error {
 }
 
 /** Reject ambiguous callbacks before any authorization code can reach the token endpoint. */
-export function parseNativeShareCallback(raw: string): Callback | null {
+export function parseNativeShareCallback(raw: string, requireIssuer = true): Callback | null {
   try {
     const url = new URL(raw);
     if (
@@ -44,10 +50,19 @@ export function parseNativeShareCallback(raw: string): Callback | null {
       if (!Object.hasOwn(allowed, key) || url.searchParams.getAll(key).length !== 1) return null;
     }
     const state = url.searchParams.get("state");
-    const issuer = url.searchParams.get("iss");
+    const issuer = requireIssuer ? url.searchParams.get("iss") : NO_ISSUER;
+    if (!requireIssuer && url.searchParams.has("iss")) return null;
     const code = url.searchParams.get("code");
     const error = url.searchParams.get("error");
-    if (!state || !issuer || !!code === !!error || code === "" || error === "") return null;
+    if (
+      !state ||
+      (requireIssuer && !issuer) ||
+      issuer === null ||
+      !!code === !!error ||
+      code === "" ||
+      error === ""
+    )
+      return null;
     if (code && url.searchParams.has("error_description")) return null;
     return code ? { state, issuer, code } : { state, issuer, error: error! };
   } catch {
@@ -125,7 +140,8 @@ export class NativeShareAuthReceiver {
     // Other deep links belong to the coordinate/file listeners. Never pass an
     // OAuth URL through those queues and never log its raw value.
     if (!raw.toLowerCase().startsWith("org.geolibre.desktop:")) return false;
-    const callback = parseNativeShareCallback(raw);
+    // A flow registered with NO_ISSUER expects a callback without `iss`.
+    const callback = parseNativeShareCallback(raw, this.pending?.issuer !== NO_ISSUER);
     // A callback for any terminated transaction is stale — never consume the
     // pending attempt with it. Replays of a consumed state are ignored too.
     if (callback && this.retired.includes(callback.state)) return true;

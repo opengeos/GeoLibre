@@ -187,6 +187,13 @@ export interface ArcGISLayerOptions {
    */
   splitSublayers?: boolean;
   token?: string;
+  /**
+   * Supplies a current access token for this layer's later requests (edits,
+   * refresh), for a connection whose token expires and is renewed, such as an
+   * ArcGIS sign-in. Kept in memory with the layer's edit options and never
+   * persisted. When it returns a token it replaces `token`.
+   */
+  tokenProvider?: () => Promise<string | undefined>;
   url?: string;
   /**
    * Whether to fit the map to the layer once its bounds are known. Defaults to
@@ -734,20 +741,25 @@ function startArcGISViewportLoader(
     // publish over an already-reported error with nothing to clear it.
     const walk = async (envelope: ArcGISEnvelope, index: number, attempt = 0): Promise<void> => {
       try {
-        const data = await fetchArcGISFeaturePages(queryUrl, queryOptions, layerInfo, {
-          params: {
-            geometry: envelope.join(","),
-            geometryType: "esriGeometryEnvelope",
-            inSR: "4326",
-            spatialRel: "esriSpatialRelIntersects",
-            ...generalization,
+        const data = await fetchArcGISFeaturePages(
+          queryUrl,
+          await withFreshArcGISToken(queryOptions),
+          layerInfo,
+          {
+            params: {
+              geometry: envelope.join(","),
+              geometryType: "esriGeometryEnvelope",
+              inSR: "4326",
+              spatialRel: "esriSpatialRelIntersects",
+              ...generalization,
+            },
+            signal: controller.signal,
+            onPage: (features) => {
+              pages[index] = features;
+              publish();
+            },
           },
-          signal: controller.signal,
-          onPage: (features) => {
-            pages[index] = features;
-            publish();
-          },
-        });
+        );
         pages[index] = data.features;
         publish();
       } catch (error) {
@@ -1639,13 +1651,13 @@ export async function refreshArcGISFeatureLayer(params: {
   if (params.layerId && arcGISLayerHasPendingEdits(params.layerId))
     return currentArcGISLayerGeojson(params.layerId);
   const queryUrl = trimTrailingSlash(params.queryUrl).replace(/\/query$/i, "");
-  const options: ArcGISLayerOptions = {
+  const options: ArcGISLayerOptions = await withFreshArcGISToken({
     ...(params.layerId ? arcgisEditOptions.get(params.layerId) : undefined),
     layerType: "feature",
     maxFeatures: params.maxFeatures,
     pageSize: params.pageSize,
     sourceType: "url",
-  };
+  });
   // Re-read the metadata rather than trusting a stored copy: `maxRecordCount`
   // and the paging capabilities are the service's to change between sessions.
   const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(queryUrl, options, undefined);
@@ -2658,6 +2670,13 @@ function createArcGISLayerId(): string {
 
 // Credentials belong to the live connection, never to project metadata.
 const arcgisEditOptions = new Map<string, ArcGISLayerOptions>();
+
+/** Resolve `options.tokenProvider` into `options.token`, leaving a static token when it yields none. */
+async function withFreshArcGISToken(options: ArcGISLayerOptions): Promise<ArcGISLayerOptions> {
+  if (!options.tokenProvider) return options;
+  const token = await options.tokenProvider();
+  return token ? { ...options, token } : options;
+}
 const arcgisSavingLayers = new Set<string>();
 
 function arcGISBaseline(layer: GeoLibreLayer): FeatureCollection | undefined {
@@ -2724,11 +2743,13 @@ export async function saveArcGISLayerEdits(
     );
   }
   if (parsedUrl.protocol !== "https:") throw new Error("ArcGIS writes require HTTPS.");
-  const options = arcgisEditOptions.get(layerId) ?? { layerType: "feature", sourceType: "url" };
   arcgisSavingLayers.add(layerId);
   // Abort a page walk started before the save; late pages also check the lock.
   arcgisFeatureLoaders.get(layerId)?.abort?.abort();
   try {
+    const options = await withFreshArcGISToken(
+      arcgisEditOptions.get(layerId) ?? { layerType: "feature", sourceType: "url" },
+    );
     const fetched = await fetchArcGISJson<ArcGISFeatureLayerInfo>(layerUrl, options, undefined);
     const current = useAppStore.getState().layers.find((l) => l.id === layerId);
     if (!current?.geojson) throw new Error("ArcGIS layer was removed.");
