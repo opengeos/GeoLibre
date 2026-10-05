@@ -23,6 +23,8 @@ import {
   DEFAULT_XYZ_URL,
   GEBCO_WMS_ENDPOINT,
   GEBCO_WMS_LAYERS,
+  NLCD_WMS_ENDPOINT,
+  NLCD_WMS_LAYERS,
   MAX_SAVED_SERVICES,
   SERVICE_LIBRARY_STORAGE_KEY,
 } from "./constants";
@@ -413,8 +415,8 @@ export const BUILTIN_SERVICES: readonly ServiceLibraryEntry[] = [
     kind: "wms",
     builtin: true,
     fields: {
-      endpoint: "https://www.mrlc.gov/geoserver/mrlc_display/wms",
-      layers: "NLCD_2021_Land_Cover_L48",
+      endpoint: NLCD_WMS_ENDPOINT,
+      layers: NLCD_WMS_LAYERS,
       styles: "",
       format: "image/png",
       transparent: true,

@@ -561,6 +561,7 @@
       "defaultName": "WMS Layer",
       "sampleLabel": "USGS NAIP imagery",
       "sampleLabelGebco": "GEBCO ocean bathymetry",
+      "sampleLabelNlcd": "NLCD 2021 land cover (with legend)",
       "errorUrl": "Enter a WMS service URL.",
       "errorLayers": "Enter one or more WMS layer names.",
       "urlPlaceholder": "https://example.com/geoserver/wms",

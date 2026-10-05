@@ -87,6 +87,9 @@ export const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
 // attribution and must not be used for navigation. See gebco.net/data-products.
 export const GEBCO_WMS_ENDPOINT = "https://wms.gebco.net/mapserv";
 export const GEBCO_WMS_LAYERS = "GEBCO_LATEST";
+/** USGS MRLC NLCD 2021 land cover (CONUS); its capabilities advertise a legend. */
+export const NLCD_WMS_ENDPOINT = "https://www.mrlc.gov/geoserver/mrlc_display/wms";
+export const NLCD_WMS_LAYERS = "NLCD_2021_Land_Cover_L48";
 // GEBCO's license requires its imagery credit the source. `attributionForTileUrl`
 // (helpers) attaches this to any GEBCO WMS layer, however it was added (the sample
 // below or a hand-pasted wms.gebco.net URL).

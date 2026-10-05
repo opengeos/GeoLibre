@@ -8,6 +8,8 @@ import {
   DEFAULT_WMS_LAYERS,
   GEBCO_WMS_ENDPOINT,
   GEBCO_WMS_LAYERS,
+  NLCD_WMS_ENDPOINT,
+  NLCD_WMS_LAYERS,
 } from "../constants";
 import {
   fetchWmsCapabilities,
@@ -557,6 +559,10 @@ export function WmsSource({
                 layers: GEBCO_WMS_LAYERS,
                 version: "1.3.0",
               },
+            },
+            {
+              label: t("addData.wms.sampleLabelNlcd"),
+              value: { endpoint: NLCD_WMS_ENDPOINT, layers: NLCD_WMS_LAYERS },
             },
           ]}
           onSelect={applyFields}
