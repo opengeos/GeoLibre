@@ -375,6 +375,11 @@ export interface S3UrlSigner {
    * through its native HTTP client, which needs no bucket CORS rule.
    */
   fetchText?(url: string, signal?: AbortSignal): Promise<{ status: number; body: string }>;
+  /**
+   * Drops cached credentials and signed URLs, so the next `presign` resolves
+   * them afresh. Called when S3 refuses a request as expired.
+   */
+  invalidateCredentials?(): void;
   /** The persisted location (`s3://bucket/prefix/`) the S3 browser opens at, or "". */
   defaultLocation?(): string;
   /** Persists the S3 browser's default location; "" clears it. */

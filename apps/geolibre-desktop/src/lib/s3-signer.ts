@@ -295,6 +295,7 @@ export function createS3Signer(
     connections: () =>
       getConnections().map(({ id, name, buckets }) => ({ id, name, buckets: [...buckets] })),
     fetchText,
+    invalidateCredentials: clearS3SignerCaches,
     async presign(request, signal) {
       const connection = request.connectionId
         ? (getConnections().find((candidate) => candidate.id === request.connectionId) ?? null)
