@@ -2496,6 +2496,8 @@
       "noProjectSelected": "선택된 프로젝트 없음",
       "globeByDefault": "기본적으로 3D 지구본 사용",
       "globeByDefaultHint": "시작 프로젝트나 프로젝트 링크가 지정되지 않은 경우 제목 없는 작업 공간에 사용됩니다.",
+      "openS3Browser": "시작 시 S3 브라우저 열기",
+      "openS3BrowserHint": "GeoLibre를 시작할 때마다 S3 브라우저 패널을 표시합니다. 프로젝트를 열어도 계속 열려 있습니다.",
       "defaultView": "기본 지도 보기",
       "defaultViewHint": "제목 없는 작업 공간의 중심과 확대/축소 수준을 설정합니다.",
       "longitude": "중심 경도",

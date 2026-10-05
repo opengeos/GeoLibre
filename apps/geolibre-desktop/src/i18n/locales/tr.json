@@ -2547,6 +2547,8 @@
       "noProjectSelected": "Proje seçilmedi",
       "globeByDefault": "3D küreyi varsayılan olarak etkinleştir",
       "globeByDefaultHint": "Başlangıç projesi veya proje bağlantısı verilmediğinde adsız çalışma alanı için kullanılır.",
+      "openS3Browser": "Başlangıçta S3 Tarayıcısını aç",
+      "openS3BrowserHint": "GeoLibre her başladığında S3 Tarayıcısı panelini göster. Bir proje açtığınızda açık kalır.",
       "defaultView": "Varsayılan harita görünümü",
       "defaultViewHint": "Adsız çalışma alanı için merkezi ve yakınlaştırmayı belirleyin.",
       "longitude": "Merkez boylamı",

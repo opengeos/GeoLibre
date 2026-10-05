@@ -2496,6 +2496,8 @@
       "noProjectSelected": "未选择项目",
       "globeByDefault": "默认启用 3D 地球",
       "globeByDefaultHint": "在未提供启动项目或项目链接时，用于未命名的工作区。",
+      "openS3Browser": "启动时打开 S3 浏览器",
+      "openS3BrowserHint": "每次启动 GeoLibre 时显示 S3 浏览器面板。打开项目时它会保持打开。",
       "defaultView": "默认地图视图",
       "defaultViewHint": "为未命名的工作区设置中心点和缩放级别。",
       "longitude": "中心经度",

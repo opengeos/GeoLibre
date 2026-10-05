@@ -2496,6 +2496,8 @@
       "noProjectSelected": "Tidak ada proyek yang dipilih",
       "globeByDefault": "Aktifkan bola dunia 3D secara bawaan",
       "globeByDefaultHint": "Digunakan untuk ruang kerja tanpa judul saat tidak ada proyek saat memulai atau tautan proyek yang diberikan.",
+      "openS3Browser": "Buka Penjelajah S3 saat mulai",
+      "openS3BrowserHint": "Tampilkan panel Penjelajah S3 setiap kali GeoLibre dimulai. Panel tetap terbuka saat Anda membuka proyek.",
       "defaultView": "Tampilan peta bawaan",
       "defaultViewHint": "Tetapkan pusat dan tingkat zoom untuk ruang kerja tanpa judul.",
       "longitude": "Bujur pusat",

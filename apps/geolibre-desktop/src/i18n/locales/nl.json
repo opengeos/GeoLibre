@@ -2547,6 +2547,8 @@
       "noProjectSelected": "Geen project geselecteerd",
       "globeByDefault": "3D-globe standaard inschakelen",
       "globeByDefaultHint": "Wordt gebruikt voor de naamloze werkruimte wanneer er geen opstartproject en geen projectlink is opgegeven.",
+      "openS3Browser": "S3-browser openen bij het opstarten",
+      "openS3BrowserHint": "Toon het S3-browserpaneel telkens wanneer GeoLibre start. Het blijft open wanneer u een project opent.",
       "defaultView": "Standaardkaartweergave",
       "defaultViewHint": "Stel het middelpunt en het zoomniveau in voor de naamloze werkruimte.",
       "longitude": "Lengtegraad van het middelpunt",

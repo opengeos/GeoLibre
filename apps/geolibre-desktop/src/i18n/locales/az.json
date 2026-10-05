@@ -2547,6 +2547,8 @@
       "noProjectSelected": "Layihə seçilməyib",
       "globeByDefault": "3D qlobusu standart olaraq aktiv et",
       "globeByDefaultHint": "Başlanğıc layihəsi və ya layihə keçidi təqdim edilmədikdə adsız iş sahəsi üçün istifadə olunur.",
+      "openS3Browser": "S3 brauzerini başlanğıcda aç",
+      "openS3BrowserHint": "GeoLibre hər başladıqda S3 brauzer panelini göstər. Layihə açdığınız zaman açıq qalır.",
       "defaultView": "Standart xəritə görünüşü",
       "defaultViewHint": "Adsız iş sahəsi üçün mərkəzi və miqyas səviyyəsini təyin edin.",
       "longitude": "Mərkəzin uzunluğu",

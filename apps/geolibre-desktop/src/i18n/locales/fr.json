@@ -2547,6 +2547,8 @@
       "noProjectSelected": "Aucun projet sélectionné",
       "globeByDefault": "Activer le globe 3D par défaut",
       "globeByDefaultHint": "Utilisé pour l'espace de travail sans titre lorsqu'aucun projet de démarrage ni lien de projet n'est fourni.",
+      "openS3Browser": "Ouvrir le navigateur S3 au démarrage",
+      "openS3BrowserHint": "Affiche le panneau du navigateur S3 à chaque démarrage de GeoLibre. Il reste ouvert lorsque vous ouvrez un projet.",
       "defaultView": "Vue de carte par défaut",
       "defaultViewHint": "Définissez le centre et le zoom de l'espace de travail sans titre.",
       "longitude": "Longitude du centre",

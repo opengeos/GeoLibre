@@ -2547,6 +2547,8 @@
       "noProjectSelected": "Kein Projekt ausgewählt",
       "globeByDefault": "3D-Globus standardmäßig aktivieren",
       "globeByDefaultHint": "Wird für den unbenannten Arbeitsbereich verwendet, wenn kein Startprojekt und kein Projektlink angegeben ist.",
+      "openS3Browser": "S3-Browser beim Start öffnen",
+      "openS3BrowserHint": "Zeigt den S3-Browser bei jedem Start von GeoLibre an. Er bleibt geöffnet, wenn Sie ein Projekt öffnen.",
       "defaultView": "Standard-Kartenansicht",
       "defaultViewHint": "Legen Sie Zentrum und Zoom für den unbenannten Arbeitsbereich fest.",
       "longitude": "Längengrad des Zentrums",

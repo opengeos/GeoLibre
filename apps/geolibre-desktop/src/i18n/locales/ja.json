@@ -2496,6 +2496,8 @@
       "noProjectSelected": "プロジェクトが選択されていません",
       "globeByDefault": "既定で3D地球儀を有効にする",
       "globeByDefaultHint": "起動時のプロジェクトもプロジェクトリンクも指定されていない場合の、無題のワークスペースに使用されます。",
+      "openS3Browser": "起動時に S3 ブラウザーを開く",
+      "openS3BrowserHint": "GeoLibre を起動するたびに S3 ブラウザーパネルを表示します。プロジェクトを開いても開いたままになります。",
       "defaultView": "既定の地図表示",
       "defaultViewHint": "無題のワークスペースの中心とズームを設定します。",
       "longitude": "中心の経度",

@@ -2496,6 +2496,8 @@
       "noProjectSelected": "Không có dự án nào được chọn",
       "globeByDefault": "Bật khối cầu 3D theo mặc định",
       "globeByDefaultHint": "Được dùng cho không gian làm việc chưa đặt tên khi không có dự án khởi động hoặc liên kết dự án.",
+      "openS3Browser": "Mở Trình duyệt S3 khi khởi động",
+      "openS3BrowserHint": "Hiển thị bảng Trình duyệt S3 mỗi khi GeoLibre khởi động. Bảng vẫn mở khi bạn mở một dự án.",
       "defaultView": "Chế độ xem bản đồ mặc định",
       "defaultViewHint": "Đặt tâm và mức thu phóng cho không gian làm việc chưa đặt tên.",
       "longitude": "Kinh độ tâm",
