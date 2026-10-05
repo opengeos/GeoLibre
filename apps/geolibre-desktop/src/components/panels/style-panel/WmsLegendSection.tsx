@@ -2,7 +2,7 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import { openHtmlPanelWithEntry } from "@geolibre/plugins";
 import type { MapEngine } from "@geolibre/map";
 import { Button } from "@geolibre/ui";
-import { type RefObject, useEffect, useMemo, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../hooks/usePlugins";
 import {
@@ -39,25 +39,38 @@ export function WmsLegendSection({
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
   const [addedToMap, setAddedToMap] = useState<boolean | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // A different layer (or edited WMS source) invalidates the shown legend.
+  // A different layer (or edited WMS source) invalidates the shown legend and
+  // cancels a lookup still in flight, so a late answer cannot land on the
+  // wrong layer.
   useEffect(() => {
     setEntries(null);
+    setLoadFailed(false);
     setFailed(new Set());
     setLoading(false);
     setAddedToMap(null);
+    return () => abortRef.current?.abort();
   }, [layer.id, source]);
 
   if (!source) return null;
 
   const load = async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setFailed(new Set());
     setAddedToMap(null);
+    setLoadFailed(false);
     try {
-      setEntries(await resolveWmsLegends(source));
+      const result = await resolveWmsLegends(source, controller.signal);
+      if (!controller.signal.aborted) setEntries(result);
+    } catch {
+      if (!controller.signal.aborted) setLoadFailed(true);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
@@ -85,9 +98,12 @@ export function WmsLegendSection({
       {loading && (
         <p className="text-xs text-muted-foreground">{t("style.raster.legend.loading")}</p>
       )}
+      {!loading && loadFailed && (
+        <p className="text-xs text-amber-600">{t("style.raster.legend.failed")}</p>
+      )}
       {!loading &&
-        entries?.map((entry) => (
-          <div key={entry.layer} className="space-y-1">
+        entries?.map((entry, index) => (
+          <div key={`${index}:${entry.layer}`} className="space-y-1">
             {entries.length > 1 && <p className="text-[11px] font-medium">{entry.layer}</p>}
             {failed.has(entry.url) ? (
               <p className="text-xs text-amber-600">{t("style.raster.legend.failed")}</p>

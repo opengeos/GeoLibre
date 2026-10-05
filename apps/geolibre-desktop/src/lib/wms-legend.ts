@@ -14,8 +14,6 @@ export interface WmsLegendEntry {
   layer: string;
   /** Image URL, usable directly as an `<img src>`. */
   url: string;
-  /** Whether the URL came from the capabilities `<LegendURL>` or a GetLegendGraphic request. */
-  origin: "capabilities" | "getlegendgraphic";
 }
 
 /** The WMS request fields a legend lookup needs, read from a layer's source. */
@@ -35,17 +33,19 @@ export interface WmsLegendSource {
  */
 export function wmsLegendSource(layer: GeoLibreLayer): WmsLegendSource | null {
   if (layer.type !== "wms") return null;
-  const source = layer.source as Record<string, unknown> | undefined;
-  const text = (key: string) => (typeof source?.[key] === "string" ? (source[key] as string) : "");
+  const source = layer.source;
+  const text = (key: string) => (typeof source[key] === "string" ? (source[key] as string) : "");
   const endpoint = stripOgcOperationParams(text("url").trim(), "WMS");
-  const layers = text("layers")
+  const styleList = text("styles").split(",");
+  // Pair each style with its layer before dropping blank layer names, so a
+  // LAYERS value such as "a,,b" keeps every remaining layer on its own style.
+  const pairs = text("layers")
     .split(",")
-    .map((name) => name.trim())
-    .filter(Boolean);
+    .map((name, index) => ({ name: name.trim(), style: (styleList[index] ?? "").trim() }))
+    .filter((pair) => pair.name);
+  const layers = pairs.map((pair) => pair.name);
+  const styles = pairs.map((pair) => pair.style);
   if (!endpoint || layers.length === 0) return null;
-  const styles = text("styles")
-    .split(",")
-    .map((name) => name.trim());
   return { endpoint, layers, styles, version: normalizeWmsVersion(text("version")) };
 }
 
@@ -74,6 +74,20 @@ export function wmsGetLegendGraphicUrl(
 }
 
 /**
+ * Resolves an advertised legend href against the service endpoint and keeps it
+ * only when it is an http(s) URL, so a capabilities document cannot hand the
+ * `<img>` a `javascript:`, `data:` or `file:` address.
+ */
+function resolveLegendHref(href: string, baseUrl?: string): string | null {
+  try {
+    const url = new URL(href, baseUrl);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Finds the `<LegendURL>` a capabilities document advertises for a layer's
  * style. A named style wins; otherwise the layer's first style is used.
  * Traversal is namespace-agnostic (WMS 1.1.1 and 1.3.0).
@@ -81,12 +95,14 @@ export function wmsGetLegendGraphicUrl(
  * @param doc - The parsed capabilities document.
  * @param layerName - The layer's `<Name>`.
  * @param styleName - The requested style, or empty for the default.
- * @returns The legend image URL, or null when none is advertised.
+ * @param baseUrl - The service endpoint, used to resolve a relative href.
+ * @returns The legend image URL (http or https), or null when none is advertised.
  */
 export function findCapabilitiesLegendUrl(
   doc: Document,
   layerName: string,
   styleName: string,
+  baseUrl?: string,
 ): string | null {
   const layers = doc.getElementsByTagNameNS("*", "Layer");
   for (let i = 0; i < layers.length; i += 1) {
@@ -107,8 +123,10 @@ export function findCapabilitiesLegendUrl(
       resource?.getAttribute("xlink:href") ??
       resource?.getAttributeNS("http://www.w3.org/1999/xlink", "href") ??
       resource?.getAttribute("href");
-    if (href?.trim()) return href.trim();
-    return null;
+    // A layer can appear more than once (nested groups); keep looking when
+    // this match has no usable legend.
+    const resolved = href?.trim() ? resolveLegendHref(href.trim(), baseUrl) : null;
+    if (resolved) return resolved;
   }
   return null;
 }
@@ -143,14 +161,8 @@ export async function resolveWmsLegends(
   }
   return source.layers.map((layer, index) => {
     const style = source.styles[index] ?? "";
-    const advertised = doc ? findCapabilitiesLegendUrl(doc, layer, style) : null;
-    return advertised
-      ? { layer, url: advertised, origin: "capabilities" as const }
-      : {
-          layer,
-          url: wmsGetLegendGraphicUrl(source, layer, style),
-          origin: "getlegendgraphic" as const,
-        };
+    const advertised = doc ? findCapabilitiesLegendUrl(doc, layer, style, source.endpoint) : null;
+    return { layer, url: advertised ?? wmsGetLegendGraphicUrl(source, layer, style) };
   });
 }
 
