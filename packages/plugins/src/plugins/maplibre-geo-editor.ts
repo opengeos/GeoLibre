@@ -18,10 +18,10 @@ import type { GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
   type EditedFeatureProperties,
   type GeometryEditTrackingOptions,
-  GEOMETRY_EDIT_FID_PROPERTY,
   SKETCHES_SOURCE_KIND,
   applySyncedEditorTracking,
   canEditLayerGeometry,
+  findGeometryEditFeature,
   geometryEditMetadata,
   captureEditedGeometries,
   captureEditedProperties,
@@ -1226,9 +1226,7 @@ export async function startLayerGeometryEdit(
  */
 export function selectGeometryEditFeature(featureId: string): boolean {
   if (!pluginActive || !geoEditorControl || !editTargetLayerId) return false;
-  const match = geoEditorControl
-    .getAllFeatureCollection()
-    .features.find((feature) => feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY] === featureId);
+  const match = findGeometryEditFeature(geoEditorControl.getAllFeatureCollection(), featureId);
   if (!match) return false;
   geoEditorControl.selectFeatures([match]);
   return true;

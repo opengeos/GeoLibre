@@ -15,6 +15,7 @@ import {
   reconcileEditedFeatures,
   removeMultiLineStringVertex,
   tagFeatureKeys,
+  findGeometryEditFeature,
 } from "../packages/plugins/src/plugins/geo-editor-geometry";
 
 function makeLayer(overrides: Partial<GeoLibreLayer>): GeoLibreLayer {
@@ -926,6 +927,26 @@ describe("removeMultiLineStringVertex", () => {
         ]),
         [9, 9],
       ),
+      undefined,
+    );
+  });
+});
+
+describe("findGeometryEditFeature", () => {
+  it("finds the feature Identify named through the session tag", () => {
+    const tagged = tagFeatureKeys({
+      type: "FeatureCollection",
+      features: [point(42, { name: "a" }), point(undefined, { name: "b" })],
+    });
+    assert.equal(findGeometryEditFeature(tagged, "1")?.properties?.name, "b");
+    assert.equal(findGeometryEditFeature(tagged, "42")?.properties?.name, "a");
+  });
+
+  it("returns undefined for an unknown id or untagged features", () => {
+    const tagged = tagFeatureKeys({ type: "FeatureCollection", features: [point(undefined)] });
+    assert.equal(findGeometryEditFeature(tagged, "7"), undefined);
+    assert.equal(
+      findGeometryEditFeature({ type: "FeatureCollection", features: [point("0")] }, "0"),
       undefined,
     );
   });

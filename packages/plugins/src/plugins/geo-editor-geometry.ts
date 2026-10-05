@@ -144,6 +144,23 @@ export function tagFeatureKeys(collection: FeatureCollection): FeatureCollection
   };
 }
 
+/**
+ * Find a feature in the editor's collection by the id the attribute table and
+ * Identify gave it, through the session's feature-key tag (#2932).
+ *
+ * @param collection The editor's current (tagged) features.
+ * @param featureId The feature's id in the attribute table's scheme.
+ * @returns The matching feature, or undefined when none carries that tag.
+ */
+export function findGeometryEditFeature(
+  collection: FeatureCollection,
+  featureId: string,
+): Feature | undefined {
+  return collection.features.find(
+    (feature) => feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY] === featureId,
+  );
+}
+
 /** Prefix Geoman namespaces its own feature properties with. */
 const GEOMAN_PROPERTY_PREFIX = "__gm_";
 
