@@ -222,8 +222,8 @@ describe("Basemap control API keys", () => {
       .map((input) => input.parentElement?.className ?? "")
       .filter((className) => /^basemap-control-[a-z-]+-(key|token|region)$/.test(className));
     // A failed match (renamed wrappers, view not opened) fails here, not silently.
-    assert.ok(upstream.length >= 10, `found only ${upstream.join(", ")}`);
     const mapped: string[] = PANEL_CREDENTIAL_FIELDS.map((field) => field.className);
+    assert.equal(upstream.length, mapped.length, `found ${upstream.join(", ")}`);
     for (const className of upstream) assert.ok(mapped.includes(className), className);
   });
 
