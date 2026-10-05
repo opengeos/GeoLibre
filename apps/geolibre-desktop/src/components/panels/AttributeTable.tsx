@@ -1,4 +1,8 @@
-import { isVectorControlAttributeSource } from "../../lib/attribute-table-source";
+import {
+  canEditAttributeValues,
+  isReadOnlyAttributeLayer,
+  isVectorControlAttributeSource,
+} from "../../lib/attribute-table-source";
 import { useTranslation } from "react-i18next";
 import {
   attributeLinkUrl,
@@ -515,12 +519,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     : geojsonRows;
   const layerCaps = resolveLayerCapabilities(layer);
   const hasAttributeSource = Boolean((layer?.geojson || isDuckDBLayer) && layerCaps.query);
-  // Add Vector Layer layers render from a source the
-  // control owns, and their `layer.geojson` is dropped when a project is saved.
-  // Edits made here would neither redraw on the map nor survive a save, so the
-  // attribute table is read-only for them.
-  const isReadOnlyVectorLayer =
-    geojsonVectorSourceId(layer) !== null || isVectorControlAttributeSource(layer);
+  // Add Vector Layer layers are read-only here (see isReadOnlyAttributeLayer).
+  const isReadOnlyVectorLayer = isReadOnlyAttributeLayer(layer);
   // While this layer's geometry is being edited in place, attribute edits would
   // race the editor's geometry write-back, so the inline editor is disabled.
   const geometryEditLayerId = useSyncExternalStore(
@@ -673,8 +673,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // together with the layer selection, the reset runs first and this one wins.
   const attributeTableEditLayerId = useAppStore((s) => s.ui.attributeTableEditLayerId);
   const requestAttributeTableEdit = useAppStore((s) => s.requestAttributeTableEdit);
-  const canEnterEditMode =
-    hasAttributeSource && layerCaps.update && !isReadOnlyVectorLayer && !isGeometryEditing;
+  // The same gate as the Edit button below, shared with Identify's action.
+  const canEnterEditMode = canEditAttributeValues(layer, geometryEditLayerId);
   useEffect(() => {
     if (attributeTableEditLayerId === null) return;
     if (layer?.id === attributeTableEditLayerId && canEnterEditMode) {
@@ -1647,13 +1647,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               ? t("attributeTable.exitEditMode")
               : t("attributeTable.editValues")
           }
-          disabled={
-            !hasAttributeSource ||
-            !layerCaps.update ||
-            isReadOnlyVectorLayer ||
-            isGeometryEditing ||
-            (isEditing && hasEdits)
-          }
+          disabled={!canEnterEditMode || (isEditing && hasEdits)}
           onClick={toggleEditing}
         >
           <Pencil className="h-3.5 w-3.5" />

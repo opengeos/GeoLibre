@@ -1,9 +1,4 @@
-import {
-  isDuckDBQueryLayer,
-  resolveLayerCapabilities,
-  useAppStore,
-  type GeoLibreLayer,
-} from "@geolibre/core";
+import { resolveLayerCapabilities, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapCanvasIdentifyEditActions } from "@geolibre/map";
 import {
   canEditLayerGeometry,
@@ -13,10 +8,9 @@ import {
 } from "@geolibre/plugins";
 import { useMemo } from "react";
 import {
+  canEditAttributeValues,
   canOpenLayerAttributeTable,
-  isVectorControlAttributeSource,
 } from "../../lib/attribute-table-source";
-import { geojsonVectorSourceId } from "../../lib/vector-export";
 
 interface IdentifyEditActionsOptions {
   /** Collaboration's per-layer edit permission (always true when solo). */
@@ -26,23 +20,17 @@ interface IdentifyEditActionsOptions {
 }
 
 /**
- * Whether a layer's attribute values can be edited in the attribute table.
- * Mirrors the table's own Edit-button gate, so Identify never offers an action
- * that lands on a disabled button.
+ * Whether Identify offers Edit attributes for a layer: the table must open on
+ * it, and its Edit button must be enabled (the shared gate).
  *
  * @param layer - The identified feature's layer.
  * @returns True when the attribute table would allow editing this layer.
  */
 export function canEditLayerAttributes(layer: GeoLibreLayer): boolean {
-  if (!canOpenLayerAttributeTable(layer)) return false;
-  const caps = resolveLayerCapabilities(layer);
-  if (!caps.update) return false;
-  if (!layer.geojson && !isDuckDBQueryLayer(layer)) return false;
-  // Add Vector Layer layers render from a source the control owns, so the
-  // table keeps them read-only.
-  if (geojsonVectorSourceId(layer) !== null || isVectorControlAttributeSource(layer)) return false;
-  // The table disables attribute edits while the layer's geometry is edited.
-  return getGeometryEditTargetLayerId() !== layer.id;
+  return (
+    canOpenLayerAttributeTable(layer) &&
+    canEditAttributeValues(layer, getGeometryEditTargetLayerId())
+  );
 }
 
 /**

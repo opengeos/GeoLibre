@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import {
+  canEditAttributeValues,
   canOpenLayerAttributeTable,
   isVectorControlAttributeSource,
 } from "../apps/geolibre-desktop/src/lib/attribute-table-source";
@@ -82,5 +83,32 @@ describe("attribute table sources", () => {
       }),
       false,
     );
+  });
+});
+
+describe("canEditAttributeValues (#2932)", () => {
+  const plain = (): GeoLibreLayer => ({
+    id: "regions",
+    name: "regions",
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {},
+    geojson: { type: "FeatureCollection", features: [] },
+  });
+
+  it("allows an in-memory geojson layer", () => {
+    assert.equal(canEditAttributeValues(plain(), null), true);
+  });
+  it("refuses read-only, capability-locked, and geometry-edited layers", () => {
+    assert.equal(canEditAttributeValues(tiledLayer(), null), false);
+    assert.equal(
+      canEditAttributeValues({ ...plain(), capabilities: { update: false } }, null),
+      false,
+    );
+    assert.equal(canEditAttributeValues(plain(), "regions"), false);
+    assert.equal(canEditAttributeValues(undefined, null), false);
   });
 });
