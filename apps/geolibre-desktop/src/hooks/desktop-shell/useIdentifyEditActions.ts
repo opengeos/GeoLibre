@@ -26,7 +26,7 @@ interface IdentifyEditActionsOptions {
  * @param layer - The identified feature's layer.
  * @returns True when the attribute table would allow editing this layer.
  */
-export function canEditLayerAttributes(layer: GeoLibreLayer): boolean {
+function canEditLayerAttributes(layer: GeoLibreLayer): boolean {
   return (
     canOpenLayerAttributeTable(layer) &&
     canEditAttributeValues(layer, getGeometryEditTargetLayerId())

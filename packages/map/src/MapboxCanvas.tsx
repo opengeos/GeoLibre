@@ -925,15 +925,27 @@ export function MapboxCanvas({
               return true;
             }
             store.selectFeature(result.featureId);
-            showPopupAt(
-              lngLat,
-              createIdentifyPopupElement(layer.name, result.properties, result.featureId, {
+            const content = createIdentifyPopupElement(
+              layer.name,
+              result.properties,
+              result.featureId,
+              {
                 popup: layer.popup,
                 fieldVisibility: layer.fieldVisibility,
                 zoom: map.getZoom(),
-              }),
-              maxWidth,
+              },
             );
+            // DuckDB rows are editable in the attribute table too, as in the
+            // grouped popup.
+            const editRow = createIdentifyEditActionsElement(
+              layer,
+              result.featureId,
+              identifyEditActionsRef.current,
+              labels,
+              () => removeIdentifyPopup({ restore: false }),
+            );
+            if (editRow) content.firstElementChild?.after(editRow);
+            showPopupAt(lngLat, content, maxWidth);
             return true;
           }
           return false;

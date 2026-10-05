@@ -1069,13 +1069,27 @@ export const MapCanvas = memo(function MapCanvas({
         }
 
         selectFeature(result.featureId);
-        showIdentifyPopup(
-          createIdentifyPopupElement(layer.name, result.properties, result.featureId, {
+        const content = createIdentifyPopupElement(
+          layer.name,
+          result.properties,
+          result.featureId,
+          {
             popup: layer.popup,
             fieldVisibility: layer.fieldVisibility,
             zoom: map.getZoom(),
-          }),
+          },
         );
+        // DuckDB rows are editable in the attribute table too, as in the
+        // grouped popup.
+        const editRow = createIdentifyEditActionsElement(
+          layer,
+          result.featureId,
+          identifyEditActionsRef.current,
+          identifyAllLabels,
+          () => removeIdentifyPopup(),
+        );
+        if (editRow) content.firstElementChild?.after(editRow);
+        showIdentifyPopup(content);
         return;
       }
 
