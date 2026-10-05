@@ -58,6 +58,7 @@ import { fetchNativeWithWebviewFallback } from "./native-fetch-fallback";
 import { fetchUrlBytes } from "./native-http";
 import { nativeWmsTileUrl } from "./native-wms-url";
 import { openExternalLink } from "./open-external";
+import { openProjectFromUrlForPlugin } from "./plugin-open-project";
 import type { pluginCredentialHost } from "./plugin-credentials";
 import { createPluginLayerGroupActions } from "./plugin-layer-groups";
 import { pluginLayerMetadata } from "./plugin-layer-metadata";
@@ -503,6 +504,12 @@ export function createAppAPI(
     getCesiumScene: () => host.getCesiumScene(mapControllerRef?.current),
     getProjectSnapshot: () => host.buildProjectSnapshot(mapControllerRef ?? { current: null }),
     openExternalUrl: (url: string) => void openExternalLink(url),
+    openProjectFromUrl: (url: string, signal?: AbortSignal) =>
+      openProjectFromUrlForPlugin(
+        url,
+        (key, fallback, params) => host.i18n.t(key as never, { defaultValue: fallback, ...params }),
+        signal,
+      ),
     pickLocalDirectoryFiles,
     // Present only on desktop (filesystem access); the Vector panel keys off its
     // presence to auto-discover shapefile sidecars instead of forcing the user

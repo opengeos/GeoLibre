@@ -4593,7 +4593,7 @@
     "metaRaw": "Raw metadata"
   },
   "s3Browser": {
-    "hint": "Browse an S3 bucket and add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ point cloud files to the map. Enter s3://bucket/prefix/.",
+    "hint": "Browse an S3 bucket, add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ point cloud files to the map, or open a .geolibre or .geolibre.json project. Enter s3://bucket/prefix/.",
     "noConnections": "No S3 connections are configured, so only public buckets can be read. Add credentials in Settings > Cloud Storage.",
     "connection": "Connection",
     "listBuckets": "List buckets",
@@ -4614,6 +4614,10 @@
     "setDefault": "Set as default",
     "isDefault": "Default",
     "pointCloud": "point cloud",
+    "project": "project",
+    "openProject": "Open project",
+    "openingProject": "Opening…",
+    "openProjectFailed": "Could not open {{name}}: {{message}}",
     "select": "Select",
     "selectAll": "Select all",
     "addSelected": "Add selected ({{count}})",

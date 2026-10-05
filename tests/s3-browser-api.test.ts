@@ -5,6 +5,7 @@ import {
   createS3BrowserClient,
   describeObjects,
   formatS3BrowseLocation,
+  isProjectKey,
   parentPrefix,
   parseS3BrowseLocation,
   prefixLabel,
@@ -69,6 +70,20 @@ describe("S3 browser client", () => {
         ["autzen.copc.laz", "other", true, "s3://b/data/autzen.copc.laz"],
       ],
     );
+  });
+
+  it("recognizes GeoLibre projects, which are not mosaic indexes", () => {
+    assert.equal(isProjectKey("maps/demo.geolibre.json"), true);
+    assert.equal(isProjectKey("maps/DEMO.GEOLIBRE.JSON"), true);
+    assert.equal(isProjectKey("maps/demo.geolibre"), true);
+    assert.equal(isProjectKey("maps/mosaic.json"), false);
+    assert.equal(isProjectKey("maps/demo.geolibrary"), false);
+    const [object] = describeObjects(
+      { bucket: "b", prefix: "maps/" },
+      { prefixes: [], objects: [{ key: "maps/demo.geolibre.json", size: 10 }] },
+    );
+    assert.equal(object.project, true);
+    assert.equal(object.uri, "s3://b/maps/demo.geolibre.json");
   });
 
   it("follows an anonymous listing to the bucket's region once", async () => {

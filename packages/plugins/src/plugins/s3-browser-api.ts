@@ -49,8 +49,17 @@ export interface S3BrowserObject {
    * streams it.
    */
   pointCloud: boolean;
+  /** A `.geolibre.json` project, which the panel opens rather than adds as a layer. */
+  project: boolean;
   /** `s3://bucket/key`, which layers keep as their source. */
   uri: string;
+}
+
+const PROJECT_KEY = /\.geolibre(?:\.json)?$/i;
+
+/** Whether a key names a GeoLibre project (`.geolibre` or `.geolibre.json`). */
+export function isProjectKey(key: string): boolean {
+  return PROJECT_KEY.test(key);
 }
 
 const POINT_CLOUD_KEY = /\.(?:copc\.laz|laz|las)$/i;
@@ -186,6 +195,7 @@ export function describeObjects(location: S3BrowseLocation, page: S3ListPage): S
         ...(object.lastModified ? { lastModified: object.lastModified } : {}),
         format: classifyPath(object.key),
         pointCloud: isPointCloudKey(object.key),
+        project: isProjectKey(object.key),
         uri: `s3://${location.bucket}/${object.key}`,
       };
     });

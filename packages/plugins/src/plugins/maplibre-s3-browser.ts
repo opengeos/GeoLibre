@@ -60,6 +60,10 @@ export interface S3BrowserLabels {
   setDefault: string;
   isDefault: string;
   pointCloud: string;
+  project: string;
+  openProject: string;
+  openingProject: string;
+  openProjectFailed: (name: string, message: string) => string;
   select: string;
   selectAll: string;
   addSelected: (count: number) => string;
@@ -69,7 +73,7 @@ export interface S3BrowserLabels {
 }
 
 export const DEFAULT_S3_BROWSER_LABELS: S3BrowserLabels = {
-  hint: "Browse an S3 bucket and add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ point cloud files to the map. Enter s3://bucket/prefix/.",
+  hint: "Browse an S3 bucket, add GeoTIFF/COG, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ point cloud files to the map, or open a .geolibre or .geolibre.json project. Enter s3://bucket/prefix/.",
   noConnections:
     "No S3 connections are configured, so only public buckets can be read. Add credentials in Settings > Cloud Storage.",
   connection: "Connection",
@@ -92,6 +96,10 @@ export const DEFAULT_S3_BROWSER_LABELS: S3BrowserLabels = {
   setDefault: "Set as default",
   isDefault: "Default",
   pointCloud: "point cloud",
+  project: "project",
+  openProject: "Open project",
+  openingProject: "Opening…",
+  openProjectFailed: (name, message) => `Could not open ${name}: ${message}`,
   select: "Select",
   selectAll: "Select all",
   addSelected: (count) => `Add selected (${count})`,
@@ -495,14 +503,37 @@ function buildPanel(container: HTMLElement, app: GeoLibreAppAPI | null): () => v
     card.dataset.key = object.key;
     const titleRow = el("div", CSS.row);
     titleRow.append(el("span", CSS.title, object.name));
-    if (object.pointCloud) titleRow.append(el("span", CSS.badge, labels.pointCloud));
+    if (object.project) titleRow.append(el("span", CSS.badge, labels.project));
+    else if (object.pointCloud) titleRow.append(el("span", CSS.badge, labels.pointCloud));
     else if (object.format !== "other") titleRow.append(el("span", CSS.badge, object.format));
     card.append(titleRow);
     const date = object.lastModified ? ` · ${object.lastModified.slice(0, 10)}` : "";
     card.append(el("div", CSS.sub, `${formatBytes(object.size)}${date}`));
 
     const actions = el("div", CSS.actions);
-    if (app && canAdd(object)) {
+    if (object.project) {
+      // A project replaces the whole map, so it opens rather than joining the
+      // batch of layers.
+      if (app?.openProjectFromUrl) {
+        const openProject = button(labels.openProject, CSS.action);
+        openProject.addEventListener("click", () => {
+          const openProjectFromUrl = app.openProjectFromUrl;
+          if (!openProjectFromUrl) return;
+          openProject.disabled = true;
+          openProject.textContent = labels.openingProject;
+          setStatus("");
+          openProjectFromUrl(object.uri)
+            .catch((error: unknown) => {
+              showFailures([labels.openProjectFailed(object.name, errorMessage(error))]);
+            })
+            .finally(() => {
+              openProject.disabled = false;
+              openProject.textContent = labels.openProject;
+            });
+        });
+        actions.append(openProject);
+      }
+    } else if (app && canAdd(object)) {
       if (!object.pointCloud && isTooLargeToOpen(object.format, object.size)) {
         card.append(el("div", CSS.sub, labels.tooLarge));
       } else {
