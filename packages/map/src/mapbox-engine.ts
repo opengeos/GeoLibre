@@ -233,10 +233,7 @@ export class MapboxEngine implements MapEngine {
     removeControl: (control) => this.removeControl(control),
     getLayers: () => this.layers,
     getNativeLayerIds: (layer) => this.nativeLayerIds(layer),
-    getSourceIds: (layer) => {
-      const plan = this.plans.get(layer.id);
-      return plan ? [plan.sourceId, ...Object.keys(plan.additionalSources ?? {})] : [];
-    },
+    getSourceIds: (layer) => this.getLayerSourceIds(layer),
     excludedLayerIds: [BLANK_BACKGROUND_LAYER_ID, ...HIGHLIGHT_LAYER_IDS],
     // Never hand the control a URL: `mapbox://` styles are not fetchable, and
     // the engine already holds the loaded style's own layers (see styleLoaded),
