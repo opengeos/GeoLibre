@@ -341,6 +341,7 @@ export async function signInToArcGIS(options: {
       try {
         // The deep-link receiver starts asynchronously after launch.
         await waitForDesktopOAuthReady();
+        if (cancelled) throw new ArcGISAuthError("cancelled");
         // Throws "malformed" while another flow (a Share sign-in) holds the
         // shared receiver.
         const waiter = waitForNativeShareCode(state, NO_ISSUER, SIGN_IN_TIMEOUT_MS);
