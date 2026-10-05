@@ -95,8 +95,6 @@ export function useIdentifyEditActions({
         const store = useAppStore.getState();
         store.selectLayer(layer.id);
         store.selectFeature(featureId);
-        // A table filter could hide the row this action opens.
-        store.setAttributeFilter("");
         store.requestAttributeTableEdit(layer.id);
       },
     } satisfies MapCanvasIdentifyEditActions;

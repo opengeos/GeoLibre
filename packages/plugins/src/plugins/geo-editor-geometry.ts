@@ -105,6 +105,11 @@ function makeIdAllocator(): { take: (preferred?: unknown) => string } {
  */
 export function tagFeatureKeys(collection: FeatureCollection): FeatureCollection {
   const ids = makeIdAllocator();
+  // Explicit ids are claimed first, so an id-less feature's index fallback can
+  // never take an id a later feature really carries (#2932).
+  const explicitIds = collection.features.map((feature) =>
+    feature.id != null && feature.id !== "" ? ids.take(feature.id) : null,
+  );
   let warnedCollision = false;
   return {
     type: "FeatureCollection",
@@ -126,7 +131,7 @@ export function tagFeatureKeys(collection: FeatureCollection): FeatureCollection
       // A feature without an id falls back to its array index, the same id the
       // attribute table and Identify give it, so an Identify result can find
       // its feature in the editor (#2932). The allocator still keeps it unique.
-      const id = ids.take(feature.id ?? index);
+      const id = explicitIds[index] ?? ids.take(index);
       return {
         ...feature,
         id,

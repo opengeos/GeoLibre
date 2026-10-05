@@ -165,6 +165,8 @@ const MAX_ATTRIBUTE_COLUMN_WIDTH = 520;
 // measured. View-mode rows are ~37px; edit-mode rows (with an Input) are taller
 // and are corrected by measureElement once rendered.
 const ESTIMATED_ROW_HEIGHT = 37;
+/** Sticky header plus horizontal scrollbar: the table's non-row height, in px. */
+const ATTRIBUTE_TABLE_CHROME_HEIGHT = 58;
 const DEFAULT_TABLE_HEIGHT = 192;
 const MIN_TABLE_HEIGHT = 96;
 const MAX_TABLE_HEIGHT = 520;
@@ -632,23 +634,6 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setCalcSelectedOnly(false);
   }, [selectedLayerId, hasLayer, isGeometryEditing]);
 
-  // Identify's Edit attributes action asks for edit mode on its layer (#2932).
-  // Declared after the reset above so, when the request arrives together with
-  // the layer selection, the reset runs first and this one wins.
-  const attributeTableEditLayerId = useAppStore((s) => s.ui.attributeTableEditLayerId);
-  const requestAttributeTableEdit = useAppStore((s) => s.requestAttributeTableEdit);
-  const canEnterEditMode =
-    hasAttributeSource && layerCaps.update && !isReadOnlyVectorLayer && !isGeometryEditing;
-  useEffect(() => {
-    if (attributeTableEditLayerId === null) return;
-    if (layer?.id === attributeTableEditLayerId && canEnterEditMode) {
-      // A collapsed table would enter edit mode with the row out of sight.
-      setCollapsed(false);
-      setIsEditing(true);
-    }
-    requestAttributeTableEdit(null);
-  }, [attributeTableEditLayerId, canEnterEditMode, layer?.id, requestAttributeTableEdit]);
-
   // If the selected feature is cleared while the calculator is open, drop the
   // "selected only" flag too: leaving it checked-but-disabled would mislead the
   // user, and the submit guard would silently widen the scope to all features.
@@ -682,6 +667,34 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       return featureId.includes(filterLower) || props.includes(filterLower);
     });
   }, [attributeFilter, attributeRows, featureView, selectedIdSet]);
+
+  // Identify's Edit attributes action asks for edit mode on its layer (#2932).
+  // Declared after the layer-change reset above so, when the request arrives
+  // together with the layer selection, the reset runs first and this one wins.
+  const attributeTableEditLayerId = useAppStore((s) => s.ui.attributeTableEditLayerId);
+  const requestAttributeTableEdit = useAppStore((s) => s.requestAttributeTableEdit);
+  const canEnterEditMode =
+    hasAttributeSource && layerCaps.update && !isReadOnlyVectorLayer && !isGeometryEditing;
+  useEffect(() => {
+    if (attributeTableEditLayerId === null) return;
+    if (layer?.id === attributeTableEditLayerId && canEnterEditMode) {
+      // Clear the search only when it hides the requested row; a filter that
+      // already shows it is the user's to keep.
+      if (
+        attributeFilter &&
+        selectedFeatureId !== null &&
+        !filtered.some((row) => row.featureId === selectedFeatureId)
+      ) {
+        setAttributeFilter("");
+      }
+      // A collapsed table would enter edit mode with the row out of sight.
+      setCollapsed(false);
+      setIsEditing(true);
+    }
+    requestAttributeTableEdit(null);
+    // Runs once per request; the rows and filter are read as they stand then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attributeTableEditLayerId, canEnterEditMode, layer?.id, requestAttributeTableEdit]);
   // String-oriented sources can encode measurements as text. Adapt only the
   // rows sent to analysis dialogs, leaving the table and source data intact.
   const adaptAnalysisRows = chartOpen || statsOpen || explorerOpen;
@@ -750,6 +763,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     // to avoid blank gaps during fast scrolling, without keeping many extra rows
     // mounted.
     overscan: 8,
+    // Row offsets are measured from the top of the scroll area, but the sticky
+    // header (2.75rem) sits above the first row and the horizontal scrollbar
+    // (0.875rem) overlays the bottom; the vertical scrollbar's 3.625rem inset
+    // below is the same sum. Without this, scrolling the selected row into view
+    // from below parked it under the horizontal scrollbar.
+    scrollPaddingEnd: ATTRIBUTE_TABLE_CHROME_HEIGHT,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
   const virtualTotalSize = rowVirtualizer.getTotalSize();
@@ -768,7 +787,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // the sort changes, when the row count changes (so the scroll fires once rows
   // materialize asynchronously for Add Vector Layer layers), and when the filter
   // text changes (two different filters can yield the same row count yet a
-  // different position for the selected row).
+  // different position for the selected row). Also when edit mode toggles or the
+  // table expands: edit-mode inputs make every row taller (and a collapsed table
+  // has no viewport), so a row placed before that change slides out of view.
   useEffect(() => {
     // `""` is a valid feature id; only `null` means no selection.
     if (!attributeTableOpen || selectedFeatureId === null) return;
@@ -785,6 +806,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     sort,
     sorted.length,
     attributeFilter,
+    isEditing,
+    collapsed,
   ]);
 
   const propKeys = new Set<string>();
@@ -1941,9 +1964,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 : t("attributeTable.requiresVectorLayer")}
             </p>
           ) : (
+            // mb-3.5 reserves room for the horizontal scrollbar, which overlays
+            // the viewport and would otherwise cover the last row even at full
+            // scroll.
             <table
               data-testid="attribute-table"
-              className="table-fixed caption-bottom text-sm"
+              className="mb-3.5 table-fixed caption-bottom text-sm"
               style={{ minWidth: "100%", width: tableWidth }}
             >
               <colgroup>

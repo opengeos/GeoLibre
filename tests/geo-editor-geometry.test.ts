@@ -188,6 +188,19 @@ describe("tagFeatureKeys", () => {
     );
   });
 
+  it("keeps an explicit id even when an earlier id-less index would claim it", () => {
+    // Identify resolves the third feature as "1" (its own id), so the editor
+    // must tag it "1"; the id-less feature at index 1 gets a fresh id instead.
+    const tagged = tagFeatureKeys({
+      type: "FeatureCollection",
+      features: [point(undefined), point(undefined), point("1")],
+    });
+    const tags = tagged.features.map((f) => f.properties?.[GEOMETRY_EDIT_FID_PROPERTY]);
+    assert.equal(tags[0], "0");
+    assert.equal(tags[2], "1");
+    assert.equal(new Set(tags).size, 3);
+  });
+
   it("assigns unique ids when the input has duplicate ids", () => {
     const tagged = tagFeatureKeys({
       type: "FeatureCollection",
