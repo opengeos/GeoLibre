@@ -752,7 +752,8 @@ export function MapboxCanvas({
                 labels,
                 widest,
                 identifyEditActionsRef.current,
-                () => removeIdentifyPopup(),
+                // Programmatic: the edit action owns the selection from here.
+                () => removeIdentifyPopup({ restore: false }),
               ),
               identifyPopupShellMaxWidth(widest ? { maxWidth: widest } : undefined),
             );
@@ -1022,7 +1023,8 @@ export function MapboxCanvas({
             match.featureId,
             identifyEditActionsRef.current,
             identifyAllLabelsRef.current,
-            () => removeIdentifyPopup(),
+            // Programmatic: the edit action owns the selection from here.
+            () => removeIdentifyPopup({ restore: false }),
           );
           // Under the title, above the attribute rows.
           if (editRow) content.firstElementChild?.after(editRow);
