@@ -504,16 +504,43 @@ function wmsExceptionMessage(value: string): string {
   return normalizeText(inner ?? "") || normalizeText(value);
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+/** Decodes numeric and the common named character references in a title. */
+function decodeHtmlEntities(value: string): string {
+  return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => {
+    if (name[0] !== "#") return HTML_ENTITIES[name.toLowerCase()] ?? entity;
+    const code =
+      name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : entity;
+  });
+}
+
 /**
  * A short reason for a failed GetFeatureInfo request: the status, plus the
- * error page's title or a plain-text body. An HTML page without a title adds
+ * error page's title or a plain-text body. A markup page without a title adds
  * nothing, since its body text would carry its markup and styles along.
  */
 function wmsHttpErrorMessage(response: Response, text: string): string {
   const status = normalizeText(`HTTP ${response.status} ${response.statusText}`);
   const title = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(text)?.[1];
-  let detail = normalizeText(title ?? (/<[a-z!?]/i.test(text) ? "" : text));
-  if (detail.length > 200) detail = `${detail.slice(0, 200)}…`;
+  // Markup by its header, or by its first character for the desktop's
+  // headerless responses; a plain-text body may still mention "<value>".
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  const isMarkup = /html|xml/.test(contentType) || text.trimStart().startsWith("<");
+  const characters = Array.from(
+    normalizeText(title !== undefined ? decodeHtmlEntities(title) : isMarkup ? "" : text),
+  );
+  // Truncated by code point, so a character outside the BMP is never split.
+  const detail =
+    characters.length > 200 ? `${characters.slice(0, 200).join("")}…` : characters.join("");
   return detail ? `${status} (${detail})` : status;
 }
 

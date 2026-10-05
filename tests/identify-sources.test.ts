@@ -361,6 +361,29 @@ describe("fetchWmsIdentifyProperties and queryable (#2887)", () => {
     );
   });
 
+  it("keeps a plain-text error body that mentions a tag-like token", async () => {
+    globalThis.fetch = (async () =>
+      new Response("Error: parameter <I> is missing", {
+        status: 400,
+        headers: { "content-type": "text/plain" },
+      })) as typeof fetch;
+    await assert.rejects(
+      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+      /^Error: WMS GetFeatureInfo failed: HTTP 400 \(Error: parameter <I> is missing\)$/,
+    );
+  });
+
+  it("decodes character references in the error page title", async () => {
+    globalThis.fetch = (async () =>
+      new Response("<html><head><title>Richiesta non valida &amp; rifiutata &#232;</title>", {
+        status: 400,
+      })) as typeof fetch;
+    await assert.rejects(
+      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+      /^Error: WMS GetFeatureInfo failed: HTTP 400 \(Richiesta non valida & rifiutata è\)$/,
+    );
+  });
+
   it("prefers a WMS exception over an HTTP error page", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) =>
       String(input).includes("text%2Fplain")
