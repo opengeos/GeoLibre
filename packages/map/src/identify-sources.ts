@@ -12,7 +12,15 @@ const WEB_MERCATOR_WORLD_SIZE = 2 * Math.PI * WEB_MERCATOR_EARTH_RADIUS;
 const MAPLIBRE_TILE_SIZE = 512;
 const WMS_IDENTIFY_QUERY_SIZE = 101;
 const WMS_IDENTIFY_QUERY_CENTER = Math.floor(WMS_IDENTIFY_QUERY_SIZE / 2);
-const WMS_IDENTIFY_INFO_FORMATS = ["application/json", "text/html", "text/plain"];
+// application/geojson is what ArcGIS (and some MapServer) WMS servers answer in
+// JSON; it follows application/json so a server offering only that one, like
+// GeoServer, is not charged an extra round trip on every click (#2945).
+const WMS_IDENTIFY_INFO_FORMATS = [
+  "application/json",
+  "application/geojson",
+  "text/html",
+  "text/plain",
+];
 
 export interface DuckDBIdentifyBridgeResult {
   coordinate: [number, number] | null;

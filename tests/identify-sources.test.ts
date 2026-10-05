@@ -189,7 +189,7 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
       calls += 1;
       return { forward: ([lng, lat]) => [lng * 100000, lat * 100000], northFirst: false };
     });
-    // An empty answer makes identify probe all three formats.
+    // An empty answer makes identify probe all four formats.
     const urls = stubFetch("", "text/plain");
     await fetchWmsIdentifyProperties(
       wmsLayer({ version: "1.3.0", crs: "EPSG:25833" }),
@@ -197,7 +197,7 @@ describe("fetchWmsIdentifyProperties in the layer's CRS", () => {
       16,
       new AbortController().signal,
     );
-    assert.equal(urls.length, 3);
+    assert.equal(urls.length, 4);
     assert.equal(calls, 1);
   });
 
@@ -292,7 +292,57 @@ describe("fetchWmsIdentifyProperties and queryable (#2887)", () => {
       new AbortController().signal,
     );
     assert.deepEqual(result, { properties: { result: "Feature 1: name = Road" } });
-    assert.equal(urls.length, 3);
+    assert.equal(urls.length, 4);
+  });
+
+  // An ArcGIS WMS refuses application/json but answers application/geojson,
+  // and its text/plain probe fails with an HTML error page (#2945).
+  it("probes application/geojson when application/json is refused", async () => {
+    const formats: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const format = new URL(String(input)).searchParams.get("INFO_FORMAT")!;
+      formats.push(format);
+      if (format === "application/geojson") {
+        return new Response(
+          JSON.stringify({
+            type: "FeatureCollection",
+            features: [{ type: "Feature", id: 3, properties: { SIGLA: "AES8" }, geometry: null }],
+          }),
+          { headers: { "content-type": "application/geo+json" } },
+        );
+      }
+      if (format === "text/plain") {
+        return new Response("<html><body>400 Server Error</body></html>", {
+          status: 400,
+          headers: { "content-type": "text/html" },
+        });
+      }
+      return new Response(exception, { headers: { "content-type": "text/xml" } });
+    }) as typeof fetch;
+    const result = await fetchWmsIdentifyProperties(
+      wmsLayer(),
+      [0, 0],
+      10,
+      new AbortController().signal,
+    );
+    assert.deepEqual(result, { featureId: 3, properties: { SIGLA: "AES8" } });
+    assert.deepEqual(formats, ["application/json", "application/geojson"]);
+  });
+
+  it("reads an empty GeoJSON collection as no hit, not an error page", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      new URL(String(input)).searchParams.get("INFO_FORMAT") === "application/geojson"
+        ? new Response('{"type":"FeatureCollection","features":[]}', {
+            headers: { "content-type": "application/geo+json" },
+          })
+        : new Response(exception, { headers: { "content-type": "text/xml" } })) as typeof fetch;
+    const result = await fetchWmsIdentifyProperties(
+      wmsLayer(),
+      [0, 0],
+      10,
+      new AbortController().signal,
+    );
+    assert.deepEqual(result, { properties: {} });
   });
 });
 

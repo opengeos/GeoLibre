@@ -135,7 +135,12 @@ describe("native WMS identify fetcher", () => {
       5,
       new AbortController().signal,
     );
-    assert.deepEqual(formats, ["application/json", "text/html", "text/plain"]);
+    assert.deepEqual(formats, [
+      "application/json",
+      "application/geojson",
+      "text/html",
+      "text/plain",
+    ]);
     assert.deepEqual(result, { properties: { result: "value 12" } });
   });
 
