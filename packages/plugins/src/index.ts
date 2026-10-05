@@ -156,6 +156,7 @@ export {
   openFlatGeobufAddVectorLayerPanel,
   openColorbarPanel,
   openHtmlPanel,
+  openHtmlPanelWithEntry,
   openLegendPanel,
   openLegendPanelWithItems,
   LIDAR_SOURCE_KIND,

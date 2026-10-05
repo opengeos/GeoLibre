@@ -87,6 +87,7 @@ export {
   closeHtmlPanel,
   isHtmlPanelVisible,
   openHtmlPanel,
+  openHtmlPanelWithEntry,
   subscribeHtmlPanel,
 } from "./components/html";
 export {

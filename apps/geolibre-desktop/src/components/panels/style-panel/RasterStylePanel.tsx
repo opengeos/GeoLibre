@@ -170,7 +170,7 @@ export function RasterStylePanel({
               until this layer has a sampled pixel, so it costs nothing for the
               single-band and tile rasters that also come through here. */}
           <NetcdfProfilePanel layerId={layer.id} />
-          <WmsLegendSection layer={layer} />
+          <WmsLegendSection layer={layer} mapControllerRef={mapControllerRef} />
           <Separator />
           <Button
             type="button"

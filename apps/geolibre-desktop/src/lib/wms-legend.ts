@@ -153,3 +153,33 @@ export async function resolveWmsLegends(
         };
   });
 }
+
+/** Escapes a value for use inside a double-quoted HTML attribute. */
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Builds the HTML shown by a map HTML control for a set of legend images: one
+ * `<img>` per layer, on a white plate so transparent server-drawn legends stay
+ * readable on any map style, with the layer name above it when there are
+ * several.
+ *
+ * @param entries - The resolved legend images.
+ * @returns The HTML string.
+ */
+export function wmsLegendHtml(entries: WmsLegendEntry[]): string {
+  const blocks = entries.map((entry) => {
+    const label =
+      entries.length > 1
+        ? `<div style="font-size:11px;font-weight:600;margin:0 0 2px 0;">${escapeHtmlAttribute(entry.layer)}</div>`
+        : "";
+    const image = `<img src="${escapeHtmlAttribute(entry.url)}" alt="${escapeHtmlAttribute(entry.layer)}" style="max-width:100%;background:#fff;padding:2px;border-radius:2px;">`;
+    return `<div style="margin:0 0 6px 0;">${label}${image}</div>`;
+  });
+  return `<div style="padding:4px;">${blocks.join("")}</div>`;
+}

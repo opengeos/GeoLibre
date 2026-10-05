@@ -7411,7 +7411,11 @@
         "refresh": "Reload legend",
         "loading": "Looking up legend…",
         "failed": "The server did not return a legend for this layer.",
-        "alt": "Legend for {{layer}}"
+        "alt": "Legend for {{layer}}",
+        "addToMap": "Add to map",
+        "added": "Added to the map as an HTML control.",
+        "addFailed": "Could not add the legend to the map.",
+        "mapTitle": "{{layer}} legend"
       },
       "greyscale": "Greyscale",
       "greyscaleHint": "Toggle a greyscale basemap (drives saturation to its minimum)",

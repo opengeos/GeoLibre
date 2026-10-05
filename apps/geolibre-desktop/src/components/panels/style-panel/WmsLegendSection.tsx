@@ -1,18 +1,33 @@
 import type { GeoLibreLayer } from "@geolibre/core";
+import { openHtmlPanelWithEntry } from "@geolibre/plugins";
+import type { MapEngine } from "@geolibre/map";
 import { Button } from "@geolibre/ui";
-import { useEffect, useMemo, useState } from "react";
+import { type RefObject, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { resolveWmsLegends, wmsLegendSource, type WmsLegendEntry } from "../../../lib/wms-legend";
+import { createAppAPI } from "../../../hooks/usePlugins";
+import {
+  resolveWmsLegends,
+  wmsLegendHtml,
+  wmsLegendSource,
+  type WmsLegendEntry,
+} from "../../../lib/wms-legend";
 
 /**
  * Style-panel section that fetches and shows a WMS layer's legend: the
  * capabilities `<LegendURL>` when the service advertises one, otherwise a
  * `GetLegendGraphic` request. Renders nothing for non-WMS layers.
  *
- * @param props - The selected layer.
+ * @param props - The selected layer and the map controller, used to put the
+ *   legend on the map as an HTML control.
  * @returns The section, or null.
  */
-export function WmsLegendSection({ layer }: { layer: GeoLibreLayer }) {
+export function WmsLegendSection({
+  layer,
+  mapControllerRef,
+}: {
+  layer: GeoLibreLayer;
+  mapControllerRef: RefObject<MapEngine | null>;
+}) {
   const { t } = useTranslation();
   const source = useMemo(
     () => wmsLegendSource(layer),
@@ -23,12 +38,14 @@ export function WmsLegendSection({ layer }: { layer: GeoLibreLayer }) {
   const [entries, setEntries] = useState<WmsLegendEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  const [addedToMap, setAddedToMap] = useState<boolean | null>(null);
 
   // A different layer (or edited WMS source) invalidates the shown legend.
   useEffect(() => {
     setEntries(null);
     setFailed(new Set());
     setLoading(false);
+    setAddedToMap(null);
   }, [layer.id, source]);
 
   if (!source) return null;
@@ -36,12 +53,26 @@ export function WmsLegendSection({ layer }: { layer: GeoLibreLayer }) {
   const load = async () => {
     setLoading(true);
     setFailed(new Set());
+    setAddedToMap(null);
     try {
       setEntries(await resolveWmsLegends(source));
     } finally {
       setLoading(false);
     }
   };
+
+  const addToMap = async () => {
+    const shown = (entries ?? []).filter((entry) => !failed.has(entry.url));
+    if (shown.length === 0) return;
+    setAddedToMap(
+      await openHtmlPanelWithEntry(createAppAPI(mapControllerRef), {
+        title: t("style.raster.legend.mapTitle", { layer: layer.name }),
+        html: wmsLegendHtml(shown),
+      }),
+    );
+  };
+
+  const hasLegend = !loading && !!entries && entries.some((entry) => !failed.has(entry.url));
 
   return (
     <div className="space-y-2" data-testid="wms-legend-section">
@@ -72,6 +103,18 @@ export function WmsLegendSection({ layer }: { layer: GeoLibreLayer }) {
             )}
           </div>
         ))}
+      {hasLegend && (
+        <div className="space-y-1">
+          <Button type="button" size="sm" variant="outline" className="w-full" onClick={addToMap}>
+            {t("style.raster.legend.addToMap")}
+          </Button>
+          {addedToMap !== null && (
+            <p className={addedToMap ? "text-xs text-muted-foreground" : "text-xs text-amber-600"}>
+              {addedToMap ? t("style.raster.legend.added") : t("style.raster.legend.addFailed")}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

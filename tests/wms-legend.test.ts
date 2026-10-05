@@ -4,6 +4,7 @@ import { DOMParser } from "linkedom";
 import {
   findCapabilitiesLegendUrl,
   wmsGetLegendGraphicUrl,
+  wmsLegendHtml,
   wmsLegendSource,
 } from "../apps/geolibre-desktop/src/lib/wms-legend";
 import { geojsonLayer } from "./helpers/layer-fixtures";
@@ -71,5 +72,19 @@ describe("WMS legend", () => {
     );
     assert.equal(findCapabilitiesLegendUrl(doc, "bare", ""), null);
     assert.equal(findCapabilitiesLegendUrl(doc, "missing", ""), null);
+  });
+
+  it("builds escaped legend HTML, labelling layers only when there are several", () => {
+    const one = wmsLegendHtml([
+      { layer: "dtm", url: 'https://x/s?a=1&b="2"', origin: "getlegendgraphic" },
+    ]);
+    assert.ok(one.includes('src="https://x/s?a=1&amp;b=&quot;2&quot;"'));
+    assert.ok(!one.includes("font-weight"));
+    const two = wmsLegendHtml([
+      { layer: "a<b", url: "https://x/1", origin: "capabilities" },
+      { layer: "c", url: "https://x/2", origin: "capabilities" },
+    ]);
+    assert.ok(two.includes("a&lt;b"));
+    assert.equal(two.match(/<img /g)?.length, 2);
   });
 });
