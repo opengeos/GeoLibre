@@ -195,3 +195,35 @@ export function wmsLegendHtml(entries: WmsLegendEntry[]): string {
   });
   return `<div style="padding:4px;">${blocks.join("")}</div>`;
 }
+
+/** `layer.metadata` key holding a user-supplied legend image URL. */
+export const WMS_LEGEND_IMAGE_METADATA_KEY = "legendImageUrl";
+
+/**
+ * Validates a user-entered legend image URL: trimmed, absolute, http(s) only
+ * (a `javascript:`, `data:` or `file:` address is rejected).
+ *
+ * @param input - The text the user typed.
+ * @returns The normalized URL, or null when it is not usable.
+ */
+export function parseLegendImageUrl(input: string): string | null {
+  const text = input.trim();
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads the legend image URL a user saved on a layer, if it is still valid.
+ *
+ * @param layer - The layer to inspect.
+ * @returns The saved URL, or null.
+ */
+export function savedLegendImageUrl(layer: GeoLibreLayer): string | null {
+  const value = layer.metadata?.[WMS_LEGEND_IMAGE_METADATA_KEY];
+  return typeof value === "string" ? parseLegendImageUrl(value) : null;
+}

@@ -1,12 +1,15 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import { openHtmlPanelWithEntry } from "@geolibre/plugins";
 import type { MapEngine } from "@geolibre/map";
-import { Button } from "@geolibre/ui";
+import { Button, Input } from "@geolibre/ui";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../hooks/usePlugins";
 import {
+  WMS_LEGEND_IMAGE_METADATA_KEY,
+  parseLegendImageUrl,
   resolveWmsLegends,
+  savedLegendImageUrl,
   wmsLegendHtml,
   wmsLegendSource,
   type WmsLegendEntry,
@@ -15,7 +18,9 @@ import {
 /**
  * Style-panel section that fetches and shows a WMS layer's legend: the
  * capabilities `<LegendURL>` when the service advertises one, otherwise a
- * `GetLegendGraphic` request. Renders nothing for non-WMS layers.
+ * `GetLegendGraphic` request. When the service has no usable legend the user
+ * can enter an image URL instead, which is saved on the layer. Renders nothing
+ * for non-WMS layers.
  *
  * @param props - The selected layer and the map controller, used to put the
  *   legend on the map as an HTML control.
@@ -41,6 +46,10 @@ export function WmsLegendSection({
   const [addedToMap, setAddedToMap] = useState<boolean | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const updateLayer = useAppStore((s) => s.updateLayer);
+  const savedUrl = savedLegendImageUrl(layer);
+  const [draftUrl, setDraftUrl] = useState("");
+  const [draftInvalid, setDraftInvalid] = useState(false);
 
   // A different layer (or edited WMS source) invalidates the shown legend and
   // cancels a lookup still in flight, so a late answer cannot land on the
@@ -51,6 +60,8 @@ export function WmsLegendSection({
     setFailed(new Set());
     setLoading(false);
     setAddedToMap(null);
+    setDraftUrl("");
+    setDraftInvalid(false);
     return () => abortRef.current?.abort();
   }, [layer.id, source]);
 
@@ -74,8 +85,33 @@ export function WmsLegendSection({
     }
   };
 
+  // A saved custom image replaces the server lookup as the legend shown.
+  const shownEntries: WmsLegendEntry[] = savedUrl
+    ? [{ layer: layer.name, url: savedUrl }]
+    : (entries ?? []);
+  const hasLegend = !loading && shownEntries.some((entry) => !failed.has(entry.url));
+  // Offer the image-URL field once a lookup found nothing displayable.
+  const lookupDone = !loading && (loadFailed || entries !== null);
+  const showCustomInput = !savedUrl && lookupDone && !hasLegend;
+
+  const saveLegendImageUrl = (url: string | null) => {
+    updateLayer(layer.id, {
+      metadata: { ...layer.metadata, [WMS_LEGEND_IMAGE_METADATA_KEY]: url ?? undefined },
+    });
+    setFailed(new Set());
+    setAddedToMap(null);
+  };
+
+  const applyDraftUrl = () => {
+    const url = parseLegendImageUrl(draftUrl);
+    setDraftInvalid(url === null);
+    if (!url) return;
+    saveLegendImageUrl(url);
+    setDraftUrl("");
+  };
+
   const addToMap = async () => {
-    const shown = (entries ?? []).filter((entry) => !failed.has(entry.url));
+    const shown = shownEntries.filter((entry) => !failed.has(entry.url));
     if (shown.length === 0) return;
     setAddedToMap(
       await openHtmlPanelWithEntry(createAppAPI(mapControllerRef), {
@@ -85,26 +121,35 @@ export function WmsLegendSection({
     );
   };
 
-  const hasLegend = !loading && !!entries && entries.some((entry) => !failed.has(entry.url));
-
   return (
     <div className="space-y-2" data-testid="wms-legend-section">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium">{t("style.raster.legend.heading")}</span>
-        <Button type="button" size="sm" variant="outline" disabled={loading} onClick={load}>
-          {entries ? t("style.raster.legend.refresh") : t("style.raster.legend.get")}
-        </Button>
+        {savedUrl ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => saveLegendImageUrl(null)}
+          >
+            {t("style.raster.legend.removeCustom")}
+          </Button>
+        ) : (
+          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={load}>
+            {entries ? t("style.raster.legend.refresh") : t("style.raster.legend.get")}
+          </Button>
+        )}
       </div>
       {loading && (
         <p className="text-xs text-muted-foreground">{t("style.raster.legend.loading")}</p>
       )}
-      {!loading && loadFailed && (
+      {!loading && !savedUrl && loadFailed && (
         <p className="text-xs text-amber-600">{t("style.raster.legend.failed")}</p>
       )}
       {!loading &&
-        entries?.map((entry, index) => (
+        shownEntries.map((entry, index) => (
           <div key={`${index}:${entry.layer}`} className="space-y-1">
-            {entries.length > 1 && <p className="text-[11px] font-medium">{entry.layer}</p>}
+            {shownEntries.length > 1 && <p className="text-[11px] font-medium">{entry.layer}</p>}
             {failed.has(entry.url) ? (
               <p className="text-xs text-amber-600">{t("style.raster.legend.failed")}</p>
             ) : (
@@ -119,6 +164,33 @@ export function WmsLegendSection({
             )}
           </div>
         ))}
+      {showCustomInput && (
+        <div className="space-y-1" data-testid="wms-legend-custom">
+          <p className="text-xs text-muted-foreground">{t("style.raster.legend.customHint")}</p>
+          <div className="flex gap-2">
+            <Input
+              type="url"
+              value={draftUrl}
+              placeholder={t("style.raster.legend.customPlaceholder")}
+              aria-label={t("style.raster.legend.customLabel")}
+              aria-invalid={draftInvalid}
+              onChange={(event) => {
+                setDraftUrl(event.target.value);
+                setDraftInvalid(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") applyDraftUrl();
+              }}
+            />
+            <Button type="button" size="sm" variant="outline" onClick={applyDraftUrl}>
+              {t("style.raster.legend.customUse")}
+            </Button>
+          </div>
+          {draftInvalid && (
+            <p className="text-xs text-amber-600">{t("style.raster.legend.customInvalid")}</p>
+          )}
+        </div>
+      )}
       {hasLegend && (
         <div className="space-y-1">
           <Button type="button" size="sm" variant="outline" className="w-full" onClick={addToMap}>

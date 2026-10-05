@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import { DOMParser } from "linkedom";
 import {
   findCapabilitiesLegendUrl,
+  parseLegendImageUrl,
+  savedLegendImageUrl,
   wmsGetLegendGraphicUrl,
   wmsLegendHtml,
   wmsLegendSource,
@@ -120,5 +122,32 @@ describe("WMS legend", () => {
       findCapabilitiesLegendUrl(twice, "dtm", "", base),
       "https://wms.example/second.png",
     );
+  });
+
+  it("accepts only absolute http(s) legend image URLs", () => {
+    assert.equal(parseLegendImageUrl("  https://x.example/l.png "), "https://x.example/l.png");
+    assert.equal(parseLegendImageUrl("http://x.example/l.png"), "http://x.example/l.png");
+    for (const bad of [
+      "",
+      "   ",
+      "legend.png",
+      "/l.png",
+      "javascript:alert(1)",
+      "data:image/png;base64,AA",
+      "file:///l.png",
+    ]) {
+      assert.equal(parseLegendImageUrl(bad), null, bad);
+    }
+  });
+
+  it("reads a saved legend image URL from layer metadata", () => {
+    const layer = (value: unknown) => ({
+      ...wmsLayer({ url: "https://x/s", layers: "a" }),
+      metadata: { legendImageUrl: value },
+    });
+    assert.equal(savedLegendImageUrl(layer("https://x.example/l.png")), "https://x.example/l.png");
+    assert.equal(savedLegendImageUrl(layer("javascript:alert(1)")), null);
+    assert.equal(savedLegendImageUrl(layer(42)), null);
+    assert.equal(savedLegendImageUrl(wmsLayer({ url: "https://x/s", layers: "a" })), null);
   });
 });
