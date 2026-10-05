@@ -8,6 +8,7 @@
 // keyed by portal, and are never written to a project or the service library.
 // The OAuth client ID is not a secret and is remembered per portal.
 
+import type { ParseKeys } from "i18next";
 import { create } from "zustand";
 import { isDesktopRuntime } from "./is-mobile";
 import {
@@ -57,6 +58,30 @@ export class ArcGISAuthError extends Error {
     this.name = "ArcGISAuthError";
     this.code = code;
   }
+}
+
+/** The catalog key for each failure the UI words specifically. */
+const AUTH_ERROR_KEYS: Partial<Record<ArcGISAuthErrorCode, ParseKeys>> = {
+  "invalid-portal": "addData.arcgis.signInErrorPortal",
+  "client-id-required": "addData.arcgis.signInErrorClientId",
+  "already-pending": "addData.arcgis.signInErrorPending",
+  "popup-blocked": "addData.arcgis.signInErrorPopup",
+  cancelled: "addData.arcgis.signInErrorCancelled",
+  "access-denied": "addData.arcgis.signInErrorCancelled",
+  timeout: "addData.arcgis.signInErrorTimeout",
+  "session-expired": "addData.arcgis.signInErrorExpired",
+  "not-signed-in": "addData.arcgis.signInErrorExpired",
+};
+
+/**
+ * The i18n key describing a sign-in failure.
+ *
+ * @param error - Anything thrown by the sign-in or token functions.
+ * @returns The key, or null when the error is not an ArcGIS sign-in failure.
+ */
+export function arcgisAuthErrorKey(error: unknown): ParseKeys | null {
+  if (!(error instanceof ArcGISAuthError)) return null;
+  return AUTH_ERROR_KEYS[error.code] ?? "addData.arcgis.signInError";
 }
 
 /**

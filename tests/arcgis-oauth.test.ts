@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   ArcGISAuthError,
+  arcgisAuthErrorKey,
   getArcGISAccessToken,
   normalizeArcGISPortalUrl,
   resetArcGISSessions,
@@ -188,5 +189,23 @@ describe("ArcGIS sign-in session", () => {
       signInToArcGIS({ portalUrl: "http://x.test", clientId: "c" }),
       ArcGISAuthError,
     );
+  });
+});
+
+describe("arcgisAuthErrorKey", () => {
+  it("words specific failures and falls back for the rest", () => {
+    assert.equal(
+      arcgisAuthErrorKey(new ArcGISAuthError("popup-blocked")),
+      "addData.arcgis.signInErrorPopup",
+    );
+    assert.equal(
+      arcgisAuthErrorKey(new ArcGISAuthError("session-expired")),
+      "addData.arcgis.signInErrorExpired",
+    );
+    assert.equal(
+      arcgisAuthErrorKey(new ArcGISAuthError("exchange-failed")),
+      "addData.arcgis.signInError",
+    );
+    assert.equal(arcgisAuthErrorKey(new Error("x")), null);
   });
 });

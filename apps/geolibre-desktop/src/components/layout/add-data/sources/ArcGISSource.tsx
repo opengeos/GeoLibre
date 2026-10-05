@@ -16,20 +16,15 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
 import {
-  ArcGISAuthError,
+  arcgisAuthErrorKey,
   getArcGISAccessToken,
-  loadArcGISClientId,
-  normalizeArcGISPortalUrl,
-  signInToArcGIS,
-  signOutOfArcGIS,
   tryGetArcGISAccessToken,
-  useArcGISAuthStore,
-  type ArcGISAuthErrorCode,
 } from "../../../../lib/arcgis-oauth";
 import { serviceRequestErrorMessage } from "../helpers";
 import { DEFAULT_ARCGIS_URLS } from "../constants";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import { serviceFieldBoolean, serviceFieldString, type ServiceFields } from "../service-library";
+import { ArcGISSignInSection } from "./ArcGISSignInSection";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
 /**
@@ -55,19 +50,6 @@ const URL_PLACEHOLDER_KEYS = {
 } as const satisfies Record<ArcGISLayerType, string>;
 
 type ArcGISAuthMode = "none" | "sign-in" | "token";
-
-/** The i18n key for each sign-in failure, so the UI never shows a raw code. */
-const AUTH_ERROR_KEYS = {
-  "invalid-portal": "addData.arcgis.signInErrorPortal",
-  "client-id-required": "addData.arcgis.signInErrorClientId",
-  "already-pending": "addData.arcgis.signInErrorPending",
-  "popup-blocked": "addData.arcgis.signInErrorPopup",
-  cancelled: "addData.arcgis.signInErrorCancelled",
-  "access-denied": "addData.arcgis.signInErrorCancelled",
-  timeout: "addData.arcgis.signInErrorTimeout",
-  "session-expired": "addData.arcgis.signInErrorExpired",
-  "not-signed-in": "addData.arcgis.signInErrorExpired",
-} as const satisfies Partial<Record<ArcGISAuthErrorCode, string>>;
 
 const CUSTOM_RENDERING_RULE_OPTION = "custom-rendering-rule";
 const RASTER_FUNCTION_OPTION_PREFIX = "raster-function:";
@@ -101,12 +83,6 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
   const [arcgisPortalUrl, setArcgisPortalUrl] = useState("");
   const [arcgisAccessToken, setArcgisAccessToken] = useState("");
   const [authMode, setAuthMode] = useState<ArcGISAuthMode>("none");
-  const [arcgisClientId, setArcgisClientId] = useState("");
-  const [authError, setAuthError] = useState<string | null>(null);
-  const authPending = useArcGISAuthStore((state) => state.pending);
-  const connections = useArcGISAuthStore((state) => state.connections);
-  const signInPortal = normalizeArcGISPortalUrl(arcgisPortalUrl);
-  const connection = signInPortal ? connections[signInPortal] : undefined;
   const [arcgisPageSize, setArcgisPageSize] = useState("");
   const [arcgisMaxFeatures, setArcgisMaxFeatures] = useState("");
   const [arcgisSublayers, setArcgisSublayers] = useState("");
@@ -143,29 +119,11 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
       try {
         return await getArcGISAccessToken(arcgisPortalUrl);
       } catch (error) {
-        if (error instanceof ArcGISAuthError && error.code in AUTH_ERROR_KEYS) {
-          throw new Error(t(AUTH_ERROR_KEYS[error.code as keyof typeof AUTH_ERROR_KEYS]), {
-            cause: error,
-          });
-        }
-        throw error;
+        const key = arcgisAuthErrorKey(error);
+        throw key ? new Error(t(key), { cause: error }) : error;
       }
     }
     return authMode === "token" ? arcgisAccessToken.trim() || undefined : undefined;
-  };
-
-  const handleSignIn = async () => {
-    setAuthError(null);
-    try {
-      await signInToArcGIS({ portalUrl: arcgisPortalUrl, clientId: arcgisClientId });
-    } catch (error) {
-      const code = error instanceof ArcGISAuthError ? error.code : undefined;
-      setAuthError(
-        code && code in AUTH_ERROR_KEYS
-          ? t(AUTH_ERROR_KEYS[code as keyof typeof AUTH_ERROR_KEYS])
-          : t("addData.arcgis.signInError"),
-      );
-    }
   };
 
   const resetSublayerCatalog = (clearSelection = false) => {
@@ -306,7 +264,6 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     // tied to a portal, so it is dropped as a choice too (the session stays).
     setArcgisAccessToken("");
     setAuthMode("none");
-    setAuthError(null);
   };
 
   const handleArcgisLayerTypeChange = (nextLayerType: ArcGISLayerType) => {
@@ -461,12 +418,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
             onChange={(event) => {
               resetSublayerCatalog();
               resetRasterFunctionCatalog();
-              setAuthError(null);
-              const next = event.target.value as ArcGISAuthMode;
-              setAuthMode(next);
-              if (next === "sign-in" && signInPortal && !arcgisClientId) {
-                setArcgisClientId(loadArcGISClientId(signInPortal));
-              }
+              setAuthMode(event.target.value as ArcGISAuthMode);
             }}
           >
             <option value="none">{t("addData.arcgis.authNone")}</option>
@@ -474,55 +426,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
             <option value="token">{t("addData.arcgis.authToken")}</option>
           </Select>
         </div>
-        {authMode === "sign-in" ? (
-          <div className="space-y-2">
-            {connection ? (
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span>
-                  {t("addData.arcgis.signedInAs", {
-                    user: connection.username || connection.portal,
-                    portal: connection.portal,
-                  })}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void signOutOfArcGIS(arcgisPortalUrl)}
-                >
-                  {t("addData.arcgis.signOut")}
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="arcgis-client-id">{t("addData.arcgis.clientId")}</Label>
-                  <Input
-                    id="arcgis-client-id"
-                    autoComplete="off"
-                    placeholder={t("addData.arcgis.clientIdPlaceholder")}
-                    value={arcgisClientId}
-                    onChange={(event) => setArcgisClientId(event.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t("addData.arcgis.clientIdHint")}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={authPending}
-                  onClick={() => void handleSignIn()}
-                >
-                  {authPending ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : null}
-                  {t("addData.arcgis.signIn")}
-                </Button>
-              </>
-            )}
-            {authError ? <p className="text-sm text-destructive">{authError}</p> : null}
-          </div>
-        ) : null}
+        {authMode === "sign-in" ? <ArcGISSignInSection portalUrl={arcgisPortalUrl} /> : null}
         {authMode === "token" ? (
           <div className="space-y-1.5">
             <Label htmlFor="arcgis-access-token">{t("addData.arcgis.accessToken")}</Label>
