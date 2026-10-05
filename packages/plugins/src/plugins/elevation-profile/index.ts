@@ -234,11 +234,14 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
   },
 
   getProjectState() {
-    if (control) return { ...control.getState(), collapsed: isDockCollapsed() };
-    // A default state (the New Project reset, or a plugin never opened) carries
-    // nothing worth saving; omitting it keeps empty projects free of plugin
-    // state, so the credential-strip prompt has nothing to count.
-    return isDefaultState(pendingState) ? undefined : (pendingState ?? undefined);
+    const current = control
+      ? { ...control.getState(), collapsed: isDockCollapsed() }
+      : pendingState;
+    // A default state (the New Project reset, a plugin never opened, or one
+    // opened but untouched) carries nothing worth saving; omitting it keeps
+    // empty projects free of plugin state, so the credential-strip prompt has
+    // nothing to count.
+    return isDefaultState(current) ? undefined : (current ?? undefined);
   },
 
   applyProjectState(app, state) {

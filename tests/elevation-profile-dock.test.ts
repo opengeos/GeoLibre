@@ -162,6 +162,22 @@ describe("Elevation Profile docked panel", () => {
     plugin.applyProjectState?.(host, undefined);
   });
 
+  it("saves no project state for an activated but untouched panel", () => {
+    const document = installDom();
+    const host = fakeHost(document);
+    const originalRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = () => 0;
+    plugin.applyProjectState?.(host, undefined);
+    try {
+      assert.notEqual(plugin.activate(host), false);
+      assert.equal(plugin.getProjectState?.(), undefined);
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf;
+      plugin.deactivate(host);
+      plugin.applyProjectState?.(host, undefined);
+    }
+  });
+
   it("refuses to activate on a host without a dock", () => {
     const document = installDom();
     const host = fakeHost(document, false);
