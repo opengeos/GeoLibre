@@ -329,6 +329,65 @@ describe("fetchWmsIdentifyProperties and queryable (#2887)", () => {
     assert.deepEqual(formats, ["application/json", "application/geojson"]);
   });
 
+  // A failed request is not the feature's data: its error page must not reach
+  // the popup as a `result` attribute, markup and all (#2945).
+  it("reports an HTML error page as an error naming its title", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        "<!DOCTYPE html><html><head><title>400 - Richiesta non valida</title>" +
+          "<style>body { color: #fff; }</style></head><body><h1>400</h1></body></html>",
+        { status: 400, headers: { "content-type": "text/html" } },
+      )) as typeof fetch;
+    await assert.rejects(
+      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+      /^Error: WMS GetFeatureInfo failed: HTTP 400 \(400 - Richiesta non valida\)$/,
+    );
+  });
+
+  it("reports a plain-text error body, and the bare status for untitled HTML", async () => {
+    globalThis.fetch = (async () =>
+      new Response("Service   temporarily\nunavailable", { status: 503 })) as typeof fetch;
+    await assert.rejects(
+      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+      /^Error: WMS GetFeatureInfo failed: HTTP 503 \(Service temporarily unavailable\)$/,
+    );
+    globalThis.fetch = (async () =>
+      new Response("<html><body><style>h1 {}</style>Oops</body></html>", {
+        status: 500,
+      })) as typeof fetch;
+    await assert.rejects(
+      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+      /^Error: WMS GetFeatureInfo failed: HTTP 500$/,
+    );
+  });
+
+  it("prefers a WMS exception over an HTTP error page", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      String(input).includes("text%2Fplain")
+        ? new Response("<html><head><title>Bad request</title></head></html>", { status: 400 })
+        : new Response(exception, { headers: { "content-type": "text/xml" } })) as typeof fetch;
+    await assert.rejects(
+      fetchWmsIdentifyProperties(wmsLayer(), [0, 0], 10, new AbortController().signal),
+      /^Error: WMS GetFeatureInfo returned an error: Layer buildings is not queryable$/,
+    );
+  });
+
+  it("still returns a format that answered when another one failed", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      String(input).includes("text%2Fplain")
+        ? new Response("Feature 1: name = Road", { headers: { "content-type": "text/plain" } })
+        : new Response("<html><head><title>Bad request</title></head></html>", {
+            status: 400,
+          })) as typeof fetch;
+    const result = await fetchWmsIdentifyProperties(
+      wmsLayer(),
+      [0, 0],
+      10,
+      new AbortController().signal,
+    );
+    assert.deepEqual(result, { properties: { result: "Feature 1: name = Road" } });
+  });
+
   it("reads an empty GeoJSON collection as no hit, not an error page", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) =>
       new URL(String(input)).searchParams.get("INFO_FORMAT") === "application/geojson"

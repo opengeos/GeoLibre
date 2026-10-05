@@ -504,6 +504,19 @@ function wmsExceptionMessage(value: string): string {
   return normalizeText(inner ?? "") || normalizeText(value);
 }
 
+/**
+ * A short reason for a failed GetFeatureInfo request: the status, plus the
+ * error page's title or a plain-text body. An HTML page without a title adds
+ * nothing, since its body text would carry its markup and styles along.
+ */
+function wmsHttpErrorMessage(response: Response, text: string): string {
+  const status = normalizeText(`HTTP ${response.status} ${response.statusText}`);
+  const title = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(text)?.[1];
+  let detail = normalizeText(title ?? (/<[a-z!?]/i.test(text) ? "" : text));
+  if (detail.length > 200) detail = `${detail.slice(0, 200)}…`;
+  return detail ? `${status} (${detail})` : status;
+}
+
 function parseWmsJsonProperties(value: unknown): {
   featureId?: string | number;
   properties: Record<string, unknown>;
@@ -566,7 +579,8 @@ function parseWmsJsonProperties(value: unknown): {
  * @param signal Aborts the request when a newer click supersedes it.
  * @returns The first feature's id and properties, a text result, or null
  *   (also, without a request, for a layer that is not queryable).
- * @throws Error when every format probed came back as a WMS exception.
+ * @throws Error when every format probed came back as a WMS exception or an
+ *   HTTP error, naming the exception text or the status.
  */
 export async function fetchWmsIdentifyProperties(
   layer: GeoLibreLayer,
@@ -582,6 +596,9 @@ export async function fetchWmsIdentifyProperties(
   // A WMS exception is the server refusing the request, not the feature's data:
   // kept apart so it surfaces as an error when no format gave anything else.
   let exceptionText = "";
+  // Likewise a failed request (often an HTML error page), so the page is
+  // reported as an error rather than shown as a `result` attribute (#2945).
+  let httpErrorText = "";
 
   // Honor an explicitly configured INFO_FORMAT so we issue a single request
   // instead of probing JSON/HTML/plain-text in sequence.
@@ -601,11 +618,9 @@ export async function fetchWmsIdentifyProperties(
     const text = await response.text();
     if (signal.aborted) return null;
     if (!response.ok) {
-      // HTTP/2 drops the reason phrase, so statusText is often "". Fall back to
-      // the status code so a failed request never surfaces as "No attributes".
       // Some servers send their exception report with an error status too.
       if (isWmsExceptionResponse(text)) exceptionText = wmsExceptionMessage(text);
-      else fallbackText = normalizeText(text) || response.statusText || `HTTP ${response.status}`;
+      else httpErrorText = wmsHttpErrorMessage(response, text);
       continue;
     }
 
@@ -673,6 +688,8 @@ export async function fetchWmsIdentifyProperties(
 
   if (fallbackText) return { properties: { result: fallbackText } };
   if (exceptionText) throw new Error(`WMS GetFeatureInfo returned an error: ${exceptionText}`);
+  // Never "No attributes" for a request that failed: name the status instead.
+  if (httpErrorText) throw new Error(`WMS GetFeatureInfo failed: ${httpErrorText}`);
   return null;
 }
 
