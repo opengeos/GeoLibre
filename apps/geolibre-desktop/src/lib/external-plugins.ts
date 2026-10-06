@@ -420,12 +420,7 @@ async function loadPluginUrlBundles(
               archiveName: bundle.archiveName,
               sourceUrl: bundle.sourceUrl,
               integrityStatus: integrity.status,
-              // The registry can offer an announced version as an explicit
-              // update; otherwise uninstalling clears the pin and reinstalling
-              // re-pins the published bundle after review.
-              message:
-                `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
-                "Open Settings → Plugins, uninstall it, then install it again to review and accept the update.",
+              message: heldBackPluginMessage(bundle.sourceUrl ?? manifestUrls[index], heldBack),
             });
             continue;
           }
@@ -458,6 +453,31 @@ async function loadPluginUrlBundles(
     }
   }
   return bundles;
+}
+
+/**
+ * Explains why a URL bundle whose hash no longer matches its pin was not loaded.
+ *
+ * The registry can offer an announced version as an explicit Update in
+ * Settings → Plugins, so that comes first; otherwise uninstalling clears the
+ * pin and reinstalling re-pins the published bundle after review.
+ *
+ * @param sourceUrl The manifest URL the bundle was fetched from.
+ * @param heldBack The pinned and served versions of the held-back bundle.
+ * @returns The message logged and shown for the held-back plugin.
+ */
+export function heldBackPluginMessage(sourceUrl: string, heldBack: HeldBackPluginBundle): string {
+  const versions =
+    heldBack.pinnedVersion === null
+      ? ` (now ${heldBack.version})`
+      : heldBack.pinnedVersion === heldBack.version
+        ? ` (${heldBack.version}, contents changed)`
+        : ` (${heldBack.pinnedVersion} → ${heldBack.version})`;
+  return (
+    `Plugin at '${sourceUrl}' changed since you last trusted it${versions} and was not loaded. ` +
+    "If Settings → Plugins offers Update, use it; otherwise uninstall it and install it again " +
+    "to review and accept the update."
+  );
 }
 
 async function loadPluginUrlBundle(

@@ -309,6 +309,34 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
     }
   });
 
+  it("names the versions in the held-back message", () => {
+    const url = "https://plugins.example.com/demo/plugin.json";
+    assert.match(
+      externalPlugins.heldBackPluginMessage(url, {
+        pluginId: "demo",
+        pinnedVersion: "0.3.1",
+        version: "0.3.2",
+      }),
+      /changed since you last trusted it \(0\.3\.1 → 0\.3\.2\) and was not loaded\./,
+    );
+    assert.match(
+      externalPlugins.heldBackPluginMessage(url, {
+        pluginId: "demo",
+        pinnedVersion: null,
+        version: "0.3.2",
+      }),
+      /\(now 0\.3\.2\)/,
+    );
+    assert.match(
+      externalPlugins.heldBackPluginMessage(url, {
+        pluginId: "demo",
+        pinnedVersion: "0.3.2",
+        version: "0.3.2",
+      }),
+      /\(0\.3\.2, contents changed\)/,
+    );
+  });
+
   it("clears the pin on uninstall even though the blocked plugin never registered", async () => {
     // A bundle whose hash no longer matches the pin recorded on an earlier
     // visit: held back, so nothing registers and no loaded source is recorded.
@@ -349,6 +377,12 @@ describe("recovering a URL plugin blocked by its integrity pin", () => {
       pinnedVersion: "0.9.0",
       version: "1.0.0",
     });
+    // The warning names both versions and points to Update before reinstalling.
+    assert.match(blocked.issues[0].message, /\(0\.9\.0 → 1\.0\.0\)/);
+    assert.match(
+      blocked.issues[0].message,
+      /If Settings → Plugins offers Update, use it; otherwise/,
+    );
 
     const plugin = await externalPlugins.reloadExternalUrlPlugin(manager, MANIFEST_URL, app);
     assert.equal(plugin.id, "pin-demo");
