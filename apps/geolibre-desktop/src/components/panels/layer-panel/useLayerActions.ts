@@ -53,6 +53,7 @@ import {
   type QuickBufferPreset,
 } from "../../../lib/quick-analysis";
 import { layerParquetKeyValueMetadata } from "../../../lib/parquet-kv-metadata";
+import { exportLidarLayer, type LidarExportFormat } from "../../../lib/lidar-export";
 import { exportRasterLayer } from "../../../lib/raster-export";
 import type { ExtrusionModelFormat } from "../../../lib/extrusion-model";
 import {
@@ -1188,6 +1189,40 @@ export function useLayerActions({
     [clearRefreshStatusTimer, scheduleStatusClear, setRefreshStatuses, t],
   );
 
+  const handleExportLidarLayer = useCallback(
+    async (layer: GeoLibreLayer, format: LidarExportFormat) => {
+      clearRefreshStatusTimer(layer.id);
+      // Reading a remote cloud and converting it can take a while.
+      setRefreshStatuses((current) => ({
+        ...current,
+        [layer.id]: { type: "refreshing", message: t("layers.exportLidarRunning") },
+      }));
+      try {
+        const savedPath = await exportLidarLayer(layer, format, sanitizeExportFileName(layer.name));
+        if (savedPath === null) {
+          // The user cancelled the save dialog: clear the running note.
+          setRefreshStatuses((current) => {
+            const { [layer.id]: _cleared, ...rest } = current;
+            return rest;
+          });
+          return;
+        }
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "success", message: t("layers.exportLidarSuccess") },
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t("layers.exportLidarError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+      }
+      scheduleStatusClear(layer.id);
+    },
+    [clearRefreshStatusTimer, scheduleStatusClear, setRefreshStatuses, t],
+  );
+
   return {
     quickBufferPresets,
     formatQuickDistance,
@@ -1208,6 +1243,7 @@ export function useLayerActions({
     handleBindTemporalLayer,
     handleUnbindTimeSlider,
     handleExportRasterLayer,
+    handleExportLidarLayer,
   };
 }
 

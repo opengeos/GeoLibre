@@ -181,6 +181,7 @@ export {
   openLegendPanelWithItems,
   LIDAR_SOURCE_KIND,
   openLidarLayerPanel,
+  addLidarLayerFromBytes,
   addLidarLayerFromUrl,
   restoreLidarLayers,
   openMeasurePanel,

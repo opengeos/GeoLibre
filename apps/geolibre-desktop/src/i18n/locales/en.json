@@ -1172,6 +1172,9 @@
       "errorMlt": "ArcGIS requires MVT vector tiles, not MLT."
     },
     "lidar": {
+      "dropAdded_one": "Added {{count}} point cloud layer.",
+      "dropAdded_other": "Added {{count}} point cloud layers.",
+      "dropLoading": "Loading point clouds…",
       "errorUrl": "Enter a valid HTTP or HTTPS LiDAR URL."
     },
     "zarr": {
@@ -8112,6 +8115,9 @@
     "selectFeaturesRadius": "Select features by radius",
     "selectFeaturesModifiers": "Shift adds, Alt removes, and Shift+Alt intersects. Press Esc to cancel.",
     "exportGeoTiff": "GeoTIFF (COG)",
+    "exportLas": "LAS",
+    "exportLaz": "LAZ (compressed)",
+    "exportCopc": "COPC (cloud optimized)",
     "extractSubset": "Extract subset…",
     "stylesMenu": "Styles",
     "exportGeoLibreStyle": "Export GeoLibre URL style",
@@ -8169,6 +8175,9 @@
     "openRasterStylePanel": "Edit raster style…",
     "exportRasterSuccess": "Raster exported.",
     "exportRasterError": "Could not export this raster.",
+    "exportLidarRunning": "Exporting point cloud…",
+    "exportLidarSuccess": "Point cloud exported.",
+    "exportLidarError": "Could not export this point cloud.",
     "saveEditsToSource": "Save edits to source file",
     "saveEditsSuccess": "Saved {{count}} feature(s) to the source file.",
     "saveEditsNoFeatures": "This layer has no features to save.",

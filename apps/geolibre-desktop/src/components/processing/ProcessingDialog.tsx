@@ -19,6 +19,8 @@ import {
   runWhiteboxToolWasm,
   outputBaseName,
   fileOutputTargetExtension,
+  isLas,
+  lidarBytesExtension,
   type WhiteboxJob,
   type WhiteboxLayerInput,
   type WhiteboxTool,
@@ -149,6 +151,10 @@ interface ProcessingDialogProps {
   // runner) as a new map layer. Wired by the desktop shell, which owns the
   // raster control / app API.
   onAddRaster?: (bytes: Uint8Array, name: string, fileName?: string) => Promise<void> | void;
+  // Renders a LiDAR tool output (LAS/LAZ/COPC bytes from the WASM runner) as a
+  // new point cloud layer. Resolves false when the LiDAR control could not be
+  // mounted, so the dialog falls back to downloading the file.
+  onAddLidar?: (bytes: Uint8Array, name: string, fileName: string) => Promise<boolean>;
 }
 
 /** A layer's `[west, south, east, north]` extent, or null when it has none. */
@@ -176,7 +182,11 @@ function downloadBytes(bytes: Uint8Array, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDialogProps) {
+export function ProcessingDialog({
+  mapControllerRef,
+  onAddRaster,
+  onAddLidar,
+}: ProcessingDialogProps) {
   const { t, i18n } = useTranslation();
   const open = useAppStore((s) => s.ui.processingOpen);
   const setProcessingOpen = useAppStore((s) => s.setProcessingOpen);
@@ -1343,12 +1353,23 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         if (!(value instanceof Uint8Array)) continue;
         const param = jobTool?.params?.find((item) => item.name === name);
         const outKind = param ? parameterKind(param) : "";
+        // A `lidar_out` (a classified/filtered/thinned cloud) goes on the map
+        // as a point cloud layer, named for its own encoding so a COPC output
+        // streams; the download below is only the fallback.
+        if (outKind === "lidar_out" && isLas(value) && onAddLidar) {
+          const lidarName = `${jobToolLabel} ${humanize(name)}`;
+          const fileName = `${outputBaseName(nextJob.tool_id, name)}.${lidarBytesExtension(value)}`;
+          if (await onAddLidar(value, lidarName, fileName)) {
+            historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(lidarName);
+            continue;
+          }
+        }
         // A generic `file_out` can still hold a GeoTIFF — `slope` declares its
         // output only as "Optional output path" — so sniff the bytes rather
         // than trust the declared kind, the way the scripting/assistant path
         // does, and put a raster on the map instead of downloading it.
-        // A `lidar_out` (a classified/filtered LAS from the WASM runner) is
-        // downloaded too; it never belongs on the raster path.
+        // A `lidar_out` the map could not take is downloaded too; it never
+        // belongs on the raster path.
         const declaredFile =
           outKind === "file_out" || outKind === "vector_out" || outKind === "lidar_out";
         if (declaredFile && (!isTiff(value) || !onAddRaster)) {
@@ -1376,7 +1397,7 @@ export function ProcessingDialog({ mapControllerRef, onAddRaster }: ProcessingDi
         }
       }
     },
-    [addGeoJsonLayer, mapControllerRef, onAddRaster, t, tools],
+    [addGeoJsonLayer, mapControllerRef, onAddLidar, onAddRaster, t, tools],
   );
 
   useEffect(() => {

@@ -31,7 +31,7 @@ export interface WhiteboxMenuCategory {
   subcategories: WhiteboxMenuSubcategory[];
 }
 
-/** 1066 tools across 9 categories. */
+/** 1068 tools across 9 categories. */
 export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
   {
     key: "conversion",
@@ -262,6 +262,8 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
         label: "GeoLibre (WASM)",
         tools: [
           { id: "assign_projection_lidar", name: "Assign Projection Lidar" },
+          { id: "lidar_convert", name: "LiDAR Convert" },
+          { id: "lidar_grid_thin", name: "LiDAR Grid Thin" },
         ],
       },
       {

@@ -123,6 +123,7 @@ export {
   subscribeLegendPanel,
 } from "./components/legend";
 export {
+  addLidarLayerFromBytes,
   addLidarLayerFromUrl,
   LIDAR_SOURCE_KIND,
   openLidarLayerPanel,

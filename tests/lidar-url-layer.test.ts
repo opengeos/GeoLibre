@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import { useAppStore } from "@geolibre/core";
 import {
   __setComponentsModuleLoaderForTests,
+  addLidarLayerFromBytes,
   addLidarLayerFromUrl,
   closeMaplibreComponentControls,
   LIDAR_SOURCE_KIND,
@@ -45,7 +46,9 @@ class LidarControlStub {
     this.handlers.get(event)?.delete(handler);
   }
 
-  async loadPointCloud(url: string) {
+  async loadPointCloud(source: string | File) {
+    // maplibre-gl-lidar reports a File's source only as "file".
+    const url = typeof source === "string" ? source : source.name;
     loadCalls.push({ url, autoZoom: this._options.autoZoom });
     counter += 1;
     const info = {
@@ -56,7 +59,7 @@ class LidarControlStub {
       hasRGB: false,
       hasIntensity: true,
       hasClassification: true,
-      source: url,
+      source: typeof source === "string" ? source : "file",
     };
     this.pointClouds.push({ id: info.id });
     if (emitLoad) {
@@ -155,6 +158,41 @@ describe("addLidarLayerFromUrl", () => {
     await assert.rejects(
       addLidarLayerFromUrl(app, "https://example.com/a.copc.laz"),
       /did not create a layer/,
+    );
+  });
+});
+
+describe("addLidarLayerFromBytes", () => {
+  it("loads a tool output under its display name and keeps its bytes", async () => {
+    installStubModule();
+    const bytes = new Uint8Array([0x4c, 0x41, 0x53, 0x46, 1, 2, 3]);
+    const id = await addLidarLayerFromBytes(app, bytes, {
+      name: "LiDAR Grid Thin Output",
+      fileName: "lidar_grid_thin_output.copc.laz",
+    });
+
+    const layer = useAppStore.getState().layers.find((item) => item.id === id);
+    assert.ok(layer, "the returned id names a store layer");
+    assert.equal(layer.name, "LiDAR Grid Thin Output");
+    assert.equal(layer.metadata.sourceKind, LIDAR_SOURCE_KIND);
+    // The loader sees the file name, whose extension picks streaming for COPC.
+    assert.deepEqual(loadCalls, [{ url: "lidar_grid_thin_output.copc.laz", autoZoom: true }]);
+    const localBytesUrl = layer.metadata.localBytesUrl;
+    assert.ok(typeof localBytesUrl === "string" && localBytesUrl.startsWith("blob:"));
+    const retained = new Uint8Array(await (await fetch(localBytesUrl)).arrayBuffer());
+    assert.deepEqual(retained, bytes, "the blob URL serves the loaded bytes");
+  });
+
+  it("keeps the camera still when asked", async () => {
+    installStubModule();
+    await addLidarLayerFromBytes(app, new Uint8Array([0x4c, 0x41, 0x53, 0x46]), {
+      name: "Output",
+      fileName: "output.las",
+      fit: false,
+    });
+    assert.deepEqual(
+      loadCalls.map((call) => call.autoZoom),
+      [false],
     );
   });
 });

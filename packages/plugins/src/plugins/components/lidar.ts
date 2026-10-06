@@ -156,6 +156,77 @@ export async function addLidarLayerFromUrl(
   }
 }
 
+/**
+ * Load a point cloud held in memory (a Whitebox LiDAR tool's output) into the
+ * shared LiDAR control without revealing its panel. `fileName`'s extension
+ * picks the loader, so a `.copc.laz` name streams the cloud by octree node.
+ * The bytes stay reachable through the layer's `metadata.localBytesUrl` (see
+ * {@link retainLocalPointCloudBytes}), so the layer can be exported or fed to
+ * another tool.
+ *
+ * @param app - The GeoLibre app API.
+ * @param bytes - The LAS/LAZ/COPC file bytes, or a dropped file.
+ * @param options - `name` is the layer's display name, `fileName` the file
+ *   name the loader sees, and `fit: false` keeps the camera still.
+ * @returns The store layer id of the loaded point cloud, or null when the LiDAR
+ *   control could not be mounted.
+ * @throws When the point cloud fails to load.
+ */
+export async function addLidarLayerFromBytes(
+  app: GeoLibreAppAPI,
+  bytes: Uint8Array | File,
+  options: { name: string; fileName: string; fit?: boolean },
+): Promise<string | null> {
+  // A dropped File loads as-is, so a large COPC streams without being copied.
+  const file =
+    bytes instanceof File && bytes.name === options.fileName
+      ? bytes
+      : new File([bytes as BlobPart], options.fileName);
+  const load = async () => {
+    const opened = await openStandaloneLidarControl(app, { reveal: false });
+    if (!opened || !lidarControl) return null;
+    const info = await lidarControl.loadPointCloud(file);
+    const store = useAppStore.getState();
+    if (!store.layers.some((layer) => layer.id === info.id)) {
+      throw new Error(`The LiDAR control did not create a layer for ${options.fileName}.`);
+    }
+    store.updateLayer(info.id, { name: options.name });
+    return info.id;
+  };
+  return (options.fit ?? true) ? load() : withLidarAutoZoomSuppressed(app, load);
+}
+
+/**
+ * Keep the bytes of every point cloud loaded from a `File` or `ArrayBuffer`
+ * (a tool output, or a file picked in the LiDAR panel) reachable as a blob URL
+ * on the layer's `metadata.localBytesUrl`. maplibre-gl-lidar reports such a
+ * cloud's source only as `"file"`, so without this the layer could not be
+ * exported or used as a Whitebox tool input. The project format drops
+ * `localBytesUrl` on save, as it does for File-loaded rasters.
+ *
+ * @param control - The LiDAR control whose loads to watch.
+ */
+function retainLocalPointCloudBytes(control: LidarControl): void {
+  const loadPointCloud = control.loadPointCloud.bind(control);
+  // The panel's file picker calls `this.loadPointCloud(file)`, so an instance
+  // override covers it as well as addLidarLayerFromBytes.
+  control.loadPointCloud = async (...args: Parameters<LidarControl["loadPointCloud"]>) => {
+    const info = await loadPointCloud(...args);
+    const [source] = args;
+    if (typeof source !== "string") {
+      const store = useAppStore.getState();
+      const layer = store.layers.find((item) => item.id === info.id);
+      if (layer && !layer.metadata.localBytesUrl) {
+        const blob = source instanceof Blob ? source : new Blob([source]);
+        store.updateLayer(layer.id, {
+          metadata: { ...layer.metadata, localBytesUrl: URL.createObjectURL(blob) },
+        });
+      }
+    }
+    return info;
+  };
+}
+
 /** Safety net for {@link waitForPendingLidarRestores}: how long to wait for
  * queued restores to settle before giving up regardless. */
 const PENDING_LIDAR_RESTORE_TIMEOUT_MS = 60_000;
@@ -430,6 +501,7 @@ function createLidarControl(
     };
     control.getTerrain = () => app.isTerrainEnabled?.() ?? false;
   }
+  retainLocalPointCloudBytes(control);
   lidarLayerAdapter = new LidarLayerAdapterClass(control);
   const onUnload = createLidarUnloadHandler();
   const onLoad = createLidarLoadHandler();

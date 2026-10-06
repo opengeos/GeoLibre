@@ -1,6 +1,10 @@
 import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { addVectorFileToMap, prepareRasterControl } from "@geolibre/plugins";
+import {
+  addLidarLayerFromBytes,
+  addVectorFileToMap,
+  prepareRasterControl,
+} from "@geolibre/plugins";
 import type { TFunction } from "i18next";
 import {
   type Dispatch,
@@ -13,6 +17,11 @@ import {
   useState,
 } from "react";
 import { importGeoPackageDrops } from "../../lib/geopackage-drop";
+import {
+  addDroppedPointClouds,
+  type DroppedPointCloud,
+  isPointCloudFileName,
+} from "../../lib/lidar-drop";
 import type { GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import { isPhotoDropFileName } from "../../lib/photo-file-names";
 import {
@@ -98,6 +107,29 @@ export function useFileDrop({
   const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
   const dropDisabled = layoutOptions.viewer || !deploymentCapabilities.has("data:add");
 
+  // LAS/LAZ/COPC files load into the LiDAR control, one layer each, instead of
+  // going through the vector/raster pipeline (which cannot read them).
+  const addPointClouds = useCallback(
+    async (clouds: DroppedPointCloud[]): Promise<number> => {
+      if (clouds.length === 0) return 0;
+      setDropMessage(t("addData.lidar.dropLoading"));
+      const added = await addDroppedPointClouds(
+        clouds,
+        (data, name, fileName) =>
+          addLidarLayerFromBytes(createAppAPI(mapControllerRef), data, {
+            name,
+            fileName,
+            fit: shouldZoomToNewLayers(),
+          }),
+        (name, error) =>
+          setDropError(`${name}: ${error instanceof Error ? error.message : String(error)}`),
+      );
+      setDropMessage(added > 0 ? t("addData.lidar.dropAdded", { count: added }) : null);
+      return added;
+    },
+    [mapControllerRef, setDropError, setDropMessage, t],
+  );
+
   useEffect(() => {
     if (!isTauri() || dropDisabled) return;
 
@@ -157,7 +189,18 @@ export function useFileDrop({
             // single-FeatureCollection pipeline (which would otherwise route a
             // .pbf to DuckDB ST_Read and merge it).
             const pbfPaths = paths.filter((path) => isOsmPbfFileName(path));
-            const otherPaths = paths.filter((path) => !isOsmPbfFileName(path));
+            const cloudPaths = paths.filter((path) => isPointCloudFileName(path));
+            const otherPaths = paths.filter(
+              (path) => !isOsmPbfFileName(path) && !isPointCloudFileName(path),
+            );
+            await addPointClouds(
+              await Promise.all(
+                cloudPaths.map(async (path) => ({
+                  name: path,
+                  data: await readLocalFileBytes(path),
+                })),
+              ),
+            );
 
             if (pbfPaths.length > 0) {
               const { readFile, stat } = await import("@tauri-apps/plugin-fs");
@@ -257,10 +300,13 @@ export function useFileDrop({
                 importedLayers.length > 0 ||
                 rasterCount > 0 ||
                 containers.layerCount > 0 ||
-                (pbfPaths.length === 0 && photoResult === null && containers.count === 0)
+                (pbfPaths.length === 0 &&
+                  cloudPaths.length === 0 &&
+                  photoResult === null &&
+                  containers.count === 0)
               ) {
                 finishDrop(importedLayers, rasterCount, containers.layerCount);
-              } else if (pbfPaths.length === 0 && photoResult === null) {
+              } else if (pbfPaths.length === 0 && cloudPaths.length === 0 && photoResult === null) {
                 setDropMessage(null);
               }
             }
@@ -288,6 +334,7 @@ export function useFileDrop({
       unlisten?.();
     };
   }, [
+    addPointClouds,
     clearDropMessageLater,
     finishDrop,
     addDroppedRasters,
@@ -376,7 +423,11 @@ export function useFileDrop({
         // finishDrop throws on an empty list, so only call it when non-PBF
         // files were dropped.
         const pbfFiles = allFiles.filter((file) => isOsmPbfFileName(file.name));
-        const otherFiles = allFiles.filter((file) => !isOsmPbfFileName(file.name));
+        const cloudFiles = allFiles.filter((file) => isPointCloudFileName(file.name));
+        const otherFiles = allFiles.filter(
+          (file) => !isOsmPbfFileName(file.name) && !isPointCloudFileName(file.name),
+        );
+        await addPointClouds(cloudFiles.map((file) => ({ name: file.name, data: file })));
 
         for (const file of pbfFiles) {
           // Mirror the file-picker path's large-file guard (parsing a huge
@@ -465,10 +516,13 @@ export function useFileDrop({
             importedLayers.length > 0 ||
             rasterCount > 0 ||
             containers.layerCount > 0 ||
-            (pbfFiles.length === 0 && photoResult === null && containers.count === 0)
+            (pbfFiles.length === 0 &&
+              cloudFiles.length === 0 &&
+              photoResult === null &&
+              containers.count === 0)
           ) {
             finishDrop(importedLayers, rasterCount, containers.layerCount);
-          } else if (pbfFiles.length === 0 && photoResult === null) {
+          } else if (pbfFiles.length === 0 && cloudFiles.length === 0 && photoResult === null) {
             setDropMessage(null);
           }
         }
@@ -480,6 +534,7 @@ export function useFileDrop({
       }
     },
     [
+      addPointClouds,
       clearDropMessageLater,
       finishDrop,
       addDroppedRasters,
