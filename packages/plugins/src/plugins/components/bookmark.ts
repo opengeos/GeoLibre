@@ -125,6 +125,12 @@ const BOOKMARK_OPTIONS = {
  * migrate them into the first project that has none of its own.
  */
 export const LEGACY_BOOKMARK_STORAGE_KEY = "geolibre-bookmarks";
+/**
+ * Set once the legacy bookmarks were copied into a project. The legacy data
+ * itself is left in place, so bookmarks moved into the wrong project can still
+ * be recovered from this browser's storage.
+ */
+export const LEGACY_BOOKMARKS_MIGRATED_KEY = "geolibre-bookmarks-migrated";
 
 /** Control events after which its bookmarks or folders may have changed. */
 const BOOKMARK_CHANGE_EVENTS: readonly BookmarkEvent[] = [
@@ -256,14 +262,16 @@ function copyGroups(
 }
 
 /**
- * Move bookmarks saved by older versions (in this browser's localStorage) into
- * the open project, once, when the project has none of its own. The legacy
- * key is removed after a successful move so they are not copied into every
- * project opened afterwards.
+ * Copy bookmarks saved by older versions (in this browser's localStorage) into
+ * the open project, once, when the project has none of its own. A marker key
+ * records the copy so they are not copied into every project opened
+ * afterwards; the legacy data stays, so nothing is lost if they landed in the
+ * wrong project.
  */
 function migrateLegacyBookmarks(): void {
   let raw: string | null = null;
   try {
+    if (localStorage.getItem(LEGACY_BOOKMARKS_MIGRATED_KEY)) return;
     raw = localStorage.getItem(LEGACY_BOOKMARK_STORAGE_KEY);
   } catch {
     return;
@@ -286,7 +294,7 @@ function migrateLegacyBookmarks(): void {
   if (bookmarks.length === 0 && groups.length === 0) return;
   state.setBookmarks(bookmarks, groups);
   try {
-    localStorage.removeItem(LEGACY_BOOKMARK_STORAGE_KEY);
+    localStorage.setItem(LEGACY_BOOKMARKS_MIGRATED_KEY, new Date().toISOString());
   } catch {
     // Keep going: the bookmarks are in the project now either way.
   }

@@ -2112,9 +2112,16 @@ def add_bookmark(
         The bookmark that was added.
 
     Raises:
-        ValueError: If a value is invalid, a layer does not resolve, or
-            ``bookmark_id`` is already used.
+        ValueError: If a value is invalid, a layer does not resolve,
+            ``bookmark_id`` is already used, or the project already holds
+            :data:`geolibre.project.MAX_BOOKMARKS` bookmarks.
     """
+    existing = [b for b in project.get("bookmarks") or [] if isinstance(b, dict)]
+    if len(existing) >= _project.MAX_BOOKMARKS:
+        raise ValueError(
+            f"the project already has {len(existing)} bookmarks, the most the app keeps "
+            f"({_project.MAX_BOOKMARKS}); remove one first"
+        )
     view = project.get("mapView") if isinstance(project.get("mapView"), dict) else {}
     existing_folders = [f for f in project.get("bookmarkGroups") or [] if isinstance(f, dict)]
     new_folder: dict[str, Any] | None = None

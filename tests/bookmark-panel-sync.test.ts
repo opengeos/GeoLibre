@@ -182,7 +182,15 @@ describe("Bookmarks panel and the project", () => {
       ["old"],
     );
     assert.equal(useAppStore.getState().bookmarkGroups[0].name, "Legacy");
-    assert.equal(storage.has("geolibre-bookmarks"), false);
+    // The legacy data is kept (recoverable); a marker stops a second copy.
+    assert.equal(storage.has("geolibre-bookmarks"), true);
+    assert.ok(storage.get("geolibre-bookmarks-migrated"));
+
+    closeBookmarkPanel(app);
+    useAppStore.getState().newProject();
+    openBookmarkPanel(app);
+    await tick();
+    assert.deepEqual(useAppStore.getState().bookmarks, [], "not copied into a second project");
   });
 
   it("leaves legacy bookmarks alone when the project already has its own", async () => {

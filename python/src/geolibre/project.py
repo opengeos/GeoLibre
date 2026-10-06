@@ -3814,6 +3814,11 @@ def story_chapter(
     return chapter
 
 
+#: Bookmarks the app keeps per project (``MAX_PROJECT_BOOKMARKS`` in project.ts);
+#: any past this are dropped when the project is opened.
+MAX_BOOKMARKS = 500
+
+
 def bookmark_folder(
     name: str, *, collapsed: bool = False, folder_id: str | None = None
 ) -> dict[str, Any]:

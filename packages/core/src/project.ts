@@ -1291,9 +1291,9 @@ export function normalizeBookmarks(
       bearing,
       createdAt: finite(entry.createdAt) ?? 0,
     };
-    if (typeof entry.groupId === "string" && groupIds.has(entry.groupId)) {
-      bookmark.groupId = entry.groupId;
-    }
+    // Folder ids are trimmed, so compare a trimmed groupId with them.
+    const groupId = typeof entry.groupId === "string" ? entry.groupId.trim() : "";
+    if (groupId && groupIds.has(groupId)) bookmark.groupId = groupId;
     if (entry.extra && typeof entry.extra === "object" && !Array.isArray(entry.extra)) {
       bookmark.extra = entry.extra as Record<string, unknown>;
     }

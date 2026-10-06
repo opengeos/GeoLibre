@@ -62,6 +62,12 @@ describe("normalizeBookmarks", () => {
     assert.deepEqual(bookmarks[0].extra, { visibleLayerIds: ["roads"] });
     assert.equal("groupId" in bookmarks[1], false);
   });
+
+  it("matches a groupId to its folder despite surrounding spaces", () => {
+    const groups = normalizeBookmarkGroups([{ id: " g1 ", name: "Parks" }]);
+    const [bookmark] = normalizeBookmarks([view("a", { groupId: " g1 " })], groups);
+    assert.equal(bookmark.groupId, "g1");
+  });
 });
 
 describe("bookmarks in the project file", () => {

@@ -805,3 +805,23 @@ def test_map_add_bookmark_accepts_layer_handles(monkeypatch):
     assert m.project["bookmarks"] == [bookmark]
     m.remove_bookmark("Here")
     assert "bookmarks" not in m.project
+
+
+def test_add_bookmark_refuses_past_the_app_limit(proj):
+    proj["bookmarks"] = [
+        project.bookmark(f"B{i}", center=[0, 0], zoom=1, bookmark_id=f"b{i}", created_at=0)
+        for i in range(project.MAX_BOOKMARKS)
+    ]
+    with pytest.raises(ValueError, match="most the app keeps"):
+        authoring.add_bookmark(proj, "One too many", zoom=1, folder="New")
+    # Refused before anything changed: no folder was created.
+    assert len(proj["bookmarks"]) == project.MAX_BOOKMARKS
+    assert "bookmarkGroups" not in proj
+
+
+@pytest.mark.skipif(not (REPO / "packages").is_dir(), reason="needs the repo sources")
+def test_bookmark_limit_matches_the_app():
+    source = (REPO / "packages" / "core" / "src" / "project.ts").read_text(encoding="utf-8")
+    match = re.search(r"MAX_PROJECT_BOOKMARKS = (\d+);", source)
+    assert match, "MAX_PROJECT_BOOKMARKS not found in project.ts"
+    assert int(match.group(1)) == project.MAX_BOOKMARKS
