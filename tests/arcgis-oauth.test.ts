@@ -4,6 +4,7 @@ import {
   ArcGISAuthError,
   arcgisAuthErrorKey,
   arcgisOAuthEndpoint,
+  defaultArcGISClientId,
   getArcGISAccessToken,
   normalizeArcGISPortalUrl,
   resetArcGISSessions,
@@ -71,6 +72,20 @@ describe("arcgisOAuthEndpoint", () => {
       arcgisOAuthEndpoint(org, "revokeToken").href,
       "https://www.arcgis.com/sharing/rest/oauth2/revokeToken",
     );
+  });
+});
+
+describe("defaultArcGISClientId", () => {
+  const env = { VITE_ARCGIS_OAUTH_CLIENT_ID: " default-id " };
+
+  it("applies to ArcGIS Online and its organization URLs", () => {
+    assert.equal(defaultArcGISClientId("https://www.arcgis.com", env), "default-id");
+    assert.equal(defaultArcGISClientId("https://myorg.maps.arcgis.com", env), "default-id");
+  });
+
+  it("never applies to an Enterprise portal, and is blank when unset", () => {
+    assert.equal(defaultArcGISClientId("https://gis.example.org/portal", env), "");
+    assert.equal(defaultArcGISClientId("https://www.arcgis.com", {}), "");
   });
 });
 

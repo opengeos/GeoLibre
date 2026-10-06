@@ -6,8 +6,10 @@
 // same-origin popup that lands on `oauth-callback.html`; desktop uses the
 // system browser and the app's deep-link callback. Tokens live in memory only,
 // keyed by portal, and are never written to a project or the service library.
-// The OAuth client ID is not a secret and is remembered per portal.
+// The OAuth client ID is not a secret and is remembered per portal. A build can
+// ship a default ArcGIS Online client ID in VITE_ARCGIS_OAUTH_CLIENT_ID.
 
+import { getRuntimeEnvironment } from "@geolibre/core";
 import type { ParseKeys } from "i18next";
 import { create } from "zustand";
 import { isDesktopRuntime } from "./is-mobile";
@@ -148,13 +150,34 @@ export function arcgisOAuthEndpoint(
   return new URL(`${base}/sharing/rest/oauth2/${endpoint}`);
 }
 
-/** The OAuth client ID last used with this portal, or "". */
+/**
+ * The build's default OAuth client ID for an ArcGIS Online portal.
+ *
+ * The default app is registered on ArcGIS Online, so Enterprise portals never
+ * get it. It only works where the app registration lists this origin's
+ * redirect URI, which is why only the web deploy sets it.
+ *
+ * @param portal - A portal base from `normalizeArcGISPortalUrl`.
+ * @param env - Environment record (defaults to the runtime environment); injectable for testing.
+ * @returns The client ID, or "" when unset or the portal is not ArcGIS Online.
+ */
+export function defaultArcGISClientId(
+  portal: string,
+  env: Record<string, string | undefined> = getRuntimeEnvironment(),
+): string {
+  if (portal !== ARCGIS_ONLINE_PORTAL && !isArcGISOnlineOrgPortal(portal)) return "";
+  return env.VITE_ARCGIS_OAUTH_CLIENT_ID?.trim() ?? "";
+}
+
+/** The OAuth client ID last used with this portal, else the build's default, or "". */
 export function loadArcGISClientId(portal: string): string {
+  let stored: string | null = null;
   try {
-    return localStorage.getItem(CLIENT_ID_STORAGE_PREFIX + portal) ?? "";
+    stored = localStorage.getItem(CLIENT_ID_STORAGE_PREFIX + portal);
   } catch {
-    return "";
+    // Storage unavailable: fall through to the default.
   }
+  return stored || defaultArcGISClientId(portal);
 }
 
 function saveArcGISClientId(portal: string, clientId: string): void {

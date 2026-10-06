@@ -104,6 +104,12 @@ jobs:
           # No GEOLIBRE_APP_BASE: this site is served from the root of its own
           # domain, unlike the /demo/ copy published by pages.yml.
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          # Default ArcGIS Online OAuth client ID for "Sign in with ArcGIS", so
+          # visitors need not register their own. Public by design (PKCE, no
+          # secret). Its app registration must list this site's redirect URI
+          # (https://web.geolibre.app/oauth-callback.html), which is why the
+          # other web builds do not set it.
+          VITE_ARCGIS_OAUTH_CLIENT_ID: ${{ secrets.VITE_ARCGIS_OAUTH_CLIENT_ID || vars.VITE_ARCGIS_OAUTH_CLIENT_ID }}
           VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}

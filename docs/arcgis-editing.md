@@ -60,6 +60,13 @@ identity-provider credentials, and the layer is added with your own permissions.
 3. Paste the application's client ID and select **Sign in**. The client ID is
    not a secret and is remembered per portal.
 
+A build can ship a default ArcGIS Online client ID in the
+`VITE_ARCGIS_OAUTH_CLIENT_ID` build variable; the hosted web app at
+`web.geolibre.app` does, so its users can skip step 1. The field is prefilled
+for ArcGIS Online and organization URLs only, and a client ID the user enters
+replaces it. The default only works where its app registration lists that
+build's redirect URI, so set it only for an origin you have registered.
+
 The session is held in memory for the running app and shared by every ArcGIS
 layer from the same portal. The access token (about 30 minutes) is renewed from
 the refresh token, including for saving edits and refreshing layers. If it cannot
