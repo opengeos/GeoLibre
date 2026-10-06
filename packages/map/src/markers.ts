@@ -1,5 +1,7 @@
 import {
   drawMarkerPath,
+  isRasterMarkerSource,
+  isSvgMarkerResponse,
   normalizeHexColor,
   proportionalSizeRange,
   styleValue,
@@ -22,7 +24,10 @@ const MIN_MARKER_SIZE = 6;
 const MAX_MARKER_SIZE = 96;
 const MAX_SVG_SOURCE_CACHE = 64;
 export const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
-const svgSourceCache = new Map<string, Promise<string | null>>();
+// A remote source whose response is not SVG text (a PNG, JPEG, GIF, ...): the
+// Image loads the URL itself, since there are no color parameters to resolve.
+const RASTER_SOURCE = Symbol("raster-marker-source");
+const svgSourceCache = new Map<string, Promise<string | typeof RASTER_SOURCE | null>>();
 // The expression heads whose outputs markerImageValue rewrites into sprite ids.
 const COLOR_BRANCH_HEADS: ReadonlySet<string> = new Set(["match", "step", "case"]);
 
@@ -103,14 +108,45 @@ function replaceSvgColorParameters(markup: string, color: string): string {
     .replace(/param\(outline-width\)/gi, "0");
 }
 
-async function colorizedSvgSource(markup: string, color: string): Promise<string | null> {
+/**
+ * Fetch a remote or `data:` marker source: its text when the response is SVG,
+ * {@link RASTER_SOURCE} when it is another image type, `null` on an HTTP error.
+ */
+async function fetchMarkerSource(url: string): Promise<string | typeof RASTER_SOURCE | null> {
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  if (isSvgMarkerResponse(url, response.headers.get("content-type"))) return response.text();
+  // The Image downloads the URL itself; drop this body unread.
+  response.body?.cancel().catch(() => undefined);
+  return RASTER_SOURCE;
+}
+
+/** An `Image.src` for a custom marker, and whether it is a raster image. */
+interface MarkerImageSource {
+  src: string;
+  raster: boolean;
+}
+
+/**
+ * Resolve a custom marker to an `Image.src`, substituting the QGIS color
+ * parameters of an SVG source. Remote and `data:` SVG is fetched as text for
+ * that; a raster source (by URL, or by the content type a remote URL answers
+ * with) is passed through unchanged, because reading a PNG as text yields
+ * garbage that resolves to no marker at all.
+ */
+async function colorizedMarkerSource(
+  markup: string,
+  color: string,
+): Promise<MarkerImageSource | null> {
+  if (isRasterMarkerSource(markup)) {
+    const src = resolveSvgSource(markup);
+    return src ? { src, raster: true } : null;
+  }
   let sourceMarkup = markup;
   if (/^(?:https?:|data:image\/svg\+xml)/i.test(markup)) {
     let pending = svgSourceCache.get(markup);
     if (!pending) {
-      pending = fetch(markup)
-        .then((response) => (response.ok ? response.text() : null))
-        .catch(() => null);
+      pending = fetchMarkerSource(markup).catch(() => null);
       if (svgSourceCache.size >= MAX_SVG_SOURCE_CACHE) {
         const oldest = svgSourceCache.keys().next().value;
         if (oldest !== undefined) svgSourceCache.delete(oldest);
@@ -118,6 +154,10 @@ async function colorizedSvgSource(markup: string, color: string): Promise<string
       svgSourceCache.set(markup, pending);
     }
     const fetched = await pending;
+    if (fetched === RASTER_SOURCE) {
+      const src = resolveSvgSource(markup);
+      return src ? { src, raster: true } : null;
+    }
     if (fetched !== null) {
       sourceMarkup = fetched;
     } else {
@@ -132,7 +172,26 @@ async function colorizedSvgSource(markup: string, color: string): Promise<string
       // resolved without access to the SVG text.
     }
   }
-  return resolveSvgSource(replaceSvgColorParameters(sourceMarkup, color));
+  const src = resolveSvgSource(replaceSvgColorParameters(sourceMarkup, color));
+  return src ? { src, raster: false } : null;
+}
+
+/**
+ * Where to draw an image inside a square `px` canvas. SVG keeps filling the
+ * square as before; a raster image is fitted inside it, centered, so a
+ * non-square PNG or photo keeps its aspect ratio instead of being squashed.
+ */
+function markerDrawRect(
+  image: HTMLImageElement,
+  px: number,
+  raster: boolean,
+): [number, number, number, number] {
+  const { naturalWidth: width, naturalHeight: height } = image;
+  if (!raster || width <= 0 || height <= 0 || width === height) return [0, 0, px, px];
+  const scale = px / Math.max(width, height);
+  const drawWidth = width * scale;
+  const drawHeight = height * scale;
+  return [(px - drawWidth) / 2, (px - drawHeight) / 2, drawWidth, drawHeight];
 }
 
 async function loadSvgMarker(
@@ -140,8 +199,8 @@ async function loadSvgMarker(
   color: string,
   size: number,
 ): Promise<GeneratedImageResult | null> {
-  const src = await colorizedSvgSource(markup, color);
-  if (!src) return Promise.resolve(null);
+  const source = await colorizedMarkerSource(markup, color);
+  if (!source) return Promise.resolve(null);
   const ratio = MARKER_PIXEL_RATIO;
   const px = size * ratio;
   return new Promise((resolve) => {
@@ -163,7 +222,8 @@ async function loadSvgMarker(
       }
       try {
         ctx.clearRect(0, 0, px, px);
-        ctx.drawImage(image, 0, 0, px, px);
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(image, ...markerDrawRect(image, px, source.raster));
         resolve({ image: ctx.getImageData(0, 0, px, px), pixelRatio: ratio });
       } catch {
         // A cross-origin source without CORS headers taints the canvas, so
@@ -172,7 +232,7 @@ async function loadSvgMarker(
       }
     };
     image.onerror = () => resolve(null);
-    image.src = src;
+    image.src = source.src;
   });
 }
 
@@ -253,7 +313,10 @@ export function prepareMarker(style: LayerStyle, colorOverride?: string): string
     const markup = styleValue(style, "markerSvg").trim();
     if (!markup) return null;
     const color = colorOverride ?? markerColor(style);
-    const id = `geolibre-marker-svg-${hashText(`${markup}\0${color}`)}-${size}`;
+    // A raster image ignores the color, so every class shares one sprite
+    // instead of baking an identical copy per class color.
+    const key = isRasterMarkerSource(markup) ? markup : `${markup}\0${color}`;
+    const id = `geolibre-marker-svg-${hashText(key)}-${size}`;
     // Capture the markup in the factory closure so the lazy generator never
     // depends on a separate, evictable cache (which could blank the marker).
     registerGeneratedImage(id, () => loadSvgMarker(markup, color, size));

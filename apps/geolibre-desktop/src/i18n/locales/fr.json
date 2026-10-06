@@ -7553,7 +7553,7 @@
       "markerShape": "Forme du marqueur",
       "markerColor": "Couleur du marqueur",
       "markerSize": "Taille du marqueur (px)",
-      "markerSvg": "SVG du marqueur",
+      "markerSvg": "Image du marqueur",
       "markerShapes": {
         "circle": "Cercle",
         "square": "Carré",
@@ -7562,7 +7562,7 @@
         "star": "Étoile",
         "cross": "Croix",
         "pin": "Épingle",
-        "custom": "SVG personnalisé"
+        "custom": "Image personnalisée"
       },
       "fillPatterns": {
         "none": "Aucun (remplissage uni)",

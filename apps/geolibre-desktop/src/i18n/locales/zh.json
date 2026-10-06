@@ -7465,7 +7465,7 @@
       "markerShape": "标记形状",
       "markerColor": "标记颜色",
       "markerSize": "标记大小 (px)",
-      "markerSvg": "标记 SVG",
+      "markerSvg": "标记图像",
       "markerShapes": {
         "circle": "圆形",
         "square": "方形",
@@ -7474,7 +7474,7 @@
         "star": "星形",
         "cross": "十字形",
         "pin": "图钉",
-        "custom": "自定义 SVG"
+        "custom": "自定义图像"
       },
       "fillPatterns": {
         "none": "无（纯色填充）",

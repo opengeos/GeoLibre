@@ -7465,7 +7465,7 @@
       "markerShape": "마커 모양",
       "markerColor": "마커 색상",
       "markerSize": "마커 크기(px)",
-      "markerSvg": "마커 SVG",
+      "markerSvg": "마커 이미지",
       "markerShapes": {
         "circle": "원",
         "square": "사각형",
@@ -7474,7 +7474,7 @@
         "star": "별",
         "cross": "십자",
         "pin": "핀",
-        "custom": "사용자 지정 SVG"
+        "custom": "사용자 지정 이미지"
       },
       "fillPatterns": {
         "none": "없음(단색 채우기)",

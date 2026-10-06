@@ -7553,7 +7553,7 @@
       "markerShape": "Markeringsvorm",
       "markerColor": "Markeringskleur",
       "markerSize": "Markeringsgrootte (px)",
-      "markerSvg": "Markerings-SVG",
+      "markerSvg": "Markeringsafbeelding",
       "markerShapes": {
         "circle": "Cirkel",
         "square": "Vierkant",
@@ -7562,7 +7562,7 @@
         "star": "Ster",
         "cross": "Kruis",
         "pin": "Speldje",
-        "custom": "Aangepaste SVG"
+        "custom": "Aangepaste afbeelding"
       },
       "fillPatterns": {
         "none": "Geen (effen vulling)",

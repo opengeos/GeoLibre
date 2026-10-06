@@ -7553,7 +7553,7 @@
       "markerShape": "मार्कर आकृति",
       "markerColor": "मार्कर रंग",
       "markerSize": "मार्कर आकार (px)",
-      "markerSvg": "मार्कर SVG",
+      "markerSvg": "मार्कर छवि",
       "markerShapes": {
         "circle": "वृत्त",
         "square": "वर्ग",
@@ -7562,7 +7562,7 @@
         "star": "तारा",
         "cross": "क्रॉस",
         "pin": "पिन",
-        "custom": "कस्टम SVG"
+        "custom": "कस्टम छवि"
       },
       "fillPatterns": {
         "none": "कोई नहीं (ठोस फ़िल)",

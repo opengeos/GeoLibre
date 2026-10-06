@@ -7553,7 +7553,7 @@
       "markerShape": "Forma del marcador",
       "markerColor": "Color del marcador",
       "markerSize": "Tamaño del marcador (px)",
-      "markerSvg": "SVG del marcador",
+      "markerSvg": "Imagen del marcador",
       "markerShapes": {
         "circle": "Círculo",
         "square": "Cuadrado",
@@ -7562,7 +7562,7 @@
         "star": "Estrella",
         "cross": "Cruz",
         "pin": "Pin",
-        "custom": "SVG personalizado"
+        "custom": "Imagen personalizada"
       },
       "fillPatterns": {
         "none": "Ninguno (relleno sólido)",

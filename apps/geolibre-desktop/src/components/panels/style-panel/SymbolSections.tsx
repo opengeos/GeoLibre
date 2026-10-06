@@ -1,4 +1,5 @@
 import {
+  isRasterMarkerSource,
   styleValue,
   useAppStore,
   type FillPattern,
@@ -6,9 +7,12 @@ import {
   type LineDecoration,
   type MarkerShape,
 } from "@geolibre/core";
-import { ColorField, Label, Select } from "@geolibre/ui";
+import { Button, ColorField, Label, Select } from "@geolibre/ui";
 import type { ParseKeys } from "i18next";
+import { ImageUp } from "lucide-react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { MARKER_IMAGE_ACCEPT, readMarkerImageFile } from "../../../lib/marker-image";
 import { NumericStyleInput } from "./style-inputs";
 
 const MARKER_SHAPE_OPTIONS: ReadonlyArray<{
@@ -133,7 +137,7 @@ export function FillPatternSection({ layer, supportsDerivedGeometry }: FillPatte
 }
 
 /**
- * Point marker icon controls: shape gallery, color, size and custom SVG.
+ * Point marker icon controls: shape gallery, color, size and custom image.
  *
  * @param props - The layer being styled.
  * @returns The marker section.
@@ -211,20 +215,82 @@ export function MarkerSection({ layer }: { layer: GeoLibreLayer }) {
             value={styleValue(style, "markerSize")}
             onChange={(markerSize) => setLayerStyle(layer.id, { markerSize })}
           />
-          {markerShape === "custom" ? (
-            <div className="space-y-2">
-              <Label htmlFor="markerSvg">{t("style.symbology.markerSvg")}</Label>
-              <textarea
-                id="markerSvg"
-                className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
-                placeholder={t("style.symbology.svgPlaceholder")}
-                value={styleValue(style, "markerSvg")}
-                onChange={(event) => setLayerStyle(layer.id, { markerSvg: event.target.value })}
-              />
-            </div>
-          ) : null}
+          {markerShape === "custom" ? <CustomMarkerImageField layer={layer} /> : null}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * The custom marker source: a text box for SVG markup or a URL, plus an upload
+ * button that reads an SVG as markup or a PNG/JPEG/GIF as a downscaled data
+ * URL. A raster image cannot be recolored, so a hint says so.
+ *
+ * @param props - The layer being styled.
+ * @returns The custom marker image field.
+ */
+function CustomMarkerImageField({ layer }: { layer: GeoLibreLayer }) {
+  const { t } = useTranslation();
+  const setLayerStyle = useAppStore((s) => s.setLayerStyle);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadError, setUploadError] = useState(false);
+  const markerSvg = styleValue(layer.style, "markerSvg");
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const markup = await readMarkerImageFile(file);
+      setUploadError(false);
+      setLayerStyle(layer.id, { markerSvg: markup });
+    } catch {
+      setUploadError(true);
+    }
+  };
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor="markerSvg">{t("style.symbology.markerSvg")}</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <ImageUp className="h-3.5 w-3.5" aria-hidden="true" />
+          {t("style.symbology.uploadMarkerImage")}
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={MARKER_IMAGE_ACCEPT}
+          className="hidden"
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={(event) => {
+            void handleFile(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+      </div>
+      <textarea
+        id="markerSvg"
+        className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+        placeholder={t("style.symbology.markerImagePlaceholder")}
+        value={markerSvg}
+        onChange={(event) => {
+          setUploadError(false);
+          setLayerStyle(layer.id, { markerSvg: event.target.value });
+        }}
+      />
+      {uploadError ? (
+        <p role="alert" className="text-xs text-destructive">
+          {t("style.symbology.markerImageUploadError")}
+        </p>
+      ) : null}
+      {isRasterMarkerSource(markerSvg) ? (
+        <p className="text-xs text-muted-foreground">{t("style.symbology.rasterMarkerHint")}</p>
+      ) : null}
     </div>
   );
 }

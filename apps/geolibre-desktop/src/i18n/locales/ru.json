@@ -7729,7 +7729,7 @@
       "markerShape": "Форма маркера",
       "markerColor": "Цвет маркера",
       "markerSize": "Размер маркера (px)",
-      "markerSvg": "Маркер SVG",
+      "markerSvg": "Изображение маркера",
       "markerShapes": {
         "circle": "Круг",
         "square": "Квадрат",
@@ -7738,7 +7738,7 @@
         "star": "Звезда",
         "cross": "Крест",
         "pin": "Булавка",
-        "custom": "Пользовательский SVG"
+        "custom": "Пользовательское изображение"
       },
       "fillPatterns": {
         "none": "Нет (сплошная заливка)",

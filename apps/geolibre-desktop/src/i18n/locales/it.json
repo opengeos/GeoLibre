@@ -7553,7 +7553,7 @@
       "markerShape": "Forma marcatore",
       "markerColor": "Colore marcatore",
       "markerSize": "Dimensione marcatore (px)",
-      "markerSvg": "SVG marcatore",
+      "markerSvg": "Immagine marcatore",
       "markerShapes": {
         "circle": "Cerchio",
         "square": "Quadrato",
@@ -7562,7 +7562,7 @@
         "star": "Stella",
         "cross": "Croce",
         "pin": "Segnaposto",
-        "custom": "SVG personalizzato"
+        "custom": "Immagine personalizzata"
       },
       "fillPatterns": {
         "none": "Nessuno (riempimento pieno)",

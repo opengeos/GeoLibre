@@ -7714,7 +7714,11 @@
       "markerShape": "Marker shape",
       "markerColor": "Marker color",
       "markerSize": "Marker size (px)",
-      "markerSvg": "Marker SVG",
+      "markerSvg": "Marker image",
+      "markerImagePlaceholder": "<svg xmlns='http://www.w3.org/2000/svg' ...>…</svg>, or a data/https URL to an SVG, PNG, JPEG, or GIF",
+      "uploadMarkerImage": "Upload image…",
+      "markerImageUploadError": "That file could not be read as an SVG, PNG, JPEG, or GIF image.",
+      "rasterMarkerHint": "Raster images draw as they are: the marker color and the per-class colors of categorized, graduated, and rule-based styles apply only to SVG markers. An animated GIF shows its first frame.",
       "markerShapes": {
         "circle": "Circle",
         "square": "Square",
@@ -7723,7 +7727,7 @@
         "star": "Star",
         "cross": "Cross",
         "pin": "Pin",
-        "custom": "Custom SVG"
+        "custom": "Custom image"
       },
       "fillPatterns": {
         "none": "None (solid fill)",

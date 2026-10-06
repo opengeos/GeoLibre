@@ -7553,7 +7553,7 @@
       "markerShape": "Marker-Form",
       "markerColor": "Marker-Farbe",
       "markerSize": "Marker-Größe (px)",
-      "markerSvg": "Marker-SVG",
+      "markerSvg": "Marker-Bild",
       "markerShapes": {
         "circle": "Kreis",
         "square": "Quadrat",
@@ -7562,7 +7562,7 @@
         "star": "Stern",
         "cross": "Kreuz",
         "pin": "Stecknadel",
-        "custom": "Benutzerdefiniertes SVG"
+        "custom": "Benutzerdefiniertes Bild"
       },
       "fillPatterns": {
         "none": "Keins (Volltonfüllung)",

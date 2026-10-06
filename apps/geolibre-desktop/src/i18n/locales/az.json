@@ -7617,7 +7617,7 @@
       "markerShape": "Markerin forması",
       "markerColor": "Markerin rəngi",
       "markerSize": "Markerin ölçüsü (px)",
-      "markerSvg": "Marker SVG-si",
+      "markerSvg": "Marker şəkli",
       "markerShapes": {
         "circle": "Dairə",
         "square": "Kvadrat",
@@ -7626,7 +7626,7 @@
         "star": "Ulduz",
         "cross": "Xaç",
         "pin": "Sancaq",
-        "custom": "Fərdi SVG"
+        "custom": "Fərdi şəkil"
       },
       "fillPatterns": {
         "none": "Yoxdur (bütöv doldurma)",

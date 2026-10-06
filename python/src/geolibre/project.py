@@ -1263,7 +1263,8 @@ def marker_style(
         stroke_width: Outline width in pixels.
         shape: One of :data:`MARKER_SHAPES`. Switches to sprite rendering.
         size: Sprite size in pixels. Switches to sprite rendering.
-        icon: Raw SVG markup (or a data URL) for a ``"custom"`` sprite.
+        icon: Raw SVG markup, or a data/https URL to an SVG, PNG, JPEG, or
+            GIF image, for a ``"custom"`` sprite. Only SVG takes ``color``.
             Switches to sprite rendering and implies ``shape="custom"``.
 
     Returns:

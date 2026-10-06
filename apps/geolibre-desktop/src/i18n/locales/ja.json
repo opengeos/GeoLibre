@@ -7465,7 +7465,7 @@
       "markerShape": "マーカーの形状",
       "markerColor": "マーカーの色",
       "markerSize": "マーカーサイズ (px)",
-      "markerSvg": "マーカーSVG",
+      "markerSvg": "マーカー画像",
       "markerShapes": {
         "circle": "円",
         "square": "四角",
@@ -7474,7 +7474,7 @@
         "star": "星",
         "cross": "十字",
         "pin": "ピン",
-        "custom": "カスタムSVG"
+        "custom": "カスタム画像"
       },
       "fillPatterns": {
         "none": "なし (べた塗り)",

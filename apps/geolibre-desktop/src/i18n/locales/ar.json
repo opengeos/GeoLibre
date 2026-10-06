@@ -7904,7 +7904,7 @@
       "markerShape": "شكل العلامة",
       "markerColor": "لون العلامة",
       "markerSize": "حجم العلامة (بكسل)",
-      "markerSvg": "علامة SVG",
+      "markerSvg": "صورة العلامة",
       "markerShapes": {
         "circle": "دائرة",
         "square": "مربع",
@@ -7913,7 +7913,7 @@
         "star": "نجمة",
         "cross": "صليب",
         "pin": "دبوس",
-        "custom": "SVG مخصص"
+        "custom": "صورة مخصصة"
       },
       "fillPatterns": {
         "none": "بدون (تعبئة مصمتة)",
