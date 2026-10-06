@@ -410,10 +410,13 @@ function geometricIntervalClassBreaks(sorted: number[], count: number): number[]
   const max = sorted[sorted.length - 1];
   const lowest = sorted.find((value) => value > 0);
   if (lowest === undefined) return null;
-  const ratio = Math.pow(max / lowest, 1 / count);
+  // Step in log space: `max / lowest` overflows to Infinity for samples
+  // spanning more than ~308 orders of magnitude, while the logs stay finite.
+  const logLowest = Math.log(lowest);
+  const logStep = (Math.log(max) - logLowest) / count;
   return [
     sorted[0],
-    ...Array.from({ length: count - 1 }, (_, index) => lowest * Math.pow(ratio, index + 1)),
+    ...Array.from({ length: count - 1 }, (_, index) => Math.exp(logLowest + logStep * (index + 1))),
   ];
 }
 

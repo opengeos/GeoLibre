@@ -133,6 +133,13 @@ describe("createGraduatedClassBreaks", () => {
     });
   });
 
+  it("keeps geometric breaks finite across extreme ranges", () => {
+    const breaks = createGraduatedClassBreaks([1e-200, 1e200], 4, "geometric-interval");
+    assert.equal(breaks.length, 4);
+    assert.ok(breaks.every(Number.isFinite), breaks.join(", "));
+    assert.ok(Math.abs(breaks[2] / 1 - 1) < 1e-9, breaks.join(", "));
+  });
+
   it("starts the geometric series at the smallest positive value", () => {
     // Zero and negative values cannot seed a geometric series; they land in the
     // first class, which still opens at the sample minimum.

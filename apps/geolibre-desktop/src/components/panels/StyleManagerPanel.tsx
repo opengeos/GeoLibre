@@ -431,9 +431,10 @@ export function StyleManagerPanel() {
         const storedScheme =
           patch.vectorStyleClassificationScheme ??
           styleValue(layer.style, "vectorStyleClassificationScheme");
-        // Hand-edited ("manual") breaks are replaced here, so record the scheme
-        // that produced the new ones.
-        const scheme = regeneratingClassificationScheme(storedScheme);
+        // Hand-edited ("manual") graduated breaks are replaced here, so record
+        // the scheme that produced the new ones. Categorized layers keep theirs.
+        const scheme =
+          mode === "graduated" ? regeneratingClassificationScheme(storedScheme) : storedScheme;
         if (scheme !== storedScheme) patch.vectorStyleClassificationScheme = scheme;
         const stops =
           mode === "graduated"
