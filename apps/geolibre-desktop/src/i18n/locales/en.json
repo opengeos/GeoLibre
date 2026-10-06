@@ -7767,6 +7767,9 @@
       "schemeEqualInterval": "Equal interval",
       "schemeQuantile": "Quantile",
       "schemeNaturalBreaks": "Natural breaks",
+      "schemeStandardDeviation": "Standard deviation",
+      "schemeGeometricInterval": "Geometric interval",
+      "schemeManual": "Manual",
       "schemeTopValues": "Most frequent",
       "schemeAlphabetical": "Alphabetical",
       "schemeFirstValues": "First values",
@@ -8635,7 +8638,9 @@
     "expandEntry": "Expand section",
     "collapsePanel": "Collapse legend",
     "expandPanel": "Expand legend",
-    "exportJson": "Export as JSON"
+    "exportJson": "Export as JSON",
+    "classification_one": "{{method}}, {{count}} class",
+    "classification_other": "{{method}}, {{count}} classes"
   },
   "errorBoundary": {
     "title": "Something went wrong",

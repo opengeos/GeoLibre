@@ -30,7 +30,36 @@ export const GRADUATED_CLASSIFICATION_SCHEMES: ReadonlyArray<{
   { value: "equal-interval", labelKey: "style.symbology.schemeEqualInterval" },
   { value: "quantile", labelKey: "style.symbology.schemeQuantile" },
   { value: "natural-breaks", labelKey: "style.symbology.schemeNaturalBreaks" },
+  { value: "standard-deviation", labelKey: "style.symbology.schemeStandardDeviation" },
+  { value: "geometric-interval", labelKey: "style.symbology.schemeGeometricInterval" },
+  { value: "manual", labelKey: "style.symbology.schemeManual" },
 ];
+
+/**
+ * The graduated scheme recorded once the user edits, adds or removes a class
+ * break by hand, so the legend never names a method that did not produce the
+ * breaks on the map. It computes no breaks itself: regenerating from it (a new
+ * class count, ramp or attribute) classifies by equal interval.
+ */
+export const MANUAL_CLASSIFICATION_SCHEME = "manual";
+
+/**
+ * The scheme to compute breaks with for a stored scheme, and the scheme to
+ * record once those breaks replace the current ones. Only "manual" differs.
+ */
+export function regeneratingClassificationScheme(scheme: string): string {
+  return scheme === MANUAL_CLASSIFICATION_SCHEME ? "equal-interval" : scheme;
+}
+
+/**
+ * The i18n label key of a graduated layer's classification scheme, or null
+ * when the scheme is not one the Style panel offers.
+ */
+export function graduatedSchemeLabelKey(scheme: string): ParseKeys | null {
+  return (
+    GRADUATED_CLASSIFICATION_SCHEMES.find((option) => option.value === scheme)?.labelKey ?? null
+  );
+}
 
 export const CATEGORIZED_CLASSIFICATION_SCHEMES: ReadonlyArray<{
   value: string;

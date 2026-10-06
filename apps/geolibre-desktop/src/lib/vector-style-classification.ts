@@ -96,8 +96,8 @@ export function createGraduatedStops(
 
   // The breaks are class lower bounds, so `count` classes give `count` stops
   // and the top class is open-ended above (see createGraduatedClassBreaks).
-  // normalizeClassificationScheme keeps the scheme to the three known values;
-  // anything else classifies as equal interval, as it did before.
+  // normalizeClassificationScheme keeps the scheme to the known values; anything
+  // else (including the Style panel's "manual") classifies as equal interval.
   const breaks = createGraduatedClassBreaks(
     values,
     count,

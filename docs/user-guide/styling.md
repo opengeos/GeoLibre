@@ -44,10 +44,18 @@ Graduated and categorized styles share four more controls, and then list the gen
 
 - **Attribute** — the field the style reads.
 - **Classes** — 2 to 12 classes for a graduated style; 1 to 12 for a categorized one, plus an **All (n)** option that gives every distinct value its own colour.
-- **Scheme** — how the stops are chosen. Graduated offers **Equal interval**, **Quantile**, and **Natural breaks**; categorized offers **Most frequent**, **Alphabetical**, and **First values**.
+- **Scheme** — how the stops are chosen. Graduated offers **Equal interval**, **Quantile**, **Natural breaks**, **Standard deviation**, **Geometric interval**, and **Manual**; categorized offers **Most frequent**, **Alphabetical**, and **First values**.
 - **Colormap** — the named colour ramp the classes are drawn from.
 
 Nothing reaches the map until you click **Apply style type**, so you can adjust the classification and watch the stop list update first.
+
+The graduated schemes differ in where they put the class breaks:
+
+- **Standard deviation** centres classes one standard deviation wide on the mean, so it shows how far each feature is from average. An even class count puts a break on the mean; an odd count gives a middle class that straddles it. Breaks that would fall outside the data's range are dropped, so you can get fewer classes than you asked for. A diverging colormap suits it.
+- **Geometric interval** grows the breaks by a constant ratio from the smallest positive value to the maximum, which suits skewed data spanning orders of magnitude (population, income, concentrations). Zero and negative values fall into the first class; if no value is positive, it classifies by equal interval instead.
+- **Manual** is set for you as soon as you edit a class value, add a class, or remove one, so the method shown never claims to have produced breaks you typed. Choose it yourself to keep the current breaks while you edit them. Changing the class count, colormap, or attribute regenerates the breaks by equal interval.
+
+The map legend names the method under a graduated layer's field, for example "Quantile, 5 classes", so a reader of an exported or shared map can tell how the classes were built.
 
 ### Diagram symbology
 

@@ -99,6 +99,13 @@ export interface AutoLegendEntry {
   headerSwatch: { color: string; marker?: LegendMarker } | null;
   /** Caption above class rows (the classified attribute), when meaningful. */
   fieldLabel?: string;
+  /**
+   * How a graduated layer's classes were built: the Style panel's scheme id
+   * (e.g. `quantile`, or `manual` for hand-edited breaks) and the number of
+   * classes on the map. The panel localizes it into a caption such as
+   * "Quantile, 5 classes". Absent for every other entry kind.
+   */
+  classification?: AutoLegendClassification;
   rows: AutoLegendRow[];
   gradient: AutoLegendGradient | null;
   /** Compound opacity applied to this entry's swatches. */
@@ -109,6 +116,14 @@ export interface AutoLegendEntry {
   standalone: boolean;
   /** Hidden by a user override; the panel dims it in edit mode. */
   hidden: boolean;
+}
+
+/** The classification method behind a graduated legend entry. */
+export interface AutoLegendClassification {
+  /** The layer's `vectorStyleClassificationScheme`. */
+  scheme: string;
+  /** Number of classes the map draws (the stop count, not the requested count). */
+  classCount: number;
 }
 
 /** Injected environment for {@link buildAutoLegend}. */
@@ -652,6 +667,7 @@ function vectorParts(
   gradient: AutoLegendGradient | null;
   headerSwatch: { color: string; marker?: LegendMarker } | null;
   fieldLabel?: string;
+  classification?: AutoLegendClassification;
 } {
   const style = layer.style;
   const mode = styleValue(style, "vectorStyleMode");
@@ -727,6 +743,14 @@ function vectorParts(
       gradient: null,
       headerSwatch: null,
       fieldLabel: classProperty || undefined,
+      ...(mode === "graduated"
+        ? {
+            classification: {
+              scheme: styleValue(style, "vectorStyleClassificationScheme"),
+              classCount: stops.length,
+            },
+          }
+        : {}),
     };
   }
   if (mode === "rule-based") {
@@ -872,6 +896,7 @@ export function buildAutoLegend(
     let gradient: AutoLegendGradient | null = null;
     let headerSwatch: { color: string; marker?: LegendMarker } | null = null;
     let fieldLabel: string | undefined;
+    let classification: AutoLegendClassification | undefined;
     let defaultName = layer.name;
 
     if (custom) {
@@ -888,6 +913,7 @@ export function buildAutoLegend(
       gradient = parts.gradient;
       headerSwatch = parts.headerSwatch;
       fieldLabel = parts.fieldLabel;
+      classification = parts.classification;
     }
 
     entries.push(
@@ -896,6 +922,7 @@ export function buildAutoLegend(
         custom: Boolean(custom),
         standalone: false,
         opacity: custom ? 1 : entryOpacity(layer),
+        classification,
       }),
     );
   }
@@ -935,7 +962,13 @@ function finishEntry(
   fieldLabel: string | undefined,
   rows: RawRow[],
   gradient: AutoLegendGradient | null,
-  context: { config: LegendConfig; custom: boolean; standalone: boolean; opacity: number },
+  context: {
+    config: LegendConfig;
+    custom: boolean;
+    standalone: boolean;
+    opacity: number;
+    classification?: AutoLegendClassification;
+  },
 ): AutoLegendEntry {
   const { config } = context;
   const entryOverride = config.overrides[id];
@@ -946,6 +979,7 @@ function finishEntry(
     shape,
     headerSwatch,
     ...(fieldLabel ? { fieldLabel } : {}),
+    ...(context.classification ? { classification: context.classification } : {}),
     rows: rows.map((row, index) => {
       const key = legendRowKey(id, index);
       const override = config.overrides[key];

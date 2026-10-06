@@ -276,6 +276,67 @@ describe("buildAutoLegend — vector layers", () => {
     assert.equal(entry.rows[1].shape, "square");
   });
 
+  it("records a graduated layer's classification method and class count", () => {
+    const [graduated, categorized] = buildAutoLegend(
+      [
+        layer({
+          id: "cat",
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "categorized",
+            vectorStyleClassificationScheme: "top-values",
+            vectorStyleStops: [{ value: "a", color: "#111111" }],
+          },
+        }),
+        layer({
+          id: "g",
+          metadata: { geometryType: "polygon" },
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            vectorStyleMode: "graduated",
+            vectorStyleProperty: "population",
+            vectorStyleClassificationScheme: "geometric-interval",
+            // Fewer stops than requested classes: the caption counts what the
+            // map draws, not vectorStyleClassCount.
+            vectorStyleClassCount: 5,
+            vectorStyleStops: [
+              { value: 1, color: "#111111" },
+              { value: 10, color: "#222222" },
+              { value: 100, color: "#333333" },
+            ],
+          },
+        }),
+      ],
+      config(),
+      EN,
+    );
+    assert.deepEqual(graduated.classification, { scheme: "geometric-interval", classCount: 3 });
+    assert.equal(categorized.classification, undefined);
+  });
+
+  it("drops the classification method once the entry is customized", () => {
+    const graduatedLayer = layer({
+      id: "g",
+      metadata: { geometryType: "polygon" },
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "graduated",
+        vectorStyleClassificationScheme: "quantile",
+        vectorStyleStops: [
+          { value: 0, color: "#111111" },
+          { value: 5, color: "#222222" },
+        ],
+      },
+    });
+    const [entry] = buildAutoLegend(
+      [graduatedLayer],
+      config({ customEntries: { g: { items: [{ label: "Low", color: "#111111" }] } } }),
+      EN,
+    );
+    assert.equal(entry.classification, undefined);
+  });
+
   it("renders a categorized layer with value (or stop label) rows", () => {
     const entries = buildAutoLegend(
       [
