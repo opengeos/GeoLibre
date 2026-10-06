@@ -122,8 +122,9 @@ Some layers have options under their own row, saved with the project.
 Public Safety, Aviation / Marine, Traffic / Transit, Music, or Other), matched
 from each station's Radio Browser tags. **Public CCTV Cameras** has **Snapshots
 on map**: by default, snapshots appear only once you zoom in past street level;
-**Always** shows them at every zoom, and **Off** keeps plain markers, with the
-snapshot still in each camera's popup.
+**Always** shows them at any zoom, and **Off** keeps plain markers, with the
+snapshot still in each camera's popup. Either way, cameras load only for a view
+less than 5° across.
 
 Two layers use a key of your own, entered under **API keys** at the bottom of
 the panel. **Live AIS Vessels** streams ship positions from

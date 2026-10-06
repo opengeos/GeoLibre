@@ -365,7 +365,14 @@ function radioStationTags(tags: string): string[] {
   return tags
     .split(",")
     .map((tag) =>
-      tag.trim().toLocaleLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").slice(0, 80),
+      tag
+        .trim()
+        .toLocaleLowerCase()
+        // Separators become spaces so "news/talk" is two words; "&" stays, as
+        // in "r&b".
+        .replace(/[_\-/|.:;()]+/g, " ")
+        .replace(/\s+/g, " ")
+        .slice(0, 80),
     )
     .filter(Boolean);
 }

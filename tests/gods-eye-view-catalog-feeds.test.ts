@@ -47,6 +47,9 @@ describe("God's Eye View catalog feeds", () => {
     assert.equal(radioStationMatchesCategory("ATC,Airport", "aviation-marine"), true);
     assert.equal(radioStationMatchesCategory("classic rock,80s", "music"), true);
     assert.equal(radioStationMatchesCategory("Hip-Hop", "music"), true);
+    assert.equal(radioStationMatchesCategory("news/talk", "news"), true);
+    assert.equal(radioStationMatchesCategory("news/talk", "talk"), true);
+    assert.equal(radioStationMatchesCategory("R&B", "music"), true);
     // Whole words, not substrings: upstream's substring match files these
     // under Public Safety and Aviation / Marine.
     assert.equal(radioStationMatchesCategory("problems", "public-safety"), false);
