@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
   createEmptyProject,
+  createSampleStoryMap,
   DEFAULT_LAYER_STYLE,
+  parseProject,
+  projectFromStore,
+  serializeProject,
   setHistoryCoalesceMs,
   undo,
   useAppStore,
@@ -10,7 +14,10 @@ import {
   type GeoLibreProject,
   type LayerGroup,
 } from "@geolibre/core";
-import { restoreLayerFromSnapshot } from "../apps/geolibre-desktop/src/lib/snapshot-layer-restore";
+import {
+  restoreLayerFromSnapshot,
+  restoreLayerReferencesFromSnapshot,
+} from "../apps/geolibre-desktop/src/lib/snapshot-layer-restore";
 
 function layer(id: string, over: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
   return {
@@ -168,5 +175,164 @@ describe("restoring a layer through the store", () => {
       useAppStore.getState().layers.map((l) => l.id),
       ["b"],
     );
+  });
+});
+
+describe("restoring a deleted layer's references", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject();
+    useAppStore.temporal.getState().clear();
+  });
+
+  // Give layer "a" one of every reference removeLayer scrubs, plus matching
+  // references on "b" that must survive untouched.
+  function seedReferences(): void {
+    const store = useAppStore.getState();
+    store.addLayer(layer("a"));
+    store.addLayer(layer("b"));
+    store.setMapGrid(1, 2);
+    const storymap = createSampleStoryMap();
+    const chapter = storymap.chapters[0];
+    const pane = useAppStore.getState().secondaryMapViews[0];
+    useAppStore.setState({
+      widgets: [
+        { id: "w-a", layerId: "a", type: "histogram", field: "pop" },
+        { id: "w-b", layerId: "b", type: "histogram", field: "pop" },
+      ],
+      comments: [
+        {
+          id: "c-a",
+          anchor: { type: "feature", layerId: "a", featureId: 1 },
+          author: { name: "Ana", color: "#123456" },
+          body: "check this",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          resolved: false,
+          replies: [],
+        },
+      ],
+      legend: {
+        ...useAppStore.getState().legend,
+        order: ["b", "a"],
+        overrides: { a: { label: "Alpha" }, "a::0": { hidden: true } },
+      },
+      storymap: {
+        ...storymap,
+        chapters: [
+          {
+            ...chapter,
+            onChapterEnter: [
+              { id: "row-b", layerId: "b", opacity: 1 },
+              { id: "row-a", layerId: "a", opacity: 0.5 },
+            ],
+          },
+          ...storymap.chapters.slice(1),
+        ],
+      },
+      secondaryMapViews: [{ ...pane, layerVisibility: { a: false, b: true } }],
+      printLayout: {
+        ...useAppStore.getState().printLayout,
+        tableLayerId: "a",
+        showDataTable: true,
+        atlasLayerId: "b",
+        atlasEnabled: true,
+      },
+    });
+  }
+
+  it("brings back exactly what deleting the layer scrubbed", () => {
+    seedReferences();
+    const before = useAppStore.getState();
+    // Read back the way Project History reads a snapshot.
+    const snapshot = parseProject(serializeProject(projectFromStore(before)));
+
+    useAppStore.getState().removeLayer("a");
+    const scrubbed = useAppStore.getState();
+    assert.deepEqual(
+      scrubbed.widgets.map((w) => w.id),
+      ["w-b"],
+      "removeLayer scrubbed the widget (precondition)",
+    );
+
+    const patch = restoreLayerReferencesFromSnapshot(scrubbed, snapshot, "a");
+    const next = { ...scrubbed, ...patch };
+    assert.deepEqual(next.widgets.map((w) => w.id).sort(), ["w-a", "w-b"]);
+    assert.deepEqual(
+      next.comments.map((c) => c.id),
+      ["c-a"],
+    );
+    assert.deepEqual(next.legend.order, before.legend.order);
+    assert.deepEqual(next.legend.overrides, before.legend.overrides);
+    assert.deepEqual(
+      next.storymap!.chapters[0].onChapterEnter.map((row) => row.id),
+      ["row-b", "row-a"],
+    );
+    assert.deepEqual(next.secondaryMapViews[0].layerVisibility, { a: false, b: true });
+    assert.equal(next.printLayout.tableLayerId, "a");
+    assert.equal(next.printLayout.showDataTable, true);
+    assert.equal(next.printLayout.atlasLayerId, "b");
+  });
+
+  it("does not overwrite what the user changed after the delete", () => {
+    seedReferences();
+    const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    useAppStore.getState().removeLayer("a");
+    // Since the delete: the table block now shows "b", the legend order was
+    // reset to the default, and the chapter was deleted.
+    useAppStore.setState((s) => ({
+      printLayout: { ...s.printLayout, tableLayerId: "b", showDataTable: false },
+      legend: { ...s.legend, order: [] },
+      storymap: { ...s.storymap!, chapters: s.storymap!.chapters.slice(1) },
+    }));
+    const state = useAppStore.getState();
+
+    const patch = restoreLayerReferencesFromSnapshot(state, snapshot, "a");
+    assert.equal(patch.printLayout, undefined, "a re-pointed block keeps its layer");
+    assert.deepEqual(
+      patch.legend?.order ?? state.legend.order,
+      [],
+      "a default order stays default",
+    );
+    assert.equal(patch.storymap, undefined, "rows of a deleted chapter do not come back");
+    assert.ok(patch.widgets, "unrelated sections still restore");
+  });
+
+  it("undoes the restore of the layer and its references in one step", () => {
+    seedReferences();
+    const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    useAppStore.getState().removeLayer("a");
+    useAppStore.temporal.getState().clear();
+
+    const state = useAppStore.getState();
+    const layers = restoreLayerFromSnapshot(state, snapshot, "a")!;
+    const references = restoreLayerReferencesFromSnapshot(state, snapshot, "a");
+    useAppStore.setState({ layers, ...references, isDirty: true });
+    assert.ok(useAppStore.getState().widgets.some((w) => w.layerId === "a"));
+
+    undo();
+    const after = useAppStore.getState();
+    assert.equal(
+      after.layers.some((l) => l.id === "a"),
+      false,
+    );
+    assert.equal(
+      after.widgets.some((w) => w.layerId === "a"),
+      false,
+    );
+    assert.equal(after.comments.length, 0);
+    assert.equal("a" in after.legend.overrides, false);
+    assert.equal(
+      after.storymap!.chapters[0].onChapterEnter.some((r) => r.layerId === "a"),
+      false,
+    );
+    assert.equal("a" in after.secondaryMapViews[0].layerVisibility, false);
+    assert.equal(after.printLayout.tableLayerId, "");
+  });
+
+  it("changes nothing when the snapshot had no references to the layer", () => {
+    useAppStore.getState().addLayer(layer("a"));
+    const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    useAppStore.getState().removeLayer("a");
+    assert.deepEqual(restoreLayerReferencesFromSnapshot(useAppStore.getState(), snapshot, "a"), {});
   });
 });

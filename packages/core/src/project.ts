@@ -536,7 +536,7 @@ function normalizeLayerGroups(value: unknown): LayerGroup[] {
  * {@link LegendConfig}, dropping malformed entries. Returns undefined when no
  * usable config is present so the default is applied downstream.
  */
-function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
+export function normalizeLegendConfig(legend: unknown): LegendConfig | undefined {
   if (!legend || typeof legend !== "object") return undefined;
   const candidate = legend as Partial<LegendConfig>;
 

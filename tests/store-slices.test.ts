@@ -106,7 +106,9 @@ describe("app store undo history after the slice split", () => {
       "comments",
       "layerGroups",
       "layers",
+      "legend",
       "storymap",
+      "widgets",
     ]);
   });
 
@@ -206,7 +208,6 @@ describe("app store undo history after the slice split", () => {
     store().toggleLayerGroupCollapsed(groupId);
     store().setMapView({ zoom: 9 });
     store().setPreferences({ ...store().preferences });
-    store().setLegend({ ...store().legend });
     store().setProjectName("Renamed project");
     store().setDashboardColumns(3);
     store().selectLayer(layerId);

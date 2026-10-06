@@ -1,7 +1,8 @@
 /**
  * Undo/redo for the app store. zundo's `temporal` middleware tracks only the
  * project-data fields that {@link partializeHistory} lists (layers, groups,
- * basemap, story map, comments); every other field, including the whole `ui`
+ * basemap, story map, comments, dashboard widgets, legend); every other field,
+ * including the whole `ui`
  * dialog sub-state, selection and the camera, is outside the history, so
  * changing it never records an undo step and undo/redo never reverts it.
  *
@@ -19,7 +20,9 @@ import {
   leadingDebounce,
   trimHistoryBySize,
 } from "../history";
+import { scrubPrintLayoutForLayers } from "../print-layout-config";
 import type { GeoLibreProject, LayerGroup } from "../types";
+import { scrubSecondaryPaneLayerVisibility } from "./layer-removal";
 import type { AppState } from "./types";
 
 /** The fields undo/redo snapshots, restores and compares. */
@@ -33,6 +36,8 @@ export type HistoryState = Pick<
   | "blankBackgroundColor"
   | "storymap"
   | "comments"
+  | "widgets"
+  | "legend"
 >;
 
 /** The parts of the bound store the history functions use. */
@@ -153,6 +158,13 @@ export function partializeHistory(s: AppState): HistoryState {
     blankBackgroundColor: s.blankBackgroundColor,
     storymap: s.storymap,
     comments: s.comments,
+    // Widgets and legend entries reference layers, and deleting a layer
+    // scrubs them; tracking them makes undoing a delete (or a snapshot layer
+    // restore) bring them back with the layer instead of leaving them lost or
+    // dangling. Secondary panes and the Print Layout are deliberately not
+    // tracked (see finishHistoryStep).
+    widgets: s.widgets,
+    legend: s.legend,
   };
 }
 
@@ -169,7 +181,8 @@ export function createHistoryOptions(): ZundoOptions<AppState, HistoryState> {
     // new object, so real edits differ while an unchanged null stays equal.
     // `layerGroups` is compared ignoring `collapsed`, which is a UI preference
     // excluded from undo (see toggleLayerGroupCollapsed).
-    // `comments` is compared shallowly by reference.
+    // `comments` and `widgets` are compared shallowly by reference, and
+    // `legend` by reference: setLegend always stores a new object.
     equality: (a, b) =>
       a.basemapStyleUrl === b.basemapStyleUrl &&
       a.basemapVisible === b.basemapVisible &&
@@ -178,6 +191,8 @@ export function createHistoryOptions(): ZundoOptions<AppState, HistoryState> {
       a.storymap === b.storymap &&
       shallow(a.layers, b.layers) &&
       shallow(a.comments, b.comments) &&
+      shallow(a.widgets, b.widgets) &&
+      a.legend === b.legend &&
       layerGroupsEqualForHistory(a.layerGroups, b.layerGroups),
     limit: 100,
     // Group rapid bursts (slider drags) into one entry; window is 0 in tests.
@@ -207,11 +222,28 @@ export function createHistoryOptions(): ZundoOptions<AppState, HistoryState> {
 
 /**
  * After an undo/redo restores the tracked slice, mark the project dirty and
- * drop a `selectedLayerId` that no longer points at an existing layer (selection
- * is intentionally not tracked in history, so it can dangle after a restore).
+ * drop references the step left pointing at a layer that no longer exists:
+ * the selection, per-pane layer visibility, and Print Layout data/atlas
+ * blocks. None of those is tracked in history (selection is UI state; panes
+ * carry their own camera and must stay in step with the untracked grid
+ * layout; the Print Layout composer keeps a local copy it writes back), so
+ * they are scrubbed the way deleting the layer would have scrubbed them.
  */
 function finishHistoryStep(previousBasemapStyleUrl: string): void {
   const s = boundStore().getState();
+  const layerIds = new Set(s.layers.map((layer) => layer.id));
+  const danglingPaneIds = new Set<string>();
+  for (const pane of s.secondaryMapViews) {
+    for (const id of Object.keys(pane.layerVisibility)) {
+      if (!layerIds.has(id)) danglingPaneIds.add(id);
+    }
+  }
+  const secondaryMapViews = scrubSecondaryPaneLayerVisibility(s.secondaryMapViews, danglingPaneIds);
+  const printLayout = scrubPrintLayoutForLayers(s.printLayout, layerIds);
+  const referencePatch = {
+    ...(secondaryMapViews !== s.secondaryMapViews ? { secondaryMapViews } : {}),
+    ...(printLayout !== s.printLayout ? { printLayout } : {}),
+  };
   const selectionDangling =
     s.selectedLayerId !== null && !s.layers.some((layer) => layer.id === s.selectedLayerId);
   // The basemap is in the undo history but the ellipsoid preference is not, so a
@@ -241,8 +273,9 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
           selectedFeatureId: null,
           selectedFeatureIds: [],
           ...ellipsoidPatch,
+          ...referencePatch,
         }
-      : { isDirty: true, ...ellipsoidPatch },
+      : { isDirty: true, ...ellipsoidPatch, ...referencePatch },
   );
   // The setState above must not leave a coalesce window open for the next edit.
   cancelHistoryCoalesce();

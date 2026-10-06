@@ -1,4 +1,5 @@
 import {
+  cascadeLayerJoinRefresh,
   createProjectLayerSerializationCache,
   parseProject,
   registerProjectRestoreHistory,
@@ -36,7 +37,10 @@ import {
   SESSION_HEARTBEAT_MS,
   shouldOfferProjectRecovery,
 } from "../lib/project-history-session";
-import { restoreLayerFromSnapshot } from "../lib/snapshot-layer-restore";
+import {
+  restoreLayerFromSnapshot,
+  restoreLayerReferencesFromSnapshot,
+} from "../lib/snapshot-layer-restore";
 import { notify } from "../lib/notify";
 const AUTOSAVE_DELAY_MS = 3_000;
 
@@ -271,14 +275,26 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
       setRestoreError(null);
       try {
         const state = useAppStore.getState();
-        const layers = restoreLayerFromSnapshot(
+        const project = parseProject(snapshot.content);
+        const restoredLayers = restoreLayerFromSnapshot(
           { layers: state.layers, layerGroups: state.layerGroups },
-          parseProject(snapshot.content),
+          project,
           layerId,
         );
-        if (!layers) throw new Error(`Snapshot has no layer ${layerId}.`);
+        if (!restoredLayers) throw new Error(`Snapshot has no layer ${layerId}.`);
+        // Layers that join on the restored one re-derive their columns from it,
+        // as they do after any change to a join source.
+        const layers = cascadeLayerJoinRefresh(restoredLayers, layerId);
+        // Deleting a layer scrubbed every reference to it, so a re-inserted
+        // layer also gets back its widgets, comments, legend entries,
+        // story-map rows, pane visibility and Print Layout blocks. A layer
+        // that still exists kept its references; leave those as they are.
+        const wasDeleted = !state.layers.some((layer) => layer.id === layerId);
+        const references = wasDeleted
+          ? restoreLayerReferencesFromSnapshot(state, project, layerId)
+          : {};
         // One store write, so one Undo step reverts the whole restore.
-        useAppStore.setState({ layers, isDirty: true });
+        useAppStore.setState({ layers, ...references, isDirty: true });
         return true;
       } catch (error) {
         console.error("Could not restore the layer from the snapshot.", error);
