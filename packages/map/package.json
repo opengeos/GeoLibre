@@ -99,8 +99,8 @@
     "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/style-layer-ids.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts --format esm --dts"
   },
   "dependencies": {
-    "@cesium/engine": "^26.3.0",
-    "@cesium/widgets": "^16.2.0",
+    "@cesium/engine": "^26.4.0",
+    "@cesium/widgets": "^16.3.0",
     "@geolibre/core": "*",
     "@maplibre/geojson-vt": "^6.1.1",
     "@maplibre/vt-pbf": "^4.3.2",
@@ -113,14 +113,14 @@
     "@turf/convex": "^7.4.0",
     "@turf/helpers": "^7.4.0",
     "@turf/mask": "^7.4.0",
-    "cesium": "^1.145.0",
+    "cesium": "^1.146.0",
     "cog-tiler-wasm": "^0.4.0",
     "copc": "^0.0.9",
-    "fast-xml-parser": "^5.11.1",
+    "fast-xml-parser": "^5.11.2",
     "geotiff": "^3.0.5",
     "geotiff-geokeys-to-proj4": "^2026.8.16",
     "laz-perf": "^0.0.7",
-    "mapbox-gl": "^3.31.0",
+    "mapbox-gl": "^3.32.0",
     "maplibre-gl": "^6.11.2",
     "maplibre-gl-layer-control": "^0.18.1",
     "pmtiles": "^4.5.0",
@@ -128,7 +128,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "satellite.js": "^7.1.0",
-    "zarr-cesium": "^0.3.3",
+    "zarr-cesium": "^0.3.5",
     "zarrita": "^0.7.5"
   },
   "devDependencies": {

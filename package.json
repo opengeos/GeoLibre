@@ -64,17 +64,17 @@
     "@playwright/test": "^1.63.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "ajv": "^8.20.0",
     "esbuild": "^0.28.2",
-    "eslint": "^10.11.0",
+    "eslint": "^10.12.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fflate": "^0.8.3",
     "happy-dom": "^20.14.5",
     "linkedom": "^0.18.13",
     "tsx": "^4.23.15",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.71.0"
   },
   "overrides": {
     "@loaders.gl/compression": {
