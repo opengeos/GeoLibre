@@ -597,6 +597,10 @@ export {
   type FieldsOfTheWorldFileSaver,
 } from "./plugins/maplibre-fields-of-the-world";
 export {
+  SENTINEL2_EXPLORER_PLUGIN_ID,
+  maplibreSentinel2ExplorerPlugin,
+} from "./plugins/maplibre-sentinel2-explorer";
+export {
   OCEAN_DATA_PLATFORM_PLUGIN_ID,
   maplibreOceanDataPlatformPlugin,
   setOceanDataPlatformFileSaver,

@@ -42,6 +42,7 @@ They are grouped together because they behave the same way, not because they sha
 | [Hugging Face](#hugging-face) | Hugging Face | Geospatial files in dataset repos — and uploads |
 | [Satellite Embeddings](#satellite-embeddings) | Source.coop, Tessera | Pre-computed foundation-model embeddings (AlphaEarth, Tessera, Earth Index, …) |
 | [Fields of the World](#fields-of-the-world) | Source.coop | Global agricultural field boundaries (2024, 2025) |
+| [Sentinel-2 Explorer](#sentinel-2-explorer) | Source.coop, AWS | Every Sentinel-2 L2A scene since 2015, searched from static GeoParquet |
 | [Ocean Data Platform](#ocean-data-platform) | HUB Ocean | Public ocean datasets: habitats, protected areas, fisheries, observations |
 | [GeoLens](#geolens) | your server | A self-hosted spatial catalog |
 
@@ -317,6 +318,19 @@ Browses [Fields of the World](https://fieldsofthe.world) (FTW), the global agric
 
 !!! note "Running the FTW model"
     The plugin shows and downloads the published global predictions. To run the FTW model on your own area and Sentinel-2 scenes, use the [FTW inference app](https://fieldsofthe.world/ftw-inference-app) or the [ftw-baselines](https://github.com/fieldsoftheworld/ftw-baselines) command-line tools, then add the result to GeoLibre. The data is licensed CC-BY-4.0.
+
+## Sentinel-2 Explorer
+
+Finds and views Sentinel-2 L2A imagery anywhere on Earth, the way Taylor Geospatial's [reference explorer](https://research.taylorgeospatial.org/s2-stac-geoparquet/) does. It reads the [s2-stac-geoparquet](https://github.com/taylor-geospatial/s2-stac-geoparquet) catalog on [Source Cooperative](https://source.coop/tge-labs/s2-stac-geoparquet), which republishes every scene Earth Search indexes as partitioned STAC-GeoParquet. There is no API or server behind it: each search is a set of HTTP range reads against static files, and each image streams from the scene's Cloud-Optimized GeoTIFFs on AWS.
+
+- Pick a **collection**: **Collection 1** (ESA's uniform reprocessing, from October 2015, the default) or the original **L2A** index (from November 2016).
+- Set the **From** and **To** dates. The map colors every MGRS tile by its statistics over that window, read from the catalog's small monthly stats files: the **clearest scene**'s cloud cover, the **scene count**, the **median cloud** cover, or the **coverage** (the most of the tile any one scene fills). Green is good and dark red is poor.
+- The **Max cloud %**, **Min coverage %**, and **Min scenes per tile** filters grey out tiles that fail them. Max cloud and Min coverage also filter the scene list. **Show the tile grid** hides the grid without closing the panel.
+- **Click a tile** to search its scenes. The panel reads only the row groups of the window's GeoParquet parts that can hold the tile, usually a few hundred KB, and reports how many range reads it took. The scenes can be sorted by least cloud, most coverage, or newest, and hovering a scene outlines its footprint.
+- **Add scenes as** picks what **Add to map** streams: the **true color** (TCI) image, or any single band (B01 to B12, B8A, AOT, WVP, the SCL scene classification, and for Collection 1 the cloud and snow probability masks). Each scene is added as a COG layer, saved with the project and restyled in the Style panel like any raster. The selected tile is left unfilled so the scene shows through.
+
+!!! note "Data and license"
+    The imagery is Copernicus Sentinel-2 data processed by ESA, indexed by Element 84's Earth Search, and hosted on the AWS Registry of Open Data. The catalog is published by Taylor Geospatial under CC-BY-4.0. Band composites and NDVI/NDWI, which the reference explorer computes from several band files, are not offered yet; add the bands as separate layers instead.
 
 ## Ocean Data Platform
 

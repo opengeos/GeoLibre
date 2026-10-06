@@ -51,6 +51,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "maplibre-gl-huggingface",
   "geolibre-satellite-embeddings",
   "geolibre-fields-of-the-world",
+  "geolibre-sentinel2-explorer",
   "geolibre-ocean-data-platform",
   "maplibre-gl-geolens",
   "maplibre-gl-usgs-lidar",

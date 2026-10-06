@@ -126,6 +126,10 @@
     "description": "Global agricultural field boundaries colored by model confidence.",
     "docs": "web-services.md#fields-of-the-world"
   },
+  "geolibre-sentinel2-explorer": {
+    "description": "Sentinel-2 imagery search and viewer over static STAC-GeoParquet, with no API.",
+    "docs": "web-services.md#sentinel-2-explorer"
+  },
   "geolibre-ocean-data-platform": {
     "description": "HUB Ocean's public ocean datasets: habitats, protected areas, fisheries, and observations.",
     "docs": "web-services.md#ocean-data-platform"
