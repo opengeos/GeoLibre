@@ -8735,6 +8735,11 @@
   },
   "shell": {
     "workspaceTitle": "GeoLibre map workspace",
+    "webglContextLost": {
+      "message": "The map lost its graphics context",
+      "description": "The graphics driver reset or the GPU ran out of memory, so the map may be frozen or blank. Reload to restore it; your project is kept in project history.",
+      "reload": "Reload"
+    },
     "section": {
       "toolbar": "Toolbar",
       "sharedLeftSidebar": "Shared left sidebar",

@@ -164,9 +164,11 @@ export async function verifyPluginBundleIntegrity(
     return { status: "pinned-first-use" };
   }
   if (pin.hash === currentHash) {
-    // Backfill the version on a legacy pin so a later release can be offered
-    // as an update.
-    if (pin.version === undefined && version !== undefined) {
+    // Record the fetched manifest's version: a legacy pin has none, and a
+    // registry install pins the entry's announced version before the manifest
+    // is fetched. The update check compares against this, so it must describe
+    // the bundle the hash belongs to.
+    if (version !== undefined && pin.version !== version) {
       pinPluginBundle(url, currentHash, version);
     }
     return { status: "unchanged" };

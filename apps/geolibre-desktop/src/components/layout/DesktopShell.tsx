@@ -152,6 +152,7 @@ import { useCollabShareLinkAutoOpen } from "../../hooks/desktop-shell/useCollabS
 import { useDataUrlFit } from "../../hooks/desktop-shell/useDataUrlFit";
 import { useDropStatus } from "../../hooks/desktop-shell/useDropStatus";
 import { useUrlLoadErrorNotices } from "../../hooks/desktop-shell/useUrlLoadErrorNotices";
+import { useWebglContextLossNotice } from "../../hooks/desktop-shell/useWebglContextLossNotice";
 import { useFileDrop } from "../../hooks/desktop-shell/useFileDrop";
 import { useKnowledgeCard } from "../../hooks/desktop-shell/useKnowledgeCard";
 import { useLayerEditActions } from "../../hooks/desktop-shell/useLayerEditActions";
@@ -318,6 +319,8 @@ export function DesktopShell({
   const [mapReadyGeneration, setMapReadyGeneration] = useState(0);
   const { clearDropMessageLater, setCrsWarning, setDropError, setDropMessage } = useDropStatus();
   useUrlLoadErrorNotices(projectUrlLoadState?.error, dataUrlLoadState?.error);
+  const mapAreaRef = useRef<HTMLElement>(null);
+  useWebglContextLossNotice(mapAreaRef);
   const credentialStorageError = useCredentialStorageStatus((s) => s.error);
   const credentialStorageRevision = useCredentialStorageStatus((s) => s.revision);
   // A new failure bumps the revision, which re-shows a dismissed warning.
@@ -739,6 +742,7 @@ export function DesktopShell({
           </>
         )}
         <main
+          ref={mapAreaRef}
           // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
           className={`relative isolate min-w-0 flex-1 overflow-hidden ${
             layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"

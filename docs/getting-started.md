@@ -42,6 +42,32 @@ The desktop app adds local filesystem dialogs, local MBTiles, local raster file 
 
 On macOS, prefer the Homebrew or DMG build: the [Mac App Store](https://apps.apple.com/app/geolibre-desktop/id6796848769) build is sandboxed, so it drops the Python sidecar engines, Add Data → PostgreSQL/PostGIS via martin, the local Jupyter server, Earth Engine sign-in, and external plugin installs. See [what the Store build leaves out](downloads.md#what-the-store-build-leaves-out).
 
+#### Linux desktop troubleshooting
+
+The Linux app runs in WebKitGTK. At startup it picks the WebKitGTK renderer settings known to work for your WebKitGTK version and GPU, so most systems need no configuration:
+
+| Your system | What the app sets |
+| --- | --- |
+| WebKitGTK older than 2.48 | `WEBKIT_DISABLE_DMABUF_RENDERER=1` (the DMA-BUF renderer can leave the window blank on older graphics stacks) |
+| NVIDIA GPU, WebKitGTK 2.48 to 2.51 | `WEBKIT_DISABLE_DMABUF_RENDERER=1` (NVIDIA's buffer allocation fails, and there is no faster fallback yet) |
+| NVIDIA GPU, WebKitGTK 2.52 or newer | `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` (a shared-memory fallback that avoids the blank window without the slow legacy renderer) |
+| Anything else | Nothing; WebKitGTK's default DMA-BUF renderer is used |
+| x86-64 CPU without AVX | `JSC_useWasmOSR=false` and `JSC_useBBQTierUpChecks=false` (WebAssembly tier-up crashes the renderer on these CPUs; WebAssembly-heavy work runs slower) |
+
+The app treats the GPU as NVIDIA when the boot display is driven by the `nvidia` driver, when `__NV_PRIME_RENDER_OFFLOAD` is set to anything but `0`, or when `__GLX_VENDOR_LIBRARY_NAME=nvidia`. It also sets `GTK_USE_PORTAL=1` so file dialogs go through the desktop portal.
+
+A value you set yourself always wins: the app only fills in variables that are not already in the environment. If the window is blank, the map flickers, or panning is slow, try these from a terminal:
+
+```bash
+# Blank window or flicker: use the legacy renderer (slower, most compatible)
+WEBKIT_DISABLE_DMABUF_RENDERER=1 geolibre-desktop
+
+# Slow pan/zoom on a system the app put on the legacy renderer: try the default renderer
+WEBKIT_DISABLE_DMABUF_RENDERER=0 geolibre-desktop
+```
+
+`geolibre-desktop` is the command the `.deb`, `.rpm`, and AUR packages install; for the AppImage, run its file path instead, and for Flatpak use `flatpak run --env=WEBKIT_DISABLE_DMABUF_RENDERER=1 app.geolibre.GeoLibre`. If one of these settings fixes your system but the default does not, please [open an issue](https://github.com/opengeos/GeoLibre/issues) with your distribution, GPU, driver, and WebKitGTK version. See also [the map is blank or renders incorrectly](user-guide/troubleshooting.md#the-map-is-blank-or-renders-incorrectly).
+
 ### In Jupyter
 
 The [`geolibre`](python.md) Python package embeds the full GeoLibre app in a Jupyter notebook and drives the map through an expanded leafmap-style API that syncs both ways, so UI edits read back from Python.
