@@ -63,6 +63,7 @@ import {
 } from "./satellite-embeddings-tessera";
 import { addRasterToMap, getRasterRenderEngine } from "./maplibre-raster";
 import { getControlMap } from "./style-map";
+import { createPluginTranslator } from "../plugin-i18n";
 
 export const SATELLITE_EMBEDDINGS_PLUGIN_ID = "geolibre-satellite-embeddings";
 const PANEL_ID = SATELLITE_EMBEDDINGS_PLUGIN_ID;
@@ -254,12 +255,7 @@ let onFootprintClick: ((ids: string[]) => void) | null = null;
 const readerCache = new Map<string, Promise<AefTileReader>>();
 
 /** Resolves a plugin-namespaced translation key, falling back to English text. */
-function tr(key: string, fallback: string, params?: Record<string, string | number>): string {
-  return (
-    appRef?.translate?.(`plugin.${SATELLITE_EMBEDDINGS_PLUGIN_ID}.${key}`, fallback, params) ??
-    fallback.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params?.[name] ?? ""))
-  );
-}
+const tr = createPluginTranslator(() => appRef, SATELLITE_EMBEDDINGS_PLUGIN_ID);
 
 /** Creates an element with inline CSS. */
 function element<K extends keyof HTMLElementTagNameMap>(

@@ -2,6 +2,10 @@
 
 import { isIpadDesktopUserAgent } from "@geolibre/core";
 import { invoke } from "@tauri-apps/api/core";
+import { LocalizedError } from "../localized-error";
+
+/** Catalog keys for the sign-in failures GeoLibre itself raises. */
+const AUTH_ERROR_KEY = "plugin.earth-engine-auth";
 
 export const DEFAULT_GEE_OAUTH_CLIENT_ID =
   "937635412428-qc3albpo6dtm2jdp2o5mk8biqlh0i6vo.apps.googleusercontent.com";
@@ -183,7 +187,7 @@ export async function authenticateEarthEngine(
   // state or an external plugin could still reach here, and the Rust command is
   // a stub that binds nothing.
   if (!isEarthEngineAvailable()) {
-    throw new Error(EARTH_ENGINE_UNAVAILABLE_MESSAGE);
+    throw new LocalizedError(`${AUTH_ERROR_KEY}.unavailable`, EARTH_ENGINE_UNAVAILABLE_MESSAGE);
   }
 
   if (shouldUseTauriEarthEngineOAuth()) {
@@ -199,7 +203,10 @@ function normalizeEarthEngineAccessToken(
 ): Required<Pick<TauriEarthEngineOAuthToken, "accessToken" | "tokenType" | "expiresIn">> {
   if (token.error) throw new Error(token.error);
   if (!token.accessToken) {
-    throw new Error("Earth Engine sign-in did not return an access token.");
+    throw new LocalizedError(
+      `${AUTH_ERROR_KEY}.noAccessToken`,
+      "Earth Engine sign-in did not return an access token.",
+    );
   }
 
   const accessToken = token.accessToken.replace(/^Bearer\s+/i, "").trim();
@@ -285,7 +292,12 @@ async function authenticateEarthEngineViaBrowser(oauthClientId: string): Promise
     const onFailure = (error: unknown) => reject(new Error(errorMessage(error)));
     const onImmediateFailed = () => {
       if (!earthEngine.data?.authenticateViaPopup) {
-        reject(new Error("Earth Engine popup authentication is unavailable."));
+        reject(
+          new LocalizedError(
+            `${AUTH_ERROR_KEY}.popupUnavailable`,
+            "Earth Engine popup authentication is unavailable.",
+          ),
+        );
         return;
       }
       earthEngine.data.authenticateViaPopup(onSuccess, onFailure);
@@ -296,7 +308,12 @@ async function authenticateEarthEngineViaBrowser(oauthClientId: string): Promise
       return;
     }
     if (!earthEngine.data?.authenticateViaOauth) {
-      reject(new Error("Earth Engine OAuth authentication is unavailable."));
+      reject(
+        new LocalizedError(
+          `${AUTH_ERROR_KEY}.oauthUnavailable`,
+          "Earth Engine OAuth authentication is unavailable.",
+        ),
+      );
       return;
     }
     // Suppress the SDK's default scopes (earthengine + cloud-platform + full
@@ -352,7 +369,7 @@ async function waitForTauriEarthEngineToken(state: string): Promise<TauriEarthEn
     if (token) return token;
     await delay(1000);
   }
-  throw new Error("Earth Engine sign-in timed out.");
+  throw new LocalizedError(`${AUTH_ERROR_KEY}.timedOut`, "Earth Engine sign-in timed out.");
 }
 
 function delay(ms: number): Promise<void> {

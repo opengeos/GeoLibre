@@ -1,7 +1,5 @@
 import {
   addArcGISLayer,
-  ARCGIS_IMAGE_SERVICE_URL_ERROR,
-  ARCGIS_MAP_SERVICE_URL_ERROR,
   fetchArcGISImageServiceRasterFunctions,
   fetchArcGISMapServiceSublayers,
   type ArcGISImageServiceRasterFunction,
@@ -163,13 +161,8 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
     } catch (error) {
       if (controller.signal.aborted) return;
       setSublayerOptions([]);
-      setSublayerError(
-        error instanceof Error && error.message === ARCGIS_MAP_SERVICE_URL_ERROR
-          ? t("addData.arcgis.errorMapServiceUrl")
-          : error instanceof Error
-            ? error.message
-            : t("addData.arcgis.retrieveError"),
-      );
+      // Plugin errors (LocalizedError) arrive already translated.
+      setSublayerError(error instanceof Error ? error.message : t("addData.arcgis.retrieveError"));
     } finally {
       if (!controller.signal.aborted) setIsRetrievingSublayers(false);
     }
@@ -197,11 +190,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
       if (controller.signal.aborted) return;
       setRasterFunctionOptions([]);
       setRasterFunctionError(
-        error instanceof Error && error.message === ARCGIS_IMAGE_SERVICE_URL_ERROR
-          ? t("addData.arcgis.errorImageServiceUrl")
-          : error instanceof Error
-            ? error.message
-            : t("addData.arcgis.retrieveRasterFunctionsError"),
+        error instanceof Error ? error.message : t("addData.arcgis.retrieveRasterFunctionsError"),
       );
     } finally {
       if (!controller.signal.aborted) setIsRetrievingRasterFunctions(false);

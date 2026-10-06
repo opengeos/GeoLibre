@@ -38,6 +38,7 @@ import {
 } from "./fields-of-the-world-data";
 import { type LonLatBbox, bboxRing, polygonFeature } from "./satellite-embeddings-grids";
 import { getControlMap } from "./style-map";
+import { createPluginTranslator } from "../plugin-i18n";
 
 export const FIELDS_OF_THE_WORLD_PLUGIN_ID = "geolibre-fields-of-the-world";
 const PANEL_ID = FIELDS_OF_THE_WORLD_PLUGIN_ID;
@@ -226,12 +227,7 @@ let onFootprintClick: ((ids: string[]) => void) | null = null;
 let gridPromise: Promise<FtwGridTile[]> | null = null;
 
 /** Resolves a plugin-namespaced translation key, falling back to English text. */
-function tr(key: string, fallback: string, params?: Record<string, string | number>): string {
-  return (
-    appRef?.translate?.(`plugin.${FIELDS_OF_THE_WORLD_PLUGIN_ID}.${key}`, fallback, params) ??
-    fallback.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params?.[name] ?? ""))
-  );
-}
+const tr = createPluginTranslator(() => appRef, FIELDS_OF_THE_WORLD_PLUGIN_ID);
 
 /** Creates an element with inline CSS. */
 function element<K extends keyof HTMLElementTagNameMap>(

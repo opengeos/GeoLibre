@@ -186,9 +186,10 @@ async function openGeoAgentPanel(
       geoAgentControl = control;
       patchGeoAgentToolRunner(control);
       control.expand();
-      enhanceEarthEngineSignIn(container, createPluginTranslator(app, GEOAGENT_PLUGIN_ID));
+      const stopSignInRelabel = enhanceEarthEngineSignIn(container, app);
       preloadEarthEngineAuthLibrary();
       return () => {
+        stopSignInRelabel();
         // Unmounting runs the control's onRemove, which clears its overlays
         // from the map; drop the matching store entries with them.
         unmount();
@@ -412,7 +413,16 @@ function projectValue(envValue: unknown): string {
   return earthEngineProjectValue(envValue, STORAGE_PREFIX);
 }
 
-function enhanceEarthEngineSignIn(root: ParentNode, tr: PluginTranslate): void {
+/**
+ * Add the Earth Engine Sign in button to GeoAgent's settings, labelled in the
+ * active language and re-labelled when the language changes.
+ *
+ * @param root - The panel container.
+ * @param app - The host API, for translation and locale changes.
+ * @returns A function that stops following the language.
+ */
+function enhanceEarthEngineSignIn(root: ParentNode, app: GeoLibreAppAPI): () => void {
+  const tr: PluginTranslate = createPluginTranslator(app, GEOAGENT_PLUGIN_ID);
   const details = root.querySelector<HTMLElement>(".geoagent-earth-engine");
   const status = details?.querySelector<HTMLElement>(".geoagent-earth-engine-status");
   const clientIdInput = details?.querySelector<HTMLInputElement>(".geoagent-ee-client-id");
@@ -424,7 +434,7 @@ function enhanceEarthEngineSignIn(root: ParentNode, tr: PluginTranslate): void {
   // GeoAgent counterpart of the ProcessingMenu/TopToolbar gates.
   if (details && !isEarthEngineAvailable()) {
     details.hidden = true;
-    return;
+    return () => {};
   }
   if (
     !details ||
@@ -433,7 +443,7 @@ function enhanceEarthEngineSignIn(root: ParentNode, tr: PluginTranslate): void {
     !projectIdInput ||
     details.querySelector(".geolibre-ee-sign-in")
   ) {
-    return;
+    return () => {};
   }
 
   const button = document.createElement("button");
@@ -458,6 +468,13 @@ function enhanceEarthEngineSignIn(root: ParentNode, tr: PluginTranslate): void {
   });
 
   status.insertAdjacentElement("beforebegin", button);
+  // The button is plain DOM built once per panel render, so a live language
+  // change would otherwise leave it in the previous language.
+  return (
+    app.onLocaleChange?.(() => {
+      button.textContent = tr("signIn", "Sign in");
+    }) ?? (() => {})
+  );
 }
 
 async function applyEarthEngineAccessToken(

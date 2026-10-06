@@ -14,6 +14,7 @@ import {
   withLidarAutoZoomSuppressed,
 } from "./maplibre-components";
 import { getControlMap } from "./style-map";
+import { createPluginTranslator } from "../plugin-i18n";
 
 export const IGN_LIDAR_HD_PLUGIN_ID = "geolibre-ign-lidar-hd";
 const PANEL_ID = IGN_LIDAR_HD_PLUGIN_ID;
@@ -101,8 +102,8 @@ function tr(
   key: string,
   fallback: string,
   params?: Record<string, string | number>,
-) {
-  return app.translate?.(`plugin.${IGN_LIDAR_HD_PLUGIN_ID}.${key}`, fallback, params) ?? fallback;
+): string {
+  return createPluginTranslator(app, IGN_LIDAR_HD_PLUGIN_ID)(key, fallback, params);
 }
 
 /** Creates an HTML element with the given inline CSS applied. */

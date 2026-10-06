@@ -1189,7 +1189,88 @@
       "modelFileHint": "Choose a GLB or self-contained glTF file. Local models are embedded in saved projects, increasing the project size.",
       "modelExternalResources": "This model references separate files. Export it as a GLB with embedded textures and buffers, then try again.",
       "modelTooLarge": "This model is larger than the {{limit}} MB limit for embedding in a project. Host it and add it by URL instead.",
-      "modelFileError": "Could not read this model. Choose a valid glTF 2.0 or GLB file."
+      "modelFileError": "Could not read this model. Choose a valid glTF 2.0 or GLB file.",
+      "kinds": {
+        "scatterplot": {
+          "label": "Scatterplot",
+          "description": "Circles at each point. CSV/JSON with longitude & latitude."
+        },
+        "heatmap": {
+          "label": "Heatmap",
+          "description": "Smooth density heatmap from weighted points."
+        },
+        "hexagon": {
+          "label": "Hexagon (3D)",
+          "description": "Aggregates points into extruded hexagonal bins."
+        },
+        "grid": {
+          "label": "Grid (3D)",
+          "description": "Aggregates points into extruded square bins."
+        },
+        "screen-grid": {
+          "label": "Screen grid",
+          "description": "Aggregates points into fixed-pixel screen cells."
+        },
+        "contour": {
+          "label": "Contour",
+          "description": "Isoline bands over point density."
+        },
+        "arc": {
+          "label": "Arc",
+          "description": "Curved arcs between source and target points."
+        },
+        "line": {
+          "label": "Line",
+          "description": "Straight lines between source and target points."
+        },
+        "great-circle": {
+          "label": "Great circle",
+          "description": "Geodesic great-circle paths between points."
+        },
+        "geojson": {
+          "label": "GeoJSON (with extrusion)",
+          "description": "Render a GeoJSON file; optionally extrude polygons by a property."
+        },
+        "icon": {
+          "label": "Icon markers",
+          "description": "A marker icon at each point. CSV/JSON with longitude & latitude."
+        },
+        "text": {
+          "label": "Text labels",
+          "description": "A text label at each point. CSV/JSON with a label column."
+        },
+        "trips": {
+          "label": "Trips (animated)",
+          "description": "Animated trails along paths. JSON array of objects with path & timestamps."
+        },
+        "scenegraph": {
+          "label": "3D model (glTF)",
+          "description": "Place a glTF/GLB 3D model at each point. CSV/JSON with longitude & latitude, plus a model URL."
+        }
+      },
+      "categories": {
+        "point": "Point & aggregation",
+        "flow": "Flow / origin-destination",
+        "geojson": "GeoJSON",
+        "advanced": "Advanced / animated",
+        "models": "3D models"
+      },
+      "roles": {
+        "lng": "Longitude",
+        "lat": "Latitude",
+        "weight": "Weight (optional)",
+        "sourceLng": "Source longitude",
+        "sourceLat": "Source latitude",
+        "targetLng": "Target longitude",
+        "targetLat": "Target latitude",
+        "elevation": "Extrusion height property (optional)",
+        "text": "Label text",
+        "path": "Path property",
+        "timestamps": "Timestamps property",
+        "altitude": "Altitude (optional)",
+        "bearing": "Bearing / heading (optional)",
+        "scale": "Scale factor (optional)"
+      }
     },
     "nonGeographicCoordinates": "Coordinates in {{names}} are not longitude/latitude, so nothing will be drawn on the map. The CRS is mislabelled — reproject the data (or fix its .prj) and load it again.",
     "pmtiles": {
@@ -3059,6 +3140,11 @@
       "videoUnsupported": "Video recording isn't supported in this browser.",
       "videoFileTypeMp4": "MP4 video",
       "videoFileTypeWebm": "WebM video",
+      "errors": {
+        "notActive": "The route animation is not active.",
+        "selectLineLayer": "Select a line layer with length before recording.",
+        "encoderTimeout": "Recording timed out waiting for the encoder."
+      },
       "collapse": "Collapse",
       "expand": "Expand",
       "close": "Close"
@@ -9553,10 +9639,46 @@
       "statDescent": "Descent ↓",
       "unitsTitle": "Units: {{units}}"
     },
+    "earth-engine-auth": {
+      "unavailable": "Earth Engine sign-in is not available in the App Store build of GeoLibre.",
+      "noAccessToken": "Earth Engine sign-in did not return an access token.",
+      "popupUnavailable": "Earth Engine popup authentication is unavailable.",
+      "oauthUnavailable": "Earth Engine OAuth authentication is unavailable.",
+      "timedOut": "Earth Engine sign-in timed out."
+    },
     "maplibre-gl-geoagent": {
       "signIn": "Sign in",
       "signInOpening": "Opening Google sign-in...",
       "signInComplete": "Earth Engine sign-in complete."
+    }
+  },
+  "arcgisService": {
+    "errors": {
+      "enterServiceUrl": "Enter an ArcGIS service URL.",
+      "enterPortalItemId": "Enter an ArcGIS portal item ID.",
+      "missingGeometryType": "The ArcGIS feature layer metadata is missing geometry type.",
+      "itemWithoutServiceUrl": "The ArcGIS portal item does not include a service URL.",
+      "sublayerIds": "Enter the MapServer sublayers as numeric ids, for example 0,2,5.",
+      "renderingRuleJson": "The rendering rule must be JSON, for example {\"rasterFunction\":\"Hillshade\"}.",
+      "featureQueryFailed": "ArcGIS feature query failed with {{status}}.",
+      "htmlInsteadOfGeojson": "The ArcGIS service returned HTML instead of GeoJSON (the layer may require a token or sign-in).",
+      "notGeojson": "The ArcGIS feature layer did not return GeoJSON features.",
+      "enterFeatureServerLayerUrl": "Enter an ArcGIS FeatureServer layer URL.",
+      "noFeatureLayer": "The ArcGIS feature service does not list a feature layer.",
+      "portalItemRequestFailed": "ArcGIS portal item request failed with {{status}}.",
+      "serviceRequestFailed": "ArcGIS service request failed with {{status}}.",
+      "saveInProgress": "An ArcGIS save is already in progress.",
+      "finishGeometryEdit": "Finish editing geometry before saving to ArcGIS.",
+      "noWritableConnection": "This layer has no writable ArcGIS connection. Add the service again to establish one.",
+      "saveUnconfirmed": "The previous save could not be confirmed. Check the service and add the layer again before saving to avoid duplicate inserts.",
+      "missingServiceUrl": "Missing ArcGIS service URL.",
+      "invalidServiceUrl": "Invalid ArcGIS service URL. Add the service again with a valid Feature Service URL.",
+      "writesRequireHttps": "ArcGIS writes require HTTPS.",
+      "layerRemoved": "ArcGIS layer was removed.",
+      "editsNotPermitted": "Layer permissions do not allow the requested edits.",
+      "incompleteEditResults": "Incomplete ArcGIS edit results.",
+      "noInsertedObjectIds": "ArcGIS did not return inserted object IDs.",
+      "saveNotConfirmed": "ArcGIS save could not be confirmed. Check the service and add the layer again before saving to avoid duplicate inserts."
     }
   }
 }

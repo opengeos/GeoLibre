@@ -12,6 +12,7 @@ import {
   sliceLineAtDistance,
   sliceRouteAtDistance,
 } from "./route-animation-geometry";
+import { LocalizedError } from "../localized-error";
 
 /**
  * How the selected route layer is being drawn, so the animated marker/trail can
@@ -1148,10 +1149,16 @@ export async function recordRouteAnimation({
   onProgress,
 }: RecordRouteAnimationOptions = {}): Promise<RouteAnimationRecording> {
   if (!engine) {
-    throw new Error("The route animation is not active.");
+    throw new LocalizedError(
+      "toolbar.routeAnimation.errors.notActive",
+      "The route animation is not active.",
+    );
   }
   if (measureLine(routeCoords).totalMeters <= 0) {
-    throw new Error("Select a line layer with length before recording.");
+    throw new LocalizedError(
+      "toolbar.routeAnimation.errors.selectLineLayer",
+      "Select a line layer with length before recording.",
+    );
   }
   const mimeType = pickRouteVideoMimeType();
   if (!mimeType) throw new RouteVideoUnsupportedError();
@@ -1286,7 +1293,13 @@ export async function recordRouteAnimation({
   // Guard against a browser that never fires onstop leaving this await hung.
   const timeout = new Promise<never>((_, reject) => {
     const timer = window.setTimeout(
-      () => reject(new Error("Recording timed out waiting for the encoder.")),
+      () =>
+        reject(
+          new LocalizedError(
+            "toolbar.routeAnimation.errors.encoderTimeout",
+            "Recording timed out waiting for the encoder.",
+          ),
+        ),
       ROUTE_VIDEO_STOP_TIMEOUT_MS,
     );
     void finished.then(

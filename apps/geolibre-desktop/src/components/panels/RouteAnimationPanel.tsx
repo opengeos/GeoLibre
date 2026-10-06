@@ -8,6 +8,7 @@ import {
   ROUTE_FOLLOW_ZOOM_MAX,
   ROUTE_FOLLOW_ZOOM_MIN,
   ROUTE_MARKER_STYLES,
+  LocalizedError,
   RouteVideoUnsupportedError,
   type RouteMarkerStyle,
   closeRouteAnimationPanel,
@@ -343,7 +344,10 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       setVideoError(
         err instanceof RouteVideoUnsupportedError
           ? t("toolbar.routeAnimation.videoUnsupported")
-          : t("toolbar.routeAnimation.videoError"),
+          : err instanceof LocalizedError
+            ? // An actionable failure (no line layer, encoder timeout), already translated.
+              err.message
+            : t("toolbar.routeAnimation.videoError"),
       );
       setRecordStatus("idle");
     } finally {

@@ -87,6 +87,12 @@ export {
   type PluginTranslate,
   type PluginTranslateParams,
 } from "./plugin-i18n";
+export {
+  LocalizedError,
+  localizedMessage,
+  setLocalizedErrorTranslator,
+  type LocalizedErrorTranslator,
+} from "./localized-error";
 export { LAYER_CONTROL_PLUGIN_ID, maplibreLayerControlPlugin } from "./plugins/layer-control";
 export { getStyleMap } from "./plugins/style-map";
 export {

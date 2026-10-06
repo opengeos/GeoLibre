@@ -6,6 +6,7 @@ import {
   type OsmDownloadFilter,
   type OsmDownloadPreset,
 } from "./osm-downloader-api";
+import { createPluginTranslator } from "../plugin-i18n";
 
 export const OSM_DOWNLOADER_PLUGIN_ID = "geolibre-osm-downloader";
 const PANEL_ID = OSM_DOWNLOADER_PLUGIN_ID;
@@ -42,13 +43,14 @@ const CSS = {
     "color:hsl(var(--muted-foreground));line-height:1.45;min-height:18px;",
 };
 
+/** Resolves a plugin-namespaced translation key, falling back to English text. */
 function tr(
   app: GeoLibreAppAPI,
   key: string,
   fallback: string,
   params?: Record<string, string | number>,
-) {
-  return app.translate?.(`plugin.${OSM_DOWNLOADER_PLUGIN_ID}.${key}`, fallback, params) ?? fallback;
+): string {
+  return createPluginTranslator(app, OSM_DOWNLOADER_PLUGIN_ID)(key, fallback, params);
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(

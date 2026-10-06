@@ -21,6 +21,7 @@ import {
   searchOdpDatasets,
 } from "./ocean-data-platform-api";
 import { getControlMap } from "./style-map";
+import { createPluginTranslator } from "../plugin-i18n";
 
 export const OCEAN_DATA_PLATFORM_PLUGIN_ID = "geolibre-ocean-data-platform";
 const PANEL_ID = OCEAN_DATA_PLATFORM_PLUGIN_ID;
@@ -136,12 +137,7 @@ let disposePanel: (() => void) | null = null;
 let catalogPromise: Promise<{ collections: OdpCollection[]; datasets: OdpDataset[] }> | null = null;
 
 /** Resolves a plugin-namespaced translation key, falling back to English text. */
-function tr(key: string, fallback: string, params?: Record<string, string | number>): string {
-  return (
-    appRef?.translate?.(`plugin.${OCEAN_DATA_PLATFORM_PLUGIN_ID}.${key}`, fallback, params) ??
-    fallback.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params?.[name] ?? ""))
-  );
-}
+const tr = createPluginTranslator(() => appRef, OCEAN_DATA_PLATFORM_PLUGIN_ID);
 
 /** Creates an element with inline CSS. */
 function element<K extends keyof HTMLElementTagNameMap>(

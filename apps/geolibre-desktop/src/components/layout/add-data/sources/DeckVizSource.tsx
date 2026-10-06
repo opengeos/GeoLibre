@@ -23,6 +23,12 @@ import {
   type DeckVizParsedInput,
   detectAndParseDeckVizInput,
 } from "../../../../lib/deck-viz-input";
+import {
+  deckVizCategoryLabel,
+  deckVizKindDescription,
+  deckVizKindLabel,
+  deckVizRoleLabel,
+} from "../../../../lib/deck-viz-i18n";
 import { SHANGHAI_MODEL_SAMPLE, modelSampleBounds } from "../../../../lib/model-samples";
 import { MAX_LOCAL_GLTF_BYTES, embedLocalGltf } from "../../../../lib/local-gltf";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
@@ -57,8 +63,9 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   const startSg = startExample?.scenegraph;
   const [startLng, startLat] = startExample?.scenegraphLocation ?? ["", ""];
 
+  const startDef = getDeckVizLayerDef(startKind);
   const source = useAddDataSource(
-    getDeckVizLayerDef(startKind)?.label ?? t("addData.deckViz.defaultName"),
+    startDef ? deckVizKindLabel(t, startDef) : t("addData.deckViz.defaultName"),
   );
 
   const [deckVizKind, setDeckVizKind] = useState(startKind);
@@ -125,7 +132,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     source.setError(null);
     setDeckVizStyle({ ...DEFAULT_DECK_VIZ_STYLE });
     const nextDef = getDeckVizLayerDef(nextKind);
-    source.setLayerName(nextDef?.label ?? t("addData.deckViz.defaultName"));
+    source.setLayerName(nextDef ? deckVizKindLabel(t, nextDef) : t("addData.deckViz.defaultName"));
     // Pre-fill the scenegraph model URL and transform from the bundled example
     // so the user can place a model immediately (and tweak from there).
     const exampleSg = nextDef?.example.scenegraph;
@@ -318,10 +325,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     }
 
     if (def.format === "geojson" && parsed.format !== "geojson") {
-      throw new Error(t("addData.deckViz.needsGeojson", { label: def.label }));
+      throw new Error(t("addData.deckViz.needsGeojson", { label: deckVizKindLabel(t, def) }));
     }
     if (def.format !== "geojson" && parsed.format === "geojson") {
-      throw new Error(t("addData.deckViz.needsTabular", { label: def.label }));
+      throw new Error(t("addData.deckViz.needsTabular", { label: deckVizKindLabel(t, def) }));
     }
     const missing = def.roles.filter(
       (role) => role.required && (mapping[role.key] === undefined || mapping[role.key] === ""),
@@ -330,7 +337,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       throw new Error(
         t("addData.deckViz.mapRequiredFields", {
           count: missing.length,
-          fields: missing.map((role) => role.label).join(", "),
+          fields: missing.map((role) => deckVizRoleLabel(t, role)).join(", "),
         }),
       );
     }
@@ -341,7 +348,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
         ? undefined
         : (computeDeckVizBounds(parsed.rows ?? [], mapping) ?? undefined));
     const layer = createDeckVizStoreLayer({
-      name: source.layerName.trim() || def.label,
+      name: source.layerName.trim() || deckVizKindLabel(t, def),
       config: {
         layerKind: def.kind,
         format: parsed.format,
@@ -391,10 +398,10 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
       const { sourcePath, text } = await readDeckVizSource();
       const parsed = detectAndParseDeckVizInput(text);
       if (def.format === "geojson" && parsed.format !== "geojson") {
-        throw new Error(t("addData.deckViz.needsGeojson", { label: def.label }));
+        throw new Error(t("addData.deckViz.needsGeojson", { label: deckVizKindLabel(t, def) }));
       }
       if (def.format !== "geojson" && parsed.format === "geojson") {
-        throw new Error(t("addData.deckViz.needsTabular", { label: def.label }));
+        throw new Error(t("addData.deckViz.needsTabular", { label: deckVizKindLabel(t, def) }));
       }
       setDeckVizParsed(parsed);
       setDeckVizSourcePath(sourcePath);
@@ -516,19 +523,22 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
             onChange={(event) => handleDeckVizKindChange(event.target.value)}
           >
             {(Object.keys(DECK_VIZ_CATEGORY_LABELS) as DeckVizCategory[]).map((category) => (
-              <optgroup key={category} label={DECK_VIZ_CATEGORY_LABELS[category]}>
+              <optgroup
+                key={category}
+                label={deckVizCategoryLabel(t, category, DECK_VIZ_CATEGORY_LABELS[category])}
+              >
                 {listDeckVizLayerDefs()
                   .filter((def) => def.category === category)
                   .map((def) => (
                     <option key={def.kind} value={def.kind}>
-                      {def.label}
+                      {deckVizKindLabel(t, def)}
                     </option>
                   ))}
               </optgroup>
             ))}
           </Select>
           {deckVizDef ? (
-            <p className="text-xs text-muted-foreground">{deckVizDef.description}</p>
+            <p className="text-xs text-muted-foreground">{deckVizKindDescription(t, deckVizDef)}</p>
           ) : null}
         </div>
 
@@ -738,7 +748,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
               <div className="grid gap-3 sm:grid-cols-2">
                 {deckVizDef.roles.map((role) => (
                   <div key={role.key} className="space-y-1.5">
-                    <Label htmlFor={`deckviz-role-${role.key}`}>{role.label}</Label>
+                    <Label htmlFor={`deckviz-role-${role.key}`}>{deckVizRoleLabel(t, role)}</Label>
                     <Select
                       id={`deckviz-role-${role.key}`}
                       value={String(deckVizMapping[role.key] ?? "")}

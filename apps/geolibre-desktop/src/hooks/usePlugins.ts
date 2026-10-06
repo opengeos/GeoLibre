@@ -121,6 +121,7 @@ import {
   closeFloatingPanel,
   getOpenFloatingPanels,
   setArcGisPortalAuth,
+  setLocalizedErrorTranslator,
 } from "@geolibre/plugins";
 import { getDeploymentPolicy, readDeploymentEnvValue } from "../lib/deployment-env";
 import type { DeploymentPolicy } from "../lib/deployment-policy";
@@ -405,6 +406,15 @@ setArcGisPortalAuth({
     return key ? i18n.t(key) : error instanceof Error ? error.message : String(error);
   },
 });
+
+// Errors that plugin library code throws for the UI (LocalizedError) translate
+// themselves through this when they are raised.
+setLocalizedErrorTranslator((key, defaultValue, params) =>
+  (i18n.t as (key: string, options: Record<string, unknown>) => string)(key, {
+    ...params,
+    defaultValue,
+  }),
+);
 
 // The Earthdata GIS plugin exports an ArcGIS service as a plain GeoTIFF but
 // cannot re-encode it: ArcGIS has no COG output (`format=cog` falls back to
