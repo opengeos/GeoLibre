@@ -620,6 +620,46 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.equal(layer?.geojson?.features.length, 1, "the shared feature is published once");
   });
 
+  it("treats an envelope that matches nothing as empty, not as a failed query", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) return jsonResponse(VIEWPORT_LAYER_INFO);
+      if (Number(url.searchParams.get("resultOffset") ?? "0") > 0) {
+        return jsonResponse({ type: "FeatureCollection", features: [] });
+      }
+      // What a hosted service answers a quantized query over an empty envelope
+      // with: plain Esri JSON with no `transform`, so not a quantized set either.
+      if (url.searchParams.get("geometry")?.startsWith("170,")) {
+        return jsonResponse({
+          objectIdFieldName: "OBJECTID",
+          uniqueIdField: { name: "OBJECTID", isSystemMaintained: true },
+          globalIdFieldName: "",
+          geometryProperties: { shapeAreaFieldName: "Shape__Area" },
+          features: [],
+        });
+      }
+      return jsonResponse({ type: "FeatureCollection", features: [viewportFeature(1)] });
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([170, -20, -170, 20]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+
+    const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
+    assert.equal(layer?.connection?.lastError ?? null, null);
+    assert.equal(layer?.geojson?.features.length, 1);
+    assert.equal((await reloadArcGISViewportLayer(id))?.features.length, 1);
+  });
+
   // The exact body Vicmap_Parcel returns (with HTTP 200) when it exceeds its
   // own query timeout on a wide extent — it blames the parameters, which are
   // correct: the identical request succeeds on a retry (GeoLibre#1756).

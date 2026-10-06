@@ -46,6 +46,24 @@ function renderTable() {
   return render(createElement(AttributeTable, { mapControllerRef: { current: null } }));
 }
 
+/** Open the table on a URL-backed GeoJSON layer, which the layer menu can refresh. */
+function renderRefreshableTable(props: Record<string, unknown>) {
+  stubLayout(1024, 600);
+  useAppStore.setState({
+    layers: [
+      geojsonLayer({
+        id: "cities",
+        name: "Cities",
+        geojson: cities,
+        source: { type: "geojson", url: "https://example.com/cities.geojson" },
+      }),
+    ],
+    selectedLayerId: "cities",
+  });
+  useAppStore.getState().setAttributeTableOpen(true);
+  return render(createElement(AttributeTable, { mapControllerRef: { current: null }, ...props }));
+}
+
 function table(): HTMLElement {
   return screen.getByTestId("attribute-table");
 }
@@ -122,6 +140,47 @@ describe("AttributeTable", () => {
 
     assert.equal(useAppStore.getState().selectedFeatureId, "2");
     assert.match(status(), /1 selected/);
+  });
+
+  it("refreshes a refreshable layer through the shared handler", () => {
+    const refreshed: string[] = [];
+    renderRefreshableTable({
+      onRefreshLayer: (layer: { id: string }) => {
+        refreshed.push(layer.id);
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh features" }));
+
+    assert.deepEqual(refreshed, ["cities"]);
+  });
+
+  it("offers no Refresh for a layer with nothing to re-read", () => {
+    renderTable();
+    assert.equal(screen.queryByRole("button", { name: "Refresh features" }), null);
+
+    // Nor without a handler, even when the layer has a source URL.
+    renderRefreshableTable({});
+    assert.equal(screen.queryByRole("button", { name: "Refresh features" }), null);
+  });
+
+  it("disables Refresh while one is running and shows the layer's refresh note", () => {
+    const view = renderRefreshableTable({
+      onRefreshLayer: () => {},
+      refreshStatuses: { cities: { type: "refreshing", message: "Refreshing..." } },
+    });
+    const button = screen.getByRole("button", { name: "Refresh features" });
+    assert.equal((button as HTMLButtonElement).disabled, true);
+
+    view.rerender(
+      createElement(AttributeTable, {
+        mapControllerRef: { current: null },
+        onRefreshLayer: () => {},
+        refreshStatuses: { cities: { type: "error", message: "HTTP 503" } },
+      }),
+    );
+    assert.equal((button as HTMLButtonElement).disabled, false);
+    assert.ok(screen.getByText("HTTP 503"));
   });
 
   it("closes from its close button", () => {

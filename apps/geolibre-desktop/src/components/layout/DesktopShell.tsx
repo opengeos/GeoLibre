@@ -1100,7 +1100,11 @@ export function DesktopShell({
           label="Attribute table"
           displayName={t("shell.section.attributeTable")}
         >
-          <AttributeTable mapControllerRef={mapControllerRef} />
+          <AttributeTable
+            mapControllerRef={mapControllerRef}
+            onRefreshLayer={layerRefresh.handleRefreshLayer}
+            refreshStatuses={layerRefresh.refreshStatuses}
+          />
         </SectionErrorBoundary>
       ) : null}
       {layoutOptions.attributePanelVisible ? (

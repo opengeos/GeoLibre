@@ -2195,6 +2195,19 @@ async function fetchArcGISGeoJson(
     const decoded = decodeArcGISQuantizedFeatures(json);
     return { ...decoded, firstRecordSignature: arcgisRecordSignature(decoded.firstRecord) };
   }
+  // An envelope that matches nothing answers the quantized query with a bare
+  // Esri JSON feature set: no `transform`, no `geometryType`, and no features.
+  // The default world view splits at the antimeridian, so one of its two
+  // envelopes over the US routinely comes back like this (issue #2948).
+  if (json.type === undefined && Array.isArray(json.features) && json.features.length === 0) {
+    return {
+      type: "FeatureCollection",
+      features: [],
+      exceededTransferLimit: Boolean(json.exceededTransferLimit),
+      recordCount: 0,
+      firstRecordSignature: null,
+    };
+  }
   if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
     throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
   }

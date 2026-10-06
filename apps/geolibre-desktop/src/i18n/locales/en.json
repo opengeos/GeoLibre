@@ -7247,6 +7247,10 @@
     "collapse": "Collapse {{title}}"
   },
   "attributeTable": {
+    "refresh": "Refresh features",
+    "refreshTitle": "Re-read features from the source to pick up changes made elsewhere",
+    "refreshTitleLocalFile": "Reload features from the file on disk",
+    "refreshTitlePendingEdits": "Save or discard your edits before refreshing",
     "title": "Attribute table",
     "resize": "Resize attribute table",
     "editValues": "Edit attribute values",
@@ -7307,7 +7311,8 @@
       "fields": "Fields",
       "explore": "Explore",
       "statistics": "Statistics",
-      "export": "Export"
+      "export": "Export",
+      "refresh": "Refresh"
     },
     "chart": {
       "field": "Field",
