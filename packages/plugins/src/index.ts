@@ -171,6 +171,7 @@ export {
   IMAGE_SIZE_MIN,
   formatAspectRatio,
   normalizeImageUrl,
+  ratioHeight,
   parseAspectRatio,
   type ComponentImageState,
   type ImageSizeMode,

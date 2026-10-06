@@ -2941,7 +2941,7 @@
     "width": "Width (px)",
     "height": "Height (px)",
     "ratio": "Aspect ratio (width:height)",
-    "ratioInvalid": "Enter a ratio such as 16:9 or 1.5 (between {{min}} and {{max}}).",
+    "ratioInvalid": "Enter a ratio such as 16:9 or 1.5 (between {{min}} and {{max}}) that keeps the height between {{minSize}} and {{maxSize}} px.",
     "sizeRange": "Enter a size between {{min}} and {{max}} px.",
     "position": "Position",
     "corner": {

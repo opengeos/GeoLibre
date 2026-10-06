@@ -10,6 +10,7 @@ import {
   normalizeImageStates,
   normalizeImageUrl,
   parseAspectRatio,
+  ratioHeight,
 } from "../packages/plugins/src/plugins/components/image-model";
 
 describe("Image control model", () => {
@@ -53,6 +54,16 @@ describe("Image control model", () => {
     });
     assert.equal(imageLayout({ ...base, sizeMode: "fixed" }).height, "100px");
     assert.equal(imageLayout({ ...base, sizeMode: "ratio", ratio: 4 }).height, "50px");
+  });
+
+  it("keeps the height a ratio implies within the size limits", () => {
+    assert.equal(ratioHeight(300, 2), 150);
+    assert.equal(ratioHeight(2000, 0.1), 2000);
+    assert.equal(ratioHeight(20, 10), 16);
+    assert.equal(
+      imageLayout({ sizeMode: "ratio", width: 2000, height: 100, ratio: 0.1 }).height,
+      "2000px",
+    );
   });
 
   it("normalizes untrusted project state", () => {

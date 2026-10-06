@@ -10,6 +10,7 @@ import {
   formatAspectRatio,
   normalizeImageUrl,
   parseAspectRatio,
+  ratioHeight,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -100,6 +101,9 @@ export function ImageControlDialog({ panel }: { panel: ToolbarPanels["image"] })
     if (nextHeight === null) return setInvalid("height");
     const nextRatio = mode === "ratio" ? parseAspectRatio(ratio) : DEFAULT_IMAGE_STATE.ratio;
     if (nextRatio === null) return setInvalid("ratio");
+    // The width and ratio together must give a height within the size limits.
+    if (mode === "ratio" && ratioHeight(nextWidth, nextRatio) !== Math.round(nextWidth / nextRatio))
+      return setInvalid("ratio");
     const id = panel.apply({
       id: editingId ?? undefined,
       title: title.trim() || NEW_IMAGE_TITLE,
@@ -269,7 +273,12 @@ export function ImageControlDialog({ panel }: { panel: ToolbarPanels["image"] })
                     clearInvalid();
                   }}
                 />,
-                t("imageControl.ratioInvalid", { min: IMAGE_RATIO_MIN, max: IMAGE_RATIO_MAX }),
+                t("imageControl.ratioInvalid", {
+                  min: IMAGE_RATIO_MIN,
+                  max: IMAGE_RATIO_MAX,
+                  minSize: IMAGE_SIZE_MIN,
+                  maxSize: IMAGE_SIZE_MAX,
+                }),
               )}
           </div>
           <div className="space-y-1">

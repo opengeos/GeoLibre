@@ -110,6 +110,7 @@ export {
   DEFAULT_IMAGE_STATE,
   formatAspectRatio,
   normalizeImageUrl,
+  ratioHeight,
   parseAspectRatio,
 } from "./components/image-model";
 export {

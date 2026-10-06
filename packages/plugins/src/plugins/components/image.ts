@@ -33,6 +33,8 @@ class ImageControl implements IControl {
     container.className = "maplibregl-ctrl geolibre-image-control";
     container.style.width = "fit-content";
     container.style.maxWidth = "100%";
+    // An oversized image is clipped to its box rather than spilling over the map.
+    container.style.overflow = "hidden";
 
     const toggle = document.createElement("button");
     toggle.type = "button";

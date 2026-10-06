@@ -180,6 +180,18 @@ export function formatAspectRatio(ratio: number): string {
   return String(Math.round(ratio * 100) / 100);
 }
 
+/**
+ * The height a width and aspect ratio imply, kept within the same limits as an
+ * explicit size so an extreme ratio cannot make a box taller than allowed.
+ *
+ * @param width - Width in px.
+ * @param ratio - Width / height.
+ * @returns The height in whole px, within [IMAGE_SIZE_MIN, IMAGE_SIZE_MAX].
+ */
+export function ratioHeight(width: number, ratio: number): number {
+  return Math.min(IMAGE_SIZE_MAX, Math.max(IMAGE_SIZE_MIN, Math.round(width / ratio)));
+}
+
 /** Inline CSS (as a property map) that sizes the `<img>` for a state. */
 export interface ImageLayout {
   width: string;
@@ -201,7 +213,7 @@ export function imageLayout(
     return { width, height: `${Math.round(state.height)}px`, objectFit: "contain" };
   }
   if (state.sizeMode === "ratio") {
-    return { width, height: `${Math.round(state.width / state.ratio)}px`, objectFit: "contain" };
+    return { width, height: `${ratioHeight(state.width, state.ratio)}px`, objectFit: "contain" };
   }
   return { width, height: "auto", objectFit: "contain" };
 }
