@@ -5,6 +5,7 @@ import {
   DEFAULT_IMAGE_STATE,
   formatAspectRatio,
   imageLayout,
+  isRatioHeightInRange,
   MAX_IMAGE_CONTROLS,
   normalizeImageState,
   normalizeImageStates,
@@ -64,6 +65,12 @@ describe("Image control model", () => {
       imageLayout({ sizeMode: "ratio", width: 2000, height: 100, ratio: 0.1 }).height,
       "2000px",
     );
+  });
+
+  it("tells whether a ratio keeps the height in range", () => {
+    assert.equal(isRatioHeightInRange(300, 2), true);
+    assert.equal(isRatioHeightInRange(2000, 0.1), false);
+    assert.equal(isRatioHeightInRange(20, 10), false);
   });
 
   it("normalizes untrusted project state", () => {

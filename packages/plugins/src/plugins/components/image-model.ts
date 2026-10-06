@@ -192,6 +192,17 @@ export function ratioHeight(width: number, ratio: number): number {
   return Math.min(IMAGE_SIZE_MAX, Math.max(IMAGE_SIZE_MIN, Math.round(width / ratio)));
 }
 
+/**
+ * Whether a width and aspect ratio imply a height within the size limits.
+ *
+ * @param width - Width in px.
+ * @param ratio - Width / height.
+ * @returns True when the implied height needs no clamping.
+ */
+export function isRatioHeightInRange(width: number, ratio: number): boolean {
+  return ratioHeight(width, ratio) === Math.round(width / ratio);
+}
+
 /** Inline CSS (as a property map) that sizes the `<img>` for a state. */
 export interface ImageLayout {
   width: string;

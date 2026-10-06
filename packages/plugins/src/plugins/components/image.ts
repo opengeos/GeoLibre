@@ -12,6 +12,21 @@ import {
   normalizeImageState,
 } from "./image-model";
 
+/**
+ * User-facing strings of the control. Defaults are English; the desktop shell
+ * pushes translated values via {@link setImageLabels} since this package has no
+ * react-i18next access.
+ */
+const imageLabels = { fallbackTitle: "Image", expand: "Expand", collapse: "Collapse" };
+
+/** Override the Image control labels with translated text. */
+export function setImageLabels(labels: Partial<typeof imageLabels>): void {
+  for (const [key, value] of Object.entries(labels)) {
+    if (value !== undefined) imageLabels[key as keyof typeof imageLabels] = value;
+  }
+  for (const control of controls.values()) control.refresh();
+}
+
 /** One image on the map: a header bar (title + fold toggle) over the picture. */
 class ImageControl implements IControl {
   private container: HTMLDivElement | null = null;
@@ -108,6 +123,11 @@ class ImageControl implements IControl {
     this.render();
   }
 
+  /** Re-draws the header text, e.g. after the labels were translated. */
+  refresh(): void {
+    this.render();
+  }
+
   private showError(failed: boolean): void {
     if (!this.image) return;
     // A broken image collapses to nothing; keep a visible dashed box so the
@@ -120,9 +140,9 @@ class ImageControl implements IControl {
     const { image, toggle, chevron, titleEl } = this;
     if (!image || !toggle || !chevron || !titleEl) return;
     const { collapsed, title, url } = this.state;
-    titleEl.textContent = title || "Image";
+    titleEl.textContent = title || imageLabels.fallbackTitle;
     toggle.setAttribute("aria-expanded", String(!collapsed));
-    toggle.title = collapsed ? "Expand" : "Collapse";
+    toggle.title = collapsed ? imageLabels.expand : imageLabels.collapse;
     toggle.style.borderRadius = collapsed ? "6px" : "6px 6px 0 0";
     chevron.style.transform = collapsed ? "rotate(-90deg)" : "";
     const layout = imageLayout(this.state);

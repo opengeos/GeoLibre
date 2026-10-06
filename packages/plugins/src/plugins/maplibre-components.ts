@@ -97,6 +97,7 @@ export {
   isImagePanelVisible,
   removeImageControl,
   setImageControl,
+  setImageLabels,
   subscribeImagePanel,
 } from "./components/image";
 export {
@@ -110,6 +111,7 @@ export {
   DEFAULT_IMAGE_STATE,
   formatAspectRatio,
   normalizeImageUrl,
+  isRatioHeightInRange,
   ratioHeight,
   parseAspectRatio,
 } from "./components/image-model";

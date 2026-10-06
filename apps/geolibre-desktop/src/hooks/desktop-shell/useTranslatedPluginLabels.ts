@@ -1,5 +1,6 @@
 import {
   setBookmarkLabels,
+  setImageLabels,
   setTerrainMeasureBodyNames,
   setTerrainMeasureLabels,
   setViewStateLabels,
@@ -29,6 +30,11 @@ export function useTranslatedPluginLabels(t: TFunction): void {
       defaultFolderName: t("bookmark.defaultFolderName"),
     });
     setViewStateLabels({ title: t("viewState.panelTitle") });
+    setImageLabels({
+      fallbackTitle: t("imageControl.defaultTitle"),
+      expand: t("imageControl.expand"),
+      collapse: t("imageControl.collapse"),
+    });
     setTerrainMeasureLabels({
       title: t("terrainMeasure.title"),
       surfaceDistance: t("terrainMeasure.surfaceDistance"),

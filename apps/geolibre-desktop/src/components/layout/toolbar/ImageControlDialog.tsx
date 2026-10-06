@@ -9,8 +9,8 @@ import {
   MAX_IMAGE_CONTROLS,
   formatAspectRatio,
   normalizeImageUrl,
+  isRatioHeightInRange,
   parseAspectRatio,
-  ratioHeight,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -33,10 +33,7 @@ import {
   subscribeImageControlDialog,
 } from "../../../lib/image-control-dialog-store";
 
-type Field = "url" | "width" | "height" | "ratio" | "apply";
-
-/** Form values (all text) for a new image. */
-const NEW_IMAGE_TITLE = DEFAULT_IMAGE_STATE.title;
+type Field = "url" | "width" | "height" | "ratio" | "apply" | "limit";
 
 /**
  * Dialog for the Image control. A map can hold several images, each with a
@@ -56,7 +53,7 @@ export function ImageControlDialog({ panel }: { panel: ToolbarPanels["image"] })
     isImageControlDialogOpen,
   );
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [title, setTitle] = useState(NEW_IMAGE_TITLE);
+  const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState<ImageSizeMode>(DEFAULT_IMAGE_STATE.sizeMode);
   const [width, setWidth] = useState(String(DEFAULT_IMAGE_STATE.width));
@@ -70,7 +67,7 @@ export function ImageControlDialog({ panel }: { panel: ToolbarPanels["image"] })
   const loadForm = (current: ComponentImageState | null) => {
     const source = current ?? DEFAULT_IMAGE_STATE;
     setEditingId(current?.id ?? null);
-    setTitle(source.title);
+    setTitle(current ? current.title : t("imageControl.defaultTitle"));
     setUrl(source.url);
     setMode(source.sizeMode);
     setWidth(String(source.width));
@@ -102,11 +99,11 @@ export function ImageControlDialog({ panel }: { panel: ToolbarPanels["image"] })
     const nextRatio = mode === "ratio" ? parseAspectRatio(ratio) : DEFAULT_IMAGE_STATE.ratio;
     if (nextRatio === null) return setInvalid("ratio");
     // The width and ratio together must give a height within the size limits.
-    if (mode === "ratio" && ratioHeight(nextWidth, nextRatio) !== Math.round(nextWidth / nextRatio))
-      return setInvalid("ratio");
+    if (mode === "ratio" && !isRatioHeightInRange(nextWidth, nextRatio)) return setInvalid("ratio");
+    if (!editingId && panel.images.length >= MAX_IMAGE_CONTROLS) return setInvalid("limit");
     const id = panel.apply({
       id: editingId ?? undefined,
-      title: title.trim() || NEW_IMAGE_TITLE,
+      title: title.trim() || t("imageControl.defaultTitle"),
       url: nextUrl,
       sizeMode: mode,
       width: nextWidth,
@@ -294,6 +291,11 @@ export function ImageControlDialog({ panel }: { panel: ToolbarPanels["image"] })
               <option value="bottom-right">{t("imageControl.corner.bottomRight")}</option>
             </Select>
           </div>
+          {invalid === "limit" && (
+            <p className="text-xs text-amber-600">
+              {t("imageControl.limit", { max: MAX_IMAGE_CONTROLS })}
+            </p>
+          )}
           {invalid === "apply" && (
             <p className="text-xs text-amber-600">{t("imageControl.addFailed")}</p>
           )}
