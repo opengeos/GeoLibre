@@ -149,6 +149,10 @@ export function decodeArcGISQuantizedFeatures(
 } {
   const grid = featureSet.transform;
   if (!grid) {
+    // Only an empty page may omit the grid; records without one cannot be placed.
+    if (featureSet.features.length > 0) {
+      throw new Error("The ArcGIS quantized feature set has records but no transform.");
+    }
     return {
       type: "FeatureCollection",
       features: [],

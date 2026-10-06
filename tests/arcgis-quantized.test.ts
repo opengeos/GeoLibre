@@ -88,6 +88,13 @@ describe("decodeArcGISQuantizedFeatures", () => {
     assert.equal(decoded.firstRecord, undefined);
   });
 
+  it("rejects a non-empty page without a transform instead of dropping its records", () => {
+    assert.throws(
+      () => decodeArcGISQuantizedFeatures({ features: [{ attributes: { FID: 1 } }] }),
+      /no transform/,
+    );
+  });
+
   it("undoes the delta encoding and the upper-left origin", () => {
     const decoded = decodeArcGISQuantizedFeatures(
       featureSet([
