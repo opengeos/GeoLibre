@@ -4,6 +4,7 @@ import proj4 from "proj4";
 import {
   canReprojectWmsCrs,
   projectedWmsRequest,
+  reprojectableWmsCodes,
   reprojectableWmsCrs,
   sourcePixelMap,
   warpToMercator,
@@ -106,6 +107,22 @@ test("canReprojectWmsCrs accepts only CRSs the tile protocol can draw", async ()
   for (const crs of ["EPSG:999999", "EPSG:1", "EPSG:6244"]) {
     assert.equal(await canReprojectWmsCrs(crs), false, crs);
   }
+});
+
+test("reprojectableWmsCodes keeps the supported codes when one check rejects", async () => {
+  const check = async (code: string) => {
+    if (code === "EPSG:6244") throw new Error("Could not get projection name");
+    return code !== "EPSG:999999";
+  };
+  assert.deepEqual(
+    await reprojectableWmsCodes(["EPSG:3857", "EPSG:6244", "EPSG:999999", "CRS:84"], check),
+    ["EPSG:3857", "CRS:84"],
+  );
+  // The real check, over the Vienna mix from #3007.
+  assert.deepEqual(await reprojectableWmsCodes(["EPSG:6244", "EPSG:3857", "CRS:84"]), [
+    "EPSG:3857",
+    "CRS:84",
+  ]);
 });
 
 test("reprojectableWmsCrs falls back to Web Mercator for a CRS it cannot draw", async () => {

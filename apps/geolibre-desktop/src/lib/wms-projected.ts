@@ -88,6 +88,23 @@ export async function canReprojectWmsCrs(code: string): Promise<boolean> {
 }
 
 /**
+ * The codes among `codes` the desktop tile protocol can reproject. A code whose
+ * check fails counts as unsupported, so one odd CRS in a long inherited list
+ * never fails the whole probe.
+ *
+ * @param codes - The advertised CRS codes.
+ * @param check - The per-code check; tests pass a stub.
+ * @returns The supported codes, in their original order.
+ */
+export async function reprojectableWmsCodes(
+  codes: string[],
+  check: (code: string) => Promise<boolean> = canReprojectWmsCrs,
+): Promise<string[]> {
+  const supported = await Promise.all(codes.map((code) => check(code).catch(() => false)));
+  return codes.filter((_, index) => supported[index]);
+}
+
+/**
  * `crs` when the desktop tile protocol can reproject it, else undefined, which
  * requests the tiles in Web Mercator: a saved service may carry a CRS the
  * bundled EPSG tables do not know.
