@@ -301,7 +301,17 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
         token: await resolveToken(),
         // Sign-in tokens expire in about 30 minutes; later requests renew them.
         tokenProvider:
-          authMode === "sign-in" ? () => tryGetArcGISAccessToken(arcgisPortalUrl) : undefined,
+          authMode === "sign-in"
+            ? async () => {
+                try {
+                  return await tryGetArcGISAccessToken(arcgisPortalUrl);
+                } catch (error) {
+                  // Layer errors are shown verbatim, so word the failure here.
+                  const key = arcgisAuthErrorKey(error);
+                  throw key ? new Error(t(key), { cause: error }) : error;
+                }
+              }
+            : undefined,
         url: arcgisUrl.trim() || undefined,
       });
     } catch (error) {

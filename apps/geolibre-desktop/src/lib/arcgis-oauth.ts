@@ -379,9 +379,11 @@ export async function signInToArcGIS(options: {
 
     let code: string;
     if (desktop) {
+      let receiverReady = false;
       try {
         // The deep-link receiver starts asynchronously after launch.
         await waitForDesktopOAuthReady();
+        receiverReady = true;
         if (cancelled) throw new ArcGISAuthError("cancelled");
         // Throws "malformed" while another flow (a Share sign-in) holds the
         // shared receiver.
@@ -407,8 +409,9 @@ export async function signInToArcGIS(options: {
                     : "exchange-failed",
           );
         }
-        // Startup readiness failed (a ShareOAuthError): the receiver is not usable.
-        throw new ArcGISAuthError("restart-required");
+        // Startup readiness failed (a ShareOAuthError): the receiver is not
+        // usable. Past that, the system browser failed to open.
+        throw new ArcGISAuthError(receiverReady ? "exchange-failed" : "restart-required");
       }
     } else {
       popup!.location.href = authorizeUrl.toString();
@@ -425,6 +428,8 @@ export async function signInToArcGIS(options: {
         code_verifier: verifier,
       }),
     );
+    // Cancelled while the exchange was in flight: do not sign in after all.
+    if (cancelled) throw new ArcGISAuthError("cancelled");
     sessions.set(portal, {
       clientId,
       username: tokens.username,
