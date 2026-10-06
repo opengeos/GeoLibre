@@ -8619,6 +8619,8 @@
     "layerAccessDeniedHint": "The server answered HTTP {{status}}. Check the layer's API key or access token.",
     "layerTilesMissing": "No tiles found for layer \"{{name}}\"",
     "layerTilesMissingHint": "Every tile request so far came back as not found. Check the layer's URL template.",
+    "layerRateLimited": "The server for layer \"{{name}}\" is limiting requests",
+    "layerRateLimitedHint": "It answered HTTP 429 (too many requests), so some tiles may be missing. They load again when you pan or zoom after a moment.",
     "projectHistoryLoadFailed": "Could not load the project history.",
     "projectRecoveryUnavailable": "Could not check for unsaved work from a previous session.",
     "autosaveFailed": "Autosave failed. Save the project to keep your changes.",

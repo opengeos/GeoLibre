@@ -9,6 +9,8 @@
  * the layer has loaded no tile at all after several requests (a wrong URL
  * template). A 404 for a whole-file source (GeoJSON, PMTiles, a style) still
  * counts at once, and so does a 401/403, which no sparse tile set answers with.
+ * A 429 is the server throttling a burst of requests, not a broken layer, so it
+ * gets its own warning rather than "failed to load".
  */
 import type { GeoLibreLayer } from "@geolibre/core";
 import { mapboxSourceId, sourceId } from "@geolibre/map/style-layer-ids";
@@ -19,6 +21,21 @@ export const EMPTY_TILE_STATUSES: ReadonlySet<number> = new Set([204, 404]);
 
 /** HTTP statuses that mean the server refused the request (a bad or missing key). */
 const ACCESS_DENIED_STATUSES = new Set([401, 403]);
+
+/** HTTP status a server answers when it is throttling requests. */
+const RATE_LIMITED_STATUS = 429;
+
+/**
+ * The Diagnostics level for a map-engine error. A 429 is the server throttling
+ * a burst of tile requests: the layer still works and it is not a GeoLibre bug,
+ * so it is a warning (no "Report issue"), not one error per throttled tile.
+ *
+ * @param event - The engine's error event.
+ * @returns The level to record the event at.
+ */
+export function mapDiagnosticLevel(event: MapDiagnosticEvent): "error" | "warning" {
+  return event.status === RATE_LIMITED_STATUS ? "warning" : "error";
+}
 
 /**
  * Failed tile requests, with none loaded, after which a tile layer reads as
@@ -33,8 +50,10 @@ export const MISSING_TILES_THRESHOLD = 12;
  * - `failed`: it did not load (an error toast).
  * - `accessDenied`: the server refused it, typically a bad API key (a warning).
  * - `tilesMissing`: every tile so far was "not found" (a warning).
+ * - `rateLimited`: the server throttled requests (HTTP 429); the layer works,
+ *   but some tiles may be missing until it lets requests through (a warning).
  */
-export type LayerFailureKind = "failed" | "accessDenied" | "tilesMissing";
+export type LayerFailureKind = "failed" | "accessDenied" | "tilesMissing" | "rateLimited";
 
 /** A layer to tell the user about, and how. */
 export interface LayerFailureNotice {
@@ -109,6 +128,7 @@ export function mapErrorNotice(
   if (status !== undefined && ACCESS_DENIED_STATUSES.has(status)) {
     return { layer, kind: "accessDenied", status };
   }
+  if (status === RATE_LIMITED_STATUS) return { layer, kind: "rateLimited", status };
   // An engine that counts tiles (Cesium) passes the tallies. It often cannot
   // see the HTTP status at all (an <img> load), so a missing status may be an
   // empty tile too, and only the tallies can tell.

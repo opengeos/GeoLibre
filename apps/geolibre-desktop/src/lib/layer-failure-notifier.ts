@@ -65,9 +65,12 @@ export function createLayerFailureNotifier(
 
   const show = (notice: LayerFailureNotice, diagnostic?: DiagnosticRecord) => {
     const { layer } = notice;
-    if (notified.has(layer.id)) return;
-    notified.add(layer.id);
-    const dedupeKey = `map-layer:${layer.id}`;
+    // A throttled burst is transient, so it is tracked apart from the layer's
+    // one failure notice: a real failure later still gets its own toast.
+    const key = notice.kind === "rateLimited" ? `${layer.id}:rateLimited` : layer.id;
+    if (notified.has(key)) return;
+    notified.add(key);
+    const dedupeKey = `map-layer:${key}`;
     const { t } = options;
     // The warnings stay up like the error does: the layer stays broken until
     // its URL or key is fixed, so the notice should not time out unread.
@@ -76,6 +79,12 @@ export function createLayerFailureNotifier(
         description: t("notifications.layerAccessDeniedHint", { status: notice.status ?? 403 }),
         dedupeKey,
         durationMs: null,
+      });
+    } else if (notice.kind === "rateLimited") {
+      // Transient and not a GeoLibre bug: no "Report issue", and it times out.
+      notify.warning(t("notifications.layerRateLimited", { name: layer.name }), {
+        description: t("notifications.layerRateLimitedHint"),
+        dedupeKey,
       });
     } else if (notice.kind === "tilesMissing") {
       notify.warning(t("notifications.layerTilesMissing", { name: layer.name }), {

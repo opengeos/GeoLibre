@@ -92,6 +92,7 @@ import {
   useDiagnosticsSnapshot,
 } from "../../lib/diagnostics";
 import { createLayerFailureNotifier } from "../../lib/layer-failure-notifier";
+import { mapDiagnosticLevel } from "../../lib/map-error-notification";
 import { useCredentialStorageStatus } from "../../lib/credential-store";
 import { SectionErrorBoundary, SilentErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
@@ -511,7 +512,7 @@ export function DesktopShell({
     (event: MapDiagnosticEvent) => {
       const record = appendDiagnostic({
         category: "map",
-        level: "error",
+        level: mapDiagnosticLevel(event),
         message: event.message,
         detail: event.detail,
         source: event.source,

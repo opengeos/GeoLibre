@@ -5,6 +5,7 @@ import { clearDiagnostics } from "../apps/geolibre-desktop/src/lib/diagnostics";
 import { createLayerFailureNotifier } from "../apps/geolibre-desktop/src/lib/layer-failure-notifier";
 import {
   layerForTileUrl,
+  mapDiagnosticLevel,
   mapErrorNotice,
   MISSING_TILES_THRESHOLD,
   tilesLookBroken,
@@ -60,6 +61,18 @@ describe("mapErrorNotice", () => {
     assert.equal(event(1, 30), null);
     // A server error is a failure at once.
     assert.equal(event(4, 1, 500)?.kind, "failed");
+  });
+
+  it("reads a 429 as rate limiting, not a failed layer", () => {
+    const notice = mapErrorNotice({ message: "x", source: "source-xyz", status: 429 }, layers);
+    assert.equal(notice?.kind, "rateLimited");
+    assert.equal(notice?.status, 429);
+  });
+
+  it("records a throttled tile as a Diagnostics warning, other failures as errors", () => {
+    assert.equal(mapDiagnosticLevel({ message: "x", status: 429 }), "warning");
+    assert.equal(mapDiagnosticLevel({ message: "x", status: 500 }), "error");
+    assert.equal(mapDiagnosticLevel({ message: "x" }), "error");
   });
 
   it("tilesLookBroken needs zero loads and the threshold", () => {
@@ -159,6 +172,20 @@ describe("createLayerFailureNotifier", () => {
     assert.match(visible()[0].message, /notifications\.layerLoadFailed .*Imagery/);
     // The error toast links a Diagnostics record for "Report issue".
     assert.ok(visible()[0].diagnostic);
+  });
+
+  it("warns about a throttled layer without blocking a later failure toast", () => {
+    const n = notifier();
+    n.handleMapEvent({ message: "AJAXError: (429)", source: "source-xyz", status: 429 });
+    n.handleMapEvent({ message: "AJAXError: (429)", source: "source-xyz", status: 429 });
+    assert.equal(visible().length, 1);
+    assert.equal(visible()[0].kind, "warning");
+    assert.match(visible()[0].message, /notifications\.layerRateLimited .*Imagery/);
+    // Transient, not a GeoLibre bug: no "Report issue" link.
+    assert.equal(visible()[0].diagnostic, undefined);
+    n.handleMapEvent({ message: "boom", source: "source-xyz", status: 500 });
+    assert.equal(visible().length, 2);
+    assert.equal(visible()[1].kind, "error");
   });
 
   it("stays quiet for basemap sources and empty tiles", () => {
