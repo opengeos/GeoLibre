@@ -55,7 +55,7 @@ The graduated schemes differ in where they put the class breaks:
 - **Geometric interval** grows the breaks by a constant ratio from the smallest positive value to the maximum, which suits skewed data spanning orders of magnitude (population, income, concentrations). Zero and negative values fall into the first class; if no value is positive, it classifies by equal interval instead.
 - **Manual** is set for you as soon as you edit a class value, add a class, or remove one, so the method shown never claims to have produced breaks you typed. Choose it yourself to keep the current breaks while you edit them. Changing the class count, colormap, or attribute regenerates the breaks by equal interval.
 
-The map legend names the method under a graduated layer's field, for example "Quantile, 5 classes", so a reader of an exported or shared map can tell how the classes were built.
+The map legend names the method under a graduated layer's field, for example "Quantile, 5 classes", so a reader of an exported or shared map can tell how the classes were built. A project saved before the **Manual** scheme existed keeps the method it was classified with even if its breaks were edited by hand afterwards; reapply the classification, or pick **Manual**, to correct the caption.
 
 ### Diagram symbology
 

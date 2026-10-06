@@ -214,7 +214,9 @@ export function VectorSymbologySection({
   };
   const updateDraftVectorStyleStop = (index: number, patch: Partial<VectorStyleStop>) => {
     // A new color or label keeps the breaks; only a moved break is manual.
-    if ("value" in patch) markGraduatedStopsManual();
+    if ("value" in patch && patch.value !== draftVectorStyleStops[index]?.value) {
+      markGraduatedStopsManual();
+    }
     setDraftVectorStyleStops((stops) =>
       stops.map((stop, stopIndex) => (stopIndex === index ? { ...stop, ...patch } : stop)),
     );
