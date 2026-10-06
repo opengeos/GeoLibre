@@ -126,7 +126,8 @@ const BOOKMARK_OPTIONS = {
  */
 export const LEGACY_BOOKMARK_STORAGE_KEY = "geolibre-bookmarks";
 /**
- * Set once the legacy bookmarks were copied into a project. The legacy data
+ * Set once the legacy bookmarks were copied into a project and it was saved.
+ * The legacy data
  * itself is left in place, so bookmarks moved into the wrong project can still
  * be recovered from this browser's storage.
  */
@@ -263,9 +264,9 @@ function copyGroups(
 
 /**
  * Copy bookmarks saved by older versions (in this browser's localStorage) into
- * the open project, once, when the project has none of its own. A marker key
- * records the copy so they are not copied into every project opened
- * afterwards; the legacy data stays, so nothing is lost if they landed in the
+ * the open project, once, when the project has none of its own. A marker key,
+ * written when that project is saved, stops them being copied into every
+ * project opened afterwards; the legacy data stays, so nothing is lost if they landed in the
  * wrong project.
  */
 function migrateLegacyBookmarks(): void {
@@ -293,11 +294,35 @@ function migrateLegacyBookmarks(): void {
   const bookmarks = normalizeBookmarks(envelope?.bookmarks, groups);
   if (bookmarks.length === 0 && groups.length === 0) return;
   state.setBookmarks(bookmarks, groups);
-  try {
-    localStorage.setItem(LEGACY_BOOKMARKS_MIGRATED_KEY, new Date().toISOString());
-  } catch {
-    // Keep going: the bookmarks are in the project now either way.
-  }
+  markMigratedOnSave(useAppStore.getState().projectGeneration);
+}
+
+let unsubscribeMigrationWatch: (() => void) | null = null;
+
+/**
+ * Write the migration marker once the project that received the legacy
+ * bookmarks is saved. A project discarded or replaced before saving leaves the
+ * marker unset, so the next empty project gets the copy instead.
+ *
+ * @param generation - The `projectGeneration` of the project that received them.
+ */
+function markMigratedOnSave(generation: number): void {
+  unsubscribeMigrationWatch?.();
+  unsubscribeMigrationWatch = useAppStore.subscribe((state) => {
+    if (state.projectGeneration !== generation) {
+      unsubscribeMigrationWatch?.();
+      unsubscribeMigrationWatch = null;
+      return;
+    }
+    if (state.isDirty) return;
+    unsubscribeMigrationWatch?.();
+    unsubscribeMigrationWatch = null;
+    try {
+      localStorage.setItem(LEGACY_BOOKMARKS_MIGRATED_KEY, new Date().toISOString());
+    } catch {
+      // Without the marker the copy may be offered again; nothing is lost.
+    }
+  });
 }
 
 /**

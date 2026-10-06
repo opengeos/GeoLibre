@@ -2419,9 +2419,9 @@ export function applyProjectToStore(project: GeoLibreProject): {
     orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
   const scrubbedLegend =
     orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
+  const bookmarkGroups = normalizeBookmarkGroups(project.bookmarkGroups);
   // The composer's data/atlas blocks name a layer directly rather than through
   // `allReferencedIds`, so they are scrubbed against the surviving layer set.
-  const bookmarkGroups = normalizeBookmarkGroups(project.bookmarkGroups);
   const printLayout = scrubPrintLayoutForLayers(
     normalizePrintLayoutConfig(project.printLayout) ?? createDefaultPrintLayout(),
     existingLayerIds,

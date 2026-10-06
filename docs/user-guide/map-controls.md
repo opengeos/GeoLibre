@@ -32,7 +32,7 @@ These are interactive panels provided by the MapLibre components plugin:
 | **Legend** | Show a legend describing the layers on the map. |
 | **HTML** | Display custom HTML content in an on-map panel. |
 | **Measure** | Measure distances and areas interactively, with heading and terrain-aware 3D readouts. See [Measuring distance, area, and heading](#measuring-distance-area-and-heading). |
-| **Bookmark** | Save named map views and jump back to them. Bookmarks and their folders are saved in the project, so they travel with the file (bookmarks saved by older versions in this browser are copied into the first project you open that has none, and kept in browser storage as a backup). |
+| **Bookmark** | Save named map views and jump back to them. Bookmarks and their folders are saved in the project, so they travel with the file (bookmarks saved by older versions in this browser are copied into the first project you open that has none and saved there; the old browser copy is left in place but no longer updated). |
 | **Minimap** | Show an overview map of the current extent. |
 | **View State** | Read and edit the exact center, zoom, bearing, and pitch. |
 
