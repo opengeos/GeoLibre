@@ -6,7 +6,6 @@ import {
   serializeProjectWithLayerCache,
   serializeProjectWithLayerCacheAsync,
   useAppStore,
-  type GeoLibreProject,
 } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
@@ -254,16 +253,16 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
   );
 
   /**
-   * The current project in the shape a snapshot is read back in (serialized
-   * and re-parsed), so comparing it with a snapshot reports real edits rather
-   * than in-memory versus on-disk shape differences.
+   * The current project serialized the way a snapshot is stored, so comparing
+   * it with a snapshot (after both are parsed the same way, in the compare
+   * worker) reports real edits rather than in-memory versus on-disk shape
+   * differences. Reuses the autosave layer cache, so unchanged layers are not
+   * re-serialized.
    */
-  const currentProject = useCallback((): GeoLibreProject => {
+  const currentProjectContent = useCallback((): string => {
     const layerSources = useAppStore.getState().layers;
     const snapshot = buildProjectSnapshot(mapControllerRef);
-    return parseProject(
-      serializeProjectWithLayerCache(snapshot, layerSources, layerCacheRef.current),
-    );
+    return serializeProjectWithLayerCache(snapshot, layerSources, layerCacheRef.current);
   }, [mapControllerRef]);
 
   /**
@@ -326,7 +325,7 @@ export function useProjectHistory(mapControllerRef: RefObject<MapEngine | null>)
     refresh,
     restore,
     restoreLayer,
-    currentProject,
+    currentProjectContent,
     discardRecovery,
     dismissRecovery,
     clearRestoreError,

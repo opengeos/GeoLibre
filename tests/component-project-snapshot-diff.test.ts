@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, useAppStore, within } from "./helpers/dom";
+import { act, fireEvent, render, screen, useAppStore, waitFor, within } from "./helpers/dom";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement } from "react";
@@ -67,13 +67,13 @@ function renderDialog(current: GeoLibreProject, restored: string[] = []) {
         restored.push(layerId);
         return true;
       },
-      getCurrentProject: () => current,
+      getCurrentProjectContent: () => serializeProject(current),
     }),
   );
 }
 
 describe("ProjectHistoryDialog compare", () => {
-  it("compares a snapshot with the current project and restores one layer", () => {
+  it("compares a snapshot with the current project and restores one layer", async () => {
     const restored: string[] = [];
     renderDialog(
       project([
@@ -89,7 +89,8 @@ describe("ProjectHistoryDialog compare", () => {
     fireEvent.click(compare[1]); // the older snapshot
     const view = screen.getByTestId("project-snapshot-diff");
     assert.ok(screen.getByText("Compare snapshots"));
-    assert.ok(within(view).getByText("rivers"));
+    // The comparison runs asynchronously (in a worker in the app).
+    await waitFor(() => assert.ok(within(view).getByText("rivers")));
     assert.ok(within(view).getByText("Main roads"));
     assert.ok(within(view).getByText("fillColor"));
     assert.ok(within(view).getByText("#ff0000"));
@@ -99,18 +100,18 @@ describe("ProjectHistoryDialog compare", () => {
     assert.ok(within(view).getByRole("status").textContent?.includes("Main roads"));
   });
 
-  it("compares two snapshots oldest to newest without offering layer restore", () => {
+  it("compares two snapshots oldest to newest without offering layer restore", async () => {
     renderDialog(project([]));
     fireEvent.click(screen.getAllByRole("button", { name: /Compare the snapshot/ })[0]);
     const view = screen.getByTestId("project-snapshot-diff");
     fireEvent.change(within(view).getByLabelText("Compare with"), { target: { value: "s1" } });
-    assert.ok(within(view).getByText("parks"));
+    await waitFor(() => assert.ok(within(view).getByText("parks")));
     assert.ok(within(view).getByText("Added"));
     assert.equal(within(view).queryByRole("button", { name: /Restore the layer/ }), null);
     assert.ok(within(view).getByText(/1 change|2 changes/));
   });
 
-  it("blames the current project when it cannot be built", () => {
+  it("blames the current project when it cannot be built", async () => {
     render(
       createElement(ProjectHistoryDialog, {
         open: true,
@@ -118,16 +119,21 @@ describe("ProjectHistoryDialog compare", () => {
         snapshots: [older],
         restoreError: null,
         onRestore: () => true,
-        getCurrentProject: () => {
+        getCurrentProjectContent: () => {
           throw new RangeError("Invalid string length");
         },
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: /Compare the snapshot/ }));
-    assert.match(screen.getByRole("alert").textContent ?? "", /Could not read the current project/);
+    await waitFor(() =>
+      assert.match(
+        screen.getByRole("alert").textContent ?? "",
+        /Could not read the current project/,
+      ),
+    );
   });
 
-  it("re-reads the current project when the store's layers change (e.g. Undo)", () => {
+  it("re-reads the current project when the store's layers change (e.g. Undo)", async () => {
     let current = project([layer("roads"), layer("rivers")]);
     render(
       createElement(ProjectHistoryDialog, {
@@ -136,20 +142,21 @@ describe("ProjectHistoryDialog compare", () => {
         snapshots: [older],
         restoreError: null,
         onRestore: () => true,
-        getCurrentProject: () => current,
+        getCurrentProjectContent: () => serializeProject(current),
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: /Compare the snapshot/ }));
     const view = screen.getByTestId("project-snapshot-diff");
-    assert.ok(within(view).getByText("rivers"));
+    await waitFor(() => assert.ok(within(view).getByText("rivers")));
 
     current = project([layer("roads")]);
     act(() => useAppStore.setState({ layers: [layer("roads")] }));
+    // Live changes are debounced before the comparison re-runs.
+    await waitFor(() => assert.ok(within(view).getByText("No differences.")), { timeout: 2000 });
     assert.equal(within(view).queryByText("rivers"), null);
-    assert.ok(within(view).getByText("No differences."));
   });
 
-  it("re-reads the current project after a non-layer edit such as a basemap switch", () => {
+  it("re-reads the current project after a non-layer edit such as a basemap switch", async () => {
     let current = project([layer("roads")]);
     render(
       createElement(ProjectHistoryDialog, {
@@ -158,22 +165,40 @@ describe("ProjectHistoryDialog compare", () => {
         snapshots: [older],
         restoreError: null,
         onRestore: () => true,
-        getCurrentProject: () => current,
+        getCurrentProjectContent: () => serializeProject(current),
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: /Compare the snapshot/ }));
     const view = screen.getByTestId("project-snapshot-diff");
-    assert.ok(within(view).getByText("No differences."));
+    await waitFor(() => assert.ok(within(view).getByText("No differences.")));
 
     current = { ...current, basemapStyleUrl: "https://example.com/style.json" };
     act(() => useAppStore.setState({ basemapStyleUrl: "https://example.com/style.json" }));
-    assert.ok(within(view).getByText("basemapStyleUrl"));
+    await waitFor(() => assert.ok(within(view).getByText("basemapStyleUrl")), { timeout: 2000 });
   });
 
-  it("returns to the snapshot list", () => {
+  it("leaves a compare view whose snapshot is no longer in the history", async () => {
+    const props = {
+      open: true,
+      onOpenChange: () => {},
+      restoreError: null,
+      onRestore: () => true,
+      getCurrentProjectContent: () => serializeProject(project([layer("roads")])),
+    };
+    const view = render(
+      createElement(ProjectHistoryDialog, { ...props, snapshots: [newer, older] }),
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: /Compare the snapshot/ })[1]);
+    assert.ok(screen.getByTestId("project-snapshot-diff"));
+    // A history refresh after autosave evicted the oldest snapshot.
+    view.rerender(createElement(ProjectHistoryDialog, { ...props, snapshots: [newer] }));
+    await waitFor(() => assert.equal(screen.queryByTestId("project-snapshot-diff"), null));
+  });
+
+  it("returns to the snapshot list", async () => {
     renderDialog(project([layer("roads")]));
     fireEvent.click(screen.getAllByRole("button", { name: /Compare the snapshot/ })[1]);
-    assert.ok(screen.getByText("No differences."));
+    await waitFor(() => assert.ok(screen.getByText("No differences.")));
     fireEvent.click(screen.getByRole("button", { name: "Back to snapshots" }));
     assert.equal(screen.queryByTestId("project-snapshot-diff"), null);
     assert.equal(screen.getAllByRole("button", { name: /Compare the snapshot/ }).length, 2);

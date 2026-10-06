@@ -18,3 +18,7 @@ export {
 export { decodePolyline, decodePolylineDetailed, encodePolyline } from "./polyline";
 export { horizontalBbox } from "./geojson-z";
 export { layerJoinKey } from "./joins";
+// Project History's compare view parses and diffs projects off the main thread.
+export type { GeoLibreProject } from "./types";
+export { parseProject } from "./project";
+export { diffProjects, type ProjectDiff } from "./project-diff";

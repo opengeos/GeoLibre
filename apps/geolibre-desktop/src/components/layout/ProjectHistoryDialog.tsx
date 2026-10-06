@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@geolibre/ui";
-import type { GeoLibreProject } from "@geolibre/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ProjectHistorySnapshot } from "../../lib/project-history-store";
@@ -23,8 +22,8 @@ interface ProjectHistoryDialogProps {
   onRestore: (snapshot: ProjectHistorySnapshot) => boolean;
   /** Restores one layer from a snapshot; enables "Restore this layer". */
   onRestoreLayer?: (snapshot: ProjectHistorySnapshot, layerId: string) => boolean;
-  /** Builds the live project for "Compare"; without it, Compare is hidden. */
-  getCurrentProject?: () => GeoLibreProject;
+  /** Serializes the live project for "Compare"; without it, Compare is hidden. */
+  getCurrentProjectContent?: () => string;
 }
 
 export function ProjectHistoryDialog({
@@ -35,7 +34,7 @@ export function ProjectHistoryDialog({
   restoreError,
   onRestore,
   onRestoreLayer,
-  getCurrentProject,
+  getCurrentProjectContent,
 }: ProjectHistoryDialogProps) {
   const { t, i18n } = useTranslation();
   const [compare, setCompare] = useState<{ baseId: string; targetId: string } | null>(null);
@@ -77,14 +76,14 @@ export function ProjectHistoryDialog({
               {restoreError}
             </p>
           ) : null}
-          {compare && compareBase && getCurrentProject ? (
+          {compare && compareBase && getCurrentProjectContent ? (
             <ProjectSnapshotDiff
               base={compareBase}
               snapshots={snapshots}
               targetId={compare.targetId}
               onTargetChange={(targetId) => setCompare({ ...compare, targetId })}
               onBack={() => setCompare(null)}
-              getCurrentProject={getCurrentProject}
+              getCurrentProjectContent={getCurrentProjectContent}
               onRestoreLayer={onRestoreLayer}
             />
           ) : snapshots.length === 0 ? (
@@ -111,7 +110,7 @@ export function ProjectHistoryDialog({
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  {getCurrentProject ? (
+                  {getCurrentProjectContent ? (
                     <Button
                       size="sm"
                       variant="outline"

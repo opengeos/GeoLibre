@@ -1175,7 +1175,7 @@ export function DesktopShell({
         restoreError={projectHistory.restoreError}
         onRestore={projectHistory.restore}
         onRestoreLayer={projectHistory.restoreLayer}
-        getCurrentProject={projectHistory.currentProject}
+        getCurrentProjectContent={projectHistory.currentProjectContent}
       />
       <ProjectRecoveryDialog
         snapshot={projectHistory.recoverySnapshot}

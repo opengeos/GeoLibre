@@ -1,9 +1,6 @@
 import {
-  diffProjects,
-  parseProject,
   useAppStore,
   type AppState,
-  type GeoLibreProject,
   type LayerDiff,
   type ProjectDiff,
   type ProjectValueChange,
@@ -13,10 +10,19 @@ import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { projectChanged } from "../../lib/project-broadcast-changed";
+import { createProjectDiffClient, type ProjectDiffClient } from "../../lib/project-diff-client";
 import type { ProjectHistorySnapshot } from "../../lib/project-history-store";
 
 /** `targetId` value meaning "the live project". */
 export const CURRENT_PROJECT_TARGET = "current";
+
+/** Quiet time after a live project change before the comparison re-runs. */
+const LIVE_DIFF_DEBOUNCE_MS = 300;
+
+/** Worker cache key for one revision of the live project. */
+function currentKey(revision: number, liveRevision: number): string {
+  return `current:${revision}:${liveRevision}`;
+}
 
 interface ProjectSnapshotDiffProps {
   /** The snapshot the user chose to compare. */
@@ -27,8 +33,8 @@ interface ProjectSnapshotDiffProps {
   targetId: string;
   onTargetChange: (targetId: string) => void;
   onBack: () => void;
-  /** Builds the live project in its saved shape. */
-  getCurrentProject: () => GeoLibreProject;
+  /** Serializes the live project in its saved shape; may throw when too large. */
+  getCurrentProjectContent: () => string;
   /**
    * Restores one layer from `base`; returns true on success. Offered only
    * when comparing against the current project.
@@ -71,7 +77,7 @@ export function ProjectSnapshotDiff({
   targetId,
   onTargetChange,
   onBack,
-  getCurrentProject,
+  getCurrentProjectContent,
   onRestoreLayer,
 }: ProjectSnapshotDiffProps) {
   const { t, i18n } = useTranslation();
@@ -86,86 +92,138 @@ export function ProjectSnapshotDiff({
     return (iso: string) => format.format(new Date(iso));
   }, [i18n.language]);
 
-  // Parsed projects are kept across target switches so the differ's per-feature
-  // hash cache (keyed by feature object) hits instead of re-hashing every
-  // embedded feature. The live project is re-read after a layer restore or
-  // whenever a persisted project field changes in the store (an Undo, a
-  // basemap switch, a sync edit), so the diff and its restore buttons never
-  // describe a stale project.
+  // The live project is re-read after a layer restore or whenever a persisted
+  // project field changes in the store (an Undo, a basemap switch, a sync
+  // edit), so the diff and its restore buttons never describe a stale
+  // project. Changes are debounced: a burst (a camera animation behind the
+  // dialog, a collaborator typing) costs one re-serialization, not one each.
   const [liveRevision, setLiveRevision] = useState(0);
   useEffect(() => {
     if (targetId !== CURRENT_PROJECT_TARGET) return;
-    return useAppStore.subscribe((state, previous) => {
-      if (snapshotInputsChanged(state, previous)) setLiveRevision((value) => value + 1);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = useAppStore.subscribe((state, previous) => {
+      if (!snapshotInputsChanged(state, previous)) return;
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        setLiveRevision((value) => value + 1);
+      }, LIVE_DIFF_DEBOUNCE_MS);
     });
-  }, [targetId]);
-  const parsedSnapshots = useRef(new Map<string, GeoLibreProject>());
-  const currentCache = useRef<{
-    revision: number;
-    liveRevision: number;
-    project: GeoLibreProject;
-  } | null>(null);
-
-  const result = useMemo<DiffResult>(() => {
-    const parsed = (snapshot: ProjectHistorySnapshot): GeoLibreProject => {
-      let project = parsedSnapshots.current.get(snapshot.id);
-      if (!project) {
-        project = parseProject(snapshot.content);
-        parsedSnapshots.current.set(snapshot.id, project);
-      }
-      return project;
+    return () => {
+      unsubscribe();
+      if (timer !== null) clearTimeout(timer);
     };
-    let baseProject: GeoLibreProject;
-    try {
-      baseProject = parsed(base);
-    } catch (error) {
-      console.error("Could not read the project snapshot.", error);
-      return { ok: false, error: "snapshot" };
+  }, [targetId]);
+
+  // Parsing and diffing run in a worker, which keeps each parsed snapshot so
+  // the differ's per-feature hash cache hits on the next comparison. One
+  // worker per open compare view.
+  const [client, setClient] = useState<ProjectDiffClient | null>(null);
+  useEffect(() => {
+    const next = createProjectDiffClient();
+    setClient(next);
+    return () => next.dispose();
+  }, []);
+
+  // The view holds its snapshots' content, so it keeps working when autosave
+  // evicts one; but when the history list is refreshed without the snapshot
+  // being viewed, leave the view rather than compare against a snapshot that
+  // is no longer in the history. A compared snapshot that is gone falls back
+  // to the current project. The worker drops what it no longer needs.
+  const snapshotIds = snapshots.map((snapshot) => snapshot.id).join("\n");
+  useEffect(() => {
+    const ids = new Set(snapshotIds.split("\n"));
+    if (!ids.has(base.id)) {
+      onBack();
+      return;
     }
-    if (targetId === CURRENT_PROJECT_TARGET) {
-      let current: GeoLibreProject;
-      try {
-        if (
-          currentCache.current?.revision !== revision ||
-          currentCache.current.liveRevision !== liveRevision
-        ) {
-          currentCache.current = { revision, liveRevision, project: getCurrentProject() };
+    if (targetId !== CURRENT_PROJECT_TARGET && !ids.has(targetId)) {
+      onTargetChange(CURRENT_PROJECT_TARGET);
+      return;
+    }
+    client?.retain([...ids, currentKey(revision, liveRevision)]);
+    // Runs when the set of snapshots changes; the callbacks are stable enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshotIds, base.id, targetId, client]);
+
+  // The shown result stays up while a newer comparison runs (`computing`).
+  const [result, setResult] = useState<DiffResult | null>(null);
+  const [computing, setComputing] = useState(true);
+  // Read inside the comparison effect without re-running it on every
+  // history refresh; eviction is handled by the effect above.
+  const snapshotsRef = useRef(snapshots);
+  useEffect(() => {
+    snapshotsRef.current = snapshots;
+  }, [snapshots]);
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    const settle = (next: DiffResult) => {
+      if (cancelled) return;
+      setResult(next);
+      setComputing(false);
+    };
+    setComputing(true);
+    const source = (snapshot: ProjectHistorySnapshot) => ({
+      key: snapshot.id,
+      content: () => snapshot.content,
+    });
+    void (async () => {
+      if (targetId === CURRENT_PROJECT_TARGET) {
+        let outcome;
+        try {
+          outcome = await client.compare(source(base), {
+            key: currentKey(revision, liveRevision),
+            content: getCurrentProjectContent,
+          });
+        } catch (error) {
+          // Serializing the live project can fail on its own (a project too
+          // large to serialize throws RangeError), which is not the
+          // snapshot's fault.
+          console.error("Could not read the current project.", error);
+          settle({ ok: false, error: "current" });
+          return;
         }
-        current = currentCache.current.project;
-      } catch (error) {
-        // Building the live project can fail on its own (a project too large
-        // to serialize throws RangeError), which is not the snapshot's fault.
-        console.error("Could not read the current project.", error);
-        return { ok: false, error: "current" };
+        settle(
+          outcome.ok
+            ? {
+                ok: true,
+                diff: outcome.diff,
+                beforeLabel: formatDate(base.createdAt),
+                afterLabel: t("projectHistory.diff.current"),
+                againstCurrent: true,
+              }
+            : { ok: false, error: outcome.side === "after" ? "current" : "snapshot" },
+        );
+        return;
       }
-      return {
-        ok: true,
-        diff: diffProjects(baseProject, current),
-        beforeLabel: formatDate(base.createdAt),
-        afterLabel: t("projectHistory.diff.current"),
-        againstCurrent: true,
-      };
-    }
-    try {
-      const other = snapshots.find((snapshot) => snapshot.id === targetId);
-      if (!other) return { ok: false, error: "snapshot" };
+      const other = snapshotsRef.current.find((snapshot) => snapshot.id === targetId);
+      if (!other) {
+        settle({ ok: false, error: "snapshot" });
+        return;
+      }
       // Always read oldest to newest, whichever row was picked first.
       const [older, newer] = other.createdAt < base.createdAt ? [other, base] : [base, other];
-      return {
-        ok: true,
-        diff: diffProjects(parsed(older), parsed(newer)),
-        beforeLabel: formatDate(older.createdAt),
-        afterLabel: formatDate(newer.createdAt),
-        againstCurrent: false,
-      };
-    } catch (error) {
-      console.error("Could not compare the project snapshots.", error);
-      return { ok: false, error: "snapshot" };
-    }
-  }, [base, snapshots, targetId, getCurrentProject, formatDate, t, revision, liveRevision]);
+      const outcome = await client.compare(source(older), source(newer));
+      settle(
+        outcome.ok
+          ? {
+              ok: true,
+              diff: outcome.diff,
+              beforeLabel: formatDate(older.createdAt),
+              afterLabel: formatDate(newer.createdAt),
+              againstCurrent: false,
+            }
+          : { ok: false, error: "snapshot" },
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, base, targetId, getCurrentProjectContent, formatDate, t, revision, liveRevision]);
 
   const restoreLayer =
-    result.ok && result.againstCurrent && onRestoreLayer
+    result?.ok && result.againstCurrent && onRestoreLayer
       ? (layer: LayerDiff) => {
           if (onRestoreLayer(base, layer.id)) {
             setRestoredName(layer.name);
@@ -211,7 +269,11 @@ export function ProjectSnapshotDiff({
           {t("projectHistory.diff.layerRestored", { name: restoredName })}
         </p>
       ) : null}
-      {!result.ok ? (
+      {result === null ? (
+        <p role="status" className="py-6 text-center text-sm text-muted-foreground">
+          {t("projectHistory.diff.comparing")}
+        </p>
+      ) : !result.ok ? (
         <p
           role="alert"
           className="rounded-md border border-destructive/50 p-3 text-sm text-destructive"
@@ -222,6 +284,7 @@ export function ProjectSnapshotDiff({
         </p>
       ) : (
         <DiffSummary
+          busy={computing}
           diff={result.diff}
           beforeLabel={result.beforeLabel}
           afterLabel={result.afterLabel}
@@ -233,11 +296,14 @@ export function ProjectSnapshotDiff({
 }
 
 function DiffSummary({
+  busy,
   diff,
   beforeLabel,
   afterLabel,
   onRestoreLayer,
 }: {
+  /** A newer comparison is running; the shown one may be out of date. */
+  busy: boolean;
   diff: ProjectDiff;
   beforeLabel: string;
   afterLabel: string;
@@ -251,11 +317,17 @@ function DiffSummary({
     diff.plugins.length + diff.pluginManifests.added.length + diff.pluginManifests.removed.length;
   const projectCount = diff.metadata.length + diff.preferences.length + diff.sections.length;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" aria-busy={busy}>
       <p className="text-sm text-muted-foreground">
         {t("projectHistory.diff.range", { before: beforeLabel, after: afterLabel })}
         {" · "}
         {t("projectHistory.diff.changeCount", { count: diff.changeCount })}
+        {busy ? (
+          <>
+            {" · "}
+            {t("projectHistory.diff.updating")}
+          </>
+        ) : null}
       </p>
       {diff.changeCount === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
