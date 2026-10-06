@@ -39,6 +39,13 @@ function addGeometryToProfile(profile: GeometryProfile, geometry: Geometry): voi
 }
 
 export function getLayerBounds(layer: GeoLibreLayer): [number, number, number, number] | null {
+  // A layer that loads by viewport (an ArcGIS feature layer) holds only the
+  // features in view, so their extent is the view, not the layer: prefer the
+  // service extent it stored.
+  if (layer.metadata.viewportLoading === true) {
+    const stored = storedLayerBounds(layer);
+    if (stored) return stored;
+  }
   if (layer.geojson?.features?.length) {
     // A collection whose features all carry a null geometry (e.g. a delimited
     // text file imported as an attribute table, or a non-spatial SQL result)
@@ -49,6 +56,11 @@ export function getLayerBounds(layer: GeoLibreLayer): [number, number, number, n
     const box = horizontalBbox(bbox(layer.geojson));
     if (box) return box;
   }
+  return storedLayerBounds(layer);
+}
+
+/** The layer's advertised `source.bounds` or `metadata.bounds`, if well-formed. */
+function storedLayerBounds(layer: GeoLibreLayer): [number, number, number, number] | null {
   for (const value of [layer.source.bounds, layer.metadata.bounds]) {
     if (
       Array.isArray(value) &&

@@ -604,6 +604,9 @@ async function addArcGISFeatureLayerAsGeoJson(
   // Add the layer before downloading features. Large services must not hold the
   // Add Data dialog open while hundreds of thousands of records are fetched.
   const id = store.addGeoJsonLayer(name, initialData, refreshUrl, options.beforeLayerId ?? null);
+  // A viewport-loaded layer only ever holds the features in view, so Zoom to
+  // layer needs the service's extent stored on the layer to frame the data.
+  const bounds = await resolveArcGISFeatureLayerBounds(queryUrl, layerInfo, options);
 
   store.updateLayer(id, {
     source: {
@@ -623,6 +626,7 @@ async function addArcGISFeatureLayerAsGeoJson(
     metadata: {
       sourceKind: ARCGIS_FEATURE_SOURCE_KIND,
       viewportLoading: Boolean(map),
+      ...(bounds ? { bounds } : {}),
       arcgisEditBaseline: structuredClone(initialData),
       arcgisEditInfo: layerInfo,
     },
@@ -630,7 +634,6 @@ async function addArcGISFeatureLayerAsGeoJson(
 
   arcgisEditOptions.set(id, { ...options, onProgress: undefined });
   ensureArcGISFeatureLoaderCleanup();
-  const bounds = arcgisExtentToBounds(layerInfo.extent);
   if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   if (map) startArcGISViewportLoader(id, map, queryUrl, options, () => Promise.resolve(layerInfo));
   return id;
@@ -722,10 +725,14 @@ function startArcGISViewportLoader(
       }
       const data = identifyArcGISFeatures(collect(), layerInfo.objectIdField);
       const current = useAppStore.getState().layers.find((l) => l.id === layerId)!;
+      // Backfill the extent Zoom to layer reads for a layer restored from a
+      // project saved before it was stored.
+      const bounds = current.metadata.bounds ?? arcgisExtentToBounds(layerInfo.extent);
       useAppStore.getState().updateLayer(layerId, {
         geojson: data,
         metadata: {
           ...current.metadata,
+          ...(bounds ? { bounds } : {}),
           arcgisEditBaseline: structuredClone(data),
           // Generalized shapes must never be written back over the originals.
           arcgisEditInfo: generalization ? { ...layerInfo, geometryGeneralized: true } : layerInfo,
@@ -1360,6 +1367,43 @@ async function addArcGISImageServiceLayer(
   useAppStore.getState().addLayer(layer, options.beforeLayerId ?? null);
   if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return id;
+}
+
+/**
+ * A FeatureServer layer's extent in WGS84.
+ *
+ * The layer metadata's own `extent` is used when it is already geographic or
+ * Web Mercator; a layer published in a local projected CRS asks the server to
+ * project it instead (see {@link resolveArcGISMapServiceBounds}). Failure is
+ * not fatal: the layer simply has no stored extent.
+ *
+ * @param queryUrl - The layer's `/query` endpoint.
+ * @param layerInfo - The layer's `?f=json` metadata.
+ * @param options - The ArcGIS layer options, for the token.
+ * @returns `[west, south, east, north]`, or undefined when unknown.
+ */
+async function resolveArcGISFeatureLayerBounds(
+  queryUrl: string,
+  layerInfo: ArcGISFeatureLayerInfo,
+  options: ArcGISLayerOptions,
+): Promise<[number, number, number, number] | undefined> {
+  const bounds = arcgisExtentToBounds(layerInfo.extent);
+  if (bounds) return bounds;
+  try {
+    const result = await fetchArcGISJson<{ extent?: ArcGISExtent }>(
+      appendArcGISParams(queryUrl, {
+        f: "json",
+        outSR: "4326",
+        returnExtentOnly: "true",
+        where: "1=1",
+      }),
+      options,
+      undefined,
+    );
+    return arcgisExtentToBounds(result.extent);
+  } catch {
+    return undefined;
+  }
 }
 
 /**

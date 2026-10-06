@@ -98,4 +98,22 @@ describe("getLayerBounds", () => {
     layer.metadata.bounds = [-10, -5, 10, 5];
     assert.deepEqual(getLayerBounds(layer), [-10, -5, 10, 5]);
   });
+
+  it("prefers the stored extent of a viewport-loaded layer over its features", () => {
+    const layer = layerWith({
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", geometry: { type: "Point", coordinates: [1, 2] }, properties: {} },
+      ],
+    });
+    layer.metadata.bounds = [-115.4, 36, -115, 36.3];
+    // An ordinary layer frames its features.
+    assert.deepEqual(getLayerBounds(layer), [1, 2, 1, 2]);
+    // A viewport-loaded layer holds only the features in view.
+    layer.metadata.viewportLoading = true;
+    assert.deepEqual(getLayerBounds(layer), [-115.4, 36, -115, 36.3]);
+    // With nothing stored, the loaded features still answer.
+    delete layer.metadata.bounds;
+    assert.deepEqual(getLayerBounds(layer), [1, 2, 1, 2]);
+  });
 });

@@ -467,6 +467,8 @@ describe("addArcGISLayer (feature layer)", () => {
     const initial = useAppStore.getState().layers.find((layer) => layer.id === id);
     assert.equal(initial?.geojson?.features.length, 0);
     assert.equal(initial?.metadata.viewportLoading, true);
+    // Zoom to layer frames the service extent, not the (empty) view.
+    assert.deepEqual(initial?.metadata.bounds, [-160, 18, -154, 23]);
     const move = view.listeners.get("moveend");
     assert.ok(move, "expected a moveend listener");
     assert.equal(requests.length, 1);
@@ -501,6 +503,58 @@ describe("addArcGISLayer (feature layer)", () => {
     // Removing the layer detaches the listener it registered.
     useAppStore.getState().removeLayer(id);
     assert.deepEqual(view.offCalls, [["moveend", move]]);
+  });
+
+  it("asks the server to project a projected-CRS extent for Zoom to layer", async () => {
+    const extentRequests: URL[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      if (!url.pathname.endsWith("/query")) {
+        return jsonResponse({
+          ...VIEWPORT_LAYER_INFO,
+          // Nevada State Plane East (feet): not geographic, not Web Mercator.
+          extent: {
+            xmin: 760000,
+            ymin: 26700000,
+            xmax: 830000,
+            ymax: 26800000,
+            spatialReference: { wkid: 102707 },
+          },
+        });
+      }
+      if (url.searchParams.get("returnExtentOnly") === "true") {
+        extentRequests.push(url);
+        return jsonResponse({
+          extent: {
+            xmin: -115.4,
+            ymin: 36.0,
+            xmax: -115.0,
+            ymax: 36.3,
+            spatialReference: { wkid: 4326 },
+          },
+        });
+      }
+      return jsonResponse({ type: "FeatureCollection", features: [] });
+    }) as typeof fetch;
+
+    const view = fakeViewportMap([144, -39, 146, -37]);
+    app = {
+      getMap: () => view.map,
+      fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
+    } as unknown as GeoLibreAppAPI;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: SERVICE_URL,
+    });
+    await settle();
+
+    assert.equal(extentRequests.length, 1);
+    assert.equal(extentRequests[0].searchParams.get("outSR"), "4326");
+    const layer = useAppStore.getState().layers.find((item) => item.id === id);
+    assert.deepEqual(layer?.metadata.bounds, [-115.4, 36.0, -115.0, 36.3]);
+    useAppStore.getState().removeLayer(id);
   });
 
   it("ignores a superseded viewport query that fails for its own reasons", async () => {
