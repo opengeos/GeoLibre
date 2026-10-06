@@ -13,6 +13,13 @@
  */
 export const MARKER_IMAGE_MAX_SIDE = 128;
 
+/**
+ * The largest SVG file stored as markup. SVG is kept verbatim (so it can be
+ * recolored) rather than downscaled, so cap it to keep projects small; a
+ * marker icon is a few kilobytes.
+ */
+export const MARKER_SVG_MAX_BYTES = 512 * 1024;
+
 /** The `accept` list of the marker image file picker. */
 export const MARKER_IMAGE_ACCEPT =
   ".svg,.png,.jpg,.jpeg,.gif,image/svg+xml,image/png,image/jpeg,image/gif";
@@ -76,6 +83,21 @@ export function markerImageOutputType(kind: MarkerImageKind): "image/jpeg" | "im
   return kind === "jpeg" ? "image/jpeg" : "image/png";
 }
 
+/**
+ * Whether markup parses as XML with an SVG-namespaced `<svg>` root, so a truncated or
+ * non-SVG file is rejected at upload instead of silently drawing nothing.
+ *
+ * @param markup - The file's text.
+ * @returns `true` for a well-formed SVG document.
+ */
+function isWellFormedSvg(markup: string): boolean {
+  const document = new DOMParser().parseFromString(markup, "image/svg+xml");
+  if (document.getElementsByTagName("parsererror").length > 0) return false;
+  // An <svg> without the SVG namespace parses but does not render as an image.
+  const root = document.documentElement;
+  return root?.localName === "svg" && root.namespaceURI === "http://www.w3.org/2000/svg";
+}
+
 function decodeImage(file: Blob): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file);
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -99,8 +121,9 @@ export async function readMarkerImageFile(file: File): Promise<string> {
   const kind = markerImageKind(file.name, file.type);
   if (!kind) throw new Error("Unsupported image type.");
   if (kind === "svg") {
+    if (file.size > MARKER_SVG_MAX_BYTES) throw new Error("The SVG file is too large.");
     const markup = (await file.text()).trim();
-    if (!/<svg[\s>]/i.test(markup)) throw new Error("The file is not an SVG image.");
+    if (!isWellFormedSvg(markup)) throw new Error("The file is not an SVG image.");
     return markup;
   }
   const image = await decodeImage(file);

@@ -235,15 +235,20 @@ function CustomMarkerImageField({ layer }: { layer: GeoLibreLayer }) {
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState(false);
+  // Bumped by every upload and text edit, so a slow upload that finishes after
+  // a newer choice cannot overwrite it.
+  const uploadGeneration = useRef(0);
   const markerSvg = styleValue(layer.style, "markerSvg");
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
+    const generation = ++uploadGeneration.current;
     try {
       const markup = await readMarkerImageFile(file);
+      if (generation !== uploadGeneration.current) return;
       setUploadError(false);
       setLayerStyle(layer.id, { markerSvg: markup });
     } catch {
-      setUploadError(true);
+      if (generation === uploadGeneration.current) setUploadError(true);
     }
   };
   return (
@@ -279,6 +284,7 @@ function CustomMarkerImageField({ layer }: { layer: GeoLibreLayer }) {
         placeholder={t("style.symbology.markerImagePlaceholder")}
         value={markerSvg}
         onChange={(event) => {
+          uploadGeneration.current += 1;
           setUploadError(false);
           setLayerStyle(layer.id, { markerSvg: event.target.value });
         }}
