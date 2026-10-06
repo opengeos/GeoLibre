@@ -11,7 +11,7 @@ A GeoLibre project captures your whole workspace in a single `.geolibre.json` fi
 
 **Project → New...** starts a fresh project. GeoLibre offers to save the current project first, then resets the layers, map view, controls, and plugin state to defaults.
 
-The **New project** dialog names the project and picks its starting basemap: the OpenFreeMap styles, a **Regional** group, sections for the Moon, Mars, and other celestial bodies, a blank background, or a custom MapLibre style or PMTiles URL.
+The **New project** dialog names the project and picks its starting basemap: the OpenFreeMap styles, the Protomaps styles (when the build offers them), a **Regional** group, sections for the Moon, Mars, and other celestial bodies, a blank background, or a custom MapLibre style or PMTiles URL. Templates you saved with **Save as template...** appear above the basemaps under **Saved Templates**.
 
 ![The New project dialog, with a project name field and the basemap gallery](https://assets.geolibre.app/images/geolibre-new-project.webp)
 
@@ -19,13 +19,13 @@ The collapsible **Examples** section lists a few curated starter projects from t
 
 ## Open
 
-**Project → Open From** has two sources:
+**Project → Open From** has three sources:
 
-- **File...** opens a `.geolibre.json` file from disk (desktop app).
+- **File...** opens a `.geolibre.json` file from disk. The browser build uses the browser's file picker.
 - **URL...** loads a public `.geolibre.json` from an HTTP or HTTPS URL. This works in the browser too and adds the project to your recent list.
 - **Gallery...** browses the shared project gallery and opens any entry with one click.
 
-**Project → Open Recent** lists the projects you have opened before, each with its name, path, and the time you last opened it. Click an entry to reopen it, use the small remove button to drop a single entry, or choose **Clear Recent Projects** to empty the list. On the desktop app the recent list persists across sessions; in the browser it tracks URL-based projects.
+**Project → Open Recent** lists the projects you have opened before, each with its name, path, and the time you last opened it. Click an entry to reopen it, use the small remove button to drop a single entry, or choose **Clear Recent Projects** to empty the list. On the desktop app the recent list persists across sessions. In the browser, a URL-based entry reopens directly, while an entry for a local file asks you to pick the file again, because a browser cannot reopen a file on disk by itself.
 
 !!! note "Loading a project at startup"
     You can open a project directly by passing its URL with the `url` query parameter, for example `?url=https://share.geolibre.app/you/project.geolibre.json`. See [Embedding & Sharing](embedding.md).
@@ -37,7 +37,7 @@ The collapsible **Examples** section lists a few curated starter projects from t
 - **Save** writes back to the project's existing file path.
 - **Save As...** prompts for a new name and location.
 
-Both capture the current map view, basemap, layers, styles, preferences, and plugin state at the moment you save. Projects that were opened from a URL have no writable local path, so both Save and Save As fall back to the save dialog. Saving requires the desktop app.
+Both capture the current map view, basemap, layers, styles, preferences, and plugin state at the moment you save. Projects that were opened from a URL have no writable local path, so both Save and Save As fall back to the save dialog. In the browser build, saving uses the browser's save dialog where it has one (Chromium-based browsers); elsewhere it asks for a file name and downloads the project to your downloads folder.
 
 **Project → Duplicate project** copies the open project into a new, unsaved one, so you can branch off an experiment without touching the original file.
 
@@ -78,8 +78,9 @@ An ArcGIS Pro project can contain several maps; GeoLibre imports its first 2D ma
 
 Connecting your account depends on the build:
 
-- **Web app**: click **Sign in** in the Share dialog (or Settings → Environment Variables). A popup opens `share.geolibre.app`'s consent page; approving it connects the app, and the sign-in is kept for the browser session. Session expired prompts offer a one-click re-sign-in.
-- **GeoLibre Desktop** (and as a fallback everywhere): paste a personal API token — created under Settings → API tokens at [share.geolibre.app/settings](https://share.geolibre.app/settings) — into the **Share.GeoLibre API token** field in **Settings → Environment Variables**.
+- **Web app**: click **Sign in** in the Share dialog (or under **Share.GeoLibre account** in **Settings → Environment Variables**). A popup opens `share.geolibre.app`'s consent page; approving it connects the app, and the sign-in is kept for the browser session. Session expired prompts offer a one-click re-sign-in.
+- **GeoLibre Desktop**: sign in the same way; the consent page opens in your system browser and returns to the app. The sign-in is kept in your system keychain, so it survives restarts. Once signed in, **Settings → Environment Variables** also lets you review and revoke your sessions.
+- **Mobile apps, notebook embeds, and as a fallback everywhere**: paste a personal API token — created under Settings → API tokens at [share.geolibre.app/settings](https://share.geolibre.app/settings) — into the **Share.GeoLibre API token** field in **Settings → Environment Variables**.
 
 ### Share-readiness check
 
@@ -105,7 +106,11 @@ The dialog warns even before a share token is configured, because uploading a sa
 
 ## Export as HTML
 
-**Project → Export as HTML...** writes the whole project to a single standalone HTML file that runs offline with no server. Host it anywhere, or open it straight from disk.
+**Project → Export → Export as HTML...** writes the whole project to a single standalone HTML file that runs offline with no server. Host it anywhere, or open it straight from disk.
+
+## Layer styles
+
+**Project → Export → Export Layer Styles...** writes every layer's style to one JSON file keyed by layer name. **Project → Import → Import Layer Styles...** applies such a file to the open project, restyling each layer whose name matches in one undoable step, and reports any styles that matched no layer. To apply a styles file automatically, choose it under **Default layer styles** in [Settings → Startup](settings.md#startup): each layer you add whose name matches is styled as it arrives, while layers in opened projects keep their saved styles.
 
 ## Collaborate
 

@@ -44,7 +44,7 @@ measurements match the body you are mapping. Switch bodies from the planet
 switcher in the Layers panel.
 
 The deep-space starfield behind each globe comes from the
-[Atmosphere Effects plugin](features.md#plugins).
+[Atmospheric Effects plugin](features.md#plugins).
 
 <table>
   <tr>

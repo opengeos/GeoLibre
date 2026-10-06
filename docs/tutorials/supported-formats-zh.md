@@ -17,7 +17,7 @@
 | 形态 | 怎么跑 | 说明 |
 |---|---|---|
 | 浏览器 | 打开 `web.geolibre.app` | 什么都不用装，加载完可离线用 |
-| 桌面 | Tauri v2 原生应用 | Windows / macOS / Linux，微软商店、Homebrew、winget、AUR、Flatpak 都有 |
+| 桌面 | Tauri v2 原生应用 | Windows / macOS / Linux，微软商店、Mac App Store、Homebrew、winget、AUR、Flatpak 都有 |
 | 安卓 | Google Play 原生 App | 每 ABI 约 40MB |
 | iOS | App Store 原生 App | iPhone 与 iPad，同一套代码经 Tauri v2 mobile 构建 |
 | Jupyter | `pip install geolibre` | 整个应用嵌进 notebook 单元格 |
@@ -52,6 +52,7 @@ csv, tsv, kml, kmz, gml, gpx, dxf, tab, shp, zip
 | **GML** | `.gml` | DuckDB `ST_Read` | — |
 | **GPX** | `.gpx` | 纯 JS | **自动拆成三个图层**：航点 / 轨迹 / 路线 |
 | **CSV / TSV** | `.csv` `.tsv` `.txt` `.dat` | 自研 + DuckDB 兜底 | 自动识别分隔符和经纬度列；WKT 几何列走 DuckDB；对话框可指定源坐标系 |
+| **Excel** | `.xlsx` `.xls` | SheetJS（`@e965/xlsx`） | 从分隔文本面板打开：先选工作表，再选坐标列 |
 | **CAD（DXF/DWG）** | `.dxf` `.dwg` | DuckDB `ST_Read` | 会读出图层清单让你挑；**CAD 不带坐标系，需要手动选 EPSG** |
 | **MapInfo TAB** | `.tab` | `ST_Read` | — |
 | **Esri 文件地理数据库** | `.gdb` **文件夹** | Python sidecar | 桌面端专属，且要 sidecar；Mac App Store 版本里是隐藏的 |
@@ -59,7 +60,7 @@ csv, tsv, kml, kmz, gml, gpx, dxf, tab, shp, zip
 | **GeoRSS** | `.xml` `.rss` `.atom` | 纯 JS | RSS 2.0 / Atom / RDF 都吃，GeoRSS Simple + GML 几何 |
 | **地理标记照片** | `.jpg` `.jpeg` `.png` `.tif` `.tiff` `.webp` `.heic` `.heif` | exifr | **读 EXIF GPS 直接生成点图层**，无人机照片很实用 |
 
-_明确不支持的：`.xlsx` / `.xls`（经全库搜索，零命中）、原始 `.osm` XML（只认 PBF）。要用 Excel 的先另存为 CSV。_
+_明确不支持的：原始 `.osm` XML（只认 PBF）。_
 
 !!! tip "KML `<Model>` 的三维模型"
     KML 的 `<Model>` 这条值得关注：它会把内嵌的 COLLADA `.dae` 用 three.js 加载再导出成 GLB 加载到地图中。为了这一个边缘场景引入了 three.js。
@@ -96,11 +97,11 @@ _注意这个不对等：`.img`、`.vrt`、`.asc`、`.jp2`、`.hgt` 这些只在
 
 | 项 | 支持 | 说明 |
 |---|---|---|
-| **LiDAR 图层** | COPC / LAZ（URL 方式） | 走 `maplibre-gl-lidar` + deck.gl 渲染 |
-| **USGS 3DEP** | 在线点云流式加载 | 独立插件，会附带 3DEP 高程索引 WMS 覆盖图 |
+| **LiDAR 图层** | LAS / LAZ / COPC（URL 或本地文件）、EPT（`ept.json` URL） | 走 `maplibre-gl-lidar` + deck.gl 渲染 |
+| **USGS 3DEP** | 在线点云流式加载 | 基于 `maplibre-gl-usgs-lidar` 的独立插件，会附带 3DEP 高程索引 WMS 覆盖图 |
 | **Whitebox LiDAR 工具** | `.las .laz .zlidar .copc .e57 .ply`，输出 `.laz` | 这是全库唯一出现 `.e57` / `.ply` 的地方 |
 
-_LiDAR 图层面板本身的扩展名白名单**不在这个仓库里**，定义在上游 npm 包中。仓库里唯一的直接证据是一个 `.copc.laz` 的示例 URL。LAS/LAZ/COPC/EPT 大概率都支持，但从源码无法百分百确认。_
+_LiDAR 的文件选择器本身在上游 `maplibre-gl-lidar` 包里；GeoLibre 的封装（`packages/plugins/src/plugins/components/lidar.ts`）写明支持 LAS/LAZ/COPC 文件和 EPT 的 `ept.json` URL，拖进来的本地 COPC 会按八叉树节点流式加载，不整份复制。_
 
 ---
 
@@ -113,7 +114,7 @@ _LiDAR 图层面板本身的扩展名白名单**不在这个仓库里**，定义
 | **OGC 3D Tiles** | tileset URL | `maplibre-gl-3d-tiles` + deck.gl `Tile3DLayer` | **支持自定义请求头**，带鉴权的切片也能加 |
 | **Google 照片级 3D Tiles** | 内置 URL | 同上 | 需要 Google Maps API key，走请求头传，不落盘 |
 | **ArcGIS I3S 场景图层** | `…/SceneServer` URL | deck.gl + loaders.gl `I3SLoader` | 整合网格和三维对象图层都支持 |
-| **glTF / GLB** | **只能填 URL** | deck.gl `ScenegraphLayer` | 没有本地文件选择器，这是目前最明显的缺口 |
+| **glTF / GLB** | URL 或本地文件 | deck.gl `ScenegraphLayer` | 通过 deck.gl 可视化图层的 scenegraph 类型添加 |
 | **COLLADA `.dae`** | 只能通过 KML `<Model>` 内嵌 | three.js → GLB | — |
 | **高斯泼溅** | URL | `maplibre-gl-splat` | 存储层类型是 `gaussian-splat` |
 
@@ -121,7 +122,7 @@ _LiDAR 图层面板本身的扩展名白名单**不在这个仓库里**，定义
 
 上面这张图挺能说明问题：**左侧图层面板里 3D Tiles、矢量、XYZ、glTF 模型、高斯泼溅是叠在同一个列表里的**，右边直接就是渲染结果。「加载 3D Tiles 要起服务器写页面」这件事在这儿就是**粘贴一个 URL**。
 
-_没找到的：`.obj` 完全不支持（零命中）。`.b3dm`/`.pnts`/`.cmpt` 这些 3D Tiles 内部格式在仓库里也搜不到——它们被上游加载器透明处理了，不用你操心。高斯泼溅的扩展名清单同样在上游包里。_
+_没找到的：`.obj` 不能导入（它只作为拉伸图层三维模型导出的一种输出格式出现，和 GLB、STL 并列）。`.b3dm`/`.pnts`/`.cmpt` 这些 3D Tiles 内部格式在仓库里也搜不到——它们被上游加载器透明处理了，不用你操心。高斯泼溅的扩展名清单同样在上游包里。_
 
 ---
 
@@ -145,8 +146,7 @@ geoparquet, duckdb-query, deckgl-viz, video, image
 | **WFS** | GetCapabilities 拉 typeName；可选自动刷新 |
 | **OGC API - Features** | 落地页 / `/collections` / 单个集合 / 完整 `/items` URL 都认，自动翻 `next` 链接，默认取 1000 条 |
 | **OGC API - Tiles（矢量）** | TileJSON 或 MVT 模板，可另填 Mapbox style URL 来解析 `source-layer` 名 |
-| **ArcGIS** | 对话框里**只有两个**：FeatureServer（以 `f=geojson` 拉）和 VectorTileServer |
-| **ArcGIS MapServer / ImageServer** | 不在添加数据对话框里，只能通过 NASA Earthdata GIS、EnviroAtlas 这类插件间接用 |
+| **ArcGIS** | 四种图层类型：FeatureServer（按页下载成 GeoJSON）、VectorTileServer、MapServer 和 ImageServer（后两种作为栅格图层）；支持门户项目 ID 和 ArcGIS 登录 |
 | **MBTiles** | `.mbtiles` 本地文件，自定义协议 + Rust 后端读取。**桌面端专属** |
 | **PMTiles** | `.pmtiles`，矢量栅格都行，自动嗅探文件头 |
 | **PostgreSQL / PostGIS** | 连接 → 选表 → 出 MVT，靠内置的 Martin 服务。**桌面端专属** |
@@ -229,7 +229,7 @@ geoparquet, duckdb-query, deckgl-viz, video, image
 | 工具 | 输入 | 输出 |
 |---|---|---|
 | 矢量 → 矢量 | `geojson geojsonl json parquet geoparquet fgb gpkg shp zip kml gml gpx` | 桌面端 14 种驱动：GeoJSON、GeoJSONSeq、FlatGeobuf、GPKG、Shapefile、GML、KML、CSV、SQLite、GMT、DXF、MapInfo、JML、GPX |
-| 矢量 → GeoParquet | 同上 | `.parquet`，压缩可选 `zstd / snappy / gzip / lz4 / 不压缩` |
+| 矢量 → GeoParquet | `parquet geoparquet geojson json shp gpkg fgb gml kml` | `.parquet`，压缩可选 `zstd / snappy / gzip / lz4 / 不压缩` |
 | 矢量 → FlatGeobuf | 同上 | `.fgb` |
 | 矢量 → Shapefile | 同上 | `.zip` |
 | 矢量 → GeoPackage | 同上 | `.gpkg` |
@@ -256,7 +256,7 @@ _浏览器端输出格式是子集：geojson / json / csv / parquet / geoparquet
 | 限制 | 影响什么 |
 |---|---|
 | **桌面端（Tauri）专属** | 原生文件/文件夹对话框、本地 MBTiles、本地栅格读取、Shapefile 同名文件自动发现、PostGIS/Martin、文件地理数据库、本地文件监听重载 |
-| **需要 Python sidecar** | 文件地理数据库、桌面端的全部转换工具（首选路径）、栅格工具（rasterio）、AI 分割、PostGIS、Sedona |
+| **需要 Python sidecar** | 文件地理数据库、桌面端的全部转换工具（首选路径）、没有浏览器引擎的栅格工具（rasterio）、AI 分割、PostGIS、Sedona |
 | **Mac App Store 版本** | 不带 Python sidecar：隐藏 PostgreSQL 和 GDB 数据源、隐藏 AI 分割；Whitebox、转换、栅格、矢量工具全部退回浏览器/WASM 引擎；Shapefile companion 文件要手动多选 |
 | **安卓 / iOS 移动端** | 隐藏栅格工具、转换工具、AI 分割、PostgreSQL——这些都依赖 sidecar。Whitebox 工具箱走 WASM，依然可用 |
 | **浏览器端** | 无本地 MBTiles/GDB/PostGIS；转换输出是子集；矢量转换不收 `.zip`；栅格转 COG 只收 GeoTIFF；Zarr 本地文件夹在 Firefox/Safari 不可用 |
@@ -286,7 +286,7 @@ _浏览器端输出格式是子集：geojson / json / csv / parquet / geoparquet
 
 一个值得注意的细节：**Cesium 的相机同步不是按 zoom 级别对齐的，而是按地面分辨率（米/像素）**，所以不同高度的分屏面板能保持同样的屏幕比例尺。
 
-**计算引擎有五套**，都挂在同一套 UI 下：DuckDB-WASM Spatial（主力，跑在独立 Worker 里）、PGlite + PostGIS、Apache Sedona（sidecar 或浏览器 WASM 版）、Pyodide（浏览器里跑 GeoPandas/Shapely）、Whitebox WASM（700+ 工具）。
+**计算引擎有五套**，都挂在同一套 UI 下：DuckDB-WASM Spatial（主力，跑在独立 Worker 里）、PGlite + PostGIS、Apache Sedona（sidecar 或浏览器 WASM 版）、Pyodide（浏览器里跑 GeoPandas/Shapely）、Whitebox WASM（1,000+ 工具）。
 
 !["处理"菜单展开的样子：Whitebox、转换、水文、LiDAR、网络、投影、栅格、遥感、地形、矢量，右边是按字母排的工具清单](https://assets.geolibre.app/images/processing-tools-menu.webp)
 
@@ -298,7 +298,7 @@ _浏览器端输出格式是子集：geojson / json / csv / parquet / geoparquet
 
 也简单说几个，都是源码里能查到的实数，不是估算的。
 
-**大矢量的处理方式。** **超过 5 万要素，就不再走 MapLibre 原生 GeoJSON 源，而是在客户端现场切成矢量瓦片**——geojson-vt 生成瓦片（点图层用 Supercluster 聚合），vt-pbf 编码成 MVT，再通过一个自定义协议喂给 MapLibre。最大 16 级，4096 extent。
+**大矢量的处理方式。** **超过 5 万要素，就不再走 MapLibre 原生 GeoJSON 源，而是在客户端现场切成矢量瓦片**——在 Web Worker 里由 geojson-vt 生成瓦片（点图层用 Supercluster 聚合），vt-pbf 编码成 MVT，再通过一个自定义协议喂给 MapLibre。最大 16 级，4096 extent。
 
 两个细节能看出功力：瓦片索引对象**故意不放进 store**（太大、不可序列化，不能写进工程文件）；编码前会检查中止信号，因为 MapLibre 会取消滚出屏幕的瓦片请求。
 
@@ -335,13 +335,13 @@ _浏览器端输出格式是子集：geojson / json / csv / parquet / geoparquet
 
 **一、功能范围是故意收窄的。** 它聚焦在浏览器工作流、本地处理、云原生格式、空间 SQL、现代可视化和可移植性。复杂的专业流程该用 QGIS 还得用 QGIS。
 
-**二、迭代速度是双刃剑。** 两个多月从 0 到 2.4.0，2.0.0 到 2.1.0 只隔了大概 19 小时。拿它做生产环境的长期依赖，得想清楚这个 churn 风险。
+**二、迭代速度是双刃剑。** 原文写作时，它两个多月就从 0 到了 2.4.0，2.0.0 到 2.1.0 只隔了大概 19 小时。拿它做生产环境的长期依赖，得想清楚这个 churn 风险。
 
-**三、几个明确的格式缺口。** glTF/GLB 没有本地文件选择器（只能填 URL）、`.obj` 完全不支持、Excel 不支持、HDF4 不支持、原始 `.osm` XML 不支持。
+**三、几个明确的格式缺口。** `.obj` 不能导入、HDF4 不支持、原始 `.osm` XML 不支持。
 
 **四、平台能力不对等。** 见第十节那张表。别拿浏览器版的体验去代表全部。
 
-**五、Cesium 3D 球在网页版之外需要 Ion token。** 网页版内置了演示 token，桌面版和移动版需要自己的 token。免费额度够个人玩，团队用要算账。
+**五、Cesium 的地形和影像在网页版之外需要 Ion token。** 网页版内置了演示 token，桌面版和移动版需要自己的 token；没有 token 三维球照样能用，只是没有 Cesium World Terrain 和 Ion 影像。免费额度够个人玩，团队用要算账。
 
 **六、国内环境。** 底图、地形、Photorealistic 3D Tiles 这些默认源都在墙外；坐标系走标准 WGS84，**GCJ-02 偏移得自己处理**。想认真用得先解决这两件事。这部分暂无可靠的实测信息，留给实际使用者补充。
 
@@ -359,7 +359,7 @@ GeoLibre 真正的价值在于——不在于它比 QGIS 强（它不强），�
 
 1. **只想看看** —— 直接开 `web.geolibre.app`，不用装不用注册
 2. **要真干活** —— GitHub Releases 下桌面版，或走微软商店 / Homebrew / winget，两分钟的事
-3. **Python 用户** —— `pip install geolibre`，要 GeoPandas 支持就 `pip install "geolibre[all]"`，需要 Python 3.10+
+3. **Python 用户** —— `pip install geolibre`，要 GeoPandas 支持就 `pip install "geolibre[all]"`，需要 Python 3.11+
 4. **内网 / 离线环境** —— `VITE_PYODIDE_INDEX_URL` 和 `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` 可以把 Pyodide 和 DuckDB 空间扩展指到内部镜像，**不用重新构建**；官方也有 Docker 镜像 `ghcr.io/opengeos/geolibre:latest`
 5. **二次开发** —— npm workspaces 单体仓库，所以要用 **npm**（仓库跟踪 `package-lock.json`）配 **Node 22+**；主应用在 `apps/geolibre-desktop`，MIT 许可
 

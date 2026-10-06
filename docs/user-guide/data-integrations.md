@@ -42,7 +42,7 @@ single sign-on layer.
 
 ## Web Services
 
-The **Web Services** submenu of the [Plugins menu](plugins.md) bundles seventeen catalog and service browsers, from the United States federal sources below to general-purpose STAC, ArcGIS Hub, Source Cooperative, and Hugging Face browsers. All seventeen are documented on the **[Web Services](web-services.md)** page.
+The **Web Services** submenu of the [Plugins menu](plugins.md) bundles more than thirty catalog and service browsers, from the United States federal sources below to general-purpose STAC, ArcGIS Hub, Source Cooperative, and Hugging Face browsers. All of them are documented on the **[Web Services](web-services.md)** page.
 
 | Service | Data |
 | --- | --- |
@@ -59,7 +59,8 @@ The **Web Services** submenu of the [Plugins menu](plugins.md) bundles seventeen
 | **Historical Imagery** | Plugins menu | Browse historical Esri World Imagery snapshots. |
 | **Vantor Open Data** | Plugins → Web Services | Search disaster-event satellite imagery, filter pre/post-event scenes by map extent, visualize Cloud-Optimized GeoTIFFs, and download selected scenes. |
 | **Planet Open Data** | Plugins → Web Services | Browse Planet Labs PBC disaster data releases through the STAC Catalogs interface, with the public disaster catalog selected by default. |
-| **Street View** | Plugins menu | View Google Street View and Mapillary street-level imagery. Needs provider credentials (see [Getting Started](../getting-started.md#optional-imagery-credentials)). |
+| **Street View** | Plugins menu | View Google Street View or Mapillary street-level imagery at a clicked point. Needs provider credentials (see [Getting Started](../getting-started.md#optional-imagery-credentials)). |
+| **Mapillary** | Plugins menu | Browse Mapillary street-level imagery in its own viewer. Needs a Mapillary access token (see [Getting Started](../getting-started.md#optional-imagery-credentials)). |
 
 ## Time series and comparison
 
@@ -74,7 +75,7 @@ The **Web Services** submenu of the [Plugins menu](plugins.md) bundles seventeen
 | --- | --- |
 | **GeoAgent** | AI-assisted geospatial analysis. |
 
-The plugins under **Imagery and street-level**, **Time series and comparison**, and **AI analysis** are activated from the [Plugins menu](plugins.md), where you can also set their on-map position (the integrations further up this page are reached from the Processing and Add Data menus instead). The Web Services panels are the exception, including **Vantor Open Data** and **Planet Open Data** above: they dock beside the Layers panel instead of floating over the map, so they offer no position choice.
+The plugins under **Imagery and street-level**, **Time series and comparison**, and **AI analysis** are activated from the [Plugins menu](plugins.md) (the integrations further up this page are reached from the Processing and Add Data menus instead). Most of them, like the Web Services panels, open docked beside the Layers panel; only **Street View** and **Mapillary** place a control on the map, so only they offer a position choice in their Plugins submenu.
 
 ## Geocoding
 
@@ -82,7 +83,7 @@ GeoLibre can turn addresses into points and points into addresses. Both run thro
 
 | Tool | Where | What it does |
 | --- | --- | --- |
-| **Geocode Addresses** | Processing menu | Pick a CSV with an address column and geocode each row into a point layer. Each matched row keeps its original columns plus `geocode_lat`, `geocode_lon`, `geocode_display_name`, and `geocode_importance` (a match score). A per-run provider picker lets you switch backend for that batch. |
+| **Geocode Addresses** | Processing → GeoLibre Toolbox | Pick a CSV with an address column and geocode each row into a point layer. Each matched row keeps its original columns plus `geocode_lat`, `geocode_lon`, `geocode_display_name`, and `geocode_importance` (a match score). A per-run provider picker lets you switch backend for that batch. |
 | **Delimited Text Layer → Addresses** | Add Data | Geocode a CSV/TSV at import time instead of a separate step: choose "Addresses" as the import mode, pick one or more columns to concatenate into the address (e.g. street, city, state), and each row is geocoded through the project's configured provider. Matched rows become points; rows with no match are kept (not dropped) with `geocode_status: "unmatched"` so they stay visible and fixable in the attribute table. |
 | **Reverse Geocode** | Controls menu | A toggle. While on, click anywhere on the map to look up the address at that point, shown in a popup with a copy button. The popup follows the app's light or dark theme. |
 

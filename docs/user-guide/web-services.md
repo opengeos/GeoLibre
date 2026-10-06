@@ -2,7 +2,7 @@
 
 **Plugins → Web Services** is a submenu of catalog and service browsers. Each entry connects to one public (or self-hosted) data provider, searches it, and adds what you pick to the map as a normal GeoLibre layer.
 
-They are grouped together because they behave the same way, not because they share a data source: every one of them opens a **docked side panel** rather than a floating on-map control, so it sits alongside the Layers and Style panels, resizes with them, and can be collapsed. That is also why these entries have no "position" submenu — unlike most plugins, there is no on-map control to place in a corner.
+They are grouped together because they behave the same way, not because they share a data source: every one of them opens a **docked side panel** rather than a floating on-map control, so it sits alongside the Layers and Style panels, resizes with them, and can be collapsed. That is also why these entries have no "position" submenu: there is no on-map control to place in a corner.
 
 ![The Plugins menu with the Web Services submenu open, listing the catalog and service browsers](https://assets.geolibre.app/images/web-services-menu.webp)
 
@@ -10,8 +10,8 @@ They are grouped together because they behave the same way, not because they sha
 
 - **Activating** an entry opens its panel; closing the panel deactivates the plugin. A check mark next to **Web Services** in the Plugins menu means at least one of them is active.
 - **Layers you add are real layers.** Whatever a panel puts on the map is mirrored into the GeoLibre layer store, so it appears in the [Layers panel](layers.md), can be reordered, hidden, restyled, and removed there, and is saved into the `.geolibre.json` [project file](projects.md). Reopening the project restores the layer and hands it back to its panel.
-- **The catalog browsers are mutually exclusive.** STAC Catalogs and Planet Open Data share panel state, so activating one deactivates the other; if the switch fails, the plugin that was displaced comes back.
-- **Nothing here needs an account** except Hugging Face uploads (a user access token) and GeoLens private datasets (an API key).
+- **The catalog browsers are mutually exclusive.** STAC Catalogs, Planet Open Data, and Portolan share panel state, so activating one deactivates the other; if the switch fails, the plugin that was displaced comes back.
+- **Nothing here needs an account** except ArcGIS Portal (an ArcGIS sign-in), private S3 buckets (an S3 connection), Hugging Face uploads (a user access token), and GeoLens private datasets (an API key).
 
 ## At a glance
 
@@ -23,11 +23,15 @@ They are grouped together because they behave the same way, not because they sha
 | [USGS National Map](#usgs-national-map) | USGS | Topo, imagery, hydrography, elevation, and index services |
 | [USGS NLDI](#usgs-nldi) | USGS | Flowline tracing, hydrolocation, basins, and network navigation |
 | [USGS 3DEP](#usgs-3dep) | USGS | 3DEP digital elevation models (1 m, 1/3 and 1 arc-second, and more) |
+| [USGS LiDAR](#usgs-lidar) | USGS | 3DEP LiDAR point clouds clipped to an area of interest, as COPC |
 | [Vantor Open Data](#vantor-open-data) | Vantor | Disaster-event satellite imagery (COG) |
 | [Planet Open Data](#planet-open-data) | Planet Labs | Planet's disaster data releases, through the STAC browser |
+| [Portolan](#portolan) | Portolan Registry | Registered geospatial catalogs, or a publisher's catalog URL, through the STAC browser |
 | [Earthdata GIS](#earthdata-gis) | NASA EOSDIS | ArcGIS image, map, and feature services, and published web maps |
 | [OpenAerialMap](#openaerialmap) | OpenAerialMap | Openly licensed drone and aerial imagery |
 | [OSM Downloader](#osm-downloader) | OpenStreetMap / Overpass | Buildings, roads, amenities, waterways, land use, or custom OSM tags |
+| [IGN LiDAR HD](#ign-lidar-hd) | IGN (France) | LiDAR HD tile coverage and COPC point clouds |
+| [ArcGIS Portal](#arcgis-portal) | Esri | The content of your ArcGIS Online organization or Enterprise portal, after signing in |
 | [ArcGIS Hub](#arcgis-hub) | Esri | Public datasets published to ArcGIS Hub |
 | [Tennessee GIS](#tennessee-gis) | State of Tennessee | The geodata.tn.gov open GIS data portal |
 | [US Federal GIS](#us-federal-gis) | US federal agencies | The public GIS portals of 24 federal agencies, from the Census Bureau and NOAA to USGS and FEMA |
@@ -108,6 +112,10 @@ Searches The National Map for [3D Elevation Program](https://www.usgs.gov/3d-ele
 - Footprints render on the map and in the Layers panel; click one to select its result, or export them all to GeoJSON.
 - **Load on Map** streams a GeoTIFF DEM through GeoLibre's raster path; **Download** saves the source file (IMG products are download-only).
 
+## USGS LiDAR
+
+Clips a USGS [3D Elevation Program](https://www.usgs.gov/3d-elevation-program) LiDAR point cloud to an area of interest and downloads the result as COPC. While the panel is open, a 3DEP Elevation Index layer shows where point clouds exist, and the map switches to the Mercator projection (your previous projection is restored when you close it), since the streamed point cloud does not render on the globe.
+
 ## Vantor Open Data
 
 A STAC explorer for [Vantor's](https://www.vantor.com/) open disaster imagery releases.
@@ -120,6 +128,10 @@ A STAC explorer for [Vantor's](https://www.vantor.com/) open disaster imagery re
 ## Planet Open Data
 
 The same panel as [STAC Catalogs](#stac-catalogs), pinned to [Planet Labs PBC's](https://www.planet.com/disasterdata/) continuously updated disaster data releases so the catalog is already selected when it opens. Everything below about searching, filtering, and adding assets applies here too.
+
+## Portolan
+
+The same panel as [STAC Catalogs](#stac-catalogs), opened on the public [Portolan Registry](https://github.com/portolan-sdi/portolan-registry) of catalogs. Pick a registered catalog, or enter a publisher's catalog URL to connect to it directly, then add assets as in STAC Catalogs.
 
 ## Earthdata GIS
 
@@ -152,6 +164,14 @@ Downloads current OpenStreetMap vector data through the public Overpass API.
 Public Overpass instances are intended for bounded interactive queries. Zoom to the area you need before downloading. To prevent accidentally requesting an enormous result, **All tagged features** is limited to 0.25 square degrees and filtered downloads are limited to 4 square degrees.
 
 The panel identifies the source as © OpenStreetMap contributors and notes the Open Database License (ODbL); keep the required attribution when publishing derived maps or data.
+
+## IGN LiDAR HD
+
+Searches the tile coverage of France's [IGN LiDAR HD](https://geoservices.ign.fr/lidarhd) program and adds its COPC point clouds.
+
+- **Use map extent** and **Search tiles** list the LiDAR HD tiles in the area; their footprints are drawn as one entry in the Layers panel, and hovering a tile highlights its footprint.
+- **Add to map** streams a tile as a point cloud layer (MapLibre, Mapbox, or ArcGIS renderer), and **Download** saves the COPC file. Check several tiles and choose **Add selected to map** to add them in one go.
+- The data is © IGN, published under the Licence Ouverte 2.0.
 
 ## ArcGIS Portal
 

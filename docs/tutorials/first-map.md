@@ -38,7 +38,7 @@ See [Adding Data](../user-guide/adding-data.md) for every supported source.
 
 ## 5. Save or share
 
-- In the desktop app, use **Project → Save** to write a `.geolibre.json` file.
+- Use **Project → Save** to write a `.geolibre.json` file. The desktop app saves to disk; the browser build uses the browser's save dialog where it has one and otherwise downloads the file. See [Projects](../user-guide/projects.md#save-and-save-as).
 - Anywhere, use **Project → Share** to upload the project and get a public link. See [Sharing & Embedding](sharing-embedding.md).
 
 ## Next steps

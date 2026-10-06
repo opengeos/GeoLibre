@@ -45,21 +45,29 @@ Tools that depend on a **local desktop process** are hidden on mobile because
 iOS has no Python sidecar or local helper binaries and its sandbox forbids
 spawning subprocesses:
 
-- Processing → GeoLibre Toolbox → **Raster**, **Conversion**, **AI Segmentation**
-  (all need the Python sidecar). The Whitebox geoprocessing toolbox runs in
-  WebAssembly, needs no sidecar, and stays available.
-- Add Data → **PostgreSQL** (served by the local Martin tile server)
+- Processing → GeoLibre Toolbox → **Conversion**, **AI Segmentation**, and the
+  sidecar-backed **Raster** tools (all need the Python sidecar; the Raster
+  submenu keeps only the client-side **Download Global DEM** tool). The Whitebox
+  geoprocessing toolbox runs in WebAssembly, needs no sidecar, and stays
+  available.
+- Add Data → **PostgreSQL** (served by the local Martin tile server) and
+  **SQL Server**
 
 These are gated by a user-agent `isMobile()` check (which already matches
-iPhone/iPad), so the Add Data menu and the Layer panel's add-data group never
-offer them. Everything else runs client-side.
+iPhone/iPad), so the Processing menu, the Add Data menu, and the Layer panel's
+add-data group never offer them. Everything else runs client-side.
 
-PostgreSQL has one entry point that check does not cover: the Browser panel
-keeps its **Databases** section on every platform for discovery, so its ＋ still
-opens the PostgreSQL dialog. The dialog gates on `isDesktopRuntime()`
-(`isTauri() && !isMobile()`) rather than on `isTauri()` alone, so on iOS it
-shows the "requires GeoLibre Desktop" notice and disables Connect instead of
-calling a sidecar that cannot exist (GeoLibre#2091).
+The database sources have one entry point that check does not cover: the Browser
+panel keeps its **Databases** section on every platform for discovery, so its ＋
+still opens the connection dialog. The dialogs gate on `isDesktopRuntime()`
+(`isTauri() && !isMobile()`) rather than on `isTauri()` alone, so on iOS they
+show the "requires GeoLibre Desktop" notice and disable Connect instead of
+calling a helper that cannot exist (GeoLibre#2091).
+
+Unlike Android, the App Store build also hides **Earth Engine**: signing in from
+the packaged app needs a loopback OAuth listener, which the Apple App Store
+builds compile out (`src-tauri/src/lib.rs`) so the app binds no listening
+socket.
 
 ## Location permission (required)
 
@@ -282,12 +290,12 @@ not free to choose — see the Xcode floor below.
   on a published release, as the `GeoLibre_<version>_ios_app-store.ipa` release
   asset, which outlives the artifact's 14-day retention:
   - `APPLE_IOS_CERTIFICATE_BASE64` — `base64 -i dist.p12`
-  - `APPLE_IOS_CERTIFICATE_PASSWORD`
+  - `APPLE_IOS_CERTIFICATE_PASSWORD` — only if the `.p12` is password-protected
   - `APPLE_IOS_PROVISIONING_PROFILE_BASE64` — `base64 -i profile.mobileprovision`
   - `APPLE_TEAM_ID` — **reused** from the existing macOS/Homebrew signing
     secrets; the Team ID is account-wide.
 - **Without them**, it falls back to a no-signing **compile check**
-  (`cargo build --lib --target aarch64-apple-ios`) so CI still catches iOS build
+  (`cargo build --lib --release --target aarch64-apple-ios`) so CI still catches iOS build
   breakage; it just can't produce an installable `.ipa`. A release run in that
   state attaches nothing and logs a warning saying which secrets were missing,
   rather than failing the release.
@@ -445,7 +453,8 @@ Most mirror Android:
 - The **Download Offline Area** tool relies on a service worker, which the Tauri
   builds don't use — it's a PWA feature. Native offline basemap caching is future
   work.
-- Earth Engine OAuth uses a desktop loopback/multi-window flow; a mobile
-  deep-link redirect (an iOS URL scheme / universal link) is future work.
+- Earth Engine is hidden in the App Store build because its OAuth uses a
+  desktop loopback flow; a mobile deep-link redirect (an iOS URL scheme /
+  universal link) is future work.
 - iPadOS multitasking (Split View / Stage Manager) hasn't been tuned; the
   responsive layout should adapt, but verify on a real iPad before release.

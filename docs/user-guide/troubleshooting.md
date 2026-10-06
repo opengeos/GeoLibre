@@ -202,8 +202,9 @@ that is the first thing to try if the window is blank or the map flickers. See
 If a plugin's **Activate** action seems to do nothing, first rule out the
 stale-cache cause above with a hard refresh or a private window. Once you are on
 the latest build, an active plugin shows a checkmark next to its entry in the
-**Plugins** menu, and map controls (when the plugin provides one) appear at the
-configured corner of the map. A greyed-out plugin does not support the current
+**Plugins** menu, and its panel opens in the side panel, or, for the few
+plugins with an on-map control (such as GeoEditor or Annotations), the control
+appears at the configured corner of the map. A greyed-out plugin does not support the current
 rendering engine; hover over it for the reason. A plugin that fails to start is
 reported as a notification and in Diagnostics.
 

@@ -31,7 +31,7 @@ The repository is an npm workspaces monorepo with 7 packages plus a desktop appl
 
 ![Supported formats](https://assets.geolibre.app/images/add-data-formats.webp)
 
-The KML case is particularly illustrative. `docs/architecture.md:61` states it clearly: KML is handled by a **custom-built parser** to **preserve embedded styling**, outputting simplestyle-spec properties (`fill`, `stroke`, `stroke-width`) so that styled KML looks the same in GeoLibre as it does in Google Earth. Only when the custom parser fails does it fall back to DuckDB Spatial, **at the cost of losing style information**.
+The KML case is particularly illustrative. The DuckDB-WASM section of `docs/architecture.md` states it clearly: KML is handled by a **custom-built parser** to **preserve embedded styling**, outputting simplestyle-spec properties (`fill`, `stroke`, `stroke-width`) so that styled KML looks the same in GeoLibre as it does in Google Earth. Only when the custom parser fails does it fall back to DuckDB Spatial, **at the cost of losing style information**.
 
 > **Key insight**: General-purpose libraries inevitably discard format-specific information when unifying data models. And that information is often exactly what users care about most.
 
@@ -39,18 +39,18 @@ The same pattern repeats for Shapefile: **try shpjs first, only fall back to Duc
 
 ### 1.2 Spatial Computation: Four Engine Tiers, Defaulting to the Lightest
 
-This area is easy to misunderstand. Tracing through the source (per `docs/architecture.md:75-79`):
+This area is easy to misunderstand. Tracing through the source (per the Python sidecar section of `docs/architecture.md`):
 
 | Engine | Where It Runs | Positioning |
 |---|---|---|
-| **Turf.js** (`@turf/*`, ~20 sub-packages) | Browser, pure JS | **Default engine for vector tools**, zero dependencies, zero backend |
+| **Turf.js** (`@turf/*`, ~25 sub-packages) | Browser, pure JS | **Default engine for vector tools**, zero dependencies, zero backend |
 | **GeoPandas / Shapely** | Python sidecar | Upgrade path when **projection-aware** results are needed |
 | **GeoPandas / Shapely** | Browser via Pyodide | **Same codebase**, usable in the web version |
 | **DuckDB / PGlite+PostGIS / SedonaDB** | Browser or sidecar | Three engines for the SQL Workspace |
 
 Note that Turf is imported **per sub-package** (`@turf/buffer`, `@turf/intersect`, etc.), not as a whole. This is important — importing all of Turf at once is substantial; per-package imports are what make it practical.
 
-The "one codebase, two runtimes" design is documented at `docs/architecture.md:77`: the geometry logic lives in a **framework-free module** `backend/geolibre_server/geolibre_server/vector_ops.py`. A Vite plugin (`vite-plugins/copy-vector-ops.ts`) copies it into the frontend package, and the browser side uses a classic Web Worker to load Pyodide, install `geopandas`, and call `run_vector_tool` across a JSON string boundary.
+The "one codebase, two runtimes" design is documented in the same section: the geometry logic lives in a **framework-free module** `backend/geolibre_server/geolibre_server/vector_ops.py`. A Vite plugin (`vite-plugins/copy-vector-ops.ts`) copies it into the frontend package, and the browser side uses a classic Web Worker to load Pyodide, install `geopandas`, and call `run_vector_tool` across a JSON string boundary.
 
 > **Real-world lesson**: Anyone who has worked with GIS knows this pitfall — compute a buffer with Turf.js on the frontend, compute the same buffer with PostGIS on the backend, and the areas differ by 0.3%. Two days later you discover it's because the default segment count differs between the two implementations.
 
@@ -58,8 +58,8 @@ The "one codebase, two runtimes" design is documented at `docs/architecture.md:7
 
 | Library | Role |
 |---|---|
-| **`maplibre-gl`** 5.24 | Primary map |
-| **`deck.gl`** 9.3 (core/layers/geo-layers/mesh-layers/aggregation-layers/mapbox) | COG, 3D Tiles, I3S, visualization layers, interleaved into the MapLibre canvas |
+| **`maplibre-gl`** 6.11 | Primary map |
+| **`deck.gl`** 9.4 (core/layers/geo-layers/mesh-layers/aggregation-layers/mapbox) | COG, 3D Tiles, I3S, visualization layers, interleaved into the MapLibre canvas |
 | **`maplibre-gl-3d-tiles` / `-lidar` / `-splat` / `-raster` / `-vector`** | **Without switching engines, directly add 3D Tiles, point clouds, and Gaussian splats onto MapLibre** |
 | **`@developmentseed/deck.gl-geotiff` / `-raster`** | COG rendering |
 | **`@carbonplan/zarr-layer`** | Zarr scientific data |
@@ -67,7 +67,7 @@ The "one codebase, two runtimes" design is documented at `docs/architecture.md:7
 | **`@geoman-io/maplibre-geoman-free`** | Drawing and editing |
 | **`maplibre-gl-time-slider` / `-swipe` / `-layer-control` / `-basemap-control`** | Interactive controls |
 | **`@tanstack/react-virtual`** | Attribute table virtualization |
-| **`cesium`** 1.143 | Optional 3D globe split-view, **lazy-loaded ~4.8 MB in a separate chunk** |
+| **`cesium`** 1.146 | Optional 3D globe split-view, **lazy-loaded ~4.7 MB in a separate chunk** |
 
 ![3D Tiles, vectors, glTF, and Gaussian splats intermixed in a single layer list](https://assets.geolibre.app/images/3dtiles.webp)
 
@@ -86,7 +86,7 @@ The "one codebase, two runtimes" design is documented at `docs/architecture.md:7
 
 This section is the core of this article. **If you only read one thing, read this.**
 
-First, let's cover WebAssembly in one sentence: the GeoLibre repository has 315 hits for the `wasm` identifier. **Database, language runtime, native toolchain, codec, and machine learning** — all five capability categories are powered by WASM engines: DuckDB, sql.js (SQLite), PGlite + PostGIS, CereusDB (SedonaDB), Pyodide, `geolibre-wasm` (a WASI build of Whitebox), gdal3.js, `cog-tiler-wasm`, h5wasm, onnxruntime-web. **When you trace the native languages, the picture becomes clear: C, C++, Rust. WASM here is not about accelerating JavaScript — it's about bringing decades of accumulated native GIS ecosystem into the browser wholesale.**
+First, let's cover WebAssembly in one sentence: the identifier `wasm` turns up well over a thousand times in the GeoLibre source. **Database, language runtime, native toolchain, codec, and machine learning** — all five capability categories are powered by WASM engines: DuckDB, sql.js (SQLite), PGlite + PostGIS, CereusDB (SedonaDB), Pyodide, `geolibre-wasm` (the Whitebox engine compiled to WASI, plus GeoLibre's own Rust tools), gdal3.js, `cog-tiler-wasm`, h5wasm, onnxruntime-web. **When you trace the native languages, the picture becomes clear: C, C++, Rust. WASM here is not about accelerating JavaScript — it's about bringing decades of accumulated native GIS ecosystem into the browser wholesale.**
 
 ![Processing menu: a row of WASM engines behind it](https://assets.geolibre.app/images/processing-tools-menu.webp)
 
@@ -141,12 +141,14 @@ const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
   mvp: { mainModule: duckdbWasmMvp, mainWorker: mvpWorker },
   eh: { mainModule: duckdbWasmEh, mainWorker: ehWorker },
 };
-export function selectDuckDbBundle() {
-  return duckdb.selectBundle(MANUAL_BUNDLES);
+export async function selectDuckDbBundle() {
+  // Imported here so DuckDB-WASM's JS stays off the startup path
+  const { selectBundle } = await import("@duckdb/duckdb-wasm");
+  return selectBundle(MANUAL_BUNDLES);
 }
 ```
 
-**Manually listing bundles rather than using the default CDN resolution ensures Vite produces content-hashed local artifacts for the WASM and worker** — which in turn enables safe caching by the Service Worker's CacheFirst strategy (see Section 5).
+**Manually listing bundles rather than using the default CDN resolution ensures Vite produces content-hashed local artifacts for the WASM and worker** — which in turn enables safe caching by the Service Worker's CacheFirst strategy (see Section 5). (The `npm run lite:build` variant swaps in `duckdb-wasm-bundles.cdn.ts`, which loads the same pinned version from jsDelivr for hosts with a per-file size cap.)
 
 **Second, extension loading must be "per-instance, run-once."** `INSTALL spatial` goes over the network, and `LOAD` has state; concurrent calls will conflict. GeoLibre's approach is worth studying:
 
@@ -190,7 +192,7 @@ GeoLibre counters this with a two-pronged approach:
 
 **First, warming up.** The `beforeLoad` hook on `ensureSpatialExtension` is exactly for this — before `LOAD spatial`, it runs `SELECT 1 FROM read_parquet(…) LIMIT 0` against whatever remote reader this query uses. **`LIMIT 0` only fetches the Parquet footer, incurring almost no additional traffic.** If this particular query has no remote Parquet, it falls back to reading a small public sample file.
 
-**Second, rebuilding.** If the bug still strikes (e.g., the warm-up failed previously), `runSqlQuery` catches `stoi: no conversion`, calls `resetSqlDatabase(poisoned)` to replace the entire instance, and then **retries once**. The rebuild goes through the warm-up again, so the second attempt is clean.
+**Second, rebuilding.** If the bug still strikes (e.g., the warm-up failed previously), `runSqlQuery` catches `stoi: no conversion`, calls `resetSqlDatabase(db)` to replace the entire instance, and then **retries once**. The rebuild goes through the warm-up again, so the second attempt is clean.
 
 Two additional defensive details: the retry is triggered only when the statement **actually contains a remote reader call** (URLs appearing inside string literals don't count), and `resetSqlDatabase` confirms that "the instance to replace is still the current instance" before acting.
 
@@ -247,11 +249,11 @@ Threshold constants in the source (all verifiable):
 
 | Constant | Value | Location | What It Protects |
 |---|---|---|---|
-| `LARGE_VECTOR_FEATURE_THRESHOLD` | **50,000** | `core/src/types.ts:670` | Main-thread GeoJSON parsing |
+| `LARGE_VECTOR_FEATURE_THRESHOLD` | **50,000** | `core/src/types.ts:783` | Main-thread GeoJSON parsing |
 | `maxHistoryFeatureCount` | 500,000 | `core/src/history.ts:29` | Undo stack memory |
-| `DUCKDB_VECTOR_FEATURE_WARN_COUNT` | 100,000 | `core/src/types.ts:1838` | Result materialization memory |
+| `DUCKDB_VECTOR_FEATURE_WARN_COUNT` | 100,000 | `core/src/types.ts:2540` | Result materialization memory |
 | `MAX_CEREUS_FEATURES` | 50,000 | `lib/sedona-workspace.ts:25` | WASM heap |
-| `MAX_DERIVED_FEATURES` | 50,000 | `map/src/derived-geometry.ts:37` | Derived geometry computation |
+| `MAX_DERIVED_FEATURES` | 50,000 | `map/src/derived-geometry.ts:42` | Derived geometry computation |
 | `historyCoalesceMs` | 400 ms | `core/src/history.ts:6` | Undo record explosion |
 | Remote files | 2 GiB | `plugins/remote-file-formats.ts` | DuckDB-WASM 32-bit |
 
@@ -261,19 +263,20 @@ Threshold constants in the source (all verifiable):
 
 ### 3.2 Client-Side Tiling: On-the-Fly Tile Generation Above 50K Features
 
-The full pipeline is in `packages/map/src/geojson-vt-protocol.ts`, step by step:
+The pipeline lives in `packages/map/src/geojson-vt-protocol.ts` (protocol and registry) and `geojson-vt-index.ts` (index building and encoding), step by step:
 
 - Indexing uses **`@maplibre/geojson-vt`** (note: this is MapLibre's fork; **Supercluster is included in this package** — the comments say it's "the same engine MapLibre uses internally")
 - Point layers use `Supercluster` for indexing; everything else uses `GeoJSONVT`
 - Encoding uses `@maplibre/vt-pbf`'s `fromGeojsonVt`
 - Fed to MapLibre via a custom protocol `geolibre-gjvt`
 - `TILE_EXTENT = 4096`, `TILE_MAX_ZOOM = 16` (beyond this, let MapLibre over-zoom)
+- Index building and tile encoding run on a Web Worker (`geojson-vt.worker.ts`), so a large load no longer freezes the main thread; where no Worker is available, the same code runs inline
 
 ![Large vector data loading](https://assets.geolibre.app/demos/vector-data-demo.gif)
 
 Two details worth highlighting individually.
 
-**First, tile indexes live in a module-level Map, not in the store.** The source comment puts it this way:
+**First, the per-layer tile registry lives in a module-level Map, not in the store.** The source comment puts it this way:
 
 > Keyed by layer id. Module-level rather than on the Zustand record because **tile indexes are large, non-serializable objects that must not enter app state or be written to `.geolibre.json`**.
 
@@ -282,8 +285,8 @@ Two details worth highlighting individually.
 **Second, check the abort signal before encoding.** One line:
 
 ```ts
-// packages/map/src/geojson-vt-protocol.ts:150
-if (abortController?.signal.aborted) return { data: new ArrayBuffer(0) };
+// packages/map/src/geojson-vt-protocol.ts
+if (signal?.aborted) return empty;
 ```
 
 MapLibre cancels tile requests that scroll off-screen, and the result would be discarded anyway — so don't waste the computation.
@@ -295,7 +298,7 @@ MapLibre cancels tile requests that scroll off-screen, and the result would be d
 
 ### 3.3 Undo Stack: Three Refinements Worth Studying
 
-The file `packages/core/src/history.ts` is worth opening directly — about a hundred lines, high density. It uses `zundo` (Zustand's time-travel middleware).
+The file `packages/core/src/history.ts` is worth opening directly — under two hundred lines, high density. It uses `zundo` (Zustand's time-travel middleware).
 
 The problem: **Every snapshot holds the full GeoJSON of layers.** Repeated editing pins multiple copies in memory (the comments reference issue #341).
 
@@ -311,7 +314,7 @@ let total = distinctFeatureCount(pastStates[lastIndex], seen);
 
 **"When memory is tight, clear the undo stack" is many projects' approach — but that means the user, at the very moment they most need undo (right after a large edit), has exactly no undo available.**
 
-**Treatment 3: Deduplicate by object reference.** `distinctFeatureCount` uses a `Set<object>` to track seen payloads: unchanged layers share the same reference across snapshots and are counted only once. **So "keeping many small-layer snapshots" has almost no additional memory cost.**
+**Treatment 3: Deduplicate by object reference.** `distinctFeatureCount` uses a `Set` to track seen payloads: unchanged layers share the same reference across snapshots and are counted only once. **So "keeping many small-layer snapshots" has almost no additional memory cost.**
 
 One more easily overlooked detail: that 400 ms is not ordinary debouncing — it's **leading-edge debounce**, serving as zundo's `handleSet`:
 
@@ -327,17 +330,15 @@ This sounds modest, but it's a high-frequency bug: many virtual list implementat
 
 ### 3.5 Bundle Size: How Far Does Lazy Loading Go?
 
-The `manualChunks` configuration in `apps/geolibre-desktop/vite.config.ts` is the core of this approach. Take the most representative example — Cesium:
+The code-splitting configuration in `apps/geolibre-desktop/vite.config.ts` (`manualChunks` plus the Rolldown `CODE_SPLITTING_GROUPS`) is the core of this approach. Take the most representative example — Cesium. The source comments record that when Cesium's chunk once swallowed shared helpers, "the whole ~4.7 MB Cesium chunk was modulepreloaded on every boot"; it now sits in its own group because **"Cesium only loads when a pane switches to the 3D globe."**
 
-> CesiumJS (~4.8 MB) for the 3D-globe view. Lazily imported only when a pane switches to the globe……kept in its own build chunk and **off the 2D boot path**.
-
-**"Off the boot path" is the key phrase.** For web GIS, this is the easiest performance win: the users who actually need 3D may only be 20%; there is no reason for 100% of users to pay the first-screen cost for it.
+**Keeping it off the boot path is the key point.** For web GIS, this is the easiest performance win: the users who actually need 3D may only be 20%; there is no reason for 100% of users to pay the first-screen cost for it.
 
 A detailed size breakdown from the source comments, organized here:
 
 | Heavy Resource | Size | Strategy |
 |---|---|---|
-| CesiumJS | ~4.8 MB | Separate chunk, `import()` only when switching to globe view |
+| CesiumJS | ~4.7 MB | Separate chunk, `import()` only when switching to globe view |
 | PGlite + PostGIS | ~25 MB (bundling into desktop would add **~22 MB of nearly incompressible size**) | Default via jsDelivr CDN, not included in the build |
 | gdal3.js | WASM ~28 MB + data ~12 MB | **Never bundled**, always from CDN; disabling CDN disables the feature |
 | Pyodide / CereusDB | Tens of MB each | CDN-loaded; PGlite and CereusDB can be bundled-in via build switches |
@@ -383,7 +384,7 @@ This section is pure web engineering, less GIS-specific, but has the lowest migr
 
 ![Layer panel: all parameters modify the store](https://assets.geolibre.app/images/raster-style-panel.webp)
 
-**Pattern 1: Constant array as single source of truth.** The 20 layer types at `packages/core/src/types.ts:62`:
+**Pattern 1: Constant array as single source of truth.** The 20 layer types at `packages/core/src/types.ts:63`:
 
 ```ts
 export const LAYER_TYPES = [
@@ -413,7 +414,7 @@ This minimalism is deliberate. The smaller the state, the greater the confidence
 
 **Pattern 3: Cross-language boundaries marked with `SYNC:`.** This was the most surprising discovery from reading through the source.
 
-The 17 vector file extensions exist as `VECTOR_FILE_DIALOG_EXTENSIONS` in TypeScript (`lib/tauri-io.ts:154`) and as `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]` in Rust (`src-tauri/src/lib.rs:418`) — **two copies, because constants can't be shared across languages**. Their solution is to annotate both sides. Quoted verbatim from `lib/tauri-io.ts:150-153`:
+The 17 vector file extensions exist as `VECTOR_FILE_DIALOG_EXTENSIONS` in TypeScript (`lib/file-io/paths.ts:39`) and as `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]` in Rust (`src-tauri/src/lib.rs:800`) — **two copies, because constants can't be shared across languages**. Their solution is to annotate both sides. Quoted verbatim from `lib/file-io/paths.ts:35-38`:
 
 > SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs must list the same extensions, or a format added here would be rejected by the Rust restore guard on every project reopen (**the bug this PR fixes**). Grep "SYNC:" to find the partner list.
 
@@ -425,7 +426,7 @@ Note the parenthetical "the bug this PR fixes" — it refers to the pull request
 
 ## 5. Offline Capability: Workbox Three-Tier Caching Strategy
 
-This section stands alone because it's especially relevant for intranet, offline, and government deployment scenarios, and `docs/architecture.md:83-100` documents it comprehensively.
+This section stands alone because it's especially relevant for intranet, offline, and government deployment scenarios, and the "Offline support (PWA)" section of `docs/architecture.md` documents it comprehensively.
 
 The web build is an installable PWA using `vite-plugin-pwa` + Workbox. Caching is **deliberately split into three tiers**:
 
@@ -547,7 +548,7 @@ One more detail worth remembering: Source Cooperative's unknown API paths don't 
 
 COG's ability to be read via Range requests depends on **internal tiling and pyramid overviews within the file**. A striped GeoTIFF can technically be range-read too — its strip offsets and byte counts are in the header — but a strip spans the full image width, so fetching a small map extent drags in far more bytes than it needs, and with no overviews there is no coarse level to zoom out against. Naming it `.tif` changes none of that, and GeoLibre's client-side readers require internal tiles outright.
 
-GeoLibre's handling is instructive: the panel **first reads the file header with a Range request** to determine whether internal tiles exist; if not, it prompts the user to go through client-side conversion (the gdal3.js path) before loading. **A few KB of header for a definitive answer, rather than making the user wait through an inevitably slow load.**
+GeoLibre's handling is instructive: the panel **first reads the file header with a Range request** to determine whether internal tiles exist; if not, it offers to convert the file to a COG in the browser (geolibre-wasm's `CogBuilder`, in `packages/processing/src/cog-convert.ts`) before loading. **A few KB of header for a definitive answer, rather than making the user wait through an inevitably slow load.**
 
 The trade-offs among the three raster engines are also documented in the source: `cog-tiler-wasm` (default, browser WASM, **at the cost of only using built-in color ramps** — custom classification is lost), `maplibre-gl-raster` (GPU, full symbology), `titiler` (server-side). **The default is chosen for stability, not feature completeness.**
 

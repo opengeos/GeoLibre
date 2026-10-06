@@ -6,7 +6,7 @@ The **SQL Workspace** runs DuckDB Spatial SQL right in the app, against your loa
 
 ## Querying loaded layers
 
-Every loaded vector layer is exposed as a queryable table; the dialog lists the available table names at the top. Write a query in the editor and click **Run** to see the results.
+Every loaded vector layer is exposed as a queryable table; the workspace lists the available table names under **Queryable layers**. Write a query in the editor and click **Run** (or press `Ctrl/Cmd+Enter`) to see the results. `Tab` or `Ctrl+Space` autocompletes.
 
 ```sql
 SELECT NAME, CONTINENT, POP_EST
@@ -50,7 +50,7 @@ The bare `FROM s3://…` form works too — the workspace wraps it in the matchi
 
 ## Choosing a SQL engine
 
-The **Engine** menu (top right) selects which SQL engine runs your query. All three load a spatial extension, so `ST_*` functions are available in each.
+The **SQL engine** menu (top right) selects which SQL engine runs your query. All three load a spatial extension, so `ST_*` functions are available in each.
 
 - **DuckDB** (default) — DuckDB Spatial, in-browser. Queries loaded layers, local files, and remote URLs (including `s3://`/`gs://`/`az://` public data). Works offline after first use.
 - **PostGIS** — PGlite + PostGIS, in-browser. Queries loaded layers using full PostGIS SQL. The first run loads a ~19 MB engine.
@@ -64,12 +64,12 @@ The **Engine** menu (top right) selects which SQL engine runs your query. All th
 
 ## Sample queries and history
 
-- **Sample queries** and **Sample query for layer** menus drop ready-made queries into the editor to get you started.
-- Your previous queries are kept in a **history** so you can rerun them.
+- The **Sample queries…** and **Sample query for layer…** menus drop ready-made queries into the editor to get you started.
+- Your previous queries are kept under **History…** so you can rerun them.
 
 ## Using the results
 
-When a query returns geometry, you can **add the result to the map** as a new layer (with an optional layer name). The result layer behaves like any vector layer, with [identify, selection, and the attribute table](attribute-table.md). You can also **export** results as CSV or GeoParquet.
+When a query returns geometry, **Add as layer** adds the result to the map as a new layer (with an optional layer name). The result layer behaves like any vector layer, with [identify, selection, and the attribute table](attribute-table.md). With the DuckDB engine, **Add as query layer** instead adds a live layer that re-runs the SQL when you refresh it from the Layers panel. **Export CSV** and **Export GeoParquet** save the results to a file (GeoParquet needs a geometry column).
 
 !!! tip "Multiple result layers"
     You can add several DuckDB query-result layers to the same project and keep them all open at once.

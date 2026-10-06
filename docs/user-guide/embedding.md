@@ -26,6 +26,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `loading`    | `loading=true` | Exposes screenshot readiness on the document element. Accepts a bare flag, `true`, `1`, `yes`, or `on`; disabled by default. See below. |
 | `data`       | `data=https://assets.geolibre.app/data/places.geojson`     | Loads public GeoJSON, GeoParquet, PMTiles, a COG, or a ZIP/REST response containing multiple GeoJSON files.                           |
 | `style`      | `style=https://assets.geolibre.app/data/sample.style.json` | Applies a GeoLibre/MapLibre vector style or raster-style JSON to the data loaded by `data`.                                            |
+| `dataType`   | `dataType=lidar`                                           | Marks a `data` URL whose path has no file extension as a LiDAR point cloud; pairs with `data` by position. See [Open remote data](#open-remote-data). |
 | `stac`       | `stac=https://earth-search.aws.element84.com/v1/collections/naip` | Opens the STAC Catalogs browser connected to a STAC catalog, API, or API collection. A collection URL is searched on load, so its item footprints appear as a layer. See [Open a STAC catalog](#open-a-stac-catalog). |
 | `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, Help, and any quick filters the project's layers carry, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
 | `toolbar`    | `toolbar=none`                                             | Hides the top toolbar while keeping panels and the status bar. Use `icons` for icon-only buttons; `icon` and `icon-only` are aliases. `hidden`, `hide`, and `off` are aliases for `none`. |
@@ -208,8 +209,8 @@ Read-only covers the keyboard too: the
 project shortcuts (Ctrl/Cmd+N, +O, +S) and the command palette (Ctrl/Cmd+K) go
 with the menus they belong to, while the View shortcuts (`[`, `]`, `n`, `u`,
 `r`) keep working since the View menu stays. Dropping a file onto the map
-imports nothing, and the plugins whose on-map control writes to the project —
-the geometry editor, Annotations, and GeoAgent — cannot be active, even if the
+imports nothing, and the plugins that write to the project — the geometry
+editor, Annotations, and GeoAgent — cannot be active, even if the
 loaded project saved them that way.
 So an embed cannot be steered into authoring by a key press, a drag, or a
 project file. Display plugins (layer control, basemaps, time slider, legend and
@@ -407,7 +408,7 @@ For Docker, `GEOLIBRE_EMBED_ORIGINS` overrides the policy at container startup:
 ```bash
 docker run --rm -p 8080:80 \
   -e GEOLIBRE_EMBED_ORIGINS="https://portal.example.com,https://erp.example.com" \
-  geolibre-policy:local
+  ghcr.io/opengeos/geolibre:latest
 ```
 
 For a static build, the legacy `VITE_GEOLIBRE_EMBED_ORIGINS` build setting is
@@ -476,6 +477,8 @@ other frame or origin is ignored. Pass the *app's* origin, not your own.
 | `setLayerVisibility(layerId, visible)` | `void`                  | Shows or hides a project layer.                                         |
 | `listLayers()`                         | `LayerSummary[]`        | `{ id, name, type, visible, opacity }` per layer.                       |
 | `setFilter(layerId, expression)`       | `void`                  | A MapLibre filter expression, or `null` to clear it.                    |
+| `setRenderer(renderer)`                | `void`                  | See [Switching renderers](#switching-renderers).                        |
+| `getRenderer()`                        | the active renderer     | `"maplibre"`, `"mapbox"`, `"cesium"`, or `"arcgis"`.                  |
 | `getViewport()`                        | `Viewport`              | `{ bbox, center, zoom, bearing, pitch }`.                               |
 | `addLayer(spec)`                       | the new layer's `id`    | Takes a project-format layer specification.                             |
 | `addData(url, options?)`               | the new layer `id`s     | Loads remote data like `?data=`; options are `{ styleUrl, fit }`.        |
@@ -524,6 +527,8 @@ them out of the other `postMessage` traffic on your page.
 | `listLayers`       | `{}`                                                       | Returns layer summaries in the acknowledgement's `result`.                           |
 | `setFilter`        | `{ layerId, expression }`                                  | Applies a MapLibre filter expression; send `null` to clear it.                        |
 | `getViewport`      | `{}`                                                       | Returns the current camera and bounds in `result`.                                    |
+| `setRenderer`      | `{ renderer }`                                             | Switches the map renderer. See [Switching renderers](#switching-renderers).            |
+| `getRenderer`      | `{}`                                                       | Returns the active renderer in `result`.                                              |
 | `addLayer`         | `{ spec }`                                                 | Adds a project-format layer specification at runtime.                                 |
 | `addData`          | `{ url, styleUrl?, fit? }`                                 | Loads GeoJSON/API, ZIP, GeoParquet, PMTiles, or COG data without reloading the iframe. |
 | `exportImage`      | `{}`                                                       | Returns the rendered map as a PNG data URL in `result`.                               |
@@ -560,6 +565,7 @@ reporting whether it worked.
 | `ack`               | `{ requestId, ok, error, result }`                             | A message you sent with a `requestId` was applied (or rejected).  |
 | `projectLoaded`     | `{ url, name, layerIds }`                                      | A project finished loading, whoever started it.                   |
 | `selectionChanged`  | `{ layerId, featureIds }`                                      | The user (or your `highlightFeature`) changed the selection.      |
+| `rendererchange`    | `{ renderer }`                                                 | The map renderer changed.                                         |
 | `viewChanged`       | `{ bbox, center, zoom, bearing, pitch }`                       | The camera moved (throttled to about four events a second).       |
 | `toolCompleted`     | `{ id, name, status, engine, durationMs, outputLayerNames }`   | A processing run finished, successfully or not.                   |
 | `serverFileWritten` | `{ path, toolId }`                                             | A file-based tool wrote an output (conversion and raster tools).  |
@@ -623,10 +629,12 @@ See the [Sharing & Embedding tutorial](../tutorials/sharing-embedding.md) for a 
 
 ## Switching renderers
 
+With the [typed client](#the-typed-client):
+
 ```javascript
-client.on("rendererchange", ({ renderer }) => console.log(renderer));
-await client.setRenderer("cesium");
-const renderer = await client.getRenderer();
+map.on("rendererchange", ({ renderer }) => console.log(renderer));
+await map.setRenderer("cesium");
+const renderer = await map.getRenderer();
 ```
 
 Both methods accept or return `"maplibre"`, `"mapbox"`, `"cesium"`, or

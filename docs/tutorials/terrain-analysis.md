@@ -7,7 +7,7 @@ This tutorial derives terrain products from a digital elevation model (DEM): a h
 
 ## 1. Load a DEM
 
-Add an elevation raster as a layer, for example a GeoTIFF or COG DEM (see [Adding Data](../user-guide/adding-data.md)). The raster tools take a file path in and write a file path out, so a local or accessible raster works best.
+Add an elevation raster as a layer, for example a GeoTIFF or COG DEM (see [Adding Data](../user-guide/adding-data.md)). The raster tools read a GeoTIFF file, so a local or accessible raster works best. Tools with a browser engine (Hillshade, Slope, Aspect, Clip by extent) can also use **Use a layer on the map** to pick a raster layer you have already added.
 
 ## 2. Hillshade
 

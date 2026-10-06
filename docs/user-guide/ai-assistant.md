@@ -28,7 +28,7 @@ providers in **Settings → AI Providers**:
 | --- | --- | --- |
 | Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-3.6-flash` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-5` |
-| OpenAI | `OPENAI_API_KEY` | Select from the current GPT models |
+| OpenAI | `OPENAI_API_KEY` | `gpt-5.6` |
 | **OpenRouter** | `OPENROUTER_API_KEY` (+ optional `OPENROUTER_MODEL`) | `openai/gpt-5.6-luna` |
 | **Ollama** (local) | `OLLAMA_BASE_URL` (e.g. `http://localhost:11434`) | `gemma4` |
 | **Amazon Bedrock** | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (+ `AWS_REGION`, optional `AWS_SESSION_TOKEN`) | `global.anthropic.claude-opus-5` |

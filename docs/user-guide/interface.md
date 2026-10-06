@@ -17,8 +17,8 @@ The toolbar across the top of the window groups every action into nine menus:
 | **Processing** | Run vector, raster, conversion, Whitebox, and SQL tools, plus the [AI Assistant](ai-assistant.md). The menu holds [two separate toolboxes](processing.md#two-toolboxes-in-one-menu), so some category names appear twice. See [Processing Tools](processing.md) and [SQL Workspace](sql-workspace.md). |
 | **Controls** | Toggle map controls and component panels (Measure, Bookmark, Minimap, and more). See [Map Controls & Tools](map-controls.md). |
 | **Plugins** | Activate built-in plugins and set their on-map position. See [Plugins & Marketplace](plugins.md). |
-| **Settings** | Map preferences, layout, environment variables, project settings, and Manage Plugins. See [Settings & Preferences](settings.md). |
-| **Help** | The command palette, keyboard shortcuts, **Simplify Interface...**, diagnostics, feedback, update checks, and the About dialog. |
+| **Settings** | Language, map preferences, layout, appearance, interface profile, geocoding, AI providers, environment variables, cloud storage, updates, startup project, Manage Plugins, and the Style Manager. See [Settings & Preferences](settings.md). |
+| **Help** | The command palette, keyboard shortcuts, **Simplify Interface...**, links to the website and GitHub repository, diagnostics, feedback, update checks, and the About dialog. |
 
 On the right side of the toolbar are the light/dark theme toggle and the editable project name.
 
@@ -57,6 +57,8 @@ The built-in global shortcuts are:
 | `Ctrl`/`Cmd` + `O` | Open project from file |
 | `Ctrl`/`Cmd` + `S` | Save project |
 | `Ctrl`/`Cmd` + `Shift` + `S` | Save project as… |
+| `Ctrl`/`Cmd` + `Z` | Undo |
+| `Ctrl`/`Cmd` + `Shift` + `Z` (or `Ctrl` + `Y`) | Redo |
 | `C` | Toggle the [review comment](map-controls.md#review-comments) tool, then click the map to place the pin |
 | `N` | Reset bearing (north up) |
 | `U` | Reset pitch (top-down view) |
@@ -91,7 +93,7 @@ Four dockable panels surround the map, plus the attribute table along the bottom
 | **Comments** | Right | Anchored review notes and their threads. See [Review comments](map-controls.md#review-comments). |
 | **Attribute table** | Bottom | The attributes of the selected vector or DuckDB layer, with its own explorer, statistics, chart, and export tools. Expand it from the status bar. See [Attribute Table](attribute-table.md). |
 
-The Layers, Style, and Attribute panels can each be shown or hidden from **Settings → Layout**, and panels auto-hide on small screens. Resize the Layers and Style panels by dragging their inner edge, and the attribute table by dragging its top edge.
+The Browser, Layers, Style, Comments, and Attribute panels can each be shown or hidden from **Settings → Layout**, and panels auto-hide on small screens. Resize the Layers and Style panels by dragging their inner edge, and the attribute table by dragging its top edge.
 
 ## The map
 
@@ -166,8 +168,8 @@ Messages about what just happened (a layer that failed to load, a file that was 
 
 ## Theme
 
-Use the sun/moon button on the toolbar to switch between light and dark themes. The theme also follows your operating system preference by default, and you can set it for embeds with the `theme=dark` or `theme=light` URL parameter. See [Embedding & Sharing](embedding.md).
+Use the sun/moon button on the toolbar to switch between light and dark themes, and **Settings → Appearance** to pick an accent color. The theme follows your operating system preference by default, and you can set it for embeds with the `theme=dark` or `theme=light` URL parameter. See [Embedding & Sharing](embedding.md).
 
 ## Desktop and browser
 
-The same UI runs as an installed desktop app (built with Tauri) and as a web app in the browser. The browser build covers most workflows, but features that need the local filesystem (file dialogs, local MBTiles and raster reads, project save/open, and the Python sidecar tools) require the desktop app. Each affected page notes these differences. See [Getting Started](../getting-started.md) for installation and [Downloads](../downloads.md) for installers.
+The same UI runs as an installed desktop app (built with Tauri) and as a web app in the browser. The browser build covers most workflows, but features that need direct access to the local filesystem (native file dialogs, local MBTiles and raster reads, reopening referenced local files, and the Python sidecar tools, unless a self-hosted web deployment proxies the sidecar) require the desktop app. In the browser, projects open through the browser's file picker and save through its save dialog or as a download. Each affected page notes these differences. See [Getting Started](../getting-started.md) for installation and [Downloads](../downloads.md) for installers.

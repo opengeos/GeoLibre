@@ -104,7 +104,7 @@ Build interactive maps in RStudio, Quarto, R Markdown, and Shiny with the [`geol
 <div class="feature-card" markdown>
 ### AI Assistant
 
-Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre operations — Spatial SQL, symbology, add or remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI) with your own API key, disabled until configured.
+Chat with your data: a natural-language [assistant](user-guide/ai-assistant.md) that turns plain-English requests into GeoLibre operations — Spatial SQL, symbology, add or remove data, and map control — applied through the app so they stay auditable and undoable. Provider-pluggable (Google Gemini, Anthropic, OpenAI, OpenRouter, Amazon Bedrock, a local Ollama, or any OpenAI-compatible endpoint) with your own credentials, disabled until configured.
 </div>
 
 <div class="feature-card" markdown>
@@ -144,7 +144,7 @@ Open a project by passing a public `.geolibre.json` URL with the `url` query par
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json
 ```
 
-You can also open hosted data directly. `data` accepts GeoJSON, GeoParquet, PMTiles, REST endpoints returning GeoJSON or ZIP, ZIP archives containing multiple GeoJSON files, and COGs. Add `style` to apply hosted vector or raster symbology:
+You can also open hosted data directly. `data` accepts GeoJSON, GeoParquet, PMTiles, COGs, LiDAR point clouds (LAS, LAZ, COPC, or an EPT `ept.json`), REST endpoints returning GeoJSON or ZIP, and ZIP archives containing multiple GeoJSON files. Add `style` to apply hosted vector or raster symbology:
 
 ```text
 https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json
@@ -152,7 +152,7 @@ https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&s
 
 Vector layers can produce a compatible file from **Layer actions → Styles → Export GeoLibre URL style**, and apply it again with **Import style from file (GeoLibre URL / Mapbox GL / SLD / QML)…**, or with **Import style from text…** by pasting the style itself.
 
-For narrow embeds, add `?layout=compact` to the demo URL to use icon-only toolbar buttons and hide project metadata:
+For narrow embeds, add `&layout=compact` to the demo URL to use icon-only toolbar buttons and hide project metadata:
 
 ```text
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact
@@ -213,19 +213,19 @@ see the [Roadmap](roadmap.md).
 
 ### Recently added
 
-Newest capabilities, still settling in: autosave with crash recovery and a
-browsable [project history](user-guide/projects.md#project-history-and-crash-recovery),
-[QGIS](user-guide/projects.md#importing-a-qgis-project) and
-[ArcGIS Pro project import](user-guide/projects.md#importing-an-arcgis-pro-project), nested
-[layer groups](user-guide/layers.md#layer-groups) with multi-select moves,
-anchored [review comments](user-guide/map-controls.md#review-comments) that sync
-through a collaboration session, an
-[Elements panel](user-guide/map-controls.md#annotations-and-the-elements-panel)
-for map annotations, [ArcGIS Hub and open-data catalog
-browsers](user-guide/adding-data.md#more-data-sources), address geocoding of
-delimited text at import time, KML Super-Overlay support, a Dashboard selector
-widget that cross-filters the other widgets, and
-[NMEA receiver support](user-guide/map-controls.md#gps-tracking) in GPS Tracking.
+Newest capabilities, still settling in. The v3.3 release added interactive
+[line of sight](user-guide/map-controls.md), MGRS/USNG grids and coordinate
+readouts, SQL Server and Azure SQL sources on desktop, a
+[project history](user-guide/projects.md#project-history-and-crash-recovery)
+that compares snapshots and restores single layers, editable layer metadata
+with STAC Item export, glTF, OBJ, and STL export of 3D-extruded layers, and
+plugin panels that dock in the side panel. Since then, `main` has added an
+[ArcGIS Portal](user-guide/web-services.md#arcgis-portal) browser and a
+[Sentinel-2 Explorer](user-guide/web-services.md#sentinel-2-explorer) under Web
+Services, Sign in with ArcGIS for secured services, administrative boundaries
+from geoBoundaries, Cesium Ion terrain assets, custom point markers from PNG,
+JPEG, and GIF images, standard deviation and geometric interval
+classification, and LAS/LAZ/COPC export of LiDAR tool outputs.
 
 The [roadmap](roadmap.md) tracks every release, version by version.
 

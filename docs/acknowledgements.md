@@ -15,6 +15,7 @@ many transitive dependencies they rely on).
 ### Mapping and rendering
 
 - [MapLibre GL JS](https://maplibre.org/) — the core map rendering engine.
+- [CesiumJS](https://cesium.com/platform/cesiumjs/) — the 3D globe rendering engine.
 - [deck.gl](https://deck.gl/) and the [vis.gl](https://vis.gl/) / Open Visualization toolkit — raster, point-cloud, and 3D overlays.
 - [Three.js](https://threejs.org/) — 3D rendering used by globe and atmosphere effects.
 - [PMTiles](https://github.com/protomaps/PMTiles) and [Protomaps](https://protomaps.com/) — single-file tile archives.

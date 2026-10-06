@@ -15,7 +15,7 @@ Before listing formats, it's important to clarify "where it runs," since many fo
 | Runtime | How | Notes |
 |---|---|---|
 | Browser | Open `web.geolibre.app` | No installation needed; works offline after initial load |
-| Desktop | Tauri v2 native application | Windows / macOS / Linux; available via Microsoft Store, Homebrew, winget, AUR, Flatpak |
+| Desktop | Tauri v2 native application | Windows / macOS / Linux; available via Microsoft Store, Mac App Store, Homebrew, winget, AUR, Flatpak |
 | Android | Google Play native app | ~40 MB per ABI |
 | iOS | App Store native app | iPhone and iPad, same codebase via Tauri v2 mobile |
 | Jupyter | `pip install geolibre` | The entire application embedded in a notebook cell |
@@ -50,6 +50,7 @@ What's truly interesting is **which engine reads each format behind the scenes**
 | **GML** | `.gml` | DuckDB `ST_Read` | — |
 | **GPX** | `.gpx` | Pure JS | **Auto-splits into three layers**: waypoints / tracks / routes |
 | **CSV / TSV** | `.csv` `.tsv` `.txt` `.dat` | Custom + DuckDB fallback | Auto-detects delimiter and lat/lon columns; WKT geometry columns go through DuckDB; dialog allows specifying source CRS |
+| **Excel** | `.xlsx` `.xls` | SheetJS (`@e965/xlsx`) | Opened from the Delimited Text panel: pick a worksheet, then the coordinate columns |
 | **CAD (DXF/DWG)** | `.dxf` `.dwg` | DuckDB `ST_Read` | Presents a layer list for selection; **CAD files lack coordinate systems — EPSG must be selected manually** |
 | **MapInfo TAB** | `.tab` | `ST_Read` | — |
 | **Esri File Geodatabase** | `.gdb` **folder** | Python sidecar | Desktop-only, requires sidecar; hidden in Mac App Store builds |
@@ -57,7 +58,7 @@ What's truly interesting is **which engine reads each format behind the scenes**
 | **GeoRSS** | `.xml` `.rss` `.atom` | Pure JS | Supports RSS 2.0 / Atom / RDF, GeoRSS Simple + GML geometries |
 | **Geotagged photos** | `.jpg` `.jpeg` `.png` `.tif` `.tiff` `.webp` `.heic` `.heif` | exifr | **Reads EXIF GPS data to directly generate a point layer** — very practical for UAV/drone photos |
 
-_Explicitly unsupported: `.xlsx` / `.xls` (zero hits in a full-repo search), raw `.osm` XML (PBF only). If you need Excel data, save as CSV first._
+_Explicitly unsupported: raw `.osm` XML (PBF only)._
 
 !!! tip "KML `<Model>` 3D Models"
     The KML `<Model>` handling is worth noting: it loads embedded COLLADA `.dae` files with three.js, then exports them as GLB into the map. The project pulled in three.js just for this one edge case.
@@ -94,11 +95,11 @@ _Note the asymmetry: `.img`, `.vrt`, `.asc`, `.jp2`, `.hgt` are only recognized 
 
 | Item | Support | Notes |
 |---|---|---|
-| **LiDAR layer** | COPC / LAZ (via URL) | Rendered through `maplibre-gl-lidar` + deck.gl |
-| **USGS 3DEP** | Online point cloud streaming | Standalone plugin; comes with a 3DEP elevation index WMS overlay |
+| **LiDAR layer** | LAS / LAZ / COPC (URL or local file), EPT (`ept.json` URL) | Rendered through `maplibre-gl-lidar` + deck.gl |
+| **USGS 3DEP** | Online point cloud streaming | Standalone plugin built on `maplibre-gl-usgs-lidar`; comes with a 3DEP elevation index WMS overlay |
 | **Whitebox LiDAR tools** | `.las .laz .zlidar .copc .e57 .ply`, output `.laz` | The only place in the entire repo where `.e57` / `.ply` appear |
 
-_The LiDAR layer panel's extension allowlist is **not in this repository** — it's defined in upstream npm packages. The only direct evidence in the repo is a single `.copc.laz` example URL. LAS/LAZ/COPC/EPT are very likely supported but cannot be confirmed 100% from the source._
+_The LiDAR file picker itself lives in the upstream `maplibre-gl-lidar` package; GeoLibre's wrapper (`packages/plugins/src/plugins/components/lidar.ts`) documents LAS/LAZ/COPC files and EPT `ept.json` URLs, and a dropped local COPC streams by octree node without being copied._
 
 ---
 
@@ -111,7 +112,7 @@ The opening scenario — "received some 3D Tiles, just want to take a quick look
 | **OGC 3D Tiles** | tileset URL | `maplibre-gl-3d-tiles` + deck.gl `Tile3DLayer` | **Supports custom request headers** — authenticated tilesets work |
 | **Google Photorealistic 3D Tiles** | Built-in URL | Same as above | Requires Google Maps API key; passed via request headers, never stored to disk |
 | **ArcGIS I3S Scene Layer** | `…/SceneServer` URL | deck.gl + loaders.gl `I3SLoader` | Both integrated mesh and 3D object layers are supported |
-| **glTF / GLB** | **URL only** | deck.gl `ScenegraphLayer` | No local file picker — this is the most visible gap currently |
+| **glTF / GLB** | URL or local file | deck.gl `ScenegraphLayer` | Added through the deck.gl visualization layer's scenegraph type |
 | **COLLADA `.dae`** | Only via KML `<Model>` embedding | three.js → GLB | — |
 | **Gaussian Splats** | URL | `maplibre-gl-splat` | Storage layer type is `gaussian-splat` |
 
@@ -119,7 +120,7 @@ The opening scenario — "received some 3D Tiles, just want to take a quick look
 
 This screenshot is quite telling: **in the layer panel on the left, 3D Tiles, vectors, XYZ, glTF models, and Gaussian splats are all stacked in the same list** — and the rendering result is right there on the right. "Loading 3D Tiles requires setting up a server and writing a page" becomes **paste a URL** here.
 
-_What's absent: `.obj` is completely unsupported (zero hits). `.b3dm`/`.pnts`/`.cmpt` — these 3D Tiles internal formats also have zero hits in the repo; they're transparently handled by upstream loaders, so you don't need to worry about them. The Gaussian splat extension list is likewise in upstream packages._
+_What's absent: `.obj` cannot be imported (it appears only as an output of the extruded-layer 3D model export, alongside GLB and STL). `.b3dm`/`.pnts`/`.cmpt` — these 3D Tiles internal formats also have zero hits in the repo; they're transparently handled by upstream loaders, so you don't need to worry about them. The Gaussian splat extension list is likewise in upstream packages._
 
 ---
 
@@ -143,8 +144,7 @@ What you can fill in under "Add Data → Web Services":
 | **WFS** | GetCapabilities fetches typeName; optional auto-refresh |
 | **OGC API - Features** | Landing page / `/collections` / single collection / full `/items` URL are all recognized; auto-follows `next` links; defaults to 1,000 features |
 | **OGC API - Tiles (Vector)** | TileJSON or MVT template; can optionally provide a Mapbox style URL to resolve `source-layer` names |
-| **ArcGIS** | Only **two** in the dialog: FeatureServer (fetched as `f=geojson`) and VectorTileServer |
-| **ArcGIS MapServer / ImageServer** | Not in the Add Data dialog; only accessible indirectly via plugins like NASA Earthdata GIS or EnviroAtlas |
+| **ArcGIS** | Four layer types: FeatureServer (downloaded page by page as GeoJSON), VectorTileServer, MapServer, and ImageServer (the last two as raster layers); supports portal item IDs and ArcGIS sign-in |
 | **MBTiles** | `.mbtiles` local file, custom protocol + Rust backend reads. **Desktop-only** |
 | **PMTiles** | `.pmtiles`; vector or raster both work; auto-sniffs file header |
 | **PostgreSQL / PostGIS** | Connect → select table → outputs MVT via built-in Martin service. **Desktop-only** |
@@ -227,7 +227,7 @@ Right-click a layer to export — **all done in the browser, no backend needed**
 | Tool | Input | Output |
 |---|---|---|
 | Vector → Vector | `geojson geojsonl json parquet geoparquet fgb gpkg shp zip kml gml gpx` | Desktop: 14 drivers — GeoJSON, GeoJSONSeq, FlatGeobuf, GPKG, Shapefile, GML, KML, CSV, SQLite, GMT, DXF, MapInfo, JML, GPX |
-| Vector → GeoParquet | Same as above | `.parquet`; compression: `zstd / snappy / gzip / lz4 / uncompressed` |
+| Vector → GeoParquet | `parquet geoparquet geojson json shp gpkg fgb gml kml` | `.parquet`; compression: `zstd / snappy / gzip / lz4 / uncompressed` |
 | Vector → FlatGeobuf | Same as above | `.fgb` |
 | Vector → Shapefile | Same as above | `.zip` |
 | Vector → GeoPackage | Same as above | `.gpkg` |
@@ -254,7 +254,7 @@ Mentioned piecemeal above, consolidated here. **This is where things most easily
 | Limitation | Impact |
 |---|---|
 | **Desktop (Tauri) exclusive** | Native file/folder dialogs, local MBTiles, local raster reads, Shapefile companion file auto-discovery, PostGIS/Martin, file geodatabase, local file watch reload |
-| **Requires Python sidecar** | File geodatabase, all desktop conversion tools (preferred path), raster tools (rasterio), AI segmentation, PostGIS, Sedona |
+| **Requires Python sidecar** | File geodatabase, all desktop conversion tools (preferred path), raster tools without a browser engine (rasterio), AI segmentation, PostGIS, Sedona |
 | **Mac App Store build** | No Python sidecar: hides PostgreSQL and GDB data sources, hides AI segmentation; Whitebox, conversion, raster, and vector tools all fall back to their browser/WASM engines; Shapefile companion files must be manually multi-selected |
 | **Android / iOS (mobile)** | Hides raster tools, conversion tools, AI segmentation, PostgreSQL — all sidecar-backed. The Whitebox toolbox is WASM-backed and stays available |
 | **Browser** | No local MBTiles/GDB/PostGIS; conversion output is subset; vector conversion doesn't accept `.zip`; raster-to-COG only accepts GeoTIFF; Zarr local folders unavailable in Firefox/Safari |
@@ -291,7 +291,7 @@ can replace layers owned by an earlier one.
 
 A noteworthy detail: **Cesium's camera sync is not aligned by zoom level, but by ground resolution (meters/pixel)**, so split-screen panels at different heights maintain the same on-screen scale.
 
-**Five compute engines**, all under the same UI: DuckDB-WASM Spatial (the workhorse, running in a dedicated Worker), PGlite + PostGIS, Apache Sedona (sidecar or browser WASM version), Pyodide (running GeoPandas/Shapely in the browser), Whitebox WASM (700+ tools).
+**Five compute engines**, all under the same UI: DuckDB-WASM Spatial (the workhorse, running in a dedicated Worker), PGlite + PostGIS, Apache Sedona (sidecar or browser WASM version), Pyodide (running GeoPandas/Shapely in the browser), Whitebox WASM (1,000+ tools).
 
 !["Processing" menu expanded: Whitebox, Conversion, Hydrology, LiDAR, Network, Projection, Raster, Remote Sensing, Terrain, Vector — with an alphabetical tool list on the right](https://assets.geolibre.app/images/processing-tools-menu.webp)
 
@@ -303,7 +303,7 @@ A noteworthy detail: **Cesium's camera sync is not aligned by zoom level, but by
 
 A quick overview, all verifiable numbers from the source — not estimates.
 
-**How large vectors are handled.** **Above 50,000 features, it stops using MapLibre's native GeoJSON source and instead tiles on-the-fly client-side** — geojson-vt generates tiles (point layers use Supercluster for aggregation), vt-pbf encodes to MVT, then feeds MapLibre through a custom protocol. Max zoom 16, 4096 extent.
+**How large vectors are handled.** **Above 50,000 features, it stops using MapLibre's native GeoJSON source and instead tiles on-the-fly client-side** — on a Web Worker, geojson-vt generates tiles (point layers use Supercluster for aggregation), vt-pbf encodes to MVT, then feeds MapLibre through a custom protocol. Max zoom 16, 4096 extent.
 
 Two details that show engineering care: tile index objects are **deliberately excluded from the store** (too large, non-serializable, can't be written into a project file); encoding checks an abort signal before proceeding, since MapLibre cancels tile requests that scroll off-screen.
 
@@ -340,13 +340,13 @@ Having covered the strengths, let's discuss the limitations.
 
 **1. The feature scope is deliberately narrow.** It focuses on browser workflows, local processing, cloud-native formats, spatial SQL, modern visualization, and portability. Complex professional workflows still belong in QGIS.
 
-**2. The iteration speed is a double-edged sword.** From 0 to 2.4.0 in just over two months; 2.0.0 to 2.1.0 was separated by roughly 19 hours. If you're considering it as a long-term production dependency, factor in this churn risk.
+**2. The iteration speed is a double-edged sword.** When the original article was written, it had gone from 0 to 2.4.0 in just over two months; 2.0.0 to 2.1.0 was separated by roughly 19 hours. If you're considering it as a long-term production dependency, factor in this churn risk.
 
-**3. Several clear format gaps.** glTF/GLB has no local file picker (URL only), `.obj` is completely unsupported, Excel is unsupported, HDF4 is unsupported, raw `.osm` XML is unsupported.
+**3. Several clear format gaps.** `.obj` cannot be imported, HDF4 is unsupported, raw `.osm` XML is unsupported.
 
 **4. Platform capability asymmetry.** See the table in Section 10. Don't extrapolate the browser version's experience to represent the whole.
 
-**5. Cesium 3D Globe requires an ion token outside the web version.** The hosted web version bundles a demo token, but the desktop and mobile apps need your own. The free tier is sufficient for individual use; teams need to budget for quotas and pricing.
+**5. Cesium terrain and imagery need an ion token outside the web version.** The hosted web version bundles a demo token, but the desktop and mobile apps need your own; without one the globe still works, just without Cesium World Terrain and Ion imagery. The free tier is sufficient for individual use; teams need to budget for quotas and pricing.
 
 **6. The China-specific environment.** Default sources for basemaps, terrain, and Photorealistic 3D Tiles are all outside the firewall; coordinates use standard WGS84 — **GCJ-02 offsets must be handled separately**. These two issues need to be addressed first for serious use. Reliable first-hand data on this is unavailable; further input from actual users is welcome.
 
@@ -364,7 +364,7 @@ Usage paths by scenario:
 
 1. **Just want to take a look** — Open `web.geolibre.app` directly; no installation, no registration
 2. **Need to get real work done** — Download the desktop version from GitHub Releases, or via Microsoft Store / Homebrew / winget; a two-minute process
-3. **Python users** — `pip install geolibre`; for GeoPandas support, `pip install "geolibre[all]"`; requires Python 3.10+
+3. **Python users** — `pip install geolibre`; for GeoPandas support, `pip install "geolibre[all]"`; requires Python 3.11+
 4. **Intranet / offline environments** — `VITE_PYODIDE_INDEX_URL` and `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` can point Pyodide and the DuckDB spatial extension to internal mirrors, **no rebuild required**; an official Docker image is also available at `ghcr.io/opengeos/geolibre:latest`
 5. **Secondary development** — npm workspaces monorepo, so use **npm** (the repo tracks `package-lock.json`) on **Node 22+**; main application in `apps/geolibre-desktop`; MIT licensed
 

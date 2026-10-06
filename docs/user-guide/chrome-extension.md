@@ -33,11 +33,11 @@ A manually installed copy does not update itself. To update it, download and ext
 
 1. Visit a webpage or data catalog containing geospatial file links.
 2. Select the GeoLibre icon in the Chrome toolbar.
-3. Use **All**, **Vector**, or **Raster** to filter the discovered datasets.
+3. Use **All**, **Vector**, **Raster**, or **LiDAR** to filter the discovered datasets.
 4. Check one or more datasets. Nothing is selected by default.
 5. Select **Open in GeoLibre** to load the selected datasets on the same map.
 
-The extension recognizes GeoJSON and spatial JSON, GeoParquet and Parquet, PMTiles, GeoTIFF and Cloud-Optimized GeoTIFF, ZIP archives containing GeoJSON, JSON-LD download metadata, and existing GeoLibre data links. On Source Cooperative repository pages, it also reads the embedded inventory so datasets outside the currently visible list can be selected.
+The extension recognizes GeoJSON and spatial JSON, GeoParquet and Parquet, PMTiles, GeoTIFF and Cloud-Optimized GeoTIFF, LiDAR point clouds (LAS, LAZ, COPC, and EPT `ept.json`), ZIP archives containing GeoJSON, JSON-LD download metadata, and existing GeoLibre data links. A neighboring `name.style.json` or `name.geolibre.style.json` link is paired with the matching dataset. It also offers the map services the page's own maps requested: WMS, WMTS, WFS, OGC API - Features, ArcGIS feature services, XYZ/TMS image tiles, and vector tiles. On Source Cooperative repository pages, it also reads the embedded inventory so datasets outside the currently visible list can be selected.
 
 ## Use a different GeoLibre instance
 

@@ -22,6 +22,7 @@ export type GeoLibreBuiltInMapControl =
   | "scale"
   | "attribution"
   | "logo"
+  | "maptoolkit-logo"
   | "layer-control";
 
 export interface GeoLibrePlugin {
@@ -43,7 +44,9 @@ export interface GeoLibrePlugin {
   exclusiveGroup?: string;
   /** At least one name is required for handleUrlParameters to be called. */
   urlParameterNames?: string[];
-  activate: (app: GeoLibreAppAPI) => boolean | void;
+  // Return (or resolve) false to refuse activation; the host then rolls back
+  // the optimistic active state.
+  activate: (app: GeoLibreAppAPI) => boolean | void | Promise<boolean | void>;
   deactivate: (app: GeoLibreAppAPI) => void;
   handleUrlParameters?: (
     app: GeoLibreAppAPI,
@@ -57,6 +60,18 @@ export interface GeoLibrePlugin {
   getProjectState?: () => unknown;
   applyProjectState?: (app: GeoLibreAppAPI, state: unknown) => boolean | void;
   /**
+   * The plugin saves its own panel open/collapsed state through
+   * getProjectState/applyProjectState, so the project-restore pass must not
+   * collapse its control.
+   */
+  restoresPanelCollapseState?: boolean;
+  /**
+   * The plugin's project state is project data, not a preference: every
+   * project load calls applyProjectState, with undefined when the file has no
+   * state for it, so the previous project's data is not carried over.
+   */
+  clearsStateOnProjectLoad?: boolean;
+  /**
    * A workspace tool, not part of a project (e.g. the S3 Browser panel):
    * project loads and map swaps leave it running, and it is never saved in
    * the project's active plugins. Only for plugins with no map controls.
@@ -69,6 +84,7 @@ export interface GeoLibrePlugin {
 export interface GeoLibreDeckGL {
   core: typeof import("@deck.gl/core");
   layers: typeof import("@deck.gl/layers");
+  aggregationLayers: typeof import("@deck.gl/aggregation-layers");
   geoLayers: typeof import("@deck.gl/geo-layers");
   meshLayers: typeof import("@deck.gl/mesh-layers");
   mapbox: typeof import("@deck.gl/mapbox");
@@ -115,6 +131,8 @@ export interface GeoLibreRasterWindowReading {
   overviewLevel: number;
 }
 
+// An excerpt: the full interface, with every optional method, is in
+// packages/plugins/src/types.ts.
 export interface GeoLibreAppAPI {
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (
@@ -198,6 +216,16 @@ export interface GeoLibreAppAPI {
   moveLayersToGroup?: (layerIds: string[], groupId: string | null) => void;
   moveLayerGroupToGroup?: (id: string, parentId: string | null) => void;
   removeLayerGroup?: (id: string) => void;
+  // Time Slider adapters (see "Driving a layer's own time dimension" below).
+  registerTemporalLayer?: (
+    layerId: string,
+    adapter: TemporalLayerAdapter,
+    options?: { bind?: boolean }
+  ) => () => void;
+  unregisterTemporalLayer?: (layerId: string) => void;
+  // See "Activating and deactivating other plugins" below.
+  activatePlugin?: (pluginId: string, state?: unknown) => Promise<boolean>;
+  deactivatePlugin?: (pluginId: string) => boolean;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
@@ -216,6 +244,11 @@ export interface GeoLibreAppAPI {
   // falls back to this when getMap() is null — see "Supporting the Mapbox
   // renderer" below.
   getMapboxMap?: () => import("mapbox-gl").Map | null;
+  // The mapbox-gl namespace and the access token, only while Mapbox is the
+  // primary renderer, for a plugin that must construct Mapbox classes or a
+  // second Mapbox map.
+  getMapboxGl?: () => typeof import("mapbox-gl").default | null;
+  getMapboxAccessToken?: () => string | null;
   // The primary ArcGIS MapView or SceneView, or null on another renderer.
   // The shared deck overlay hosts flat maps and local scenes only.
   getArcgisView?: () => ReturnType<
@@ -290,11 +323,18 @@ export interface GeoLibreAppAPI {
   openFloatingPanel?: (id: string) => boolean;
   closeFloatingPanel?: (id: string) => void;
   getOpenFloatingPanels?: () => string[];
+  // AI Assistant tools and guidance (see "Assistant tools" below).
+  registerAssistantTool?: (tool: Tool) => () => void;
+  registerAssistantToolSpec?: (spec: AssistantToolSpec) => () => void;
+  registerAssistantGuidance?: (text: string) => () => void;
 }
+
+// A getter re-reads the label on every render (see "Toolbar menus" below).
+export type GeoLibreToolbarLabel = string | (() => string);
 
 export interface GeoLibreToolbarMenu {
   id: string;
-  label: string;
+  label: GeoLibreToolbarLabel;
   icon?: string; // URL or data: URI
   items: GeoLibreToolbarMenuItem[];
 }
@@ -303,7 +343,7 @@ export type GeoLibreToolbarMenuItem =
   | {
       type?: "action";
       id: string;
-      label: string;
+      label: GeoLibreToolbarLabel;
       icon?: string;
       disabled?: boolean;
       onSelect: () => void;
@@ -311,7 +351,7 @@ export type GeoLibreToolbarMenuItem =
   | {
       type: "submenu";
       id: string;
-      label: string;
+      label: GeoLibreToolbarLabel;
       icon?: string;
       items: GeoLibreToolbarMenuItem[];
     }
@@ -338,6 +378,8 @@ export interface GeoLibreFloatingPanelRegistration {
   title: string | (() => string);
   icon?: string; // URL or data: URI
   defaultWidth?: number;
+  defaultHeight?: number; // omitted: the card sizes to its content
+  position?: GeoLibreMapControlPosition; // corner it first opens at, default "top-left"
   render: (container: HTMLElement) => void | (() => void);
   onOpen?: () => void;
   onClose?: () => void;
@@ -370,11 +412,15 @@ export interface GeoLibreRightPanelRegistration {
   icon?: string;
   /** Preferred expanded width in px (desktop only; host-clamped). */
   defaultWidth?: number;
+  /** Deactivate the owning plugin when the user closes the panel. */
+  deactivatePluginOnClose?: boolean;
   /** Fill the panel body with your own DOM. May return a cleanup function. */
   render: (container: HTMLElement) => void | (() => void);
   onOpen?: () => void;
   onCollapse?: () => void;
   onClose?: () => void;
+  /** Called only on an explicit close, not when another panel displaces it. */
+  onExplicitClose?: () => void;
 }
 ```
 
@@ -424,17 +470,19 @@ GeoLibre. To add one to this repository:
    export { myPlugin } from "./plugins/my-plugin";
    ```
 
-3. Register it in `apps/geolibre-desktop/src/hooks/usePlugins.ts`.
+3. Register it in `apps/geolibre-desktop/src/hooks/usePlugins.ts` by adding it
+   to the `BUILT_IN_PLUGINS` array, which is passed to `manager.registerAll`.
 
    ```typescript
    import { myPlugin } from "@geolibre/plugins";
 
-   manager.registerAll([
+   const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
      maplibreLayerControlPlugin,
-     maplibreGeoAgentPlugin,
      maplibreGeoEditorPlugin,
+     // ...
      myPlugin,
-   ]);
+   ];
+   manager.registerAll(BUILT_IN_PLUGINS);
    ```
 
 For a MapLibre control plugin, add the package dependency, then call
@@ -482,13 +530,15 @@ default control button CSS can override their flex centering:
 }
 ```
 
-Run `npm run build` and `pre-commit run --all-files` before submitting the
-change. If you also touched pages under `docs/`, build the site — CI runs
+Run `npm run build` and `pre-commit run --files <changed files>` before
+submitting the change. If you also touched pages under `docs/`, build the site — CI runs
 `zensical build --strict`, so a broken link or a page missing from the
 `mkdocs.yml` `nav` fails the build. See
 [Contributing](contributing.md#documentation) for both gates in full.
 
 ## Built-in plugins
+
+A selection of the built-in plugins:
 
 | ID                            | Description                                                                                                                                                                   |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -499,7 +549,7 @@ change. If you also touched pages under `docs/`, build the site — CI runs
 | `maplibre-gl-geo-editor`      | Adds GeoEditor drawing controls                                                                                                                                               |
 | `maplibre-gl-dimensions`      | Adds Dimension tools (linear/angular CAD-style dimension lines, with optional vertex snapping)                                                                                |
 | `maplibre-gl-geoagent`        | Adds GeoAgent map assistant controls                                                                                                                                          |
-| `maplibre-gl-lidar`           | Adds LiDAR controls                                                                                                                                                           |
+| `maplibre-gl-usgs-lidar`      | Searches and streams USGS 3DEP LiDAR point clouds                                                                                                                             |
 | `geolibre-ign-lidar-hd`       | Searches IGN LiDAR HD tile coverage (WFS) and downloads point cloud (COPC LAZ) files. Its live-network test is opt-in via `RUN_LIVE_TESTS` (see `tests/ign-lidar-hd.test.ts`) |
 | `maplibre-gl-streetview`      | Adds street view controls                                                                                                                                                     |
 | `maplibre-gl-swipe`           | Adds map swipe controls                                                                                                                                                       |
@@ -526,7 +576,7 @@ Map control plugins can optionally expose `getMapControlPosition()` and `setMapC
 
 Plugins with serializable runtime settings can expose `getProjectState()` and `applyProjectState()` so GeoLibre can save and restore those settings in the project file. A wrapper should use these hooks to adapt upstream control APIs such as `getState()` without requiring every upstream package to implement a GeoLibre-specific interface.
 
-Plugins that render with deck.gl should call `app.getDeckGL()` (returns a promise) to obtain GeoLibre's own deck.gl modules — `core`, `layers`, `geoLayers`, `meshLayers`, and `mapbox` (use `mapbox.MapboxOverlay` for interleaved MapLibre rendering). Render on the host's single deck.gl instance rather than bundling a second copy: deck.gl and luma.gl throw on a version mismatch and share global singletons, so a bundled copy fails to render. Call it with optional chaining (`app.getDeckGL?.()`) since a host variant may not ship deck.gl.
+Plugins that render with deck.gl should call `app.getDeckGL()` (returns a promise) to obtain GeoLibre's own deck.gl modules — `core`, `layers`, `aggregationLayers`, `geoLayers`, `meshLayers`, and `mapbox` (use `mapbox.MapboxOverlay` for interleaved MapLibre rendering). Render on the host's single deck.gl instance rather than bundling a second copy: deck.gl and luma.gl throw on a version mismatch and share global singletons, so a bundled copy fails to render. Call it with optional chaining (`app.getDeckGL?.()`) since a host variant may not ship deck.gl.
 
 ### Shared projection library
 
@@ -796,6 +846,7 @@ export interface GeoLibreWfsLayerOptions {
 }
 
 export interface GeoLibreCogLayerOptions {
+  engine?: "maplibre-gl-raster" | "cog-tiler-wasm" | "titiler" | "auto"; // see below
   bands?: string; // "1" (single band) or "1,2,3" (RGB)
   colormap?: string; // named colormap for a single-band COG, e.g. "terrain"
   rescaleMin?: number;
@@ -1016,6 +1067,8 @@ export interface TemporalLayerAdapter {
   getTimeValues: () => ReadonlyArray<Date | number | string>; // the time coordinate, in index order
   setTime: (date: Date) => void | Promise<void>; // apply a date to the layer
   dimension?: string; // the axis name, default "time"
+  granularity?: "hour" | "day" | "month" | "year"; // stepping unit; derived from the axis span when omitted
+  displayUnits?: ("hour" | "day" | "month" | "year")[]; // units offered by the slider's granularity controls
 }
 ```
 
@@ -1327,7 +1380,7 @@ const user = await (await http(`${server}/api/v1/users/current`)).json(); // sen
 
 ## Floating panels
 
-A floating panel is a draggable, closeable card the host overlays on the map's top-left corner. Unlike a dockable right panel (one active panel docked at a fixed position), several floating panels can be open at once and they do not shrink the map. The render contract is the same plain-DOM `render(container)` as right panels.
+A floating panel is a draggable, closeable card the host overlays on the map, opening at the corner named by `position` (top-left by default). Unlike a dockable right panel (one active panel docked at a fixed position), several floating panels can be open at once and they do not shrink the map. The render contract is the same plain-DOM `render(container)` as right panels.
 
 ```typescript
 const unregister = app.registerFloatingPanel?.({
@@ -1403,7 +1456,7 @@ project or persisted state carrying `activePluginIds` overrides the default.
 The flag is honored **only** for bundled drop-ins; it does not bypass a blocked
 plugin policy.
 
-If instead you want a plugin compiled into the main JS bundle (no `plugin.json`, no fetch), register it as a built-in plugin (see "Add a plugin" in the repository README).
+If instead you want a plugin compiled into the main JS bundle (no `plugin.json`, no fetch), register it as a built-in plugin (see [Add a built-in plugin](#add-a-built-in-plugin-in-this-repository)).
 
 ```json
 {
@@ -1417,7 +1470,7 @@ If instead you want a plugin compiled into the main JS bundle (no `plugin.json`,
 }
 ```
 
-The `entry` file must export a `GeoLibrePlugin` as either the default export or a named `plugin` export. The exported plugin `id`, `name`, and `version` must match `plugin.json`. The entry must be a self-contained `.js` or `.mjs` bundle because relative module imports inside the zip are not resolved by this first loader. The optional `engines` array declares which of GeoLibre's four map renderers the plugin supports (`"maplibre" | "mapbox" | "cesium" | "arcgis"`, defaulting to `["maplibre"]`). Plugins supporting the native globe add `"cesium"`; plugins that stay on the Style Spec surface can add `"mapbox"` (see "Supporting the Mapbox renderer"); and plugins with an ArcGIS-native adapter can add `"arcgis"` (see the [ArcGIS renderer](arcgis-renderer.md)). The host suspends a plugin when the selected engine is not in this list and restores it when a compatible engine becomes active.
+The `entry` file must export a `GeoLibrePlugin` as either the default export or a named `plugin` export. The exported plugin `id`, `name`, and `version` must match `plugin.json`. The entry must be a self-contained `.js` or `.mjs` bundle because relative module imports inside the zip are not resolved by this first loader. The optional `engines` array declares which of GeoLibre's four map renderers the plugin supports (`"maplibre" | "mapbox" | "cesium" | "arcgis"`, defaulting to `["maplibre"]`). Plugins supporting the native globe add `"cesium"`; plugins that stay on the Style Spec surface can add `"mapbox"` (see [Supporting the Mapbox renderer](#supporting-the-mapbox-renderer)); and plugins with an ArcGIS-native adapter can add `"arcgis"` (see the [ArcGIS renderer](arcgis-renderer.md)). The host suspends a plugin when the selected engine is not in this list and restores it when a compatible engine becomes active.
 
 External plugin entries are executed with `import(URL.createObjectURL(...))`, which is why the desktop CSP in `tauri.conf.json` includes `blob:` in `script-src`. Removing `blob:` from `script-src` breaks external plugin loading. Combined with `'unsafe-eval'`, this means code that can create a blob URL can execute scripts, which is acceptable because external plugins are trusted local files installed by the user.
 
@@ -1428,8 +1481,8 @@ boundary. GeoLibre keeps them in a trusted local save only when the user
 explicitly chooses to retain credentials, and removes the entire
 `plugins.settings` object from shares, standalone HTML exports, embed
 snapshots, and collaboration snapshots. The exception is state a plugin's
-registry entry declares publishable (see `publishableSettings` under "Plugin
-marketplace"), which is kept and still scrubbed for credentials. Store portable, non-secret identifiers
+registry entry declares publishable (see `publishableSettings` under [Plugin
+marketplace](#plugin-marketplace)), which is kept and still scrubbed for credentials. Store portable, non-secret identifiers
 such as broker references in layer source or metadata instead when recipients
 need them.
 
@@ -1632,6 +1685,8 @@ callbacks omits the method. The assistant recomposes its system prompt together
 with its tools before the next prompt, keeping the conversation history.
 Feature-detect the method for older hosts.
 
+## Map renderers
+
 The host exposes `app.getMapRenderer()` to read the current primary renderer.
 Engine declarations are enforced by the plugin manager for activation, URL
 parameters, project restoration, and delayed control registration, as well as
@@ -1724,7 +1779,7 @@ whose results land out of order.
 
 ### Supporting the Mapbox renderer
 
-The Mapbox renderer (`docs/mapbox-renderer.md`) draws with Mapbox GL JS, whose
+The [Mapbox renderer](mapbox-renderer.md) draws with Mapbox GL JS, whose
 runtime API is the Style Spec surface MapLibre grew out of: sources and style
 layers (`addSource`, `addLayer`, `setPaintProperty`, `setLayoutProperty`,
 `setFilter`, `getSource`, `getLayer`, `getStyle`, `moveLayer`), images

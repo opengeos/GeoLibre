@@ -73,9 +73,15 @@ packages/map            # MapLibre integration and layer sync
 packages/ui             # Tailwind + shadcn/ui primitives
 packages/plugins        # Plugin API and built-in plugins
 packages/processing     # Client-side algorithm registry
+packages/embed          # Typed iframe embed client (@geolibre/embed)
+packages/collab-core    # Shared collaboration code for the collab workers
 workers/                # viewer, collab, collab-node, tiles and ai-proxy workers
 backend/geolibre_server # Optional FastAPI conversion sidecar (Python)
-docs/                   # This documentation site (MkDocs)
+backend/geolibre_server_api # Reference projects and identity API (Python)
+python/                 # The geolibre Python package (Jupyter widget, MCP server)
+e2e/                    # Playwright end-to-end tests
+tests/                  # Frontend unit and component tests
+docs/                   # This documentation site (Zensical, mkdocs.yml)
 ```
 
 See the [Architecture](architecture.md) reference for how these fit together,
@@ -133,7 +139,8 @@ runs the full production build once per invocation; if you already built, add
 `SKIP=npm-build` in front of the command.
 
 `npm run ci:web` is the quick gate for changes that only touch the web app and
-its packages: lint, the i18n catalog check, `typecheck:fast`, the
+its packages: lint, the shared dependency, i18n catalog, gallery and plugin docs
+checks, `typecheck:fast`, the
 [test type check](maintenance.md#test-type-check-ratchet), and the frontend
 unit tests. It needs only Node.
 
@@ -143,6 +150,7 @@ order:
 | Step               | Command                          | Covers                                                                                                                 |
 | ------------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Lint               | `npm run lint`                   | ESLint over `apps/`, `packages/`, `workers/` and `tests/`                                                              |
+| Shared deps check  | `npm run check:shared-deps`      | Dependencies declared by both the app and `packages/plugins` carry the same range (see [Shared dependency ranges](maintenance.md#shared-dependency-ranges)) |
 | i18n catalog check | `npm run i18n:tools:check`       | The processing-tool strings in `en.json` match the tool registries (regenerate with `npm run i18n:tools`)              |
 | Gallery check      | `npm run gallery:check`          | `docs/gallery.md` and the `docs/demos.md` teaser match `scripts/demo-gallery.json` (regenerate with `npm run gallery`) |
 | Plugin docs check  | `npm run plugins:docs:check`     | The built-in plugin table in `docs/user-guide/plugins.md` matches the plugin registry (regenerate with `npm run plugins:docs`) |
@@ -161,7 +169,8 @@ and `npm run ci:backend` (backend and Docker tests; needs Python and the npm CLI
 to run the script, but no `npm install`). CI runs lint, `ci:frontend`,
 `ci:backend` and `check:rust` as separate, parallel jobs in
 `.github/workflows/ci.yml` rather than one after another, with
-`typecheck:tests` running next to lint in the "Lint and type check" job, so if
+`check:shared-deps` and `typecheck:tests` running next to lint in the "Lint and
+type check" job, so if
 you add a step to `npm run ci`, add it to one of those groups and CI picks it
 up.
 

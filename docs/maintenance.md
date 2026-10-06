@@ -477,7 +477,7 @@ rejects the preflight a JSON `POST /search` needs, so the library's own
 goes out as a `GET /search`, and the collection list falls back to the bundled
 `planetary-computer-collections.json` when the live one cannot be read. The
 subclass reuses the private `fetch` / `abortController` fields, and
-`maplibre-gl-planetary-computer.ts` swaps it into the control's private
+`maplibre-planetary-computer.ts` swaps it into the control's private
 `_stacClient` field before the control is added (collections load in `onAdd`).
 
 If upstream renames those fields, loads collections in its constructor, or adds
@@ -1072,8 +1072,9 @@ the bundle report makes a second copy easy to spot.
 
 Dependencies are watched two ways: **Dependabot** (`.github/dependabot.yml`) opens
 grouped weekly update PRs for npm, pip (backend + `python/`), cargo, and Actions,
-and the CI **`audit` job** runs `npm run audit:ci` (blocking) plus a non-blocking
-`pip-audit` of the resolved backend environment.
+and CI runs `npm run audit:ci` (blocking, in the "Lint and type check" job) plus a
+non-blocking `pip-audit` of the resolved backend environment (in the "Backend
+tests" job).
 
 `audit:ci` is `scripts/audit-check.mjs`, a thin wrapper over `npm audit
 --omit=dev` that still fails on every high/critical advisory _except_ the ones

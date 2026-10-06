@@ -164,6 +164,7 @@ The sidecar exposes these endpoints (proxied to `samgeo-api`):
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | GET | `/ml/status` | Backend availability, default model, version, and model list. |
+| GET | `/ml/models` | The backend's model catalog (available and loaded models). |
 | POST | `/ml/segment/text` | Text-prompt segmentation (`prompt`, `confidence_threshold`). |
 | POST | `/ml/segment/automatic` | Automatic mask generation. |
 | POST | `/ml/segment/predict` | Box/point prompt segmentation (`boxes`, `point_coords`, `point_labels`, `point_crs`). |

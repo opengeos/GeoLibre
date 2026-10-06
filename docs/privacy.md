@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: October 4, 2026_
+_Last updated: October 6, 2026_
 
 GeoLibre Desktop ("GeoLibre", "the app") is an open-source desktop GIS
 application developed by the OpenGeos community. This policy explains how the app
@@ -50,6 +50,10 @@ the request you make, and are governed by their own privacy policies:
   server operated by the OpenGeos project (currently hosted on Cloudflare) and
   shared with the other participants. The relay holds the latest project snapshot
   so that later joiners can load the session, and discards it when the session ends.
+- **Project sharing**: if you use Project → Share, the project file is uploaded
+  to share.geolibre.app, operated by the OpenGeos project. Vector layers added
+  from local files are embedded in the uploaded file; other local files are not
+  uploaded.
 
 GeoLibre does not control these third-party services; please review their privacy
 policies for how they handle data.

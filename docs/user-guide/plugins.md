@@ -8,7 +8,7 @@ The **Plugins** menu lists every available plugin under **Activate plugin**. Cli
 
 ![The Plugins menu, listing every built-in plugin under Activate plugin](https://assets.geolibre.app/images/geolibre-plugins-menu.webp)
 
-Most entries open a submenu that **activates** the plugin and **positions** its on-map control in any corner: top left, top right, bottom left, or bottom right. A few behave differently: **Flight Simulator**, **SamGeo**, and **Point Cloud Annotation** toggle directly with no submenu, and **Web Services** and **DGGS** open a list of their sub-plugins instead.
+Most entries toggle their plugin directly. The plugins that place a control on the map (**GeoEditor**, **Annotations**, **Dimensions**, **Street View**, and **Mapillary**) open a submenu instead, which **activates** the plugin and **positions** its on-map control in any corner: top left, top right, bottom left, or bottom right. **Web Services** and **DGGS** open a list of their sub-plugins, and plugins you install from the marketplace are listed under **Installed**, which also links to **Manage Plugins…**.
 
 ![A plugin submenu, with Activate above the four map-corner positions](https://assets.geolibre.app/images/geolibre-plugin-position-menu.webp)
 
@@ -78,7 +78,7 @@ GeoLibre registers 68 built-in plugins.
 | **OLC** | Plugins → DGGS | `olc` | The Open Location Code (plus code) grid over the current view; identify a cell and export the grid or selection. |
 | **Geohash** | Plugins → DGGS | `geohash` | The Geohash grid over the current view; identify a cell and export the grid or selection. |
 | **Tilecode** | Plugins → DGGS | `tilecode` | The web-map tile grid (z/x/y tile codes) over the current view; identify a cell and export the grid or selection. |
-| **Basemaps** | Plugins | `basemap-control` | A basemap gallery for switching the background map, from the same catalog as the Change basemap dialog. |
+| **Basemaps** | Plugins | `basemap-control` | A basemap gallery for switching the background map, from the same catalog as the Change background dialog. |
 | **Historical Imagery** | Plugins | `esri-wayback` | Browse historical aerial and satellite imagery (Esri World Imagery Wayback) for a location. |
 | **Time Slider** | Plugins | `time-slider` | Filter a temporal layer by a date or number field, or step a time-enabled raster or Zarr cube through its time axis. |
 | **Timelapse** | Plugins | `timelapse` | Animate annual cloudless basemaps (EOX Sentinel-2, NASA GIBS Landsat/WELD and MODIS land cover) and record them to video. |
@@ -176,7 +176,7 @@ Open **Settings → Manage Plugins** to browse the marketplace. The dialog is mo
 - **Search** the registry and **Install** an entry with one click. Installation records the plugin's manifest URL and registers it immediately, with no restart.
 - **Update** appears when a newer version is published; it re-fetches and re-registers the plugin in place, keeping the old version if the update fails.
 - **Uninstall** (after a confirmation) unregisters the plugin at runtime and tears down any active control.
-- The **Settings** section manages additional plugin sources: extra local directories and manual manifest URLs.
+- The **Settings** section installs a packaged plugin (`.zip`) with **Install from file** and manages additional plugin sources: extra local directories (desktop only) and manual manifest URLs.
 
 Compatibility is checked against each entry's `minGeoLibreVersion`, so incompatible plugins are flagged rather than installed.
 
@@ -188,6 +188,7 @@ Compatibility is checked against each entry's `minGeoLibreVersion`, so incompati
 - **Curated registry**: the marketplace fetches a versioned JSON registry, hosted by default at `plugins.geolibre.app`. The registry and plugin bundles live in the [opengeos/geolibre-plugins](https://github.com/opengeos/geolibre-plugins) repository.
 - **Manifest URL**: point the Settings section at any `plugin.json` manifest URL.
 - **Local directory**: load a plugin from a local folder (desktop app).
+- **Plugin archive**: install a packaged `.zip` from **Install from file**; in the browser it is stored locally and reloads on your next visit.
 - **Bundled drop-ins**: plugins placed in `public/plugins/<id>/` load automatically in a build.
 
 ## Writing your own plugin

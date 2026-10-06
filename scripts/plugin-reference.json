@@ -169,7 +169,7 @@
     "description": "The web-map tile grid (z/x/y tile codes) over the current view; identify a cell and export the grid or selection."
   },
   "maplibre-gl-basemap-control": {
-    "description": "A basemap gallery for switching the background map, from the same catalog as the Change basemap dialog."
+    "description": "A basemap gallery for switching the background map, from the same catalog as the Change background dialog."
   },
   "maplibre-gl-esri-wayback": {
     "description": "Browse historical aerial and satellite imagery (Esri World Imagery Wayback) for a location."

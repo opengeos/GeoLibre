@@ -91,8 +91,9 @@ elevation-filtered points are skipped, as in a drawn selection.
 ## Pre-labelling with Whitebox
 
 **Pre-label (Whitebox)** runs a Whitebox LiDAR classifier on the session's
-points in the browser (the same WebAssembly build as **Processing → Whitebox**)
-and applies its classes as one undoable edit:
+points in the browser (the same WebAssembly build as the **Processing →
+Whitebox Toolbox**) when you press **Run pre-label**, and applies its classes
+as one undoable edit:
 
 - **Ground (improved ground point filter)** separates ground (2) from
   everything else (1).

@@ -26,22 +26,32 @@ file contents do not change.
 
 | Field             | Type    | Description                                                                                                  |
 | ----------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| `version`         | string  | Format version (`0.1.0`)                                                                                     |
+| `version`         | string  | Format version: the app writes `0.2.0`; older files and the Python package write `0.1.0`                    |
 | `name`            | string  | Project display name                                                                                         |
 | `mapView`         | object  | `center`, `zoom`, `bearing`, `pitch`, optional `bbox`                                                        |
 | `basemapStyleUrl` | string  | MapLibre style JSON URL, or an empty string for a blank background                                           |
 | `basemapVisible`  | boolean | Whether the Background layer is visible                                                                      |
 | `basemapOpacity`  | number  | Background layer opacity from `0` to `1`                                                                     |
+| `blankBackgroundColor` | string | Optional custom colour for the Blank background; `null` uses the theme default                       |
 | `layers`          | array   | Layer definitions (see below)                                                                                |
+| `selectedLayerId` | string  | Optional layer selected in the Layers panel when the project was saved; `null` restores no active layer    |
+| `layerGroups`     | array   | Optional Layers-panel folders (`id`, `name`, `parentId`, `collapsed`, `visible`, `opacity`); omitted when empty |
 | `styles`          | object  | Map of layer id → `LayerStyle`                                                                               |
+| `preferences`     | object  | Project map preferences, environment variables, and geocoding settings (see [Credential redaction](#credential-redaction)) |
 | `plugins`         | object  | Optional external plugin manifest URLs, active plugin IDs, plugin map-control positions, and plugin settings |
 | `legend`          | object  | Optional Print Layout legend customizations (title, grouping, ordering, per-item rename/hide)                |
 | `printLayout`     | object  | Optional Print Layout composer settings (title, page size, orientation, blocks, atlas); omitted when default  |
 | `storymap`        | object  | Optional scroll-driven story map (chapters and presentation settings); omitted when there are no chapters    |
+| `models`          | array   | Optional saved processing models (Model Builder pipelines)                                                   |
+| `processingHistory` | array | Optional record of processing tool runs (Processing History)                                                 |
 | `widgets`         | array   | Optional Dashboard panel chart widgets (see below); omitted when there are none                              |
 | `dashboardColumns`| number  | Optional Dashboard widget-grid column count (1-6, default 2); omitted when default                          |
+| `mapLayout`       | object  | Optional multi-map grid (`rows`, `cols`, `syncView`); omitted for a single map                               |
+| `secondaryMapViews` | array | Optional panes past the primary one, each with its own camera and layer visibility; omitted for a single map |
+| `primaryMapLabel` | string  | Optional label for the primary pane of a multi-map grid                                                      |
 | `styleLibrary`    | array   | Optional project-scoped Style Manager entries (name, tags, kind, `LayerStyle` subset); omitted when empty    |
 | `primaryRenderer` | string  | Optional engine for the primary map area: `"maplibre"` (2D, the default), `"mapbox"` (Mapbox GL JS), `"arcgis"` (ArcGIS Maps SDK for JavaScript) or `"cesium"` (3D globe); omitted when default |
+| `comments`        | array   | Optional review comments anchored to map points or features, with replies                                    |
 | `interaction`     | object  | Optional startup Identify target and control visibility (see below); omitted by default                      |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
@@ -195,9 +205,13 @@ self-contained HTML page for static hosting.
 ```
 
 Each widget binds a chart to a layer's attributes. `type` is one of `histogram`,
-`scatter`, `bar`, `line`, `box`, or `pie`. Which other keys apply depends on the
-type: `field` (histogram/line/box), `xField`/`yField` (scatter), `category` +
-`aggregation` + `valueField` (bar/pie), `bins` (histogram). Bar `aggregation` is
+`scatter`, `bar`, `line`, `box`, `pie`, `indicator`, `selector`, or `list`.
+Which other keys apply depends on the type: `field` (histogram/line/box, and
+indicator unless it counts), `xField`/`yField` (scatter), `category` +
+`aggregation` + `valueField` (bar/pie), `bins` (histogram),
+`indicatorAggregation` (`count`/`sum`/`mean`/`min`/`max`/`median`) + `prefix` +
+`suffix` (indicator), `category` + `multiple` (selector), and `listFields` +
+`sortBy` + `sortDir` + `limit` (list). Bar `aggregation` is
 `count`/`sum`/`mean`; pie is `count`/`sum` only. `title` is an optional label and
 `color` an optional hex (`#rgb`/`#rrggbb`) for the chart's marks (the series
 color for single-series charts; the base of a monochromatic ramp for bar/pie).
@@ -596,6 +610,7 @@ under `geolibre:metadata`, beside the `geo` key.
 | `geojson`        | Supported for imported files and GeoJSON URLs                                                      |
 | `xyz`            | Supported for raster tile templates                                                                |
 | `wms`            | Supported as tiled WMS GetMap layers                                                               |
+| `wmts`           | Supported for WMTS raster tile templates                                                           |
 | `raster`         | Supported for raster tile templates; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion imagery asset the 3D globe loads with the app's Ion token (3D only) |
 | `vector-tiles`   | Supported for MapLibre vector tile sources                                                         |
 | `mbtiles`        | Supported in the desktop app through a local MapLibre protocol                                     |
@@ -608,7 +623,10 @@ under `geolibre:metadata`, beside the `geo` key.
 | `gaussian-splat` | Supported through the Components plugin                                                            |
 | `geoparquet`     | Imported as GeoJSON via DuckDB-WASM                                                                |
 | `duckdb-query`   | Supported for SQL query-result layers                                              |
-| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` plugin; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion tileset the 3D globe loads with the app's Ion token (3D only) |
+| `deckgl-viz`     | Supported through the Deck.gl Layer plugin                                                         |
+| `video`          | Supported for georeferenced video overlays                                                         |
+| `image`          | Supported for georeferenced image overlays (KML ground overlays, the Georeferencer, NetCDF grids)  |
+| `3d-tiles`       | Supported through the `maplibre-gl-3d-tiles` package; with `source.ionAssetId` and `metadata.sourceKind: "cesium-ion"`, a Cesium Ion tileset the 3D globe loads with the app's Ion token (3D only) |
 
 ## API
 

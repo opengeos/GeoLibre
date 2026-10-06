@@ -7,10 +7,11 @@ other three engines. Primary and pane choices are saved with the project.
 
 ## Credentials
 
-The renderer requires a Cesium ion token. The hosted web version bundles a
-demo token, so Cesium works there out of the box; the desktop and mobile apps
-need your own token. The token enables Cesium World Terrain, Ion World Imagery
-as a fallback, and access to ion-hosted assets.
+The globe works without a Cesium ion token: it drapes the project basemap as
+its base imagery and shows a hint that terrain is unavailable. A token adds
+Cesium World Terrain, Ion World Imagery as the fallback for a basemap with no
+raster form, and access to ion-hosted assets. The hosted web version bundles a
+demo token; the desktop and mobile apps need your own for those features.
 
 Enter the token under **Settings → Environment Variables → Cesium Ion token**.
 It is stored on the current device rather than in the project file. Developers

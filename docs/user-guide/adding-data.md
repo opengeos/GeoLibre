@@ -14,9 +14,9 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | --- | --- |
 | **Vector Layer** | Opens the Add Vector panel (backed by `maplibre-gl-vector`). Loads GeoJSON, GeoParquet, FlatGeobuf, zipped Shapefile, GeoPackage, KML/KMZ, GML, and other vector formats from a file or URL. |
 | **Raster Layer** | Opens the Add Raster panel (backed by `maplibre-gl-raster`). Loads GeoTIFF and Cloud-Optimized GeoTIFF (COG) from a file or URL. |
-| **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). |
+| **Delimited Text Layer** | Loads CSV/TSV from a file or URL, using longitude and latitude columns to build point features, or by geocoding one or more address columns (see [Geocoding](data-integrations.md#geocoding)). A file with no coordinates can be added as a non-spatial attribute table. |
 | **CAD (DXF/DWG) Layer** | Loads AutoCAD drawings, converting their entities to vector features. Coordinate Z values (contours, 3D polylines, surveyed points) are kept and rendered in 3D unless **Render Z values in 3D** is unchecked. |
-| **File Geodatabase (GDB)** | Opens an Esri file geodatabase and adds one of its feature classes as a layer. |
+| **File Geodatabase (GDB)** | Opens an Esri file geodatabase (`.gdb` folder) and adds one of its feature classes as a layer. It is read by the local GeoLibre server, so it needs the desktop app. |
 | **Geotagged Photos** | Reads the EXIF GPS tags from a set of photos and places each one on the map as a point with a thumbnail. |
 | **GPX Layer** | Loads a GPX file or URL and splits it into separate waypoint, track, and route layers. |
 | **LandXML Layer** | Loads a LandXML file or URL and imports selected TIN surfaces, horizontal alignments, vertical profile metadata, and survey points. Projected coordinates are reprojected from the selected or embedded source CRS. |
@@ -64,6 +64,7 @@ GeoParquet opens across its variants: 1.0 and 1.1 files (including one carrying 
 | **XYZ Layer** | A raster or vector tile service using a `{z}/{x}/{y}` URL template. |
 | **[WCS Layer](../data-formats.md#wcs-raster-subsets)** | Downloads numerical GeoTIFF subsets from WCS 1.0.0 services. |
 | **WMS Layer** | A Web Map Service layer, with click-to-identify through GetFeatureInfo where supported. In the desktop app, once the layers are retrieved, a layer can be requested in any coordinate reference system it offers; the tiles are reprojected to Web Mercator. |
+| **CSW Catalog** | Searches an OGC Catalogue Service (CSW) for datasets and adds their supported linked resources (GeoJSON, WMS, WFS, ArcGIS) to the map. |
 | **WFS Layer** | A Web Feature Service layer, with optional automatic refresh. GeoLibre asks for GeoJSON first and falls back to GML when the server offers no GeoJSON output, so GML-only services (MapServer, most INSPIRE services) load too. GML in WGS84, ETRS89, NAD83 or Web Mercator is read directly, and GML in any other EPSG coordinate system (a national grid, a UTM zone) is reprojected; a system GeoLibre does not know is reported as an error rather than drawn in the wrong place. In the desktop app, WFS requests go through the native HTTP client, so services that send no CORS headers load too. |
 | **WMTS Layer** | A Web Map Tile Service layer. |
 | **OGC API - Features** | An OGC API - Features endpoint; pick a collection and add it as a vector layer. |
@@ -78,7 +79,9 @@ GeoParquet opens across its variants: 1.0 and 1.1 files (including one carrying 
 ### ArcGIS services
 
 Pick the **Layer type** that matches the service, then give it a service URL or a
-portal item ID (with an access token for a secured service).
+portal item ID. For a secured service, set **Authentication** to **Sign in with
+ArcGIS** or paste an access token; see
+[Signing in with ArcGIS](../arcgis-editing.md#signing-in-with-arcgis).
 
 | Layer type | Service | How it loads |
 | --- | --- | --- |
@@ -122,6 +125,9 @@ were rendered before the choice existed and cannot honor it.
 | **LiDAR Layer** | Point-cloud visualization, rendered with deck.gl. |
 | **Gaussian Splatting** | Gaussian splat scenes. |
 | **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. Includes a Google Photorealistic 3D Tiles sample that reads `VITE_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` from the runtime environment. |
+| **Cesium Ion Asset** | Adds a 3D Tiles tileset or imagery from Cesium ion by asset ID, using your Cesium ion token. Cesium engine only; the entry is disabled on the 2D engines. |
+| **CZML Dynamic 3D Scene** | Loads a CZML document of orbits, trajectories, vehicle paths, and other time-varying 3D scenes. Cesium engine only. |
+| **KML / KMZ** | Loads KML or KMZ with native globe styling, overlays, and network links on the Cesium globe, and through the regular KML importer on the 2D engines. |
 | **3D Model (glTF)** | Places a glTF/GLB model at a coordinate, with scale, rotation, and altitude controls. |
 
 ## Databases
@@ -135,7 +141,12 @@ were rendered before the choice existed and cannot honor it.
 
 ## Drag and drop
 
-Drag a vector file (GeoJSON, zipped Shapefile, KMZ, and similar) or a GeoTIFF/COG raster directly onto the map to add it as a layer. GPX files dropped on the map are split into named waypoint, track, and route layers.
+Drag a vector file (GeoJSON, zipped Shapefile, KMZ, and similar) or a GeoTIFF/COG raster directly onto the map to add it as a layer. GPX files dropped on the map are split into named waypoint, track, and route layers. Other files are routed by type:
+
+- **OSM PBF** (`.osm.pbf`) extracts are parsed into point, line, and polygon layers.
+- **LAS, LAZ, and COPC** point clouds load into the LiDAR control; a LAS 1.4 file the viewer cannot read whole is converted to COPC first.
+- **Geotagged photos** (JPEG, PNG, WebP, HEIC) become a point layer placed from their EXIF GPS tags.
+- A single **`.geolibre.json`** project file opens as the current project.
 
 ## The Browser panel
 
@@ -145,10 +156,12 @@ The **Browser** tab on the left edge of the window opens a QGIS-style Data Sourc
 
 | Section | What it holds |
 | --- | --- |
+| **Favorites** | Services, folders, and files you starred, listed first for quick access. Appears once you have favorited something. |
 | **My Data** | Your personal layer library. **Layer actions → Save to My Data** stores a fully configured layer — source, style, labels, filters, joins, virtual fields, and attribute form — and one click here re-adds it to any later project. Import and export the library with the buttons on the section header. |
-| **Services** | Saved map services, grouped by kind (XYZ, WMS, WFS, WMTS, ArcGIS). GeoLibre ships a starter set; the **+** on a group adds a new connection of that kind. Expand a service to browse its layers and add one. Self-hosted deployments can add read-only organization-wide services here, marked with a *config* badge (see [Getting Started](../getting-started.md#deployment-service-library)); they are shared with every user, cannot be edited or deleted, and are never stored in your own service library. |
-| **Recent** | The sources you added most recently, so a repeat is one click. |
+| **Services** | Saved map services, grouped by kind (WMS, WFS, WMTS, XYZ, ArcGIS, CSW). GeoLibre ships a starter set; the **+** on a group adds a new connection of that kind. Expand a service to browse its layers and add one. Self-hosted deployments can add read-only organization-wide services here, marked with a *config* badge (see [Getting Started](../getting-started.md#deployment-service-library)); they are shared with every user, cannot be edited or deleted, and are never stored in your own service library. |
+| **Recent** | The projects you opened most recently, so reopening one is one click. |
 | **Databases** | PostgreSQL/PostGIS and SQL Server connections, each in its own engine group with a **+** for a new connection. Expand a connection to browse its schemas and spatial tables; the Add Data form retains each engine's table options. The trash icon forgets a saved connection and removes its saved credential; on desktop, if the system keychain cannot delete the credential right away, GeoLibre shows a persistent warning with the password-masked connection label and retries the next time it starts. Failures for different connections are reported separately. |
+| **Files** | Desktop app only. Folders you pinned with **Add folder** (the **+** on the section), each expandable to its subfolders and the loadable files inside, so you can add a file without a file dialog. |
 
 Choose the **+** on the PostgreSQL or SQL Server group to open that engine's connection form; the Databases section has no shared connection action.
 
@@ -160,13 +173,13 @@ If desktop database browsing reports a processing server from a previous session
 
 ## Basemaps
 
-The basemap sits at the bottom of the [Layers panel](layers.md) as the **Background** entry. **Double-click that row** to open the **Change basemap** dialog, or activate the **Basemaps** plugin from the [Plugins menu](plugins.md) to switch between OpenFreeMap styles (Liberty, Liberty 3D, Positron, Bright, Dark, Fiord), a collapsible **Regional** group, a blank background, or a custom style URL. You can toggle basemap visibility and adjust its opacity from the Layers panel.
+The basemap sits at the bottom of the [Layers panel](layers.md) as the **Background** entry. **Double-click that row** to open the **Change background** dialog, or activate the **Basemaps** plugin from the [Plugins menu](plugins.md) to switch between OpenFreeMap styles (Liberty, Liberty 3D, Positron, Bright, Dark, Fiord), Protomaps styles (when the build offers them), a collapsible **Regional** group, a blank background, or a custom style URL. You can toggle basemap visibility and adjust its opacity from the Layers panel.
 
-![The Change basemap dialog, with OpenFreeMap styles at the top and Moon, Mars, and other celestial-body sections below](https://assets.geolibre.app/images/geolibre-change-basemap.webp)
+![The Change background dialog, with OpenFreeMap styles at the top and Moon, Mars, and other celestial-body sections below](https://assets.geolibre.app/images/geolibre-change-basemap.webp)
 
 ### Other celestial bodies
 
-GeoLibre can map worlds beyond Earth. The **Change basemap** dialog and the **New project** dialog group planetary basemaps into sections for **The Moon**, **Mars**, and a collapsible **Other celestial bodies** section covering **Mercury, Venus, the Galilean moons** (Io, Europa, Ganymede, Callisto), **Titan, Pluto,** and **Charon**. The Moon and Mars mosaics come from [OpenPlanetaryMap](https://www.openplanetary.org/opm); the other bodies come from [USGS Astrogeology](https://astrogeology.usgs.gov/) and are reprojected to Web Mercator on the fly so MapLibre can render them.
+GeoLibre can map worlds beyond Earth. The **Change background** dialog and the **New project** dialog group planetary basemaps into sections for **The Moon**, **Mars**, and a collapsible **Other celestial bodies** section covering **Mercury, Venus, the Galilean moons** (Io, Europa, Ganymede, Callisto), **Titan, Pluto,** and **Charon**. The Moon and Mars mosaics come from [OpenPlanetaryMap](https://www.openplanetary.org/opm); the other bodies come from [USGS Astrogeology](https://astrogeology.usgs.gov/) and are reprojected to Web Mercator on the fly so MapLibre can render them.
 
 For quick switching, use the **planet switcher** (the orbit icon) in the Layers panel header. Selecting a body sets the project's **ellipsoid**, so distance, area, and scale-bar measurements use that body's radius instead of Earth's.
 
@@ -182,7 +195,7 @@ Three of them, grouped under **Plugins → Web Services**, search public dataset
 | **Socrata** | Public Socrata open-data catalogs, adding their GeoJSON datasets. |
 | **CKAN** | The Humanitarian Data Exchange CKAN catalog, adding its available GeoJSON resources. |
 
-Each panel shows how many of the total results you are looking at and offers **Load more** to page further. See [Web Services](web-services.md) for the other fourteen browsers in that submenu.
+Each panel shows how many of the total results you are looking at and offers **Load more** to page further. See [Web Services](web-services.md) for the other browsers in that submenu.
 
 !!! note "Browser vs desktop"
-    URL-based sources work in both the browser and the desktop app. Local file dialogs, local MBTiles, local raster reads, and PostgreSQL require the desktop app. See [Getting Started](../getting-started.md).
+    URL-based sources work in both the browser and the desktop app. Local file dialogs, local MBTiles, local raster reads, File Geodatabases, PostgreSQL, and SQL Server require the desktop app. See [Getting Started](../getting-started.md).

@@ -13,6 +13,8 @@ both the web and desktop builds, with a different Python runtime behind the same
   from a uv-managed Python environment (the same mechanism as the FastAPI
   sidecar) on `127.0.0.1:8766`, token-authenticated, and embeds it. This gives
   full CPython with the native geospatial stack (geopandas, rasterio, GDAL, …).
+  The Mac App Store build is the exception: it cannot spawn the server, so it
+  embeds the JupyterLite site like the web build.
 
 This is distinct from the [`geolibre` Python package](python.md), which does the
 inverse — embedding the *whole GeoLibre app* inside a notebook cell.
@@ -158,9 +160,11 @@ instead (GeoLibre#1851, GeoLibre#1658). Install the deps above and rebuild.
 
 Two builds therefore treat a missing CLI as fatal rather than skippable, because
 they serve the site and cannot degrade: the Mac App Store build, and any build
-that sets `GEOLIBRE_JUPYTERLITE_REQUIRED=1` (the Docker image does). The desktop
-(Tauri) dev and build paths skip it entirely (they use the real JupyterLab
-server), so the static site never bloats the installer.
+that sets `GEOLIBRE_JUPYTERLITE_REQUIRED=1` (the Docker image does). The Mac
+App Store build cannot spawn a JupyterLab server, so its Notebook panel embeds
+the JupyterLite site instead. Every other desktop (Tauri) dev and build path
+skips it entirely (they use the real JupyterLab server), so the static site
+never bloats the installer.
 
 The Docker image builds and serves the site, and gives `/jupyterlite/` its own
 block in `docker/nginx.conf`:
@@ -175,8 +179,11 @@ block in `docker/nginx.conf`:
   prefix match would otherwise take away from them.
 
 Build config lives in `apps/geolibre-desktop/jupyterlite/` (a
-`jupyter_lite_config.json`, the build `requirements.txt`, and a starter
-`files/Welcome.ipynb`). The generated directory is excluded from the PWA
+`jupyter_lite_config.json`, a `jupyter-lite.json`, and the build
+`requirements.txt`). The build stages the kernel client and the starter
+`Welcome.ipynb` into its `files/` from their canonical copies under
+`backend/geolibre_server/` (`notebook_client.py`,
+`notebook_examples/Welcome.ipynb`). The generated directory is excluded from the PWA
 precache (see `pwaPlugin` in `apps/geolibre-desktop/vite.config.ts`).
 
 ## Desktop server

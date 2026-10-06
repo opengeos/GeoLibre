@@ -35,7 +35,8 @@ The spatial extension is loaded, so `ST_*` functions are available. For example,
 
 ```sql
 -- area is in square degrees because the data is in EPSG:4326;
--- the ranking is valid, but use ST_Area_Spheroid(geom) / 1e6 for km2.
+-- the ranking is valid, but for km2 use
+-- ST_Area_Spheroid(ST_FlipCoordinates(geom)) / 1e6 (it expects lat/lon order).
 SELECT NAME, ST_Area(geom) AS area, geom
 FROM https://data.source.coop/giswqs/opengeos/countries.parquet
 WHERE CONTINENT = 'Africa'
@@ -51,7 +52,7 @@ When a query returns a geometry column, click **Add as layer** to create a new l
 Export the query result as **CSV** or **GeoParquet** straight from the workspace — the **Export CSV** and **Export GeoParquet** buttons sit beside **Add as layer**. See [SQL Workspace](../user-guide/sql-workspace.md).
 
 !!! tip "Sample queries and history"
-    Use the **Sample queries** menus to start from a working query, and the **history** to rerun a previous one.
+    Use the **Sample queries…** menu to start from a working query, and **History…** to rerun a previous one.
 
 ## Next steps
 

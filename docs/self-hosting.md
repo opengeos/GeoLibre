@@ -150,7 +150,7 @@ generated final policy; build-only grants do not configure its guards.
 | --- | --- | --- |
 | `GEOLIBRE_DEPLOYMENT_FILE` | unset, or mounted source policy | Validated at boot; generated public file is `/usr/share/nginx/html/deployment.json`, served at `/deployment.json`. |
 | `GEOLIBRE_CAPABILITIES` | unset, or capabilities to grant | Runtime field override; `none` grants none. Unknown names stop boot. Final generated policy controls nginx sidecar guards and sidecar startup. |
-| `GEOLIBRE_AI_URL` / `GEOLIBRE_AI_PROXY_URL` / `GEOLIBRE_AI_PROXY_TOKEN` | unset, or approved proxy trio | `GEOLIBRE_AI_URL=/ai` overrides policy to enable AI. URL must be an HTTPS origin without credentials/path/query/fragment; token only `[A-Za-z0-9._-]`. Missing or invalid configuration stops boot. Keep upstream URL and token private. |
+| `GEOLIBRE_AI_URL` / `GEOLIBRE_AI_PROXY_URL` / `GEOLIBRE_AI_PROXY_TOKEN` | unset, or approved proxy trio | `GEOLIBRE_AI_URL=/ai` overrides policy to enable AI. The proxy URL must be an HTTPS origin without credentials/path/query/fragment; token only `[A-Za-z0-9._-]`. Missing or invalid configuration stops boot. Keep upstream URL and token private. |
 | `VITE_GEOLIBRE_CAPABILITIES` (legacy build arg; still honoured) | unset, or capabilities to grant | Client fallback only; does not configure nginx guards. |
 | `GEOLIBRE_AI_MODEL` | optional, with `GEOLIBRE_AI_URL` | Overrides policy model only when `GEOLIBRE_AI_URL` is set. |
 | `GEOLIBRE_COLLAB_URL` | unset, or your own relay | Unset leaves [live collaboration](collaboration.md) dark. Set it to a `wss://` relay you run if you want multiplayer editing without the hosted relay. |
@@ -168,6 +168,7 @@ generated final policy; build-only grants do not configure its guards.
 | `GEOLIBRE_NO_EXTERNAL_CDN` (build arg) | `1` for restricted deployments | Strips GeoLibre's own references to external CDNs (`unpkg.com`, `cdn.jsdelivr.net`) from the build output. Features whose assets are only available from a CDN are disabled or degraded: storymap HTML export, built-in object detection models, ONNX WASM, 3D Tiles Draco/KTX2 decoders, and gdal3.js export. Pyodide is not hard-disabled — the flag drops only its default index URL, so setting `VITE_PYODIDE_INDEX_URL` to an approved mirror keeps it working. Also forces `GEOLIBRE_PGLITE_CDN=0`, `GEOLIBRE_CEREUS_CDN=0`, `GEOLIBRE_GDAL_CDN=0`, and `GEOLIBRE_DUCKDB_WASM_CDN=0` — so PGlite/PostGIS, CereusDB, and DuckDB-WASM stay **available**, vendored into the build under `/assets/` (at a larger build size) rather than fetched. Note that some third-party packages (DuckDB-WASM, loaders.gl, maplibre-gl-3d-tiles) carry their own internal CDN URLs that this flag cannot remove; see [architecture.md](architecture.md) for the details. Intended for deployments that cannot reference untrusted external CDNs (e.g. enterprise environments with strict CSP requirements). |
 | `GEOLIBRE_APP_NAME` | optional, e.g. `Acme Maps` | Replaces "GeoLibre" at the start of the toolbar and in the browser tab title. Whitespace runs collapse to one space and the name is capped at 60 characters. `VITE_GEOLIBRE_APP_NAME` is the equivalent build arg. |
 | `VITE_WELCOME_DISABLED=1` (build arg) | optional | Skips the first-launch wizard for every visitor. |
+
 See [Getting Started](getting-started.md#run-with-docker) for the full list.
 
 !!! warning "Before exposing the image publicly"
@@ -192,6 +193,7 @@ least one listed capability must be granted.
 | `/sidecar/ml` | `processing:run` |
 | `/sidecar/sql` | `processing:run` |
 | `/sidecar/postgis` | `data:add` |
+| `/sidecar/mssql` | `data:add` |
 | `/sidecar/conversion` | `processing:run` **or** `data:add` |
 
 A denied route returns HTTP 403 with an `application/json` body containing
@@ -504,11 +506,11 @@ the public internet:
 
 | Feature | Default | How to keep it internal |
 | --- | --- | --- |
-| Basemaps | OpenFreeMap / CARTO tiles | Use the Basemaps plugin's **custom style URL** and serve your own style plus a PMTiles basemap from your server, or use a blank background. Add the host to the CSP if it is not your own origin. |
+| Basemaps | OpenFreeMap / CARTO tiles | Use the Basemaps plugin's **custom style URL** and serve your own style plus a PMTiles basemap from your server, or use a blank background. Any HTTPS host is already allowed by the CSP; a plain `http://` host needs a CSP change. |
 | Geocoding | Public Nominatim | Point it at a self-hosted Nominatim or Pelias (see [Data Integrations](user-guide/data-integrations.md#geocoding)). |
-| Routing and isochrones | Public FOSSGIS Valhalla (`valhalla1.openstreetmap.de`) | Set `VITE_ROUTING_ENDPOINT` to your own Valhalla server. This covers Processing → GeoLibre Toolbox → Network and the **Drive time** / **Walk time** [quick actions](user-guide/map-controls.md#quick-analysis-from-a-clicked-point). Add the host to the CSP. |
+| Routing and isochrones | Public FOSSGIS Valhalla (`valhalla1.openstreetmap.de`) | Set `VITE_ROUTING_ENDPOINT` to your own Valhalla server. This covers Processing → GeoLibre Toolbox → Network and the **Drive time** / **Walk time** [quick actions](user-guide/map-controls.md#quick-analysis-from-a-clicked-point). It is read at build time, or per browser from Settings → Environment variables; the Docker image has no build arg or runtime variable for it. An HTTPS endpoint needs no CSP change. |
 | Pointer elevation readout | Public Open-Meteo elevation API, whenever 3D terrain has no sample for the point | Leave the readout off (it is off by default), or decline the consent prompt GeoLibre shows before the first remote lookup — that is the gate the resolver checks. Enabling 3D terrain makes the remote call rare but does not rule it out, since a point terrain cannot answer still falls through. |
-| Python (Pyodide) vector engine | Loads Pyodide from jsDelivr | Set `VITE_PYODIDE_INDEX_URL` to a mirrored copy of the Pyodide distribution. |
+| Python (Pyodide) vector engine | Loads Pyodide from jsDelivr | Set `VITE_PYODIDE_INDEX_URL` to a mirrored copy of the Pyodide distribution (at build time, or per browser in Settings → Environment variables). Serve the mirror from your own origin, or add it to the CSP `script-src`, which pins only the jsDelivr Pyodide path. |
 | AI assistant | Off unless configured | Leave `GEOLIBRE_AI_URL` unset, or route it through your own proxy. |
 | Project sharing | `share.geolibre.app` | `GEOLIBRE_SHARE_URL=off`, or your own [projects server](server-api.md). |
 | Collaboration | Off unless configured | Leave `GEOLIBRE_COLLAB_URL` unset, or run `workers/collab-node` yourself. |

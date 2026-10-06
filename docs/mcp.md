@@ -34,7 +34,8 @@ geolibre-mcp --root ~/maps
 The server speaks MCP over stdio, which is what desktop clients spawn. The
 `--root` flag is repeatable, and `GEOLIBRE_MCP_ROOTS` (`:`-separated, `;` on
 Windows) does the same job from the environment. With neither set, the workspace
-is the current directory.
+is the current directory. `--transport` switches from the default `stdio` to
+`streamable-http` or `sse` for clients that connect over HTTP.
 
 ### Client configuration
 
@@ -244,7 +245,7 @@ project.
 
 Use `set_renderer(path, "cesium")` to open a project on the globe.
 `set_map_layout(path, 1, 2, view_kinds=["cesium", "maplibre"])` creates a mixed
-grid and returns the secondary pane IDs. Pass one as `pane_id` to `set_renderer`
+grid and returns the secondary panes, with their IDs, as `secondaryMapViews`. Pass one as `pane_id` to `set_renderer`
 to change only that pane. Camera tools continue to use longitude/latitude and
 the shared zoom, bearing, and pitch convention. The accepted renderer names are
 `maplibre`, `mapbox`, `cesium`, and `arcgis`.

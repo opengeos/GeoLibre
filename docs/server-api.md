@@ -87,7 +87,7 @@ deployment.
 | Field | Limit |
 | --- | ---: |
 | project title (derived from the uploaded project) | 100 Unicode code points |
-| username | 3–39 lowercase ASCII letters, digits, or hyphens |
+| username | 3–39 lowercase ASCII letters, digits, or hyphens, not starting or ending with a hyphen |
 | slug | 1–100 lowercase ASCII letters, digits, or hyphens |
 | description | 2,000 Unicode code points |
 | tags | 20 tags, 40 Unicode code points each |
@@ -96,7 +96,9 @@ deployment.
 | `limit` | default 24, maximum 100 |
 
 Servers may configure a smaller upload limit, but must return `413` and an
-`error` explaining that limit.
+`error` explaining that limit. The reference server reads its document and
+thumbnail limits from `GEOLIBRE_MAX_PROJECT_BYTES` and
+`GEOLIBRE_MAX_THUMBNAIL_BYTES`.
 
 ## Visibility
 
@@ -128,7 +130,10 @@ three project scopes. Omitting `expiresInDays` preserves the v1 delete-only
 token lifecycle (the token does not expire); the accepted explicit lifetime is
 1–365 days. An unknown or empty `scopes` list returns `400`
 `{"error": "invalid_scope"}`; an `expiresInDays` outside 1–365 returns `400`
-`{"error": "invalid_request"}`.
+`{"error": "invalid_request"}`. `email` is optional, trimmed and normalized to
+lowercase, validated, and unique when present. A password shorter than 8
+characters or a malformed username is `422`; a taken username or email is
+`409`.
 
 ```json
 {
@@ -157,9 +162,7 @@ Response `201`:
 
 Exchanges account credentials for a personal API token. It accepts the same
 optional policy fields (but not `email`) and returns the same shape as account
-creation. Tokens are opaque and stored only as SHA-256 digests. `email` is
-optional at account creation, trimmed and normalized to lowercase, validated,
-and unique when present.
+creation. Tokens are opaque and stored only as SHA-256 digests.
 
 | Status | `error` |
 | --- | --- |
@@ -168,16 +171,19 @@ and unique when present.
 | 403 | `password expired` (change it with `POST /api/account/password`) |
 | 403 | `single sign-on required` (an organization of the account [disallows built-in accounts](#organization-identity-provider)) |
 
-### `PATCH /api/account`
+### `GET /api/account` and `PATCH /api/account`
 
-Requires `write:projects`. `{"email":"ada@example.org"}` sets the signed-in
+`GET /api/account` returns `{"account": <account>}` for any valid credential.
+
+`PATCH` requires `write:projects`. `{"email":"ada@example.org"}` sets the signed-in
 account's validated, normalized email; `{"email":null}` clears it. A duplicate
 email is `409`. The response is `{"account": <account>}` and uses
 `Cache-Control: private, no-store`.
 
 ### `DELETE /api/auth/token`
 
-Revokes the presented Bearer token. Response: `204`.
+Revokes the presented Bearer token: a personal token is deleted, and an OAuth
+access token revokes its whole session family. Response: `204`.
 
 ### `GET /api/users/me`
 
@@ -382,7 +388,8 @@ ownership, and an owner cannot leave until ownership is transferred.
 Routes:
 
 - `GET /api/groups/mine` lists accepted memberships; `GET /api/groups/{id}`
-  returns group detail to a signed-in caller.
+  returns group detail to a signed-in caller. `PATCH /api/groups/{id}` changes
+  `name`, `description`, or `joinPolicy`; owner or manager only.
 - `DELETE /api/groups/{id}` deletes the group with its memberships,
   invitations, and thumbnail; owner only. Projects shared with the group are
   kept and lose only that group target.
@@ -393,7 +400,7 @@ Routes:
   `{username}=me` leaves.
 - `POST /api/groups/{id}/invitations` creates a pending invitation for exactly
   one `username` or `email`. The creation response includes its opaque token;
-  manager listings omit the token and retain pending, accepted, and revoked
+  manager listings (`GET` on the same path) omit the token and retain pending, accepted, and revoked
   rows. `DELETE .../invitations/{invitationId}` changes a pending invitation to
   `revoked`, and `POST /api/groups/invitations/{token}/accept` changes it to
   `accepted` while adding the signed-in target account.
@@ -850,6 +857,9 @@ value the provider puts in that claim (for Entra ID, the UPN in
   "versionCount": 1,
   "featured": false,
   "deleteProtected": false,
+  "role": "edit",
+  "expiresAt": null,
+  "hasPassword": false,
   "createdAt": "2026-08-03T12:00:00Z",
   "updatedAt": "2026-08-03T12:00:00Z",
   "tags": [],
@@ -1123,7 +1133,8 @@ optional `slug`:
   Responds `201` with `{"transfer": <transfer>, "project": <project>}`.
 - An **organization** target requires that the caller administers the
   organization and is applied immediately (the transfer is stored as
-  `accepted`). It responds `201` with the moved `project`.
+  `accepted`). It responds `201` with `{"transfer": <transfer>, "project":
+  <project>}`, the project already moved.
 
 Refusals use stable phrases so clients can explain them:
 
@@ -1252,7 +1263,8 @@ validated callback with `error`, `iss`, and the exact `state` value when supplie
 browser-binding cookie, CSRF value, same-origin `Origin` or `Referer`, and
 account credentials. Approval returns `303` to the exact callback with a
 single-use code, `state`, and `iss`; cancellation returns `access_denied`.
-Authorization codes expire after 60 seconds by default.
+Authorization codes expire after 60 seconds by default
+(`GEOLIBRE_OAUTH_CODE_TTL_SECONDS`).
 Production HTTPS uses a host-only `Secure` browser-binding cookie; permitted
 loopback HTTP development uses a host-only non-`Secure` cookie so Safari can
 submit the consent form.
@@ -1299,11 +1311,12 @@ management token only in memory and discard it when session management closes,
 the project session changes, or the grant expires. A `401` on a management
 request requires a new consent; it must not sign the project session out.
 
-Access tokens expire after 600 seconds by default and never outlive their
-family. Refresh tokens are single-use and rotate on every use. Reusing a
+Access tokens expire after 600 seconds by default
+(`GEOLIBRE_OAUTH_ACCESS_TTL_SECONDS`) and never outlive their family. Refresh tokens are single-use and rotate on every use. Reusing a
 consumed refresh token revokes the entire family, including tokens minted by
 the successful rotation. A family expires at issuance plus the configured
-refresh TTL (30 days by default); rotation never extends it.
+refresh TTL (`GEOLIBRE_OAUTH_REFRESH_TTL_SECONDS`, 30 days by default);
+rotation never extends it.
 
 An enabled server deletes bounded batches of expired interactions, access
 tokens, and families at startup, during OAuth requests, and every five minutes

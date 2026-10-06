@@ -34,7 +34,7 @@
 
 ![支持格式](https://assets.geolibre.app/images/add-data-formats.webp)
 
-KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KML 由**自研解析器**读取，为的是**保留内嵌符号化**，输出 simplestyle-spec 属性（`fill`、`stroke`、`stroke-width`），这样带样式的 KML 在 GeoLibre 里和在 Google Earth 里长得一样；解析器读不了的才退回 DuckDB Spatial，**代价是丢掉样式**。
+KML 那条尤其能说明取舍。`docs/architecture.md` 的 DuckDB-WASM 一节写得很直白：KML 由**自研解析器**读取，为的是**保留内嵌符号化**，输出 simplestyle-spec 属性（`fill`、`stroke`、`stroke-width`），这样带样式的 KML 在 GeoLibre 里和在 Google Earth 里长得一样；解析器读不了的才退回 DuckDB Spatial，**代价是丢掉样式**。
 
 > **关键启发：** 通用库为了统一数据模型，一定会丢掉格式特有的信息。而那些信息往往正是用户最在意的部分。
 
@@ -42,18 +42,18 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 
 ### 1.2 空间计算：四层引擎，默认最轻
 
-这块的分工很容易看混，按源码捋一遍（依据 `docs/architecture.md:75-79`）：
+这块的分工很容易看混，按源码捋一遍（依据 `docs/architecture.md` 的 Python sidecar 一节）：
 
 | 引擎 | 在哪跑 | 定位 |
 |---|---|---|
-| **Turf.js**（`@turf/*` 二十来个子包） | 浏览器纯 JS | **矢量工具的默认引擎**，零依赖零后端 |
+| **Turf.js**（`@turf/*` 二十五个左右子包） | 浏览器纯 JS | **矢量工具的默认引擎**，零依赖零后端 |
 | **GeoPandas / Shapely** | Python sidecar | 需要**投影感知**结果时的升级项 |
 | **GeoPandas / Shapely** | 浏览器 Pyodide | **同一份代码**，Web 版也能用 |
 | **DuckDB / PGlite+PostGIS / SedonaDB** | 浏览器 或 sidecar | SQL Workspace 的三个引擎 |
 
 注意 Turf 是**按需引入子包**的（`@turf/buffer`、`@turf/intersect`……），不是整包 import。这个习惯很重要——Turf 全量引入是很大一坨，按子包引才有意义。
 
-那条「一份代码两处运行」的设计写在 `docs/architecture.md:77`：几何逻辑是一个**无框架模块** `backend/geolibre_server/geolibre_server/vector_ops.py`，一个 Vite 插件（`vite-plugins/copy-vector-ops.ts`）把它复制进前端包，浏览器侧用一个经典 Web Worker 加载 Pyodide、装 `geopandas`、通过 JSON 字符串边界调 `run_vector_tool`。
+那条「一份代码两处运行」的设计也写在同一节：几何逻辑是一个**无框架模块** `backend/geolibre_server/geolibre_server/vector_ops.py`，一个 Vite 插件（`vite-plugins/copy-vector-ops.ts`）把它复制进前端包，浏览器侧用一个经典 Web Worker 加载 Pyodide、装 `geopandas`、通过 JSON 字符串边界调 `run_vector_tool`。
 
 > **实际教训：** 做过 GIS 的都知道这个坑——前端 turf 算缓冲区，后端 PostGIS 算缓冲区，面积差 0.3%，追两天发现是分段数默认值不同。
 
@@ -61,8 +61,8 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 
 | 库 | 负责 |
 |---|---|
-| **`maplibre-gl`** 5.24 | 主地图 |
-| **`deck.gl`** 9.3（core/layers/geo-layers/mesh-layers/aggregation-layers/mapbox） | COG、3D Tiles、I3S、可视化图层，交织进 MapLibre 画布 |
+| **`maplibre-gl`** 6.11 | 主地图 |
+| **`deck.gl`** 9.4（core/layers/geo-layers/mesh-layers/aggregation-layers/mapbox） | COG、3D Tiles、I3S、可视化图层，交织进 MapLibre 画布 |
 | **`maplibre-gl-3d-tiles` / `-lidar` / `-splat` / `-raster` / `-vector`** | **不换引擎，MapLibre 上直接加 3D Tiles、点云、高斯泼溅** |
 | **`@developmentseed/deck.gl-geotiff` / `-raster`** | COG 渲染 |
 | **`@carbonplan/zarr-layer`** | Zarr 科学数据 |
@@ -70,7 +70,7 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 | **`@geoman-io/maplibre-geoman-free`** | 绘制与编辑 |
 | **`maplibre-gl-time-slider` / `-swipe` / `-layer-control` / `-basemap-control`** | 交互控件 |
 | **`@tanstack/react-virtual`** | 属性表虚拟化 |
-| **`cesium`** 1.143 | 可选的三维球分屏，**懒加载 ~4.8MB 独立 chunk** |
+| **`cesium`** 1.146 | 可选的三维球分屏，**懒加载 ~4.7MB 独立 chunk** |
 
 ![3D Tiles、矢量、glTF、高斯泼溅混排在同一个图层列表](https://assets.geolibre.app/images/3dtiles.webp)
 
@@ -89,7 +89,7 @@ KML 那条尤其能说明取舍。`docs/architecture.md:61` 写得很直白：KM
 
 这一节是这篇的重点。**如果只看一件事，看这个。**
 
-先把 WebAssembly 这件事一句话说完：GeoLibre 仓库里带 `wasm` 的标识符有 315 处命中，**数据库、语言运行时、原生工具链、编解码、机器学习**五类能力全部由 WASM 引擎承担——DuckDB、sql.js（SQLite）、PGlite + PostGIS、CereusDB（SedonaDB）、Pyodide、`geolibre-wasm`（Whitebox 的 WASI 构建）、gdal3.js、`cog-tiler-wasm`、h5wasm、onnxruntime-web。**原生语言连起来看就明白了：C、C++、Rust。WASM 在这里不是给 JS 加速，是把 GIS 领域几十年积累的原生生态整体搬进浏览器。**
+先把 WebAssembly 这件事一句话说完：`wasm` 这个标识符在 GeoLibre 源码里出现了一千多次，**数据库、语言运行时、原生工具链、编解码、机器学习**五类能力全部由 WASM 引擎承担——DuckDB、sql.js（SQLite）、PGlite + PostGIS、CereusDB（SedonaDB）、Pyodide、`geolibre-wasm`（编译成 WASI 的 Whitebox 引擎，外加 GeoLibre 自己的 Rust 工具）、gdal3.js、`cog-tiler-wasm`、h5wasm、onnxruntime-web。**原生语言连起来看就明白了：C、C++、Rust。WASM 在这里不是给 JS 加速，是把 GIS 领域几十年积累的原生生态整体搬进浏览器。**
 
 ![数据处理菜单：背后是一排 WASM 引擎](https://assets.geolibre.app/images/processing-tools-menu.webp)
 
@@ -144,12 +144,14 @@ const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
   mvp: { mainModule: duckdbWasmMvp, mainWorker: mvpWorker },
   eh: { mainModule: duckdbWasmEh, mainWorker: ehWorker },
 };
-export function selectDuckDbBundle() {
-  return duckdb.selectBundle(MANUAL_BUNDLES);
+export async function selectDuckDbBundle() {
+  // 在这里才 import，让 DuckDB-WASM 的 JS 不进启动路径
+  const { selectBundle } = await import("@duckdb/duckdb-wasm");
+  return selectBundle(MANUAL_BUNDLES);
 }
 ```
 
-**手动列 bundle 而不是用默认 CDN 解析，是为了让 Vite 把 wasm 和 worker 打成带哈希的本地产物**——这样才能被 Service Worker 的 CacheFirst 安全缓存（见第五节）。
+**手动列 bundle 而不是用默认 CDN 解析，是为了让 Vite 把 wasm 和 worker 打成带哈希的本地产物**——这样才能被 Service Worker 的 CacheFirst 安全缓存（见第五节）。（`npm run lite:build` 那个变体会换成 `duckdb-wasm-bundles.cdn.ts`，从 jsDelivr 加载同一个锁定版本，给有单文件体积上限的托管平台用。）
 
 **第二，扩展加载必须做成「按实例只跑一次」。** `INSTALL spatial` 会走网络，`LOAD` 有状态，并发调用会互相打架。GeoLibre 的做法很值得借鉴：
 
@@ -191,7 +193,7 @@ GeoLibre 的应对是两手：
 
 **一是预热。** `ensureSpatialExtension` 那个 `beforeLoad` 钩子就是干这个的——在 `LOAD spatial` 之前，先拿这条查询自己的远程 reader 跑一次 `SELECT 1 FROM read_parquet(…) LIMIT 0`。**`LIMIT 0` 只会取 Parquet 的 footer，几乎不产生额外流量。**如果这条查询本身没有远程 Parquet，就退回读一个公开的小样本文件兜底。
 
-**二是重建。** 万一还是中招了（比如上一次预热失败），`runSqlQuery` 会捕获 `stoi: no conversion`、调 `resetSqlDatabase(poisoned)` 把那个实例整个换掉、然后**重试一次**。重建时会重新走一遍预热，所以第二次是干净的。
+**二是重建。** 万一还是中招了（比如上一次预热失败），`runSqlQuery` 会捕获 `stoi: no conversion`、调 `resetSqlDatabase(db)` 把那个实例整个换掉、然后**重试一次**。重建时会重新走一遍预热，所以第二次是干净的。
 
 这里还有两个防御细节：重试只在语句里**确实有远程 reader 调用**时才触发（字符串字面量里出现的 URL 不算），并且 `resetSqlDatabase` 会先确认「要换掉的实例仍是当前实例」再动手。
 
@@ -248,11 +250,11 @@ compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`:
 
 | 常量 | 值 | 位置 | 保护什么 |
 |---|---|---|---|
-| `LARGE_VECTOR_FEATURE_THRESHOLD` | **50,000** | `core/src/types.ts:670` | 主线程 GeoJSON 解析 |
+| `LARGE_VECTOR_FEATURE_THRESHOLD` | **50,000** | `core/src/types.ts:783` | 主线程 GeoJSON 解析 |
 | `maxHistoryFeatureCount` | 500,000 | `core/src/history.ts:29` | 撤销栈内存 |
-| `DUCKDB_VECTOR_FEATURE_WARN_COUNT` | 100,000 | `core/src/types.ts:1838` | 结果物化内存 |
+| `DUCKDB_VECTOR_FEATURE_WARN_COUNT` | 100,000 | `core/src/types.ts:2540` | 结果物化内存 |
 | `MAX_CEREUS_FEATURES` | 50,000 | `lib/sedona-workspace.ts:25` | WASM 堆 |
-| `MAX_DERIVED_FEATURES` | 50,000 | `map/src/derived-geometry.ts:37` | 派生几何计算 |
+| `MAX_DERIVED_FEATURES` | 50,000 | `map/src/derived-geometry.ts:42` | 派生几何计算 |
 | `historyCoalesceMs` | 400 ms | `core/src/history.ts:6` | 撤销记录爆炸 |
 | 远程文件 | 2 GiB | `plugins/remote-file-formats.ts` | DuckDB-WASM 32 位 |
 
@@ -262,19 +264,20 @@ compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`:
 
 ### 3.2 客户端切片：超过 5 万要素就现场切瓦片
 
-完整流水线在 `packages/map/src/geojson-vt-protocol.ts`，一步步是这样的：
+流水线在 `packages/map/src/geojson-vt-protocol.ts`（协议和注册表）和 `geojson-vt-index.ts`（建索引和编码）里，一步步是这样的：
 
 - 索引用 **`@maplibre/geojson-vt`**（注意是 MapLibre 的 fork，**Supercluster 也在这个包里**，注释说它就是「the same engine MapLibre uses internally」）
 - 点图层用 `Supercluster` 索引，其它用 `GeoJSONVT`
 - 编码用 `@maplibre/vt-pbf` 的 `fromGeojsonVt`
 - 通过自定义协议 `geolibre-gjvt` 喂给 MapLibre
 - `TILE_EXTENT = 4096`，`TILE_MAX_ZOOM = 16`（超过就让 MapLibre over-zoom）
+- 建索引和瓦片编码跑在 Web Worker（`geojson-vt.worker.ts`）里，大图层加载时不再卡主线程；没有 Worker 的环境下，同一套代码直接在主线程跑
 
 ![大数据量矢量加载](https://assets.geolibre.app/demos/vector-data-demo.gif)
 
 两个细节值得单独说。
 
-**第一，瓦片索引放模块级 Map，不进 store。** 源码注释是这么写的：
+**第一，按图层存的瓦片注册表放模块级 Map，不进 store。** 源码注释是这么写的：
 
 > Keyed by layer id. Module-level rather than on the Zustand record because **tile indexes are large, non-serializable objects that must not enter app state or be written to `.geolibre.json`**.
 
@@ -283,8 +286,8 @@ compile_error!("the `mas` (Mac App Store) build must not enable `native-duckdb`:
 **第二，编码前先看中止信号。** 就一行：
 
 ```ts
-// packages/map/src/geojson-vt-protocol.ts:150
-if (abortController?.signal.aborted) return { data: new ArrayBuffer(0) };
+// packages/map/src/geojson-vt-protocol.ts
+if (signal?.aborted) return empty;
 ```
 
 因为 MapLibre 会取消滚出屏幕的瓦片请求，结果反正会被丢掉，那就别算。
@@ -296,7 +299,7 @@ if (abortController?.signal.aborted) return { data: new ArrayBuffer(0) };
 
 ### 3.3 撤销栈：三个精细到值得借鉴的处理
 
-`packages/core/src/history.ts` 这个文件值得直接打开看，一百多行，密度很高。用的是 `zundo`（Zustand 的时间旅行中间件）。
+`packages/core/src/history.ts` 这个文件值得直接打开看，不到两百行，密度很高。用的是 `zundo`（Zustand 的时间旅行中间件）。
 
 问题：**每个快照都持有图层的完整 GeoJSON**，反复编辑会把好几份副本钉在内存里（注释里点了 issue #341）。
 
@@ -312,7 +315,7 @@ let total = distinctFeatureCount(pastStates[lastIndex], seen);
 
 **「内存不够就清空撤销栈」是很多项目的做法，但那意味着用户在最需要撤销的那一刻——刚做完一次大编辑——恰好没有撤销可用。**
 
-**处理三，按对象引用去重。** `distinctFeatureCount` 用一个 `Set<object>` 记住见过的 payload：没改动的图层在多个快照间共享同一个引用，只算一次。**所以「保留很多个小图层的快照」几乎没有额外内存开销。**
+**处理三，按对象引用去重。** `distinctFeatureCount` 用一个 `Set` 记住见过的 payload：没改动的图层在多个快照间共享同一个引用，只算一次。**所以「保留很多个小图层的快照」几乎没有额外内存开销。**
 
 还有一个容易忽略的细节：那个 400ms 不是普通防抖，是**前沿防抖（leading-edge debounce）**，作为 zundo 的 `handleSet`：
 
@@ -328,17 +331,15 @@ let total = distinctFeatureCount(pastStates[lastIndex], seen);
 
 ### 3.5 体积：懒加载做到什么程度
 
-`apps/geolibre-desktop/vite.config.ts` 里的 `manualChunks` 是这套东西的核心。举个最有代表性的例子——Cesium：
+`apps/geolibre-desktop/vite.config.ts` 里的分包配置（`manualChunks` 加上 Rolldown 的 `CODE_SPLITTING_GROUPS`）是这套东西的核心。举个最有代表性的例子——Cesium。源码注释记录过一次教训：Cesium 的 chunk 曾经吞进了共享的辅助模块，结果「the whole ~4.7 MB Cesium chunk was modulepreloaded on every boot」；现在它单独成组，因为 **「Cesium only loads when a pane switches to the 3D globe.」**
 
-> CesiumJS (~4.8 MB) for the 3D-globe view. Lazily imported only when a pane switches to the globe……kept in its own build chunk and **off the 2D boot path**.
-
-**「off the boot path」是关键词。** 对 Web 端 GIS 来说，最容易获得的性能提升就是这个：真正需要三维的用户可能只有 20%，没理由让 100% 的人为它承担首屏加载开销。
+**让它不进启动路径，是关键。** 对 Web 端 GIS 来说，最容易获得的性能提升就是这个：真正需要三维的用户可能只有 20%，没理由让 100% 的人为它承担首屏加载开销。
 
 源码注释中有一份详细的体积分析，整理如下：
 
 | 重资源 | 体积 | 处理方式 |
 |---|---|---|
-| CesiumJS | ~4.8 MB | 独立 chunk，切到球面视图才 `import()` |
+| CesiumJS | ~4.7 MB | 独立 chunk，切到球面视图才 `import()` |
 | PGlite + PostGIS | ~25 MB（打进桌面端会多 **~22 MB 几乎不可压缩的体积**） | 默认走 jsDelivr CDN，不进构建 |
 | gdal3.js | wasm ~28 MB + data ~12 MB | **从不打包**，只从 CDN 取；关掉 CDN 就是关掉这个功能 |
 | Pyodide / CereusDB | 各数十 MB | CDN 加载，PGlite 和 CereusDB 可用构建开关改成内置 |
@@ -384,7 +385,7 @@ let total = distinctFeatureCount(pastStates[lastIndex], seen);
 
 ![图层面板：所有参数改的都是 store](https://assets.geolibre.app/images/raster-style-panel.webp)
 
-**模式一，常量数组当单一来源。** `packages/core/src/types.ts:62` 那 20 个图层类型：
+**模式一，常量数组当单一来源。** `packages/core/src/types.ts:63` 那 20 个图层类型：
 
 ```ts
 export const LAYER_TYPES = [
@@ -414,7 +415,7 @@ export interface MapViewState {
 
 **模式三，跨语言边界用 `SYNC:` 标记。** 这是翻阅源码过程中最意外的收获。
 
-那 17 个矢量扩展名，在 TS 里是 `VECTOR_FILE_DIALOG_EXTENSIONS`（`lib/tauri-io.ts:154`），在 Rust 里是 `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]`（`src-tauri/src/lib.rs:418`）——**两份，因为跨语言没法共享常量**。他们的处理是在两边都写注释，下面这段原样引自 `lib/tauri-io.ts:150-153`：
+那 17 个矢量扩展名，在 TS 里是 `VECTOR_FILE_DIALOG_EXTENSIONS`（`lib/file-io/paths.ts:39`），在 Rust 里是 `RESTORABLE_VECTOR_EXTENSIONS: [&str; 17]`（`src-tauri/src/lib.rs:800`）——**两份，因为跨语言没法共享常量**。他们的处理是在两边都写注释，下面这段原样引自 `lib/file-io/paths.ts:35-38`：
 
 > SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs must list the same extensions, or a format added here would be rejected by the Rust restore guard on every project reopen (**the bug this PR fixes**). Grep "SYNC:" to find the partner list.
 
@@ -426,7 +427,7 @@ export interface MapViewState {
 
 ## 五、离线能力：Workbox 三层缓存策略
 
-这节单独拎出来，因为国内做内网、离线、政务项目的人特别需要，而 `docs/architecture.md:83-100` 把这套写得非常完整。
+这节单独拎出来，因为国内做内网、离线、政务项目的人特别需要，而 `docs/architecture.md` 的「Offline support (PWA)」一节把这套写得非常完整。
 
 Web 构建是一个可安装的 PWA，用 `vite-plugin-pwa` + Workbox。缓存**刻意分成三层**：
 
@@ -548,7 +549,7 @@ Web 构建是一个可安装的 PWA，用 `vite-plugin-pwa` + Workbox。缓存**
 
 COG 能被 range 直读，靠的是**文件内部有瓦片切分和金字塔（overviews）**。条带式 GeoTIFF 严格说也能 range 读——条带的偏移和字节数就写在头里——但一个条带横跨整幅影像的宽度，取一小块地图范围要连带拉回远超所需的字节，而且没有 overviews 就没有可供缩小时使用的粗级别。后缀叫不叫 `.tif` 都改变不了这一点，况且 GeoLibre 的客户端读取器直接要求文件内部有瓦片。
 
-GeoLibre 的处理值得借鉴：面板**先用一个 Range 请求把文件头读回来**，判断有没有内部瓦片；没有就提示走客户端转换（gdal3.js 那条路）再加载。**用几 KB 的头部换一个明确判断，而不是让用户等一次必然很慢的加载。**
+GeoLibre 的处理值得借鉴：面板**先用一个 Range 请求把文件头读回来**，判断有没有内部瓦片；没有就提示在浏览器里先转成 COG（geolibre-wasm 的 `CogBuilder`，见 `packages/processing/src/cog-convert.ts`）再加载。**用几 KB 的头部换一个明确判断，而不是让用户等一次必然很慢的加载。**
 
 三个栅格引擎的取舍源码里也写清楚了：`cog-tiler-wasm`（默认，浏览器 WASM，**代价是只能用内置色带**，自定义分级失效）、`maplibre-gl-raster`（GPU，符号化完整）、`titiler`（服务端）。**默认值选的是最稳的那个，不是功能最全的。**
 

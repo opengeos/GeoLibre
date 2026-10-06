@@ -28,19 +28,22 @@ Vector tools (Turf.js / in-browser GeoPandas via Pyodide), the SQL Workspace
 Tools that depend on a **local desktop process** are hidden on mobile, because
 Android has no Python sidecar or local helper binaries:
 
-- Processing → GeoLibre Toolbox → **Raster**, **Conversion**, **AI Segmentation**
-  (all need the Python sidecar)
-- Add Data → **PostgreSQL** (served by the local Martin tile server)
+- Processing → GeoLibre Toolbox → **Conversion**, **AI Segmentation**, and the
+  sidecar-backed **Raster** tools (all need the Python sidecar; the Raster
+  submenu keeps only the client-side **Download Global DEM** tool)
+- Add Data → **PostgreSQL** (served by the local Martin tile server) and
+  **SQL Server**
 
-These are gated by a user-agent `isMobile()` check, so the Add Data menu and the
-Layer panel's add-data group never offer them. Everything else runs client-side.
+These are gated by a user-agent `isMobile()` check, so the Processing menu, the
+Add Data menu, and the Layer panel's add-data group never offer them. Everything
+else runs client-side.
 
-PostgreSQL has one entry point that check does not cover: the Browser panel
-keeps its **Databases** section on every platform for discovery, so its ＋ still
-opens the PostgreSQL dialog. The dialog gates on `isDesktopRuntime()`
-(`isTauri() && !isMobile()`) rather than on `isTauri()` alone, so on Android it
-shows the "requires GeoLibre Desktop" notice and disables Connect instead of
-calling a sidecar that cannot exist (GeoLibre#2091).
+The database sources have one entry point that check does not cover: the Browser
+panel keeps its **Databases** section on every platform for discovery, so its ＋
+still opens the connection dialog. The dialogs gate on `isDesktopRuntime()`
+(`isTauri() && !isMobile()`) rather than on `isTauri()` alone, so on Android they
+show the "requires GeoLibre Desktop" notice and disable Connect instead of
+calling a helper that cannot exist (GeoLibre#2091).
 
 ## Toolchain setup (one time)
 

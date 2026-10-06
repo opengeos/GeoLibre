@@ -96,7 +96,7 @@ Selecting a layer expands a row of icon buttons on its card:
 | **Identify features** | Click features on the map to see their attributes in a popup. On a raster layer this reads the pixel value instead, and on a multiband raster it also builds a [spectral profile](styling.md#spectral-profile). On an editable vector layer, each result also offers **Edit geometry** (opens the GeoEditor with that feature selected) and **Edit attributes** (opens the attribute table in edit mode on that feature's row). |
 | **Open Style panel** | Select the layer and open its [styling controls](styling.md). |
 | **Layer actions** | The full menu, below. |
-| **Metadata** | Inspect the layer's source and configuration. |
+| **Metadata** | Inspect the layer's source and configuration, and edit its descriptive metadata (abstract, keywords, license, contact, lineage, temporal extent, and links). **Export as STAC Item** writes that metadata out as a STAC Item. |
 | **Remove layer** | Delete the layer from the project. |
 
 The **Layer actions** menu (the `…` button) holds everything else:
@@ -115,11 +115,15 @@ The **Layer actions** menu (the `…` button) holds everything else:
 | **Select features** | The interactive selection modes: by click, rectangle, polygon, freehand, or radius, plus **Clear Selection**. Hold `Shift` to add, `Alt` to remove, `Shift`+`Alt` to intersect, and `Esc` to cancel. |
 | **Select by Expression…** / **Select by Location…** | Build a selection from an attribute expression or a spatial relationship. Select by Expression can also apply the expression as a persistent layer filter, hiding non-matching features without creating a new layer. Both are also on the [Edit menu](interface.md#the-top-toolbar). |
 | **Bind to Time Slider…** | Drive the Time Slider from one of this layer's date or number fields. |
-| **Export** | Write the layer out as GeoJSON, GeoParquet, GeoPackage, KML, KMZ, zipped Shapefile, or CSV (attributes only). A polygon layer drawn as a 3D extrusion can also be exported as a 3D model (glTF `.glb`, OBJ, or STL) for Blender and other 3D tools. See [3D model export](#3d-model-export). |
+| **Export** | Write the layer out as GeoJSON, GeoParquet, GeoPackage, KML, KMZ, zipped Shapefile, or CSV (attributes only). On a raster layer it offers **GeoTIFF (COG)** and **Extract subset…**, and on a LiDAR layer LAS, LAZ, or COPC. A polygon layer drawn as a 3D extrusion can also be exported as a 3D model (glTF `.glb`, OBJ, or STL) for Blender and other 3D tools. See [3D model export](#3d-model-export). |
 | **Styles** | Import and export symbology — see [below](#importing-and-exporting-styles). |
 | **Save to My Data** | Store the fully configured layer in your personal library, ready to re-add from the [Browser panel](adding-data.md#the-browser-panel) in any later project. |
 | **Copy style** / **Paste style** | Carry symbology from one layer to another. |
 | **Refresh** / **Auto refresh** | Reload the source now, or on an interval — see [Refreshing live layers](#refreshing-live-layers). |
+| **Reload from disk** / **Watch file for changes** | Desktop app, layers read from a local file: re-read the file now, or reload it whenever it changes on disk. These replace **Refresh** / **Auto refresh** on such layers. |
+| **Save edits to source file** | Desktop app: write attribute and geometry edits back to the layer's GeoJSON or GeoPackage file. On an ArcGIS feature layer, a PostGIS table, or a SQL Server table it reads **Save edits to ArcGIS service**, **Save edits to PostGIS table**, or **Save edits to SQL Server table**. |
+| **Materialize to editable layer** | DuckDB layers: copy the query result into an editable GeoJSON layer. |
+| **Edit query in SQL Workspace** | SQL query layers: reopen the layer's query in the [SQL Workspace](sql-workspace.md). |
 
 Some entries are unavailable on layers they do not apply to: **Select by Location** needs a second layer to compare against, and **Paste style** needs a style on the clipboard.
 
@@ -178,7 +182,7 @@ Layers added from a [DuckDB source](adding-data.md#databases) or produced by the
 
 ## The basemap
 
-The **Background** entry at the bottom of the panel is the basemap. Toggle its visibility and adjust its opacity here. To change which basemap is shown, use the **Basemaps** plugin from the [Plugins menu](plugins.md). See [Adding Data](adding-data.md#basemaps).
+The **Background** entry at the bottom of the panel is the basemap. Toggle its visibility and adjust its opacity here. To change which basemap is shown, double-click the row to open the **Change background** dialog, or use the **Basemaps** plugin from the [Plugins menu](plugins.md). See [Adding Data](adding-data.md#basemaps).
 
 !!! tip "Editing geometry"
     To draw or edit features directly on the map, activate the **GeoEditor** plugin from the [Plugins menu](plugins.md). It adds drawing, vertex editing, and deletion tools for GeoJSON layers.

@@ -12,8 +12,8 @@ is produced and why it differs.
 GeoLibre Desktop ships on macOS two ways:
 
 - **Developer ID** (the default): the notarized `.dmg` published by
-  `release.yml` on every GitHub release and distributed through the website,
-  Homebrew, and winget-style channels. Full feature set, hardened runtime, no
+  `release.yml` on every GitHub release and distributed through the website
+  and Homebrew. Full feature set, hardened runtime, no
   App Sandbox.
 - **Mac App Store (MAS)**: a sandboxed variant built by the
   `mas-store.yml` workflow (or `npm run tauri:build:mas` locally). This page
@@ -41,8 +41,9 @@ Tauri commands with stubs, and `GEOLIBRE_MAS_BUILD=1` hides the matching UI:
 - **Jupyter server** (the Notebook panel falls back to the bundled
   JupyterLite, which the web build already uses; Pyodide executes inside
   WebKit, which App Review permits).
-- **martin tile server** and its GitHub binary download (Add Data →
-  PostgreSQL is hidden).
+- **martin tile server** and its GitHub binary download. Add Data hides the
+  sources with no client-side engine: **PostgreSQL** (martin), plus **SQL
+  Server** and **File Geodatabase** (both sidecar-backed).
 - **External plugin installation** (zip archives and registry installs).
   Built-in and bundled drop-in plugins keep working.
 - **In-app update checks** (`GEOLIBRE_STORE_BUILD=1`, same as the Microsoft

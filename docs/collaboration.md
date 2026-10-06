@@ -19,6 +19,8 @@ small teams.
   Bounded recent history is relayed to late joiners; never written to a project.
 - **Permissions** — the host's per-participant view-only / can-edit overrides
   (#754), broadcast on the participant list as `editOverride`.
+- **Comments** — map comment add / reply / resolve / delete actions, relayed as
+  `comment-mutation` frames and applied to each peer's store.
 
 ## Architecture
 
@@ -55,9 +57,12 @@ Limitations).
 
 ## Sync protocol
 
-All frames are JSON. `CollabMessage` is a discriminated union on `type`. See
-`apps/geolibre-desktop/src/lib/collab-protocol.ts` for the authoritative types
-(shared by client and worker).
+All frames are JSON, and each direction is a discriminated union on `type`
+(`ClientMessage` and `ServerMessage`). The relays' types live in
+`packages/collab-core/src/protocol.ts` (`@geolibre/collab-core/protocol`, with
+`project` typed as `unknown`); the frontend keeps a parallel copy in
+`apps/geolibre-desktop/src/lib/collab-protocol.ts` with `project` typed as
+`GeoLibreProject`. Keep the `type` discriminants and field names in sync.
 
 Client → server:
 
@@ -75,6 +80,7 @@ Client → server:
 | `kick-participant` | `clientId, reason?` | host only; disconnect a participant |
 | `block-participant` | `clientId, reason?` | host only; disconnect and bar that participant key from rejoining (see the caveat under *Moderation*) |
 | `chat` | `text, coordinate?` | a chat message, with an optional attached map coordinate (#754) |
+| `comment-mutation` | `action` | add / reply / toggle-resolve / delete a map comment; validated and rate-limited by the relay |
 
 Server → client:
 
@@ -91,7 +97,8 @@ Server → client:
 | `layer-locks` | `lockedLayerIds` | broadcast when host locks/unlocks layer IDs |
 | `kicked` | `reason` | sent to a participant who was kicked or blocked by the host |
 | `chat` | `message` | fan-out of a chat message (echoed to the sender, so order is server-authoritative) (#754) |
-| `error` | `code, message` | e.g. `forbidden`, `too-large`, `identity-required`, `identity-unavailable`, `layer-locked` |
+| `comment-mutation` | `action` | fan-out of a peer's comment change |
+| `error` | `code, message` | `forbidden`, `too-large`, `bad-message`, `not-found`, `identity-required`, `identity-unavailable`, or `layer-locked` |
 
 ### Echo / feedback-loop prevention
 
@@ -113,10 +120,15 @@ accepted MVP limitation; a coalesced-history option is a v2 item.
 ## Durable Object (`workers/collab`)
 
 - `POST /sessions` — host creates a session: generates a short base32 code, mints
-  a host token, stores `{ mode, hostToken }`, returns `{ sessionId, hostToken,
-  mode }` to the host only.
+  a host token, stores `{ mode, hostToken, requireIdentity }`, returns
+  `{ sessionId, hostToken, mode, requireIdentity }` to the host only. A
+  disallowed origin gets `403` and a rate-limited caller `429` (see the operator
+  note under *Chat*).
 - `GET /sessions/:id/ws` — WebSocket upgrade, routed to
   `env.COLLAB_SESSION.get(idFromName(id))`.
+- `GET /sessions/:id/log` / `DELETE /sessions/:id/log` — host-only download or
+  clear of the session log (`Authorization: Bearer <hostToken>`).
+- `GET /health` (also `/`) — `{ ok, service, identitySupported }`.
 
 `CollabSession` uses the **WebSocket Hibernation API** so idle sessions evict
 from memory while keeping sockets open. Per-socket participant metadata is kept
@@ -137,7 +149,7 @@ of the database.
 
 ## Frontend
 
-- `lib/collab-protocol.ts` — shared message types.
+- `lib/collab-protocol.ts` — the frontend copy of the message types.
 - `lib/collab-client.ts` — WebSocket transport, `resolveCollabBaseUrl()` (wss/loopback
   validation, returns `null` when unset), exponential-backoff reconnect.
 - `hooks/useCollaboration.ts` — orchestration: subscribes to the store
@@ -260,8 +272,8 @@ ephemeral and never written to a project file.
 > hosted origins (`geolibre.app`, `web.geolibre.app`, its legacy
 > `viewer.geolibre.app` alias, `studio.geolibre.app`, and
 > `collab.geolibre.app`), single-label HTTPS deployment hosts under
-> `*.geolibre-preview.pages.dev`, loopback hosts (`localhost` and
-> `127.0.0.1`), and `tauri://localhost`). Nested or custom-port preview hosts
+> `*.geolibre-preview.pages.dev`, loopback hosts (`localhost`, `*.localhost`,
+> and `127.0.0.1`), and `tauri://localhost`). Nested or custom-port preview hosts
 > and look-alike domains are rejected; the shared `opengeos.org` GitHub Pages
 > preview origin is deliberately not trusted) as browser-origin filtering
 > and defense-in-depth (not authentication or a general server-side access gate)
@@ -308,7 +320,8 @@ core:
 - `workers/collab-node` is the self-hostable Node/SQLite relay. It is included
   as `geolibre-collab` in the root `docker-compose.yml`; its persistent database
   is mounted at `/data/collab.sqlite`. Configure `COLLAB_MAX_SNAPSHOT_BYTES`
-  (default 10,000,000) and `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
+  (relay default 10,000,000; the compose file defaults it to 1,000,000) and
+  `COLLAB_IDLE_TTL_MS` (default two hours) when needed.
 
 Both relay implementations accept `COLLAB_MAX_SNAPSHOT_BYTES` as a positive
 integer number of bytes. For the Cloudflare relay, set it as a Worker variable,
@@ -347,8 +360,9 @@ environment. Until that env var is set, the feature stays dark.
   wins and the slower edit is overwritten. Presence helps users avoid colliding.
 - **Payload size**: layers can embed `FeatureCollection`s. `projectFromStore`
   already strips redundant `geojson` for URL-backed layers, but a large
-  in-memory/local-file layer can exceed the ~1 MiB frame cap and is rejected with
-  a clear error (share via URL instead). v2: diff / chunked layer sync.
+  in-memory/local-file layer can exceed the snapshot cap
+  (`COLLAB_MAX_SNAPSHOT_BYTES`; 10 MB by default) and is rejected with
+  `error: too-large` (share via URL instead). v2: diff / chunked layer sync.
 - **Undo**: a remote apply clears local undo (see above).
 - v2 directions: per-action mutation or CRDT transport, coalesced remote-apply
   history, richer permission/identity (tie to share.geolibre.app accounts).

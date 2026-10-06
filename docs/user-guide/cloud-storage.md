@@ -77,9 +77,12 @@ Temporary credentials are refreshed shortly before they expire.
 - Type `s3://bucket/prefix/` (or a bucket name, or an S3 HTTPS URL) and press **Go**.
 - **List buckets** lists every bucket the selected connection's credentials can see. On the web this needs the S3 service endpoint to allow the page's origin, which AWS does not, so use the desktop app or type the bucket name.
 - **Add** puts a COG/GeoTIFF, GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, PMTiles, or COPC/LAZ/LAS point cloud file on the map through the same code paths as Add Data. Once a file is on the map its button reads **Added**; remove the layer and it turns back into **Add**. **Copy URI** copies the `s3://` URI for use elsewhere, such as the SQL Workspace.
+- A `.geolibre` or `.geolibre.json` file shows **Open project** instead, which opens that project from the bucket.
 - To add several files at once, tick their checkboxes (or **Select all**) and choose **Add selected**. They are added one after another, with progress shown under the buttons.
 - **Up** goes to the parent folder; **Set as default** makes the current folder the one the browser opens at.
 - The line under the location box shows whether the bucket is read with a connection's credentials or anonymously.
+
+To have the S3 Browser open every time GeoLibre starts, turn on **Open the S3 Browser at startup** under [Settings → Startup Settings](settings.md#startup).
 
 ## Where credentials are stored
 

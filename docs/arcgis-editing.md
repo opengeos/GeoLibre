@@ -3,11 +3,11 @@
 GeoLibre can save feature additions, attribute and geometry updates, and deletions
 back to an editable ArcGIS Feature Service in the web and desktop apps.
 
-1. Choose **Add Data > ArcGIS Layer**, select **Feature layer**, and enter the
+1. Choose **Add Data → ArcGIS Layer**, select **Feature layer**, and enter the
    service layer URL (or portal item). Supply an access token for a protected service.
-2. Edit attributes in the attribute table or use **Layer actions > Edit geometry**.
+2. Edit attributes in the attribute table or use **Layer actions → Edit geometry**.
    Finish the geometry editing session before saving.
-3. Choose **Layer actions > Save edits to ArcGIS service**. The status reports
+3. Choose **Layer actions → Save edits to ArcGIS service**. The status reports
    inserted, updated, and deleted records, followed by any individual failures.
 
 The save action appears when the service advertises supported editing operations
@@ -43,7 +43,7 @@ an existing token expires.
 
 ## Signing in with ArcGIS
 
-In Add Data, ArcGIS, set **Authentication** to **Sign in with ArcGIS** instead of
+In the **Add Data → ArcGIS Layer** dialog, set **Authentication** to **Sign in with ArcGIS** instead of
 pasting a token. GeoLibre opens the portal's own sign-in page (OAuth 2.0
 Authorization Code with PKCE), so it never sees your password, MFA code or
 identity-provider credentials, and the layer is added with your own permissions.

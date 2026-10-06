@@ -7,7 +7,8 @@ Once you have a map you like, you can publish it as a public link and embed it i
 Sharing uploads to `share.geolibre.app`.
 
 - **Web app**: open **Project → Share...** and click **Sign in to share.geolibre.app**. Approve the access request in the popup that opens — you are connected for the browser session.
-- **GeoLibre Desktop**: paste a personal API token into **Settings → Environment Variables → Share.GeoLibre API token**. Create one under Settings → API tokens at [share.geolibre.app/settings](https://share.geolibre.app/settings). You only need to do this once.
+- **GeoLibre Desktop**: click the same **Sign in to share.geolibre.app** button. The sign-in opens in your system browser, and the desktop app keeps the session in your OS credential store.
+- **Fallback (any build)**: paste a personal API token into **Settings → Environment Variables → Share.GeoLibre API token**. Create one under Settings → API tokens at [share.geolibre.app/settings](https://share.geolibre.app/settings).
 
 ## 2. Share the project
 

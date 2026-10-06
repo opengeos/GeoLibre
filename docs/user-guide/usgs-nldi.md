@@ -5,7 +5,7 @@ Hydrography Dataset (NHD) network and displaying the result on the map.
 
 ## Trace a map point
 
-1. Open **Plugins → USGS NLDI**.
+1. Open **Plugins → Web Services → USGS NLDI**.
 2. Choose **Complete flowline**, **Upstream only**, or **Downstream only**.
 3. Click a point on the map.
 
@@ -25,10 +25,10 @@ streamgages (`ca_gages` or `nwissite`), groundwater wells (`nwisgw`),
 Geospatial Fabric points (`gfv11_pois`), HUC12 pour points (`huc12pp`),
 New Mexico water sites (`nmwdi-st`), or another catalog returned by NLDI.
 Choose **Plot another navigation layer** to draw the selected features on the
-map; flowlines are purple and point catalogs are also rendered by the
-navigation layer. These are chained
-workflows: the selected map point feeds hydrolocation, its COMID feeds the
-basin or navigation request, and the result is rendered on the map.
+map; navigation results, flowlines and points alike, are drawn in purple.
+These are chained workflows: the selected map point feeds hydrolocation, its
+COMID feeds the basin or navigation request, and the result is rendered on the
+map.
 
 Use **Export rendered results to GeoJSON** to save the selected point,
 flowline, raindrop path, basin, and any plotted navigation features as one

@@ -43,8 +43,9 @@ Open **Settings → Interface** to:
 - Pick an **experience level**, which fills the checklists from each item's
   complexity and takes effect at once.
 - Check or uncheck individual **data sources**, **plugins**, whole **menus**
-  (Project, Edit, Add Data, Processing, Controls, Plugins, Help), and the items
-  within the Project, Edit, Processing, Controls, Settings, and Help menus.
+  (Project, Edit, View, Add Data, Processing, Controls, Plugins, Help), and the
+  items within the Project, Edit, View, Processing, Controls, Settings, and Help
+  menus.
   Editing any item switches the selector to **Custom**.
 
 The **Settings** menu itself, and its Language / Layout / Interface entries, are
@@ -105,13 +106,14 @@ these profile fields; the legacy file stores them at top level.
 | `lock` | boolean | When `true`, users cannot change the profile from Settings. To release the lock on the next launch, remove or clear `interface.lock` in the selected deployment policy, or the top-level `lock` in the legacy profile. |
 | `hiddenDataSources` | string[] | Explicit data-source ids to hide. Overrides the preset when present. |
 | `hiddenPlugins` | string[] | Explicit plugin ids to hide. Overrides the preset when present. |
-| `hiddenMenus` | string[] | Top-level menu ids to hide (`project`, `edit`, `addData`, `processing`, `controls`, `plugins`, `help`). |
+| `hiddenMenus` | string[] | Top-level menu ids to hide (`project`, `edit`, `view`, `addData`, `processing`, `controls`, `plugins`, `help`). |
 | `hiddenMenuItems` | string[] | Menu-item ids to hide (e.g. `processing.raster`, `help.diagnostics`, `controls.minimap`). |
 
 Data-source ids are the catalog ids in
 `apps/geolibre-desktop/src/lib/ui-profile.ts` (e.g. `vector`, `xyz`, `mbtiles`,
 `postgres`). Plugin ids are the stable ids defined in
-`packages/plugins/src/plugins/*` (e.g. `maplibre-gl-geoagent`). Menu and
+`packages/plugins/src/plugins/*` and `packages/plugins/src/plugin-ids.ts`
+(e.g. `maplibre-gl-geoagent`). Menu and
 menu-item ids are the catalog ids in the same `ui-profile.ts`
 (`TOP_LEVEL_MENUS`, `MENU_ITEM_CATALOG`).
 

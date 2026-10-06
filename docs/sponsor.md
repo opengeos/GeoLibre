@@ -2,8 +2,8 @@
 
 GeoLibre is free and open-source software, released under the
 [MIT License](https://github.com/opengeos/GeoLibre/blob/main/LICENSE) and
-developed in the open. There is no paid tier, no seat license, and no telemetry —
-everything on this site is available to everyone, forever.
+developed in the open. There is no paid tier, no seat license, and no telemetry in
+the app — everything on this site is available to everyone, forever.
 
 That model only works if the work behind it is sustainable. If GeoLibre saves you
 or your team time, sponsorship is the most direct way to keep it moving.

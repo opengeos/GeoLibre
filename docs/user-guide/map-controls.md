@@ -31,6 +31,7 @@ These are interactive panels provided by the MapLibre components plugin:
 | **Colorbar** | Display a continuous color scale for raster values. |
 | **Legend** | Show a legend describing the layers on the map. |
 | **HTML** | Display custom HTML content in an on-map panel. |
+| **Image** | Place images from `https://` URLs on the map, such as a logo, a north arrow, or a legend, in any corner. Each image has a title bar that folds it away, and a map can hold up to 20. |
 | **Measure** | Measure distances and areas interactively, with heading and terrain-aware 3D readouts. See [Measuring distance, area, and heading](#measuring-distance-area-and-heading). |
 | **Bookmark** | Save named map views and jump back to them. |
 | **Minimap** | Show an overview map of the current extent. |
@@ -49,7 +50,7 @@ The **Print Layout** composer lives under the Project menu; see [Print Layout](p
 
 **Exact segment** is the keyboard route to the same thing: type a length and a bearing and click **Add** to extend the measurement by a segment of exactly those dimensions, instead of clicking for it. Useful for retracing a deed description or a survey traverse.
 
-Beyond distance and area, the panel adds two further sections:
+Beyond distance and area, the panel adds further readouts:
 
 - **Heading** — the direction of the measured line, as degrees plus a 16-point compass label (for example `310° NW`). This is a true great-circle initial bearing, not the angle the line makes on screen: on a Mercator map Washington to London *looks* due east, while the real initial bearing is about 50°. On a path with more than two points, the heading is the overall first-to-last direction rather than one row per segment.
 - **Final heading** — the bearing arriving at the far end. A great circle changes direction along its length, so this row appears only on lines long enough for the convergence to reach a degree; short measurements stay a single row.

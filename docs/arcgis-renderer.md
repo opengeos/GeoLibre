@@ -179,7 +179,7 @@ override draws Esri World Imagery instead.
   feature is painted onto the capture rather than drawn on the live map, and
   a fixed scale is corrected up to three times, aiming for 0.5 % of the
   requested one, since the SDK rounds the zoom it is given.
-- **Plugins → Layer Control** toggles the native ArcGIS layer list, enabled by
+- **Controls → Layer Control** toggles the native ArcGIS layer list, enabled by
   default on the primary map like the shared plugin. Its visibility
   toggles update the project and the sidebar, and sidebar changes update the
   list. Mixed-geometry GeoJSON records have one entry for all their parts.

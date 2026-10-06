@@ -28,10 +28,10 @@ overrides field by field, and writes the generated public policy on every boot
 (see [Docker](#docker)). The client then resolves settings in this order:
 final policy, `window.__GEOLIBRE_DEPLOYMENT_ENV__`, then build environment.
 
-**Availability:** Runtime policy delivery and Docker enforcement live on
-`main`. Published Docker images and desktop releases may predate them. If a
-Docker image does not honour `deployment.json`, build the image from `main`.
-For desktop, use a build that includes this support.
+**Availability:** Runtime policy delivery, desktop config-dir loading, and
+Docker enforcement first shipped in v3.3.0. Older Docker images and desktop
+releases ignore `deployment.json`; use v3.3.0 or later (the
+`ghcr.io/opengeos/geolibre:latest` image is rebuilt from `main`).
 
 The previous `admin-profile.json` and `VITE_GEOLIBRE_CAPABILITIES` inputs are
 **legacy, still honoured**. They remain fallbacks where the primary policy does
@@ -82,7 +82,7 @@ For capability details and Docker route enforcement, see
     "hiddenDataSources": ["arcgis"],
     "hiddenPlugins": ["plugin-a"],
     "hiddenMenus": ["help"],
-    "hiddenMenuItems": ["file.print"]
+    "hiddenMenuItems": ["project.print"]
   },
   "plugins": {
     "registryUrl": "https://plugins.example.com/registry.json",
@@ -166,15 +166,15 @@ An array of the capability names from
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `shareUrl` | string | Projects server URL (`http(s)://…`), or `off` to remove Share and the Gallery. |
-| `collabUrl` | string | Live collaboration relay (`ws(s)://…`). |
+| `shareUrl` | string | Projects server URL (`https://…`; plain `http://` only on `localhost`/`127.0.0.1`), or `off` to remove Share and the Gallery. |
+| `collabUrl` | string | Live collaboration relay (`wss://…`; plain `ws://` only on loopback). |
 | `embedOrigins` | string[] | Origins allowed to drive a framed app (`https://host`), or `*` for any. |
 
 ### `geolens`
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `url` | string | Default GeoLens server (`http(s)://…`), `same-origin`, or `off`. |
+| `url` | string | Default GeoLens server (`https://…`; plain `http://` only on loopback in the container), `same-origin`, or `off`. |
 
 ### `ai`
 
@@ -197,6 +197,7 @@ mean opposite things. Omitted means "no restriction from this file"; `[]` means
 "nothing is granted/allowed".
 
 ## Plugin precedence
+
 An id in `blocked` is never loaded, even if it is also in `allowed`. When
 `allowed` is present, any non-bundled external id not in it is not loaded.
 
@@ -318,16 +319,15 @@ blank values count as unset. Invalid input stops boot and cannot be repaired by
 an override.
 
 ```bash
-docker build -t geolibre-policy:local .
 docker run --rm -p 8080:80 \
   -v "$PWD/deployment.json:/etc/geolibre/deployment.json:ro" \
   -e GEOLIBRE_DEPLOYMENT_FILE=/etc/geolibre/deployment.json \
   -e GEOLIBRE_CAPABILITIES=data:add,export:data \
-  geolibre-policy:local
+  ghcr.io/opengeos/geolibre:latest
 ```
 
-Build the image from merged `main` to obtain runtime policy support until a
-containing release is verified; configuration changes do not require rebuilding.
+Configuration changes take effect on the next container start; they do not
+require rebuilding the image.
 
 | Variable | Policy field |
 | --- | --- |

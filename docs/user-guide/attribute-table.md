@@ -26,6 +26,7 @@ memory.
 | **Statistics** | Summary statistics for one field. See [Field statistics](#field-statistics). |
 | **Charts** | Chart one or two fields. See [Charts](#charts). |
 | **Dashboard** | Open the [Dashboard](processing.md#dashboard) with this layer preselected. |
+| **Refresh** | Re-read the features from the source to pick up changes made elsewhere, such as edits by other clients of a service. Shown for layers that can be [refreshed](layers.md#refreshing-live-layers); on desktop, a layer read from a local file is reloaded from disk. Disabled while an ArcGIS layer has unsaved edits. |
 | **Export** | Write the layer to a file. See [Exporting](#exporting). |
 | **Search attributes...** | Show only rows whose values (or id) contain the text, ignoring case. |
 | **Zoom to selection** | Zoom the map to each new selection. |
@@ -275,9 +276,9 @@ that holds an object must contain valid JSON before you can save.
   Layer layers.
 - `Ctrl`/`Cmd` + `Z` undoes saved layer changes (not while you are typing in a
   cell).
-- To write edits back to the file or service the layer came from, use the
-  layer's **Save edits to source file** (or the ArcGIS and PostGIS
-  equivalents).
+- To write edits back to the file, service, or database the layer came from,
+  use the layer's **Save edits to source file** (or the ArcGIS, PostGIS, and
+  SQL Server equivalents).
 
 Combine this with the **GeoEditor** plugin to edit geometry and attributes
 together. See [Managing Layers](layers.md).

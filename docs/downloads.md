@@ -31,10 +31,11 @@ older versions.
 Release builds are produced for:
 
 - Linux x64: Debian package, RPM package, and AppImage
-- Windows x64: unsigned desktop binary
+- Windows x64: unsigned `.msi` and `-setup.exe` installers, a portable `.zip`, and the bare `.exe`
 - macOS Apple Silicon: Developer ID signed and notarized DMG and app bundle (v1.4.1+)
 - macOS Intel: Developer ID signed and notarized DMG and app bundle (v1.4.1+)
 - Android: signed APKs, one per ABI (`geolibre-android-arm64.apk` and friends)
+- Chrome extension: a packaged ZIP (`geolibre-chrome-<version>.zip`)
 
 The Windows GitHub Release build is unsigned and may require a platform-specific
 trust prompt; the [Microsoft Store](#windows-installation) build is signed and
@@ -160,6 +161,7 @@ shipping them broken. Here is how the two macOS builds compare:
 | SQL Workspace (DuckDB-WASM, PGlite/PostGIS, in-browser Apache Sedona on CereusDB) | Yes | Yes |
 | Python sidecar engines (GeoPandas vector, rasterio raster, GDAL conversion, SamGeo segmentation, the SedonaDB sidecar behind the Apache Sedona engine) | Yes | No |
 | Add Data → PostgreSQL / PostGIS (martin tile server) | Yes | No |
+| Add Data → SQL Server, File Geodatabase (sidecar-backed) | Yes | No |
 | Notebook panel on a local JupyterLab server | Yes | JupyterLite only |
 | Installing external plugins from a zip or the registry | Yes | Built-in and bundled plugins only |
 | Earth Engine sign-in | Yes | No |

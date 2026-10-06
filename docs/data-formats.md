@@ -17,11 +17,11 @@ workflow and [Projects](user-guide/projects.md) for saving and reopening data.
 | Shapefile | `.shp` with companion files, or `.zip` | Vector Layer | Keep `.shx`, `.dbf`, and `.prj` companions together; use a ZIP for browser imports. |
 | GML | `.gml` | Vector Layer | Imported through the vector reader. |
 | MapInfo TAB | `.tab` and companion files | Vector Layer | Requires access to the dataset's companion files. |
-| KML / KMZ | `.kml`, `.kmz` | KML / KMZ Layer or Vector Layer | Supports folders, styles, ground overlays, embedded models, and Super-Overlays; behavior depends on the renderer. |
+| KML / KMZ | `.kml`, `.kmz` | KML / KMZ or Vector Layer | Supports folders, styles, ground overlays, embedded models, and Super-Overlays; behavior depends on the renderer. |
 | GPX | `.gpx` | GPX Layer | Waypoints, tracks, and routes can become separate layers. |
 | LandXML | `.xml`, `.landxml`, LandXML URL | LandXML Layer | Imports TIN surfaces, horizontal alignments, vertical profile metadata, and survey points; projected data requires a source CRS. |
 | Delimited text | CSV, TSV, and custom-delimited text | Delimited Text Layer | Map coordinate columns, specify their CRS, or geocode address columns. CSV without coordinates can also be loaded as a table. |
-| Excel | Excel workbooks | File import | Select a worksheet and coordinate columns to create point features. |
+| Excel | Excel workbooks | Delimited Text Layer | Select a worksheet and coordinate columns to create point features. |
 | AutoCAD | `.dxf`, `.dwg` | CAD (DXF/DWG) Layer | Select drawing layers and the source CRS. Coordinate Z values are kept and rendered in 3D unless you turn that off. |
 | Esri File Geodatabase | `.gdb` folder | File Geodatabase (GDB) | Desktop folder access; select a feature class. |
 | OpenStreetMap PBF | `.osm.pbf` | OSM PBF Layer | Reads an extract in the browser and adds the selected features. |
@@ -76,9 +76,9 @@ are described in [Web Services](user-guide/web-services.md) and
 | LiDAR point clouds | LiDAR Layer | LAS/LAZ and cloud-optimized point-cloud data. The layer menu exports a cloud to LAS, LAZ or COPC, and Whitebox LiDAR tool outputs load as new point cloud layers. LAS, LAZ and COPC files can also be dropped on the map. |
 | Gaussian splats | Gaussian Splatting | Point-based scene rendering. |
 | OGC 3D Tiles | 3D Tiles Layer | Streamed 3D tilesets; authenticated tilesets can use request headers. |
-| ArcGIS I3S | I3S integration | Integrated Mesh and 3D Object scene layers. |
-| Cesium ion assets | Cesium ion | Assets hosted on Cesium ion; requires the Cesium renderer. |
-| CZML | CZML Layer | Time-dependent scene descriptions; requires the Cesium renderer. |
+| ArcGIS I3S | 3D Tiles Layer (SceneServer URL) | Integrated Mesh and 3D Object scene layers. |
+| Cesium ion assets | Cesium Ion Asset | 3D Tiles tilesets or imagery hosted on Cesium ion; requires the Cesium renderer. |
+| CZML | CZML Dynamic 3D Scene | Time-dependent scene descriptions; requires the Cesium renderer. |
 | glTF / GLB | 3D Model (glTF) | Place a local or remote model at coordinates with scale, rotation, and altitude. |
 | Georeferenced video | Video Layer | Video draped over four map corner coordinates. |
 | Geotagged photos | Geotagged Photos | EXIF GPS locations with thumbnails; photos without coordinates can be placed manually. |
@@ -90,6 +90,7 @@ are described in [Web Services](user-guide/web-services.md) and
 | --- | --- | --- |
 | DuckDB / DuckDB Spatial | DuckDB Layer or SQL Workspace | Query local files, remote data, or a database and add spatial results to the map. |
 | PostgreSQL / PostGIS | PostgreSQL Layer or Browser panel | Desktop database connections use a local tile server. |
+| SQL Server / Azure SQL | SQL Server Layer or Browser panel | Desktop only; spatial tables load as editable layers. |
 | Apache Iceberg | Apache Iceberg Layer | Read spatial tables through DuckDB. |
 | PostGIS via PGlite | SQL Workspace | In-browser spatial SQL engine. |
 | Apache Sedona | SQL Workspace | An additional spatial query engine. |
@@ -98,7 +99,7 @@ are described in [Web Services](user-guide/web-services.md) and
 
 | Format | Entry point | Notes |
 | --- | --- | --- |
-| GeoLibre project (`.geolibre.json`) | Project > Open | Layers, styles, groups, and map state; remote sources and local file references still need to be accessible. |
+| GeoLibre project (`.geolibre.json`) | Project > Open From | Layers, styles, groups, and map state; remote sources and local file references still need to be accessible. |
 | QGIS project (`.qgs`, `.qgz`) | Project > Import | Imports supported layers and settings; reports skipped sources. Local paths require desktop access. |
 | ArcGIS Pro project or map (`.aprx`, `.mapx`) | Project > Import | Imports supported layers and settings; see the [project import guide](user-guide/projects.md#importing-an-arcgis-pro-project) for requirements. |
 

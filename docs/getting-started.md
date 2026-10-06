@@ -52,7 +52,7 @@ The Linux app runs in WebKitGTK. At startup it picks the WebKitGTK renderer sett
 | NVIDIA GPU, WebKitGTK 2.48 to 2.51 | `WEBKIT_DISABLE_DMABUF_RENDERER=1` (NVIDIA's buffer allocation fails, and there is no faster fallback yet) |
 | NVIDIA GPU, WebKitGTK 2.52 or newer | `WEBKIT_DISABLE_DMABUF_RENDERER=0` and `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` (a shared-memory fallback that avoids the blank window without the slow legacy renderer) |
 | Anything else | Nothing; WebKitGTK's default DMA-BUF renderer is used |
-| x86-64 CPU without AVX | `JSC_useWasmOSR=false` and `JSC_useBBQTierUpChecks=false` (WebAssembly tier-up crashes the renderer on these CPUs; WebAssembly-heavy work runs slower) |
+| x86-64 CPU without AVX | `JSC_useWasmOSR=false` and `JSC_useBBQTierUpChecks=false` (WebAssembly tier-up crashes the renderer on these CPUs; WebAssembly-heavy work runs slower; see [CPUs without AVX](#linux-desktop-a-blank-window-on-a-cpu-without-avx)) |
 
 The app treats the GPU as NVIDIA when the boot display is driven by the `nvidia` driver, when `__NV_PRIME_RENDER_OFFLOAD` is set to anything but `0`, or when `__GLX_VENDOR_LIBRARY_NAME=nvidia`. It also sets `GTK_USE_PORTAL=1` so file dialogs go through the desktop portal.
 
@@ -145,7 +145,7 @@ cd GeoLibre
 npm install
 ```
 
-Bun users can run `bun install`. The root `trustedDependencies` list allows the known install scripts for `core-js`, `@google/genai`, and `protobufjs`.
+Bun users can run `bun install`. The root `trustedDependencies` list allows the known install scripts for `@google/genai`, `core-js`, `esbuild`, `protobufjs`, `sharp`, and `workerd`.
 
 ### Update
 
@@ -495,10 +495,10 @@ capabilities rather than rebuilding the client:
 ```bash
 docker run --rm -p 8080:80 \
   -e GEOLIBRE_CAPABILITIES=project:edit,data:add,processing:run,export:data \
-  geolibre-policy:local
+  ghcr.io/opengeos/geolibre:latest
 ```
 
-Build the local image from merged `main` as described in
+Runtime policy enforcement needs image v3.3.0 or later; see
 [Deployment Policy](deployment-policy.md#docker). The legacy
 `VITE_GEOLIBRE_CAPABILITIES` build input is still honoured as a client fallback.
 `none` grants no capabilities. Client gates remove menus, command palette
@@ -623,8 +623,9 @@ Production web callbacks require HTTPS and must end in
 `geolibre-desktop` registration to the same JSON array when desktop sign-in is
 required. The web app signs in through a popup to the server's consent page
 using this registration, so the `geolibre-web` callback URL must match the web
-app's own origin (including any base path). Desktop sign-in (the system
-browser flow) is still pending; desktop users paste a personal API token. See
+app's own origin (including any base path). The desktop app opens the consent
+page in the system browser and receives the callback through the OS protocol
+handler; a personal API token still works as a fallback. See
 the [server API OAuth contract](server-api.md#oauth-20-sign-in-authorization-code-s256-pkce)
 for the flow and lifetime settings.
 
@@ -883,7 +884,7 @@ Restart `npm run dev` or `npm run tauri:dev` after changing environment variable
 
 ## Optional basemap credentials
 
-The **New map** dialog offers [Protomaps](https://protomaps.com) basemaps (Light, Dark, White, Grayscale, Black) when a Protomaps API key is configured. Without a key these options are hidden, and you can still use the OpenFreeMap basemaps or a custom style URL.
+The **New project** dialog offers [Protomaps](https://protomaps.com) basemaps (Light, Dark, White, Grayscale, Black) when a Protomaps API key is configured. Without a key these options are hidden, and you can still use the OpenFreeMap basemaps or a custom style URL.
 
 Use your own key — create one in the [Protomaps dashboard](https://protomaps.com). Set it one of two ways:
 
@@ -923,7 +924,7 @@ VITE_AMAZON_LOCATION_AWS_REGION=us-east-1                   # optional; omit to 
 The Basemaps control also carries **Protomaps** and **Stadia Maps** (including Stadia x Stamen) style basemaps. Both authenticate with your own key:
 
 ```env
-VITE_PROTOMAPS_API_KEY=your_protomaps_api_key   # same key as the New map dialog's Protomaps basemaps
+VITE_PROTOMAPS_API_KEY=your_protomaps_api_key   # same key as the New project dialog's Protomaps basemaps
 VITE_STADIA_API_KEY=your_stadia_api_key         # https://client.stadiamaps.com
 ```
 
@@ -937,7 +938,7 @@ GeoLibre's default basemaps (OpenFreeMap, Protomaps) are hosted outside mainland
 
 ### The Regional section (no key)
 
-**New project** and **Change basemap** both carry a collapsed **Regional → China (中国)** section with five keyless basemaps: 高德地图, 高德卫星, 高德混合 (Amap street, satellite, and satellite-with-labels) and 腾讯地图, 腾讯深色 (Tencent street and dark). Pick one and it applies like any other basemap. Nothing to configure.
+**New project** and **Change background** both carry a collapsed **Regional → China (中国)** section with five keyless basemaps: 高德地图, 高德卫星, 高德混合 (Amap street, satellite, and satellite-with-labels) and 腾讯地图, 腾讯深色 (Tencent street and dark). Pick one and it applies like any other basemap. Nothing to configure.
 
 ### The Basemaps control (adds Tianditu)
 
@@ -967,7 +968,7 @@ Keys set via **Settings → Environment Variables**, or typed directly into the 
 
 ## Optional 3D globe credentials (Cesium Ion)
 
-The optional **Cesium 3D-globe renderer** can own the primary map or any pane in a mixed-engine split layout. It requires a [Cesium Ion](https://ion.cesium.com/) access token. The hosted web version bundles a demo token, so the globe works there out of the box, but the desktop and mobile apps need your own. The token enables Cesium World Terrain (relief on tilted views) plus Ion World Imagery as the fallback for a basemap that has no raster form. To get one, create a free Ion account, copy your default access token, and set it at build time:
+The optional **Cesium 3D-globe renderer** can own the primary map or any pane in a mixed-engine split layout. It works without a token, draping the project basemap as its imagery, but a [Cesium Ion](https://ion.cesium.com/) access token unlocks more. The hosted web version bundles a demo token; the desktop and mobile apps need your own. The token enables Cesium World Terrain (relief on tilted views) plus Ion World Imagery as the fallback for a basemap that has no raster form. To get one, create a free Ion account, copy your default access token, and set it at build time:
 
 ```env
 CESIUM_TOKEN=your_cesium_ion_access_token
@@ -1041,9 +1042,7 @@ extra is unavailable. See [Processing Tools](user-guide/processing.md) for what
 each engine does, and [AI Segmentation](user-guide/segmentation.md) for the
 separate `samgeo-api` model server.
 
-## Linux desktop troubleshooting
-
-### A blank window on a CPU without AVX
+## Linux desktop: a blank window on a CPU without AVX
 
 On x86-64 CPUs with no AVX (Intel Celeron and Pentium N-series, Atom, and
 anything older than Sandy Bridge), WebKitGTK can kill its own renderer as soon
@@ -1071,7 +1070,7 @@ The two options only work as a pair, so GeoLibre treats them as one decision.
 Turning either one back on is the opt-out and leaves both alone:
 
 ```bash
-JSC_useWasmOSR=true geolibre
+JSC_useWasmOSR=true geolibre-desktop
 ```
 
 Setting one of them to `false` yourself is not an opt-out: GeoLibre keeps your
@@ -1082,7 +1081,7 @@ Or, if a renderer crash persists, fall back to disabling the WebAssembly JIT
 entirely:
 
 ```bash
-JSC_useBBQJIT=false geolibre
+JSC_useBBQJIT=false geolibre-desktop
 ```
 
 The check is a runtime CPU feature test, not a model or release-date list, so

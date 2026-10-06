@@ -44,7 +44,7 @@ withheld is never on offer, whatever the profile says.
 
 | Capability | Grants |
 | --- | --- |
-| `project:edit` | Authoring the project: New, Open, Open Recent, Import, Project History, Save, Save As, Duplicate, Save as Template, Collaborate, StoryMap; Undo/Redo (the menu items **and** the Ctrl/Cmd+Z and Ctrl+Y shortcuts); Export Selection; adding a review comment; the embed API's `loadProject`. |
+| `project:edit` | Authoring the project: New, Open, Open Recent, Import, Project History, Save, Save As, Duplicate, Save as Template, Collaborate, StoryMap; Undo/Redo (the menu items **and** the Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, and Ctrl+Y shortcuts); Export Selection; adding a review comment; the embed API's `loadProject`. |
 | `data:add` | Bringing data in: the whole Add Data menu, dragging a file onto the map (browser and desktop), and the embed API's `addLayer` and `addData`. |
 | `processing:run` | The whole Processing menu — Whitebox, SQL, Python, the AI assistant, geocoding, Model Builder, conversion/vector/raster tools — and the embed API's `openTool`. |
 | `export:data` | Getting data or a rendering back out: Share, Export HTML, Print, Print Layout, Offline Basemap, and the embed API's `exportImage`. |
@@ -65,10 +65,10 @@ Docker runtime override:
 ```bash
 docker run --rm -p 8080:80 \
   -e GEOLIBRE_CAPABILITIES=data:add,export:data \
-  geolibre-policy:local
+  ghcr.io/opengeos/geolibre:latest
 ```
 
-Build `geolibre-policy:local` from merged `main` as described in
+Runtime policy support ships in the published image from v3.3.0 on; see
 [Deployment Policy](deployment-policy.md#docker). `none` grants nothing with
 the environment variable; JSON uses `"capabilities":[]` for the same empty
 grant. Omitted sources grant the default full set.
@@ -107,13 +107,13 @@ do not configure Docker nginx route enforcement.
 A kiosk or exhibit terminal, with no optional capabilities:
 
 ```bash
-docker run --rm -p 8080:80 -e GEOLIBRE_CAPABILITIES=none geolibre-policy:local
+docker run --rm -p 8080:80 -e GEOLIBRE_CAPABILITIES=none ghcr.io/opengeos/geolibre:latest
 ```
 
 Allow visitors to export an image:
 
 ```bash
-docker run --rm -p 8080:80 -e GEOLIBRE_CAPABILITIES=export:data geolibre-policy:local
+docker run --rm -p 8080:80 -e GEOLIBRE_CAPABILITIES=export:data ghcr.io/opengeos/geolibre:latest
 ```
 
 A classroom instance with project authoring, data and processing tools, and
@@ -122,12 +122,12 @@ export, but no plugin installs or settings:
 ```bash
 docker run --rm -p 8080:80 \
   -e GEOLIBRE_CAPABILITIES=project:edit,data:add,processing:run,export:data \
-  geolibre-policy:local
+  ghcr.io/opengeos/geolibre:latest
 ```
 
 An embedded map can use an empty grant to refuse commands such as
 `loadProject`, `addLayer`, `addData`, `openTool`, and `exportImage`, while
-`setView`, `highlight`, and layer-visibility commands remain available.
+`setView`, `highlightFeature`, and layer-visibility commands remain available.
 
 ## Embed API behavior
 
@@ -135,7 +135,7 @@ A denied command rejects rather than silently doing nothing, so the host page
 can tell the difference between "refused" and "no effect":
 
 ```js
-await map.addData({ url: "https://example.com/data.geojson" });
+await map.addData("https://example.com/data.geojson");
 // Error: Missing data:add capability
 ```
 
