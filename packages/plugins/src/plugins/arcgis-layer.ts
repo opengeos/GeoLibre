@@ -652,7 +652,9 @@ async function addArcGISFeatureLayerAsGeoJson(
       });
       // A late fit must not pull the camera away from where the user went
       // while the request was out.
-      if (zoomTo && viewportKey(map) === viewAtAdd) app.fitBounds?.(projected);
+      // A map torn down meanwhile has no key, so it is never fitted.
+      const viewNow = viewportKey(map);
+      if (zoomTo && viewNow !== null && viewNow === viewAtAdd) app.fitBounds?.(projected);
     });
   }
   return id;
@@ -1388,12 +1390,20 @@ async function addArcGISImageServiceLayer(
   return id;
 }
 
-/** The map's visible extent as a string, for telling whether the view moved. */
-function viewportKey(map: maplibregl.Map): string {
-  // engine-audit-allow: getMap-bounds — compared only against the same map's
-  // own earlier value; the caller holds a MapLibre map (viewport loading).
-  const bounds = map.getBounds();
-  return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
+/**
+ * The map's visible extent as a string, for telling whether the view moved.
+ *
+ * @returns The key, or null when the map can no longer answer (torn down).
+ */
+function viewportKey(map: maplibregl.Map): string | null {
+  try {
+    // engine-audit-allow: getMap-bounds — compared only against the same map's
+    // own earlier value; the caller holds a MapLibre map (viewport loading).
+    const bounds = map.getBounds();
+    return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
+  } catch {
+    return null;
+  }
 }
 
 /** How long the server gets to project a feature layer's extent. */
@@ -2608,13 +2618,24 @@ function arcgisPortalItemExtentToBounds(
 }
 
 /**
- * Geographic CRSs whose degrees are within metres of WGS84's, so an extent in
- * one frames the map as-is: WGS84, NAD83, ETRS89, GDA94, GDA2020, NZGD2000,
- * NAD83(CSRS), JGD2000, JGD2011, CGCS2000 and SIRGAS 2000.
+ * Geographic CRSs numbered outside the ranges {@link isGeographicWkid} covers:
+ * JGD2011, GDA2020, NAD83(2011), NAD83(PA11) and NAD83(MA11).
  */
-const ARCGIS_GEOGRAPHIC_WKIDS = new Set([
-  4326, 4269, 4258, 4283, 7844, 4167, 4617, 4612, 6668, 4490, 4674,
-]);
+const ARCGIS_GEOGRAPHIC_WKIDS = new Set([6668, 7844, 6318, 6322, 6325]);
+
+/**
+ * Whether a WKID names a geographic (degree-based) CRS: the EPSG geographic
+ * block (4000-4999), Esri's geographic ranges, or a later EPSG geographic code.
+ * Any of them frames the map as-is, within metres of WGS84.
+ */
+function isGeographicWkid(wkid: number): boolean {
+  return (
+    (wkid >= 4000 && wkid <= 4999) ||
+    (wkid >= 37001 && wkid <= 37299) ||
+    (wkid >= 104000 && wkid <= 104999) ||
+    ARCGIS_GEOGRAPHIC_WKIDS.has(wkid)
+  );
+}
 
 function arcgisExtentToBounds(
   extent: ArcGISExtent | undefined,
@@ -2631,7 +2652,7 @@ function arcgisExtentToBounds(
   }
   // A projected extent near its false origin can fall inside the degree range,
   // so a known non-geographic WKID is never read as longitude and latitude.
-  if (wkid !== undefined && !ARCGIS_GEOGRAPHIC_WKIDS.has(wkid)) return undefined;
+  if (wkid !== undefined && !isGeographicWkid(wkid)) return undefined;
 
   const bounds: [number, number, number, number] = [
     extent.xmin,
