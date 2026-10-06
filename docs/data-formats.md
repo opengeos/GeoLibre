@@ -71,8 +71,8 @@ are described in [Web Services](user-guide/web-services.md) and
 ## 3D, time-dependent data, and media
 
 | Source | How to add it | Notes |
+| --- | --- | --- |
 | LiDAR point clouds | LiDAR Layer | LAS/LAZ and cloud-optimized point-cloud data. The layer menu exports a cloud to LAS, LAZ or COPC, and Whitebox LiDAR tool outputs load as new point cloud layers. LAS, LAZ and COPC files can also be dropped on the map. |
-| LiDAR point clouds | LiDAR Layer | LAS/LAZ and cloud-optimized point-cloud data. |
 | Gaussian splats | Gaussian Splatting | Point-based scene rendering. |
 | OGC 3D Tiles | 3D Tiles Layer | Streamed 3D tilesets; authenticated tilesets can use request headers. |
 | ArcGIS I3S | I3S integration | Integrated Mesh and 3D Object scene layers. |
