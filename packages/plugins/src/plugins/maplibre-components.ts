@@ -27,7 +27,7 @@ import {
   normalizeHtmlState,
   normalizeLegendState,
 } from "./components/gui-state";
-import { imageProjectState, restoreImagePanel, teardownImageControl } from "./components/image";
+import { imageProjectState, restoreImagePanels, teardownImageControl } from "./components/image";
 import {
   htmlControl,
   htmlPanelVisible,
@@ -93,8 +93,9 @@ export {
 } from "./components/html";
 export {
   closeImagePanel,
-  getImageControlState,
+  getImageControlStates,
   isImagePanelVisible,
+  removeImageControl,
   setImageControl,
   subscribeImagePanel,
 } from "./components/image";
@@ -105,6 +106,7 @@ export {
   IMAGE_RATIO_MIN,
   IMAGE_SIZE_MAX,
   IMAGE_SIZE_MIN,
+  MAX_IMAGE_CONTROLS,
   DEFAULT_IMAGE_STATE,
   formatAspectRatio,
   normalizeImageUrl,
@@ -332,8 +334,8 @@ function componentsProjectStateSnapshot(): ComponentsProjectState | undefined {
   if (htmlPanelVisible && htmlControl) {
     state.html = normalizeHtmlState(htmlControl.getState());
   }
-  const image = imageProjectState();
-  if (image) state.image = image;
+  const images = imageProjectState();
+  if (images) state.images = images;
 
   return Object.keys(state).length > 0 ? state : undefined;
 }
@@ -358,8 +360,8 @@ function applyComponentsProjectState(app: GeoLibreAppAPI, state: unknown): void 
     teardownHtmlControl(app);
   }
 
-  if (normalized?.image?.visible && normalized.image.url) {
-    restoreImagePanel(app, normalized.image);
+  if (normalized?.images?.length) {
+    restoreImagePanels(app, normalized.images);
   } else {
     teardownImageControl(app);
   }

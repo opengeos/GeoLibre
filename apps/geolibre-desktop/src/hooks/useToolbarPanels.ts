@@ -3,7 +3,6 @@ import {
   closeBookmarkPanel,
   closeColorbarPanel,
   closeHtmlPanel,
-  closeImagePanel,
   closeMeasurePanel,
   closeMinimapPanel,
   closePrintPanel,
@@ -17,7 +16,6 @@ import {
   isColorbarPanelVisible,
   isEarthEnginePanelVisible,
   isHtmlPanelVisible,
-  isImagePanelVisible,
   isMeasurePanelVisible,
   isMinimapPanelVisible,
   isPrintPanelVisible,
@@ -42,6 +40,8 @@ import {
   subscribeBookmarkPanel,
   subscribeColorbarPanel,
   subscribeEarthEnginePanel,
+  getImageControlStates,
+  removeImageControl,
   setImageControl,
   subscribeHtmlPanel,
   subscribeImagePanel,
@@ -67,10 +67,15 @@ export interface ToolbarPanel {
   toggle: () => void;
 }
 
-/** The Image control: its toggle opens the dialog; apply/remove edit the map. */
+/**
+ * The Image control: its toggle opens the dialog; `images` lists what is on the
+ * map and apply/remove edit it. `visible` means at least one image is shown.
+ */
 export interface ToolbarImagePanel extends ToolbarPanel {
-  apply: (state: Partial<ComponentImageState>) => void;
-  remove: () => void;
+  images: readonly ComponentImageState[];
+  /** Adds an image, or updates the one with the same id; returns its id. */
+  apply: (state: Partial<ComponentImageState>) => string | null;
+  remove: (id: string) => void;
 }
 
 /** Visibility + toggle state for every panel surfaced in the toolbar menus. */
@@ -142,10 +147,10 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     isHtmlPanelVisible,
     isHtmlPanelVisible,
   );
-  const imageVisible = useSyncExternalStore(
+  const images = useSyncExternalStore(
     subscribeImagePanel,
-    isImagePanelVisible,
-    isImagePanelVisible,
+    getImageControlStates,
+    getImageControlStates,
   );
   const measureVisible = useSyncExternalStore(
     subscribeMeasurePanel,
@@ -259,12 +264,11 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
       },
     },
     image: {
-      visible: imageVisible,
+      visible: images.length > 0,
       toggle: () => setImageControlDialogOpen(true),
-      apply: (state) => {
-        setImageControl(appApi, state);
-      },
-      remove: () => closeImagePanel(appApi),
+      images,
+      apply: (state) => setImageControl(appApi, state),
+      remove: (id) => removeImageControl(appApi, id),
     },
     measure: {
       visible: measureVisible,

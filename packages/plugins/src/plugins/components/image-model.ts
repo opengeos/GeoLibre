@@ -12,8 +12,12 @@ import type { GeoLibreMapControlPosition } from "../../types";
  */
 export type ImageSizeMode = "auto" | "fixed" | "ratio";
 
-/** Project state of the Image control. */
+/** Project state of one Image control; a map can hold several. */
 export interface ComponentImageState {
+  /** Stable id, unique among the map's images. */
+  id: string;
+  /** Heading shown in the control's header bar. */
+  title: string;
   /** Absolute http(s) URL of the image; empty until the user sets one. */
   url: string;
   sizeMode: ImageSizeMode;
@@ -25,9 +29,12 @@ export interface ComponentImageState {
   ratio: number;
   /** Map corner the image is docked to. */
   position: GeoLibreMapControlPosition;
-  /** Whether the image is on the map. */
-  visible: boolean;
+  /** Whether only the header bar is shown (the image folded away). */
+  collapsed: boolean;
 }
+
+/** The most images one map can hold. */
+export const MAX_IMAGE_CONTROLS = 20;
 
 export const IMAGE_SIZE_MIN = 16;
 export const IMAGE_SIZE_MAX = 2000;
@@ -35,13 +42,15 @@ export const IMAGE_RATIO_MIN = 0.1;
 export const IMAGE_RATIO_MAX = 10;
 
 export const DEFAULT_IMAGE_STATE: ComponentImageState = Object.freeze({
+  id: "",
+  title: "Image",
   url: "",
   sizeMode: "auto",
   width: 200,
   height: 150,
   ratio: 4 / 3,
   position: "bottom-left",
-  visible: true,
+  collapsed: false,
 });
 
 const POSITIONS = new Set<GeoLibreMapControlPosition>([
@@ -77,17 +86,24 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 }
 
 /**
- * Normalizes untrusted (project-file) Image control state, replacing anything
- * invalid with the defaults.
+ * Normalizes one untrusted (project-file) Image control entry, replacing
+ * anything invalid with the defaults.
  *
  * @param state - The raw value.
+ * @param fallbackId - The id to use when the entry carries none.
  * @returns The normalized state, or undefined when `state` is not an object.
  */
-export function normalizeImageState(state: unknown): ComponentImageState | undefined {
+export function normalizeImageState(
+  state: unknown,
+  fallbackId = "image-1",
+): ComponentImageState | undefined {
   if (!state || typeof state !== "object") return undefined;
   const candidate = state as Partial<ComponentImageState>;
   const defaults = DEFAULT_IMAGE_STATE;
+  const id = typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : fallbackId;
   return {
+    id,
+    title: typeof candidate.title === "string" ? candidate.title.slice(0, 80) : defaults.title,
     url: normalizeImageUrl(candidate.url),
     sizeMode: SIZE_MODES.has(candidate.sizeMode as ImageSizeMode)
       ? (candidate.sizeMode as ImageSizeMode)
@@ -98,8 +114,32 @@ export function normalizeImageState(state: unknown): ComponentImageState | undef
     position: POSITIONS.has(candidate.position as GeoLibreMapControlPosition)
       ? (candidate.position as GeoLibreMapControlPosition)
       : defaults.position,
-    visible: typeof candidate.visible === "boolean" ? candidate.visible : defaults.visible,
+    collapsed: typeof candidate.collapsed === "boolean" ? candidate.collapsed : defaults.collapsed,
   };
+}
+
+/**
+ * Normalizes a project's list of images: entries without a usable URL are
+ * dropped, duplicate ids are renamed, and the list is capped at
+ * {@link MAX_IMAGE_CONTROLS}.
+ *
+ * @param value - The raw list.
+ * @returns The usable entries, or undefined when `value` is not an array.
+ */
+export function normalizeImageStates(value: unknown): ComponentImageState[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<string>();
+  const result: ComponentImageState[] = [];
+  for (const [index, raw] of value.entries()) {
+    const entry = normalizeImageState(raw, `image-${index + 1}`);
+    if (!entry || !entry.url) continue;
+    let id = entry.id;
+    for (let n = 2; seen.has(id); n += 1) id = `${entry.id}-${n}`;
+    seen.add(id);
+    result.push({ ...entry, id });
+    if (result.length >= MAX_IMAGE_CONTROLS) break;
+  }
+  return result;
 }
 
 /**

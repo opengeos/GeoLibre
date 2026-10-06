@@ -2922,7 +2922,14 @@
   },
   "imageControl": {
     "title": "Image",
-    "description": "Show an image from a URL on the map, such as a logo, a north arrow or a legend.",
+    "description": "Show images from URLs on the map, such as a logo, a north arrow or a legend. Each image has a header you can click to fold it away.",
+    "listLabel": "Images on the map",
+    "titleField": "Title",
+    "edit": "Edit image",
+    "editNamed": "Edit {{title}}",
+    "removeNamed": "Remove {{title}}",
+    "newImage": "New image",
+    "close": "Close",
     "url": "Image URL",
     "urlInvalid": "Enter a full http(s) image URL.",
     "sizeMode": "Size",
@@ -2945,8 +2952,7 @@
     },
     "add": "Add to map",
     "update": "Update",
-    "remove": "Remove image",
-    "cancel": "Cancel"
+    "remove": "Remove image"
   },
   "toolbar": {
     "menu": {

@@ -5,7 +5,9 @@ import {
   DEFAULT_IMAGE_STATE,
   formatAspectRatio,
   imageLayout,
+  MAX_IMAGE_CONTROLS,
   normalizeImageState,
+  normalizeImageStates,
   normalizeImageUrl,
   parseAspectRatio,
 } from "../packages/plugins/src/plugins/components/image-model";
@@ -62,34 +64,72 @@ describe("Image control model", () => {
       height: "x",
       ratio: -3,
       position: "middle",
-      visible: "yes",
+      collapsed: "yes",
+      title: 5,
     });
-    assert.deepEqual(state, { ...DEFAULT_IMAGE_STATE, width: 2000, ratio: 0.1, url: "" });
+    assert.deepEqual(state, {
+      ...DEFAULT_IMAGE_STATE,
+      id: "image-1",
+      width: 2000,
+      ratio: 0.1,
+      url: "",
+    });
     const kept = normalizeImageState({
+      id: "logo",
+      title: "North arrow",
       url: "https://x.example/a.png",
       sizeMode: "ratio",
       width: 320,
       height: 100,
       ratio: 1.5,
       position: "top-right",
-      visible: false,
+      collapsed: true,
     });
     assert.deepEqual(kept, {
+      id: "logo",
+      title: "North arrow",
       url: "https://x.example/a.png",
       sizeMode: "ratio",
       width: 320,
       height: 100,
       ratio: 1.5,
       position: "top-right",
-      visible: false,
+      collapsed: true,
     });
+  });
+
+  it("keeps several images, dropping unusable ones and renaming duplicate ids", () => {
+    assert.equal(normalizeImageStates("nope"), undefined);
+    const images = normalizeImageStates([
+      { id: "a", url: "https://x.example/1.png" },
+      { id: "a", url: "https://x.example/2.png", collapsed: true },
+      { url: "javascript:alert(1)" },
+      { url: "https://x.example/3.png" },
+      "junk",
+    ]);
+    assert.deepEqual(
+      images?.map((image) => [image.id, image.url, image.collapsed]),
+      [
+        ["a", "https://x.example/1.png", false],
+        ["a-2", "https://x.example/2.png", true],
+        ["image-4", "https://x.example/3.png", false],
+      ],
+    );
+  });
+
+  it("caps the number of images", () => {
+    const many = Array.from({ length: MAX_IMAGE_CONTROLS + 5 }, (_, i) => ({
+      id: `i${i}`,
+      url: `https://x.example/${i}.png`,
+    }));
+    assert.equal(normalizeImageStates(many)?.length, MAX_IMAGE_CONTROLS);
   });
 
   it("is part of the Components project state", () => {
     const normalized = normalizeComponentsProjectState({
-      image: { url: "https://x.example/a.png" },
+      images: [{ id: "a", url: "https://x.example/a.png" }],
     });
-    assert.equal(normalized?.image?.url, "https://x.example/a.png");
-    assert.equal(normalizeComponentsProjectState({})?.image, undefined);
+    assert.equal(normalized?.images?.[0]?.url, "https://x.example/a.png");
+    assert.equal(normalizeComponentsProjectState({})?.images, undefined);
   });
 });
