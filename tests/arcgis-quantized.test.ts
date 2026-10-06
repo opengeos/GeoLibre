@@ -65,7 +65,27 @@ describe("decodeArcGISQuantizedFeatures", () => {
   it("recognizes only a feature set with a transform", () => {
     assert.ok(isArcGISQuantizedFeatureSet(featureSet([])));
     assert.equal(isArcGISQuantizedFeatureSet({ type: "FeatureCollection", features: [] }), false);
-    assert.equal(isArcGISQuantizedFeatureSet({ features: [], transform: { scale: [1] } }), false);
+    assert.equal(
+      isArcGISQuantizedFeatureSet({ features: [{ attributes: {} }], transform: { scale: [1] } }),
+      false,
+    );
+    assert.equal(isArcGISQuantizedFeatureSet({ features: [{ attributes: {} }] }), false);
+  });
+
+  it("accepts the transform-less page ArcGIS returns when no record matched", () => {
+    // Verbatim from a hosted FeatureServer queried over an empty extent.
+    const empty = {
+      objectIdFieldName: "FID",
+      uniqueIdField: { name: "FID", isSystemMaintained: true },
+      globalIdFieldName: "",
+      features: [],
+    };
+    assert.ok(isArcGISQuantizedFeatureSet(empty));
+    const decoded = decodeArcGISQuantizedFeatures(empty);
+    assert.deepEqual(decoded.features, []);
+    assert.equal(decoded.recordCount, 0);
+    assert.equal(decoded.exceededTransferLimit, false);
+    assert.equal(decoded.firstRecord, undefined);
   });
 
   it("undoes the delta encoding and the upper-left origin", () => {

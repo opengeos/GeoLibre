@@ -82,7 +82,8 @@ export interface ArcGISQuantizedFeatureSet {
     geometry?: EsriGeometry | null;
   }>;
   objectIdFieldName?: string;
-  transform: {
+  /** Absent when no record matched: ArcGIS omits the grid from an empty page. */
+  transform?: {
     originPosition?: string;
     scale: number[];
     translate: number[];
@@ -104,14 +105,18 @@ interface EsriGeometry {
  *   value: The parsed response body.
  *
  * Returns:
- *   True for a feature set carrying a quantization transform.
+ *   True for a feature set carrying a quantization transform, and for an empty
+ *   Esri JSON feature set: a quantized query over an extent with no records
+ *   comes back without a `transform`, and there is nothing to decode with it.
  */
 export function isArcGISQuantizedFeatureSet(value: unknown): value is ArcGISQuantizedFeatureSet {
   if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<ArcGISQuantizedFeatureSet>;
+  const candidate = value as Partial<ArcGISQuantizedFeatureSet> & { type?: unknown };
+  if (!Array.isArray(candidate.features)) return false;
+  // An empty GeoJSON FeatureCollection is not Esri JSON.
+  if (candidate.features.length === 0 && candidate.type === undefined) return true;
   const transform = candidate.transform;
   return (
-    Array.isArray(candidate.features) &&
     !!transform &&
     Array.isArray(transform.scale) &&
     Array.isArray(transform.translate) &&
@@ -143,6 +148,15 @@ export function decodeArcGISQuantizedFeatures(
   firstRecord: ArcGISRecordIdentity | undefined;
 } {
   const grid = featureSet.transform;
+  if (!grid) {
+    return {
+      type: "FeatureCollection",
+      features: [],
+      exceededTransferLimit: false,
+      recordCount: 0,
+      firstRecord: undefined,
+    };
+  }
   const [scaleX, scaleY] = grid.scale;
   const [translateX, translateY] = grid.translate;
   // "upperLeft" counts rows down from the top edge; "lowerLeft" counts up.
