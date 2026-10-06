@@ -20,8 +20,17 @@ The published extension is on the Chrome Web Store:
 Everything happens after you click the toolbar icon: the extension scans the
 document's links, and reads each reachable frame's Resource Timing buffer to
 recognize the
-services its maps requested. It holds no permission beyond `activeTab` and
-`scripting`, runs no background service worker, and stores nothing.
+services its maps requested. It holds no permission beyond `activeTab`,
+`scripting`, and `storage`, and runs no background service worker. The only
+thing `storage` holds is an optional custom GeoLibre base URL, set from the
+extension's settings page; nothing else is stored.
+
+## Settings
+
+Right-click the toolbar icon and choose **Options** (or open
+`chrome://extensions`, find the extension, and choose **Extension options**) to
+set a different GeoLibre base URL, for example a self-hosted instance. Leaving
+it unset keeps the default, `https://web.geolibre.app/`.
 
 ## Package for the Chrome Web Store
 

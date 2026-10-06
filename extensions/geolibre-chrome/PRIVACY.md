@@ -5,7 +5,8 @@ Last updated: August 18, 2026
 Open data in GeoLibre does not independently collect, retain, or sell personal
 information, page contents, or usage analytics. It does forward the complete
 dataset, service, and style URLs that the user explicitly selects,
-as described below.
+as described below. The only data it stores is an optional custom GeoLibre
+base URL, described in the settings section below.
 
 The extension uses Chrome's `activeTab` permission to inspect the current page
 only after the user clicks the extension's toolbar icon. In that moment it reads
@@ -35,9 +36,18 @@ policies and CORS configuration. Cookies and other browser-session credentials
 from the source page are not forwarded, although credentials embedded directly
 in a selected URL are part of the URL and are forwarded.
 
+The extension's settings page (open it from `chrome://extensions`) lets the
+user replace the default `https://web.geolibre.app/` destination with a
+different GeoLibre instance, for example a self-hosted one. That single URL is
+kept in Chrome's synced extension storage, which Chrome may sync across the
+user's signed-in browsers under their own Google account; it is never sent
+anywhere by the extension itself except as the destination of the "Open in
+GeoLibre" tab it opens. Clearing it in the settings page or uninstalling the
+extension removes it.
+
 The extension uses no remote code, advertising, analytics, tracking pixels,
-cookies, accounts, or extension storage of any kind. It holds no host
-permissions and no permission to observe browsing.
+cookies, or accounts. It holds no host permissions and no permission to
+observe browsing.
 
 Questions may be submitted through the GeoLibre repository:
 <https://github.com/opengeos/GeoLibre/issues>.

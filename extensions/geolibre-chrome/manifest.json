@@ -2,10 +2,10 @@
   "manifest_version": 3,
   "name": "Open data in GeoLibre",
   "description": "Find geospatial datasets and services used by the current page and open them in GeoLibre.",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "homepage_url": "https://geolibre.app/",
   "minimum_chrome_version": "106",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_title": "Open data in GeoLibre",
     "default_popup": "popup.html",
@@ -13,6 +13,10 @@
       "16": "icons/geolibre-16.png",
       "32": "icons/geolibre-32.png"
     }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
   },
   "icons": {
     "16": "icons/geolibre-16.png",

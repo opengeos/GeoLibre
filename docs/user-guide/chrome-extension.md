@@ -39,8 +39,12 @@ A manually installed copy does not update itself. To update it, download and ext
 
 The extension recognizes GeoJSON and spatial JSON, GeoParquet and Parquet, PMTiles, GeoTIFF and Cloud-Optimized GeoTIFF, ZIP archives containing GeoJSON, JSON-LD download metadata, and existing GeoLibre data links. On Source Cooperative repository pages, it also reads the embedded inventory so datasets outside the currently visible list can be selected.
 
+## Use a different GeoLibre instance
+
+By default, selected datasets open on the hosted `web.geolibre.app`. To open them on a self-hosted GeoLibre instance instead, right-click the toolbar icon, choose **Options**, and enter its URL. Choose **Reset to default** to go back to the hosted instance.
+
 ## Access and privacy
 
 GeoLibre fetches selected links directly, so the source server must allow cross-origin requests (CORS). Complete HTTP(S) URLs, including signed query parameters, are forwarded to GeoLibre. Cookies and other browser-session credentials are not forwarded, so cookie-bound or session-authenticated links might fail. Temporary `blob:` URLs cannot be transferred.
 
-The extension requests access only to the active tab, and only from the moment you click its icon. It holds no standing permission to any website, stores nothing, sends no analytics, and runs nothing in the background. Map services are recognized by reading back the addresses of the requests the page has already made, which the page records for itself, rather than by watching your browsing.
+The extension requests access only to the active tab, and only from the moment you click its icon. It holds no standing permission to any website, sends no analytics, and runs nothing in the background. The only thing it stores is the custom base URL described above, if you set one. Map services are recognized by reading back the addresses of the requests the page has already made, which the page records for itself, rather than by watching your browsing.

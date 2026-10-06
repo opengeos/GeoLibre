@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open data in GeoLibre — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <img class="brand-mark" src="icons/geolibre-48.png" alt="" width="42" height="42" />
+        <div>
+          <p class="eyebrow">GeoLibre field reader</p>
+          <h1>Settings</h1>
+        </div>
+      </header>
+
+      <form id="settings-form">
+        <label for="base-url">GeoLibre base URL</label>
+        <input
+          id="base-url"
+          type="text"
+          inputmode="url"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="https://web.geolibre.app/"
+        />
+        <p class="field-hint">
+          Where selected datasets open. Leave at the default unless you run your own GeoLibre
+          instance.
+        </p>
+        <div class="actions">
+          <button id="save-button" type="submit">Save</button>
+          <button id="reset-button" type="button" class="text-button">Reset to default</button>
+        </div>
+        <p id="status" role="status" aria-live="polite"></p>
+      </form>
+    </main>
+    <script type="module" src="options.mjs"></script>
+  </body>
+</html>

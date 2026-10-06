@@ -35,7 +35,7 @@ English
 
 ## Permission justification
 
-Each block below is self-contained and is pasted verbatim into the matching field of the Chrome Web Store dashboard's Privacy tab. Keep them in sync with `manifest.json`: a permission added there needs a justification here and in the dashboard, or the version is rejected. As of 0.3.0 the manifest requests `activeTab` and `scripting` and nothing else, so the storage, webRequest, and host-permission fields no longer appear.
+Each block below is self-contained and is pasted verbatim into the matching field of the Chrome Web Store dashboard's Privacy tab. Keep them in sync with `manifest.json`: a permission added there needs a justification here and in the dashboard, or the version is rejected. As of 0.4.0 the manifest requests `activeTab`, `scripting`, and `storage`, so the webRequest and host-permission fields still do not appear.
 
 ### activeTab
 
@@ -45,6 +45,10 @@ activeTab grants temporary access to the current page only after the user clicks
 
 scripting injects two packaged functions into the active tab when the user opens the popup. One reads the page's links and metadata to find dataset files. The other reads back the addresses of the requests the page has already made, so the map services it draws can be recognized; a map fetches those from JavaScript, so they are never links in the document. Both functions are contained in the extension package, so no remote code is involved. They run once per invocation and return their results to the popup.
 
+### storage
+
+storage holds a single setting: the base URL "Open in GeoLibre" opens, in case the user runs their own GeoLibre instance instead of the hosted default. It is read only when the popup opens and only written from the extension's own settings page. No other data is stored.
+
 ### Not requested
 
-The extension requests no host permissions, and no permission to watch network requests, store data, or run in the background. It does not request browsing history, downloads, cookies, tabs beyond the active one, or remote code. Answer "No, I am not using remote code": every script it runs ships inside the package.
+The extension requests no host permissions, and no permission to watch network requests or run in the background. It does not request browsing history, downloads, cookies, tabs beyond the active one, or remote code. Answer "No, I am not using remote code": every script it runs ships inside the package.

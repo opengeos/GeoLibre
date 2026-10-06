@@ -1,3 +1,4 @@
+import { loadBaseUrl } from "./base-url-settings.mjs";
 import { collectRequestedUrls, scanDocumentForDatasets } from "./scanner.mjs";
 import { collectServiceCandidates, mergeServiceCandidates } from "./service-scanner.mjs";
 import { buildGeoLibreUrl } from "./url-builder.mjs";
@@ -193,7 +194,8 @@ for (const tab of elements.filterTabs) {
 elements.openButton.addEventListener("click", async () => {
   elements.openError.hidden = true;
   try {
-    const url = buildGeoLibreUrl(selectedDatasets());
+    const baseUrl = await loadBaseUrl();
+    const url = buildGeoLibreUrl(selectedDatasets(), baseUrl);
     await chrome.tabs.create({ url });
     window.close();
   } catch (error) {

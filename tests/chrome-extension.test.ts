@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseHTML } from "linkedom";
+import {
+  loadBaseUrl,
+  normalizeBaseUrl,
+  resetBaseUrl,
+  saveBaseUrl,
+} from "../extensions/geolibre-chrome/base-url-settings.mjs";
 import { scanDocumentForDatasets } from "../extensions/geolibre-chrome/scanner.mjs";
 import {
   classifyServiceRequest,
@@ -8,7 +14,32 @@ import {
   collectServiceCandidates,
   mergeServiceCandidates,
 } from "../extensions/geolibre-chrome/service-scanner.mjs";
-import { buildGeoLibreUrl } from "../extensions/geolibre-chrome/url-builder.mjs";
+import { buildGeoLibreUrl, GEOLIBRE_WEB_URL } from "../extensions/geolibre-chrome/url-builder.mjs";
+
+/** A minimal in-memory stand-in for chrome.storage.sync, scoped to one test. */
+function withStorage(run) {
+  const store = {};
+  const chromeStub = {
+    storage: {
+      sync: {
+        async get(key) {
+          return Object.hasOwn(store, key) ? { [key]: store[key] } : {};
+        },
+        async set(values) {
+          Object.assign(store, values);
+        },
+        async remove(key) {
+          delete store[key];
+        },
+      },
+    },
+  };
+  const previous = globalThis.chrome;
+  Object.assign(globalThis, { chrome: chromeStub });
+  return Promise.resolve(run()).finally(() => {
+    Object.assign(globalThis, { chrome: previous });
+  });
+}
 
 function scan(html: string, url = "https://catalog.example.com/page/") {
   const { document } = parseHTML(html);
@@ -464,6 +495,56 @@ describe("GeoLibre Chrome extension URL builder", () => {
     );
     assert.equal(bare.searchParams.has("serviceLayer"), false);
     assert.equal(bare.searchParams.has("serviceStyle"), false);
+  });
+});
+
+describe("GeoLibre Chrome extension base URL settings", () => {
+  it("falls back to the default base URL when storage is empty", async () => {
+    await withStorage(async () => {
+      assert.equal(await loadBaseUrl(), GEOLIBRE_WEB_URL);
+    });
+  });
+
+  it("uses the stored base URL once one is saved", async () => {
+    await withStorage(async () => {
+      await saveBaseUrl("https://geolibre.example.com");
+      assert.equal(await loadBaseUrl(), "https://geolibre.example.com/");
+    });
+  });
+
+  it("reverts to the default after a reset", async () => {
+    await withStorage(async () => {
+      await saveBaseUrl("https://geolibre.example.com");
+      await resetBaseUrl();
+      assert.equal(await loadBaseUrl(), GEOLIBRE_WEB_URL);
+    });
+  });
+
+  it("normalizes a missing trailing slash but leaves one already there alone", () => {
+    assert.equal(normalizeBaseUrl("https://geolibre.example.com"), "https://geolibre.example.com/");
+    assert.equal(
+      normalizeBaseUrl("https://geolibre.example.com/"),
+      "https://geolibre.example.com/",
+    );
+    assert.equal(
+      normalizeBaseUrl("  https://geolibre.example.com  "),
+      "https://geolibre.example.com/",
+    );
+  });
+
+  it("stores the normalized form, including a subpath", async () => {
+    await withStorage(async () => {
+      const saved = await saveBaseUrl("https://example.com/geolibre");
+      assert.equal(saved, "https://example.com/geolibre/");
+      assert.equal(await loadBaseUrl(), "https://example.com/geolibre/");
+    });
+  });
+
+  it("rejects a non-HTTP(S) or unparsable base URL", async () => {
+    await withStorage(async () => {
+      await assert.rejects(() => saveBaseUrl("ftp://example.com"), /http/);
+      await assert.rejects(() => saveBaseUrl("not a url"), /valid URL/);
+    });
   });
 });
 
