@@ -186,7 +186,8 @@ describe("AttributeTable", () => {
         },
       }),
     );
-    assert.equal((button as HTMLButtonElement).disabled, false);
+    const settled = screen.getByRole("button", { name: "Refresh features" });
+    assert.equal((settled as HTMLButtonElement).disabled, false);
     assert.ok(screen.getByText("HTTP 503"));
   });
 

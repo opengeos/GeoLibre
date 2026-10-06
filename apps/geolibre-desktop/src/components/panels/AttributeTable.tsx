@@ -712,11 +712,19 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
    * @param target - The layer to refresh.
    */
   const refreshLayerRows = async (target: GeoLibreLayer) => {
-    if (!refresh) return;
+    // Re-checked here because an in-flight ArcGIS save is module state the
+    // render-time check above is not subscribed to.
+    if (!refresh || arcGISLayerHasPendingEdits(target.id)) return;
+    const syncedBefore = target.connection?.lastSyncedAt;
     await refresh.handleRefreshLayer(target);
-    if (!isVectorControlAttributeSource(target) || target.type !== "vector-tiles") return;
+    if (!isVectorControlAttributeSource(target)) return;
     const current = useAppStore.getState().layers.find((l) => l.id === target.id);
-    if (current?.type === "vector-tiles" && current.geojson) {
+    // The handler reports failure through the layer, not by throwing: only a
+    // new sync stamp with no error means the control actually reloaded. A
+    // failed, deduped, or skipped refresh keeps the rows the table has.
+    const synced =
+      current?.connection?.lastSyncedAt !== syncedBefore && !current?.connection?.lastError;
+    if (synced && current?.type === "vector-tiles" && current.geojson) {
       updateLayer(target.id, { geojson: undefined });
     }
   };
