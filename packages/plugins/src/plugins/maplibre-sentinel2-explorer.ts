@@ -32,7 +32,7 @@ import {
   baselineOffset,
   filterScenes,
   loadMgrsGrid,
-  loadMonthSlice,
+  loadMonthSlices,
   monthsIn,
   sceneDirectory,
   searchTileScenes,
@@ -236,6 +236,8 @@ let syncSceneButtons: (() => void) | null = null;
 let refreshPanel: (() => void) | null = null;
 /** Per-tile aggregates of the painted window. */
 let tileStats = new Map<string, S2TileStats>();
+/** What {@link tileStats} was aggregated from: collection, months, metric. */
+let tileStatsKey = "";
 /** The decoded grid of the painted collection. */
 let grid: FeatureCollection<Geometry, S2GridProperties> | null = null;
 let gridCollection: S2CollectionId | null = null;
@@ -444,12 +446,18 @@ async function paintGrid(): Promise<void> {
       gridCollection = collection.id;
     }
     const months = monthsIn(state.from, state.to);
-    const slices = await Promise.all(months.map((ym) => loadMonthSlice(collection, ym)));
-    if (seq !== paintSeq) return;
-    tileStats = aggregateMonths(
-      slices.filter((rows): rows is NonNullable<typeof rows> => rows !== null),
-      state.metric,
-    );
+    // The aggregate depends only on the collection, months and metric, so a
+    // filter drag repaints without reading or aggregating anything.
+    const statsKey = `${collection.id}|${months.join(",")}|${state.metric}`;
+    if (statsKey !== tileStatsKey) {
+      const slices = await loadMonthSlices(collection, months);
+      if (seq !== paintSeq) return;
+      tileStats = aggregateMonths(
+        slices.filter((rows): rows is NonNullable<typeof rows> => rows !== null),
+        state.metric,
+      );
+      tileStatsKey = statsKey;
+    }
     const filters = {
       maxCloud: state.maxCloud,
       minCoverage: state.minCoverage,
@@ -481,18 +489,20 @@ async function paintGrid(): Promise<void> {
       void (map.getSource(GRID_SOURCE_ID) as GeoJSONSource | undefined)?.setData(painted);
       grid = painted as FeatureCollection<Geometry, S2GridProperties>;
     }
-    setStatus(
-      state.tile
-        ? null
-        : tr(
-            "gridPainted",
-            "{{passing}} of {{total}} tiles pass the filters. Click a tile to find its scenes.",
-            {
-              passing: passing.toLocaleString(),
-              total: tileStats.size.toLocaleString(),
-            },
-          ),
-    );
+    // With a tile selected the status line belongs to its search (the read
+    // plan, or an error); a repaint must not wipe it.
+    if (!state.tile) {
+      setStatus(
+        tr(
+          "gridPainted",
+          "{{passing}} of {{total}} tiles pass the filters. Click a tile to find its scenes.",
+          {
+            passing: passing.toLocaleString(),
+            total: tileStats.size.toLocaleString(),
+          },
+        ),
+      );
+    }
   } catch (error) {
     if (seq !== paintSeq) return;
     setStatus(
@@ -1404,6 +1414,11 @@ export const maplibreSentinel2ExplorerPlugin: GeoLibrePlugin = {
     removeOverlays(mapOf());
     state = initialState();
     tileStats = new Map();
+    tileStatsKey = "";
+    // `grid` carries the last window's colors baked in; the raw grid stays
+    // cached in the data module.
+    grid = null;
+    gridCollection = null;
     appRef = null;
   },
 };

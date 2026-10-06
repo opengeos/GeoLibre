@@ -396,8 +396,8 @@ function partMeta(url: string, sidecars: boolean): Promise<PartMeta> {
         headers: { Range: `bytes=-${TAIL_BYTES}` },
       });
       // An unpublished part (a future month's tail) is empty, not an error.
-      // Object stores answer 403 for a key they will not talk about.
-      if (tail.status === 404 || tail.status === 403) {
+      // Only a 404 means that: a 403 (blocked, rate limited) is surfaced.
+      if (tail.status === 404) {
         return {
           url,
           absent: true,
@@ -763,8 +763,15 @@ export function filterScenes(
 // Scene imagery
 // ---------------------------------------------------------------------------
 
-/** Hosts a scene's COGs may be read from. */
-const COG_HOST_RE = /(^|\.)(amazonaws\.com|source\.coop)$/;
+/**
+ * The buckets Earth Search keeps Sentinel-2 L2A COGs in: Collection 1 and the
+ * original collection. A scene directory anywhere else is refused, so a
+ * crafted project or tile URL cannot point the reader at another host.
+ */
+export const S2_SCENE_HOSTS: ReadonlySet<string> = new Set([
+  "e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com",
+  "sentinel-cogs.s3.us-west-2.amazonaws.com",
+]);
 
 /**
  * The directory holding a scene's COGs (`TCI.tif`, `B04.tif`, `SCL.tif`, ...),
@@ -782,7 +789,7 @@ export function sceneDirectory(thumbnailUrl: string): string {
     throw new Error(`The scene has no usable thumbnail URL: ${thumbnailUrl}`);
   }
   if (url.protocol !== "https:") throw new Error(`Thumbnail URL is not https: ${thumbnailUrl}`);
-  if (!COG_HOST_RE.test(url.hostname)) {
+  if (!S2_SCENE_HOSTS.has(url.hostname)) {
     throw new Error(`Thumbnail URL is on an unexpected host: ${url.hostname}`);
   }
   url.pathname = url.pathname.replace(/\/[^/]*$/, "");
@@ -1031,7 +1038,7 @@ export function loadMonthSlice(collection: S2Collection, ym: string): Promise<S2
   if (!cached) {
     cached = (async () => {
       const res = await fetch(url);
-      if (res.status === 404 || res.status === 403) return null;
+      if (res.status === 404) return null;
       if (!res.ok) throw new Error(`${url} returned HTTP ${res.status}`);
       const buf = await res.arrayBuffer();
       const rows = (await parquetReadObjects({
@@ -1108,4 +1115,33 @@ export function loadMgrsGrid(
     cached.catch(() => gridCache.delete(url));
   }
   return cached;
+}
+
+/** Most month slices fetched at once. */
+const MONTH_FETCH_CONCURRENCY = 6;
+
+/**
+ * The month slices of a window, at most {@link MONTH_FETCH_CONCURRENCY} in
+ * flight, so a multi-year window does not fire a hundred requests at once.
+ *
+ * @param collection - The item collection whose stats to read.
+ * @param months - `YYYY-MM` months, in order.
+ * @returns Each month's rows (null when the month has no slice), in order.
+ */
+export async function loadMonthSlices(
+  collection: S2Collection,
+  months: readonly string[],
+): Promise<Array<S2MonthRow[] | null>> {
+  const out = new Array<S2MonthRow[] | null>(months.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(MONTH_FETCH_CONCURRENCY, months.length) }, async () => {
+      while (next < months.length) {
+        const i = next;
+        next += 1;
+        out[i] = await loadMonthSlice(collection, months[i]);
+      }
+    }),
+  );
+  return out;
 }

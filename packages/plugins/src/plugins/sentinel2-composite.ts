@@ -17,7 +17,7 @@
 import { addProtocol, type RequestParameters } from "maplibre-gl";
 import { fromUrl, type GeoTIFF, type GeoTIFFImage } from "geotiff";
 import proj4 from "proj4";
-import { bandRescale } from "./sentinel2-explorer-data";
+import { S2_SCENE_HOSTS, bandRescale } from "./sentinel2-explorer-data";
 
 /** The URL scheme of composite tiles. */
 export const S2_COMPOSITE_PROTOCOL = "s2composite";
@@ -109,10 +109,7 @@ export function parseCompositeTileUrl(url: string): CompositeTileRequest | null 
   if (!isComposite(key) || (offset !== 0 && offset !== 1000)) return null;
   try {
     const parsed = new URL(dir);
-    if (
-      parsed.protocol !== "https:" ||
-      !/(^|\.)(amazonaws\.com|source\.coop)$/.test(parsed.hostname)
-    ) {
+    if (parsed.protocol !== "https:" || !S2_SCENE_HOSTS.has(parsed.hostname)) {
       return null;
     }
   } catch {
@@ -439,7 +436,13 @@ export function registerSentinel2CompositeProtocol(): void {
       if (!request) throw new Error(`Invalid Sentinel-2 composite tile: ${params.url}`);
       const rgba = await renderCompositeTile(request, controller.signal);
       if (!rgba) {
-        emptyTile ??= rgbaToPng(new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4));
+        // A failed encode must not poison every later empty tile.
+        emptyTile ??= rgbaToPng(new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4)).catch(
+          (error: unknown) => {
+            emptyTile = null;
+            throw error;
+          },
+        );
         return { data: await emptyTile };
       }
       return { data: await rgbaToPng(rgba) };

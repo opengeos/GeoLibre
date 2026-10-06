@@ -142,6 +142,8 @@ describe("Sentinel-2 explorer scenes", () => {
     assert.throws(() => sceneDirectory("http://sentinel-cogs.s3.amazonaws.com/a/b.jpg"));
     assert.throws(() => sceneDirectory("https://evil.example.com/a/b.jpg"));
     assert.throws(() => sceneDirectory("not a url"));
+    // Only Earth Search's two Sentinel-2 buckets, not any S3 bucket.
+    assert.throws(() => sceneDirectory("https://other-bucket.s3.amazonaws.com/a/b.jpg"));
   });
 
   it("offsets reflectance stretches from processing baseline 04.00", () => {
@@ -226,6 +228,11 @@ describe("Sentinel-2 explorer composites", () => {
       encodeURIComponent("https://evil.example.com/x"),
     );
     assert.equal(parseCompositeTileUrl(foreign), null);
+    const otherBucket = url.replace(
+      encodeURIComponent(dir),
+      encodeURIComponent("https://other-bucket.s3.us-west-2.amazonaws.com/x"),
+    );
+    assert.equal(parseCompositeTileUrl(otherBucket), null);
     assert.equal(parseCompositeTileUrl(url.replace("c=ndvi", "c=toString")), null);
     assert.equal(parseCompositeTileUrl(url.replace("o=1000", "o=7")), null);
   });
