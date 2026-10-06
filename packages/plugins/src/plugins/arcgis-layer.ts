@@ -606,7 +606,7 @@ async function addArcGISFeatureLayerAsGeoJson(
   const id = store.addGeoJsonLayer(name, initialData, refreshUrl, options.beforeLayerId ?? null);
   // A viewport-loaded layer only ever holds the features in view, so Zoom to
   // layer needs the service's extent stored on the layer to frame the data.
-  const bounds = await resolveArcGISFeatureLayerBounds(queryUrl, layerInfo, options);
+  const bounds = arcgisExtentToBounds(layerInfo.extent);
 
   store.updateLayer(id, {
     source: {
@@ -634,8 +634,22 @@ async function addArcGISFeatureLayerAsGeoJson(
 
   arcgisEditOptions.set(id, { ...options, onProgress: undefined });
   ensureArcGISFeatureLoaderCleanup();
-  if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
+  const zoomTo = options.zoomTo ?? shouldZoomToNewLayers();
+  if (bounds && zoomTo) app.fitBounds?.(bounds);
   if (map) startArcGISViewportLoader(id, map, queryUrl, options, () => Promise.resolve(layerInfo));
+  if (!bounds) {
+    // An extent in a local projected CRS is projected by the server. That is a
+    // round trip the layer does not wait on: the extent is patched in when it
+    // lands, if the layer is still there.
+    void fetchProjectedArcGISFeatureLayerBounds(queryUrl, options).then((projected) => {
+      const layer = useAppStore.getState().layers.find((item) => item.id === id);
+      if (!projected || !layer || layer.metadata.bounds) return;
+      useAppStore.getState().updateLayer(id, {
+        metadata: { ...layer.metadata, bounds: projected },
+      });
+      if (zoomTo) app.fitBounds?.(projected);
+    });
+  }
   return id;
 }
 
@@ -1369,26 +1383,25 @@ async function addArcGISImageServiceLayer(
   return id;
 }
 
+/** How long the server gets to project a feature layer's extent. */
+const ARCGIS_EXTENT_TIMEOUT_MS = 10_000;
+
 /**
- * A FeatureServer layer's extent in WGS84.
+ * Ask the server for a FeatureServer layer's extent in WGS84.
  *
- * The layer metadata's own `extent` is used when it is already geographic or
- * Web Mercator; a layer published in a local projected CRS asks the server to
- * project it instead (see {@link resolveArcGISMapServiceBounds}). Failure is
- * not fatal: the layer simply has no stored extent.
+ * For a layer published in a local projected CRS, whose metadata `extent`
+ * {@link arcgisExtentToBounds} cannot convert (see
+ * {@link resolveArcGISMapServiceBounds}). Failure, including a timeout, is not
+ * fatal: the layer simply has no stored extent.
  *
  * @param queryUrl - The layer's `/query` endpoint.
- * @param layerInfo - The layer's `?f=json` metadata.
  * @param options - The ArcGIS layer options, for the token.
  * @returns `[west, south, east, north]`, or undefined when unknown.
  */
-async function resolveArcGISFeatureLayerBounds(
+async function fetchProjectedArcGISFeatureLayerBounds(
   queryUrl: string,
-  layerInfo: ArcGISFeatureLayerInfo,
   options: ArcGISLayerOptions,
 ): Promise<[number, number, number, number] | undefined> {
-  const bounds = arcgisExtentToBounds(layerInfo.extent);
-  if (bounds) return bounds;
   try {
     const result = await fetchArcGISJson<{ extent?: ArcGISExtent }>(
       appendArcGISParams(queryUrl, {
@@ -1399,6 +1412,7 @@ async function resolveArcGISFeatureLayerBounds(
       }),
       options,
       undefined,
+      AbortSignal.timeout(ARCGIS_EXTENT_TIMEOUT_MS),
     );
     return arcgisExtentToBounds(result.extent);
   } catch {

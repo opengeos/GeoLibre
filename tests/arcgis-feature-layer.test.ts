@@ -505,8 +505,9 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.deepEqual(view.offCalls, [["moveend", move]]);
   });
 
-  it("asks the server to project a projected-CRS extent for Zoom to layer", async () => {
+  it("asks the server to project a projected-CRS extent without waiting on it", async () => {
     const extentRequests: URL[] = [];
+    const extentResponses: Array<(response: Response) => void> = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = new URL(typeof input === "string" ? input : input.toString());
       if (!url.pathname.endsWith("/query")) {
@@ -524,37 +525,53 @@ describe("addArcGISLayer (feature layer)", () => {
       }
       if (url.searchParams.get("returnExtentOnly") === "true") {
         extentRequests.push(url);
-        return jsonResponse({
-          extent: {
-            xmin: -115.4,
-            ymin: 36.0,
-            xmax: -115.0,
-            ymax: 36.3,
-            spatialReference: { wkid: 4326 },
-          },
-        });
+        return new Promise<Response>((resolve) => extentResponses.push(resolve));
       }
       return jsonResponse({ type: "FeatureCollection", features: [] });
     }) as typeof fetch;
+    const projectedExtent = () =>
+      jsonResponse({
+        extent: {
+          xmin: -115.4,
+          ymin: 36.0,
+          xmax: -115.0,
+          ymax: 36.3,
+          spatialReference: { wkid: 4326 },
+        },
+      });
 
     const view = fakeViewportMap([144, -39, 146, -37]);
     app = {
       getMap: () => view.map,
       fitBounds: (bounds: [number, number, number, number]) => fitBoundsCalls.push(bounds),
     } as unknown as GeoLibreAppAPI;
+    const add = () =>
+      addArcGISLayer(app, { layerType: "feature", sourceType: "url", url: SERVICE_URL });
+    const layerById = (id: string) => useAppStore.getState().layers.find((item) => item.id === id);
 
-    const id = await addArcGISLayer(app, {
-      layerType: "feature",
-      sourceType: "url",
-      url: SERVICE_URL,
-    });
+    // The add resolves, fully set up, while the extent request is still out.
+    const id = await add();
     await settle();
-
     assert.equal(extentRequests.length, 1);
     assert.equal(extentRequests[0].searchParams.get("outSR"), "4326");
-    const layer = useAppStore.getState().layers.find((item) => item.id === id);
-    assert.deepEqual(layer?.metadata.bounds, [-115.4, 36.0, -115.0, 36.3]);
+    assert.equal(layerById(id)?.metadata.viewportLoading, true);
+    assert.equal(layerById(id)?.metadata.bounds, undefined);
+    assert.deepEqual(fitBoundsCalls, []);
+
+    extentResponses[0](projectedExtent());
+    await settle();
+    assert.deepEqual(layerById(id)?.metadata.bounds, [-115.4, 36.0, -115.0, 36.3]);
+    assert.deepEqual(fitBoundsCalls, [[-115.4, 36.0, -115.0, 36.3]]);
     useAppStore.getState().removeLayer(id);
+
+    // A layer removed before its extent lands is left alone.
+    const removed = await add();
+    await settle();
+    useAppStore.getState().removeLayer(removed);
+    extentResponses[1](projectedExtent());
+    await settle();
+    assert.equal(layerById(removed), undefined);
+    assert.equal(fitBoundsCalls.length, 1);
   });
 
   it("ignores a superseded viewport query that fails for its own reasons", async () => {
