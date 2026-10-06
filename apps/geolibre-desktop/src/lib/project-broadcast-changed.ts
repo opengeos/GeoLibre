@@ -16,7 +16,7 @@ type AppState = ReturnType<typeof useAppStore.getState>;
  * (viewport rectangles + opt-in follow-host) instead.
  *
  * The compared fields must stay aligned with `buildProjectSnapshot` (minus
- * camera): models, processing history, dashboard widgets, map grid, and the
+ * camera): models, processing history, dashboard widgets, bookmarks, map grid, and the
  * project style library are part of the snapshot payload and must trigger a
  * broadcast when they change on their own. Plugin activation/settings are
  * participant-local: plugin-created layer records trigger their own broadcast,
@@ -42,6 +42,8 @@ export function projectChanged(a: AppState, b: AppState): boolean {
     a.models !== b.models ||
     a.processingHistory !== b.processingHistory ||
     a.widgets !== b.widgets ||
+    a.bookmarks !== b.bookmarks ||
+    a.bookmarkGroups !== b.bookmarkGroups ||
     a.dashboardColumns !== b.dashboardColumns ||
     a.mapLayout !== b.mapLayout ||
     a.secondaryMapViews !== b.secondaryMapViews ||

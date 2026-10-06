@@ -250,5 +250,38 @@
         ]
       }
     ]
-  }
+  },
+  "bookmarkGroups": [
+    {
+      "id": "hoods",
+      "name": "Neighborhoods",
+      "collapsed": false
+    }
+  ],
+  "bookmarks": [
+    {
+      "id": "downtown",
+      "name": "Downtown",
+      "lng": -83.92,
+      "lat": 35.96,
+      "zoom": 14.0,
+      "pitch": 30.0,
+      "bearing": 340.0,
+      "createdAt": 1700000000000,
+      "groupId": "hoods",
+      "extra": {
+        "visibleLayerIds": ["cities"]
+      }
+    },
+    {
+      "id": "region",
+      "name": "Region",
+      "lng": -84.0,
+      "lat": 36.0,
+      "zoom": 6.0,
+      "pitch": 0.0,
+      "bearing": 0.0,
+      "createdAt": 1700000000001
+    }
+  ]
 }

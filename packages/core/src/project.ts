@@ -16,6 +16,8 @@ import {
   MIN_DASHBOARD_COLUMNS,
   PROJECT_VERSION,
   type DashboardWidget,
+  type ProjectBookmark,
+  type ProjectBookmarkGroup,
   type DashboardWidgetAggregation,
   type DashboardWidgetType,
   type GeoLibreLayer,
@@ -456,6 +458,7 @@ export function parseProject(json: string): GeoLibreProject {
     models: normalizeModels(data.models) ?? undefined,
     processingHistory: normalizeProcessingHistory(data.processingHistory) ?? undefined,
     widgets: normalizeWidgets(data.widgets) ?? undefined,
+    ...bookmarkFields(data.bookmarks, data.bookmarkGroups),
     ...(data.dashboardColumns === undefined
       ? {}
       : { dashboardColumns: normalizeDashboardColumns(data.dashboardColumns) }),
@@ -1215,6 +1218,106 @@ const INDICATOR_AGGREGATIONS: readonly IndicatorAggregation[] = [
   "median",
 ];
 
+/** Bookmarks kept per project, as the panel's own default limit allows. */
+export const MAX_PROJECT_BOOKMARKS = 500;
+
+/**
+ * Coerce an untrusted `bookmarkGroups` array into valid folders: drops entries
+ * without a string id and de-duplicates by id. A missing name becomes
+ * "Folder"; `collapsed` defaults to false.
+ *
+ * @param value Raw `bookmarkGroups` value from the project JSON.
+ * @returns The folders (possibly empty).
+ */
+export function normalizeBookmarkGroups(value: unknown): ProjectBookmarkGroup[] {
+  if (!Array.isArray(value)) return [];
+  const groups: ProjectBookmarkGroup[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const entry = raw as Record<string, unknown>;
+    const id = typeof entry.id === "string" ? entry.id.trim() : "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    groups.push({
+      id,
+      name: typeof entry.name === "string" && entry.name.trim() ? entry.name : "Folder",
+      collapsed: entry.collapsed === true,
+    });
+  }
+  return groups;
+}
+
+/**
+ * Coerce an untrusted `bookmarks` array into valid saved views: drops entries
+ * without a string id or a finite, in-range camera, de-duplicates by id, wraps
+ * the bearing into 0-360, and drops a `groupId` that names no folder in
+ * `groups`. Keeps at most {@link MAX_PROJECT_BOOKMARKS}.
+ *
+ * @param value Raw `bookmarks` value from the project JSON.
+ * @param groups The project's (normalized) folders.
+ * @returns The bookmarks (possibly empty).
+ */
+export function normalizeBookmarks(
+  value: unknown,
+  groups: readonly ProjectBookmarkGroup[] = [],
+): ProjectBookmark[] {
+  if (!Array.isArray(value)) return [];
+  const groupIds = new Set(groups.map((group) => group.id));
+  const bookmarks: ProjectBookmark[] = [];
+  const seen = new Set<string>();
+  const finite = (input: unknown): number | null =>
+    typeof input === "number" && Number.isFinite(input) ? input : null;
+  for (const raw of value) {
+    if (bookmarks.length >= MAX_PROJECT_BOOKMARKS) break;
+    if (!raw || typeof raw !== "object") continue;
+    const entry = raw as Record<string, unknown>;
+    const id = typeof entry.id === "string" ? entry.id.trim() : "";
+    const lng = finite(entry.lng);
+    const lat = finite(entry.lat);
+    const zoom = finite(entry.zoom);
+    if (!id || seen.has(id) || lng === null || lat === null || zoom === null) continue;
+    if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || zoom < 0 || zoom > 24) continue;
+    seen.add(id);
+    const pitch = Math.min(85, Math.max(0, finite(entry.pitch) ?? 0));
+    const bearing = (((finite(entry.bearing) ?? 0) % 360) + 360) % 360;
+    const bookmark: ProjectBookmark = {
+      id,
+      name: typeof entry.name === "string" ? entry.name : "",
+      lng,
+      lat,
+      zoom,
+      pitch,
+      bearing,
+      createdAt: finite(entry.createdAt) ?? 0,
+    };
+    // Folder ids are trimmed, so compare a trimmed groupId with them.
+    const groupId = typeof entry.groupId === "string" ? entry.groupId.trim() : "";
+    if (groupId && groupIds.has(groupId)) bookmark.groupId = groupId;
+    if (entry.extra && typeof entry.extra === "object" && !Array.isArray(entry.extra)) {
+      bookmark.extra = entry.extra as Record<string, unknown>;
+    }
+    bookmarks.push(bookmark);
+  }
+  return bookmarks;
+}
+
+/**
+ * The `bookmarks`/`bookmarkGroups` project fields for normalized input, each
+ * omitted when empty so a bookmark-less project stays free of the keys.
+ */
+function bookmarkFields(
+  rawBookmarks: unknown,
+  rawGroups: unknown,
+): { bookmarks?: ProjectBookmark[]; bookmarkGroups?: ProjectBookmarkGroup[] } {
+  const bookmarkGroups = normalizeBookmarkGroups(rawGroups);
+  const bookmarks = normalizeBookmarks(rawBookmarks, bookmarkGroups);
+  return {
+    ...(bookmarks.length > 0 ? { bookmarks } : {}),
+    ...(bookmarkGroups.length > 0 ? { bookmarkGroups } : {}),
+  };
+}
+
 /**
  * Coerce an untrusted (possibly hand-edited) `widgets` array into valid
  * {@link DashboardWidget} records. Drops widgets without a usable id, layer id,
@@ -1850,6 +1953,8 @@ export function projectFromStore(state: {
   models?: ProcessingModel[] | null;
   processingHistory?: ProcessingRun[] | null;
   widgets?: DashboardWidget[] | null;
+  bookmarks?: ProjectBookmark[] | null;
+  bookmarkGroups?: ProjectBookmarkGroup[] | null;
   dashboardColumns?: number;
   mapLayout?: MapGridLayout;
   secondaryMapViews?: SecondaryMapView[];
@@ -1924,6 +2029,7 @@ export function projectFromStore(state: {
     ...(models ? { models } : {}),
     ...(processingHistory ? { processingHistory } : {}),
     ...(widgets ? { widgets } : {}),
+    ...bookmarkFields(state.bookmarks, state.bookmarkGroups),
     ...(dashboardColumns !== DEFAULT_DASHBOARD_COLUMNS ? { dashboardColumns } : {}),
     ...(persistGrid
       ? {
@@ -2239,6 +2345,8 @@ export function applyProjectToStore(project: GeoLibreProject): {
   models: ProcessingModel[];
   processingHistory: ProcessingRun[];
   widgets: DashboardWidget[];
+  bookmarks: ProjectBookmark[];
+  bookmarkGroups: ProjectBookmarkGroup[];
   dashboardColumns: number;
   mapLayout: MapGridLayout;
   secondaryMapViews: SecondaryMapView[];
@@ -2311,6 +2419,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     orphanIds.size > 0 ? scrubCommentsForRemovedLayers(comments, orphanIds) : comments;
   const scrubbedLegend =
     orphanIds.size > 0 ? scrubLegendForRemovedLayers(legend, orphanIds) : legend;
+  const bookmarkGroups = normalizeBookmarkGroups(project.bookmarkGroups);
   // The composer's data/atlas blocks name a layer directly rather than through
   // `allReferencedIds`, so they are scrubbed against the surviving layer set.
   const printLayout = scrubPrintLayoutForLayers(
@@ -2335,6 +2444,8 @@ export function applyProjectToStore(project: GeoLibreProject): {
     models: normalizeModels(project.models) ?? [],
     processingHistory: normalizeProcessingHistory(project.processingHistory) ?? [],
     widgets: scrubbedWidgets,
+    bookmarkGroups,
+    bookmarks: normalizeBookmarks(project.bookmarks, bookmarkGroups),
     dashboardColumns: normalizeDashboardColumns(project.dashboardColumns),
     mapLayout,
     secondaryMapViews,

@@ -81,4 +81,12 @@ describe("Python-authored project round trip", () => {
       ["overview", "close-up"],
     );
   });
+
+  it("keeps the bookmarks and their folder, already in normalized form", () => {
+    assert.ok(Array.isArray(fixture.bookmarks) && fixture.bookmarks.length === 2);
+    assert.deepEqual(asJson(project.bookmarks), fixture.bookmarks);
+    assert.deepEqual(asJson(project.bookmarkGroups), fixture.bookmarkGroups);
+    assert.equal(project.bookmarks?.[0].groupId, "hoods");
+    assert.deepEqual(project.bookmarks?.[0].extra, { visibleLayerIds: ["cities"] });
+  });
 });

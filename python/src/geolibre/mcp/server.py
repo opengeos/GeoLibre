@@ -1828,6 +1828,64 @@ def build_server(workspace: Workspace) -> MCPServer:
             story = authoring.move_story_chapter(project, chapter, index)
         return _summarize(file, project, storymap=story)
 
+    @tool()
+    def add_bookmark(
+        path: str,
+        name: str,
+        center: list[float] | None = None,
+        zoom: float | None = None,
+        pitch: float | None = None,
+        bearing: float | None = None,
+        folder: str | None = None,
+        visible_layers: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Add a saved map view to the project's Bookmarks panel.
+
+        A camera value you omit is taken from the project's saved view.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            name: Bookmark name.
+            center: Camera target `[lng, lat]`.
+            zoom: Camera zoom (0-24).
+            pitch: Camera tilt in degrees (0-85).
+            bearing: Camera rotation in degrees.
+            folder: A folder id or name to file it under; a new name creates
+                the folder.
+            visible_layers: Layer ids or names to show when the bookmark is
+                opened; the others are hidden. Omit to leave visibility alone.
+
+        Returns:
+            The bookmark that was added, including its id.
+        """
+        with edit(path) as (file, project):
+            bookmark = authoring.add_bookmark(
+                project,
+                name,
+                center=center,
+                zoom=zoom,
+                pitch=pitch,
+                bearing=bearing,
+                folder=folder,
+                visible_layers=visible_layers,
+            )
+        return _summarize(file, project, bookmark=bookmark)
+
+    @tool()
+    def remove_bookmark(path: str, bookmark: str | int) -> dict[str, Any]:
+        """Remove a bookmark.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            bookmark: The bookmark's id, name, or 0-based index.
+
+        Returns:
+            The remaining bookmarks.
+        """
+        with edit(path) as (file, project):
+            bookmarks = authoring.remove_bookmark(project, bookmark)
+        return _summarize(file, project, bookmarks=bookmarks)
+
     # -- export ---------------------------------------------------------------
 
     @tool()

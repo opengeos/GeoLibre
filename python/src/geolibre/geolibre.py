@@ -1542,6 +1542,69 @@ class Map(anywidget.AnyWidget):
         """Move a story chapter (by id, title, or index) to a new position."""
         self._update_project(lambda p: _authoring.move_story_chapter(p, chapter, index))
 
+    def add_bookmark(
+        self,
+        name: str,
+        *,
+        center: tuple[float, float] | None = None,
+        zoom: float | None = None,
+        pitch: float | None = None,
+        bearing: float | None = None,
+        folder: str | None = None,
+        visible_layers: list[str | Layer] | None = None,
+    ) -> dict[str, Any]:
+        """Add a saved map view to the Bookmarks panel (Controls -> Bookmarks).
+
+        Bookmarks are saved in the project, so they travel with the file. A
+        camera value left out is taken from the map's current saved view.
+
+        Args:
+            name: Bookmark name.
+            center: Camera target ``(lng, lat)``.
+            zoom: Camera zoom, 0-24.
+            pitch: Camera tilt in degrees, 0-85.
+            bearing: Camera rotation in degrees.
+            folder: A folder id or name to file it under; a new name creates
+                the folder.
+            visible_layers: Layers (ids, names, or handles) to show when the
+                bookmark is opened; the others are hidden. Omit to leave layer
+                visibility alone.
+
+        Returns:
+            The bookmark that was added, including its ``id``.
+
+        Example:
+            >>> m.add_bookmark("Downtown", center=(-83.92, 35.96), zoom=14,
+            ...                folder="Neighborhoods")
+        """
+        layer_refs = (
+            [layer.id if isinstance(layer, Layer) else layer for layer in visible_layers]
+            if visible_layers is not None
+            else None
+        )
+        result: dict[str, Any] = {}
+
+        def _apply(project: dict[str, Any]) -> None:
+            result.update(
+                _authoring.add_bookmark(
+                    project,
+                    name,
+                    center=center,
+                    zoom=zoom,
+                    pitch=pitch,
+                    bearing=bearing,
+                    folder=folder,
+                    visible_layers=layer_refs,
+                )
+            )
+
+        self._update_project(_apply)
+        return result
+
+    def remove_bookmark(self, bookmark: str | int) -> None:
+        """Remove a bookmark by id, name, or 0-based index."""
+        self._update_project(lambda p: _authoring.remove_bookmark(p, bookmark))
+
     def rename_layer(self, layer: str | Layer, name: str) -> None:
         """Rename a layer addressed by id, name, or handle.
 

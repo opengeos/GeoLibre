@@ -49,6 +49,8 @@ file contents do not change.
 | `mapLayout`       | object  | Optional multi-map grid (`rows`, `cols`, `syncView`); omitted for a single map                               |
 | `secondaryMapViews` | array | Optional panes past the primary one, each with its own camera and layer visibility; omitted for a single map |
 | `primaryMapLabel` | string  | Optional label for the primary pane of a multi-map grid                                                      |
+| `bookmarks`       | array   | Optional saved map views from the Bookmarks panel (see below); omitted when there are none                   |
+| `bookmarkGroups`  | array   | Optional folders the bookmarks are organized into; omitted when there are none                               |
 | `styleLibrary`    | array   | Optional project-scoped Style Manager entries (name, tags, kind, `LayerStyle` subset); omitted when empty    |
 | `primaryRenderer` | string  | Optional engine for the primary map area: `"maplibre"` (2D, the default), `"mapbox"` (Mapbox GL JS), `"arcgis"` (ArcGIS Maps SDK for JavaScript) or `"cesium"` (3D globe); omitted when default |
 | `comments`        | array   | Optional review comments anchored to map points or features, with replies                                    |
@@ -220,6 +222,38 @@ Unused keys are ignored. The Dashboard panel (Tools → Dashboard, or the
 widget-grid column count (1-6, default 2), at the top level of the project.
 Charts read from GeoJSON-backed vector layers and DuckDB query layers; widgets
 bound to a missing or non-attribute layer are shown as empty.
+
+## Bookmarks
+
+```json
+{
+  "bookmarkGroups": [{ "id": "hoods", "name": "Neighborhoods", "collapsed": false }],
+  "bookmarks": [
+    {
+      "id": "downtown",
+      "name": "Downtown",
+      "lng": -83.92,
+      "lat": 35.96,
+      "zoom": 14,
+      "pitch": 30,
+      "bearing": 340,
+      "createdAt": 1700000000000,
+      "groupId": "hoods",
+      "extra": { "visibleLayerIds": ["cities"] }
+    }
+  ]
+}
+```
+
+Saved views from the Bookmarks panel (Controls → Bookmark), in panel order.
+`lng`/`lat` (-180..180 / -90..90), `zoom` (0-24), `pitch` (0-85) and `bearing`
+(wrapped into 0-360) are the camera; `createdAt` is milliseconds since the
+epoch. `groupId` files a bookmark in one of `bookmarkGroups` (folders do not
+nest); a `groupId` that names no folder is dropped on load. `extra` is state
+captured with the view: `visibleLayerIds` lists the layers to show when the
+bookmark is opened, and the others are hidden. Bookmarks with a missing or
+out-of-range camera, or a duplicate `id`, are dropped on load. Before these
+fields existed, bookmarks lived only in the browser's local storage.
 
 ## Interaction
 

@@ -689,6 +689,20 @@ def build_round_trip_project() -> dict:
         chapter_id="close-up",
         on_exit=[{"id": "fade-out", "layer": "cities", "opacity": 0.25}],
     )
+    p["bookmarkGroups"] = [project.bookmark_folder("Neighborhoods", folder_id="hoods")]
+    authoring.add_bookmark(
+        p,
+        "Downtown",
+        center=[-83.92, 35.96],
+        zoom=14,
+        pitch=30,
+        bearing=-20,
+        folder="hoods",
+        visible_layers=["Cities"],
+        bookmark_id="downtown",
+        created_at=1_700_000_000_000,
+    )
+    authoring.add_bookmark(p, "Region", zoom=6, bookmark_id="region", created_at=1_700_000_000_001)
     return p
 
 
@@ -708,3 +722,106 @@ def test_round_trip_fixture_is_current():
         FIXTURE.write_text(text, encoding="utf-8")
     assert FIXTURE.is_file(), "run with GEOLIBRE_REGEN_FIXTURES=1 to create the fixture"
     assert json.loads(FIXTURE.read_text(encoding="utf-8")) == built
+
+
+# -- bookmarks ------------------------------------------------------------------
+
+
+def test_add_bookmark_defaults_to_the_saved_view(proj):
+    proj["mapView"] = {"center": [-83.9, 35.9], "zoom": 9, "pitch": 10, "bearing": 350}
+    bookmark = authoring.add_bookmark(proj, "Home")
+    assert (bookmark["lng"], bookmark["lat"], bookmark["zoom"]) == (-83.9, 35.9, 9)
+    assert (bookmark["pitch"], bookmark["bearing"]) == (10, 350)
+    assert "groupId" not in bookmark and "extra" not in bookmark
+    assert proj["bookmarks"] == [bookmark]
+    # No folder was asked for, so the project carries no empty folder list.
+    assert "bookmarkGroups" not in proj
+
+
+def test_add_bookmark_files_it_in_a_folder_next_to_its_members(proj):
+    first = authoring.add_bookmark(proj, "A", zoom=1, folder="Parks")
+    authoring.add_bookmark(proj, "Loose", zoom=1)
+    third = authoring.add_bookmark(proj, "B", zoom=1, folder="parks-missing-name-match")
+    fourth = authoring.add_bookmark(proj, "C", zoom=1, folder="Parks")
+    folders = {f["name"]: f["id"] for f in proj["bookmarkGroups"]}
+    assert first["groupId"] == fourth["groupId"] == folders["Parks"]
+    assert third["groupId"] == folders["parks-missing-name-match"]
+    # "C" lands right after "A", keeping the Parks folder contiguous.
+    assert [b["name"] for b in proj["bookmarks"]] == ["A", "C", "Loose", "B"]
+
+
+def test_add_bookmark_resolves_visible_layers(proj):
+    bookmark = authoring.add_bookmark(proj, "Cities only", zoom=3, visible_layers=["cities"])
+    layer_id = authoring.find_layer(proj, "Cities")["id"]
+    assert bookmark["extra"] == {"visibleLayerIds": [layer_id]}
+    with pytest.raises(ValueError):
+        authoring.add_bookmark(proj, "Bad", zoom=3, visible_layers=["no such layer"])
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"center": [200, 0]}, "longitude"),
+        ({"center": [0, 95]}, "latitude"),
+        ({"zoom": 30}, "zoom"),
+        ({"pitch": 90}, "pitch"),
+    ],
+)
+def test_add_bookmark_rejects_bad_values(proj, kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        authoring.add_bookmark(proj, "Bad", **{"center": [0, 0], "zoom": 1, **kwargs})
+    # A refused bookmark leaves no empty lists behind.
+    assert "bookmarks" not in proj
+
+
+def test_remove_bookmark_by_name_id_or_index(proj):
+    a = authoring.add_bookmark(proj, "Alpha", zoom=1)
+    authoring.add_bookmark(proj, "Beta", zoom=1)
+    authoring.add_bookmark(proj, "Gamma", zoom=1)
+    assert [b["name"] for b in authoring.remove_bookmark(proj, "beta")] == ["Alpha", "Gamma"]
+    authoring.remove_bookmark(proj, a["id"])
+    authoring.remove_bookmark(proj, 0)
+    assert "bookmarks" not in proj
+    with pytest.raises(ValueError, match="no bookmark"):
+        authoring.remove_bookmark(proj, "Alpha")
+
+
+def test_describe_project_lists_bookmarks(proj):
+    assert "bookmarks" not in authoring.describe_project(proj)
+    authoring.add_bookmark(proj, "Home", zoom=2, folder="Mine")
+    assert authoring.describe_project(proj)["bookmarks"] == [
+        {"id": proj["bookmarks"][0]["id"], "name": "Home", "folder": "Mine"}
+    ]
+
+
+def test_map_add_bookmark_accepts_layer_handles(monkeypatch):
+    # No server: the bundled app is not needed to author a project.
+    monkeypatch.setattr(gmod, "serve_app", lambda *_a, **_k: "http://127.0.0.1:0/")
+    monkeypatch.setattr(gmod, "app_port", lambda: 0)
+    m = Map()
+    layer = m.get_layer(m.add_geojson(POINT_FC, name="Cities"))
+    bookmark = m.add_bookmark("Here", center=(1, 2), zoom=5, visible_layers=[layer])
+    assert bookmark["extra"] == {"visibleLayerIds": [layer.id]}
+    assert m.project["bookmarks"] == [bookmark]
+    m.remove_bookmark("Here")
+    assert "bookmarks" not in m.project
+
+
+def test_add_bookmark_refuses_past_the_app_limit(proj):
+    proj["bookmarks"] = [
+        project.bookmark(f"B{i}", center=[0, 0], zoom=1, bookmark_id=f"b{i}", created_at=0)
+        for i in range(project.MAX_BOOKMARKS)
+    ]
+    with pytest.raises(ValueError, match="most the app keeps"):
+        authoring.add_bookmark(proj, "One too many", zoom=1, folder="New")
+    # Refused before anything changed: no folder was created.
+    assert len(proj["bookmarks"]) == project.MAX_BOOKMARKS
+    assert "bookmarkGroups" not in proj
+
+
+@pytest.mark.skipif(not (REPO / "packages").is_dir(), reason="needs the repo sources")
+def test_bookmark_limit_matches_the_app():
+    source = (REPO / "packages" / "core" / "src" / "project.ts").read_text(encoding="utf-8")
+    match = re.search(r"MAX_PROJECT_BOOKMARKS = (\d+);", source)
+    assert match, "MAX_PROJECT_BOOKMARKS not found in project.ts"
+    assert int(match.group(1)) == project.MAX_BOOKMARKS
