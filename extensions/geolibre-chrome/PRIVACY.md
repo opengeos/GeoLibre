@@ -18,11 +18,13 @@ the network or run in the background at any other time. Nothing is stored: the
 list exists only while the popup is open and is discarded when it closes.
 
 When the user chooses **Open in GeoLibre**, the complete selected HTTP(S)
-dataset and style URLs are placed in the query string of a new
-`https://web.geolibre.app/` tab. These URLs are forwarded verbatim and may
+dataset and style URLs are placed in the query string of a new tab opened on
+the configured GeoLibre destination: `https://web.geolibre.app/` by default, or
+the instance the user set on the settings page (see below), in which case that
+instance receives the URLs instead. These URLs are forwarded verbatim and may
 contain signed query parameters, access tokens, user identifiers, or other
 personal data. Do not select a URL containing information you do not want to
-send to GeoLibre.
+send to that GeoLibre instance.
 
 The navigation request exposes its URL and the user's IP address to GeoLibre's
 web-hosting infrastructure, where standard service logs may retain them. The

@@ -17,24 +17,24 @@ import {
 import { buildGeoLibreUrl, GEOLIBRE_WEB_URL } from "../extensions/geolibre-chrome/url-builder.mjs";
 
 /** A minimal in-memory stand-in for chrome.storage.sync, scoped to one test. */
-function withStorage(run) {
-  const store = {};
+function withStorage(run: () => unknown) {
+  const store: Record<string, unknown> = {};
   const chromeStub = {
     storage: {
       sync: {
-        async get(key) {
+        async get(key: string) {
           return Object.hasOwn(store, key) ? { [key]: store[key] } : {};
         },
-        async set(values) {
+        async set(values: Record<string, unknown>) {
           Object.assign(store, values);
         },
-        async remove(key) {
+        async remove(key: string) {
           delete store[key];
         },
       },
     },
   };
-  const previous = globalThis.chrome;
+  const previous = (globalThis as { chrome?: unknown }).chrome;
   Object.assign(globalThis, { chrome: chromeStub });
   return Promise.resolve(run()).finally(() => {
     Object.assign(globalThis, { chrome: previous });

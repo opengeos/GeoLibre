@@ -21,7 +21,7 @@ The extension also reads schema.org download metadata, understands existing GeoL
 
 Interactive maps are supported too. The extension recognizes the WMS, WMTS, WFS, OGC API Features, ArcGIS Feature Service, XYZ/TMS, and vector-tile requests the current page has already made.
 
-The extension reads the page only when you click its icon, holds no standing access to any website, stores nothing, and runs nothing in the background. It runs no analytics and sends no browsing activity to GeoLibre unless you explicitly select an item and open it.
+The extension reads the page only when you click its icon, holds no standing access to any website, runs nothing in the background, and stores only one setting: the GeoLibre address "Open in GeoLibre" uses, which you can point at your own instance. It runs no analytics and sends no browsing activity to GeoLibre unless you explicitly select an item and open it.
 
 Dataset servers must allow browser access through CORS. Complete HTTP(S) URLs, including signed query parameters, are forwarded to GeoLibre. Cookies and other browser-session credentials are not forwarded, so cookie-bound or session-authenticated links may fail. Temporary `blob:` links cannot be transferred.
 

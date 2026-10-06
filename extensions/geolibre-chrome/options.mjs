@@ -29,7 +29,12 @@ elements.form.addEventListener("submit", async (event) => {
 });
 
 elements.resetButton.addEventListener("click", async () => {
-  await resetBaseUrl();
+  try {
+    await resetBaseUrl();
+  } catch (error) {
+    showStatus(error instanceof Error ? error.message : "Could not reset the URL.", "error");
+    return;
+  }
   elements.baseUrl.value = GEOLIBRE_WEB_URL;
   showStatus("Reset to default.", "success");
 });

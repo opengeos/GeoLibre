@@ -2,24 +2,33 @@ import { GEOLIBRE_WEB_URL } from "./url-builder.mjs";
 
 const STORAGE_KEY = "baseUrl";
 
-/** Trim and add the trailing slash `buildGeoLibreUrl` expects on a base URL. */
+/**
+ * Parse a base URL and put it in the shape `buildGeoLibreUrl` expects: no query
+ * string or fragment (the deep link replaces both anyway), and a pathname with
+ * a trailing slash so a subpath instance keeps its subpath. Throws on input the
+ * URL constructor rejects.
+ */
 export function normalizeBaseUrl(raw) {
-  const trimmed = raw.trim();
-  return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+  const url = new URL(raw.trim());
+  url.search = "";
+  url.hash = "";
+  if (!url.pathname.endsWith("/")) url.pathname = `${url.pathname}/`;
+  return url.href;
 }
 
 /** Parse a candidate base URL, accepting only http(s), or throw. */
 export function parseBaseUrl(raw) {
-  let url;
+  let href;
   try {
-    url = new URL(normalizeBaseUrl(raw));
+    href = normalizeBaseUrl(raw);
   } catch {
     throw new Error("Enter a valid URL.");
   }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
+  const { protocol } = new URL(href);
+  if (protocol !== "http:" && protocol !== "https:") {
     throw new Error("The URL must start with http:// or https://.");
   }
-  return url.href;
+  return href;
 }
 
 /** The configured base URL, or the default when none is stored. */
