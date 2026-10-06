@@ -234,6 +234,8 @@ interface RowGroupRange {
 interface PartMeta {
   url: string;
   absent?: boolean;
+  /** When the metadata was read, epoch milliseconds. */
+  readAt: number;
   fromSidecar?: boolean;
   size: number;
   footerOff: number;
@@ -366,8 +368,12 @@ async function sidecarMeta(url: string, signal?: AbortSignal): Promise<PartMeta 
     metadata,
     groups,
     fromSidecar: true,
+    readAt: Date.now(),
   };
 }
+
+/** How long a part's 404 is trusted before it is probed again. */
+const ABSENT_TTL_MS = 5 * 60 * 1000;
 
 /** Footer or sidecar per part, once per session. */
 const metadataCache = new Map<string, Promise<PartMeta>>();
@@ -395,6 +401,7 @@ function partMeta(url: string, sidecars: boolean): Promise<PartMeta> {
         return {
           url,
           absent: true,
+          readAt: Date.now(),
           size: 0,
           footerOff: 0,
           footer: new ArrayBuffer(0),
@@ -433,7 +440,15 @@ function partMeta(url: string, sidecars: boolean): Promise<PartMeta> {
         row += Number(g.num_rows);
         return out;
       });
-      return { url, size, footerOff, footer, metadata, groups };
+      return {
+        url,
+        size,
+        footerOff,
+        footer,
+        metadata,
+        groups,
+        readAt: Date.now(),
+      };
     })();
     metadataCache.set(url, cached);
     // A failed read must not poison the cache for the next search.
@@ -477,6 +492,8 @@ interface Region {
 
 /** An AsyncBuffer over the prefetched chunks; a miss falls through to HTTP. */
 function regionBuffer(url: string, size: number, regions: Region[], signal?: AbortSignal) {
+  // Every fall-through read checks the object is still the size the
+  // metadata was read from.
   return {
     byteLength: size,
     async slice(start: number, end?: number): Promise<ArrayBuffer> {
@@ -486,7 +503,7 @@ function regionBuffer(url: string, size: number, regions: Region[], signal?: Abo
           return r.buf.slice(start - r.off, stop - r.off);
         }
       }
-      return rangeGet(url, start, stop - start, signal);
+      return rangeGet(url, start, stop - start, signal, size);
     },
   };
 }
@@ -507,7 +524,9 @@ async function searchPartWith(
   const columns = [tileColumn, ...SEARCH_COLUMNS];
   const jobs = groups.flatMap((g) => g.chunks.filter((c) => columns.includes(c.column)));
   const regions: Region[] = [{ off: meta.footerOff, buf: meta.footer }];
-  const expectSize = meta.fromSidecar ? meta.size : undefined;
+  // Always checked: a live tail is rewritten in place by the daily refresh,
+  // so cached offsets must never be read against a different object.
+  const expectSize = meta.size;
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(MAX_IN_FLIGHT, jobs.length) }, async () => {
@@ -546,7 +565,13 @@ async function searchPart(
   tally: Tally,
   signal?: AbortSignal,
 ): Promise<RawRow[]> {
-  const meta = await partMeta(url, collection.sidecars);
+  let meta = await partMeta(url, collection.sidecars);
+  // A tail that was not published yet (a new month) may appear during the
+  // session, so an absence is only trusted for a few minutes.
+  if (meta.absent && Date.now() - meta.readAt > ABSENT_TTL_MS) {
+    metadataCache.delete(url);
+    meta = await partMeta(url, collection.sidecars);
+  }
   if (meta.absent) {
     tally.absent += 1;
     return [];
@@ -554,11 +579,17 @@ async function searchPart(
   try {
     return await searchPartWith(meta, collection.tileColumn, tile, tally, signal);
   } catch (error) {
-    if (!meta.fromSidecar || signal?.aborted) throw error;
-    // A stale or malformed sidecar degrades to the footer path.
+    if (signal?.aborted) throw error;
+    // A rewritten part (a refreshed live tail, a re-folded year) or a stale
+    // or malformed sidecar: read its footer again once and retry.
     metadataCache.delete(url);
-    noSidecar.add(url);
-    return searchPartWith(await partMeta(url, false), collection.tileColumn, tile, tally, signal);
+    if (meta.fromSidecar) noSidecar.add(url);
+    const fresh = await partMeta(url, collection.sidecars);
+    if (fresh.absent) {
+      tally.absent += 1;
+      return [];
+    }
+    return searchPartWith(fresh, collection.tileColumn, tile, tally, signal);
   }
 }
 
@@ -792,22 +823,6 @@ export const S2_MASK_BANDS: readonly S2Band[] = [
   { key: "SNW_20m", label: "Snow probability", res: 20 },
 ];
 
-/** ESA's scene classification classes and the palette its products use. */
-export const S2_SCL_CLASSES: ReadonlyArray<readonly [number, string, string]> = [
-  [0, "No data", "#000000"],
-  [1, "Saturated / defective", "#ff0000"],
-  [2, "Dark area", "#2f2f2f"],
-  [3, "Cloud shadow", "#643200"],
-  [4, "Vegetation", "#00a000"],
-  [5, "Not vegetated", "#ffe65a"],
-  [6, "Water", "#0000ff"],
-  [7, "Unclassified", "#808080"],
-  [8, "Cloud, medium probability", "#c0c0c0"],
-  [9, "Cloud, high probability", "#ffffff"],
-  [10, "Thin cirrus", "#64c8ff"],
-  [11, "Snow / ice", "#ff96ff"],
-];
-
 /**
  * The display range of a single band, in stored DN. Reflectance is DN/10000,
  * plus a BOA offset of 1000 from processing baseline 04.00 (January 2022) on.
@@ -818,7 +833,8 @@ export const S2_SCL_CLASSES: ReadonlyArray<readonly [number, string, string]> = 
  */
 export function bandRescale(band: string, baseline: string | null): [number, number] {
   if (band === "CLD_20m" || band === "SNW_20m") return [0, 100];
-  if (band === "SCL") return [0, 11];
+  // tab20 has 20 entries, so 0..19 gives each class value its own color.
+  if (band === "SCL") return [0, 19];
   if (band === "AOT") return [0, 1000];
   if (band === "WVP") return [0, 6000];
   const offset = baseline && /^\d\d\.\d\d$/.test(baseline) && baseline >= "04.00" ? 1000 : 0;

@@ -387,8 +387,12 @@ async function paintGrid(): Promise<void> {
   try {
     if (!grid || gridCollection !== state.collection) {
       setStatus(tr("loadingGrid", "Loading the MGRS tile grid…"));
-      grid = await loadMgrsGrid(collection);
-      gridCollection = state.collection;
+      const loaded = await loadMgrsGrid(collection);
+      // A collection switch during the load started a newer paint; label the
+      // grid by the collection it was read for, never the current one.
+      if (seq !== paintSeq) return;
+      grid = loaded;
+      gridCollection = collection.id;
     }
     const months = monthsIn(state.from, state.to);
     const slices = await Promise.all(months.map((ym) => loadMonthSlice(collection, ym)));
@@ -473,9 +477,13 @@ function attachMap(map: MapLibreMap): () => void {
   };
   // A basemap switch replaces the style and drops the overlays; put them back.
   const onStyle = () => {
-    if (!map.getSource(GRID_SOURCE_ID)) {
+    if (map.getSource(GRID_SOURCE_ID)) return;
+    try {
       ensureOverlays(map);
       syncSelectedTile(map);
+    } catch {
+      // Mid-switch the style may refuse new sources; the next styledata
+      // event, once the new style has loaded, retries.
     }
   };
   map.on("click", GRID_FILL_LAYER_ID, onClick);
@@ -578,7 +586,7 @@ function displayOptions(): Array<{ value: DisplayKey; label: string }> {
     { value: "TCI", label: tr("displayTci", "True color (TCI)") },
     ...bands.map((band) => ({
       value: band.key,
-      label: `${band.key} · ${band.label} · ${band.res} m`,
+      label: `${band.key} · ${tr(`band${band.key}`, band.label)} · ${band.res} m`,
     })),
   ];
 }
@@ -604,11 +612,13 @@ async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void>
     // The visual COG is already stretched by ESA; 0 is the swath-edge nodata.
     options = { bands: "1,2,3", nodata: 0, zoomTo: true };
   } else if (display === "SCL") {
+    // A categorical palette: one tab20 entry per class value.
+    const [min, max] = bandRescale(display, scene.baseline);
     options = {
       bands: "1",
       colormap: "tab20",
-      rescaleMin: 0,
-      rescaleMax: 19,
+      rescaleMin: min,
+      rescaleMax: max,
       nodata: 0,
       zoomTo: true,
     };
@@ -809,6 +819,10 @@ function buildPanel(container: HTMLElement): () => void {
         state.display = "TCI";
       }
       onWindowChange();
+      fromInput.min = S2_COLLECTIONS[value].firstDate;
+      toInput.min = S2_COLLECTIONS[value].firstDate;
+      fromInput.value = state.from;
+      toInput.value = state.to;
       renderDisplaySelect();
     },
     tr("collection", "Collection"),

@@ -144,6 +144,7 @@ describe("Sentinel-2 explorer scenes", () => {
     assert.deepEqual(bandRescale("B8A", null), [0, 6000]);
     assert.deepEqual(bandRescale("B11", null), [0, 5000]);
     assert.deepEqual(bandRescale("CLD_20m", "05.11"), [0, 100]);
+    assert.deepEqual(bandRescale("SCL", "05.11"), [0, 19]);
   });
 });
 
