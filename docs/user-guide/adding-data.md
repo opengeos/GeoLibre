@@ -70,6 +70,7 @@ GeoParquet opens across its variants: 1.0 and 1.1 files (including one carrying 
 | **OGC Vector Tiles** | An OGC API - Tiles vector tile service. |
 | **ArcGIS Layer** | An ArcGIS FeatureServer, VectorTileServer, MapServer, or ImageServer layer. See [ArcGIS services](#arcgis-services). |
 | **GeoRSS Layer** | A GeoRSS feed, added as points and lines with the feed's titles and descriptions as attributes. |
+| **Administrative Boundaries** | Pick a country and an admin level (ADM0 for the national border down to ADM3 to ADM5 where a country has them) to add its [geoBoundaries](https://www.geoboundaries.org) polygons. Simplified geometry is the default; clear it for full-resolution boundaries, which can be several MB. |
 | **STAC Layer** | Searches a STAC catalog and adds the matching raster items. |
 | **Video Layer** | Drapes a video over four map corner coordinates, the way MapLibre's video source does. |
 | **Deck.gl Layer** | Renders a deck.gl layer specification over the map, for visualizations MapLibre's own layer types do not cover. |

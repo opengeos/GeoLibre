@@ -59,6 +59,7 @@ see [vector import details](user-guide/adding-data.md#files).
 | ArcGIS MapServer | ArcGIS Layer: Map service | Cached tiles or rendered exports, with sublayer selection. |
 | ArcGIS ImageServer | ArcGIS Layer: Image service | Rendered imagery with advertised raster functions or a custom rendering rule. Use WCS when numerical raster subsets are needed and the service exposes WCS. |
 | GeoRSS | GeoRSS Layer | Geographic features from a feed URL or file. |
+| [geoBoundaries](https://www.geoboundaries.org) | Administrative Boundaries | Country, state, and district boundaries (ADM0 to ADM5, depending on the country) under open licenses, in simplified or full geometry. |
 | STAC | STAC Layer | Search catalogs and load raster assets. |
 | OGC CSW 2.0.2 | CSW Catalog | Search metadata records; open supported linked GeoJSON, WMS, WFS, and ArcGIS resources. |
 

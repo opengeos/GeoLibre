@@ -392,6 +392,10 @@
         "label": "Add GeoRSS Layer",
         "description": "Add a GeoRSS feed (RSS, Atom, or RDF) from a URL or file as a vector layer."
       },
+      "geoBoundaries": {
+        "label": "Add Administrative Boundaries",
+        "description": "Add country, state, and district boundaries (admin levels 0 to 5) from geoBoundaries as a vector layer."
+      },
       "delimitedText": {
         "label": "Add Delimited Text Layer",
         "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields, by geocoding an address column, or as a non-spatial attribute table when no coordinates are available."
@@ -789,6 +793,26 @@
       "url": "GeoRSS URL",
       "file": "GeoRSS file",
       "urlPlaceholder": "https://example.com/feed.atom"
+    },
+    "geoBoundaries": {
+      "defaultName": "Administrative Boundaries",
+      "intro": "Boundaries come from geoBoundaries under open licenses. The available admin levels vary by country.",
+      "country": "Country",
+      "countryPlaceholder": "Select a country",
+      "level": "Admin level",
+      "levelPlaceholder": "Select a country first",
+      "levelNamed": "{{level}} ({{name}})",
+      "levelUnits_one": "{{label}}: {{formattedCount}} unit",
+      "levelUnits_other": "{{label}}: {{formattedCount}} units",
+      "noLevels": "No boundaries are available for this country.",
+      "simplified": "Use simplified geometry (smaller and faster to load)",
+      "license": "License: {{license}}",
+      "errorCountries": "Could not load the list of countries.",
+      "errorLevels": "Could not load the admin levels for this country.",
+      "errorDownload": "Could not download the boundaries.",
+      "errorCountry": "Select a country.",
+      "errorLevel": "Select an admin level.",
+      "errorInvalid": "The boundary file is not a valid GeoJSON feature collection."
     },
     "cad": {
       "defaultName": "CAD Layer",
@@ -3316,6 +3340,7 @@
       "ogcVectorTiles": "OGC Vector Tiles",
       "arcgis": "ArcGIS Layer",
       "georss": "GeoRSS Layer",
+      "geoBoundaries": "Administrative Boundaries",
       "video": "Video Layer",
       "deckglViz": "Deck.gl Layer",
       "cesiumIon": "Cesium Ion Asset",

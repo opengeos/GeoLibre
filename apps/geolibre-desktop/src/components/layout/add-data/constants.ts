@@ -23,6 +23,7 @@ export type KindI18nKey =
   | "gpx"
   | "landxml"
   | "georss"
+  | "geoBoundaries"
   | "delimitedText"
   | "cad"
   | "gdb"
@@ -59,6 +60,7 @@ export const KIND_I18N_KEY: Record<
   gpx: "gpx",
   landxml: "landxml",
   georss: "georss",
+  geoboundaries: "geoBoundaries",
   "delimited-text": "delimitedText",
   cad: "cad",
   gdb: "gdb",

@@ -94,6 +94,7 @@ export function AddDataMenu({
     },
     arcgis: { onSelect: () => onSetAddDataKind("arcgis") },
     georss: { onSelect: () => onSetAddDataKind("georss") },
+    geoboundaries: { onSelect: () => onSetAddDataKind("geoboundaries") },
     stac: { onSelect: addLayer.stac },
     video: { onSelect: () => onSetAddDataKind("video") },
     // deck.gl draws through a shared overlay on MapLibre, Mapbox and supported

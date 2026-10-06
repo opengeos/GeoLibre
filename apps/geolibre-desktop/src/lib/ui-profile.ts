@@ -128,6 +128,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
     labelKey: "toolbar.layerType.georss",
     tier: "intermediate",
   },
+  {
+    id: "geoboundaries",
+    section: "webServices",
+    labelKey: "toolbar.layerType.geoBoundaries",
+    tier: "basic",
+  },
   { id: "stac", section: "webServices", labelKey: "toolbar.item.stacLayer", tier: "advanced" },
   { id: "video", section: "webServices", labelKey: "toolbar.layerType.video", tier: "advanced" },
   {

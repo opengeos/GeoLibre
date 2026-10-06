@@ -15,6 +15,7 @@ import { LandXmlSource } from "./add-data/sources/LandXmlSource";
 import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GdbSource } from "./add-data/sources/GdbSource";
+import { GeoBoundariesSource } from "./add-data/sources/GeoBoundariesSource";
 import { GeoRssSource } from "./add-data/sources/GeoRssSource";
 import { GpxSource } from "./add-data/sources/GpxSource";
 import { IcebergSource } from "./add-data/sources/IcebergSource";
@@ -126,6 +127,8 @@ function renderSource(
       return <LandXmlSource />;
     case "georss":
       return <GeoRssSource />;
+    case "geoboundaries":
+      return <GeoBoundariesSource />;
     case "delimited-text":
       return <DelimitedTextSource />;
     case "cad":

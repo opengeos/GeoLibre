@@ -14,6 +14,7 @@ export type AddDataKind =
   | "gpx"
   | "landxml"
   | "georss"
+  | "geoboundaries"
   | "delimited-text"
   | "cad"
   | "gdb"
