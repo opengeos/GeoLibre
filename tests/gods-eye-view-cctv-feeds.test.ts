@@ -4,6 +4,7 @@ import {
   CCTV_CATALOG_FAILURE_CACHE_MS,
   cctvCamerasToCzml,
   cctvPreviewsVisibleAtZoom,
+  cctvShowPreviews,
   fetchCctvCzml,
   normalizeAustinCameras,
   normalizeCalgaryCameras,
@@ -140,6 +141,14 @@ describe("God's Eye View CCTV feeds", () => {
     assert.equal(cctvPreviewsVisibleAtZoom(null), false);
     assert.equal(cctvPreviewsVisibleAtZoom(13), false);
     assert.equal(cctvPreviewsVisibleAtZoom(13.0001), true);
+  });
+
+  it("lets the preview mode override the zoom rule", () => {
+    assert.equal(cctvShowPreviews("auto", 10), false);
+    assert.equal(cctvShowPreviews("auto", 15), true);
+    assert.equal(cctvShowPreviews("always", null), true);
+    assert.equal(cctvShowPreviews("always", 3), true);
+    assert.equal(cctvShowPreviews("off", 18), false);
   });
 
   it("normalizes pinned TfL, Austin, Calgary, and Fintraffic frame sources", () => {

@@ -117,6 +117,14 @@ restriction. Public camera imagery comes from TfL, Austin, Calgary, Fintraffic,
 Ontario 511, DriveBC, Live Traffic NSW, and Caltrans under each provider's
 public-data terms.
 
+Some layers have options under their own row, saved with the project.
+**Radio Stations** has a **Category** filter (News, Talk, Weather / Emergency,
+Public Safety, Aviation / Marine, Traffic / Transit, Music, or Other), matched
+from each station's Radio Browser tags. **Public CCTV Cameras** has **Snapshots
+on map**: by default, snapshots appear only once you zoom in past street level;
+**Always** shows them at every zoom, and **Off** keeps plain markers, with the
+snapshot still in each camera's popup.
+
 Two layers use a key of your own, entered under **API keys** at the bottom of
 the panel. **Live AIS Vessels** streams ship positions from
 [AISStream](https://aisstream.io/) for the current view (up to 30° across) and

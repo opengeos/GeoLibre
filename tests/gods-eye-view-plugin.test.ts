@@ -938,7 +938,7 @@ describe("God's Eye View clock speed", () => {
       );
 
       // The panel's select re-times the live globe without reloading a feed.
-      const select = globe.panel.querySelector("select") as HTMLSelectElement;
+      const select = globe.panel.querySelector("#gods-eye-view-speed") as HTMLSelectElement;
       assert.deepEqual(
         [...select.options].map((option) => option.value),
         ["1", "10", "60", "600"],
@@ -955,7 +955,10 @@ describe("God's Eye View clock speed", () => {
         new (globe.panel.ownerDocument.defaultView as Window & typeof globalThis).Event("change"),
       );
       // The panel re-renders on a setting change; the fresh select shows it.
-      assert.equal((globe.panel.querySelector("select") as HTMLSelectElement).value, "60");
+      assert.equal(
+        (globe.panel.querySelector("#gods-eye-view-speed") as HTMLSelectElement).value,
+        "60",
+      );
       assert.equal(globe.viewer.clock.multiplier, 60);
       assert.equal(net.calls(), afterActivate, "changing speed refetches nothing");
       assert.equal(
@@ -976,6 +979,135 @@ describe("God's Eye View clock speed", () => {
     } finally {
       godsEyeViewPlugin.deactivate?.(globe.app);
       godsEyeViewPlugin.applyProjectState?.(globe.app, {});
+      net.restore();
+    }
+  });
+});
+
+describe("God's Eye View feed options", () => {
+  /** Pick a choice the way a user does; linkedom's `select.value` is read-only. */
+  function choose(panel: HTMLElement, id: string, value: string): void {
+    const select = panel.querySelector(`#${id}`) as HTMLSelectElement;
+    // Clear first: in linkedom, deselecting any option deselects them all.
+    for (const option of select.options) if (option.selected) option.selected = false;
+    const choice = [...select.options].find((option) => option.value === value);
+    assert.ok(choice, value);
+    choice.selected = true;
+    select.dispatchEvent(
+      new (panel.ownerDocument.defaultView as Window & typeof globalThis).Event("change"),
+    );
+  }
+
+  const radioIds = () =>
+    useAppStore
+      .getState()
+      .layers.find((layer) => layer.metadata?.[GODS_EYE_VIEW_RADIO_FLAG] === true)
+      ?.geojson?.features.map((feature) => feature.id);
+
+  it("filters radio by category, persisting only a non-default choice", async () => {
+    const originalFetch = globalThis.fetch;
+    let radioCalls = 0;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      if (!String(input).includes("radio-browser.info")) throw new Error("offline");
+      radioCalls += 1;
+      return new Response(
+        JSON.stringify([
+          { stationuuid: "news", name: "News", tags: "news", geo_long: 1, geo_lat: 2 },
+          { stationuuid: "jazz", name: "Jazz", tags: "jazz", geo_long: 3, geo_lat: 4 },
+        ]),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    const globe = makeGlobe();
+    try {
+      useAppStore.setState({ layers: [] });
+      // A hand-edited project: only an offered, non-default choice of a real
+      // option survives normalization.
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {
+        earthquakes: false,
+        satellites: false,
+        radio: true,
+        options: {
+          radio: { category: "news", volume: "11" },
+          cctv: { previews: "sometimes" },
+          nowhere: { category: "news" },
+        },
+      });
+      assert.deepEqual((godsEyeViewPlugin.getProjectState?.() as { options?: unknown }).options, {
+        radio: { category: "news" },
+      });
+
+      godsEyeViewPlugin.activate?.(globe.app);
+      for (let i = 0; i < 6; i++) await flush();
+      assert.deepEqual(radioIds(), ["radio-news"]);
+      assert.equal(
+        (globe.panel.querySelector("#gods-eye-view-option-radio-category") as HTMLSelectElement)
+          .value,
+        "news",
+      );
+
+      // A new category refilters the stations already fetched.
+      choose(globe.panel, "gods-eye-view-option-radio-category", "music");
+      for (let i = 0; i < 6; i++) await flush();
+      assert.deepEqual(radioIds(), ["radio-jazz"]);
+      assert.equal(radioCalls, 1, "a category change does not re-read the directory");
+
+      // Back to the default: the project blob loses its options entirely.
+      choose(globe.panel, "gods-eye-view-option-radio-category", "all");
+      for (let i = 0; i < 6; i++) await flush();
+      assert.deepEqual(radioIds(), ["radio-news", "radio-jazz"]);
+      assert.equal(
+        "options" in ((godsEyeViewPlugin.getProjectState?.() ?? {}) as Record<string, unknown>),
+        false,
+      );
+
+      // A project load inside the refresh interval still applies its own
+      // category, rather than keeping rows fetched under another one.
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {
+        earthquakes: false,
+        satellites: false,
+        radio: true,
+        options: { radio: { category: "news" } },
+      });
+      for (let i = 0; i < 6; i++) await flush();
+      assert.deepEqual(radioIds(), ["radio-news"]);
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
+      godsEyeViewPlugin.applyProjectState?.(globe.app, {});
+      useAppStore.setState({ layers: [] });
+      globalThis.fetch = originalFetch;
+      console.warn = originalWarn;
+    }
+  });
+
+  it("offers each feed's options under its own row", () => {
+    const net = stubFetch();
+    const globe = makeGlobe();
+    try {
+      godsEyeViewPlugin.activate?.(globe.app);
+      const options = (feed: string) =>
+        [
+          ...globe.panel.querySelectorAll<HTMLElement>(
+            `[data-feed-id="${feed}"] [data-feed-option] option`,
+          ),
+        ].map((option) => (option as HTMLOptionElement).value);
+      assert.deepEqual(options("cctv"), ["auto", "always", "off"]);
+      assert.deepEqual(options("radio"), [
+        "all",
+        "news",
+        "talk",
+        "weather",
+        "public-safety",
+        "aviation-marine",
+        "traffic-transit",
+        "music",
+        "other",
+      ]);
+      assert.deepEqual(options("flights"), []);
+    } finally {
+      godsEyeViewPlugin.deactivate?.(globe.app);
       net.restore();
     }
   });

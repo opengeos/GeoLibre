@@ -4,9 +4,11 @@ import type { FeatureCollection } from "geojson";
 import {
   DATACENTERS_URL,
   fetchDatacentersCzml,
+  fetchRadioBrowserCzml,
   infrastructureQueryBounds,
   osmInfrastructureToCzml,
   radioBrowserStationsToCzml,
+  radioStationMatchesCategory,
   submarineCablesToCzml,
 } from "../packages/plugins/src/plugins/gods-eye-view-catalog-feeds";
 
@@ -35,6 +37,53 @@ describe("God's Eye View catalog feeds", () => {
       result.attributes.features[0].properties?.streamUrl,
       "https://radio.example/live.mp3",
     );
+  });
+
+  it("files radio stations under upstream's tag categories by whole word", () => {
+    assert.equal(radioStationMatchesCategory("news,talk", "news"), true);
+    assert.equal(radioStationMatchesCategory("news,talk", "talk"), true);
+    assert.equal(radioStationMatchesCategory("News_Talk", "talk"), true);
+    assert.equal(radioStationMatchesCategory("police scanner", "public-safety"), true);
+    assert.equal(radioStationMatchesCategory("ATC,Airport", "aviation-marine"), true);
+    assert.equal(radioStationMatchesCategory("classic rock,80s", "music"), true);
+    assert.equal(radioStationMatchesCategory("Hip-Hop", "music"), true);
+    // Whole words, not substrings: upstream's substring match files these
+    // under Public Safety and Aviation / Marine.
+    assert.equal(radioStationMatchesCategory("problems", "public-safety"), false);
+    assert.equal(radioStationMatchesCategory("match of the day", "aviation-marine"), false);
+    // Other is what no named category claims, music included.
+    assert.equal(radioStationMatchesCategory("community,local", "other"), true);
+    assert.equal(radioStationMatchesCategory("", "other"), true);
+    assert.equal(radioStationMatchesCategory("jazz", "other"), false);
+    assert.equal(radioStationMatchesCategory("news", "other"), false);
+    assert.equal(radioStationMatchesCategory("", "all"), true);
+  });
+
+  it("refilters cached Radio Browser stations when the category changes", async () => {
+    let requests = 0;
+    const mockFetch = (async () => {
+      requests += 1;
+      return new Response(
+        JSON.stringify([
+          { stationuuid: "news", name: "News", tags: "news", geo_long: 1, geo_lat: 2 },
+          { stationuuid: "jazz", name: "Jazz", tags: "jazz,smooth", geo_long: 3, geo_lat: 4 },
+        ]),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const ids = (result: Awaited<ReturnType<typeof fetchRadioBrowserCzml>>) =>
+      result.attributes.features.map((feature) => feature.id);
+    assert.deepEqual(ids(await fetchRadioBrowserCzml({ fetch: mockFetch })), [
+      "radio-news",
+      "radio-jazz",
+    ]);
+    assert.deepEqual(ids(await fetchRadioBrowserCzml({ fetch: mockFetch, category: "news" })), [
+      "radio-news",
+    ]);
+    assert.deepEqual(ids(await fetchRadioBrowserCzml({ fetch: mockFetch, category: "music" })), [
+      "radio-jazz",
+    ]);
+    assert.equal(requests, 1, "the directory is read once for every category");
   });
 
   it("turns GeoJSONL polygons into lightweight datacenter points", async () => {

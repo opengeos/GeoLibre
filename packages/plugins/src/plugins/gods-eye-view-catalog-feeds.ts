@@ -289,11 +289,128 @@ export async function fetchDamsCzml(
   });
 }
 
-export function radioBrowserStationsToCzml(value: unknown): GodsEyeViewFeedPayload {
+/**
+ * The station categories upstream's radio panel filters by, in its order.
+ *
+ * Radio Browser has no category field, only free-form community tags, so each
+ * category is a set of tag substrings, ported from upstream's
+ * `src/layers/radio/policy.js`.
+ */
+export const RADIO_CATEGORIES = [
+  "all",
+  "news",
+  "talk",
+  "weather",
+  "public-safety",
+  "aviation-marine",
+  "traffic-transit",
+  "music",
+  "other",
+] as const;
+export type RadioCategory = (typeof RADIO_CATEGORIES)[number];
+
+const RADIO_CATEGORY_MATCHERS: Record<
+  Exclude<RadioCategory, "all" | "music" | "other">,
+  readonly string[]
+> = {
+  news: ["news", "current affairs", "journalism"],
+  talk: ["talk", "spoken word", "interview", "podcast"],
+  weather: ["weather", "emergency", "noaa"],
+  "public-safety": ["public safety", "scanner", "police", "fire", "ems", "dispatch", "emergency"],
+  "aviation-marine": [
+    "aviation",
+    "air traffic",
+    "atc",
+    "airport",
+    "marine",
+    "maritime",
+    "coast guard",
+  ],
+  "traffic-transit": ["traffic", "transit", "transport", "rail", "metro"],
+};
+
+const RADIO_MUSIC_TAGS = [
+  "music",
+  "hits",
+  "songs",
+  "alternative",
+  "ambient",
+  "blues",
+  "classical",
+  "country",
+  "dance",
+  "electronic",
+  "folk",
+  "funk",
+  "hip hop",
+  "house",
+  "indie",
+  "jazz",
+  "latin",
+  "metal",
+  "oldies",
+  "pop",
+  "punk",
+  "r&b",
+  "reggae",
+  "rock",
+  "soul",
+  "techno",
+  "trance",
+  "world",
+];
+
+/** Split Radio Browser's comma-separated tags into normalized, lower-case tokens. */
+function radioStationTags(tags: string): string[] {
+  return tags
+    .split(",")
+    .map((tag) =>
+      tag.trim().toLocaleLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").slice(0, 80),
+    )
+    .filter(Boolean);
+}
+
+/**
+ * Whole-word matching, where upstream matches any substring: as substrings,
+ * "ems" (public safety) catches "problems" and "atc" (aviation) catches "match".
+ */
+function hasRadioTag(tags: readonly string[], needles: readonly string[]): boolean {
+  return needles.some((needle) => tags.some((tag) => ` ${tag} `.includes(` ${needle} `)));
+}
+
+/**
+ * Whether a station's tags place it in a category.
+ *
+ * Categories overlap the way upstream's do: a "news talk" station is in both
+ * News and Talk, and Other holds only stations no named category claims.
+ *
+ * @param tags The station's comma-separated Radio Browser tags.
+ * @param category The category to test.
+ * @returns True when the station belongs in the category.
+ */
+export function radioStationMatchesCategory(tags: string, category: RadioCategory): boolean {
+  if (category === "all") return true;
+  const tokens = radioStationTags(tags);
+  if (category === "music") return hasRadioTag(tokens, RADIO_MUSIC_TAGS);
+  if (category === "other") {
+    return (
+      !hasRadioTag(tokens, RADIO_MUSIC_TAGS) &&
+      !Object.values(RADIO_CATEGORY_MATCHERS).some((needles) => hasRadioTag(tokens, needles))
+    );
+  }
+  return hasRadioTag(tokens, RADIO_CATEGORY_MATCHERS[category]);
+}
+
+export function radioBrowserStationsToCzml(
+  value: unknown,
+  category: RadioCategory = "all",
+): GodsEyeViewFeedPayload {
   const features: Feature[] = [];
   for (const [index, item] of (Array.isArray(value) ? value : []).entries()) {
     const station = item as RadioBrowserStation;
     if (!Number.isFinite(station.geo_long) || !Number.isFinite(station.geo_lat)) continue;
+    const tags = typeof station.tags === "string" ? station.tags : "";
+    if (!radioStationMatchesCategory(tags, category)) continue;
     const longitude = station.geo_long as number;
     const latitude = station.geo_lat as number;
     if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) continue;
@@ -311,7 +428,7 @@ export function radioBrowserStationsToCzml(value: unknown): GodsEyeViewFeedPaylo
         countryCode: typeof station.countrycode === "string" ? station.countrycode : "",
         state: typeof station.state === "string" ? station.state : "",
         language: typeof station.language === "string" ? station.language : "",
-        tags: typeof station.tags === "string" ? station.tags : "",
+        tags,
         codec: typeof station.codec === "string" ? station.codec : "",
         bitrate: Number.isFinite(station.bitrate) ? station.bitrate : 0,
         clickCount: Number.isFinite(station.clickcount) ? station.clickcount : 0,
@@ -329,10 +446,30 @@ export function radioBrowserStationsToCzml(value: unknown): GodsEyeViewFeedPaylo
   );
 }
 
+/**
+ * How long a Radio Browser response is reused. Changing the category refilters
+ * the stations already fetched rather than asking the directory again.
+ */
+export const RADIO_BROWSER_CACHE_MS = 10 * 60_000;
+
+// Per fetcher, like the CCTV catalogs, so injected test fetchers never share.
+const radioStationsCache = new WeakMap<typeof fetch, { expiresAt: number; stations: unknown }>();
+
 export async function fetchRadioBrowserCzml(
-  options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
+  options: { fetch?: typeof fetch; signal?: AbortSignal; category?: RadioCategory } = {},
 ): Promise<GodsEyeViewFeedPayload> {
-  return radioBrowserStationsToCzml(await readJson(RADIO_BROWSER_STATIONS_URL, options));
+  const fetcher = options.fetch ?? fetch;
+  const cached = radioStationsCache.get(fetcher);
+  let stations: unknown;
+  if (cached && cached.expiresAt > Date.now()) stations = cached.stations;
+  else {
+    stations = await readJson(RADIO_BROWSER_STATIONS_URL, options);
+    radioStationsCache.set(fetcher, {
+      expiresAt: Date.now() + RADIO_BROWSER_CACHE_MS,
+      stations,
+    });
+  }
+  return radioBrowserStationsToCzml(stations, options.category);
 }
 
 function cssHexColor(value: unknown): [number, number, number, number] {

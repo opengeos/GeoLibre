@@ -12,6 +12,23 @@ export const CCTV_MAX_CAMERAS = 12;
 export function cctvPreviewsVisibleAtZoom(zoom: number | null): boolean {
   return zoom !== null && Number.isFinite(zoom) && zoom > 13;
 }
+
+/** When camera previews are drawn: past street level, at every zoom, or never. */
+export const CCTV_PREVIEW_MODES = ["auto", "always", "off"] as const;
+export type CctvPreviewMode = (typeof CCTV_PREVIEW_MODES)[number];
+
+/**
+ * Whether to draw snapshot billboards at this zoom under a preview mode.
+ *
+ * @param mode The panel's preview mode.
+ * @param zoom The camera's current zoom, or null when unknown.
+ * @returns True when the cameras should show their snapshots on the map.
+ */
+export function cctvShowPreviews(mode: CctvPreviewMode, zoom: number | null): boolean {
+  if (mode === "always") return true;
+  if (mode === "off") return false;
+  return cctvPreviewsVisibleAtZoom(zoom);
+}
 export const CCTV_CATALOG_CACHE_MS = 15 * 60_000;
 export const CCTV_CATALOG_FAILURE_CACHE_MS = 60_000;
 

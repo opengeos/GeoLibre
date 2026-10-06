@@ -3026,6 +3026,24 @@
       "dams": "Dams",
       "cables": "Submarine Cables",
       "osmInfrastructure": "OSM Infrastructure",
+      "options": {
+        "radioCategory": "Category",
+        "radioCategories": {
+          "all": "All",
+          "news": "News",
+          "talk": "Talk",
+          "weather": "Weather / Emergency",
+          "publicSafety": "Public Safety",
+          "aviationMarine": "Aviation / Marine",
+          "trafficTransit": "Traffic / Transit",
+          "music": "Music",
+          "other": "Other"
+        },
+        "cctvPreviews": "Snapshots on map",
+        "cctvPreviewsAuto": "When zoomed in",
+        "cctvPreviewsAlways": "Always",
+        "cctvPreviewsOff": "Off (markers only)"
+      },
       "loading": "Updating…",
       "updateFailed": "Update failed",
       "noneInView": "No features found in the current view for this layer.",

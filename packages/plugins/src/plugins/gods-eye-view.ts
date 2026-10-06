@@ -14,7 +14,9 @@ import {
   fetchOsmInfrastructureCzml,
   fetchRadioBrowserCzml,
   fetchSubmarineCablesCzml,
+  RADIO_CATEGORIES,
   type GodsEyeViewFeedPayload,
+  type RadioCategory,
 } from "./gods-eye-view-catalog-feeds";
 import { GodsEyeViewDenseCatalog } from "./gods-eye-view-dense";
 import { fetchActiveFiresCzml } from "./gods-eye-view-fire-feeds";
@@ -35,8 +37,10 @@ import { OVERPASS_REQUEST_TIMEOUT_MS } from "./osm-downloader-api";
 import { fetchMilitaryFlightsCzml, fetchOpenSkyCzml } from "./gods-eye-view-aircraft-feeds";
 import {
   CCTV_MAX_VIEW_SPAN_DEGREES,
+  CCTV_PREVIEW_MODES,
   CCTV_QUERY_SNAP_DEGREES,
-  cctvPreviewsVisibleAtZoom,
+  cctvShowPreviews,
+  type CctvPreviewMode,
   fetchCctvCzml,
 } from "./gods-eye-view-cctv-feeds";
 import { fetchTransitCzml } from "./gods-eye-view-transit-feeds";
@@ -90,6 +94,19 @@ interface FeedFetchContext {
   window: CzmlTimeWindow;
   bounds: [number, number, number, number] | null;
   zoom: number | null;
+  /** The feed's option values, every declared option resolved to a choice. */
+  options: Readonly<Record<string, string>>;
+}
+
+/**
+ * A per-feed choice offered under the feed's row, such as the radio category.
+ * A project persists only the choices that differ from the default.
+ */
+interface FeedOptionDescriptor {
+  id: string;
+  label: readonly [key: string, fallback: string];
+  choices: readonly { value: string; label: readonly [key: string, fallback: string] }[];
+  defaultValue: string;
 }
 
 /** A translatable status line: key, English fallback, interpolation params. */
@@ -119,6 +136,8 @@ interface FeedDescriptor {
   status?: (enabled: boolean) => StatusMessage | null;
   /** Release what the feed holds outside the layer, such as an open socket. */
   dispose?: () => void;
+  /** Choices that change what the feed shows; changing one refreshes it. */
+  options?: readonly FeedOptionDescriptor[];
   fetch: (context: FeedFetchContext) => Promise<GodsEyeViewFeedPayload>;
 }
 
@@ -137,6 +156,25 @@ const aisClient = new AisStreamClient({
 function aisQueryBounds(bounds: FeedFetchContext["bounds"]) {
   return viewportQueryBounds(bounds, AIS_MAX_VIEW_SPAN_DEGREES, AIS_QUERY_SNAP_DEGREES);
 }
+
+/** The radio categories' labels, with upstream's panel wording as the fallback. */
+const RADIO_CATEGORY_LABELS: Record<RadioCategory, readonly [key: string, fallback: string]> = {
+  all: ["panel.godsEyeView.options.radioCategories.all", "All"],
+  news: ["panel.godsEyeView.options.radioCategories.news", "News"],
+  talk: ["panel.godsEyeView.options.radioCategories.talk", "Talk"],
+  weather: ["panel.godsEyeView.options.radioCategories.weather", "Weather / Emergency"],
+  "public-safety": ["panel.godsEyeView.options.radioCategories.publicSafety", "Public Safety"],
+  "aviation-marine": [
+    "panel.godsEyeView.options.radioCategories.aviationMarine",
+    "Aviation / Marine",
+  ],
+  "traffic-transit": [
+    "panel.godsEyeView.options.radioCategories.trafficTransit",
+    "Traffic / Transit",
+  ],
+  music: ["panel.godsEyeView.options.radioCategories.music", "Music"],
+  other: ["panel.godsEyeView.options.radioCategories.other", "Other"],
+};
 
 /**
  * The complete contract for every feed.
@@ -408,18 +446,39 @@ const FEED_DESCRIPTORS = {
     timeoutMs: 30_000,
     flag: GODS_EYE_VIEW_CCTV_FLAG,
     defaultEnabled: false,
+    options: [
+      {
+        id: "previews",
+        label: ["panel.godsEyeView.options.cctvPreviews", "Snapshots on map"],
+        choices: [
+          {
+            value: "auto" satisfies CctvPreviewMode,
+            label: ["panel.godsEyeView.options.cctvPreviewsAuto", "When zoomed in"],
+          },
+          {
+            value: "always" satisfies CctvPreviewMode,
+            label: ["panel.godsEyeView.options.cctvPreviewsAlways", "Always"],
+          },
+          {
+            value: "off" satisfies CctvPreviewMode,
+            label: ["panel.godsEyeView.options.cctvPreviewsOff", "Off (markers only)"],
+          },
+        ],
+        defaultValue: "auto",
+      },
+    ],
     viewportKey: (bounds, zoom) =>
       `${viewportBoundsKey(
         bounds,
         CCTV_MAX_VIEW_SPAN_DEGREES,
         CCTV_QUERY_SNAP_DEGREES,
-      )}|preview:${cctvPreviewsVisibleAtZoom(zoom)}`,
+      )}|preview:${cctvShowPreviews(cctvPreviewMode(), zoom)}`,
     hasQueryableViewport: (bounds) =>
       viewportQueryBounds(bounds, CCTV_MAX_VIEW_SPAN_DEGREES, CCTV_QUERY_SNAP_DEGREES) !== null,
-    fetch: ({ bounds, signal, zoom }) =>
+    fetch: ({ bounds, signal, zoom, options }) =>
       fetchCctvCzml(bounds, {
         signal,
-        showPreviews: cctvPreviewsVisibleAtZoom(zoom),
+        showPreviews: cctvShowPreviews(options.previews as CctvPreviewMode, zoom),
       }),
   },
   radio: {
@@ -430,7 +489,16 @@ const FEED_DESCRIPTORS = {
     timeoutMs: 20_000,
     flag: GODS_EYE_VIEW_RADIO_FLAG,
     defaultEnabled: false,
-    fetch: ({ signal }) => fetchRadioBrowserCzml({ signal }),
+    options: [
+      {
+        id: "category",
+        label: ["panel.godsEyeView.options.radioCategory", "Category"],
+        choices: RADIO_CATEGORIES.map((value) => ({ value, label: RADIO_CATEGORY_LABELS[value] })),
+        defaultValue: "all" satisfies RadioCategory,
+      },
+    ],
+    fetch: ({ signal, options }) =>
+      fetchRadioBrowserCzml({ signal, category: options.category as RadioCategory }),
   },
 } as const satisfies Record<string, FeedDescriptor>;
 
@@ -448,12 +516,18 @@ const FEED_IDS = Object.keys(FEED_DESCRIPTORS) as FeedId[];
 const SPEED_OPTIONS = [1, 10, 60, 600] as const;
 const DEFAULT_SPEED = 1;
 
-/** What a project persists: the feed toggles and the clock speed. */
+/** What a project persists: the feed toggles, their options and the clock speed. */
 type GodsEyeViewProjectState = Record<FeedId, boolean> & {
   /** Add the current Starlink shell as lightweight points. */
   dense: boolean;
   /** One of {@link SPEED_OPTIONS}. */
   speed: number;
+  /**
+   * Each feed's option choices that differ from the default. Defaults are left
+   * out, so a project saved before options existed and one that never changed
+   * them persist the same blob.
+   */
+  options?: Partial<Record<FeedId, Record<string, string>>>;
 };
 
 interface FeedState {
@@ -467,6 +541,8 @@ interface FeedState {
   generation: number;
   lastViewportKey: string | null;
   requestedViewportKey: string | null;
+  /** The options the layer's current rows were fetched with. */
+  lastOptionsKey: string | null;
 }
 
 const feeds = Object.fromEntries(
@@ -483,6 +559,7 @@ const feeds = Object.fromEntries(
       generation: 0,
       lastViewportKey: null,
       requestedViewportKey: null,
+      lastOptionsKey: null,
     },
   ]),
 ) as Record<FeedId, FeedState>;
@@ -531,6 +608,25 @@ function translate(
 
 function feedFlag(feed: FeedId): string {
   return FEED_DESCRIPTORS[feed].flag;
+}
+
+function feedOptionDescriptors(feed: FeedId): readonly FeedOptionDescriptor[] {
+  return (FEED_DESCRIPTORS[feed] as FeedDescriptor).options ?? [];
+}
+
+/** Every declared option of a feed, resolved to the saved choice or its default. */
+function feedOptions(feed: FeedId): Record<string, string> {
+  const saved = savedState.options?.[feed];
+  return Object.fromEntries(
+    feedOptionDescriptors(feed).map((option) => [
+      option.id,
+      saved?.[option.id] ?? option.defaultValue,
+    ]),
+  );
+}
+
+function cctvPreviewMode(): CctvPreviewMode {
+  return feedOptions("cctv").previews as CctvPreviewMode;
 }
 
 function feedName(feed: FeedId): string {
@@ -754,10 +850,14 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
   const bounds = appRef?.getViewBounds?.() ?? null;
   const zoom = cesiumRef?.readView().zoom ?? null;
   const viewportKey = descriptor.viewportKey?.(bounds, zoom) ?? null;
+  const options = feedOptions(feed);
+  const optionsKey = JSON.stringify(options);
   if (
     !force &&
     state.lastUpdated &&
     Date.now() - state.lastUpdated.getTime() < refreshInterval(descriptor) &&
+    // A project load can carry other options than the rows on the map show.
+    state.lastOptionsKey === optionsKey &&
     // Recent data the user can no longer see is no reason to skip: a feed
     // toggled off and on has had its layer removed and must rebuild it, and a
     // project load brings the layer back without the rows, which are stripped
@@ -782,6 +882,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
       window,
       bounds,
       zoom,
+      options,
     });
     if (generation !== state.generation || !state.enabled) return;
     const updatedAt = new Date();
@@ -790,6 +891,7 @@ async function refreshFeed(feed: FeedId, force = true): Promise<void> {
     state.lastUpdated = updatedAt;
     state.retryAfter = 0;
     state.lastViewportKey = viewportKey;
+    state.lastOptionsKey = optionsKey;
     if (feed === "satellites") syncDenseCatalog();
   } catch (error) {
     // No `signal.aborted` check: the timeout watchdog aborts this very request,
@@ -825,6 +927,7 @@ function removeFeedLayer(feed: FeedId): void {
   state.request = null;
   state.requestedViewportKey = null;
   state.lastViewportKey = null;
+  state.lastOptionsKey = null;
   state.loading = false;
   state.retryAfter = 0;
   const layer = state.layerId
@@ -881,6 +984,23 @@ function bindViewportRefresh(): void {
   removeViewportListener = moveEnd.addEventListener(onMoveEnd);
 }
 
+function setFeedOption(feed: FeedId, option: FeedOptionDescriptor, value: string): void {
+  if (!option.choices.some((choice) => choice.value === value)) return;
+  const { [option.id]: _previous, ...others } = savedState.options?.[feed] ?? {};
+  const choices = value === option.defaultValue ? others : { ...others, [option.id]: value };
+  const { [feed]: _feed, ...otherFeeds } = savedState.options ?? {};
+  savedState = {
+    ...savedState,
+    options: Object.keys(choices).length ? { ...otherFeeds, [feed]: choices } : otherFeeds,
+  };
+  if (feeds[feed].enabled) {
+    feeds[feed].failed = false;
+    feeds[feed].retryAfter = 0;
+    void refreshFeed(feed);
+  }
+  renderPanel();
+}
+
 function setDenseEnabled(enabled: boolean): void {
   savedState = { ...savedState, dense: enabled };
   if (enabled) {
@@ -915,11 +1035,35 @@ function normalizeProjectState(value: unknown): GodsEyeViewProjectState {
       typeof record[feed] === "boolean" ? record[feed] : FEED_DESCRIPTORS[feed].defaultEnabled,
     ]),
   ) as Record<FeedId, boolean>;
+  const savedOptions =
+    record.options && typeof record.options === "object"
+      ? (record.options as Record<string, unknown>)
+      : {};
+  const options: Partial<Record<FeedId, Record<string, string>>> = {};
+  for (const feed of FEED_IDS) {
+    const saved = savedOptions[feed];
+    if (!saved || typeof saved !== "object") continue;
+    const choices: Record<string, string> = {};
+    for (const option of feedOptionDescriptors(feed)) {
+      const value = (saved as Record<string, unknown>)[option.id];
+      // Only an offered, non-default choice survives: a hand-edited project can
+      // carry anything, and the default is what an absent value already means.
+      if (
+        typeof value === "string" &&
+        value !== option.defaultValue &&
+        option.choices.some((choice) => choice.value === value)
+      ) {
+        choices[option.id] = value;
+      }
+    }
+    if (Object.keys(choices).length) options[feed] = choices;
+  }
   return {
     ...toggles,
     dense: typeof record.dense === "boolean" ? record.dense : false,
     // A hand-edited project can carry anything; only an offered step is honoured.
     speed: SPEED_OPTIONS.find((option) => option === record.speed) ?? DEFAULT_SPEED,
+    ...(Object.keys(options).length ? { options } : {}),
   };
 }
 
@@ -979,6 +1123,33 @@ function speedRow(): HTMLElement {
     select.append(item);
   }
   select.addEventListener("change", () => setSpeed(Number(select.value)));
+  row.append(label, select);
+  return row;
+}
+
+/** One per-feed option as a labelled select under the feed's row. */
+function optionRow(feed: FeedId, option: FeedOptionDescriptor): HTMLElement {
+  const row = document.createElement("div");
+  row.dataset.feedOption = option.id;
+  row.style.cssText =
+    "display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px";
+  const id = `gods-eye-view-option-${feed}-${option.id}`;
+  const label = document.createElement("label");
+  label.htmlFor = id;
+  label.textContent = translate(...option.label);
+  label.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
+  const select = document.createElement("select");
+  select.id = id;
+  select.disabled = !cesiumRef;
+  const current = feedOptions(feed)[option.id];
+  for (const choice of option.choices) {
+    const item = document.createElement("option");
+    item.value = choice.value;
+    item.textContent = translate(...choice.label);
+    item.selected = choice.value === current;
+    select.append(item);
+  }
+  select.addEventListener("change", () => setFeedOption(feed, option, select.value));
   row.append(label, select);
   return row;
 }
@@ -1220,6 +1391,7 @@ function renderPanel(): void {
       status.textContent = statusText(feed);
       status.style.cssText = "font-size:11px;color:hsl(var(--muted-foreground))";
       row.append(label, status);
+      for (const option of feedOptionDescriptors(feed)) row.append(optionRow(feed, option));
       if (feed === "satellites") {
         const dense = denseCatalog.snapshot();
         const button = document.createElement("button");
@@ -1441,7 +1613,12 @@ export const godsEyeViewPlugin: GeoLibrePlugin = {
   deactivate,
   // The host drops plugin settings that are not strictly JSON-compatible, so
   // round-trip the record the way the Time Slider does before persisting it.
-  getProjectState: () => JSON.parse(JSON.stringify(savedState)) as GodsEyeViewProjectState,
+  getProjectState: () => {
+    const { options, ...state } = savedState;
+    return JSON.parse(
+      JSON.stringify(options && Object.keys(options).length ? { ...state, options } : state),
+    ) as GodsEyeViewProjectState;
+  },
   applyProjectState: (_app: GeoLibreAppAPI, state: unknown) => {
     savedState = normalizeProjectState(state);
     for (const feed of FEED_IDS) {
