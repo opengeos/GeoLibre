@@ -454,12 +454,12 @@ setSatelliteEmbeddingsFileSaver((blob, { defaultName, extension, mimeType, descr
   }),
 );
 
-// The Fields of the World plugin saves tile GeoParquet and GeoJSON files the
-// same way.
 // Sentinel-2 Explorer composites are tiles of a MapLibre protocol; register it
 // up front so a saved project's composite layers draw before the plugin opens.
 registerSentinel2CompositeProtocol();
 
+// The Fields of the World plugin saves tile GeoParquet and GeoJSON files the
+// same way.
 setFieldsOfTheWorldFileSaver((blob, { defaultName, extension, mimeType, description }) =>
   saveBinaryFileWithFallback(blob, {
     defaultName,
