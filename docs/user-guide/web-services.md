@@ -327,10 +327,15 @@ Finds and views Sentinel-2 L2A imagery anywhere on Earth, the way Taylor Geospat
 - Set the **From** and **To** dates. The map colors every MGRS tile by its statistics over that window, read from the catalog's small monthly stats files: the **clearest scene**'s cloud cover, the **scene count**, the **median cloud** cover, or the **coverage** (the most of the tile any one scene fills). Green is good and dark red is poor.
 - The **Max cloud %**, **Min coverage %**, and **Min scenes per tile** filters grey out tiles that fail them. Max cloud and Min coverage also filter the scene list. **Show the tile grid** hides the grid without closing the panel.
 - **Click a tile** to search its scenes. The panel reads only the row groups of the window's GeoParquet parts that can hold the tile, usually a few hundred KB, and reports how many range reads it took. The scenes can be sorted by least cloud, most coverage, or newest, and hovering a scene outlines its footprint.
-- **Add scenes as** picks what **Add to map** streams: the **true color** (TCI) image, or any single band (B01 to B12, B8A, AOT, WVP, the SCL scene classification, and for Collection 1 the cloud and snow probability masks). Each scene is added as a COG layer, saved with the project and restyled in the Style panel like any raster. The selected tile is left unfilled so the scene shows through.
+- **Add scenes as** picks what **Add to map** streams:
+    - the **true color** (TCI) image, or any **single band** (B01 to B12, B8A, AOT, WVP, the SCL scene classification, and for Collection 1 the cloud and snow probability masks), added as a COG layer and restyled in the Style panel like any raster;
+    - a **composite** of several band files: **false color infrared** (B08, B04, B03), **agriculture** (B11, B08, B02), or **short-wave infrared** (B12, B8A, B04), or an **index**: **NDVI** (B08/B04) or **NDWI** (B03/B08) on a diverging ramp. Each map tile reads the bands' windows straight from their COGs at the matching overview, warps them from UTM, and paints them in the browser, so 10 m and 20 m bands combine at full resolution. Reflectance is corrected for the 1000 offset of processing baseline 04.00 and later. Composites need the MapLibre renderer.
+- Once a scene is on the map in the chosen display, its button reads **Remove from map**; removing the layer in the Layers panel turns it back into **Add to map**. All of these layers are saved with the project. The selected tile is left unfilled so the scene shows through.
+- **Download** lists the scene's files (TCI, every band, SCL, and the Collection 1 masks). Each opens the Cloud-Optimized GeoTIFF in your browser (the system browser on desktop), which saves it.
+- **About this explorer** at the top of the panel collapses to save space.
 
 !!! note "Data and license"
-    The imagery is Copernicus Sentinel-2 data processed by ESA, indexed by Element 84's Earth Search, and hosted on the AWS Registry of Open Data. The catalog is published by Taylor Geospatial under CC-BY-4.0. Band composites and NDVI/NDWI, which the reference explorer computes from several band files, are not offered yet; add the bands as separate layers instead.
+    The imagery is Copernicus Sentinel-2 data processed by ESA, indexed by Element 84's Earth Search, and hosted on the AWS Registry of Open Data. The catalog is published by Taylor Geospatial under CC-BY-4.0.
 
 ## Ocean Data Platform
 

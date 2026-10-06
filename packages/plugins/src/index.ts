@@ -600,6 +600,7 @@ export {
   SENTINEL2_EXPLORER_PLUGIN_ID,
   maplibreSentinel2ExplorerPlugin,
 } from "./plugins/maplibre-sentinel2-explorer";
+export { registerSentinel2CompositeProtocol } from "./plugins/sentinel2-composite";
 export {
   OCEAN_DATA_PLATFORM_PLUGIN_ID,
   maplibreOceanDataPlatformPlugin,

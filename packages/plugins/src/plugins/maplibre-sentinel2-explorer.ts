@@ -4,6 +4,13 @@ import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent } from "mapl
 import { createPluginTranslator } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibreCogLayerOptions, GeoLibrePlugin } from "../types";
 import {
+  S2_COMPOSITES,
+  compositeTileUrl,
+  registerSentinel2CompositeProtocol,
+  isComposite,
+  type S2CompositeKey,
+} from "./sentinel2-composite";
+import {
   MGRS_TILE_RE,
   S2_BANDS,
   S2_COLLECTIONS,
@@ -22,6 +29,7 @@ import {
   type S2TileStats,
   aggregateMonths,
   bandRescale,
+  baselineOffset,
   filterScenes,
   loadMgrsGrid,
   loadMonthSlice,
@@ -50,6 +58,33 @@ const HIGHLIGHT_COLOR = "#f5a623";
 const DIMMED_COLOR = "#9aa0a6";
 const ATTRIBUTION =
   "Sentinel-2 L2A: Copernicus / ESA, Earth Search by Element 84; s2-stac-geoparquet by Taylor Geospatial";
+
+/** Layer metadata naming the scene a layer shows, and how it is drawn. */
+const SCENE_METADATA_KEY = "sentinel2Scene";
+const DISPLAY_METADATA_KEY = "sentinel2Display";
+
+/** Scene/display pairs whose COG is still loading, keyed by `sceneLayerKey`. */
+const pendingAdds = new Set<string>();
+
+const sceneLayerKey = (sceneId: string, display: string) => `${sceneId}|${display}`;
+
+/**
+ * The store layer showing a scene in a display, if one is on the map.
+ *
+ * @param sceneId - STAC item id.
+ * @param display - TCI, a band, or a composite key.
+ * @returns The layer id, or null.
+ */
+function sceneLayerId(sceneId: string, display: string): string | null {
+  const layer = useAppStore
+    .getState()
+    .layers.find(
+      (candidate) =>
+        candidate.metadata?.[SCENE_METADATA_KEY] === sceneId &&
+        candidate.metadata?.[DISPLAY_METADATA_KEY] === display,
+    );
+  return layer?.id ?? null;
+}
 
 /** `v` on a grid feature with no scenes in the window. */
 const V_UNPAINTED = -1;
@@ -104,6 +139,15 @@ const CSS = {
     "color:hsl(var(--muted-foreground));font-size:10px;overflow:hidden;text-overflow:ellipsis;" +
     "white-space:nowrap;font-family:ui-monospace,monospace;",
   actions: "display:flex;gap:4px;flex-wrap:wrap;",
+  fileList: "display:flex;gap:4px;flex-wrap:wrap;",
+  fileLink:
+    "padding:1px 6px;font-size:10px;border-radius:4px;cursor:pointer;" +
+    "border:1px dashed hsl(var(--border));background:transparent;" +
+    "color:hsl(var(--primary));font-family:ui-monospace,monospace;",
+  about:
+    "display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:6px;" +
+    "border:1px solid hsl(var(--border));background:hsl(var(--muted));",
+  aboutSummary: "font-weight:600;cursor:pointer;",
   action:
     "padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;" +
     "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
@@ -146,6 +190,8 @@ interface PanelState {
   shown: number;
   status: { text: string; error: boolean } | null;
   busy: boolean;
+  /** Whether the About section at the top of the panel is expanded. */
+  aboutOpen: boolean;
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -174,6 +220,7 @@ function initialState(): PanelState {
     shown: PAGE_SIZE,
     status: null,
     busy: false,
+    aboutOpen: true,
   };
 }
 
@@ -183,6 +230,8 @@ let panelContainer: HTMLElement | null = null;
 let disposePanel: (() => void) | null = null;
 let unregisterPanel: (() => void) | null = null;
 let unsubscribeLocale: (() => void) | null = null;
+/** Re-labels the result cards' Add/Remove buttons; set while a panel is mounted. */
+let syncSceneButtons: (() => void) | null = null;
 /** Re-renders the panel's dynamic parts; set while a panel is mounted. */
 let refreshPanel: (() => void) | null = null;
 /** Per-tile aggregates of the painted window. */
@@ -576,33 +625,123 @@ async function selectTile(tile: string): Promise<void> {
 }
 
 /** The option list of the Display select, collection aware. */
-function displayOptions(): Array<{ value: DisplayKey; label: string }> {
+function displayOptions(): Array<{
+  label: string;
+  options: Array<{ value: DisplayKey; label: string }>;
+}> {
   const collection = S2_COLLECTIONS[state.collection];
   const bands = [
     ...S2_BANDS,
     ...S2_MASK_BANDS.filter((band) => collection.masks.includes(band.key)),
   ];
-  return [
+  const composites: Array<{ value: DisplayKey; label: string }> = [
     { value: "TCI", label: tr("displayTci", "True color (TCI)") },
-    ...bands.map((band) => ({
-      value: band.key,
-      label: `${band.key} · ${tr(`band${band.key}`, band.label)} · ${band.res} m`,
+  ];
+  if (compositesSupported()) {
+    composites.push(
+      ...(Object.keys(S2_COMPOSITES) as S2CompositeKey[]).map((key) => ({
+        value: key,
+        label: compositeLabel(key),
+      })),
+    );
+  }
+  return [
+    {
+      label: tr("groupComposites", "Composites and indices"),
+      options: composites,
+    },
+    {
+      label: tr("groupBands", "Single bands"),
+      options: bands.map((band) => ({
+        value: band.key,
+        label: `${band.key} · ${tr(`band${band.key}`, band.label)} · ${band.res} m`,
+      })),
+    },
+  ];
+}
+
+/** The display name of a composite, with the bands it reads. */
+function compositeLabel(key: S2CompositeKey): string {
+  const names: Record<S2CompositeKey, string> = {
+    fcir: tr("compositeFcir", "False color infrared"),
+    agri: tr("compositeAgri", "Agriculture"),
+    swir: tr("compositeSwir", "Short-wave infrared"),
+    ndvi: tr("compositeNdvi", "NDVI (vegetation index)"),
+    ndwi: tr("compositeNdwi", "NDWI (water index)"),
+  };
+  const spec = S2_COMPOSITES[key];
+  return `${names[key]} · ${spec.bands.join(spec.kind === "index" ? "/" : ", ")}`;
+}
+
+/**
+ * Whether composites can be drawn: they are tiles of a MapLibre protocol,
+ * which the Mapbox renderer cannot reach.
+ */
+function compositesSupported(): boolean {
+  // engine-audit-allow: getMap-mapbox -- detects MapLibre; composites are hidden on Mapbox
+  return Boolean(appRef?.getMap?.());
+}
+
+/** Adds a multi-file composite of a scene as a tile layer. */
+function addCompositeToMap(scene: S2Scene, dir: string, key: S2CompositeKey): void {
+  const app = appRef;
+  if (!app?.addTileLayer || !compositesSupported()) {
+    setStatus(tr("noComposite", "Composites need the MapLibre renderer."), true);
+    return;
+  }
+  const name = `${scene.id} (${compositeLabel(key)})`;
+  const bbox =
+    scene.bbox.length === 4 ? (scene.bbox as [number, number, number, number]) : undefined;
+  app.addTileLayer(name, compositeTileUrl(dir, key, baselineOffset(scene.baseline)), {
+    tileSize: 256,
+    // 10 m bands reach their native detail near z14; deeper zooms upsample.
+    maxzoom: 14,
+    attribution: ATTRIBUTION,
+    ...(bbox ? { bounds: bbox } : {}),
+    metadata: { [SCENE_METADATA_KEY]: scene.id, [DISPLAY_METADATA_KEY]: key },
+  });
+  if (bbox) app.fitBounds?.(bbox);
+  setStatus(tr("added", "Added {{name}}.", { name }));
+}
+
+/** The files of a scene the Download list offers. */
+function sceneFiles(): Array<{ key: string; label: string }> {
+  const collection = S2_COLLECTIONS[state.collection];
+  return [
+    { key: "TCI", label: "TCI" },
+    ...S2_BANDS.map((band) => ({ key: band.key, label: band.key })),
+    ...S2_MASK_BANDS.filter((band) => collection.masks.includes(band.key)).map((band) => ({
+      key: band.key,
+      label: band.key,
     })),
   ];
+}
+
+/** Opens a scene file for download (the system browser on desktop). */
+function downloadFile(url: string): void {
+  if (appRef?.openExternalUrl) {
+    appRef.openExternalUrl(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 /** Adds one scene to the map as a COG layer in the chosen display. */
 async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void> {
   const app = appRef;
-  if (!app?.addCogLayer) {
-    setStatus(tr("noCog", "This GeoLibre build cannot add COG layers."), true);
-    return;
-  }
   let dir: string;
   try {
     dir = sceneDirectory(scene.thumbnailUrl);
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), true);
+    return;
+  }
+  if (isComposite(display)) {
+    addCompositeToMap(scene, dir, display);
+    return;
+  }
+  if (!app?.addCogLayer) {
+    setStatus(tr("noCog", "This GeoLibre build cannot add COG layers."), true);
     return;
   }
   const url = `${dir}/${display}.tif`;
@@ -634,6 +773,9 @@ async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void>
     };
   }
   setStatus(tr("adding", "Adding {{name}}…", { name }));
+  const pendingKey = sceneLayerKey(scene.id, display);
+  pendingAdds.add(pendingKey);
+  syncSceneButtons?.();
   try {
     const id = await app.addCogLayer(name, url, options);
     const store = useAppStore.getState();
@@ -643,7 +785,8 @@ async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void>
         metadata: {
           ...layer.metadata,
           attribution: ATTRIBUTION,
-          sentinel2Scene: scene.id,
+          [SCENE_METADATA_KEY]: scene.id,
+          [DISPLAY_METADATA_KEY]: display,
         },
       });
     }
@@ -656,6 +799,9 @@ async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void>
       }),
       true,
     );
+  } finally {
+    pendingAdds.delete(pendingKey);
+    syncSceneButtons?.();
   }
 }
 
@@ -932,14 +1078,21 @@ function buildPanel(container: HTMLElement): () => void {
   const displayHolder = element("label", CSS.label, tr("display", "Add scenes as"));
   let displaySelect: HTMLSelectElement | null = null;
   function renderDisplaySelect(): void {
-    const next = select<DisplayKey>(
-      displayOptions(),
-      state.display,
-      (value) => {
-        state.display = value;
-      },
-      tr("display", "Add scenes as"),
-    );
+    const next = element("select", CSS.input);
+    next.setAttribute("aria-label", tr("display", "Add scenes as"));
+    for (const group of displayOptions()) {
+      const optgroup = element("optgroup");
+      optgroup.label = group.label;
+      for (const option of group.options) optgroup.append(new Option(option.label, option.value));
+      next.append(optgroup);
+    }
+    // A composite chosen earlier is gone on a renderer without composites.
+    if (![...next.options].some((option) => option.value === state.display)) state.display = "TCI";
+    next.value = state.display;
+    next.addEventListener("change", () => {
+      state.display = next.value;
+      syncSceneButtons?.();
+    });
     if (displaySelect) displaySelect.replaceWith(next);
     else displayHolder.append(next);
     displaySelect = next;
@@ -952,6 +1105,25 @@ function buildPanel(container: HTMLElement): () => void {
     status.append(
       element("div", state.status.error ? CSS.statusError : CSS.status, state.status.text),
     );
+  }
+
+  /** The Add/Remove buttons of the rendered cards and their scenes. */
+  const sceneButtons = new Map<HTMLButtonElement, S2Scene>();
+
+  function syncSceneButton(node: HTMLButtonElement, scene: S2Scene): void {
+    const pending = pendingAdds.has(sceneLayerKey(scene.id, state.display));
+    const onMap = !pending && sceneLayerId(scene.id, state.display) !== null;
+    node.disabled = pending;
+    node.textContent = pending
+      ? tr("addingShort", "Adding…")
+      : onMap
+        ? tr("removeFromMap", "Remove from map")
+        : tr("addToMap", "Add to map");
+    node.title = onMap
+      ? tr("removeFromMapTitle", "Remove this scene's layer from the map")
+      : tr("addToMapTitle", "Stream this scene's Cloud-Optimized GeoTIFF onto the map");
+    node.style.cssText = onMap || pending ? CSS.action : CSS.primaryAction;
+    node.setAttribute("aria-pressed", String(onMap));
   }
 
   function sceneCard(scene: S2Scene): HTMLElement {
@@ -976,20 +1148,58 @@ function buildPanel(container: HTMLElement): () => void {
     const id = element("div", CSS.cardId, scene.id);
     id.title = scene.id;
     const actions = element("div", CSS.actions);
+    // Add or remove, for the display chosen above; kept in step with the
+    // store, so removing the layer in the Layers panel flips it back.
+    const addButton = button("", CSS.primaryAction, () => {
+      const layerId = sceneLayerId(scene.id, state.display);
+      if (layerId) useAppStore.getState().removeLayer(layerId);
+      else void addSceneToMap(scene, state.display);
+    });
+    sceneButtons.set(addButton, scene);
+    syncSceneButton(addButton, scene);
     actions.append(
-      button(
-        tr("addToMap", "Add to map"),
-        CSS.primaryAction,
-        () => void addSceneToMap(scene, state.display),
-        tr("addToMapTitle", "Stream this scene's Cloud-Optimized GeoTIFF onto the map"),
-      ),
+      addButton,
       button(tr("zoom", "Zoom"), CSS.action, () => {
         if (scene.bbox.length === 4) {
           appRef?.fitBounds?.(scene.bbox as [number, number, number, number]);
         }
       }),
     );
-    body.append(id, actions);
+    // The scene's files, listed on demand: COGs of 100-250 MB each, handed to
+    // the browser (or the system browser on desktop) rather than buffered.
+    const files = element("div", CSS.fileList);
+    files.hidden = true;
+    const download = button(
+      tr("download", "Download"),
+      CSS.action,
+      () => {
+        if (!files.childElementCount) {
+          let dir: string;
+          try {
+            dir = sceneDirectory(scene.thumbnailUrl);
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : String(error), true);
+            return;
+          }
+          for (const file of sceneFiles()) {
+            const url = `${dir}/${file.key}.tif`;
+            const fileButton = button(
+              `${file.label}.tif`,
+              CSS.fileLink,
+              () => downloadFile(url),
+              url,
+            );
+            files.append(fileButton);
+          }
+        }
+        files.hidden = !files.hidden;
+        download.setAttribute("aria-expanded", String(!files.hidden));
+      },
+      tr("downloadTitle", "Download this scene's Cloud-Optimized GeoTIFFs"),
+    );
+    download.setAttribute("aria-expanded", "false");
+    actions.append(download);
+    body.append(id, actions, files);
     card.append(thumb, body);
     card.addEventListener("mouseenter", () => showFootprint(scene));
     card.addEventListener("mouseleave", () => showFootprint(null));
@@ -997,6 +1207,7 @@ function buildPanel(container: HTMLElement): () => void {
   }
 
   function renderResults(): void {
+    sceneButtons.clear();
     resultsSection.replaceChildren();
     if (!state.tile) return;
     const header = element("div", CSS.resultHeader);
@@ -1074,9 +1285,19 @@ function buildPanel(container: HTMLElement): () => void {
     ),
   );
 
-  root.append(
+  const about = element("details", CSS.about);
+  about.open = state.aboutOpen;
+  about.addEventListener("toggle", () => {
+    state.aboutOpen = about.open;
+  });
+  about.append(
+    element("summary", CSS.aboutSummary, tr("about", "About this explorer")),
     intro,
     links,
+  );
+
+  root.append(
+    about,
     collectionLabel,
     dates,
     metricLabel,
@@ -1093,8 +1314,17 @@ function buildPanel(container: HTMLElement): () => void {
     renderResults();
   };
   refreshPanel();
+  syncSceneButtons = () => {
+    for (const [node, scene] of sceneButtons) syncSceneButton(node, scene);
+  };
+  // A layer added or removed anywhere (the Layers panel, undo) re-labels the cards.
+  const unsubscribeLayers = useAppStore.subscribe((store, previous) => {
+    if (store.layers !== previous.layers) syncSceneButtons?.();
+  });
 
   return () => {
+    unsubscribeLayers();
+    syncSceneButtons = null;
     refreshPanel = null;
     showFootprint(null);
     container.replaceChildren();
@@ -1102,7 +1332,7 @@ function buildPanel(container: HTMLElement): () => void {
 }
 
 function isBaseDisplay(display: DisplayKey): boolean {
-  return display === "TCI" || S2_BANDS.some((band) => band.key === display);
+  return display === "TCI" || isComposite(display) || S2_BANDS.some((band) => band.key === display);
 }
 
 function mountPanel(container: HTMLElement): void {
@@ -1127,6 +1357,7 @@ export const maplibreSentinel2ExplorerPlugin: GeoLibrePlugin = {
   engines: ["maplibre", "mapbox"],
   activate: (app) => {
     appRef = app;
+    registerSentinel2CompositeProtocol();
     const map = mapOf();
     if (map) {
       ensureOverlays(map);

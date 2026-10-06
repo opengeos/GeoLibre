@@ -15,6 +15,14 @@ import {
   toScenes,
   windowMonths,
 } from "../packages/plugins/src/plugins/sentinel2-explorer-data";
+import {
+  S2_COMPOSITES,
+  compositeTileUrl,
+  paintComposite,
+  parseCompositeTileUrl,
+  pickOverview,
+  utmProj4,
+} from "../packages/plugins/src/plugins/sentinel2-composite";
 
 const C1 = S2_COLLECTIONS["sentinel-2-c1-l2a"];
 const L2A = S2_COLLECTIONS["sentinel-2-l2a"];
@@ -193,5 +201,79 @@ describe("Sentinel-2 explorer tile stats", () => {
     assert.equal(tilePasses({ v: 0, cc: 5, sc: 2, cover: 60 }, filters), false);
     assert.equal(tilePasses({ v: 0, cc: 5, sc: 4, cover: 40 }, filters), false);
     assert.equal(tilePasses({ v: 0, cc: null, sc: null, cover: null }, filters), true);
+  });
+});
+
+describe("Sentinel-2 explorer composites", () => {
+  const dir =
+    "https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/31/U/FU/2025/6/S2A_T31UFU_20250612T103656_L2A";
+
+  it("round-trips a composite tile URL and rejects foreign hosts", () => {
+    const url = compositeTileUrl(dir, "ndvi", 1000)
+      .replace("{z}", "12")
+      .replace("{x}", "2100")
+      .replace("{y}", "1340");
+    assert.deepEqual(parseCompositeTileUrl(url), {
+      z: 12,
+      x: 2100,
+      y: 1340,
+      dir,
+      key: "ndvi",
+      offset: 1000,
+    });
+    const foreign = url.replace(
+      encodeURIComponent(dir),
+      encodeURIComponent("https://evil.example.com/x"),
+    );
+    assert.equal(parseCompositeTileUrl(foreign), null);
+    assert.equal(parseCompositeTileUrl(url.replace("c=ndvi", "c=toString")), null);
+    assert.equal(parseCompositeTileUrl(url.replace("o=1000", "o=7")), null);
+  });
+
+  it("stretches RGB composites per band and keys out nodata", () => {
+    const out = new Uint8ClampedArray(8);
+    // Baseline >= 04.00: DN carry the 1000 offset. B08 spans 1000..7000,
+    // B04 and B03 1000..4000.
+    paintComposite(
+      S2_COMPOSITES.fcir,
+      [
+        [4000, 0],
+        [2500, 3000],
+        [1000, 3000],
+      ],
+      1000,
+      out,
+    );
+    assert.deepEqual([...out.slice(0, 4)], [128, 128, 0, 255]);
+    assert.equal(out[7], 0);
+  });
+
+  it("draws an index on its ramp over -1..1", () => {
+    const out = new Uint8ClampedArray(12);
+    // NDVI = (B08 - B04) / (B08 + B04) on offset-corrected DN: 1, 0, -1.
+    paintComposite(
+      S2_COMPOSITES.ndvi,
+      [
+        [1500, 1300, 1000],
+        [1000, 1300, 1500],
+      ],
+      1000,
+      out,
+    );
+    assert.deepEqual([...out.slice(0, 3)], [1, 102, 94]);
+    assert.deepEqual([...out.slice(4, 7)], [245, 245, 245]);
+    assert.deepEqual([...out.slice(8, 11)], [140, 81, 10]);
+  });
+
+  it("picks the coarsest overview still as fine as the tile", () => {
+    assert.equal(pickOverview([10, 20, 40, 80], 5), 0);
+    assert.equal(pickOverview([10, 20, 40, 80], 45), 2);
+    assert.equal(pickOverview([10, 20, 40, 80], 1000), 3);
+  });
+
+  it("names WGS 84 UTM zones for proj4", () => {
+    assert.equal(utmProj4(32631), "+proj=utm +zone=31 +datum=WGS84 +units=m +no_defs");
+    assert.equal(utmProj4(32755), "+proj=utm +zone=55 +south +datum=WGS84 +units=m +no_defs");
+    assert.throws(() => utmProj4(3857));
   });
 });

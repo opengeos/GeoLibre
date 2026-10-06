@@ -9434,7 +9434,21 @@
       "bandWVP": "Water vapour column",
       "bandSCL": "Scene classification",
       "bandCLD_20m": "Cloud probability",
-      "bandSNW_20m": "Snow probability"
+      "bandSNW_20m": "Snow probability",
+      "groupComposites": "Composites and indices",
+      "groupBands": "Single bands",
+      "compositeFcir": "False color infrared",
+      "compositeAgri": "Agriculture",
+      "compositeSwir": "Short-wave infrared",
+      "compositeNdvi": "NDVI (vegetation index)",
+      "compositeNdwi": "NDWI (water index)",
+      "noComposite": "Composites need the MapLibre renderer.",
+      "download": "Download",
+      "downloadTitle": "Download this scene's Cloud-Optimized GeoTIFFs",
+      "about": "About this explorer",
+      "addingShort": "Adding…",
+      "removeFromMap": "Remove from map",
+      "removeFromMapTitle": "Remove this scene's layer from the map"
     },
     "geolibre-fields-of-the-world": {
       "boundariesExists": "{{name}} is already on the map.",

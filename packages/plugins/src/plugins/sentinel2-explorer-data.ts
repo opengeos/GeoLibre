@@ -824,6 +824,17 @@ export const S2_MASK_BANDS: readonly S2Band[] = [
 ];
 
 /**
+ * The BOA offset a scene's reflectance DN carry: 1000 from processing
+ * baseline 04.00 (January 2022) on, else 0 (also when the baseline is unknown).
+ *
+ * @param baseline - The scene's processing baseline, e.g. `"05.11"`.
+ * @returns 1000 or 0.
+ */
+export function baselineOffset(baseline: string | null): number {
+  return baseline && /^\d\d\.\d\d$/.test(baseline) && baseline >= "04.00" ? 1000 : 0;
+}
+
+/**
  * The display range of a single band, in stored DN. Reflectance is DN/10000,
  * plus a BOA offset of 1000 from processing baseline 04.00 (January 2022) on.
  *
@@ -837,7 +848,7 @@ export function bandRescale(band: string, baseline: string | null): [number, num
   if (band === "SCL") return [0, 19];
   if (band === "AOT") return [0, 1000];
   if (band === "WVP") return [0, 6000];
-  const offset = baseline && /^\d\d\.\d\d$/.test(baseline) && baseline >= "04.00" ? 1000 : 0;
+  const offset = baselineOffset(baseline);
   // Visible land sits below ~0.3 reflectance; vegetation reaches ~0.5 in the
   // red edge and NIR, and ~0.4 in SWIR 1.
   const top = /^B0[5-8]$|^B8A$/.test(band)
