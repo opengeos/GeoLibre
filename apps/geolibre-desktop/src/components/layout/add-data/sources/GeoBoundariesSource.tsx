@@ -41,11 +41,12 @@ class InvalidJsonError extends Error {}
 async function fetchJson(url: string, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new HttpStatusError(response.status);
+  // Read the body before parsing, so a dropped connection, timeout, or abort
+  // mid-body surfaces as a request failure rather than as invalid data.
+  const text = await response.text();
   try {
-    return await response.json();
-  } catch (err) {
-    // A timeout or abort mid-body is not a parse failure.
-    if (signal.aborted) throw err;
+    return JSON.parse(text);
+  } catch {
     // A proxy or CDN error page can arrive as a 200 HTML body.
     throw new InvalidJsonError("Response was not valid JSON");
   }
