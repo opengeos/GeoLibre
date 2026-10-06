@@ -13,7 +13,7 @@ import {
 } from "../packages/plugins/src/plugins/components/image-model";
 
 describe("Image control model", () => {
-  it("accepts only absolute http(s) URLs", () => {
+  it("accepts only absolute https URLs", () => {
     assert.equal(normalizeImageUrl(" https://x.example/a.png "), "https://x.example/a.png");
     for (const bad of [
       "",

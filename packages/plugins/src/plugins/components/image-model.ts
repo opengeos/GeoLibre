@@ -18,7 +18,7 @@ export interface ComponentImageState {
   id: string;
   /** Heading shown in the control's header bar. */
   title: string;
-  /** Absolute http(s) URL of the image; empty until the user sets one. */
+  /** Absolute https URL of the image; empty until the user sets one. */
   url: string;
   sizeMode: ImageSizeMode;
   /** Width in CSS pixels (all modes). */
@@ -63,8 +63,10 @@ const POSITIONS = new Set<GeoLibreMapControlPosition>([
 const SIZE_MODES = new Set<ImageSizeMode>(["auto", "fixed", "ratio"]);
 
 /**
- * Validates an image URL: trimmed, absolute, http(s) only, so a saved project
- * cannot make the control load a `javascript:`, `data:` or `file:` address.
+ * Validates an image URL: trimmed, absolute and `https:` only. Both app CSPs
+ * allow only `https:` images (`img-src`), so an `http:` URL would be accepted
+ * and then silently blocked; refusing it also keeps a saved project from making
+ * the control load a `javascript:`, `data:` or `file:` address.
  *
  * @param input - The URL text.
  * @returns The normalized URL, or an empty string when it is not usable.
@@ -73,7 +75,7 @@ export function normalizeImageUrl(input: unknown): string {
   if (typeof input !== "string" || !input.trim()) return "";
   try {
     const url = new URL(input.trim());
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+    return url.protocol === "https:" ? url.href : "";
   } catch {
     return "";
   }

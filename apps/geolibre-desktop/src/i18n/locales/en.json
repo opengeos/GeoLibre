@@ -2931,7 +2931,7 @@
     "newImage": "New image",
     "close": "Close",
     "url": "Image URL",
-    "urlInvalid": "Enter a full http(s) image URL.",
+    "urlInvalid": "Enter a full https:// image URL.",
     "sizeMode": "Size",
     "mode": {
       "auto": "Width (keep the image's aspect ratio)",
@@ -2952,7 +2952,8 @@
     },
     "add": "Add to map",
     "update": "Update",
-    "remove": "Remove image"
+    "remove": "Remove image",
+    "addFailed": "Could not add the image to the map."
   },
   "toolbar": {
     "menu": {

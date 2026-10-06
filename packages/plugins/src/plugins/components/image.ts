@@ -186,17 +186,18 @@ export function setImageControl(
   const id = existing ? input.id! : input.id || newImageId();
   const state = normalizeImageState({ ...DEFAULT_IMAGE_STATE, ...input, id }, id);
   if (!state?.url) return null;
-  // A new corner needs a fresh mount: MapLibre places a control once.
-  if (existing && existing.getState().position !== state.position) {
-    app.removeMapControl(existing);
-    controls.delete(id);
-  }
   const current = controls.get(id);
-  if (current) {
+  if (current && current.getState().position === state.position) {
     current.setState(state);
   } else {
+    // A new corner needs a fresh mount (MapLibre places a control once). Mount
+    // the new one first so a failed mount leaves the old image in place.
     const control = new ImageControl(state, refreshSnapshot);
-    if (!app.addMapControl(control, state.position)) return null;
+    if (!app.addMapControl(control, state.position)) {
+      console.warn(`Could not add the image "${state.title}" to the map.`);
+      return null;
+    }
+    if (current) app.removeMapControl(current);
     controls.set(id, control);
   }
   refreshSnapshot();

@@ -32,7 +32,7 @@ import {
   subscribeImageControlDialog,
 } from "../../../lib/image-control-dialog-store";
 
-type Field = "url" | "width" | "height" | "ratio";
+type Field = "url" | "width" | "height" | "ratio" | "apply";
 
 /** Form values (all text) for a new image. */
 const NEW_IMAGE_TITLE = DEFAULT_IMAGE_STATE.title;
@@ -112,7 +112,7 @@ export function ImageControlDialog({ panel }: { panel: ToolbarPanels["image"] })
       // Editing keeps the fold state; a new image starts expanded.
       collapsed: panel.images.find((image) => image.id === editingId)?.collapsed ?? false,
     });
-    if (id === null) return setInvalid("url");
+    if (id === null) return setInvalid("apply");
     // Stay open, ready for the next image.
     loadForm(null);
   };
@@ -285,6 +285,9 @@ export function ImageControlDialog({ panel }: { panel: ToolbarPanels["image"] })
               <option value="bottom-right">{t("imageControl.corner.bottomRight")}</option>
             </Select>
           </div>
+          {invalid === "apply" && (
+            <p className="text-xs text-amber-600">{t("imageControl.addFailed")}</p>
+          )}
           <div className="flex justify-between gap-2 pt-1">
             {editingId ? (
               <Button type="button" variant="outline" onClick={() => loadForm(null)}>
