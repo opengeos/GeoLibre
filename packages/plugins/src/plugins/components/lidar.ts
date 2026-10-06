@@ -202,7 +202,9 @@ export async function addLidarLayerFromBytes(
  * on the layer's `metadata.localBytesUrl`. maplibre-gl-lidar reports such a
  * cloud's source only as `"file"`, so without this the layer could not be
  * exported or used as a Whitebox tool input. The project format drops
- * `localBytesUrl` on save, as it does for File-loaded rasters.
+ * `localBytesUrl` on save, as it does for File-loaded rasters. Like theirs,
+ * the URL is never revoked: removing a layer can be undone, and the restored
+ * record must still reach its bytes.
  *
  * @param control - The LiDAR control whose loads to watch.
  */
@@ -551,14 +553,6 @@ function createLidarControl(
       if (!currentLayer) {
         if (hasLidarPointCloud(layer.id)) {
           lidarLayerAdapter?.removeLayer(layer.id);
-        }
-        // Release the retained bytes of a cloud loaded from a file. Renderer
-        // teardown unsubscribes before it clears layers, so this runs only for
-        // a layer the user removed. A fetch already reading the URL (an export
-        // or a tool input) has resolved the blob and is unaffected.
-        const localBytesUrl = layer.metadata.localBytesUrl;
-        if (typeof localBytesUrl === "string" && localBytesUrl.startsWith("blob:")) {
-          URL.revokeObjectURL(localBytesUrl);
         }
         continue;
       }

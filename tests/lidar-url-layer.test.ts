@@ -183,7 +183,7 @@ describe("addLidarLayerFromBytes", () => {
     assert.deepEqual(retained, bytes, "the blob URL serves the loaded bytes");
   });
 
-  it("releases the retained bytes when the layer is removed", async () => {
+  it("keeps the retained bytes after removal, so an undone removal can still export", async () => {
     installStubModule();
     const id = await addLidarLayerFromBytes(app, new Uint8Array([0x4c, 0x41, 0x53, 0x46]), {
       name: "Output",
@@ -193,7 +193,7 @@ describe("addLidarLayerFromBytes", () => {
       .localBytesUrl as string;
     assert.ok((await fetch(url)).ok, "readable while the layer exists");
     useAppStore.getState().removeLayer(id!);
-    await assert.rejects(fetch(url), "the blob URL is revoked with the layer");
+    assert.ok((await fetch(url)).ok, "still readable after the layer is removed");
   });
 
   it("keeps the camera still when asked", async () => {
