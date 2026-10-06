@@ -503,9 +503,12 @@ function patchStacSearchCogLayer(control: StacSearchControl): void {
     const layerUrl = normalizeStacRasterUrl(
       mutableControl._convertS3ToHttps?.(selectedAsset.url) ?? selectedAsset.url,
     );
-    const { COGLayer: COGLayerClass, texture } = await import("@developmentseed/deck.gl-geotiff");
+    // deck.gl-geotiff 0.8 exports the texture helpers (`inferTextureFormat`)
+    // at the top level instead of under a `texture` namespace.
+    const geotiff = await import("@developmentseed/deck.gl-geotiff");
+    const COGLayerClass = geotiff.COGLayer;
     const renderProps = await createStacCogRenderProps(
-      texture,
+      geotiff,
       getStacSearchRenderOptions(mutableControl),
     );
     await patchStacSearchCOGLayerClass(COGLayerClass);

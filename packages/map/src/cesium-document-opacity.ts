@@ -1,4 +1,5 @@
-import type { Color, DataSource, Entity, Property } from "@cesium/engine";
+import type { Color } from "@cesium/core";
+import type { DataSource, Entity, Property } from "@cesium/engine";
 
 type CesiumNs = typeof import("@cesium/engine");
 

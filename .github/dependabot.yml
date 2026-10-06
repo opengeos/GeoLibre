@@ -10,6 +10,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      # The Rust side is a patched vendor copy of tauri-plugin-geolocation
+      # 2.3.x (src-tauri/vendor/tauri-plugin-geolocation/GEOLIBRE_PATCH.md).
+      # `tauri build` rejects a JS/Rust major.minor mismatch, so the JS guest
+      # moves only when the vendor copy is re-based on a new upstream release.
+      - dependency-name: "@tauri-apps/plugin-geolocation"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
     groups:
       # Security fixes land on their own, immediately actionable PRs.
       npm-security:

@@ -29,6 +29,13 @@ describe("@carbonplan/zarr-layer dependency patch", () => {
   });
 
   it("still requires the uniforms every shader variant samples", () => {
-    assert.ok(bundle.includes('mustGetUniformLocation(gl, program, "opacity")'));
+    // 0.11 only relaxes `opacity` for user-supplied custom shaders; the
+    // built-in variants still go through the throwing lookup.
+    assert.ok(bundle.includes('optionalForCustom("opacity")'));
+    assert.ok(
+      bundle.includes(
+        "useCustomShader ? gl.getUniformLocation(program, name) : mustGetUniformLocation(gl, program, name)",
+      ),
+    );
   });
 });

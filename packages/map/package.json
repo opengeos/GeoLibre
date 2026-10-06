@@ -99,6 +99,7 @@
     "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/style-layer-ids.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts --format esm --dts"
   },
   "dependencies": {
+    "@cesium/core": "^0.1.0",
     "@cesium/engine": "^26.4.0",
     "@cesium/widgets": "^16.3.0",
     "@geolibre/core": "*",

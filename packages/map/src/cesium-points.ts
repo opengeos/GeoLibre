@@ -1,6 +1,6 @@
 import { DEFAULT_LAYER_STYLE, styleValue, type GeoLibreLayer } from "@geolibre/core";
+import type { Color } from "@cesium/core";
 import type {
-  Color,
   DataSource,
   Entity,
   HeightReference,

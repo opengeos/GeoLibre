@@ -6,7 +6,8 @@ import {
   documentLocale,
 } from "@geolibre/core";
 import type { Feature } from "geojson";
-import type { Cartesian3, CesiumWidget, DistanceDisplayCondition, Entity } from "@cesium/engine";
+import type { Cartesian3, DistanceDisplayCondition } from "@cesium/core";
+import type { CesiumWidget, Entity } from "@cesium/engine";
 import { readMapViewFromCamera, zoomToDisplayDistance } from "./cesium-camera";
 
 /** Whether a label expression reads `["zoom"]`, so its text changes with the camera. */
