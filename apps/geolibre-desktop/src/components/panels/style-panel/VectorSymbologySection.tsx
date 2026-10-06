@@ -15,6 +15,7 @@ import type { StyleSuggestion } from "../../../lib/style-suggestions";
 import {
   CATEGORIZED_CLASSIFICATION_SCHEMES,
   GRADUATED_CLASSIFICATION_SCHEMES,
+  MANUAL_CLASSIFICATION_SCHEME,
   VECTOR_STYLE_CLASS_COUNTS,
   chooseDefaultStyleProperty,
   createDefaultStops,
@@ -23,6 +24,7 @@ import {
   normalizeClassificationScheme,
   normalizeVectorStyleClassCount,
   normalizeVectorStyleStops,
+  regeneratingClassificationScheme,
   validateExpressionJson,
 } from "./classification-helpers";
 import { RuleBasedRulesEditor } from "./RuleBasedRulesEditor";
@@ -103,6 +105,10 @@ export function VectorSymbologySection({
     colorRamp: string,
     classificationScheme: string,
   ) => {
+    // Fresh breaks are no longer hand-edited, so a "manual" scheme becomes the
+    // scheme that actually produced them.
+    const scheme = regeneratingClassificationScheme(classificationScheme);
+    if (scheme !== classificationScheme) setDraftVectorStyleClassificationScheme(scheme);
     setDraftVectorStyleStops(
       createDefaultStops(
         layer,
@@ -110,10 +116,16 @@ export function VectorSymbologySection({
         property,
         classCount,
         colorRamp,
-        classificationScheme,
+        scheme,
         property === draftVectorStyleProperty ? draftVectorPropertyValues : undefined,
       ),
     );
+  };
+  // Hand-edited graduated breaks no longer follow the selected method.
+  const markGraduatedStopsManual = () => {
+    if (draftVectorStyleMode === "graduated") {
+      setDraftVectorStyleClassificationScheme(MANUAL_CLASSIFICATION_SCHEME);
+    }
   };
   const updateDraftVectorStyleMode = (mode: VectorStyleMode) => {
     setDraftVectorStyleMode(mode);
@@ -190,6 +202,8 @@ export function VectorSymbologySection({
   const updateDraftVectorStyleClassificationScheme = (scheme: string) => {
     const classificationScheme = normalizeClassificationScheme(draftVectorStyleMode, scheme);
     setDraftVectorStyleClassificationScheme(classificationScheme);
+    // Choosing "Manual" keeps the current breaks for hand editing.
+    if (classificationScheme === MANUAL_CLASSIFICATION_SCHEME) return;
     regenerateDraftVectorStyleStops(
       draftVectorStyleMode,
       draftVectorStyleProperty,
@@ -199,11 +213,16 @@ export function VectorSymbologySection({
     );
   };
   const updateDraftVectorStyleStop = (index: number, patch: Partial<VectorStyleStop>) => {
+    // A new color or label keeps the breaks; only a moved break is manual.
+    if ("value" in patch && patch.value !== draftVectorStyleStops[index]?.value) {
+      markGraduatedStopsManual();
+    }
     setDraftVectorStyleStops((stops) =>
       stops.map((stop, stopIndex) => (stopIndex === index ? { ...stop, ...patch } : stop)),
     );
   };
   const addDraftVectorStyleStop = () => {
+    markGraduatedStopsManual();
     setDraftVectorStyleStops((stops) => [
       ...stops,
       {
@@ -213,6 +232,7 @@ export function VectorSymbologySection({
     ]);
   };
   const removeDraftVectorStyleStop = (index: number) => {
+    markGraduatedStopsManual();
     setDraftVectorStyleStops((stops) => stops.filter((_, stopIndex) => stopIndex !== index));
   };
   const applyVectorStyleSettings = () => {

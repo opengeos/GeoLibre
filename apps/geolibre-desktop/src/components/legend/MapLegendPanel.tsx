@@ -66,6 +66,7 @@ import {
   toggleLegendItemHidden,
 } from "../../lib/print-legend";
 import { useMapPanelControl } from "../../hooks/useMapPanelControl";
+import { graduatedSchemeLabelKey } from "../panels/style-panel/classification-helpers";
 import { GeometrySwatch, GradientBar, MarkerSwatch } from "./LegendSwatch";
 
 /** Class the recorder's MAP_PANEL_SELECTOR matches to burn the panel into videos. */
@@ -746,8 +747,22 @@ function LegendEntryRow({
     0,
   );
   const editingCustom = editing && entry.custom && customEntry;
+  const schemeLabelKey = entry.classification
+    ? graduatedSchemeLabelKey(entry.classification.scheme)
+    : null;
+  const classificationLabel =
+    entry.classification && schemeLabelKey
+      ? t("legendPanel.classification", {
+          method: t(schemeLabelKey),
+          count: entry.classification.classCount,
+        })
+      : null;
   const hasBody = Boolean(
-    entry.fieldLabel || entry.gradient || editingCustom || visibleRows.length > 0,
+    entry.fieldLabel ||
+    classificationLabel ||
+    entry.gradient ||
+    editingCustom ||
+    visibleRows.length > 0,
   );
   // Sections collapse in edit mode only, to keep long legends manageable
   // while rearranging; display mode always shows everything.
@@ -840,6 +855,17 @@ function LegendEntryRow({
       {!bodyCollapsed && entry.fieldLabel && (
         <div className="ms-6 mt-1 truncate text-[10px] font-medium text-muted-foreground">
           {entry.fieldLabel}
+        </div>
+      )}
+
+      {!bodyCollapsed && classificationLabel && (
+        <div
+          className={cn(
+            "ms-6 truncate text-[10px] text-muted-foreground",
+            !entry.fieldLabel && "mt-1",
+          )}
+        >
+          {classificationLabel}
         </div>
       )}
 

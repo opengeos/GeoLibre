@@ -7553,7 +7553,7 @@
       "markerShape": "İşaretçi şekli",
       "markerColor": "İşaretçi rengi",
       "markerSize": "İşaretçi boyutu (px)",
-      "markerSvg": "İşaretçi SVG",
+      "markerSvg": "İşaretçi görüntüsü",
       "markerShapes": {
         "circle": "Daire",
         "square": "Kare",
@@ -7562,7 +7562,7 @@
         "star": "Yıldız",
         "cross": "Artı",
         "pin": "İğne",
-        "custom": "Özel SVG"
+        "custom": "Özel görüntü"
       },
       "fillPatterns": {
         "none": "Yok (düz dolgu)",

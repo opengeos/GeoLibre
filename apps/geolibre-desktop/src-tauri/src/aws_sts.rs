@@ -5,7 +5,7 @@
 //! STS calls are signed here with SigV4 (header form), so role profiles and
 //! "role to assume" connections work without the AWS CLI.
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::env;

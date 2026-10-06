@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as C from "@cesium/engine";
+import type { Cartographic } from "@cesium/core";
 import { cesiumProfileMap } from "../packages/plugins/src/plugins/elevation-profile/cesium";
 
 function makeHandle() {
@@ -11,7 +12,7 @@ function makeHandle() {
     isDestroyed: () => false,
     terrainProvider: provider,
   };
-  const sample = async (terrain: unknown, positions: C.Cartographic[]) => {
+  const sample = async (terrain: unknown, positions: Cartographic[]) => {
     assert.equal(terrain, viewer.terrainProvider);
     return positions.map((point, i) => {
       point.height = 100 + i * 30;
@@ -25,7 +26,7 @@ function makeHandle() {
         calls.push("detailed");
         return sample(...args);
       },
-      sampleTerrain: (terrain: unknown, level: number, points: C.Cartographic[]) => {
+      sampleTerrain: (terrain: unknown, level: number, points: Cartographic[]) => {
         calls.push(`level:${level}`);
         return sample(terrain, points);
       },
@@ -81,7 +82,7 @@ describe("Cesium elevation profiles", () => {
   });
   it("rejects a sample if its terrain source changed during the request", async () => {
     const { handle, viewer } = makeHandle();
-    let finish!: (points: C.Cartographic[]) => void;
+    let finish!: (points: Cartographic[]) => void;
     handle.Cesium.sampleTerrainMostDetailed = () =>
       new Promise((resolve) => {
         finish = resolve;

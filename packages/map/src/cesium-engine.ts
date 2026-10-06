@@ -9,7 +9,8 @@ import {
   type StoryChapterLocation,
   storyLocationView,
 } from "@geolibre/core";
-import type { Cartesian2, CesiumWidget, PointPrimitiveCollection } from "@cesium/engine";
+import type { Cartesian2 } from "@cesium/core";
+import type { CesiumWidget, PointPrimitiveCollection } from "@cesium/engine";
 import type { FeatureCollection, Point, Polygon } from "geojson";
 import type * as maplibregl from "maplibre-gl";
 import {

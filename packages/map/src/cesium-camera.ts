@@ -1,5 +1,6 @@
 import type { MapViewState } from "@geolibre/core";
-import type { Cartesian3, CesiumWidget } from "@cesium/engine";
+import type { Cartesian3 } from "@cesium/core";
+import type { CesiumWidget } from "@cesium/engine";
 
 // Camera conversion between MapLibre's `MapViewState` (Web-Mercator zoom + a
 // nadir-referenced pitch) and Cesium's camera (a metric range + a

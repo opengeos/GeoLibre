@@ -7553,7 +7553,7 @@
       "markerShape": "მარკერის ფორმა",
       "markerColor": "მარკერის ფერი",
       "markerSize": "მარკერის ზომა (px)",
-      "markerSvg": "მარკერის SVG",
+      "markerSvg": "მარკერის გამოსახულება",
       "markerShapes": {
         "circle": "წრე",
         "square": "კვადრატი",
@@ -7562,7 +7562,7 @@
         "star": "ვარსკვლავი",
         "cross": "ჯვარი",
         "pin": "ქინძისთავი",
-        "custom": "მორგებული SVG"
+        "custom": "მორგებული გამოსახულება"
       },
       "fillPatterns": {
         "none": "არცერთი (მთლიანი შევსება)",

@@ -512,7 +512,11 @@ export interface LayerStyle {
   markerShape: MarkerShape;
   markerColor: string;
   markerSize: number;
-  /** Raw SVG markup (or a data URL) used when {@link markerShape} is `"custom"`. */
+  /**
+   * The custom marker image used when {@link markerShape} is `"custom"`: raw
+   * SVG markup, a `data:` URL (SVG or a raster PNG/JPEG/GIF), or an `http(s)`
+   * URL. Only SVG sources take {@link markerColor}; raster images draw as-is.
+   */
   markerSvg: string;
   /**
    * When true, per-feature [simplestyle-spec](https://github.com/mapbox/simplestyle-spec)

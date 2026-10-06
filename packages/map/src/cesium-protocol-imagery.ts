@@ -1,8 +1,7 @@
+import type { Event, Rectangle } from "@cesium/core";
 import type {
   Credit,
-  Event,
   ImageryProvider,
-  Rectangle,
   Request,
   TileDiscardPolicy,
   WebMercatorTilingScheme,

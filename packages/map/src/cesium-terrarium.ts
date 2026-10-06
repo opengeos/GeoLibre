@@ -1,6 +1,6 @@
+import type { Event } from "@cesium/core";
 import type {
   Credit,
-  Event,
   TileAvailability,
   WebMercatorTilingScheme,
   HeightmapTerrainData,

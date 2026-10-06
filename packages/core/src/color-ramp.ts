@@ -300,7 +300,12 @@ function quantileAtPosition(sorted: number[], position: number): number {
 }
 
 /** The classification schemes the graduated vector renderer offers. */
-export type GraduatedClassificationScheme = "equal-interval" | "quantile" | "natural-breaks";
+export type GraduatedClassificationScheme =
+  | "equal-interval"
+  | "quantile"
+  | "natural-breaks"
+  | "standard-deviation"
+  | "geometric-interval";
 
 /**
  * Builds the class *lower bounds* for a graduated vector renderer.
@@ -319,6 +324,12 @@ export type GraduatedClassificationScheme = "equal-interval" | "quantile" | "nat
  * fewer than `count` breaks and must size its colors off `breaks.length`.
  * MapLibre rejects a `step` expression whose inputs are not strictly ascending,
  * so this de-duplication is load-bearing, not cosmetic.
+ *
+ * Standard deviation and geometric interval derive their breaks from the data,
+ * so `count` is a ceiling there: a standard-deviation break that falls outside
+ * the sample range is dropped rather than producing an empty class. See
+ * {@link standardDeviationClassBreaks} and {@link geometricIntervalClassBreaks}
+ * for how each treats its edge cases.
  *
  * @param values - The finite numeric values of the classified property.
  * @param count - Number of classes requested.
@@ -340,11 +351,73 @@ export function createGraduatedClassBreaks(
       ),
     );
   }
+  if (scheme === "standard-deviation") {
+    return ascendingUnique(standardDeviationClassBreaks(sorted, count));
+  }
+  if (scheme === "geometric-interval") {
+    const breaks = geometricIntervalClassBreaks(sorted, count);
+    if (breaks) return ascendingUnique(breaks);
+  }
+  return ascendingUnique(equalIntervalClassBreaks(sorted, count));
+}
+
+/** Equal-interval lower bounds over the range of an ascending sample. */
+function equalIntervalClassBreaks(sorted: number[], count: number): number[] {
   const min = sorted[0];
   const max = sorted[sorted.length - 1];
-  return ascendingUnique(
-    Array.from({ length: count }, (_, index) => min + ((max - min) * index) / count),
-  );
+  return Array.from({ length: count }, (_, index) => min + ((max - min) * index) / count);
+}
+
+/**
+ * Standard-deviation lower bounds: classes one standard deviation wide,
+ * centered on the mean. An even `count` puts a break on the mean (classes
+ * `[mean - σ, mean)` and `[mean, mean + σ)` meet there); an odd `count` makes
+ * the middle class straddle it (`[mean - σ/2, mean + σ/2)`). The first break is
+ * the sample minimum, and interior breaks outside `(min, max]` are dropped, so
+ * the open-ended bottom and top classes absorb the tails and no class is empty.
+ * A constant sample (σ = 0) yields the minimum alone.
+ *
+ * Uses the population standard deviation, as QGIS and ArcGIS do.
+ */
+function standardDeviationClassBreaks(sorted: number[], count: number): number[] {
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  const mean = sorted.reduce((sum, value) => sum + value, 0) / sorted.length;
+  const variance =
+    sorted.reduce((sum, value) => sum + (value - mean) * (value - mean), 0) / sorted.length;
+  const deviation = Math.sqrt(variance);
+  if (!(deviation > 0)) return [min];
+  const interior: number[] = [];
+  for (let index = 1; index < count; index += 1) {
+    const value = mean + (index - count / 2) * deviation;
+    if (value > min && value <= max) interior.push(value);
+  }
+  return [min, ...interior];
+}
+
+/**
+ * Geometric-interval lower bounds: class edges growing by a constant ratio
+ * from the smallest positive value to the maximum, so each class spans the
+ * same multiple of its lower bound. Suits skewed data spanning orders of
+ * magnitude (population, income, concentrations).
+ *
+ * A geometric series cannot start at or below zero, so it starts at the
+ * smallest positive value and the first break stays the sample minimum: zero
+ * and negative values all fall into the first class. When no value is
+ * positive, the result is `null` and the caller falls back to equal interval.
+ */
+function geometricIntervalClassBreaks(sorted: number[], count: number): number[] | null {
+  const max = sorted[sorted.length - 1];
+  const lowest = sorted.find((value) => value > 0);
+  if (lowest === undefined) return null;
+  // Step in log space: `max / lowest` overflows to Infinity for samples
+  // spanning more than ~308 orders of magnitude, while the logs stay finite.
+  const logLowest = Math.log(lowest);
+  const logStep = (Math.log(max) - logLowest) / count;
+  return [
+    sorted[0],
+    ...Array.from({ length: count - 1 }, (_, index) => Math.exp(logLowest + logStep * (index + 1))),
+  ];
 }
 
 /** Drops non-finite breaks and collapses repeats, keeping ascending order. */

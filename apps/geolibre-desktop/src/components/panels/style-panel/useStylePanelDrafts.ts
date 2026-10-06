@@ -17,6 +17,7 @@ import { proportionalSizeBounds } from "../../../lib/vector-style-classification
 import {
   completeCategorizedValueCount,
   createDefaultStops,
+  MANUAL_CLASSIFICATION_SCHEME,
   normalizeClassificationScheme,
   normalizeVectorStyleClassCount,
 } from "./classification-helpers";
@@ -346,6 +347,8 @@ export function useStylePanelDrafts(
     ) {
       return;
     }
+    // Hand-edited breaks are the user's; loaded values must not reclassify them.
+    if (draftVectorStyleClassificationScheme === MANUAL_CLASSIFICATION_SCHEME) return;
     const values = loadedVectorPropertyValues.byProperty[draftVectorStyleProperty];
     if (!values) return;
 

@@ -7,7 +7,8 @@ import {
   resolvePopupMaxWidth,
   useAppStore,
 } from "@geolibre/core";
-import type { Cartesian2, CesiumWidget } from "@cesium/engine";
+import type { Cartesian2 } from "@cesium/core";
+import type { CesiumWidget } from "@cesium/engine";
 import type { CesiumEngine } from "./cesium-engine";
 import { createHoverTooltipElement, createIdentifyPopupElement } from "./feature-popup";
 

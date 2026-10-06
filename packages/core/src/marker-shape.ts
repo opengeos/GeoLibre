@@ -91,6 +91,51 @@ export function drawMarkerPath(
   }
 }
 
+const RASTER_IMAGE_EXTENSION = /\.(?:png|jpe?g|gif|webp|bmp|avif)$/i;
+
+/**
+ * Whether a custom marker source is a raster image (PNG, JPEG, GIF, ...) rather
+ * than SVG: a non-SVG `data:image/...` URL, or an `http(s)` URL whose path ends
+ * in a raster extension. Raster markers cannot be recolored, so the marker
+ * color and per-class colors only apply to SVG sources. A remote URL without a
+ * telling extension is not classified here; the map sniffs its content type.
+ *
+ * @param markup - The `markerSvg` value.
+ * @returns `true` for a recognizably raster source.
+ */
+export function isRasterMarkerSource(markup: string): boolean {
+  const trimmed = markup.trim();
+  if (/^data:image\//i.test(trimmed)) return !/^data:image\/svg\+xml/i.test(trimmed);
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  return RASTER_IMAGE_EXTENSION.test(urlPath(trimmed));
+}
+
+/**
+ * Whether a remote marker response holds SVG text, judged by its
+ * `content-type` header: `image/svg+xml`, or a text/XML type (a raw GitHub
+ * file is served as `text/plain`), reads as SVG and any other `image/*` does
+ * not. A missing or generic header falls back to a `.svg` path.
+ *
+ * @param url - The requested URL.
+ * @param contentType - The response's `content-type` header, if any.
+ * @returns `true` when the body should be read as SVG markup.
+ */
+export function isSvgMarkerResponse(url: string, contentType: string | null): boolean {
+  const type = (contentType ?? "").split(";")[0].trim().toLowerCase();
+  if (type === "image/svg+xml") return true;
+  if (type.startsWith("image/")) return false;
+  if (type.startsWith("text/") || type.endsWith("/xml") || type.endsWith("+xml")) return true;
+  return /\.svg$/i.test(urlPath(url));
+}
+
+function urlPath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url.split(/[?#]/)[0];
+  }
+}
+
 // Remote SVG sources we have already warned about, so the console message below
 // fires once per distinct URL instead of on every image regeneration.
 const warnedRemoteSvgSources = new Set<string>();
@@ -127,7 +172,7 @@ export function resolveSvgSource(markup: string): string | null {
     if (!warnedRemoteSvgSources.has(trimmed)) {
       warnedRemoteSvgSources.add(trimmed);
       console.warn(
-        `[geolibre] Loading a custom SVG from a remote URL triggers a ` +
+        `[geolibre] Loading a custom image from a remote URL triggers a ` +
           `cross-origin request: ${trimmed}. Prefer inline <svg> markup or a ` +
           `data: URL in shared projects.`,
       );

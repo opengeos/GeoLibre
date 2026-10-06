@@ -7705,7 +7705,7 @@
       "markerShape": "צורת הסמן",
       "markerColor": "צבע הסמן",
       "markerSize": "גודל הסמן (px)",
-      "markerSvg": "SVG של הסמן",
+      "markerSvg": "תמונת הסמן",
       "markerShapes": {
         "circle": "עיגול",
         "square": "ריבוע",
@@ -7714,7 +7714,7 @@
         "star": "כוכב",
         "cross": "צלב",
         "pin": "סיכה",
-        "custom": "SVG מותאם אישית"
+        "custom": "תמונה מותאמת אישית"
       },
       "fillPatterns": {
         "none": "ללא (מילוי מלא)",

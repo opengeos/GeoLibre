@@ -69,6 +69,7 @@ import {
   createCategorizedStops,
   createGraduatedStops,
 } from "../../lib/vector-style-classification";
+import { regeneratingClassificationScheme } from "./style-panel/classification-helpers";
 
 /** Default panel geometry (px); the user can drag it around the map area. */
 const PANEL_DEFAULT_W = 384;
@@ -427,9 +428,14 @@ export function StyleManagerPanel() {
         const classCount =
           patch.vectorStyleClassCount ?? styleValue(layer.style, "vectorStyleClassCount");
         const ramp = patch.vectorStyleColorRamp ?? styleValue(layer.style, "vectorStyleColorRamp");
-        const scheme =
+        const storedScheme =
           patch.vectorStyleClassificationScheme ??
           styleValue(layer.style, "vectorStyleClassificationScheme");
+        // Hand-edited ("manual") graduated breaks are replaced here, so record
+        // the scheme that produced the new ones. Categorized layers keep theirs.
+        const scheme =
+          mode === "graduated" ? regeneratingClassificationScheme(storedScheme) : storedScheme;
+        if (scheme !== storedScheme) patch.vectorStyleClassificationScheme = scheme;
         const stops =
           mode === "graduated"
             ? createGraduatedStops(layer, property, classCount, ramp, scheme)

@@ -7465,7 +7465,7 @@
       "markerShape": "Bentuk penanda",
       "markerColor": "Warna penanda",
       "markerSize": "Ukuran penanda (px)",
-      "markerSvg": "SVG penanda",
+      "markerSvg": "Gambar penanda",
       "markerShapes": {
         "circle": "Lingkaran",
         "square": "Persegi",
@@ -7474,7 +7474,7 @@
         "star": "Bintang",
         "cross": "Silang",
         "pin": "Pin",
-        "custom": "SVG kustom"
+        "custom": "Gambar kustom"
       },
       "fillPatterns": {
         "none": "Tidak ada (isi solid)",
