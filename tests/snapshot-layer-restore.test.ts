@@ -329,6 +329,38 @@ describe("restoring a deleted layer's references", () => {
     assert.equal(after.printLayout.tableLayerId, "");
   });
 
+  it("keeps a Print Layout block the user switched on after the delete", () => {
+    seedReferences();
+    // The snapshot has the chart block pointing at "a" but switched off.
+    useAppStore.setState((s) => ({
+      printLayout: { ...s.printLayout, chartLayerId: "a", showDataChart: false },
+    }));
+    const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    useAppStore.getState().removeLayer("a");
+    useAppStore.setState((s) => ({ printLayout: { ...s.printLayout, showDataChart: true } }));
+
+    const patch = restoreLayerReferencesFromSnapshot(useAppStore.getState(), snapshot, "a");
+    assert.equal(patch.printLayout?.chartLayerId, "a");
+    assert.equal(patch.printLayout?.showDataChart, true, "the user's toggle survives");
+    assert.equal(
+      patch.printLayout?.showDataTable,
+      true,
+      "a block on in the snapshot comes back on",
+    );
+  });
+
+  it("does not add an empty customEntries key to the legend", () => {
+    seedReferences();
+    const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));
+    useAppStore.getState().removeLayer("a");
+    const patch = restoreLayerReferencesFromSnapshot(useAppStore.getState(), snapshot, "a");
+    assert.ok(patch.legend);
+    assert.equal(
+      "customEntries" in patch.legend!,
+      "customEntries" in useAppStore.getState().legend,
+    );
+  });
+
   it("changes nothing when the snapshot had no references to the layer", () => {
     useAppStore.getState().addLayer(layer("a"));
     const snapshot = parseProject(serializeProject(projectFromStore(useAppStore.getState())));

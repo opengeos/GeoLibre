@@ -205,7 +205,12 @@ function restoreLegendReferences(
     changed = true;
   }
 
-  return changed ? { ...current, order, overrides, customEntries } : current;
+  if (!changed) return current;
+  // Only write customEntries when it changed, so a legend that never had the
+  // key does not gain an explicit `undefined` one.
+  return customEntries === current.customEntries
+    ? { ...current, order, overrides }
+    : { ...current, order, overrides, customEntries };
 }
 
 function restoreStorymapReferences(
@@ -250,10 +255,18 @@ function restorePrintLayoutReferences(
   const chart = snapshot.chartLayerId === layerId && current.chartLayerId === "";
   const atlas = snapshot.atlasLayerId === layerId && current.atlasLayerId === "";
   if (!table && !chart && !atlas) return current;
+  // Deleting the layer switched the block off; turn it back on only if it was
+  // on in the snapshot, and never switch off one the user turned on since.
   return {
     ...current,
-    ...(table ? { tableLayerId: layerId, showDataTable: snapshot.showDataTable } : {}),
-    ...(chart ? { chartLayerId: layerId, showDataChart: snapshot.showDataChart } : {}),
-    ...(atlas ? { atlasLayerId: layerId, atlasEnabled: snapshot.atlasEnabled } : {}),
+    ...(table
+      ? { tableLayerId: layerId, showDataTable: current.showDataTable || snapshot.showDataTable }
+      : {}),
+    ...(chart
+      ? { chartLayerId: layerId, showDataChart: current.showDataChart || snapshot.showDataChart }
+      : {}),
+    ...(atlas
+      ? { atlasLayerId: layerId, atlasEnabled: current.atlasEnabled || snapshot.atlasEnabled }
+      : {}),
   };
 }
