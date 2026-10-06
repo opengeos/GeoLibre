@@ -17,9 +17,9 @@ import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../../hooks/usePlugins";
 import {
   arcgisAuthErrorKey,
+  arcgisLayerTokenProvider,
   getArcGISAccessToken,
   supportsArcGISSignIn,
-  tryGetArcGISAccessToken,
 } from "../../../../lib/arcgis-oauth";
 import { serviceRequestErrorMessage } from "../helpers";
 import { DEFAULT_ARCGIS_URLS } from "../constants";
@@ -302,15 +302,7 @@ export function ArcGISSource({ initialUrl = "" }: { initialUrl?: string }) {
         // Sign-in tokens expire in about 30 minutes; later requests renew them.
         tokenProvider:
           authMode === "sign-in"
-            ? async () => {
-                try {
-                  return await tryGetArcGISAccessToken(arcgisPortalUrl);
-                } catch (error) {
-                  // Layer errors are shown verbatim, so word the failure here.
-                  const key = arcgisAuthErrorKey(error);
-                  throw key ? new Error(t(key), { cause: error }) : error;
-                }
-              }
+            ? arcgisLayerTokenProvider(arcgisPortalUrl, (key) => t(key))
             : undefined,
         url: arcgisUrl.trim() || undefined,
       });

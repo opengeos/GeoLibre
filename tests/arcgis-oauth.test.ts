@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   ArcGISAuthError,
   arcgisAuthErrorKey,
+  arcgisLayerTokenProvider,
   arcgisOAuthEndpoint,
   defaultArcGISClientId,
   getArcGISAccessToken,
@@ -268,5 +269,12 @@ describe("arcgisAuthErrorKey", () => {
       "addData.arcgis.signInError",
     );
     assert.equal(arcgisAuthErrorKey(new Error("x")), null);
+  });
+});
+
+describe("arcgisLayerTokenProvider", () => {
+  it("resolves undefined when signed out", async () => {
+    const provide = arcgisLayerTokenProvider("https://gis.example.org/portal", (key) => key);
+    assert.equal(await provide(), undefined);
   });
 });

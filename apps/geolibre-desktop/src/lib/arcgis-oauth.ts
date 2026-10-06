@@ -527,6 +527,28 @@ export async function tryGetArcGISAccessToken(
   }
 }
 
+/**
+ * A layer's token provider for a signed-in portal. Failures are reworded with
+ * `translate`, since layer load and save errors are shown verbatim.
+ *
+ * @param portalUrl - The portal URL (blank for ArcGIS Online).
+ * @param translate - Turns an i18n key into the user's language.
+ * @returns A function resolving the current token, or undefined when signed out.
+ */
+export function arcgisLayerTokenProvider(
+  portalUrl: string | undefined,
+  translate: (key: ParseKeys) => string,
+): () => Promise<string | undefined> {
+  return async () => {
+    try {
+      return await tryGetArcGISAccessToken(portalUrl);
+    } catch (error) {
+      const key = arcgisAuthErrorKey(error);
+      throw key ? new Error(translate(key), { cause: error }) : error;
+    }
+  };
+}
+
 /** Sign out of a portal: forget the session and revoke its refresh token on a best-effort basis. */
 export async function signOutOfArcGIS(portalUrl: string | undefined): Promise<void> {
   const portal = normalizeArcGISPortalUrl(portalUrl);

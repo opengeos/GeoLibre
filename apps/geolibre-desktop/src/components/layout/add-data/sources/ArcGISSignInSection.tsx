@@ -26,6 +26,7 @@ export function ArcGISSignInSection({ portalUrl }: { portalUrl: string }) {
   // Follow the portal field: another portal has its own remembered client ID.
   useEffect(() => {
     setClientId(portal ? loadArcGISClientId(portal) : "");
+    setError(null);
   }, [portal]);
   // Closing the dialog mid sign-in frees the flow instead of holding it for minutes.
   useEffect(() => () => cancelArcGISSignIn(), []);
