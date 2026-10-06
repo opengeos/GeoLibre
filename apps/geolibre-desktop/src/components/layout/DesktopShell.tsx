@@ -1212,20 +1212,24 @@ export function DesktopShell({
               });
             }}
             onAddLidar={async (bytes, name, fileName) => {
-              let cloud: Awaited<ReturnType<typeof lidarOutputForMap>>;
               try {
-                cloud = await lidarOutputForMap(bytes, fileName);
+                const cloud = await lidarOutputForMap(bytes, fileName);
+                const id = await addLidarLayerFromBytes(
+                  createAppAPI(mapControllerRef),
+                  cloud.bytes,
+                  {
+                    name,
+                    fileName: cloud.fileName,
+                    fit: shouldZoomToNewLayers(),
+                  },
+                );
+                return id !== null;
               } catch (error) {
-                // Too large to convert in the browser: the dialog downloads it.
-                console.warn("[lidar] could not prepare tool output for the map", error);
+                // Too large to convert, or unreadable by the viewer: the dialog
+                // downloads the output instead.
+                console.warn("[lidar] could not add tool output to the map", error);
                 return false;
               }
-              const id = await addLidarLayerFromBytes(createAppAPI(mapControllerRef), cloud.bytes, {
-                name,
-                fileName: cloud.fileName,
-                fit: shouldZoomToNewLayers(),
-              });
-              return id !== null;
             }}
           />
         </Suspense>

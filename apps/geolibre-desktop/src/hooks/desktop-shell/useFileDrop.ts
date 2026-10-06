@@ -1,10 +1,6 @@
 import { shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import {
-  addLidarLayerFromBytes,
-  addVectorFileToMap,
-  prepareRasterControl,
-} from "@geolibre/plugins";
+import { addVectorFileToMap, prepareRasterControl } from "@geolibre/plugins";
 import type { TFunction } from "i18next";
 import {
   type Dispatch,
@@ -18,9 +14,11 @@ import {
 } from "react";
 import { importGeoPackageDrops } from "../../lib/geopackage-drop";
 import {
-  addDroppedPointClouds,
   type DroppedPointCloud,
+  dropErrorMessage,
+  importPointCloudDrops,
   isPointCloudFileName,
+  readDroppedPointClouds,
 } from "../../lib/lidar-drop";
 import type { GeotaggedPhotoResult } from "../../lib/geotagged-photos";
 import { isPhotoDropFileName } from "../../lib/photo-file-names";
@@ -107,26 +105,15 @@ export function useFileDrop({
   const deploymentCapabilities = useAppStore((s) => s.deploymentCapabilities);
   const dropDisabled = layoutOptions.viewer || !deploymentCapabilities.has("data:add");
 
-  // LAS/LAZ/COPC files load into the LiDAR control, one layer each, instead of
-  // going through the vector/raster pipeline (which cannot read them).
+  // LAS/LAZ/COPC files load into the LiDAR control, not the vector/raster pipeline.
   const addPointClouds = useCallback(
-    async (clouds: DroppedPointCloud[]): Promise<number> => {
-      if (clouds.length === 0) return 0;
-      setDropMessage(t("addData.lidar.dropLoading"));
-      const added = await addDroppedPointClouds(
-        clouds,
-        (data, name, fileName) =>
-          addLidarLayerFromBytes(createAppAPI(mapControllerRef), data, {
-            name,
-            fileName,
-            fit: shouldZoomToNewLayers(),
-          }),
-        (name, error) =>
-          setDropError(`${name}: ${error instanceof Error ? error.message : String(error)}`),
-      );
-      setDropMessage(added > 0 ? t("addData.lidar.dropAdded", { count: added }) : null);
-      return added;
-    },
+    (clouds: DroppedPointCloud[]) =>
+      importPointCloudDrops(clouds, {
+        app: createAppAPI(mapControllerRef),
+        setMessage: setDropMessage,
+        setError: setDropError,
+        t,
+      }),
     [mapControllerRef, setDropError, setDropMessage, t],
   );
 
@@ -193,14 +180,12 @@ export function useFileDrop({
             const otherPaths = paths.filter(
               (path) => !isOsmPbfFileName(path) && !isPointCloudFileName(path),
             );
+            const onReadError = (name: string, error: unknown) =>
+              setDropError(dropErrorMessage(name, error));
             await addPointClouds(
-              await Promise.all(
-                cloudPaths.map(async (path) => ({
-                  name: path,
-                  data: await readLocalFileBytes(path),
-                })),
-              ),
+              await readDroppedPointClouds(cloudPaths, readLocalFileBytes, onReadError),
             );
+            const handledElsewhere = pbfPaths.length + cloudPaths.length > 0;
 
             if (pbfPaths.length > 0) {
               const { readFile, stat } = await import("@tauri-apps/plugin-fs");
@@ -300,13 +285,10 @@ export function useFileDrop({
                 importedLayers.length > 0 ||
                 rasterCount > 0 ||
                 containers.layerCount > 0 ||
-                (pbfPaths.length === 0 &&
-                  cloudPaths.length === 0 &&
-                  photoResult === null &&
-                  containers.count === 0)
+                (!handledElsewhere && photoResult === null && containers.count === 0)
               ) {
                 finishDrop(importedLayers, rasterCount, containers.layerCount);
-              } else if (pbfPaths.length === 0 && cloudPaths.length === 0 && photoResult === null) {
+              } else if (!handledElsewhere && photoResult === null) {
                 setDropMessage(null);
               }
             }
@@ -428,6 +410,7 @@ export function useFileDrop({
           (file) => !isOsmPbfFileName(file.name) && !isPointCloudFileName(file.name),
         );
         await addPointClouds(cloudFiles.map((file) => ({ name: file.name, data: file })));
+        const handledElsewhere = pbfFiles.length + cloudFiles.length > 0;
 
         for (const file of pbfFiles) {
           // Mirror the file-picker path's large-file guard (parsing a huge
@@ -516,13 +499,10 @@ export function useFileDrop({
             importedLayers.length > 0 ||
             rasterCount > 0 ||
             containers.layerCount > 0 ||
-            (pbfFiles.length === 0 &&
-              cloudFiles.length === 0 &&
-              photoResult === null &&
-              containers.count === 0)
+            (!handledElsewhere && photoResult === null && containers.count === 0)
           ) {
             finishDrop(importedLayers, rasterCount, containers.layerCount);
-          } else if (pbfFiles.length === 0 && cloudFiles.length === 0 && photoResult === null) {
+          } else if (!handledElsewhere && photoResult === null) {
             setDropMessage(null);
           }
         }

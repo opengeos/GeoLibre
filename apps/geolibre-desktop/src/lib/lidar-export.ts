@@ -57,21 +57,26 @@ export function canExportLidarLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
- * Read a LiDAR layer's file bytes.
+ * Read a LiDAR layer's file as a Blob. A Blob, unlike one ArrayBuffer, lets
+ * the browser keep a large cloud out of the page's memory when it is saved
+ * unchanged.
  *
  * @param layer - The LiDAR store layer.
- * @returns The LAS/LAZ/COPC file bytes.
+ * @returns The LAS/LAZ/COPC file.
  * @throws If the layer has no single source file, or it cannot be read.
  */
-async function readLidarLayerBytes(layer: GeoLibreLayer): Promise<Uint8Array> {
+async function readLidarLayerFile(layer: GeoLibreLayer): Promise<Blob> {
   const url = lidarExportUrl(layer);
   if (!url) throw new Error("This point cloud has no single source file to export.");
   const response = await fetch(await resolveReadableUrl(url));
   if (!response.ok) {
     throw new Error(`Could not read the point cloud for export (HTTP ${response.status}).`);
   }
-  return new Uint8Array(await response.arrayBuffer());
+  return response.blob();
 }
+
+/** Enough leading bytes to hold the LAS header and the first VLR's header. */
+const LAS_SNIFF_BYTES = 4096;
 
 /**
  * Convert point cloud bytes to another LAS-family encoding with the
@@ -144,13 +149,18 @@ export async function exportLidarLayer(
   baseName: string,
 ): Promise<string | null> {
   const { isLas, lidarBytesExtension } = await import("@geolibre/processing");
-  const bytes = await readLidarLayerBytes(layer);
-  if (!isLas(bytes)) {
+  const file = await readLidarLayerFile(layer);
+  const head = new Uint8Array(await file.slice(0, LAS_SNIFF_BYTES).arrayBuffer());
+  if (!isLas(head)) {
     throw new Error("Only LAS, LAZ and COPC point clouds can be exported.");
   }
   const target = LIDAR_EXPORT_EXTENSION[format];
+  // A file already in the chosen encoding is saved as the Blob it came in.
+  // lidar_convert refuses a cloud too large for WebAssembly from its header.
   const output =
-    lidarBytesExtension(bytes) === target ? bytes : await convertLidarBytes(bytes, target);
+    lidarBytesExtension(head) === target
+      ? file
+      : await convertLidarBytes(new Uint8Array(await file.arrayBuffer()), target);
   const description = FORMAT_DESCRIPTION[format];
   // Save dialogs filter on the last extension only, so COPC files match `.laz`.
   const extension = format === "las" ? "las" : "laz";

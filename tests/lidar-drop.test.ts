@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   addDroppedPointClouds,
+  importPointCloudDrops,
   isLasVersionError,
   isPointCloudFileName,
+  readDroppedPointClouds,
 } from "../apps/geolibre-desktop/src/lib/lidar-drop.ts";
 
 describe("isPointCloudFileName", () => {
@@ -74,6 +76,54 @@ describe("addDroppedPointClouds", () => {
       async () => null,
       () => assert.fail("no error expected"),
     );
+    assert.equal(added, 0);
+  });
+});
+
+describe("readDroppedPointClouds", () => {
+  it("reads each desktop path and names the cloud by it", async () => {
+    const clouds = await readDroppedPointClouds(
+      ["/a/x.laz", "/b/y.copc.laz"],
+      async (path) => new TextEncoder().encode(path),
+      () => assert.fail("no error expected"),
+    );
+    assert.deepEqual(
+      clouds.map(({ name, data }) => [name, new TextDecoder().decode(data as Uint8Array)]),
+      [
+        ["/a/x.laz", "/a/x.laz"],
+        ["/b/y.copc.laz", "/b/y.copc.laz"],
+      ],
+    );
+  });
+});
+
+describe("readDroppedPointClouds failures", () => {
+  it("reports an unreadable path and keeps the rest of the drop", async () => {
+    const errors: string[] = [];
+    const clouds = await readDroppedPointClouds(
+      ["/a/locked.laz", "/b/ok.las"],
+      async (path) => {
+        if (path.includes("locked")) throw new Error("permission denied");
+        return new Uint8Array([1]);
+      },
+      (name, error) => errors.push(`${name}: ${(error as Error).message}`),
+    );
+    assert.deepEqual(
+      clouds.map((cloud) => cloud.name),
+      ["/b/ok.las"],
+    );
+    assert.deepEqual(errors, ["locked.laz: permission denied"]);
+  });
+});
+
+describe("importPointCloudDrops", () => {
+  it("leaves the drop status alone when no point clouds were dropped", async () => {
+    const added = await importPointCloudDrops([], {
+      app: {} as Parameters<typeof importPointCloudDrops>[1]["app"],
+      setMessage: () => assert.fail("no status expected"),
+      setError: () => assert.fail("no error expected"),
+      t: ((key: string) => key) as unknown as Parameters<typeof importPointCloudDrops>[1]["t"],
+    });
     assert.equal(added, 0);
   });
 });

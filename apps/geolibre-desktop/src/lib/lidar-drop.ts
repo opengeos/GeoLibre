@@ -1,3 +1,7 @@
+import { shouldZoomToNewLayers } from "@geolibre/core";
+import { addLidarLayerFromBytes } from "@geolibre/plugins/lidar";
+import type { TFunction } from "i18next";
+
 import { lidarOutputForMap } from "./lidar-export";
 
 /** A point cloud file dropped on the map: a browser File, or bytes read from a desktop path. */
@@ -62,5 +66,75 @@ export async function addDroppedPointClouds(
       onError(fileName, error);
     }
   }
+  return added;
+}
+
+/**
+ * Read point clouds dropped on the desktop app, which reports file paths. A
+ * file that cannot be read is reported and skipped, so it does not cost the
+ * rest of the drop.
+ *
+ * @param paths - The dropped LAS/LAZ/COPC paths.
+ * @param read - Reads a local file's bytes.
+ * @param onError - Reports a path that could not be read.
+ * @returns The clouds that were read, named by path.
+ */
+export async function readDroppedPointClouds(
+  paths: string[],
+  read: (path: string) => Promise<Uint8Array>,
+  onError: (name: string, error: unknown) => void,
+): Promise<DroppedPointCloud[]> {
+  const clouds: DroppedPointCloud[] = [];
+  for (const path of paths) {
+    try {
+      clouds.push({ name: path, data: await read(path) });
+    } catch (error) {
+      onError(path.split(/[/\\]/).pop() || path, error);
+    }
+  }
+  return clouds;
+}
+
+/**
+ * The drop status line for a file that failed.
+ *
+ * @param name - The file name.
+ * @param error - What went wrong.
+ * @returns `name: message`.
+ */
+export function dropErrorMessage(name: string, error: unknown): string {
+  return `${name}: ${error instanceof Error ? error.message : String(error)}`;
+}
+
+/** What {@link importPointCloudDrops} reports through and loads into. */
+export interface PointCloudDropContext {
+  app: Parameters<typeof addLidarLayerFromBytes>[0];
+  setMessage: (message: string | null) => void;
+  setError: (message: string) => void;
+  t: TFunction;
+}
+
+/**
+ * Add a drop's point clouds to the map with the drop status messages: a
+ * loading note while they load, then how many layers were added, and one
+ * error per file that failed.
+ *
+ * @param clouds - The dropped point clouds (none is a no-op).
+ * @param context - The app to load into and the drop status setters.
+ * @returns How many layers were added.
+ */
+export async function importPointCloudDrops(
+  clouds: DroppedPointCloud[],
+  { app, setMessage, setError, t }: PointCloudDropContext,
+): Promise<number> {
+  if (clouds.length === 0) return 0;
+  setMessage(t("addData.lidar.dropLoading"));
+  const added = await addDroppedPointClouds(
+    clouds,
+    (data, name, fileName) =>
+      addLidarLayerFromBytes(app, data, { name, fileName, fit: shouldZoomToNewLayers() }),
+    (name, error) => setError(dropErrorMessage(name, error)),
+  );
+  setMessage(added > 0 ? t("addData.lidar.dropAdded", { count: added }) : null);
   return added;
 }

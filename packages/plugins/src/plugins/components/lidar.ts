@@ -552,6 +552,14 @@ function createLidarControl(
         if (hasLidarPointCloud(layer.id)) {
           lidarLayerAdapter?.removeLayer(layer.id);
         }
+        // Release the retained bytes of a cloud loaded from a file. Renderer
+        // teardown unsubscribes before it clears layers, so this runs only for
+        // a layer the user removed. A fetch already reading the URL (an export
+        // or a tool input) has resolved the blob and is unaffected.
+        const localBytesUrl = layer.metadata.localBytesUrl;
+        if (typeof localBytesUrl === "string" && localBytesUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(localBytesUrl);
+        }
         continue;
       }
 

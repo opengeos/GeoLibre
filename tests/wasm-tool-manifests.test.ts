@@ -540,15 +540,17 @@ describe("lidarOutputTargetExtension", () => {
  * @param firstVlrUserId - The first VLR's user id, if any.
  * @returns The header bytes.
  */
-function lasHeader(pointFormatByte: number, firstVlrUserId = ""): Uint8Array {
+function lasHeader(pointFormatByte: number, firstVlrUserId = "", recordId = 0): Uint8Array {
   const bytes = new Uint8Array(375 + 54);
+  const view = new DataView(bytes.buffer);
   bytes.set([0x4c, 0x41, 0x53, 0x46], 0); // "LASF"
-  new DataView(bytes.buffer).setUint16(94, 375, true);
+  view.setUint16(94, 375, true);
   bytes[104] = pointFormatByte;
   bytes.set(
     Array.from(firstVlrUserId, (char) => char.charCodeAt(0)),
     375 + 2,
   );
+  view.setUint16(375 + 18, recordId, true);
   return bytes;
 }
 
@@ -563,7 +565,12 @@ describe("lidarBytesExtension", () => {
   });
 
   it("names a cloud whose first VLR is the COPC info .copc.laz", () => {
-    assert.equal(lidarBytesExtension(lasHeader(0x86, "copc")), "copc.laz");
+    assert.equal(lidarBytesExtension(lasHeader(0x86, "copc", 1)), "copc.laz");
+  });
+
+  it("does not mistake a look-alike first VLR for the COPC info", () => {
+    assert.equal(lidarBytesExtension(lasHeader(0x86, "copc_custom", 1)), "laz");
+    assert.equal(lidarBytesExtension(lasHeader(0x86, "copc", 1000)), "laz");
   });
 
   it("falls back to .las for bytes that are not LAS", () => {

@@ -11,6 +11,7 @@
     "./cog-spectral-profile": "./src/plugins/cog-spectral-profile.ts",
     "./elevation-profile-chart": "./src/plugins/elevation-profile/chart/profileChart.ts",
     "./geo-editor-geometry": "./src/plugins/geo-editor-geometry.ts",
+    "./lidar": "./src/plugins/components/lidar.ts",
     "./local-netcdf": "./src/plugins/local-netcdf.ts",
     "./maplibre-graticule": "./src/plugins/maplibre-graticule.ts",
     "./maplibre-vantor/style.css": "./src/plugins/vantor/styles.css",

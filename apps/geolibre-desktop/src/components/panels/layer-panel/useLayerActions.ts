@@ -144,6 +144,7 @@ export function useLayerActions({
   // vector-control materialize cannot create a duplicate library entry.
   const savingToLibraryIdsRef = useRef(new Set<string>());
   const savingMssqlEditsIdsRef = useRef(new Set<string>());
+  const lidarExportsInFlightRef = useRef(new Set<string>());
 
   // Quick analysis (#1523): run an existing vector tool over a whole layer from
   // its actions menu, with defaults filled in. No new algorithms — each entry
@@ -1191,6 +1192,10 @@ export function useLayerActions({
 
   const handleExportLidarLayer = useCallback(
     async (layer: GeoLibreLayer, format: LidarExportFormat) => {
+      // One export per layer at a time: a second would refetch and reconvert
+      // the cloud, and either finishing would clear the other's status note.
+      if (lidarExportsInFlightRef.current.has(layer.id)) return;
+      lidarExportsInFlightRef.current.add(layer.id);
       clearRefreshStatusTimer(layer.id);
       // Reading a remote cloud and converting it can take a while.
       setRefreshStatuses((current) => ({
@@ -1217,6 +1222,8 @@ export function useLayerActions({
           ...current,
           [layer.id]: { type: "error", message },
         }));
+      } finally {
+        lidarExportsInFlightRef.current.delete(layer.id);
       }
       scheduleStatusClear(layer.id);
     },

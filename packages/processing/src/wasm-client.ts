@@ -447,7 +447,7 @@ export function lidarOutputTargetExtension(requested: unknown): LidarFileExtensi
  * `.las` are decoded as uncompressed records and yield garbage points. The
  * point data format byte (offset 104) has bit 7 set (bit 6 in old LASzip
  * files) when the records are compressed, and a COPC file's first VLR, right
- * after the header, has the user id `copc`.
+ * after the header, has the user id `copc` and record id 1.
  *
  * @param bytes - The file bytes (only the header and first VLR are read).
  * @returns `copc.laz`, `laz` or `las`; `las` when the bytes are not LAS at all.
@@ -455,11 +455,13 @@ export function lidarOutputTargetExtension(requested: unknown): LidarFileExtensi
 export function lidarBytesExtension(bytes: Uint8Array): LidarFileExtension {
   if (!isLas(bytes) || bytes.length < 105) return "las";
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const headerSize = view.getUint16(94, true);
-  const userId = headerSize + 2;
+  // The COPC info VLR: first after the header, user id "copc" (NUL-padded to
+  // 16 bytes), record id 1.
+  const userId = view.getUint16(94, true) + 2;
   if (
-    bytes.length >= userId + 4 &&
-    String.fromCharCode(...bytes.subarray(userId, userId + 4)) === "copc"
+    bytes.length >= userId + 18 &&
+    String.fromCharCode(...bytes.subarray(userId, userId + 16)).replace(/\0+$/, "") === "copc" &&
+    view.getUint16(userId + 16, true) === 1
   ) {
     return "copc.laz";
   }
