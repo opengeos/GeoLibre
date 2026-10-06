@@ -75,18 +75,21 @@ export function createProjectDiffClient(
     if (!outcome.ok && outcome.reason === "missing" && worker && !request.retried) {
       // The worker dropped a project the client thought it still held (a
       // retain or its own eviction raced the request): send both in full.
-      let retry: ProjectDiffWorkerRequest;
-      try {
-        retry = {
-          type: "compare",
-          id: nextId++,
-          before: { key: request.before.key, content: request.before.content() },
-          after: { key: request.after.key, content: request.after.content() },
-        };
-      } catch {
-        request.resolve({ ok: false, side: "after", reason: "parse" });
-        return;
-      }
+      // Read each side on its own so a failure names the side that failed.
+      const read = (side: "before" | "after"): ProjectDiffInput | null => {
+        const source = request[side];
+        try {
+          return { key: source.key, content: source.content() };
+        } catch {
+          request.resolve({ ok: false, side, reason: "parse" });
+          return null;
+        }
+      };
+      const before = read("before");
+      if (!before) return;
+      const after = read("after");
+      if (!after) return;
+      const retry: ProjectDiffWorkerRequest = { type: "compare", id: nextId++, before, after };
       pending.set(retry.id, { ...request, retried: true });
       worker.postMessage(retry);
       return;

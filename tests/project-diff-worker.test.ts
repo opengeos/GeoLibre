@@ -176,6 +176,24 @@ describe("createProjectDiffClient", () => {
     assert.equal(outcome.diff.layers.added.length, 1);
   });
 
+  it("names the side whose content cannot be re-read for a full re-send", async () => {
+    const worker = new FakeWorker();
+    const client = createProjectDiffClient(() => worker as unknown as Worker);
+    let snapshotReads = 0;
+    const snapshot = {
+      key: "snap",
+      content: () => {
+        snapshotReads += 1;
+        if (snapshotReads > 1) throw new Error("gone");
+        return projectJson(["x"]);
+      },
+    };
+    await client.compare(snapshot, source("current:0", ["x"]));
+    worker.forget("snap");
+    const outcome = await client.compare(snapshot, source("current:1", ["x"]));
+    assert.deepEqual(outcome, { ok: false, side: "before", reason: "parse" });
+  });
+
   it("answers every pending request when the worker fails, even one whose content throws", async () => {
     const worker = new FakeWorker(true);
     const client = createProjectDiffClient(() => worker as unknown as Worker);
