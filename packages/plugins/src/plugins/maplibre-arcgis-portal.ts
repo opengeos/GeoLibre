@@ -178,9 +178,10 @@ async function addItem(
     return ids;
   }
   if (!layerType) throw new Error(`${item.type} items cannot be added.`);
-  // An item registers its own service URL; one on an untrusted host is loaded
-  // without credentials (a public item and service still work).
-  const trusted = !item.url || isTrustedPortalServiceUrl(portal, item.url);
+  // An item registers its own service URL; one on an untrusted host, or an item
+  // whose URL the search did not report, is loaded without credentials (a
+  // public item and service still work).
+  const trusted = isTrustedPortalServiceUrl(portal, item.url);
   const id = await addArcGISLayer(app, {
     layerType,
     sourceType: "portal-item",
@@ -297,6 +298,9 @@ function buildPanel(container: HTMLElement): () => void {
     return () => container.replaceChildren();
   }
   const portal = selectedPortal;
+  // Keyed by account too: signing out in Add Data and back in as someone else
+  // on the same portal must not reuse the previous user's ids.
+  const userKey = `${portal}\n${connections.find((c) => c.portal === portal)?.username ?? ""}`;
 
   // Connection row: which portal, as whom, sign out, connect another.
   const connectionRow = element("div", undefined, styles.row);
@@ -314,7 +318,7 @@ function buildPanel(container: HTMLElement): () => void {
   });
   const signOut = button(tr("signOut", "Sign out"));
   signOut.addEventListener("click", () => {
-    users.delete(portal);
+    users.delete(userKey);
     void auth?.signOut(portal);
   });
   const another = button(tr("addPortal", "Another portal"));
@@ -491,12 +495,12 @@ function buildPanel(container: HTMLElement): () => void {
       if (run !== generation) return;
       token = fresh;
       if (!user) {
-        let lookup = users.get(portal);
+        let lookup = users.get(userKey);
         if (!lookup) {
           // Not tied to this search's signal: a rebuild must not abort the shared lookup.
           lookup = fetchPortalUser(portal, token);
-          users.set(portal, lookup);
-          lookup.catch(() => users.delete(portal));
+          users.set(userKey, lookup);
+          lookup.catch(() => users.delete(userKey));
         }
         user = await lookup;
         if (run !== generation) return;
