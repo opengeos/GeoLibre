@@ -72,7 +72,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha1 = "0.11"
 sha2 = "0.10"
-hmac = "0.12"
+hmac = "0.13"
 # Pinned to 1.x on purpose: this must match the bincode version
 # `tauri-plugin-persisted-scope` uses to write its scope file, which
 # `PersistedScopeState` in src/lib.rs reads and rewrites. Dependabot is told to
