@@ -10,6 +10,8 @@ import {
   MIN_DASHBOARD_COLUMNS,
   type CommentReply,
   type DashboardWidget,
+  type ProjectBookmark,
+  type ProjectBookmarkGroup,
   type ProjectComment,
   type ProjectInteraction,
   type StoryChapter,
@@ -23,6 +25,10 @@ export interface ProjectContentSlice {
   widgets: DashboardWidget[];
   /** Number of columns in the Dashboard widget grid. */
   dashboardColumns: number;
+  /** Saved map views from the Bookmarks panel, in panel order (#2869). */
+  bookmarks: ProjectBookmark[];
+  /** Folders the bookmarks are organized into. */
+  bookmarkGroups: ProjectBookmarkGroup[];
   /** Anchored review comments on map points or features (issue #1518). */
   comments: ProjectComment[];
   /**
@@ -60,14 +66,23 @@ export interface ProjectContentSlice {
   toggleResolveComment: (commentId: string, resolved?: boolean) => void;
   deleteComment: (commentId: string) => void;
   setComments: (comments: ProjectComment[]) => void;
+  /**
+   * Replace every bookmark and folder (the Bookmarks panel writes its whole
+   * state back after each edit). Marks the project dirty.
+   */
+  setBookmarks: (bookmarks: ProjectBookmark[], bookmarkGroups: ProjectBookmarkGroup[]) => void;
 }
 
 export const createProjectContentSlice: SliceCreator<ProjectContentSlice> = (set) => ({
   storymap: null,
   widgets: [],
   dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
+  bookmarks: [],
+  bookmarkGroups: [],
   comments: [],
   projectInteraction: null,
+
+  setBookmarks: (bookmarks, bookmarkGroups) => set({ bookmarks, bookmarkGroups, isDirty: true }),
 
   addComment: (comment) =>
     set((s) => {

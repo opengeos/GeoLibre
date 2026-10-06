@@ -337,6 +337,8 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `set_story_map(**settings)` | Set the [story map](project-format.md#story-map)'s `title`, `subtitle`, `byline`, `footer`, `theme`, `show_markers`, `marker_color`, `inset`, `inset_position`, `hide_chapter_nav`, `start_slide`, `end_slide`. |
 | `add_story_chapter(title, description=, center=, zoom=, pitch=, bearing=, image=, alignment=, hidden=, map_animation=, rotate_animation=, on_enter=, on_exit=, index=)` | Add a story chapter; camera values left out come from the saved view. `on_enter`/`on_exit` fade layers: `[{"layer": "Cities", "opacity": 1, "duration": 800}]`. |
 | `move_story_chapter(chapter, index)` / `remove_story_chapter(chapter)` | Reorder or drop a chapter by id, title, or 0-based index. |
+| `add_bookmark(name, center=, zoom=, pitch=, bearing=, folder=, visible_layers=)` | Save a view to the Bookmarks panel; camera values left out come from the saved view. `folder` is a folder id or name (a new name creates it); `visible_layers` lists the layers (ids, names, or handles) to show when it is opened. |
+| `remove_bookmark(bookmark)` | Drop a bookmark by id, name, or 0-based index. |
 | `set_identify(layer="all")` | Arm the Identify tool so a click opens the popup: on one layer (id, name, or handle), on a list of layers, on every visible layer (`"all"`), or off (`None`). |
 | `show_control(name, visible=True)` / `hide_control(name)` | Show or hide a toolbar panel (`bookmark`, `search`, `measure`, `minimap`, `print`) or a built-in map control (`navigation`, `fullscreen`, `compass`, `geolocate`, `globe`, `scale`, `attribution`, `logo`). |
 | `set_projection(projection)` / `projection` | Draw the map as a `"globe"` (the default) or flat `"mercator"` map; saved in the project. |

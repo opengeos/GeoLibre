@@ -55,6 +55,8 @@ export function buildProjectSnapshot(
     models: state.models,
     processingHistory: state.processingHistory,
     widgets: state.widgets,
+    bookmarks: state.bookmarks,
+    bookmarkGroups: state.bookmarkGroups,
     dashboardColumns: state.dashboardColumns,
     mapLayout: state.mapLayout,
     secondaryMapViews: state.secondaryMapViews,

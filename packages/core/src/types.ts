@@ -2243,6 +2243,42 @@ export type DashboardWidgetAggregation = "count" | "sum" | "mean";
  * keys are simply ignored, so the record stays flat and easy to hand-edit.
  * Saved in the project file so a dashboard reopens with its widgets intact.
  */
+/**
+ * A saved map view in the Bookmarks panel. Mirrors `MapBookmark` from
+ * maplibre-gl-components so the panel can load it unchanged.
+ */
+export interface ProjectBookmark {
+  /** Unique within the project. */
+  id: string;
+  name: string;
+  /** Camera center longitude, -180..180. */
+  lng: number;
+  /** Camera center latitude, -90..90. */
+  lat: number;
+  zoom: number;
+  /** Camera tilt in degrees, 0..85. */
+  pitch: number;
+  /** Camera rotation in degrees. */
+  bearing: number;
+  /** Creation time, milliseconds since the epoch. */
+  createdAt: number;
+  /** The {@link ProjectBookmarkGroup} it belongs to; absent when ungrouped. */
+  groupId?: string;
+  /**
+   * Host state captured with the view. GeoLibre stores `visibleLayerIds`
+   * (the layers to show when the bookmark is opened).
+   */
+  extra?: Record<string, unknown>;
+}
+
+/** A folder in the Bookmarks panel. Folders do not nest. */
+export interface ProjectBookmarkGroup {
+  id: string;
+  name: string;
+  /** Whether the folder is collapsed in the panel. */
+  collapsed: boolean;
+}
+
 export interface DashboardWidget {
   /** Stable id, unique within the project (React key and store key). */
   id: string;
@@ -2429,6 +2465,13 @@ export interface GeoLibreProject {
   processingHistory?: ProcessingRun[];
   /** Saved Dashboard panel chart widgets (issue #401). */
   widgets?: DashboardWidget[];
+  /**
+   * Saved map views (the Bookmarks panel), in panel order. Omitted when there
+   * are none. Before #2869 these lived only in the browser's localStorage.
+   */
+  bookmarks?: ProjectBookmark[];
+  /** Folders the {@link bookmarks} are organized into. Omitted when none. */
+  bookmarkGroups?: ProjectBookmarkGroup[];
   /** Number of columns in the Dashboard widget grid; omitted when default. */
   dashboardColumns?: number;
   /**

@@ -287,9 +287,13 @@ m.move_story_chapter("Downtown", 0); m.remove_story_chapter("Overview")
 
 `set_plugin_state` accepts the built-in ids in
 `geolibre.project.PLUGIN_STATE_IDS` (`allow_unknown=True` for an external
-plugin); the blob's shape is the plugin's own. Bookmarks are not part of a
-project (the app keeps them in browser storage), so there is no API for them;
-story chapters are the saved equivalent.
+plugin); the blob's shape is the plugin's own.
+
+`m.add_bookmark(name, center=, zoom=, pitch=, bearing=, folder=,
+visible_layers=)` saves a view to the Bookmarks panel (camera values left out
+come from the saved view; `folder` is an id or name, a new name creates it;
+`visible_layers` takes ids, names, or handles). `m.remove_bookmark(ref)` drops
+one by id, name, or 0-based index. Bookmarks are saved in the project.
 
 ## Live interaction (notebook only)
 

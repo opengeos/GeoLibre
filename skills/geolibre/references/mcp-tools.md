@@ -234,6 +234,23 @@ move_story_chapter(path, chapter, index)
   `on_exit` fade layers: `[{"layer": "Cities", "opacity": 1, "duration": 800}]`.
   `chapter` is a chapter id, title, or 0-based index.
 
+### Bookmarks
+
+```text
+add_bookmark(path, name, center=None, zoom=None, pitch=None, bearing=None,
+             folder=None, visible_layers=None)
+remove_bookmark(path, bookmark)
+```
+
+- Bookmarks are saved map views in the Bookmarks panel (Controls → Bookmarks),
+  stored in the project so they travel with the file. `add_bookmark` appends
+  one; a camera value you omit comes from the project's saved view, so
+  `set_view` then `add_bookmark` captures that view. `folder` is a folder id or
+  name, and a new name creates the folder. `visible_layers` lists the layers
+  (ids or names) to show when the bookmark is opened; the others are hidden.
+  `bookmark` is a bookmark id, name, or 0-based index. `describe_project` lists
+  them.
+
 ### Framing and decoration
 
 ```text

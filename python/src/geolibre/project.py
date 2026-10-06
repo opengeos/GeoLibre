@@ -15,6 +15,7 @@ import json
 import math
 import re
 import socket
+import time
 import uuid
 import warnings
 import zlib
@@ -3811,3 +3812,113 @@ def story_chapter(
         }
     )
     return chapter
+
+
+def bookmark_folder(
+    name: str, *, collapsed: bool = False, folder_id: str | None = None
+) -> dict[str, Any]:
+    """Build one Bookmarks panel folder (``ProjectBookmarkGroup`` in types.ts).
+
+    Args:
+        name: Folder name shown in the panel.
+        collapsed: Start with the folder collapsed.
+        folder_id: Explicit folder id; a UUID by default.
+
+    Returns:
+        A folder dict.
+
+    Raises:
+        ValueError: If ``name`` is blank or ``collapsed`` is not a bool.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f"folder name must be a non-empty string, got {name!r}")
+    if not isinstance(collapsed, bool):
+        raise ValueError("collapsed must be true or false")
+    folder_id = str(folder_id).strip() if folder_id is not None else str(uuid.uuid4())
+    if not folder_id:
+        raise ValueError("folder_id must not be empty")
+    return {"id": folder_id, "name": name.strip(), "collapsed": collapsed}
+
+
+def bookmark(
+    name: str,
+    *,
+    center: tuple[float, float] | list[float],
+    zoom: float,
+    pitch: float = 0,
+    bearing: float = 0,
+    group_id: str | None = None,
+    visible_layer_ids: list[str] | None = None,
+    bookmark_id: str | None = None,
+    created_at: int | None = None,
+) -> dict[str, Any]:
+    """Build one saved map view for the Bookmarks panel (``ProjectBookmark``).
+
+    Values are stored the way ``normalizeBookmarks`` in project.ts leaves them,
+    so the app loads the bookmark unchanged: the bearing is wrapped into 0-360,
+    and out-of-range coordinates, zooms, and pitches are refused rather than
+    silently clamped.
+
+    Args:
+        name: Bookmark name shown in the panel.
+        center: Camera target as ``(lng, lat)``.
+        zoom: Camera zoom, 0-24.
+        pitch: Camera tilt in degrees, 0-85.
+        bearing: Camera rotation in degrees.
+        group_id: Id of the folder it belongs to; ungrouped when omitted.
+        visible_layer_ids: Layer ids to show when the bookmark is opened (all
+            others are hidden). Omit to leave layer visibility alone.
+        bookmark_id: Explicit bookmark id; a UUID by default.
+        created_at: Creation time in milliseconds since the epoch; now by default.
+
+    Returns:
+        A bookmark dict.
+
+    Raises:
+        ValueError: If any value is out of range or of the wrong type.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f"bookmark name must be a non-empty string, got {name!r}")
+    if not isinstance(center, (list, tuple)) or len(center) != 2:
+        raise ValueError(f"center must be (lng, lat), got {center!r}")
+    try:
+        lng, lat, zoom, pitch, bearing = (float(value) for value in (*center, zoom, pitch, bearing))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"center, zoom, pitch and bearing must be numbers: {exc}") from exc
+    if not (math.isfinite(lng) and -180 <= lng <= 180):
+        raise ValueError(f"longitude must be between -180 and 180, got {center[0]!r}")
+    if not (math.isfinite(lat) and -90 <= lat <= 90):
+        raise ValueError(f"latitude must be between -90 and 90, got {center[1]!r}")
+    if not (math.isfinite(zoom) and 0 <= zoom <= 24):
+        raise ValueError(f"zoom must be between 0 and 24, got {zoom!r}")
+    if not (math.isfinite(pitch) and 0 <= pitch <= 85):
+        raise ValueError(f"pitch must be between 0 and 85, got {pitch!r}")
+    if not math.isfinite(bearing):
+        raise ValueError(f"bearing must be finite, got {bearing!r}")
+    bookmark_id = str(bookmark_id).strip() if bookmark_id is not None else str(uuid.uuid4())
+    if not bookmark_id:
+        raise ValueError("bookmark_id must not be empty")
+    if created_at is None:
+        created_at = int(time.time() * 1000)
+    elif not isinstance(created_at, int) or isinstance(created_at, bool) or created_at < 0:
+        raise ValueError(f"created_at must be a non-negative integer, got {created_at!r}")
+
+    entry: dict[str, Any] = {
+        "id": bookmark_id,
+        "name": name.strip(),
+        "lng": lng,
+        "lat": lat,
+        "zoom": zoom,
+        "pitch": pitch,
+        "bearing": bearing % 360,
+        "createdAt": created_at,
+    }
+    if group_id is not None:
+        entry["groupId"] = str(group_id)
+    if visible_layer_ids is not None:
+        if not isinstance(visible_layer_ids, (list, tuple)) or not all(
+            isinstance(layer_id, str) for layer_id in visible_layer_ids
+        ):
+            raise ValueError("visible_layer_ids must be a list of layer id strings")
+        entry["extra"] = {"visibleLayerIds": list(visible_layer_ids)}
+    return entry

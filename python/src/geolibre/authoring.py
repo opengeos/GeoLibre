@@ -317,6 +317,7 @@ def describe_project(project: dict[str, Any]) -> dict[str, Any]:
         "layerCount": len(layers_of(project)),
         "layers": [layer_summary(layer) for layer in layers_of(project) if isinstance(layer, dict)],
         "mapControls": controls,
+        **({"bookmarks": bookmark_summary(project)} if project.get("bookmarks") else {}),
     }
 
 
@@ -1986,3 +1987,197 @@ def move_story_chapter(project: dict[str, Any], ref: str | int, index: int) -> d
     destination = max(0, min(len(story["chapters"]), int(index)))
     story["chapters"].insert(destination, chapter)
     return _story_summary(story)
+
+
+# -- bookmarks ------------------------------------------------------------------
+
+
+def _bookmark_lists(project: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return the project's bookmark and folder lists, creating them if absent.
+
+    Args:
+        project: The project dict (mutated in place when a list is created).
+
+    Returns:
+        The live ``bookmarks`` and ``bookmarkGroups`` lists.
+    """
+    lists = []
+    for key in ("bookmarks", "bookmarkGroups"):
+        value = project.get(key)
+        if not isinstance(value, list):
+            value = []
+            project[key] = value
+        lists.append(value)
+    return lists[0], lists[1]
+
+
+def _drop_empty_bookmark_lists(project: dict[str, Any]) -> None:
+    """Remove empty bookmark lists, as the app omits them when saving."""
+    for key in ("bookmarks", "bookmarkGroups"):
+        if project.get(key) == []:
+            del project[key]
+
+
+def bookmark_summary(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """List the project's bookmarks with the name of the folder each is in.
+
+    Args:
+        project: The project dict.
+
+    Returns:
+        ``{"id", "name", "folder"}`` entries in panel order.
+    """
+    folders = {
+        folder.get("id"): folder.get("name")
+        for folder in project.get("bookmarkGroups") or []
+        if isinstance(folder, dict)
+    }
+    return [
+        {
+            "id": entry.get("id"),
+            "name": entry.get("name"),
+            "folder": folders.get(entry.get("groupId")),
+        }
+        for entry in project.get("bookmarks") or []
+        if isinstance(entry, dict)
+    ]
+
+
+def find_bookmark(project: dict[str, Any], ref: str | int) -> int:
+    """Resolve a bookmark by id, name, or 0-based position.
+
+    Args:
+        project: The project dict.
+        ref: A bookmark id, a bookmark name (exact, then case-insensitive), or
+            an integer index.
+
+    Returns:
+        The bookmark's index in ``bookmarks``.
+
+    Raises:
+        ValueError: If nothing matches, or a name matches several bookmarks.
+    """
+    entries = [entry for entry in project.get("bookmarks") or [] if isinstance(entry, dict)]
+    if isinstance(ref, int) and not isinstance(ref, bool):
+        if 0 <= ref < len(entries):
+            return ref
+        raise ValueError(f"bookmark index {ref} is out of range (0-{len(entries) - 1})")
+    text = str(ref)
+    for index, entry in enumerate(entries):
+        if entry.get("id") == text:
+            return index
+    for matcher in (lambda name: name == text, lambda name: name.lower() == text.lower()):
+        matches = [i for i, entry in enumerate(entries) if matcher(str(entry.get("name", "")))]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ValueError(f"several bookmarks are named {text!r}; use the id")
+    raise ValueError(f"no bookmark matches {text!r}")
+
+
+def add_bookmark(
+    project: dict[str, Any],
+    name: str,
+    *,
+    center: Iterable[float] | None = None,
+    zoom: float | None = None,
+    pitch: float | None = None,
+    bearing: float | None = None,
+    folder: str | None = None,
+    visible_layers: Iterable[str] | None = None,
+    bookmark_id: str | None = None,
+    created_at: int | None = None,
+) -> dict[str, Any]:
+    """Add a saved map view to the project's Bookmarks panel.
+
+    A camera value left out is taken from the project's saved view, the way
+    the panel's **Add** button captures the current map.
+
+    Args:
+        project: The project dict (mutated in place).
+        name: Bookmark name.
+        center: Camera target ``[lng, lat]``.
+        zoom: Camera zoom, 0-24.
+        pitch: Camera tilt in degrees, 0-85.
+        bearing: Camera rotation in degrees.
+        folder: A folder id or name to file it under; a new name creates the
+            folder. Ungrouped when omitted.
+        visible_layers: Layers (ids or names) to show when the bookmark is
+            opened; the others are hidden. Omit to leave visibility alone.
+        bookmark_id: Explicit bookmark id; a UUID by default.
+        created_at: Creation time in milliseconds since the epoch; now by
+            default.
+
+    Returns:
+        The bookmark that was added.
+
+    Raises:
+        ValueError: If a value is invalid, a layer does not resolve, or
+            ``bookmark_id`` is already used.
+    """
+    view = project.get("mapView") if isinstance(project.get("mapView"), dict) else {}
+    existing_folders = [f for f in project.get("bookmarkGroups") or [] if isinstance(f, dict)]
+    new_folder: dict[str, Any] | None = None
+    group_id: str | None = None
+    if folder is not None:
+        match = next((f for f in existing_folders if folder in (f.get("id"), f.get("name"))), None)
+        if match is None:
+            new_folder = match = _project.bookmark_folder(str(folder))
+        group_id = str(match["id"])
+    # Validate everything before touching the project, so a refused bookmark
+    # leaves it unchanged.
+    entry = _project.bookmark(
+        name,
+        center=list(center) if center is not None else list(view.get("center") or [0, 0]),
+        zoom=zoom if zoom is not None else view.get("zoom", 2),
+        pitch=pitch if pitch is not None else view.get("pitch", 0),
+        bearing=bearing if bearing is not None else view.get("bearing", 0),
+        group_id=group_id,
+        visible_layer_ids=(
+            resolve_layer_ids(project, visible_layers) if visible_layers is not None else None
+        ),
+        bookmark_id=bookmark_id,
+        created_at=created_at,
+    )
+    if any(
+        isinstance(b, dict) and b.get("id") == entry["id"] for b in project.get("bookmarks") or []
+    ):
+        raise ValueError(f"a bookmark with id {entry['id']!r} already exists")
+    bookmarks, folders = _bookmark_lists(project)
+    if new_folder is not None:
+        folders.append(new_folder)
+    # The panel keeps a folder's bookmarks together: file a new member right
+    # after the folder's last one.
+    position = len(bookmarks)
+    if group_id is not None:
+        members = [
+            i
+            for i, b in enumerate(bookmarks)
+            if isinstance(b, dict) and b.get("groupId") == group_id
+        ]
+        if members:
+            position = members[-1] + 1
+    bookmarks.insert(position, entry)
+    _drop_empty_bookmark_lists(project)
+    return copy.deepcopy(entry)
+
+
+def remove_bookmark(project: dict[str, Any], ref: str | int) -> list[dict[str, Any]]:
+    """Remove a bookmark by id, name, or index.
+
+    Args:
+        project: The project dict (mutated in place).
+        ref: A bookmark id, name, or 0-based index.
+
+    Returns:
+        The remaining bookmarks, as :func:`bookmark_summary` lists them.
+
+    Raises:
+        ValueError: If the reference does not resolve to exactly one bookmark.
+    """
+    index = find_bookmark(project, ref)
+    bookmarks, _ = _bookmark_lists(project)
+    entries = [i for i, entry in enumerate(bookmarks) if isinstance(entry, dict)]
+    bookmarks.pop(entries[index])
+    _drop_empty_bookmark_lists(project)
+    return bookmark_summary(project)

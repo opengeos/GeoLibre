@@ -1,12 +1,20 @@
 // The standalone Bookmark panel.
 // Split out of maplibre-components.ts (opengeos/GeoLibre#2633).
 
-import { useAppStore } from "@geolibre/core";
+import {
+  normalizeBookmarkGroups,
+  normalizeBookmarks,
+  useAppStore,
+  type ProjectBookmark,
+  type ProjectBookmarkGroup,
+} from "@geolibre/core";
 import type {
   BookmarkControl,
   BookmarkControlOptions,
+  BookmarkEvent,
   BookmarkExportMode,
   MapBookmark,
+  MapBookmarkGroup,
 } from "maplibre-gl-components";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../../types";
 import { type BookmarkControlConstructor, getComponentsConstructors } from "./constructors";
@@ -90,7 +98,10 @@ const BOOKMARK_OPTIONS = {
   maxHeight: 520,
   panelWidth: 280,
   position: bookmarkControlPosition,
-  storageKey: "geolibre-bookmarks",
+  // Bookmarks are saved in the project (#2869), not in this browser's
+  // localStorage: an empty key turns the control's own persistence off, and
+  // createBookmarkControl seeds it from the store instead.
+  storageKey: "",
   // Resizable panel and drag reordering are on by default upstream; enable
   // per-bookmark export selection and visible-layer capture here. Labels and
   // the capture tooltip are applied per-instance in createBookmarkControl so
@@ -109,7 +120,31 @@ const BOOKMARK_OPTIONS = {
   restoreState: restoreVisibleLayers,
 } satisfies BookmarkControlOptions;
 
+/**
+ * Where bookmarks lived before they moved into the project. Read once, to
+ * migrate them into the first project that has none of its own.
+ */
+export const LEGACY_BOOKMARK_STORAGE_KEY = "geolibre-bookmarks";
+
+/** Control events after which its bookmarks or folders may have changed. */
+const BOOKMARK_CHANGE_EVENTS: readonly BookmarkEvent[] = [
+  "add",
+  "remove",
+  "rename",
+  "clear",
+  "import",
+  "reorder",
+  "group-add",
+  "group-remove",
+  "group-rename",
+  "group-move",
+];
+
 let bookmarkControl: BookmarkControl | null = null;
+/** The store arrays the open control last matched, to tell its own writes apart. */
+let syncedBookmarks: ProjectBookmark[] | null = null;
+let syncedGroups: ProjectBookmarkGroup[] | null = null;
+let unsubscribeStore: (() => void) | null = null;
 let bookmarkControlMounted = false;
 let bookmarkPanelVisible = false;
 const bookmarkPanelListeners = new Set<() => void>();
@@ -135,6 +170,7 @@ export function subscribeBookmarkPanel(listener: () => void): () => void {
 async function openStandaloneBookmarkControl(app: GeoLibreAppAPI): Promise<boolean> {
   const { BookmarkControl: BookmarkControlClass } = await getComponentsConstructors();
 
+  migrateLegacyBookmarks();
   bookmarkControl ??= createBookmarkControl(BookmarkControlClass, app);
 
   if (!bookmarkControlMounted) {
@@ -159,8 +195,12 @@ function createBookmarkControl(
   BookmarkControlClass: BookmarkControlConstructor,
   app: GeoLibreAppAPI,
 ): BookmarkControl {
+  const { bookmarks, bookmarkGroups } = useAppStore.getState();
   const control = new BookmarkControlClass({
     ...BOOKMARK_OPTIONS,
+    // The control mutates these arrays in place, so give it copies.
+    bookmarks: copyBookmarks(bookmarks) as MapBookmark[],
+    groups: copyGroups(bookmarkGroups),
     captureStateLabel: bookmarkLabels.captureStateLabel,
     captureStateTooltip: bookmarkLabels.captureStateTooltip,
     exportLabel: bookmarkLabels.exportLabel,
@@ -170,7 +210,86 @@ function createBookmarkControl(
     defaultFolderName: bookmarkLabels.defaultFolderName,
   });
   routeBookmarkFileIoThroughHost(control, app);
+  syncedBookmarks = bookmarks;
+  syncedGroups = bookmarkGroups;
+  // Write the panel's state back to the project after every edit.
+  for (const event of BOOKMARK_CHANGE_EVENTS) control.on(event, () => syncControlToStore(control));
+  // Bookmarks replaced from elsewhere (a project load, a collaborator, a
+  // script) rebuild the panel from the store, keeping it open.
+  unsubscribeStore?.();
+  unsubscribeStore = useAppStore.subscribe((state) => {
+    if (control !== bookmarkControl) return;
+    if (state.bookmarks === syncedBookmarks && state.bookmarkGroups === syncedGroups) return;
+    const reopen = bookmarkPanelVisible;
+    teardownBookmarkControl(app);
+    if (reopen) void openStandaloneBookmarkControl(app);
+  });
   return control;
+}
+
+/**
+ * Write the open control's bookmarks and folders to the project.
+ *
+ * @param control - The control whose state to save; ignored when stale.
+ */
+function syncControlToStore(control: BookmarkControl): void {
+  if (control !== bookmarkControl) return;
+  const next = copyBookmarks(control.getBookmarks());
+  const nextGroups = copyGroups(control.getGroups());
+  syncedBookmarks = next;
+  syncedGroups = nextGroups;
+  useAppStore.getState().setBookmarks(next, nextGroups);
+}
+
+/** Plain copies, detached from the control's internal state. */
+function copyBookmarks(bookmarks: readonly (ProjectBookmark | MapBookmark)[]): ProjectBookmark[] {
+  return bookmarks.map((bookmark) => ({
+    ...bookmark,
+    ...(bookmark.extra ? { extra: { ...bookmark.extra } } : {}),
+  }));
+}
+
+function copyGroups(
+  groups: readonly (ProjectBookmarkGroup | MapBookmarkGroup)[],
+): ProjectBookmarkGroup[] {
+  return groups.map((group) => ({ id: group.id, name: group.name, collapsed: group.collapsed }));
+}
+
+/**
+ * Move bookmarks saved by older versions (in this browser's localStorage) into
+ * the open project, once, when the project has none of its own. The legacy
+ * key is removed after a successful move so they are not copied into every
+ * project opened afterwards.
+ */
+function migrateLegacyBookmarks(): void {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(LEGACY_BOOKMARK_STORAGE_KEY);
+  } catch {
+    return;
+  }
+  if (!raw) return;
+  const state = useAppStore.getState();
+  if (state.bookmarks.length > 0 || state.bookmarkGroups.length > 0) return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  // The control wrote a bare array, or `{ bookmarks, groups }` with folders.
+  const envelope = Array.isArray(parsed)
+    ? { bookmarks: parsed, groups: [] }
+    : (parsed as { bookmarks?: unknown; groups?: unknown } | null);
+  const groups = normalizeBookmarkGroups(envelope?.groups);
+  const bookmarks = normalizeBookmarks(envelope?.bookmarks, groups);
+  if (bookmarks.length === 0 && groups.length === 0) return;
+  state.setBookmarks(bookmarks, groups);
+  try {
+    localStorage.removeItem(LEGACY_BOOKMARK_STORAGE_KEY);
+  } catch {
+    // Keep going: the bookmarks are in the project now either way.
+  }
 }
 
 /**
@@ -255,6 +374,8 @@ function routeBookmarkFileIoThroughHost(control: BookmarkControl, app: GeoLibreA
           return;
         }
         io.importBookmarks(valid);
+        // The public import emits no event, so save the result explicitly.
+        syncControlToStore(control);
       })
       .catch((error) => {
         console.warn("BookmarkControl: import failed", error);
@@ -266,6 +387,8 @@ export function teardownBookmarkControl(app: GeoLibreAppAPI): void {
   if (bookmarkControl && bookmarkControlMounted) {
     app.removeMapControl(bookmarkControl);
   }
+  unsubscribeStore?.();
+  unsubscribeStore = null;
   bookmarkControl = null;
   bookmarkControlMounted = false;
   setBookmarkPanelVisible(false);
