@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { dismissNotification, notify } from "../../lib/notify";
 import { trackWebglContextLoss } from "../../lib/webgl-context-loss";
@@ -12,12 +12,19 @@ import { trackWebglContextLoss } from "../../lib/webgl-context-loss";
  */
 export function useWebglContextLossNotice(containerRef: RefObject<HTMLElement | null>): void {
   const { t } = useTranslation();
+  // Read through a ref so a language change does not restart the tracker,
+  // which would drop the canvases it knows are lost and dismiss the notice.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let noticeId: string | null = null;
     const stop = trackWebglContextLoss(container, {
       onLost: () => {
+        const t = tRef.current;
         console.warn("[geolibre] A map canvas lost its WebGL context.");
         noticeId = notify.warning(t("shell.webglContextLost.message"), {
           description: t("shell.webglContextLost.description"),
@@ -38,5 +45,5 @@ export function useWebglContextLossNotice(containerRef: RefObject<HTMLElement | 
       stop();
       if (noticeId) dismissNotification(noticeId);
     };
-  }, [containerRef, t]);
+  }, [containerRef]);
 }

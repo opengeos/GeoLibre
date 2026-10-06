@@ -50,7 +50,7 @@ The Linux app runs in WebKitGTK. At startup it picks the WebKitGTK renderer sett
 | --- | --- |
 | WebKitGTK older than 2.48 | `WEBKIT_DISABLE_DMABUF_RENDERER=1` (the DMA-BUF renderer can leave the window blank on older graphics stacks) |
 | NVIDIA GPU, WebKitGTK 2.48 to 2.51 | `WEBKIT_DISABLE_DMABUF_RENDERER=1` (NVIDIA's buffer allocation fails, and there is no faster fallback yet) |
-| NVIDIA GPU, WebKitGTK 2.52 or newer | `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` (a shared-memory fallback that avoids the blank window without the slow legacy renderer) |
+| NVIDIA GPU, WebKitGTK 2.52 or newer | `WEBKIT_DISABLE_DMABUF_RENDERER=0` and `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` (a shared-memory fallback that avoids the blank window without the slow legacy renderer) |
 | Anything else | Nothing; WebKitGTK's default DMA-BUF renderer is used |
 | x86-64 CPU without AVX | `JSC_useWasmOSR=false` and `JSC_useBBQTierUpChecks=false` (WebAssembly tier-up crashes the renderer on these CPUs; WebAssembly-heavy work runs slower) |
 
