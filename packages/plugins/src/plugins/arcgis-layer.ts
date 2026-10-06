@@ -637,17 +637,22 @@ async function addArcGISFeatureLayerAsGeoJson(
   const zoomTo = options.zoomTo ?? shouldZoomToNewLayers();
   if (bounds && zoomTo) app.fitBounds?.(bounds);
   if (map) startArcGISViewportLoader(id, map, queryUrl, options, () => Promise.resolve(layerInfo));
-  if (!bounds) {
+  // Only a viewport-loaded layer reads its stored extent; one holding the
+  // complete download frames its features.
+  if (map && !bounds) {
     // An extent in a local projected CRS is projected by the server. That is a
     // round trip the layer does not wait on: the extent is patched in when it
     // lands, if the layer is still there.
+    const viewAtAdd = viewportKey(map);
     void fetchProjectedArcGISFeatureLayerBounds(queryUrl, options).then((projected) => {
       const layer = useAppStore.getState().layers.find((item) => item.id === id);
       if (!projected || !layer || layer.metadata.bounds) return;
       useAppStore.getState().updateLayer(id, {
         metadata: { ...layer.metadata, bounds: projected },
       });
-      if (zoomTo) app.fitBounds?.(projected);
+      // A late fit must not pull the camera away from where the user went
+      // while the request was out.
+      if (zoomTo && viewportKey(map) === viewAtAdd) app.fitBounds?.(projected);
     });
   }
   return id;
@@ -1381,6 +1386,14 @@ async function addArcGISImageServiceLayer(
   useAppStore.getState().addLayer(layer, options.beforeLayerId ?? null);
   if (bounds && (options.zoomTo ?? shouldZoomToNewLayers())) app.fitBounds?.(bounds);
   return id;
+}
+
+/** The map's visible extent as a string, for telling whether the view moved. */
+function viewportKey(map: maplibregl.Map): string {
+  // engine-audit-allow: getMap-bounds — compared only against the same map's
+  // own earlier value; the caller holds a MapLibre map (viewport loading).
+  const bounds = map.getBounds();
+  return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
 }
 
 /** How long the server gets to project a feature layer's extent. */
@@ -2594,6 +2607,15 @@ function arcgisPortalItemExtentToBounds(
   return isGeoBounds([west, south, east, north]) ? [west, south, east, north] : undefined;
 }
 
+/**
+ * Geographic CRSs whose degrees are within metres of WGS84's, so an extent in
+ * one frames the map as-is: WGS84, NAD83, ETRS89, GDA94, GDA2020, NZGD2000,
+ * NAD83(CSRS), JGD2000, JGD2011, CGCS2000 and SIRGAS 2000.
+ */
+const ARCGIS_GEOGRAPHIC_WKIDS = new Set([
+  4326, 4269, 4258, 4283, 7844, 4167, 4617, 4612, 6668, 4490, 4674,
+]);
+
 function arcgisExtentToBounds(
   extent: ArcGISExtent | undefined,
 ): [number, number, number, number] | undefined {
@@ -2607,6 +2629,9 @@ function arcgisExtentToBounds(
       mercatorYToLatitude(extent.ymax),
     ];
   }
+  // A projected extent near its false origin can fall inside the degree range,
+  // so a known non-geographic WKID is never read as longitude and latitude.
+  if (wkid !== undefined && !ARCGIS_GEOGRAPHIC_WKIDS.has(wkid)) return undefined;
 
   const bounds: [number, number, number, number] = [
     extent.xmin,

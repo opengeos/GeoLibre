@@ -513,12 +513,13 @@ describe("addArcGISLayer (feature layer)", () => {
       if (!url.pathname.endsWith("/query")) {
         return jsonResponse({
           ...VIEWPORT_LAYER_INFO,
-          // Nevada State Plane East (feet): not geographic, not Web Mercator.
+          // Projected (Nevada State Plane East), but small enough to pass for
+          // degrees: only the WKID says it is not longitude and latitude.
           extent: {
-            xmin: 760000,
-            ymin: 26700000,
-            xmax: 830000,
-            ymax: 26800000,
+            xmin: 10,
+            ymin: 20,
+            xmax: 30,
+            ymax: 40,
             spatialReference: { wkid: 102707 },
           },
         });
@@ -572,6 +573,17 @@ describe("addArcGISLayer (feature layer)", () => {
     await settle();
     assert.equal(layerById(removed), undefined);
     assert.equal(fitBoundsCalls.length, 1);
+
+    // The user moved the view while the extent was out: store it, but do not
+    // pull the camera back.
+    const panned = await add();
+    await settle();
+    view.setBounds([150, -35, 152, -33]);
+    extentResponses[2](projectedExtent());
+    await settle();
+    assert.deepEqual(layerById(panned)?.metadata.bounds, [-115.4, 36.0, -115.0, 36.3]);
+    assert.equal(fitBoundsCalls.length, 1);
+    useAppStore.getState().removeLayer(panned);
   });
 
   it("ignores a superseded viewport query that fails for its own reasons", async () => {
