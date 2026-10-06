@@ -152,6 +152,31 @@ Public Overpass instances are intended for bounded interactive queries. Zoom to 
 
 The panel identifies the source as © OpenStreetMap contributors and notes the Open Database License (ODbL); keep the required attribution when publishing derived maps or data.
 
+## ArcGIS Portal
+
+Browses the content of your own ArcGIS Online organization or ArcGIS Enterprise
+portal, including items shared only with your organization or your groups, and
+adds it to the map.
+
+- Sign in from the panel. Leave the portal URL blank for ArcGIS Online, or enter
+  your organization URL (`https://yourorg.maps.arcgis.com`) to get its sign-in
+  page (including SSO), or your Enterprise portal. You need an OAuth client ID
+  registered on the portal; the hosted web app fills one in for ArcGIS Online.
+  See [Signing in with ArcGIS](../arcgis-editing.md#signing-in-with-arcgis).
+- **Browse** picks the scope: **My content**, **My favorites**, **My groups**
+  (then choose the group), **My organization**, or **All of the portal**.
+  Narrow it with a keyword or an item type. Results are newest first, or by
+  relevance once you type a keyword.
+- **Add to map** loads feature, map, image, and vector tile services. A web map
+  adds its feature, map service, and image service layers. Once added, the
+  button reads **Remove from map** and removes them again; it turns back to
+  **Add to map** if you remove the layers elsewhere, such as in the Layers
+  panel. **Zoom** frames the item and **Details** opens its page on the portal.
+- The session is the same one Add Data → ArcGIS uses, so signing in or out in
+  either place applies to both. Layers you add renew their token while you stay
+  signed in. **Another portal** signs in to a second portal, and the portal
+  picker switches between them.
+
 ## ArcGIS Hub
 
 Searches public datasets published to [ArcGIS Hub](https://hub.arcgis.com/).

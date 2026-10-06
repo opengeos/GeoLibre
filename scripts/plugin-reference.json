@@ -66,6 +66,10 @@
   "geolibre-ign-lidar-hd": {
     "description": "Search France's IGN LiDAR HD tile coverage and download COPC point clouds."
   },
+  "geolibre-arcgis-portal": {
+    "description": "Browse and add the content of your ArcGIS Online organization or ArcGIS Enterprise portal after signing in.",
+    "docs": "web-services.md#arcgis-portal"
+  },
   "maplibre-gl-arcgis-hub": {
     "description": "Public datasets published to ArcGIS Hub.",
     "docs": "web-services.md#arcgis-hub"

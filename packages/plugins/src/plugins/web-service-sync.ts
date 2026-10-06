@@ -35,6 +35,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "maplibre-gl-openaerialmap",
   "geolibre-osm-downloader",
   "geolibre-ign-lidar-hd",
+  "geolibre-arcgis-portal",
   "maplibre-gl-arcgis-hub",
   "geolibre-tennessee-gis",
   "geolibre-us-federal-gis",

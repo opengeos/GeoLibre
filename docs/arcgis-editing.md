@@ -77,6 +77,10 @@ Vector tile, map service and image service layers carry the token they were
 added with, which lasts about half an hour, so re-add them after that. The
 session is not kept across app restarts yet.
 
+To browse your portal's content instead of pasting service URLs, use
+**Plugins → Web Services → ArcGIS Portal**, which shares this sign-in. See
+[ArcGIS Portal](user-guide/web-services.md#arcgis-portal).
+
 ## Current scope
 
 Supported geometry families are points, multipoints, lines, multilines, polygons,

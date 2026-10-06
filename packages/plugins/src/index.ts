@@ -646,6 +646,13 @@ export {
   type ArcGisHubPluginInstance,
 } from "./plugins/maplibre-arcgis-hub";
 export {
+  ARCGIS_PORTAL_PLUGIN_ID,
+  maplibreArcGisPortalPlugin,
+  setArcGisPortalAuth,
+  type ArcGisPortalAuth,
+  type ArcGisPortalConnection,
+} from "./plugins/maplibre-arcgis-portal";
+export {
   DEFAULT_TENNESSEE_GIS_LABELS,
   maplibreTennesseeGisPlugin,
   setTennesseeGisLabels,

@@ -44,6 +44,7 @@ import {
   maplibreOpenAerialMapPlugin,
   maplibreOsmDownloaderPlugin,
   maplibreIgnLidarHdPlugin,
+  maplibreArcGisPortalPlugin,
   maplibreArcGisHubPlugin,
   maplibreTennesseeGisPlugin,
   maplibreUsFederalGisPlugin,
@@ -119,6 +120,7 @@ import {
   openFloatingPanel,
   closeFloatingPanel,
   getOpenFloatingPanels,
+  setArcGisPortalAuth,
 } from "@geolibre/plugins";
 import { getDeploymentPolicy, readDeploymentEnvValue } from "../lib/deployment-env";
 import type { DeploymentPolicy } from "../lib/deployment-policy";
@@ -146,6 +148,16 @@ import {
   PluginPolicyError,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
+import {
+  arcgisAuthErrorKey,
+  arcgisLayerTokenProvider,
+  getArcGISAccessToken,
+  loadArcGISClientId,
+  normalizeArcGISPortalUrl,
+  signInToArcGIS,
+  signOutOfArcGIS,
+  useArcGISAuthStore,
+} from "../lib/arcgis-oauth";
 import { pickZarrDirectory, zarrDirectoryPickerSupported } from "../lib/zarr-directory-picker";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
 import i18n from "../i18n";
@@ -201,6 +213,7 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreOpenAerialMapPlugin,
   maplibreOsmDownloaderPlugin,
   maplibreIgnLidarHdPlugin,
+  maplibreArcGisPortalPlugin,
   maplibreArcGisHubPlugin,
   maplibreTennesseeGisPlugin,
   maplibreUsFederalGisPlugin,
@@ -370,6 +383,26 @@ setPointCloudLabelWriter({
       relabelled: result.relabelled ?? 0,
       instanced: result.instanced ?? 0,
     };
+  },
+});
+
+// The ArcGIS Portal plugin browses a signed-in portal. Sign-in lives in the
+// app (lib/arcgis-oauth.ts), so the plugin shares the session Add Data uses.
+setArcGisPortalAuth({
+  connections: () => Object.values(useArcGISAuthStore.getState().connections),
+  subscribe: (listener) =>
+    useArcGISAuthStore.subscribe((state, previous) => {
+      if (state.connections !== previous.connections) listener();
+    }),
+  normalizePortalUrl: normalizeArcGISPortalUrl,
+  clientId: loadArcGISClientId,
+  signIn: (portalUrl, clientId) => signInToArcGIS({ portalUrl, clientId }),
+  signOut: (portal) => signOutOfArcGIS(portal),
+  getToken: getArcGISAccessToken,
+  tokenProvider: (portal) => arcgisLayerTokenProvider(portal, (key) => i18n.t(key)),
+  errorMessage: (error) => {
+    const key = arcgisAuthErrorKey(error);
+    return key ? i18n.t(key) : error instanceof Error ? error.message : String(error);
   },
 });
 
