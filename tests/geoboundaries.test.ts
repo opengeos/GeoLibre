@@ -35,6 +35,8 @@ describe("geoBoundaries helpers", () => {
       corsGeoBoundariesUrl("https://example.com/a.geojson"),
       "https://example.com/a.geojson",
     );
+    const otherRepo = "https://github.com/someone/else/raw/main/a.geojson";
+    assert.equal(corsGeoBoundariesUrl(otherRepo), otherRepo);
   });
 
   it("parses and sorts the country list, dropping blanks and duplicates", () => {

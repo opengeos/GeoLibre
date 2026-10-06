@@ -1,6 +1,7 @@
-import { Label, Select } from "@geolibre/ui";
+import { Button, Label, Select } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
 import { useEffect, useRef, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   geoBoundariesAttribution,
@@ -24,14 +25,43 @@ const GEOBOUNDARIES_SOURCE_KIND = "geoboundaries";
 let countriesRequest: Promise<GeoBoundariesCountry[]> | null = null;
 const levelsRequests = new Map<string, Promise<GeoBoundariesLevel[]>>();
 
-async function fetchJson(url: string): Promise<unknown> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
+// API lists answer in about a second; a full-resolution ADM3+ file can be tens
+// of MB, so the download gets more room.
+const LIST_TIMEOUT_MS = 30_000;
+const DOWNLOAD_TIMEOUT_MS = 120_000;
+
+class HttpStatusError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}`);
+  }
+}
+
+class InvalidJsonError extends Error {}
+
+async function fetchJson(url: string, signal: AbortSignal): Promise<unknown> {
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new HttpStatusError(response.status);
+  try {
+    return await response.json();
+  } catch (err) {
+    // A timeout or abort mid-body is not a parse failure.
+    if (signal.aborted) throw err;
+    // A proxy or CDN error page can arrive as a 200 HTML body.
+    throw new InvalidJsonError("Response was not valid JSON");
+  }
+}
+
+/** Maps a geoBoundaries request failure to a translated message. */
+function requestErrorMessage(err: unknown, t: TFunction, fallback: string): string {
+  if (err instanceof HttpStatusError) {
+    return t("addData.common.requestFailed", { status: err.status });
+  }
+  if (err instanceof InvalidJsonError) return t("addData.geoBoundaries.errorInvalid");
+  return serviceRequestErrorMessage(err, t, fallback);
 }
 
 function loadCountries(): Promise<GeoBoundariesCountry[]> {
-  countriesRequest ??= fetchJson(geoBoundariesCountriesUrl())
+  countriesRequest ??= fetchJson(geoBoundariesCountriesUrl(), AbortSignal.timeout(LIST_TIMEOUT_MS))
     .then(parseGeoBoundariesCountries)
     .catch((err: unknown) => {
       countriesRequest = null;
@@ -43,7 +73,7 @@ function loadCountries(): Promise<GeoBoundariesCountry[]> {
 function loadLevels(iso: string): Promise<GeoBoundariesLevel[]> {
   let request = levelsRequests.get(iso);
   if (!request) {
-    request = fetchJson(geoBoundariesLevelsUrl(iso))
+    request = fetchJson(geoBoundariesLevelsUrl(iso), AbortSignal.timeout(LIST_TIMEOUT_MS))
       .then(parseGeoBoundariesLevels)
       .catch((err: unknown) => {
         levelsRequests.delete(iso);
@@ -72,35 +102,39 @@ export function GeoBoundariesSource() {
   const [levels, setLevels] = useState<GeoBoundariesLevel[] | null>(null);
   const [levelId, setLevelId] = useState("");
   const [simplified, setSimplified] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [countriesError, setCountriesError] = useState<string | null>(null);
+  const [countriesAttempt, setCountriesAttempt] = useState(0);
+  const [levelsError, setLevelsError] = useState<string | null>(null);
+  // Aborts an in-flight boundary download when the dialog closes.
+  const downloadAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => downloadAbortRef.current?.abort(), []);
   // The name last filled in from the selection, so a name the user typed is
   // never overwritten when they change the country or level.
   const autoNameRef = useRef(defaultName);
 
   useEffect(() => {
     let cancelled = false;
+    setCountriesError(null);
     loadCountries()
       .then((list) => {
         if (!cancelled) setCountries(list);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setLoadError(
-            serviceRequestErrorMessage(err, t, t("addData.geoBoundaries.errorCountries")),
-          );
+          setCountriesError(requestErrorMessage(err, t, t("addData.geoBoundaries.errorCountries")));
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [countriesAttempt, t]);
 
   useEffect(() => {
     setLevels(null);
     setLevelId("");
     if (!iso) return;
     let cancelled = false;
-    setLoadError(null);
+    setLevelsError(null);
     loadLevels(iso)
       .then((list) => {
         if (cancelled) return;
@@ -110,7 +144,7 @@ export function GeoBoundariesSource() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setLoadError(serviceRequestErrorMessage(err, t, t("addData.geoBoundaries.errorLevels")));
+          setLevelsError(requestErrorMessage(err, t, t("addData.geoBoundaries.errorLevels")));
         }
       });
     return () => {
@@ -150,11 +184,18 @@ export function GeoBoundariesSource() {
     if (!iso) throw new Error(t("addData.geoBoundaries.errorCountry"));
     if (!selectedLevel) throw new Error(t("addData.geoBoundaries.errorLevel"));
     const url = geoBoundariesDownloadUrl(selectedLevel, simplified);
+    const controller = new AbortController();
+    downloadAbortRef.current = controller;
     let geojson: unknown;
     try {
-      geojson = await fetchJson(url);
+      geojson = await fetchJson(
+        url,
+        AbortSignal.any([controller.signal, AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)]),
+      );
     } catch (err) {
-      throw new Error(serviceRequestErrorMessage(err, t, t("addData.geoBoundaries.errorDownload")));
+      throw new Error(requestErrorMessage(err, t, t("addData.geoBoundaries.errorDownload")));
+    } finally {
+      if (downloadAbortRef.current === controller) downloadAbortRef.current = null;
     }
     if (!isFeatureCollection(geojson)) throw new Error(t("addData.geoBoundaries.errorInvalid"));
     const name = source.layerName.trim() || `${selectedLevel.countryName} ${selectedLevel.level}`;
@@ -191,7 +232,7 @@ export function GeoBoundariesSource() {
       beforeLayerId={source.beforeLayerId}
       onBeforeLayerIdChange={source.setBeforeLayerId}
       onSubmit={handleSubmit}
-      error={source.error ?? loadError}
+      error={source.error ?? levelsError ?? countriesError}
       submitDisabled={source.isSubmitting || !selectedLevel}
       useServiceIcon
     >
@@ -206,9 +247,11 @@ export function GeoBoundariesSource() {
             onChange={(event) => setIso(event.target.value)}
           >
             <option value="" disabled>
-              {countries === null
-                ? t("addData.common.loading")
-                : t("addData.geoBoundaries.countryPlaceholder")}
+              {countries !== null
+                ? t("addData.geoBoundaries.countryPlaceholder")
+                : countriesError
+                  ? t("addData.geoBoundaries.countriesUnavailable")
+                  : t("addData.common.loading")}
             </option>
             {countries?.map((country) => (
               <option key={country.iso} value={country.iso}>
@@ -216,6 +259,16 @@ export function GeoBoundariesSource() {
               </option>
             ))}
           </Select>
+          {countriesError ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCountriesAttempt((attempt) => attempt + 1)}
+            >
+              {t("addData.geoBoundaries.retry")}
+            </Button>
+          ) : null}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="geoboundaries-level">{t("addData.geoBoundaries.level")}</Label>
@@ -248,6 +301,11 @@ export function GeoBoundariesSource() {
           />
           {t("addData.geoBoundaries.simplified")}
         </label>
+        {!simplified ? (
+          <p className="text-xs text-muted-foreground">
+            {t("addData.geoBoundaries.fullGeometryNote")}
+          </p>
+        ) : null}
         {selectedLevel?.license ? (
           <p className="text-xs text-muted-foreground">
             {t("addData.geoBoundaries.license", { license: selectedLevel.license })}

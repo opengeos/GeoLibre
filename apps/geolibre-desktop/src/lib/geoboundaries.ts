@@ -113,7 +113,7 @@ export function parseGeoBoundariesLevels(json: unknown): GeoBoundariesLevel[] {
 }
 
 /**
- * Rewrites a `github.com/<owner>/<repo>/raw/<ref>/<path>` link to its
+ * Rewrites a `github.com/wmgeolab/geoBoundaries/raw/<ref>/<path>` link to its
  * `media.githubusercontent.com` target. geoBoundaries stores its GeoJSON in Git
  * LFS, and the github.com redirect in front of it fails a browser's CORS check,
  * while the media host answers with `Access-Control-Allow-Origin: *`. Any other
@@ -123,10 +123,11 @@ export function parseGeoBoundariesLevels(json: unknown): GeoBoundariesLevel[] {
  * @returns A URL the browser can fetch cross-origin.
  */
 export function corsGeoBoundariesUrl(url: string): string {
-  const match = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/raw\/(.+)$/.exec(url.trim());
+  // Only geoBoundaries' own repository is rewritten, so an unexpected API value
+  // cannot point the fetch at another repository's LFS media.
+  const match = /^https:\/\/github\.com\/wmgeolab\/geoBoundaries\/raw\/(.+)$/.exec(url.trim());
   if (!match) return url;
-  const [, owner, repo, rest] = match;
-  return `https://media.githubusercontent.com/media/${owner}/${repo}/${rest}`;
+  return `https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/${match[1]}`;
 }
 
 /**
