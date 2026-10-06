@@ -388,20 +388,17 @@ function applyDraftsToDuckDBRows(
 interface AttributeTableProps {
   mapControllerRef: RefObject<MapEngine | null>;
   /**
-   * Re-read a layer's features from its source: the layer panel's Refresh
-   * action, shared so both surfaces dedupe the request and report one status.
-   * Omitted, the table offers no Refresh button.
+   * The layer panel's refresh state (`useLayerRefresh`): its Refresh action and
+   * transient status notes keyed by layer id, shared so both surfaces dedupe
+   * the request and report one status. Omitted, the table offers no Refresh.
    */
-  onRefreshLayer?: (layer: GeoLibreLayer) => Promise<void> | void;
-  /** The layer panel's transient refresh notes, keyed by layer id. */
-  refreshStatuses?: Record<string, LayerRefreshStatus>;
+  refresh?: {
+    handleRefreshLayer: (layer: GeoLibreLayer) => Promise<void> | void;
+    refreshStatuses: Record<string, LayerRefreshStatus>;
+  };
 }
 
-export function AttributeTable({
-  mapControllerRef,
-  onRefreshLayer,
-  refreshStatuses,
-}: AttributeTableProps) {
+export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProps) {
   const { t } = useTranslation();
   // Column order is visual: in a right-to-left layout the first column renders
   // rightmost, so the move-left/right actions and their guards swap.
@@ -698,8 +695,8 @@ export function AttributeTable({
   // disk, everything else needs a refreshable source.
   const isLocalFileRefresh = layer != null && isTauri() && isLocalFileLayer(layer);
   const canRefreshLayer =
-    Boolean(onRefreshLayer) && layer != null && (isLocalFileRefresh || isRefreshableLayer(layer));
-  const refreshStatus = layer ? refreshStatuses?.[layer.id] : undefined;
+    Boolean(refresh) && layer != null && (isLocalFileRefresh || isRefreshableLayer(layer));
+  const refreshStatus = layer ? refresh?.refreshStatuses[layer.id] : undefined;
   const isRefreshingLayer = refreshStatus?.type === "refreshing";
   // An ArcGIS refresh with unsaved edits keeps the local copy rather than
   // overwrite it, so a click would report success without fetching anything.
@@ -715,8 +712,8 @@ export function AttributeTable({
    * @param target - The layer to refresh.
    */
   const refreshLayerRows = async (target: GeoLibreLayer) => {
-    if (!onRefreshLayer) return;
-    await onRefreshLayer(target);
+    if (!refresh) return;
+    await refresh.handleRefreshLayer(target);
     if (!isVectorControlAttributeSource(target) || target.type !== "vector-tiles") return;
     const current = useAppStore.getState().layers.find((l) => l.id === target.id);
     if (current?.type === "vector-tiles" && current.geojson) {

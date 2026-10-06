@@ -145,8 +145,11 @@ describe("AttributeTable", () => {
   it("refreshes a refreshable layer through the shared handler", () => {
     const refreshed: string[] = [];
     renderRefreshableTable({
-      onRefreshLayer: (layer: { id: string }) => {
-        refreshed.push(layer.id);
+      refresh: {
+        handleRefreshLayer: (layer: { id: string }) => {
+          refreshed.push(layer.id);
+        },
+        refreshStatuses: {},
       },
     });
 
@@ -166,8 +169,10 @@ describe("AttributeTable", () => {
 
   it("disables Refresh while one is running and shows the layer's refresh note", () => {
     const view = renderRefreshableTable({
-      onRefreshLayer: () => {},
-      refreshStatuses: { cities: { type: "refreshing", message: "Refreshing..." } },
+      refresh: {
+        handleRefreshLayer: () => {},
+        refreshStatuses: { cities: { type: "refreshing", message: "Refreshing..." } },
+      },
     });
     const button = screen.getByRole("button", { name: "Refresh features" });
     assert.equal((button as HTMLButtonElement).disabled, true);
@@ -175,8 +180,10 @@ describe("AttributeTable", () => {
     view.rerender(
       createElement(AttributeTable, {
         mapControllerRef: { current: null },
-        onRefreshLayer: () => {},
-        refreshStatuses: { cities: { type: "error", message: "HTTP 503" } },
+        refresh: {
+          handleRefreshLayer: () => {},
+          refreshStatuses: { cities: { type: "error", message: "HTTP 503" } },
+        },
       }),
     );
     assert.equal((button as HTMLButtonElement).disabled, false);
