@@ -60,6 +60,7 @@ import {
   type ToolbarMapControl,
 } from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
+import { ImageControlDialog } from "./ImageControlDialog";
 import { PluginMenuContributions } from "./PluginMenuContributions";
 
 /**
@@ -236,6 +237,7 @@ export function ControlsMenu({
     show("controls.colorbar") ||
     show("controls.legend") ||
     show("controls.html") ||
+    show("controls.image") ||
     show("controls.measure") ||
     show("controls.bookmark") ||
     show("controls.minimap") ||
@@ -243,6 +245,7 @@ export function ControlsMenu({
 
   return (
     <>
+      <ImageControlDialog panel={panels.image} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -435,6 +438,12 @@ export function ControlsMenu({
             <DropdownMenuItem onSelect={panels.html.toggle}>
               {t("toolbar.item.html")}
               {panels.html.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.image") && (
+            <DropdownMenuItem onSelect={panels.image.toggle}>
+              {t("toolbar.item.image")}
+              {panels.image.visible ? " ✓" : ""}
             </DropdownMenuItem>
           )}
           {show("controls.measure") && (

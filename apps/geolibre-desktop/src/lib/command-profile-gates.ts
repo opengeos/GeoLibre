@@ -78,6 +78,7 @@ const COMMAND_MENU_ITEMS: ReadonlyArray<readonly [string, string]> = [
   ["control.colorbar", "controls.colorbar"],
   ["control.legend", "controls.legend"],
   ["control.html", "controls.html"],
+  ["control.image", "controls.image"],
   ["control.measure", "controls.measure"],
   ["control.bookmark", "controls.bookmark"],
   ["control.minimap", "controls.minimap"],

@@ -755,6 +755,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   { id: "controls.html", menuId: "controls", labelKey: "toolbar.item.html", tier: "advanced" },
+  { id: "controls.image", menuId: "controls", labelKey: "toolbar.item.image", tier: "advanced" },
   {
     id: "controls.measure",
     menuId: "controls",

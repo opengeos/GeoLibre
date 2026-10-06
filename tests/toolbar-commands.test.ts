@@ -175,6 +175,7 @@ const FULL_REGISTRY_IDS = [
   "control.colorbar",
   "control.legend",
   "control.html",
+  "control.image",
   "control.measure",
   "control.bookmark",
   "control.minimap",

@@ -27,6 +27,7 @@ import {
   normalizeHtmlState,
   normalizeLegendState,
 } from "./components/gui-state";
+import { imageProjectState, restoreImagePanel, teardownImageControl } from "./components/image";
 import {
   htmlControl,
   htmlPanelVisible,
@@ -90,6 +91,25 @@ export {
   openHtmlPanelWithEntry,
   subscribeHtmlPanel,
 } from "./components/html";
+export {
+  closeImagePanel,
+  getImageControlState,
+  isImagePanelVisible,
+  setImageControl,
+  subscribeImagePanel,
+} from "./components/image";
+export {
+  type ComponentImageState,
+  type ImageSizeMode,
+  IMAGE_RATIO_MAX,
+  IMAGE_RATIO_MIN,
+  IMAGE_SIZE_MAX,
+  IMAGE_SIZE_MIN,
+  DEFAULT_IMAGE_STATE,
+  formatAspectRatio,
+  normalizeImageUrl,
+  parseAspectRatio,
+} from "./components/image-model";
 export {
   closeLegendPanel,
   isLegendPanelVisible,
@@ -278,6 +298,7 @@ export const maplibreComponentsPlugin: GeoLibrePlugin = {
     teardownColorbarControl(app);
     teardownLegendControl(app);
     teardownHtmlControl(app);
+    teardownImageControl(app);
     teardownLidarControl(app);
     teardownSplattingControl(app);
     if (!componentsControl) return;
@@ -311,6 +332,8 @@ function componentsProjectStateSnapshot(): ComponentsProjectState | undefined {
   if (htmlPanelVisible && htmlControl) {
     state.html = normalizeHtmlState(htmlControl.getState());
   }
+  const image = imageProjectState();
+  if (image) state.image = image;
 
   return Object.keys(state).length > 0 ? state : undefined;
 }
@@ -334,6 +357,12 @@ function applyComponentsProjectState(app: GeoLibreAppAPI, state: unknown): void 
   } else {
     teardownHtmlControl(app);
   }
+
+  if (normalized?.image?.visible && normalized.image.url) {
+    restoreImagePanel(app, normalized.image);
+  } else {
+    teardownImageControl(app);
+  }
 }
 
 export function closeMaplibreComponentControls(app: GeoLibreAppAPI): void {
@@ -351,6 +380,7 @@ export function closeMaplibreComponentControls(app: GeoLibreAppAPI): void {
   teardownColorbarControl(app);
   teardownLegendControl(app);
   teardownHtmlControl(app);
+  teardownImageControl(app);
   teardownLidarControl(app);
   teardownSplattingControl(app);
 }

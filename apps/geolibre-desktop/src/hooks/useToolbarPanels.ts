@@ -3,6 +3,7 @@ import {
   closeBookmarkPanel,
   closeColorbarPanel,
   closeHtmlPanel,
+  closeImagePanel,
   closeMeasurePanel,
   closeMinimapPanel,
   closePrintPanel,
@@ -16,6 +17,7 @@ import {
   isColorbarPanelVisible,
   isEarthEnginePanelVisible,
   isHtmlPanelVisible,
+  isImagePanelVisible,
   isMeasurePanelVisible,
   isMinimapPanelVisible,
   isPrintPanelVisible,
@@ -40,7 +42,10 @@ import {
   subscribeBookmarkPanel,
   subscribeColorbarPanel,
   subscribeEarthEnginePanel,
+  setImageControl,
   subscribeHtmlPanel,
+  subscribeImagePanel,
+  type ComponentImageState,
   subscribeMeasurePanel,
   subscribeMinimapPanel,
   subscribePrintPanel,
@@ -54,11 +59,18 @@ import {
 } from "@geolibre/plugins";
 import { useSyncExternalStore } from "react";
 import type { AppApi } from "../components/layout/toolbar/constants";
+import { setImageControlDialogOpen } from "../lib/image-control-dialog-store";
 
 /** Visibility flag plus a toggle handler for a single toolbar panel. */
 export interface ToolbarPanel {
   visible: boolean;
   toggle: () => void;
+}
+
+/** The Image control: its toggle opens the dialog; apply/remove edit the map. */
+export interface ToolbarImagePanel extends ToolbarPanel {
+  apply: (state: Partial<ComponentImageState>) => void;
+  remove: () => void;
 }
 
 /** Visibility + toggle state for every panel surfaced in the toolbar menus. */
@@ -72,6 +84,7 @@ export interface ToolbarPanels {
   colorbar: ToolbarPanel;
   legend: ToolbarPanel;
   html: ToolbarPanel;
+  image: ToolbarImagePanel;
   measure: ToolbarPanel;
   bookmark: ToolbarPanel;
   minimap: ToolbarPanel;
@@ -128,6 +141,11 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     subscribeHtmlPanel,
     isHtmlPanelVisible,
     isHtmlPanelVisible,
+  );
+  const imageVisible = useSyncExternalStore(
+    subscribeImagePanel,
+    isImagePanelVisible,
+    isImagePanelVisible,
   );
   const measureVisible = useSyncExternalStore(
     subscribeMeasurePanel,
@@ -239,6 +257,14 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
         }
         openHtmlPanel(appApi);
       },
+    },
+    image: {
+      visible: imageVisible,
+      toggle: () => setImageControlDialogOpen(true),
+      apply: (state) => {
+        setImageControl(appApi, state);
+      },
+      remove: () => closeImagePanel(appApi),
     },
     measure: {
       visible: measureVisible,

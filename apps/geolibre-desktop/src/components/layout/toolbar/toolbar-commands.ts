@@ -619,6 +619,12 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       run: panels.html.toggle,
     },
     {
+      id: "control.image",
+      title: t("toolbar.command.toggleImage"),
+      group: t("toolbar.commandGroup.controls"),
+      run: panels.image.toggle,
+    },
+    {
       id: "control.measure",
       title: t("toolbar.command.toggleMeasure"),
       group: t("toolbar.commandGroup.controls"),

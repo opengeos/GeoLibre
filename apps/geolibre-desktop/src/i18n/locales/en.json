@@ -2920,6 +2920,34 @@
       }
     }
   },
+  "imageControl": {
+    "title": "Image",
+    "description": "Show an image from a URL on the map, such as a logo, a north arrow or a legend.",
+    "url": "Image URL",
+    "urlInvalid": "Enter a full http(s) image URL.",
+    "sizeMode": "Size",
+    "mode": {
+      "auto": "Width (keep the image's aspect ratio)",
+      "fixed": "Width and height",
+      "ratio": "Width and aspect ratio"
+    },
+    "width": "Width (px)",
+    "height": "Height (px)",
+    "ratio": "Aspect ratio (width:height)",
+    "ratioInvalid": "Enter a ratio such as 16:9 or 1.5 (between {{min}} and {{max}}).",
+    "sizeRange": "Enter a size between {{min}} and {{max}} px.",
+    "position": "Position",
+    "corner": {
+      "topLeft": "Top left",
+      "topRight": "Top right",
+      "bottomLeft": "Bottom left",
+      "bottomRight": "Bottom right"
+    },
+    "add": "Add to map",
+    "update": "Update",
+    "remove": "Remove image",
+    "cancel": "Cancel"
+  },
   "toolbar": {
     "menu": {
       "project": "Project",
@@ -3118,6 +3146,7 @@
       "toggleColorbar": "Toggle Colorbar",
       "toggleLegend": "Toggle Legend",
       "toggleHtmlPanel": "Toggle HTML Panel",
+      "toggleImage": "Add or Edit Image",
       "toggleMeasure": "Toggle Measure",
       "toggleBookmark": "Toggle Bookmark",
       "toggleMinimap": "Toggle Minimap",
@@ -3529,6 +3558,7 @@
       "colorbar": "Colorbar",
       "legend": "Legend",
       "html": "HTML",
+      "image": "Image",
       "measure": "Measure",
       "bookmark": "Bookmark",
       "minimap": "Minimap",
