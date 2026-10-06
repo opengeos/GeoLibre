@@ -56,6 +56,22 @@ describe("trackWebglContextLoss", () => {
     assert.deepEqual(events, ["lost", "restored", "lost"]);
   });
 
+  it("forgets a canvas removed while lost, so a later loss is reported", () => {
+    const { container, fire } = fakeContainer();
+    const events: string[] = [];
+    trackWebglContextLoss(container, {
+      onLost: () => events.push("lost"),
+      onRestored: () => events.push("restored"),
+    });
+    const removedPane = { isConnected: true };
+    fire("webglcontextlost", removedPane);
+    removedPane.isConnected = false;
+
+    // The removed pane never sends a restore; a loss elsewhere still counts.
+    fire("webglcontextlost", { isConnected: true });
+    assert.deepEqual(events, ["lost", "lost"]);
+  });
+
   it("stops listening after cleanup", () => {
     const { container, listeners } = fakeContainer();
     const stop = trackWebglContextLoss(container, { onLost: () => {}, onRestored: () => {} });

@@ -29,8 +29,16 @@ export function trackWebglContextLoss(
   callbacks: WebglContextLossCallbacks,
 ): () => void {
   const lost = new Set<EventTarget>();
+  // A pane removed while its context was lost never sends a restore, so forget
+  // detached canvases; otherwise a later loss elsewhere would go unreported.
+  const pruneDetached = () => {
+    for (const canvas of lost) {
+      if ((canvas as { isConnected?: boolean }).isConnected === false) lost.delete(canvas);
+    }
+  };
   const handleLost = (event: Event) => {
     const canvas = event.target ?? target;
+    pruneDetached();
     const wasClear = lost.size === 0;
     lost.add(canvas);
     if (wasClear) callbacks.onLost();
@@ -38,6 +46,7 @@ export function trackWebglContextLoss(
   const handleRestored = (event: Event) => {
     const canvas = event.target ?? target;
     if (!lost.delete(canvas)) return;
+    pruneDetached();
     if (lost.size === 0) callbacks.onRestored();
   };
   target.addEventListener("webglcontextlost", handleLost, true);

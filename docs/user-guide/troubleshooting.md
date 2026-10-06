@@ -180,8 +180,8 @@ black, flickers, or 3D layers are missing:
 
 When a map canvas loses its WebGL context (the graphics driver resets, or the
 GPU runs out of memory), GeoLibre shows a **The map lost its graphics context**
-warning with a **Reload** button, since the map stays frozen or blank until the
-page reloads. The warning goes away on its own if the context comes back.
+warning with a **Reload** button. If the map does not recover on its own, reload
+the page. The warning goes away on its own if the context comes back.
 Save your project before reloading if you can. A recent autosave may also be in
 [project history](projects.md#project-history-and-crash-recovery), but autosave
 runs on a delay and skips projects above the snapshot size limit, so it may not
