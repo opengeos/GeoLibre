@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   ArcGISAuthError,
   arcgisAuthErrorKey,
+  arcgisOAuthEndpoint,
   getArcGISAccessToken,
   normalizeArcGISPortalUrl,
   resetArcGISSessions,
@@ -41,6 +42,35 @@ describe("normalizeArcGISPortalUrl", () => {
     assert.equal(normalizeArcGISPortalUrl("http://gis.example.org/portal"), null);
     assert.equal(normalizeArcGISPortalUrl("https://user:pw@gis.example.org"), null);
     assert.equal(normalizeArcGISPortalUrl("not a url"), null);
+  });
+});
+
+describe("arcgisOAuthEndpoint", () => {
+  it("keeps every endpoint on ArcGIS Online and Enterprise portals", () => {
+    for (const portal of ["https://www.arcgis.com", "https://gis.example.org/portal"]) {
+      for (const endpoint of ["authorize", "token", "revokeToken"] as const) {
+        assert.equal(
+          arcgisOAuthEndpoint(portal, endpoint).href,
+          `${portal}/sharing/rest/oauth2/${endpoint}`,
+        );
+      }
+    }
+  });
+
+  it("sends an organization's token calls to www.arcgis.com, which allows CORS", () => {
+    const org = "https://myorg.maps.arcgis.com";
+    assert.equal(
+      arcgisOAuthEndpoint(org, "authorize").href,
+      `${org}/sharing/rest/oauth2/authorize`,
+    );
+    assert.equal(
+      arcgisOAuthEndpoint(org, "token").href,
+      "https://www.arcgis.com/sharing/rest/oauth2/token",
+    );
+    assert.equal(
+      arcgisOAuthEndpoint(org, "revokeToken").href,
+      "https://www.arcgis.com/sharing/rest/oauth2/revokeToken",
+    );
   });
 });
 

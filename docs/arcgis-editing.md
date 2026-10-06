@@ -53,8 +53,10 @@ identity-provider credentials, and the layer is added with your own permissions.
    redirect URI to it: `<app URL>/oauth-callback.html` for the web app (for
    example `https://web.geolibre.app/oauth-callback.html`), and
    `org.geolibre.desktop:/oauth/callback` for the desktop app.
-2. Leave **Portal URL** blank for ArcGIS Online, or enter your Enterprise portal
-   (`https://gis.example.org/portal`).
+2. Leave **Portal URL** blank for ArcGIS Online, or enter your organization URL
+   (`https://myorg.maps.arcgis.com`) to get its sign-in page, including SSO, or
+   your Enterprise portal (`https://gis.example.org/portal`). If an Enterprise
+   portal restricts allowed origins, add GeoLibre's.
 3. Paste the application's client ID and select **Sign in**. The client ID is
    not a secret and is remembered per portal.
 

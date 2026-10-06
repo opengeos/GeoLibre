@@ -122,12 +122,30 @@ export function normalizeArcGISPortalUrl(input: string | undefined): string | nu
   return `${url.origin}${path}`;
 }
 
-/** The OAuth2 endpoint URL on a normalized portal base. */
+/** An ArcGIS Online organization URL, such as `https://myorg.maps.arcgis.com`. */
+function isArcGISOnlineOrgPortal(portal: string): boolean {
+  return /\.maps\.arcgis\.com$/i.test(new URL(portal).hostname);
+}
+
+/**
+ * The OAuth2 endpoint URL on a normalized portal base.
+ *
+ * An ArcGIS Online organization URL answers CORS only for its own origin, so
+ * the browser cannot read its token responses. The token and revoke calls go to
+ * www.arcgis.com, which serves the same organization; `authorize` stays on the
+ * organization URL so the user still gets its sign-in page (SSO included).
+ *
+ * @param portal - A portal base from `normalizeArcGISPortalUrl`.
+ * @param endpoint - The OAuth2 endpoint name.
+ * @returns The endpoint URL.
+ */
 export function arcgisOAuthEndpoint(
   portal: string,
   endpoint: "authorize" | "token" | "revokeToken",
 ): URL {
-  return new URL(`${portal}/sharing/rest/oauth2/${endpoint}`);
+  const base =
+    endpoint !== "authorize" && isArcGISOnlineOrgPortal(portal) ? ARCGIS_ONLINE_PORTAL : portal;
+  return new URL(`${base}/sharing/rest/oauth2/${endpoint}`);
 }
 
 /** The OAuth client ID last used with this portal, or "". */
