@@ -52,9 +52,15 @@ interface WmsFormCache {
 }
 let wmsFormCache: WmsFormCache | null = null;
 
-/** The codes among `codes` the desktop tile protocol can reproject. */
+/**
+ * The codes among `codes` the desktop tile protocol can reproject. A code whose
+ * check fails counts as unsupported, so one odd CRS in a long inherited list
+ * never fails the whole probe.
+ */
 async function reprojectableCodes(codes: string[]): Promise<string[]> {
-  const supported = await Promise.all(codes.map(canReprojectWmsCrs));
+  const supported = await Promise.all(
+    codes.map((code) => canReprojectWmsCrs(code).catch(() => false)),
+  );
   return codes.filter((_, index) => supported[index]);
 }
 
