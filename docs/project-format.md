@@ -32,9 +32,9 @@ file contents do not change.
 | `basemapStyleUrl` | string  | MapLibre style JSON URL, or an empty string for a blank background                                           |
 | `basemapVisible`  | boolean | Whether the Background layer is visible                                                                      |
 | `basemapOpacity`  | number  | Background layer opacity from `0` to `1`                                                                     |
-| `blankBackgroundColor` | string | Optional custom colour for the Blank background; `null` uses the theme default                       |
+| `blankBackgroundColor` | string \| null | Optional custom colour for the Blank background; `null` uses the theme default                       |
 | `layers`          | array   | Layer definitions (see below)                                                                                |
-| `selectedLayerId` | string  | Optional layer selected in the Layers panel when the project was saved; `null` restores no active layer    |
+| `selectedLayerId` | string \| null | Optional layer selected in the Layers panel when the project was saved; `null` restores no active layer    |
 | `layerGroups`     | array   | Optional Layers-panel folders (`id`, `name`, `parentId`, `collapsed`, `visible`, `opacity`); omitted when empty |
 | `styles`          | object  | Map of layer id → `LayerStyle`                                                                               |
 | `preferences`     | object  | Project map preferences, environment variables, and geocoding settings (see [Credential redaction](#credential-redaction)) |
