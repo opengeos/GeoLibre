@@ -15,6 +15,7 @@ import {
   arcgisPortalItemPageUrl,
   arcgisPortalSharingUrl,
   arcgisPortalThumbnailUrl,
+  isTrustedPortalServiceUrl,
   buildPortalSearchQuery,
   fetchPortalUser,
   fetchPortalWebMapLayers,
@@ -162,28 +163,31 @@ async function addItem(
     const layers = await fetchPortalWebMapLayers(portal, item.id, token);
     const ids: string[] = [];
     for (const layer of layers) {
+      // The map's author picks these URLs: credentials go only to trusted hosts.
+      const trusted = isTrustedPortalServiceUrl(portal, layer.url);
       const id = await addArcGISLayer(app, {
         layerType: layer.layerType,
         sourceType: "url",
         url: layer.url,
         name: layer.title,
         portalUrl,
-        token,
-        tokenProvider,
+        ...(trusted ? { token, tokenProvider } : {}),
       });
       if (id) ids.push(id);
     }
     return ids;
   }
   if (!layerType) throw new Error(`${item.type} items cannot be added.`);
+  // An item registers its own service URL; one on an untrusted host is loaded
+  // without credentials (a public item and service still work).
+  const trusted = !item.url || isTrustedPortalServiceUrl(portal, item.url);
   const id = await addArcGISLayer(app, {
     layerType,
     sourceType: "portal-item",
     itemId: item.id,
     name: item.title,
     portalUrl,
-    token,
-    tokenProvider,
+    ...(trusted ? { token, tokenProvider } : {}),
   });
   return id ? [id] : [];
 }
@@ -482,7 +486,10 @@ function buildPanel(container: HTMLElement): () => void {
     submit.disabled = true;
     status.textContent = tr("searching", "Searching…");
     try {
-      token = await auth!.getToken(portal);
+      const fresh = await auth!.getToken(portal);
+      // A newer search owns the panel now; do not overwrite its token.
+      if (run !== generation) return;
+      token = fresh;
       if (!user) {
         let lookup = users.get(portal);
         if (!lookup) {

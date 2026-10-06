@@ -176,6 +176,9 @@ adds it to the map.
   either place applies to both. Layers you add renew their token while you stay
   signed in. **Another portal** signs in to a second portal, and the portal
   picker switches between them.
+- Your sign-in token is sent only to services on the portal's own host, or on
+  Esri's `arcgis.com` hosting for ArcGIS Online. A web map layer or item that
+  points anywhere else is loaded without it, so only public services there load.
 
 ## ArcGIS Hub
 

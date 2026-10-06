@@ -9,6 +9,7 @@ import {
   buildPortalSearchUrl,
   fetchPortalUser,
   fetchPortalWebMapLayers,
+  isTrustedPortalServiceUrl,
   portalItemBounds,
   portalItemLayerType,
   type ArcGisPortalUser,
@@ -100,6 +101,38 @@ describe("buildPortalSearchQuery", () => {
       buildPortalSearchQuery({ view: "portal", user: USER, types: ["constructor", "Map Service"] }),
       '(type:"Map Service")',
     );
+  });
+});
+
+describe("isTrustedPortalServiceUrl", () => {
+  it("trusts Esri hosting for ArcGIS Online and its organizations", () => {
+    for (const portal of ["https://www.arcgis.com", "https://myorg.maps.arcgis.com"]) {
+      assert.ok(
+        isTrustedPortalServiceUrl(portal, "https://services3.arcgis.com/x/FeatureServer/0"),
+      );
+      assert.ok(isTrustedPortalServiceUrl(portal, "https://tiles.arcgis.com/x/VectorTileServer"));
+    }
+  });
+
+  it("trusts only the portal's own host for Enterprise", () => {
+    const portal = "https://gis.example.org/portal";
+    assert.ok(
+      isTrustedPortalServiceUrl(portal, "https://gis.example.org/server/rest/services/a/MapServer"),
+    );
+    assert.equal(
+      isTrustedPortalServiceUrl(portal, "https://services.arcgis.com/x/FeatureServer"),
+      false,
+    );
+  });
+
+  it("refuses foreign, look-alike, plain-http and credentialed URLs", () => {
+    const portal = "https://www.arcgis.com";
+    assert.equal(isTrustedPortalServiceUrl(portal, "https://evil.example/FeatureServer/0"), false);
+    assert.equal(isTrustedPortalServiceUrl(portal, "https://arcgis.com.evil.example/x"), false);
+    assert.equal(isTrustedPortalServiceUrl(portal, "https://evilarcgis.com/x"), false);
+    assert.equal(isTrustedPortalServiceUrl(portal, "http://services.arcgis.com/x"), false);
+    assert.equal(isTrustedPortalServiceUrl(portal, "https://u:p@services.arcgis.com/x"), false);
+    assert.equal(isTrustedPortalServiceUrl(portal, "not a url"), false);
   });
 });
 

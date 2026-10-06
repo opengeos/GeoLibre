@@ -85,6 +85,34 @@ export function arcgisPortalRestBase(portal: string): string {
   return /\.maps\.arcgis\.com$/i.test(new URL(portal).hostname) ? ARCGIS_ONLINE_URL : portal;
 }
 
+/**
+ * Whether a service URL may receive the portal's token.
+ *
+ * Web map layer URLs and an item's registered service URL are written by
+ * whoever authored the map or item, so they can name any host. The token goes
+ * only to HTTPS hosts the portal trusts: the portal's own host, and for ArcGIS
+ * Online, Esri's `*.arcgis.com` hosting. A federated Enterprise server on
+ * another host gets no token, so a secured layer there will not load.
+ *
+ * @param portal - A normalized portal base.
+ * @param url - The service URL.
+ * @returns True when the token may be attached.
+ */
+export function isTrustedPortalServiceUrl(portal: string, url: string | undefined): boolean {
+  let service: URL;
+  try {
+    service = new URL(url ?? "");
+  } catch {
+    return false;
+  }
+  if (service.protocol !== "https:" || service.username || service.password) return false;
+  const host = service.hostname.toLowerCase();
+  const portalHost = new URL(portal).hostname.toLowerCase();
+  if (host === portalHost) return true;
+  const online = arcgisPortalRestBase(portal) === ARCGIS_ONLINE_URL;
+  return online && (host === "arcgis.com" || host.endsWith(".arcgis.com"));
+}
+
 /** The `/sharing/rest` URL of a portal, as `addArcGISLayer`'s `portalUrl` takes it. */
 export function arcgisPortalSharingUrl(portal: string): string {
   return `${arcgisPortalRestBase(portal)}/sharing/rest`;
