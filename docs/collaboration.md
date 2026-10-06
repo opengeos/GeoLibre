@@ -361,7 +361,8 @@ environment. Until that env var is set, the feature stays dark.
 - **Payload size**: layers can embed `FeatureCollection`s. `projectFromStore`
   already strips redundant `geojson` for URL-backed layers, but a large
   in-memory/local-file layer can exceed the snapshot cap
-  (`COLLAB_MAX_SNAPSHOT_BYTES`; 10 MB by default) and is rejected with
+  (`COLLAB_MAX_SNAPSHOT_BYTES`: 10 MB by default for the relay, 1 MB in the
+  Docker Compose setup) and is rejected with
   `error: too-large` (share via URL instead). v2: diff / chunked layer sync.
 - **Undo**: a remote apply clears local undo (see above).
 - v2 directions: per-action mutation or CRDT transport, coalesced remote-apply

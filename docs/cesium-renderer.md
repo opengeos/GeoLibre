@@ -8,7 +8,8 @@ other three engines. Primary and pane choices are saved with the project.
 ## Credentials
 
 The globe works without a Cesium ion token: it drapes the project basemap as
-its base imagery and shows a hint that terrain is unavailable. A token adds
+its base imagery, uses keyless Terrarium elevation (or a configured COG) for
+terrain, and shows a hint that links to the token setting. A token adds
 Cesium World Terrain, Ion World Imagery as the fallback for a basemap with no
 raster form, and access to ion-hosted assets. The hosted web version bundles a
 demo token; the desktop and mobile apps need your own for those features.
