@@ -141,10 +141,12 @@ export function ProjectSnapshotDiff({
       onTargetChange(CURRENT_PROJECT_TARGET);
       return;
     }
+    // Keep the live project's current key too, so the next comparison does
+    // not have to re-serialize it.
     client?.retain([...ids, currentKey(revision, liveRevision)]);
-    // Runs when the set of snapshots changes; the callbacks are stable enough.
+    // The navigation callbacks are recreated by the parent on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshotIds, base.id, targetId, client]);
+  }, [snapshotIds, base.id, targetId, client, revision, liveRevision]);
 
   // The shown result stays up while a newer comparison runs (`computing`).
   const [result, setResult] = useState<DiffResult | null>(null);
@@ -222,8 +224,10 @@ export function ProjectSnapshotDiff({
     };
   }, [client, base, targetId, getCurrentProjectContent, formatDate, t, revision, liveRevision]);
 
+  // Not while a newer comparison runs: the shown diff may already be out of
+  // date, and a restore must act on what the user is looking at.
   const restoreLayer =
-    result?.ok && result.againstCurrent && onRestoreLayer
+    !computing && result?.ok && result.againstCurrent && onRestoreLayer
       ? (layer: LayerDiff) => {
           if (onRestoreLayer(base, layer.id)) {
             setRestoredName(layer.name);
