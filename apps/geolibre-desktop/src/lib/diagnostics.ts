@@ -72,11 +72,12 @@ const TAURI_IPC_FALLBACK_WARNING =
 // is kept out of the diagnostics panel (still echoed to the console for devs).
 //
 // three.js warns this once when more than one copy of its module ends up in the
-// bundle. Several first- and third-party deps (deck.gl mesh layers, the 3D
-// tiles / lidar / splat plugins, mapillary-js) each pull in three at slightly
-// different versions, so a single deduped copy is not guaranteed. The warning
-// is cosmetic — our three usage does not rely on cross-copy identity — so it is
-// kept out of the diagnostics panel (still echoed to the console for devs).
+// page. The app and its three-based plugins share one copy (the root
+// `overrides` pins it), but mapillary-js ships a prebuilt bundle with its own
+// three 0.134, so opening the Mapillary viewer still loads a second copy. The
+// warning is cosmetic — our three usage does not rely on cross-copy identity —
+// so it is kept out of the diagnostics panel (still echoed to the console for
+// devs).
 const BENIGN_CONSOLE_WARNINGS = [
   "Easing around a point is not supported under globe projection.",
   "WARNING: Multiple instances of Three.js being imported.",

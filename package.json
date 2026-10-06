@@ -94,6 +94,7 @@
     "texture-compressor": {
       "image-size": "^2.0.4"
     },
+    "three": "^0.186.1",
     "uuid": "^14.0.0"
   },
   "engines": {
