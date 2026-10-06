@@ -428,7 +428,6 @@ let registered = false;
  */
 export function registerSentinel2CompositeProtocol(): void {
   if (registered) return;
-  registered = true;
   addProtocol(
     S2_COMPOSITE_PROTOCOL,
     async (params: RequestParameters, controller: AbortController) => {
@@ -448,4 +447,6 @@ export function registerSentinel2CompositeProtocol(): void {
       return { data: await rgbaToPng(rgba) };
     },
   );
+  // Only once it took, so a failed registration is retried on the next call.
+  registered = true;
 }

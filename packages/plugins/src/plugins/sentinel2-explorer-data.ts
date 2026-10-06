@@ -1134,12 +1134,19 @@ export async function loadMonthSlices(
 ): Promise<Array<S2MonthRow[] | null>> {
   const out = new Array<S2MonthRow[] | null>(months.length);
   let next = 0;
+  // After one month fails the whole read fails, so stop starting new ones.
+  let failed = false;
   await Promise.all(
     Array.from({ length: Math.min(MONTH_FETCH_CONCURRENCY, months.length) }, async () => {
-      while (next < months.length) {
+      while (!failed && next < months.length) {
         const i = next;
         next += 1;
-        out[i] = await loadMonthSlice(collection, months[i]);
+        try {
+          out[i] = await loadMonthSlice(collection, months[i]);
+        } catch (error) {
+          failed = true;
+          throw error;
+        }
       }
     }),
   );

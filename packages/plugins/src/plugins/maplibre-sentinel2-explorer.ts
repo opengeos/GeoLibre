@@ -1142,7 +1142,13 @@ function buildPanel(container: HTMLElement): () => void {
     thumb.loading = "lazy";
     thumb.alt = "";
     thumb.referrerPolicy = "no-referrer";
-    if (scene.thumbnailUrl) thumb.src = scene.thumbnailUrl;
+    // The same https and bucket check the COG reads get.
+    try {
+      sceneDirectory(scene.thumbnailUrl);
+      thumb.src = scene.thumbnailUrl;
+    } catch {
+      // No preview for a thumbnail off the expected buckets.
+    }
     const body = element("div", CSS.cardBody);
     body.append(
       element("div", CSS.cardTitle, scene.day),
