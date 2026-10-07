@@ -10,6 +10,7 @@ import {
   buildStoryMapHtml,
   storyExportCandidates,
 } from "../apps/geolibre-desktop/src/lib/storymap-export";
+import { resolveTextFontFromStyleLayers } from "../packages/map/src/text-font";
 
 function story(overrides: Partial<StoryMap> = {}): StoryMap {
   return {
@@ -493,5 +494,67 @@ describe("buildStoryMapHtml symbology and labels (#3033)", () => {
     });
     const label = exportedLayerSpec(html, "addLabelLayer", "zones::label");
     assert.equal((label.paint as Record<string, unknown>)["text-opacity"], 0);
+  });
+});
+
+describe("buildStoryMapHtml label font resolution (#3033)", () => {
+  it("resolves fonts exactly as the live map's resolver does", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [],
+    });
+    const source = /function resolveLabelFont\(layers\) \{[\s\S]*?\n {8}\}/.exec(html);
+    assert.ok(source, "page defines resolveLabelFont");
+    const pageResolve = new Function(`${source[0]}; return resolveLabelFont;`)() as (
+      layers: unknown,
+    ) => string[] | null;
+    const fixtures: Array<Array<{ type: string; layout?: Record<string, unknown> }>> = [
+      [],
+      [{ type: "fill" }],
+      [{ type: "symbol", layout: { "icon-image": "x", "text-font": ["Icon Font"] } }],
+      [{ type: "symbol", layout: { "text-field": "{name}", "text-font": ["Noto Sans Bold"] } }],
+      [
+        {
+          type: "symbol",
+          layout: { "text-field": "{name}", "text-font": ["literal", ["Open Sans", "Arial"]] },
+        },
+      ],
+      [
+        { type: "symbol", layout: { "text-field": "{name}", "text-font": ["get", "font"] } },
+        { type: "symbol", layout: { "text-field": "{ref}", "text-font": ["Roboto Regular"] } },
+      ],
+      [{ type: "symbol", layout: { "text-field": "{name}" } }],
+    ];
+    const fallback = ["Fallback"];
+    for (const layers of fixtures) {
+      assert.deepEqual(
+        pageResolve(layers) ?? fallback,
+        resolveTextFontFromStyleLayers(layers, fallback),
+        JSON.stringify(layers),
+      );
+    }
+  });
+
+  it("exports a categorized point layer's circle color expression", () => {
+    const layer = markerLayer({
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "categorized",
+        vectorStyleProperty: "name",
+        vectorStyleStops: [{ value: "Ypres", color: "#ff8800" }],
+      },
+    });
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [layer],
+    });
+    const spec = exportedLayerSpec(html, "map.addLayer", "markers");
+    assert.equal(spec.type, "circle");
+    assert.match(
+      JSON.stringify((spec.paint as Record<string, unknown>)["circle-color"]),
+      /"Ypres","#ff8800"/,
+    );
   });
 });

@@ -823,7 +823,9 @@ function buildLabelSpec(layer: GeoLibreLayer): Record<string, unknown> | null {
     { ...layer, opacity: 1, visible: true },
     layer.geojson ?? null,
   );
-  const label = style.layers.find((styleLayer) => styleLayer.type === "symbol");
+  const label = style.layers.find(
+    (styleLayer) => styleLayer.type === "symbol" && styleLayer.layout?.["text-field"] !== undefined,
+  );
   if (!label) return null;
   const { id: _id, source: _source, ...spec } = label as unknown as Record<string, unknown>;
   const layout = { ...(spec.layout as Record<string, unknown>) };
@@ -978,14 +980,14 @@ function renderTemplate(
         function addLabelLayer(spec) {
             if (!labelFont) {
                 var style = map.getStyle();
-                labelFont = resolveLabelFont(style.layers);
-                // No basemap text means no basemap font to borrow, and nothing
-                // else reads the glyphs, so point them at the fallback server
-                // that serves the fallback font.
-                if (!labelFont) {
-                    labelFont = ['Noto Sans Regular'];
-                    map.setGlyphs(config.labelGlyphs);
-                }
+                labelFont = resolveLabelFont(style.layers) || ['Noto Sans Regular'];
+                // Swap the glyphs only when no basemap label reads them (or there
+                // are none), so a basemap label on a default or data-driven font
+                // keeps its glyph source.
+                var basemapText = (style.layers || []).some(function (layer) {
+                    return layer.type === 'symbol' && layer.layout && layer.layout['text-field'];
+                });
+                if (!style.glyphs || !basemapText) map.setGlyphs(config.labelGlyphs);
             }
             spec.layout['text-font'] = labelFont;
             map.addLayer(spec);
