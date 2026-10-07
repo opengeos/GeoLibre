@@ -109,6 +109,14 @@ describe("USGS LiDAR layer sync", () => {
     stop();
   });
 
+  it("adds rows for clouds loaded before the sync started", () => {
+    const usgs = fakeUsgs();
+    usgs.load("early", pointCloud("pc-early", "Early"));
+    const stop = bindUsgsLidarLayerSync(usgs.control, usgs.adapter);
+    assert.ok(storeLayer(usgsLidarLayerId("early")), "the already-loaded cloud is listed");
+    stop();
+  });
+
   it("removes the row when the panel unloads the cloud", () => {
     const usgs = fakeUsgs();
     const stop = bindUsgsLidarLayerSync(usgs.control, usgs.adapter);

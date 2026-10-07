@@ -110,6 +110,8 @@ export function bindUsgsLidarLayerSync(
     const id = usgsLidarLayerId(itemId);
     if (store.layers.some((layer) => layer.id === id)) store.removeLayer(id);
   });
+  // Clouds already loaded when the sync starts get their rows too.
+  for (const itemId of control.getState().loadedItems.keys()) addRow(itemId);
 
   const stopStore = useAppStore.subscribe((state, previous) => {
     if (state.layers === previous.layers) return;
