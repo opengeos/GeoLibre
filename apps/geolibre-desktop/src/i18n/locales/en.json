@@ -1841,6 +1841,7 @@
     "shareButton": "Share",
     "sharing": "Sharing…",
     "errorFallback": "Could not share the project.",
+    "errorProjectTooLarge": "This project is too large to share. Its local vector layers are shared by embedding their features, so convert large ones to PMTiles or FlatGeobuf, host them online, and add those as remote layers instead.",
     "usernameRequired": "Set a username on your {{shareHost}} account before sharing. Open your account settings to choose one, then try again.",
     "openAccountSettings": "Open account settings",
     "shareAnyway": "Share anyway",

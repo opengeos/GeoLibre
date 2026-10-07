@@ -13,6 +13,7 @@ import {
   serializeProject,
 } from "@geolibre/core";
 import { readDeploymentEnvValue, type EnvRecord } from "./deployment-env";
+import { isSerializationTooLargeError } from "./project-serialization-limits";
 import { getShareFetch } from "./share-fetch";
 
 /** `organization` is readable by every signed-in member of the owning organization. */
@@ -357,9 +358,27 @@ export async function uploadProjectToShare(
   let safeContent: string;
   try {
     safeContent = sanitizeSharedProjectContent(options.content);
-  } catch {
+  } catch (error) {
+    // A project past the engine's string cap is a size problem the dialog
+    // explains, not a validation failure.
+    if (isSerializationTooLargeError(error)) throw error;
     throw new Error("The project could not be validated before sharing.");
   }
+
+  // Built before the request rather than inline: the content is escaped into a
+  // JSON string, so the body is longer than the project text and can pass the
+  // engine's string cap on its own. Thrown inside the request's try block, that
+  // read as a network failure (GeoLibre#3025).
+  const body = JSON.stringify({
+    filename: options.filename,
+    content: safeContent,
+    visibility: options.visibility,
+    ...(options.organizationId ? { organizationId: options.organizationId } : {}),
+    ...(options.groupIds?.length ? { groupIds: options.groupIds } : {}),
+    ...(options.role ? { role: options.role } : {}),
+    ...(options.expiresIn ? { expiresIn: options.expiresIn } : {}),
+    ...(options.password ? { password: options.password } : {}),
+  });
 
   let response: Response;
   try {
@@ -369,16 +388,7 @@ export async function uploadProjectToShare(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        filename: options.filename,
-        content: safeContent,
-        visibility: options.visibility,
-        ...(options.organizationId ? { organizationId: options.organizationId } : {}),
-        ...(options.groupIds?.length ? { groupIds: options.groupIds } : {}),
-        ...(options.role ? { role: options.role } : {}),
-        ...(options.expiresIn ? { expiresIn: options.expiresIn } : {}),
-        ...(options.password ? { password: options.password } : {}),
-      }),
+      body,
       signal,
     });
   } catch (error) {
@@ -620,9 +630,16 @@ export async function updateSharedProjectContent(
   let safeContent: string;
   try {
     safeContent = sanitizeSharedProjectContent(options.content);
-  } catch {
+  } catch (error) {
+    if (isSerializationTooLargeError(error)) throw error;
     throw new Error("The project could not be validated before saving.");
   }
+  // Built outside the request's try block, as in uploadProjectToShare, so a
+  // body past the string cap is not reported as a network failure.
+  const body = JSON.stringify({
+    content: safeContent,
+    expectedVersion: options.expectedVersion,
+  });
 
   let response: Response;
   try {
@@ -634,10 +651,7 @@ export async function updateSharedProjectContent(
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          content: safeContent,
-          expectedVersion: options.expectedVersion,
-        }),
+        body,
         signal,
       },
     );

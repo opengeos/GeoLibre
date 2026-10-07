@@ -93,6 +93,10 @@ import { IS_MAS_BUILD } from "../lib/build-flags";
 import { resolveDroppedProjectIfCurrent } from "../lib/dropped-project";
 import { useWindowCloseGuard } from "./useWindowCloseGuard";
 import {
+  featureCollectionByteLength,
+  isSerializationTooLargeError,
+} from "../lib/project-serialization-limits";
+import {
   projectCredentialRollback,
   projectCredentialsInKeychain,
   rememberProjectCredentials,
@@ -138,23 +142,6 @@ export interface DroppedProjectPrompt {
  * projects unbothered.
  */
 export const LARGE_EMBED_WARNING_BYTES = 50 * 1024 * 1024;
-
-/**
- * Messages engines raise when a string passes their maximum length, which is
- * how "this project is too large to serialize" surfaces.
- *
- * Matched by text rather than by error class because there is no typed signal:
- * V8 (Chromium, WebView2) throws `RangeError: Invalid string length`,
- * JavaScriptCore (the macOS and Linux Tauri webviews) reports an out-of-memory
- * error, and SpiderMonkey says "allocation size overflow". Matching only V8's
- * wording would leave desktop users on every other webview with the generic
- * failure message instead of the guidance this exists to give.
- *
- * Deliberately narrow: a genuine serialization bug (a cycle, say, which reads
- * "Converting circular structure to JSON") must not be filed under size.
- */
-const SERIALIZATION_TOO_LARGE_PATTERN =
-  /invalid string length|out of memory|allocation size overflow|string too long/i;
 
 /**
  * A pending "embed local vector data?" prompt, shown on the web when saving a
@@ -1124,8 +1111,20 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // on `RangeError` alone was too broad — a stack overflow raises one too,
       // and pointing that at PMTiles/FlatGeobuf would send the user chasing a
       // size problem they do not have.
+      const tooLarge = isSerializationTooLargeError(error);
+      // An Embed choice that produced an unwritable file must not be reused
+      // silently, or every later save repeats this failure without showing the
+      // prompt that offers Save without data (GeoLibre#3025).
+      const remembered = saveChoicesRef.current;
+      if (tooLarge && remembered?.vectorData === "embed") {
+        saveChoicesRef.current = {
+          ...remembered,
+          vectorData: undefined,
+          acknowledgedEmbedBytes: undefined,
+        };
+      }
       setActionError(
-        error instanceof Error && SERIALIZATION_TOO_LARGE_PATTERN.test(error.message)
+        tooLarge
           ? t("toolbar.error.projectTooLargeToSave")
           : t("toolbar.error.couldNotSaveProject"),
       );
@@ -1209,19 +1208,21 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
 
   // Sums the UTF-8 byte size of every local layer's features, for the embed
   // prompt's size warning. Vector control layers are materialized; plain
-  // GeoJSON layers use their `geojson`.
+  // GeoJSON layers use their `geojson`. Measured feature by feature: a layer
+  // loaded as tiles can serialize past the engine's string cap, and
+  // stringifying it whole threw out of Save As before the prompt (which offers
+  // saving without the data) could appear (GeoLibre#3025).
   const estimateEmbedBytes = (
     layers: GeoLibreLayer[],
     embeddable: Map<string, FeatureCollection>,
   ): number => {
-    const encoder = new TextEncoder();
     let bytes = 0;
     for (const collection of embeddable.values()) {
-      bytes += encoder.encode(JSON.stringify(collection)).length;
+      bytes += featureCollectionByteLength(collection);
     }
     for (const layer of layers) {
       if (!embeddable.has(layer.id) && isReloadableLocalFileLayer(layer) && layer.geojson) {
-        bytes += encoder.encode(JSON.stringify(layer.geojson)).length;
+        bytes += featureCollectionByteLength(layer.geojson);
       }
     }
     return bytes;
@@ -1481,9 +1482,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
                   : "gallery.errorUnauthorized",
                 { shareHost: shareHostLabel() },
               )
-            : error instanceof Error
-              ? error.message
-              : t("toolbar.error.couldNotSaveProject"),
+            : isSerializationTooLargeError(error)
+              ? t("toolbar.error.projectTooLargeToSave")
+              : error instanceof Error
+                ? error.message
+                : t("toolbar.error.couldNotSaveProject"),
       );
       return false;
     }
@@ -1534,7 +1537,21 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
     // Offer to embed local vector data (or, on desktop, save file references)
     // first, so the serialized content below reflects the user's choice.
-    const layersForSave = await resolveLayersForSave();
+    let layersForSave: Awaited<ReturnType<typeof resolveLayersForSave>>;
+    try {
+      layersForSave = await resolveLayersForSave();
+    } catch (error) {
+      // Materializing or measuring the local vector data can fail (a read
+      // error, or data past the engine's string cap). Unreported, the throw
+      // escaped as an unhandled rejection and Save As did nothing (GeoLibre#3025).
+      console.error("Failed to prepare local vector data for saving", error);
+      setActionError(
+        isSerializationTooLargeError(error)
+          ? t("toolbar.error.projectTooLargeToSave")
+          : t("toolbar.error.couldNotSaveProject"),
+      );
+      return false;
+    }
     if (
       layersForSave === "cancel" ||
       useAppStore.getState().projectGeneration !== saveProjectGeneration

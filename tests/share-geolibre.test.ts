@@ -252,6 +252,33 @@ describe("uploadProjectToShare", () => {
     await assert.rejects(() => uploadProjectToShare({ ...baseArgs, token: "  " }), /token/i);
   });
 
+  it("reports a body past the string cap as too large, not as a network failure", async () => {
+    // The request body escapes the project text into a JSON string, so it is
+    // the longest string an upload builds. Cap strings just above the project
+    // text so only the body trips it, the way a large embedded layer does
+    // against V8's real limit (GeoLibre#3025).
+    const content = serializeProject(createEmptyProject("Big map"));
+    const { fn, calls } = fakeFetch(201, { project: PROJECT_DTO });
+    const original = JSON.stringify;
+    JSON.stringify = ((...args: Parameters<typeof JSON.stringify>) => {
+      const text = original(...args);
+      if (typeof text === "string" && text.length > content.length + 16) {
+        throw new RangeError("Invalid string length");
+      }
+      return text;
+    }) as typeof JSON.stringify;
+    try {
+      await assert.rejects(
+        () => uploadProjectToShare({ ...baseArgs, content, fetchImpl: fn }),
+        (error: unknown) =>
+          error instanceof RangeError && /invalid string length/i.test(error.message),
+      );
+    } finally {
+      JSON.stringify = original;
+    }
+    assert.equal(calls.length, 0);
+  });
+
   it("POSTs the project with a bearer token and returns the URLs", async () => {
     const { fn, calls } = fakeFetch(201, { project: PROJECT_DTO });
     const result = await uploadProjectToShare({ ...baseArgs, fetchImpl: fn });

@@ -64,6 +64,7 @@ import {
   type ShareReadinessReport,
 } from "../../lib/share-readiness";
 import { openSettingsSection } from "./SettingsDialog";
+import { isSerializationTooLargeError } from "../../lib/project-serialization-limits";
 import {
   fetchMyOrganizations,
   fetchMyGroups,
@@ -607,9 +608,14 @@ export function ShareProjectDialog({
         setError(
           err instanceof ShareOAuthError
             ? t(shareOAuthErrorKey(err.code))
-            : err instanceof Error
-              ? err.message
-              : t("share.errorFallback"),
+            : // Embedding a large local vector layer can push the project past
+              // the engine's string cap; the raw "Invalid string length" told
+              // the user nothing (GeoLibre#3025).
+              isSerializationTooLargeError(err)
+              ? t("share.errorProjectTooLarge")
+              : err instanceof Error
+                ? err.message
+                : t("share.errorFallback"),
         );
       }
     } finally {
