@@ -1967,8 +1967,9 @@ export function projectFromStore(state: {
   interaction?: ProjectInteraction | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
+  const layers = state.layers.filter((layer) => !isSessionOnlyLayer(layer));
   const styles: Record<string, LayerStyle> = {};
-  for (const layer of state.layers) {
+  for (const layer of layers) {
     styles[layer.id] = layer.style;
   }
   const plugins = normalizeProjectPlugins(state.plugins);
@@ -2006,7 +2007,7 @@ export function projectFromStore(state: {
     state.selectedLayerId === null
       ? null
       : typeof state.selectedLayerId === "string" &&
-          state.layers.some((layer) => layer.id === state.selectedLayerId)
+          layers.some((layer) => layer.id === state.selectedLayerId)
         ? state.selectedLayerId
         : undefined;
   return {
@@ -2017,7 +2018,7 @@ export function projectFromStore(state: {
     basemapVisible: state.basemapVisible,
     basemapOpacity: state.basemapOpacity,
     ...(state.blankBackgroundColor ? { blankBackgroundColor: state.blankBackgroundColor } : {}),
-    layers: state.layers.map(prepareLayerForSave),
+    layers: layers.map(prepareLayerForSave),
     ...(selectedLayerId !== undefined ? { selectedLayerId } : {}),
     ...(layerGroups.length > 0 ? { layerGroups } : {}),
     styles,
@@ -2066,6 +2067,20 @@ function hasRestorableSourceUrl(layer: GeoLibreLayer): boolean {
     (typeof sourceUrl === "string" && sourceUrl.trim() !== "") ||
     (typeof originalUrl === "string" && originalUrl.trim() !== "")
   );
+}
+
+/**
+ * Whether a layer lives only for the current session and is never written to a
+ * project file. A plugin sets `metadata.sessionOnly` on a store row that mirrors
+ * something it draws itself and cannot restore, such as a point cloud streamed
+ * from a short-lived signed URL, so the row shows in the Layers panel while the
+ * plugin runs but a reopened project carries no dead entry for it.
+ *
+ * @param layer - The layer to check.
+ * @returns `true` when the layer must be left out of saved projects.
+ */
+export function isSessionOnlyLayer(layer: GeoLibreLayer): boolean {
+  return layer.metadata.sessionOnly === true;
 }
 
 function prepareLayerForSave(layer: GeoLibreLayer): GeoLibreLayer {

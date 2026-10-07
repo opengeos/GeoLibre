@@ -10,6 +10,7 @@ import { pluginDisplayTitle } from "../plugin-i18n";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { mountMapControlInPanel, unmountMapControlFromPanel } from "./dockable-map-control";
 import { getControlMap } from "./style-map";
+import { bindUsgsLidarLayerSync } from "./usgs-lidar-layer-sync";
 
 const PANEL_ID = "usgs-lidar-panel";
 
@@ -116,6 +117,7 @@ const USGS_LIDAR_OPTIONS = {
 } satisfies UsgsLidarControlOptions;
 
 let usgsLidarControl: UsgsLidarControl | null = null;
+let stopLayerSync: (() => void) | null = null;
 let unregisterPanel: (() => void) | null = null;
 let pluginActive = false;
 
@@ -154,7 +156,7 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
         // Defer the heavy deck.gl/loaders.gl dependency tree until the user
         // first enables the viewer, so it stays out of the startup bundle.
         void import("maplibre-gl-usgs-lidar")
-          .then(({ UsgsLidarControl: UsgsLidarControlClass }) => {
+          .then(({ UsgsLidarControl: UsgsLidarControlClass, UsgsLidarLayerAdapter }) => {
             if (disposed || !pluginActive) return;
             const control = new UsgsLidarControlClass(USGS_LIDAR_OPTIONS);
             const mounted = mountMapControlInPanel(app, control, container, () =>
@@ -163,6 +165,8 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
             if (!mounted) return;
             usgsLidarControl = control;
             unmount = mounted;
+            // List each loaded point cloud in the Layers panel.
+            stopLayerSync = bindUsgsLidarLayerSync(control, new UsgsLidarLayerAdapter(control));
             control.expand();
           })
           .catch((error: unknown) => {
@@ -173,6 +177,8 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
           });
         return () => {
           disposed = true;
+          stopLayerSync?.();
+          stopLayerSync = null;
           unmount?.();
           unmount = null;
           usgsLidarControl = null;
@@ -192,6 +198,8 @@ export const maplibreUsgsLidarPlugin: GeoLibrePlugin = {
     pluginActive = false;
     restoreProjection();
     removeDepIndexLayer();
+    stopLayerSync?.();
+    stopLayerSync = null;
     if (usgsLidarControl) unmountMapControlFromPanel(usgsLidarControl);
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();

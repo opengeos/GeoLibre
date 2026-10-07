@@ -121,8 +121,10 @@ function isMapboxKindPluginLayer(layer: GeoLibreLayer): boolean {
       return sourceKind === "deckgl-viz";
     case "duckdb-query":
       return sourceKind === "duckdb-query";
+    // Both the shared LiDAR control and the USGS LiDAR plugin stream their
+    // point clouds through their own deck.gl overlay.
     case "lidar":
-      return external && sourceKind === "lidar-url";
+      return external && (sourceKind === "lidar-url" || sourceKind === "usgs-lidar");
     // @carbonplan/zarr-layer is a CustomLayerInterface implementation that
     // targets Mapbox GL as well as MapLibre; the Zarr control adds it to
     // whichever map hosts the control.
