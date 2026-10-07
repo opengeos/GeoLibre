@@ -58,8 +58,33 @@ appears in the attribute table toolbar while editing:
   domain to `null`.
 
 Range domains on date fields and coded-value domains on date or GUID fields
-keep the generic editor; the save check still validates them. New-feature
-defaults from types, subtypes and templates are not applied yet.
+keep the generic editor; the save check still validates them.
+
+## New features
+
+Features drawn with **Edit geometry** start with the service's creation
+defaults, filling only attributes that are empty. Most specific first:
+
+1. The type or subtype field takes the type of the only template the layer
+   publishes, otherwise `defaultSubtypeCode`, otherwise the field's
+   `defaultValue`.
+2. Other editable fields take the prototype value of the template for that
+   type, otherwise the subtype's `defaultValues`, otherwise the field's
+   `defaultValue`.
+
+A template is used only when the choice is unambiguous: the layer, or the
+feature's type, publishes exactly one. With several templates none is picked,
+and only subtype and field defaults apply. Change the type in the attribute
+table afterwards if needed; defaults are not reapplied, and existing features
+never receive them. Values the service assigns (object ID, global ID, editor
+tracking and other read-only fields) are left to the server, which also fills
+any field default GeoLibre did not, and the saved record is read back after
+the save.
+
+Copying or splitting a feature in the editor creates new features that keep
+the copied attributes, minus the values the service assigns, so they save as
+inserts. The original keeps its identity: the piece whose shape is unchanged,
+or the first piece when a split changed them all.
 
 ## Pending edits and refresh
 

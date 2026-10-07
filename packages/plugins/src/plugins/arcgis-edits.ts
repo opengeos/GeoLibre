@@ -4,6 +4,7 @@ import {
   arcGISSubtypeField,
   resolveArcGISFieldDomain,
   type ArcGISDomain,
+  type ArcGISFeatureTemplate,
   type ArcGISFeatureType,
   type ArcGISSubtype,
 } from "./arcgis-domains";
@@ -33,7 +34,15 @@ export interface ArcGISEditInfo {
     nullable?: boolean;
     length?: number;
     domain?: ArcGISDomain | null;
+    /** Value the service stores when an insert omits the field. */
+    defaultValue?: unknown;
   }>;
+  /** Field holding the service-assigned global ID, when the layer has one. */
+  globalIdField?: string;
+  /** Layer-level feature templates (layers without types). */
+  templates?: ArcGISFeatureTemplate[];
+  /** Subtype a new feature gets when none is chosen. */
+  defaultSubtypeCode?: unknown;
   /** Field whose value selects an entry of {@link types}. */
   typeIdField?: string;
   /** Feature types, each optionally overriding field domains. */

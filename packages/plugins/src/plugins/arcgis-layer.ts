@@ -26,6 +26,7 @@ import {
   arcGISSubtypeField,
   type ArcGISDomainDiagnostic,
 } from "./arcgis-domains";
+import { ARCGIS_FEATURE_SOURCE_KIND } from "./arcgis-defaults";
 import {
   arcgisQuantizationParams,
   decodeArcGISQuantizedFeatures,
@@ -129,7 +130,7 @@ const MAX_ARCGIS_PAGES = 5000;
  * `layer-refresh.ts` matches on it to replay the paging on refresh instead of
  * re-fetching the stored URL, which would return only the first page.
  */
-export const ARCGIS_FEATURE_SOURCE_KIND = "arcgis-feature-query";
+export { ARCGIS_FEATURE_SOURCE_KIND };
 
 export interface ArcGISLayerOptions {
   beforeLayerId?: string | null;

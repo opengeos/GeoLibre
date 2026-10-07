@@ -16,13 +16,16 @@ import type { Feature, FeatureCollection, MultiLineString, Position } from "geoj
 import type * as maplibregl from "maplibre-gl";
 import type { GeoEditor, GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
+  type EditedFeatureIds,
   type EditedFeatureProperties,
   type GeometryEditTrackingOptions,
+  type ReconcileEditedFeaturesOptions,
   SKETCHES_SOURCE_KIND,
   applySyncedEditorTracking,
   canEditLayerGeometry,
   findGeometryEditFeature,
   geometryEditMetadata,
+  captureEditedFeatureIds,
   captureEditedGeometries,
   captureEditedProperties,
   removeMultiLineStringVertex,
@@ -31,6 +34,12 @@ import {
   tagFeatureKeys,
 } from "./geo-editor-geometry";
 import type { MapboxGl } from "./geo-editor-mapbox";
+import {
+  ARCGIS_FEATURE_SOURCE_KIND,
+  arcGISCopiedFeatureProperties,
+  arcGISNewFeatureProperties,
+} from "./arcgis-defaults";
+import type { ArcGISEditInfo } from "./arcgis-edits";
 import {
   type ViewImportBaseline,
   type ViewImportExport,
@@ -233,6 +242,11 @@ let editTargetOriginalProperties: EditedFeatureProperties | null = null;
  * rather than every feature it loaded.
  */
 let editTargetOriginalGeometries: ReadonlyMap<string, string> | null = null;
+/**
+ * Original `feature.id` of each loaded feature, keyed by the same feature tag,
+ * so a save hands back numeric ids (such as ArcGIS object IDs) unchanged.
+ */
+let editTargetOriginalIds: EditedFeatureIds | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
 
@@ -1095,6 +1109,11 @@ function syncEditTargetToStore(): void {
     tagged,
     editTargetOriginalProperties ?? undefined,
     geometryEditTracking(layer),
+    {
+      originalIds: editTargetOriginalIds ?? undefined,
+      originalGeometries: editTargetOriginalGeometries ?? undefined,
+      prepareNewFeature: newFeaturePreparer(layer),
+    },
   );
 
   pushingSketchesToStore = true;
@@ -1111,6 +1130,24 @@ function syncEditTargetToStore(): void {
   // own rather than from `layer.geojson`, so push the edits there too or the map
   // would keep showing the pre-edit geometry.
   writeBackToVectorSource(layer, edited);
+}
+
+/**
+ * How features created in a session start out on a data source that needs it:
+ * on an ArcGIS feature layer a copy drops the server-assigned object ID (so it
+ * saves as a new feature) and a drawn feature gets the service's creation
+ * defaults. Other layers keep what the editor produced.
+ */
+function newFeaturePreparer(
+  layer: GeoLibreLayer,
+): ReconcileEditedFeaturesOptions["prepareNewFeature"] {
+  if (layer.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND) return undefined;
+  const info = layer.metadata.arcgisEditInfo as ArcGISEditInfo | undefined;
+  if (!info?.fields?.length) return undefined;
+  return (properties, kind) =>
+    kind === "copied"
+      ? arcGISCopiedFeatureProperties(info, properties)
+      : arcGISNewFeatureProperties(info, properties);
 }
 
 /**
@@ -1256,6 +1293,7 @@ export async function startLayerGeometryEdit(
     // pre-tag `source` so a feature with null properties stays null.
     editTargetOriginalProperties = captureEditedProperties(tagged, source);
     editTargetOriginalGeometries = captureEditedGeometries(tagged);
+    editTargetOriginalIds = captureEditedFeatureIds(tagged, source);
     await geoEditorControl.loadGeoJson(tagged, SKETCHES_SOURCE_PATH);
     loaded = true;
   } catch (error) {
@@ -1279,6 +1317,7 @@ export async function startLayerGeometryEdit(
     setEditTargetStoreVisible(layerId, editTargetOriginalVisible ?? true);
     editTargetOriginalVisible = null;
     editTargetOriginalProperties = null;
+    editTargetOriginalIds = null;
     editTargetOriginalGeometries = null;
     editTargetLayerId = null;
     await restoreSketchesAfterSession();
@@ -1342,6 +1381,7 @@ export async function endLayerGeometryEdit(
     editTargetLayerId = null;
     editTargetOriginalVisible = null;
     editTargetOriginalProperties = null;
+    editTargetOriginalIds = null;
     editTargetOriginalGeometries = null;
     unionSketchesWithStoreOnNextSync = false;
     notifyGeometryEdit();
@@ -1363,6 +1403,7 @@ export async function endLayerGeometryEdit(
     editTargetOriginalVisible = null;
     // The snapshot only describes the session that just ended.
     editTargetOriginalProperties = null;
+    editTargetOriginalIds = null;
     editTargetOriginalGeometries = null;
     // Await the sketches restore so a caller switching sessions does not start a
     // new edit while the previous restore is still clearing/loading the editor.
@@ -1386,6 +1427,7 @@ function abortGeometryEditSession(): void {
   // (restoreSketchesAfterSession exits Geoman edit modes.)
   editTargetOriginalVisible = null;
   editTargetOriginalProperties = null;
+  editTargetOriginalIds = null;
   editTargetOriginalGeometries = null;
   editTargetLayerId = null;
   unionSketchesWithStoreOnNextSync = false;

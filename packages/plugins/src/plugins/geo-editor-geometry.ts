@@ -245,6 +245,34 @@ export function captureEditedProperties(
   return snapshot;
 }
 
+/** Each loaded feature's original `feature.id` value (type intact), keyed by feature tag. */
+export type EditedFeatureIds = ReadonlyMap<string, string | number>;
+
+/**
+ * Remember the original `feature.id` of each feature loaded into the editor.
+ *
+ * {@link tagFeatureKeys} hands Geoman string ids, so without this a session
+ * would turn a numeric id such as an ArcGIS object ID (`1`) into `"1"` on save,
+ * and anything that matches features by id against a pre-session copy (the
+ * ArcGIS edit baseline) would see every feature as changed.
+ *
+ * @param collection The collection from {@link tagFeatureKeys}.
+ * @param source The same collection before tagging, read positionally.
+ * @returns Original ids keyed by feature tag; features without an id are omitted.
+ */
+export function captureEditedFeatureIds(
+  collection: FeatureCollection,
+  source: FeatureCollection,
+): Map<string, string | number> {
+  const ids = new Map<string, string | number>();
+  collection.features.forEach((feature, index) => {
+    const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+    const id = source.features[index]?.id;
+    if (tag != null && id != null && id !== "") ids.set(String(tag), id);
+  });
+  return ids;
+}
+
 /**
  * Decimal places coordinates are compared at when deciding whether a feature's
  * geometry actually changed during an edit session (~0.1 mm at the equator).
@@ -321,6 +349,64 @@ export interface GeometryEditTrackingOptions {
   originalGeometries: ReadonlyMap<string, string>;
 }
 
+/**
+ * How a feature that was not loaded into the session came to exist: drawn from
+ * scratch, or copied from a loaded feature (Geoman's copy and split clone the
+ * source's attributes, edit tag included).
+ */
+export type NewEditedFeatureKind = "drawn" | "copied";
+
+/** Optional inputs to {@link reconcileEditedFeatures}. */
+export interface ReconcileEditedFeaturesOptions {
+  /** Original ids from {@link captureEditedFeatureIds}, restored on loaded features. */
+  originalIds?: EditedFeatureIds;
+  /**
+   * Geometry baseline from {@link captureEditedGeometries}. When a tag appears
+   * more than once (a copy or split), the occurrence whose geometry still
+   * matches keeps the loaded feature's identity; without a match, the first does.
+   */
+  originalGeometries?: ReadonlyMap<string, string>;
+  /**
+   * Adjust the attributes of a feature the session created. Called after the
+   * editor keys are stripped and before editor tracking is stamped, so a data
+   * source can drop values that must not be duplicated (an ArcGIS object ID)
+   * or fill creation defaults.
+   */
+  prepareNewFeature?: (
+    properties: Record<string, unknown> | null,
+    kind: NewEditedFeatureKind,
+  ) => Record<string, unknown> | null;
+}
+
+/**
+ * For each tag carried by more than one feature, the index of the feature that
+ * keeps the loaded identity: the one whose geometry is unchanged (the original
+ * a copy was made from), otherwise the first.
+ */
+function identityHolders(
+  features: readonly Feature[],
+  originalGeometries?: ReadonlyMap<string, string>,
+): Map<string, number> {
+  const byTag = new Map<string, number[]>();
+  features.forEach((feature, index) => {
+    const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+    if (tag == null) return;
+    const list = byTag.get(String(tag));
+    if (list) list.push(index);
+    else byTag.set(String(tag), [index]);
+  });
+  const holders = new Map<string, number>();
+  for (const [tag, indices] of byTag) {
+    const baseline = originalGeometries?.get(tag);
+    const unchanged =
+      indices.length > 1 && baseline !== undefined
+        ? indices.find((index) => canonicalGeometryKey(features[index].geometry) === baseline)
+        : undefined;
+    holders.set(tag, unchanged ?? indices[0]);
+  }
+  return holders;
+}
+
 /** A copy of `properties` without Geoman's namespaced keys or the edit tag. */
 function withoutEditorProperties(rawProps: Record<string, unknown>): Record<string, unknown> {
   const properties: Record<string, unknown> = {};
@@ -345,36 +431,67 @@ function withoutEditorProperties(rawProps: Record<string, unknown>): Record<stri
  * so it keeps what it has minus the editor's own `__gm_*` bookkeeping, which
  * would otherwise show up as columns in the layer's attribute table.
  *
+ * A tag carried by several features means Geoman copied or split a loaded
+ * feature. Only one occurrence keeps the loaded identity (see
+ * `options.originalGeometries`); the others are new features that start from
+ * the source's attributes.
+ *
  * When `tracking` is supplied, the features the session actually changed are
- * stamped with editor tracking metadata: a feature with no snapshot was drawn
- * during the session ("create"), and one whose geometry differs from the
- * baseline was moved ("update"). Features that were merely loaded and saved
- * again are left exactly as they were, so opening a session and closing it
- * without touching anything does not rewrite the layer's edit history.
+ * stamped with editor tracking metadata: a feature with no snapshot, or a copy,
+ * was created during the session ("create"), and one whose geometry differs
+ * from the baseline was moved ("update"). Features that were merely loaded and
+ * saved again are left exactly as they were, so opening a session and closing
+ * it without touching anything does not rewrite the layer's edit history.
  *
  * @param collection The editor's current feature collection (tagged).
  * @param originalProperties Snapshot from {@link captureEditedProperties}.
  * @param tracking Editor tracking config and geometry baseline, when enabled.
+ * @param options Original ids, geometry baseline and a hook for new features.
  * @returns A new collection with unique stable ids and editor keys removed.
  */
 export function reconcileEditedFeatures(
   collection: FeatureCollection,
   originalProperties?: EditedFeatureProperties,
   tracking?: GeometryEditTrackingOptions,
+  options: ReconcileEditedFeaturesOptions = {},
 ): FeatureCollection {
   const ids = makeIdAllocator();
   // One timestamp for the whole save, so features changed in a single session
   // share an `edited_at` instead of differing by however long the map took.
   const timestamp = tracking?.timestamp ?? new Date().toISOString();
+  const holders = identityHolders(
+    collection.features,
+    options.originalGeometries ?? tracking?.originalGeometries,
+  );
+  const isHolder = (feature: Feature, index: number) => {
+    const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+    return tag != null && holders.get(String(tag)) === index;
+  };
+  // Identity holders claim their ids first, so a copy or a drawn feature that
+  // comes earlier in the editor's order can never take an id a loaded feature
+  // keeps.
+  const assigned: Array<string | number> = new Array(collection.features.length);
+  for (const pass of [true, false]) {
+    collection.features.forEach((feature, index) => {
+      if (isHolder(feature, index) !== pass) return;
+      const tag = feature.properties?.[GEOMETRY_EDIT_FID_PROPERTY];
+      const taken = ids.take(pass ? tag : undefined);
+      // The holder gets its original id back with its type intact; copies and
+      // drawn features get fresh string ids.
+      const original = pass ? options.originalIds?.get(String(tag)) : undefined;
+      assigned[index] = original !== undefined && String(original) === taken ? original : taken;
+    });
+  }
   return {
     type: "FeatureCollection",
-    features: collection.features.map((feature) => {
+    features: collection.features.map((feature, index) => {
       const rawProps = feature.properties;
       const tag = rawProps?.[GEOMETRY_EDIT_FID_PROPERTY];
       // Preserve null properties as null (GeoJSON allows it, and a feature drawn
       // during the session may have null).
       let properties: Record<string, unknown> | null;
       const restored = tag == null ? undefined : originalProperties?.get(String(tag));
+      const copied = restored !== undefined && holders.get(String(tag)) !== index;
       if (restored !== undefined) {
         properties = restored === null ? null : { ...restored };
       } else if (rawProps == null) {
@@ -382,10 +499,13 @@ export function reconcileEditedFeatures(
       } else {
         properties = withoutEditorProperties(rawProps);
       }
+      if (options.prepareNewFeature && (restored === undefined || copied)) {
+        properties = options.prepareNewFeature(properties, copied ? "copied" : "drawn");
+      }
       if (tracking) {
         const action = editTrackingAction(
           tag == null ? undefined : String(tag),
-          restored !== undefined,
+          restored !== undefined && !copied,
           feature.geometry,
           tracking.originalGeometries,
         );
@@ -401,8 +521,7 @@ export function reconcileEditedFeatures(
           });
         }
       }
-      const id = ids.take(tag);
-      return { ...feature, id, properties };
+      return { ...feature, id: assigned[index], properties };
     }),
   };
 }

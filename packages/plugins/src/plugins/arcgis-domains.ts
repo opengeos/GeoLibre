@@ -27,11 +27,18 @@ export interface ArcGISDomain {
   range?: number[];
 }
 
+/** A feature template: a named starting point for new features. */
+export interface ArcGISFeatureTemplate {
+  name?: string;
+  prototype?: { attributes?: Record<string, unknown> | null } | null;
+}
+
 /** One entry of a layer's `types[]` (keyed by `typeIdField`). */
 export interface ArcGISFeatureType {
   id: unknown;
   name?: string;
   domains?: Record<string, ArcGISDomain | null>;
+  templates?: ArcGISFeatureTemplate[];
 }
 
 /** One entry of a layer's `subtypes[]` (keyed by `subtypeField`). */

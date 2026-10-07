@@ -9,6 +9,7 @@ import {
   applySyncedEditorTracking,
   canEditLayerGeometry,
   canonicalGeometryKey,
+  captureEditedFeatureIds,
   captureEditedGeometries,
   captureEditedProperties,
   planGeoEditorOverlayOrder,
@@ -749,6 +750,44 @@ describe("editor tracking — copied and id-less features", () => {
       edited_by: "ada",
       edited_at: "2026-08-16T00:00:00.000Z",
     });
+  });
+
+  it("records a copy that kept its source's tag as created, and keeps the source's id", () => {
+    // Geoman's copy and split clone `properties`, edit tag included, so the copy
+    // matches the source's snapshot. The occurrence whose geometry is unchanged
+    // is the source; the moved one is the copy, even when it comes first.
+    const original: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 7,
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { name: "source", created_by: "bob", created_at: "2020-01-01T00:00:00.000Z" },
+        },
+      ],
+    };
+    const tagged = tagFeatureKeys(original);
+    const copy = structuredClone(tagged.features[0]);
+    copy.geometry = { type: "Point", coordinates: [1, 1] };
+    const kinds: string[] = [];
+    const reconciled = reconcileEditedFeatures(
+      { type: "FeatureCollection", features: [copy, tagged.features[0]] },
+      captureEditedProperties(tagged, original),
+      { ...stamp, originalGeometries: captureEditedGeometries(tagged) },
+      {
+        originalIds: captureEditedFeatureIds(tagged, original),
+        prepareNewFeature: (properties, kind) => {
+          kinds.push(kind);
+          return properties;
+        },
+      },
+    );
+    assert.deepEqual(kinds, ["copied"]);
+    assert.equal(reconciled.features[1].id, 7);
+    assert.equal(reconciled.features[1].properties?.created_by, "bob");
+    assert.notEqual(reconciled.features[0].id, 7);
+    assert.equal(reconciled.features[0].properties?.created_by, "ada");
   });
 
   it("keeps matching an id-less feature after it has been stamped once", () => {
