@@ -87,7 +87,7 @@
     "maplibre-gl-enviroatlas": "^0.1.1",
     "maplibre-gl-esri-wayback": "^0.2.2",
     "maplibre-gl-fema-wms": "^0.1.2",
-    "maplibre-gl-geo-editor": "^0.11.1",
+    "maplibre-gl-geo-editor": "^0.11.2",
     "maplibre-gl-geoagent": "^0.6.1",
     "maplibre-gl-lidar": "^0.21.0",
     "maplibre-gl-nasa-earthdata": "^0.1.4",
