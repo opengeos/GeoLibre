@@ -905,7 +905,8 @@ function clearPlayTimer(): void {
 
 /**
  * Stops the slider driving the map. The frame on the map stays as an
- * ordinary layer the user can keep or remove.
+ * ordinary layer the user can keep or remove; a frame still loading has never
+ * been shown, so it is superseded and removed like any frame skipped past.
  */
 function stopSlider(): void {
   if (frameTimer) clearTimeout(frameTimer);
@@ -936,6 +937,9 @@ function scheduleSliderFrame(delay = 0): void {
   const display = state.display;
   const key = sceneLayerKey(scene.id, display);
   if (key === sliderFrameKey) return;
+  // Supersede a frame still loading, so it cannot settle and retire the
+  // frame on the map before this one is read.
+  sliderSeq++;
   sliderFrameKey = key;
   if (frameTimer) clearTimeout(frameTimer);
   frameTimer = setTimeout(() => {
@@ -999,8 +1003,9 @@ async function showSliderFrame(scene: S2Scene, display: DisplayKey): Promise<voi
   const owned = existing === null;
   if (!id) {
     if (seq !== sliderSeq) return;
-    // The add failed (its status says why); let the user retry this frame.
-    sliderFrameKey = "";
+    // The add failed (its status says why). The frame key stays set, so a
+    // panel refresh does not retry a missing COG in a loop; stepping away and
+    // back retries it.
     state.playing = false;
     renderSlider?.();
     return;
@@ -1569,6 +1574,8 @@ function buildPanel(container: HTMLElement): () => void {
     sceneButtons.clear();
     resultsSection.replaceChildren();
     // Filters and searches change the frames; a drag settles before a read.
+    // Every refresh lands here, and scheduleSliderFrame returns early while
+    // the frame key is unchanged, so a status update never re-reads a frame.
     renderSlider?.();
     scheduleSliderFrame(FRAME_DEBOUNCE_MS);
     if (!state.tile) return;
