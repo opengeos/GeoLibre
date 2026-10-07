@@ -12,8 +12,11 @@ import {
   partUrls,
   sceneDirectory,
   tilePasses,
+  timeSeriesIndex,
+  timeSeriesScenes,
   toScenes,
   windowMonths,
+  type S2Scene,
 } from "../packages/plugins/src/plugins/sentinel2-explorer-data";
 import {
   S2_COMPOSITES,
@@ -130,6 +133,36 @@ describe("Sentinel-2 explorer scenes", () => {
       filterScenes(scenes, { ...window, to: "2025-06-29" }, "cloud").map((s) => s.id),
       ["B"],
     );
+  });
+
+  it("orders the time slider frames oldest first, after the filters", () => {
+    const scenes = toScenes(raw);
+    const window = {
+      from: "2025-06-01",
+      to: "2025-06-30",
+      maxCloud: 100,
+      minCoverage: 0,
+    };
+    assert.deepEqual(
+      timeSeriesScenes(scenes, window).map((s) => s.id),
+      ["B", "A"],
+    );
+    assert.deepEqual(
+      timeSeriesScenes(scenes, { ...window, maxCloud: 10 }).map((s) => s.id),
+      ["B"],
+    );
+  });
+
+  it("keeps the time slider near its scene when the frames change", () => {
+    const frame = (id: string, t: number) => ({ id, t }) as S2Scene;
+    const series = [frame("a", 10), frame("b", 20), frame("c", 30)];
+    assert.equal(timeSeriesIndex([], "a", 10), -1);
+    assert.equal(timeSeriesIndex(series, "b", 20), 1);
+    // Filtered out: the nearest earlier frame, else the first.
+    assert.equal(timeSeriesIndex(series, "gone", 25), 1);
+    assert.equal(timeSeriesIndex(series, "gone", 99), 2);
+    assert.equal(timeSeriesIndex(series, "gone", 5), 0);
+    assert.equal(timeSeriesIndex(series, null, null), 0);
   });
 
   it("derives a scene's COG directory from its thumbnail", () => {

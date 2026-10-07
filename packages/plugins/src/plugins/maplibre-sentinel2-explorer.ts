@@ -37,7 +37,11 @@ import {
   sceneDirectory,
   searchTileScenes,
   tilePasses,
+  timeSeriesIndex,
+  timeSeriesScenes,
 } from "./sentinel2-explorer-data";
+import { getRasterLoadState } from "./maplibre-raster";
+import { getSharedDeckLoadState } from "./shared-deck-overlay";
 import { getStyleMap } from "./style-map";
 
 export const SENTINEL2_EXPLORER_PLUGIN_ID = "geolibre-sentinel2-explorer";
@@ -94,6 +98,13 @@ const V_DIMMED = -2;
 const PAGE_SIZE = 30;
 /** Delay before a slider drag repaints the map. */
 const REPAINT_DEBOUNCE_MS = 150;
+/** Delay before a time slider drag streams the frame it rests on. */
+const FRAME_DEBOUNCE_MS = 300;
+/** How long playback holds a frame once it is on the map. */
+const PLAY_DWELL_MS = 1500;
+/** How often, and how long at most, a new frame is polled for its first paint. */
+const FRAME_POLL_MS = 100;
+const FRAME_WAIT_MS = 20_000;
 
 const CSS = {
   panel:
@@ -157,6 +168,10 @@ const CSS = {
     "border:1px solid hsl(var(--primary));background:hsl(var(--primary));" +
     "color:hsl(var(--primary-foreground));",
   checkbox: "display:flex;align-items:center;gap:6px;font-size:11px;",
+  timeSlider:
+    "display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:6px;" +
+    "border:1px solid hsl(var(--primary) / 0.5);",
+  frameLabel: "font-weight:600;font-variant-numeric:tabular-nums;",
 } as const;
 
 /** What a scene is drawn as when added to the map. */
@@ -192,6 +207,13 @@ interface PanelState {
   busy: boolean;
   /** Whether the About section at the top of the panel is expanded. */
   aboutOpen: boolean;
+  /** Whether the selected tile gets a time slider over its scenes. */
+  timeSlider: boolean;
+  /** The scene the time slider rests on, and its time (to stay near it). */
+  sliderSceneId: string | null;
+  sliderSceneT: number | null;
+  /** Whether the time slider is playing. */
+  playing: boolean;
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -221,6 +243,10 @@ function initialState(): PanelState {
     status: null,
     busy: false,
     aboutOpen: true,
+    timeSlider: false,
+    sliderSceneId: null,
+    sliderSceneT: null,
+    playing: false,
   };
 }
 
@@ -245,6 +271,19 @@ let paintSeq = 0;
 let searchController: AbortController | null = null;
 let detachMap: (() => void) | null = null;
 let repaintTimer: ReturnType<typeof setTimeout> | null = null;
+/** Updates the time slider in place; set while a panel is mounted. */
+let renderSlider: (() => void) | null = null;
+/**
+ * The layer showing the time slider's frame. `owned` is false when the frame
+ * was already on the map as the user's own layer, which the slider then
+ * never removes.
+ */
+let sliderLayer: { id: string; owned: boolean } | null = null;
+/** `sceneLayerKey` of the frame shown or being streamed. */
+let sliderFrameKey = "";
+let sliderSeq = 0;
+let frameTimer: ReturnType<typeof setTimeout> | null = null;
+let playTimer: ReturnType<typeof setTimeout> | null = null;
 
 const tr = createPluginTranslator(() => appRef, SENTINEL2_EXPLORER_PLUGIN_ID);
 
@@ -692,17 +731,26 @@ function compositesSupported(): boolean {
   return Boolean(appRef?.getMap?.());
 }
 
-/** Adds a multi-file composite of a scene as a tile layer. */
-function addCompositeToMap(scene: S2Scene, dir: string, key: S2CompositeKey): void {
+/**
+ * Adds a multi-file composite of a scene as a tile layer.
+ *
+ * @returns The layer id, or null when composites are unavailable.
+ */
+function addCompositeToMap(
+  scene: S2Scene,
+  dir: string,
+  key: S2CompositeKey,
+  zoomTo: boolean,
+): string | null {
   const app = appRef;
   if (!app?.addTileLayer || !compositesSupported()) {
     setStatus(tr("noComposite", "Composites need the MapLibre renderer."), true);
-    return;
+    return null;
   }
   const name = `${scene.id} (${compositeLabel(key)})`;
   const bbox =
     scene.bbox.length === 4 ? (scene.bbox as [number, number, number, number]) : undefined;
-  app.addTileLayer(name, compositeTileUrl(dir, key, baselineOffset(scene.baseline)), {
+  const id = app.addTileLayer(name, compositeTileUrl(dir, key, baselineOffset(scene.baseline)), {
     tileSize: 256,
     // 10 m bands reach their native detail near z14; deeper zooms upsample.
     maxzoom: 14,
@@ -710,8 +758,9 @@ function addCompositeToMap(scene: S2Scene, dir: string, key: S2CompositeKey): vo
     ...(bbox ? { bounds: bbox } : {}),
     metadata: { [SCENE_METADATA_KEY]: scene.id, [DISPLAY_METADATA_KEY]: key },
   });
-  if (bbox) app.fitBounds?.(bbox);
+  if (bbox && zoomTo) app.fitBounds?.(bbox);
   setStatus(tr("added", "Added {{name}}.", { name }));
+  return id;
 }
 
 /** The files of a scene the Download list offers. */
@@ -736,30 +785,38 @@ function downloadFile(url: string): void {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-/** Adds one scene to the map as a COG layer in the chosen display. */
-async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void> {
+/**
+ * Adds one scene to the map as a COG layer in the chosen display.
+ *
+ * @param scene - The scene to add.
+ * @param display - TCI, a band, or a composite key.
+ * @param zoomTo - Whether to fit the map to the scene once added.
+ * @returns The new layer's id, or null when the add failed.
+ */
+async function addSceneToMap(
+  scene: S2Scene,
+  display: DisplayKey,
+  zoomTo = true,
+): Promise<string | null> {
   const app = appRef;
   let dir: string;
   try {
     dir = sceneDirectory(scene.thumbnailUrl);
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), true);
-    return;
+    return null;
   }
-  if (isComposite(display)) {
-    addCompositeToMap(scene, dir, display);
-    return;
-  }
+  if (isComposite(display)) return addCompositeToMap(scene, dir, display, zoomTo);
   if (!app?.addCogLayer) {
     setStatus(tr("noCog", "This GeoLibre build cannot add COG layers."), true);
-    return;
+    return null;
   }
   const url = `${dir}/${display}.tif`;
   const name = `${scene.id} (${display})`;
   let options: GeoLibreCogLayerOptions;
   if (display === "TCI") {
     // The visual COG is already stretched by ESA; 0 is the swath-edge nodata.
-    options = { bands: "1,2,3", nodata: 0, zoomTo: true };
+    options = { bands: "1,2,3", nodata: 0, zoomTo };
   } else if (display === "SCL") {
     // A categorical palette: one tab20 entry per class value.
     const [min, max] = bandRescale(display, scene.baseline);
@@ -769,7 +826,7 @@ async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void>
       rescaleMin: min,
       rescaleMax: max,
       nodata: 0,
-      zoomTo: true,
+      zoomTo,
     };
   } else {
     const [min, max] = bandRescale(display, scene.baseline);
@@ -779,7 +836,7 @@ async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void>
       rescaleMin: min,
       rescaleMax: max,
       nodata: 0,
-      zoomTo: true,
+      zoomTo,
     };
   }
   setStatus(tr("adding", "Adding {{name}}…", { name }));
@@ -801,6 +858,7 @@ async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void>
       });
     }
     setStatus(tr("added", "Added {{name}}.", { name }));
+    return id;
   } catch (error) {
     setStatus(
       tr("addFailed", "Could not add {{name}}: {{error}}", {
@@ -809,10 +867,205 @@ async function addSceneToMap(scene: S2Scene, display: DisplayKey): Promise<void>
       }),
       true,
     );
+    return null;
   } finally {
     pendingAdds.delete(pendingKey);
     syncSceneButtons?.();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Time slider
+// ---------------------------------------------------------------------------
+
+// The slider steps through the selected tile's filtered scenes, oldest first,
+// and keeps one store layer showing the frame it rests on: each new frame is
+// added before the previous one is removed, so the map never flashes empty.
+
+/** The time slider's frames: the selected tile's passing scenes, oldest first. */
+function sliderSeries(): S2Scene[] {
+  if (!state.tile || !state.searched || state.searched.tile !== state.tile) return [];
+  return timeSeriesScenes(state.scenes, {
+    from: state.from,
+    to: state.to,
+    maxCloud: state.maxCloud,
+    minCoverage: state.minCoverage,
+  });
+}
+
+/** The frame index the slider rests on, or -1 with no frames. */
+function sliderIndex(series: S2Scene[]): number {
+  return timeSeriesIndex(series, state.sliderSceneId, state.sliderSceneT);
+}
+
+function clearPlayTimer(): void {
+  if (playTimer) clearTimeout(playTimer);
+  playTimer = null;
+}
+
+/**
+ * Stops the slider driving the map. The frame on the map stays as an
+ * ordinary layer the user can keep or remove.
+ */
+function stopSlider(): void {
+  if (frameTimer) clearTimeout(frameTimer);
+  frameTimer = null;
+  clearPlayTimer();
+  sliderSeq++;
+  sliderLayer = null;
+  sliderFrameKey = "";
+  state.playing = false;
+}
+
+/**
+ * Streams the frame the slider rests on, unless it is already shown or on its
+ * way. A drag passes `delay` so only the frame it settles on is read.
+ *
+ * @param delay - Milliseconds to wait before reading the frame.
+ */
+function scheduleSliderFrame(delay = 0): void {
+  if (!state.timeSlider) return;
+  // The user may have removed the frame's layer (Layers panel, card button).
+  if (sliderLayer && !useAppStore.getState().layers.some((l) => l.id === sliderLayer?.id)) {
+    sliderLayer = null;
+    sliderFrameKey = "";
+  }
+  const series = sliderSeries();
+  const scene = series[sliderIndex(series)];
+  if (!scene) return;
+  const display = state.display;
+  const key = sceneLayerKey(scene.id, display);
+  if (key === sliderFrameKey) return;
+  sliderFrameKey = key;
+  if (frameTimer) clearTimeout(frameTimer);
+  frameTimer = setTimeout(() => {
+    frameTimer = null;
+    void showSliderFrame(scene, display);
+  }, delay);
+}
+
+/**
+ * Whether a frame layer has painted the viewport: the raster control's load
+ * state for a COG (plus its deck.gl tiles when the shared overlay draws it),
+ * MapLibre's tile state for a composite tile layer. An errored layer counts as
+ * settled, so a failed tile never stalls playback.
+ *
+ * @param layerId - The frame's store layer id.
+ * @returns True once the frame is drawn or has failed.
+ */
+function frameRendered(layerId: string): boolean {
+  const layer = useAppStore.getState().layers.find((candidate) => candidate.id === layerId);
+  if (!layer) return true;
+  if (layer.metadata?.sourceKind === "maplibre-gl-raster") {
+    const raster = getRasterLoadState(layerId);
+    if (raster.error) return true;
+    if (raster.loading) return false;
+    if (raster.deckTracked) {
+      const deck = getSharedDeckLoadState(layerId);
+      return Boolean(deck.error) || (deck.found && !deck.loading);
+    }
+    // An overlaid deck canvas (desktop) reports nothing past the header state.
+    if (!raster.native) return true;
+  }
+  const map = mapOf();
+  return !map || map.areTilesLoaded();
+}
+
+/**
+ * Resolves once a frame has painted, the wait times out, or a newer frame
+ * supersedes it.
+ *
+ * @param layerId - The frame's store layer id.
+ * @param seq - The {@link sliderSeq} the frame was requested under.
+ * @returns False when a newer frame superseded this one.
+ */
+async function waitForFrame(layerId: string, seq: number): Promise<boolean> {
+  const started = Date.now();
+  while (seq === sliderSeq && !frameRendered(layerId) && Date.now() - started < FRAME_WAIT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, FRAME_POLL_MS));
+  }
+  return seq === sliderSeq;
+}
+
+/**
+ * Puts a frame on the map and retires the previous one once the new frame has
+ * painted, so the map never shows a gap between frames.
+ */
+async function showSliderFrame(scene: S2Scene, display: DisplayKey): Promise<void> {
+  const seq = ++sliderSeq;
+  const existing = sceneLayerId(scene.id, display);
+  // Zoom to the first frame only; later frames share its footprint.
+  const id = existing ?? (await addSceneToMap(scene, display, sliderLayer === null));
+  const owned = existing === null;
+  if (!id) {
+    if (seq !== sliderSeq) return;
+    // The add failed (its status says why); let the user retry this frame.
+    sliderFrameKey = "";
+    state.playing = false;
+    renderSlider?.();
+    return;
+  }
+  // Hold the previous frame underneath until this one has drawn. A newer
+  // frame asked for meanwhile supersedes this one, which then goes.
+  if (!(await waitForFrame(id, seq))) {
+    if (owned) removeLayerIfPresent(id);
+    return;
+  }
+  const previous = sliderLayer;
+  sliderLayer = { id, owned };
+  if (previous?.owned && previous.id !== id) removeLayerIfPresent(previous.id);
+  if (state.playing) {
+    clearPlayTimer();
+    playTimer = setTimeout(() => {
+      playTimer = null;
+      if (state.playing) stepSlider(1, true);
+    }, PLAY_DWELL_MS);
+  }
+}
+
+/** Removes a store layer unless the user already removed it. */
+function removeLayerIfPresent(layerId: string): void {
+  const store = useAppStore.getState();
+  if (store.layers.some((layer) => layer.id === layerId)) store.removeLayer(layerId);
+}
+
+/**
+ * Moves the slider to a frame and streams it.
+ *
+ * @param index - The frame index in the current series.
+ * @param delay - Milliseconds to wait before reading the frame.
+ */
+function moveSlider(index: number, delay = 0): void {
+  const series = sliderSeries();
+  const scene = series[index];
+  if (!scene) return;
+  state.sliderSceneId = scene.id;
+  state.sliderSceneT = scene.t;
+  renderSlider?.();
+  scheduleSliderFrame(delay);
+}
+
+/**
+ * Steps the slider by `delta` frames.
+ *
+ * @param delta - Frames to move, negative for earlier.
+ * @param wrap - Whether to wrap around the ends (playback loops).
+ */
+function stepSlider(delta: number, wrap = false): void {
+  const series = sliderSeries();
+  if (!series.length) return;
+  let next = sliderIndex(series) + delta;
+  if (wrap) next = (next + series.length) % series.length;
+  else next = Math.max(0, Math.min(series.length - 1, next));
+  moveSlider(next);
+}
+
+/** Starts or pauses playback. */
+function togglePlay(): void {
+  state.playing = !state.playing;
+  clearPlayTimer();
+  if (state.playing) stepSlider(1, true);
+  else renderSlider?.();
 }
 
 // ---------------------------------------------------------------------------
@@ -1062,6 +1315,22 @@ function buildPanel(container: HTMLElement): () => void {
   });
   gridToggle.append(gridCheckbox, tr("showGrid", "Show the tile grid"));
 
+  const sliderToggle = element("label", CSS.checkbox);
+  const sliderCheckbox = element("input");
+  sliderCheckbox.type = "checkbox";
+  sliderCheckbox.checked = state.timeSlider;
+  sliderCheckbox.addEventListener("change", () => {
+    state.timeSlider = sliderCheckbox.checked;
+    if (!state.timeSlider) stopSlider();
+    renderSlider?.();
+    scheduleSliderFrame();
+  });
+  sliderToggle.title = tr(
+    "timeSliderTitle",
+    "Step through the selected tile's scenes in time order, one layer at a time",
+  );
+  sliderToggle.append(sliderCheckbox, tr("timeSlider", "Time slider"));
+
   const filters = element("div", CSS.section);
   filters.append(
     element("div", CSS.sectionTitle, tr("filters", "Filters")),
@@ -1083,6 +1352,79 @@ function buildPanel(container: HTMLElement): () => void {
 
   const status = element("div");
 
+  // The time slider, updated in place so a status change mid-drag never
+  // rebuilds the range input under the pointer.
+  const sliderSection = element("div", CSS.timeSlider);
+  const sliderHead = element("div", CSS.resultHeader);
+  const sliderCount = element("span", CSS.cardMeta);
+  sliderHead.append(element("div", CSS.sectionTitle, tr("timeSlider", "Time slider")), sliderCount);
+  const frameDay = element("div", CSS.frameLabel);
+  const frameMeta = element("div", CSS.cardMeta);
+  const sliderInput = element("input", CSS.slider);
+  sliderInput.type = "range";
+  sliderInput.min = "0";
+  sliderInput.step = "1";
+  sliderInput.setAttribute("aria-label", tr("timeSlider", "Time slider"));
+  sliderInput.addEventListener("input", () => {
+    state.playing = false;
+    clearPlayTimer();
+    moveSlider(Number(sliderInput.value), FRAME_DEBOUNCE_MS);
+  });
+  const prevButton = button(tr("previous", "Previous"), CSS.action, () => {
+    state.playing = false;
+    clearPlayTimer();
+    stepSlider(-1);
+  });
+  const playButton = button("", CSS.primaryAction, togglePlay);
+  const nextButton = button(tr("next", "Next"), CSS.action, () => {
+    state.playing = false;
+    clearPlayTimer();
+    stepSlider(1);
+  });
+  const sliderActions = element("div", CSS.actions);
+  sliderActions.append(prevButton, playButton, nextButton);
+  const sliderEmpty = element(
+    "p",
+    CSS.hint,
+    tr("timeSliderEmpty", "No scenes of this tile match the filters."),
+  );
+  sliderSection.append(sliderHead, frameDay, frameMeta, sliderInput, sliderActions, sliderEmpty);
+
+  // `hidden` loses to the inline `display:flex`, so toggle display itself.
+  const show = (node: HTMLElement, shown: boolean, display = "block") => {
+    node.style.display = shown ? display : "none";
+  };
+  renderSlider = () => {
+    const visible = state.timeSlider && Boolean(state.searched) && !state.busy;
+    show(sliderSection, visible, "flex");
+    if (!visible) return;
+    const series = sliderSeries();
+    const index = sliderIndex(series);
+    const scene = series[index];
+    const hasFrames = Boolean(scene);
+    show(sliderEmpty, !hasFrames);
+    show(frameDay, hasFrames);
+    show(frameMeta, hasFrames);
+    show(sliderInput, hasFrames);
+    show(sliderActions, hasFrames, "flex");
+    sliderCount.textContent = hasFrames
+      ? tr("frameCount", "{{index}} / {{count}}", { index: index + 1, count: series.length })
+      : "";
+    if (!scene) return;
+    frameDay.textContent = scene.day;
+    frameMeta.textContent = tr("sceneMeta", "{{cloud}}% cloud · {{cover}} coverage", {
+      cloud: scene.cloud.toFixed(1),
+      cover: scene.cover === null ? "?" : `${scene.cover.toFixed(0)}%`,
+    });
+    sliderInput.max = String(series.length - 1);
+    if (sliderInput.value !== String(index)) sliderInput.value = String(index);
+    prevButton.disabled = index <= 0;
+    nextButton.disabled = index >= series.length - 1;
+    playButton.disabled = series.length < 2;
+    playButton.textContent = state.playing ? tr("pause", "Pause") : tr("play", "Play");
+    playButton.setAttribute("aria-pressed", String(state.playing));
+  };
+
   // Results.
   const resultsSection = element("div", CSS.section);
   const displayHolder = element("label", CSS.label, tr("display", "Add scenes as"));
@@ -1102,6 +1444,7 @@ function buildPanel(container: HTMLElement): () => void {
     next.addEventListener("change", () => {
       state.display = next.value;
       syncSceneButtons?.();
+      scheduleSliderFrame();
     });
     if (displaySelect) displaySelect.replaceWith(next);
     else displayHolder.append(next);
@@ -1225,6 +1568,9 @@ function buildPanel(container: HTMLElement): () => void {
   function renderResults(): void {
     sceneButtons.clear();
     resultsSection.replaceChildren();
+    // Filters and searches change the frames; a drag settles before a read.
+    renderSlider?.();
+    scheduleSliderFrame(FRAME_DEBOUNCE_MS);
     if (!state.tile) return;
     const header = element("div", CSS.resultHeader);
     header.append(
@@ -1319,8 +1665,10 @@ function buildPanel(container: HTMLElement): () => void {
     metricLabel,
     legend,
     gridToggle,
+    sliderToggle,
     filters,
     status,
+    sliderSection,
     resultsSection,
     attribution,
   );
@@ -1342,6 +1690,7 @@ function buildPanel(container: HTMLElement): () => void {
     unsubscribeLayers();
     syncSceneButtons = null;
     refreshPanel = null;
+    renderSlider = null;
     showFootprint(null);
     container.replaceChildren();
   };
@@ -1412,6 +1761,7 @@ export const maplibreSentinel2ExplorerPlugin: GeoLibrePlugin = {
     panelContainer = null;
     searchController?.abort();
     searchController = null;
+    stopSlider();
     if (repaintTimer) clearTimeout(repaintTimer);
     repaintTimer = null;
     paintSeq++;

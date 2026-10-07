@@ -759,6 +759,48 @@ export function filterScenes(
   return kept.sort(cmp);
 }
 
+/**
+ * The frames of the time slider: the scenes that pass the filters, oldest
+ * first, so stepping forward moves forward in time.
+ *
+ * @param scenes - All scenes of the tile.
+ * @param filters - Date window, cloud ceiling, coverage floor.
+ * @returns The passing scenes in chronological order.
+ */
+export function timeSeriesScenes(scenes: S2Scene[], filters: S2SceneFilters): S2Scene[] {
+  return filterScenes(scenes, filters, "date").sort((a, b) => a.t - b.t || cmpId(a, b));
+}
+
+/**
+ * The slider position of a scene in a series, clamped into range: the index
+ * of `sceneId` when the series still holds it, else the nearest earlier frame
+ * by time (or the first), so a filter change keeps the slider near where the
+ * user left it.
+ *
+ * @param series - The chronological frames.
+ * @param sceneId - The scene the slider showed, or null.
+ * @param t - That scene's acquisition time, epoch ms, or null.
+ * @returns The index, or -1 for an empty series.
+ */
+export function timeSeriesIndex(
+  series: S2Scene[],
+  sceneId: string | null,
+  t: number | null,
+): number {
+  if (!series.length) return -1;
+  if (sceneId !== null) {
+    const exact = series.findIndex((scene) => scene.id === sceneId);
+    if (exact >= 0) return exact;
+  }
+  if (t === null) return 0;
+  let index = 0;
+  for (let i = 0; i < series.length; i++) {
+    if (series[i].t <= t) index = i;
+    else break;
+  }
+  return index;
+}
+
 // ---------------------------------------------------------------------------
 // Scene imagery
 // ---------------------------------------------------------------------------

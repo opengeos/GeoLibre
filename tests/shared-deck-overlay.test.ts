@@ -176,6 +176,30 @@ describe("shared-deck-overlay", () => {
     assert.equal(getSharedDeckLoadState(raster.id).error, null);
   });
 
+  it("finds a raster's band-tagged deck layer under its store id", (context) => {
+    context.mock.method(console, "error", () => {});
+    const raster = { id: "raster-tagged#b1-2-3", isLoaded: false };
+    setSharedDeckLayers("raster", [raster] as never);
+    assert.deepEqual(getSharedDeckLoadState("raster-tagged"), {
+      found: true,
+      loading: true,
+      error: null,
+    });
+    raster.isLoaded = true;
+    FakeMapboxOverlay.instances.at(-1)?.onError?.(new Error("Tile failed"), {
+      id: "subtile",
+      parent: raster,
+    });
+    assert.deepEqual(getSharedDeckLoadState("raster-tagged"), {
+      found: true,
+      loading: false,
+      error: "Tile failed",
+    });
+    // A sibling id sharing the prefix is not the same layer.
+    assert.equal(getSharedDeckLoadState("raster-tag").found, false);
+    setSharedDeckLayers("raster", []);
+  });
+
   it("rebinds to a fresh overlay on a new map and re-applies live layers", async () => {
     setSharedDeckLayers("google-3d-tiles", [layer("g1")] as never);
     const before = FakeMapboxOverlay.instances.length;

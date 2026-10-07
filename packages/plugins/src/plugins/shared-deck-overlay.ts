@@ -59,9 +59,18 @@ let ensureInFlight: Promise<MapboxOverlay | ArcgisDeckOverlay | null> | null = n
 const layersBySource = new Map<SharedDeckSource, Layer[]>();
 const loadErrors = new Map<string, string>();
 
+/**
+ * Whether a deck layer id belongs to a store layer: the id itself, or the
+ * raster control's band-tagged variant (`<layerId>#b1-2-3`), which it re-keys
+ * so a band change rebuilds the layer.
+ */
+function ownsDeckLayer(layerId: string, deckId: string): boolean {
+  return deckId === layerId || deckId.startsWith(`${layerId}#`);
+}
+
 /** Inspect live deck layers, including their asynchronous tile sublayers. */
 export function getSharedDeckLoadState(layerId: string) {
-  const layers = aggregatedLayers().filter((layer) => layer.id === layerId);
+  const layers = aggregatedLayers().filter((layer) => ownsDeckLayer(layerId, layer.id));
   const loading = !overlayMounted || layers.some((layer) => !layer.isLoaded);
   // A recorded error deliberately outlives isLoaded flipping back to true: a
   // failed tile still resolves as loaded and leaves a hole in the raster. It
@@ -70,11 +79,12 @@ export function getSharedDeckLoadState(layerId: string) {
   // otherwise pin readiness at `error` forever. Once the layer is loading
   // again a retry is in flight, so drop the stale error and let `onError`
   // re-record it if that attempt fails too.
-  if (loading && layers.length > 0) loadErrors.delete(layerId);
+  if (loading) for (const layer of layers) loadErrors.delete(layer.id);
+  const error = layers.map((layer) => loadErrors.get(layer.id)).find(Boolean);
   return {
     found: layers.length > 0,
     loading,
-    error: loadErrors.get(layerId) ?? null,
+    error: error ?? null,
   };
 }
 
