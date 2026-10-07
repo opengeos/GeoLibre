@@ -539,7 +539,8 @@ export interface GeoLibreAppAPI {
   /**
    * Live, renderer-independent click-tool state, not a project snapshot.
    * Feature selection takes precedence while its gesture owns map clicks, then
-   * Identify, then the GeoEditor (active while its plugin is on). Plugins can skip their own click/hover handling while a tool is active.
+   * Identify, then the GeoEditor (active while its plugin is on). Plugins can
+   * skip their own click/hover handling while a tool is active.
    */
   getActiveMapTool?: () => GeoLibreActiveMapTool;
   /**
