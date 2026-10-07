@@ -358,7 +358,11 @@ export class VoiceSession {
     if (this.runTurn !== null && this.runTurn !== this.turnId) return;
     // The same rule inside one open-mic turn: words heard since the last
     // endpoint mean the user is mid-request, and a reply read over them would
-    // abort the recognizer and lose the rest of what they are saying.
+    // abort the recognizer and lose the rest of what they are saying. The reply
+    // is dropped rather than deferred, on purpose: speech already cancels a
+    // reply that is playing (see `onresult`), and the request being spoken
+    // cancels the run this answer came from as soon as it is sent. The
+    // transcript still shows the answer.
     if (this.mode === "open-mic" && (this.endpointTimer !== null || this.pendingPhrases.length)) {
       return;
     }
@@ -470,7 +474,8 @@ export class VoiceSession {
     }
     // An open mic ends its recognizer at the endpoint (or the engine ends it on
     // a silence of its own), and every final the stop delivered has landed by
-    // now, so whatever was heard is one complete request.
+    // now, so whatever was heard is one complete request. (The silence timer
+    // needs no clearing here: the restart's teardown clears it.)
     this.flushPendingPhrases();
     if (!this.allowRestart()) return;
     this.restartListening(generation);

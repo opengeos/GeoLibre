@@ -626,6 +626,28 @@ describe("voice session end-of-phrase", () => {
     assert.equal(h.session.getStatus(), "listening");
   });
 
+  it("does not let the silence timer stop the recognizer that replaced it", async () => {
+    const h = harness({ endpointMs: 30 });
+    h.session.start("open-mic");
+    h.current.say("zoom to Kenya");
+    // The engine ends on a silence of its own before the window elapses.
+    h.current.end();
+    assert.deepEqual(h.transcripts(), ["zoom to Kenya"]);
+    const replacement = h.current;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(replacement.stopCalls, 0);
+    assert.equal(h.recognizers.length, 2);
+  });
+
+  it("holds a reply back between the endpoint's stop and the end it causes", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    h.current.say("zoom to Kenya");
+    // Endpoint fired, `end` not yet delivered: the request is still unsent.
+    h.session.speak("An older answer.");
+    assert.equal(h.synthesis!.spoken.length, 0);
+  });
+
   it("previews the whole request, not just the phrase in progress", () => {
     const h = harness();
     h.session.start("open-mic");
