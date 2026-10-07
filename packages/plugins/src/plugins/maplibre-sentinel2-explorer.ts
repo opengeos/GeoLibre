@@ -1698,6 +1698,10 @@ function buildPanel(container: HTMLElement): () => void {
     syncSceneButtons = null;
     refreshPanel = null;
     renderSlider = null;
+    // Playback has no controls without the panel; pause it. The frame on the
+    // map stays the slider's, so a rebuilt panel picks up where it left off.
+    state.playing = false;
+    clearPlayTimer();
     showFootprint(null);
     container.replaceChildren();
   };
