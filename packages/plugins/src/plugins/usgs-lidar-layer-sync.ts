@@ -41,6 +41,8 @@ function itemIdOf(layer: GeoLibreLayer): string | null {
  * Build the store row for a loaded point cloud. It is `sessionOnly`: the cloud
  * lives in the control, which is gone once the panel closes, and STAC COPC
  * links are signed and expire, so the row is never written to a project.
+ * Because it is never saved, the row can carry the URL the cloud streamed from,
+ * which is what lets Whitebox's in-browser runner read it as a tool input.
  *
  * @param itemId - The USGS item id.
  * @param info - The loaded point cloud.
@@ -56,6 +58,7 @@ export function createUsgsLidarLayer(itemId: string, info: LoadedItemInfo): GeoL
     source: {
       type: "lidar",
       sourceId: id,
+      ...(typeof info.source === "string" && info.source ? { url: info.source } : {}),
       bounds: [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY],
     },
     visible: true,

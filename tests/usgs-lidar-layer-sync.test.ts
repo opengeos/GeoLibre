@@ -7,6 +7,7 @@ import type {
   UsgsLidarControl,
   UsgsLidarLayerAdapter,
 } from "maplibre-gl-usgs-lidar";
+import { layerPath } from "../apps/geolibre-desktop/src/lib/whitebox-layer-inputs";
 import { isMapboxPluginLayer } from "../packages/map/src/mapbox-layers";
 import {
   USGS_LIDAR_SOURCE_KIND,
@@ -100,7 +101,9 @@ describe("USGS LiDAR layer sync", () => {
     // Never saved: the control is gone once the panel closes and the signed
     // COPC URL expires.
     assert.equal(layer.metadata.sessionOnly, true);
-    assert.equal(layer.source.url, undefined, "the signed URL is not recorded");
+    // The streamed URL is kept for the session so Whitebox can fetch the
+    // cloud as a tool input; `sessionOnly` keeps it out of saved projects.
+    assert.equal(layer.source.url, "https://example.com/tile.copc.laz?sig=abc");
     // The id avoids the prefixes layer lists hide as internal helpers.
     assert.doesNotMatch(layer.id, /^(usgs-)?lidar-/);
     stop();
@@ -169,6 +172,18 @@ describe("USGS LiDAR layer sync", () => {
     // Removing the rows on dispose must not unload clouds: the control is being
     // torn down with the panel and owns that.
     assert.equal(usgs.has("item-a"), true);
+  });
+
+  it("hands Whitebox the streamed URL as the row's input path", () => {
+    const usgs = fakeUsgs();
+    const stop = bindUsgsLidarLayerSync(usgs.control, usgs.adapter);
+    usgs.load("item-a", pointCloud("pc-a", "A"));
+    const layer = storeLayer(usgsLidarLayerId("item-a"));
+    assert.ok(layer);
+    // The in-browser runner fetches this; without it the tool reported the
+    // input as "only available via the sidecar".
+    assert.equal(layerPath(layer), "https://example.com/tile.copc.laz?sig=abc");
+    stop();
   });
 
   it("is drawn by the plugin, not compiled, on Mapbox", () => {
