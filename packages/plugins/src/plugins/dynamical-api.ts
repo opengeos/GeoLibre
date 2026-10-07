@@ -210,7 +210,11 @@ export function parseDynamicalCollection(document: unknown): DynamicalDataset | 
     attribution: text(document.attribution),
     license: text(document.license),
     version: text(document.version),
-    docsUrl: docs ? String(docs.href) : `${DYNAMICAL_CATALOG_PAGE_URL}${document.id}/`,
+    // Rendered as a link, so only an http(s) address from the catalog is used.
+    docsUrl:
+      docs && /^https?:\/\//i.test(String(docs.href))
+        ? String(docs.href)
+        : `${DYNAMICAL_CATALOG_PAGE_URL}${document.id}/`,
     repositoryUrl: String(asset.href).replace(/\/+$/, ""),
     virtual: "icechunk:virtual_chunk_containers" in asset,
     bbox: parseBbox(document),
@@ -507,5 +511,6 @@ export function sampleRange(values: ArrayLike<number>, diverging = false): [numb
 function roundSignificant(value: number, round: (value: number) => number): number {
   if (value === 0) return 0;
   const magnitude = 10 ** (Math.floor(Math.log10(Math.abs(value))) - 1);
-  return Number((round(value / magnitude) * magnitude).toPrecision(12));
+  // The quotient is trimmed first: 0.3 / 0.01 is 29.999999999999996, which would floor to 29.
+  return Number((round(Number((value / magnitude).toPrecision(12))) * magnitude).toPrecision(12));
 }

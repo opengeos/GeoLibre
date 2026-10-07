@@ -217,6 +217,14 @@ describe("parseDynamicalCollection", () => {
     assert.equal(dataset.variables[0].longName, "2 metre temperature");
   });
 
+  it("falls back to the catalog page for a non-http documentation link", () => {
+    const dataset = parsed({
+      ...gfsForecast,
+      links: [{ rel: "about", href: "javascript:alert(1)" }],
+    });
+    assert.equal(dataset.docsUrl, "https://dynamical.org/catalog/noaa-gfs-forecast/");
+  });
+
   it("flags a virtual repository", () => {
     assert.equal(parsed(gfsVirtual).virtual, true);
   });
@@ -377,6 +385,10 @@ describe("sampleRange", () => {
     const values = Array.from({ length: 101 }, (_, index) => index * 10);
     values.push(Number.NaN, 1e9);
     assert.deepEqual(sampleRange(values), [20, 990]);
+  });
+
+  it("does not let floating-point error push a bound past its value", () => {
+    assert.deepEqual(sampleRange([0.3, 0.5, 0.9]), [0.3, 0.9]);
   });
 
   it("centres a diverging range on zero", () => {
