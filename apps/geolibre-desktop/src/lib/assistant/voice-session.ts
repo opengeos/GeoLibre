@@ -136,6 +136,12 @@ export class VoiceSession {
   /** Pending end-of-phrase timer for an open mic. */
   private endpointTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * Set when the silence window elapsed and stopped the recognizer, so its end
+   * is read as the end of the request rather than as the engine pausing.
+   */
+  private endpointReached = false;
+
   /** True while the push-to-talk key is physically down. */
   private pushToTalkHeld = false;
 
@@ -221,7 +227,12 @@ export class VoiceSession {
       if (generation !== this.generation) return;
       const { final, interim } = readSpeechResults(event);
       // Speech is intent: it supersedes a reply still being read out.
-      if (!final && !interim) return;
+      if (!final && !interim) {
+        // A phrase revised away to nothing: drop it from the preview, but it is
+        // not speech, so the silence window is left to run.
+        this.emit({ type: "interim", text: joinPhrases(this.pendingPhrases) });
+        return;
+      }
       this.cancelSpeech();
       // An utterance is one request, but the engine finalizes a phrase at every
       // short pause — mid-sentence, while the user is still talking. Sending
@@ -472,13 +483,16 @@ export class VoiceSession {
       this.stop();
       return;
     }
-    // An open mic ends its recognizer at the endpoint (or the engine ends it on
-    // a silence of its own), and every final the stop delivered has landed by
-    // now, so whatever was heard is one complete request. (The silence timer
-    // needs no clearing here: the restart's teardown clears it.)
-    this.flushPendingPhrases();
+    // Only the silence window ends an open-mic request. Once it has, every
+    // final the stop delivered has landed, so whatever was heard is sent. An
+    // end the engine chose itself may fall at a pause mid-sentence: the phrases
+    // are carried into the restarted recognizer, and the window starts again.
+    const endpointReached = this.endpointReached;
+    this.endpointReached = false;
+    if (endpointReached) this.flushPendingPhrases();
     if (!this.allowRestart()) return;
     this.restartListening(generation);
+    if (this.pendingPhrases.length && this.recognizer) this.armEndpoint(this.generation);
   }
 
   /**
@@ -624,6 +638,7 @@ export class VoiceSession {
     this.pushToTalkHeld = false;
     this.pendingPhrases = [];
     this.clearEndpoint();
+    this.endpointReached = false;
     const recognizer = this.recognizer;
     this.abortRecognizer();
     if (recognizer) recognizer.onend = null;
@@ -649,11 +664,13 @@ export class VoiceSession {
         this.flushPendingPhrases();
         return;
       }
+      this.endpointReached = true;
       try {
         recognizer.stop();
       } catch {
         // A recognizer that refuses to stop will end on its own; the words
         // already heard need not wait for it.
+        this.endpointReached = false;
         this.flushPendingPhrases();
       }
     }, endpointMs);
