@@ -222,12 +222,13 @@ function readSliceAxes(
       for (const name of sliceDimensions(dataset, variable)) {
         let coordinates: number[] = [];
         let attributes: Record<string, unknown> = {};
-        try {
+        // Only a coordinate the repository lacks falls back to indices. A failed read rejects,
+        // which drops the cached promise, rather than labelling the sliders with indices all session.
+        if (await store.get(`/${name}/zarr.json`)) {
           const array = await zarr.open.v3(root.resolve(name), { kind: "array" });
           attributes = array.attrs as Record<string, unknown>;
           coordinates = toNumbers((await zarr.get(array)).data as ArrayLike<unknown>);
-        } catch {
-          // No coordinate array: fall back to the size the collection gives.
+        } else {
           const size = dataset.dimensions[name]?.size ?? 1;
           coordinates = Array.from({ length: size }, (_, index) => index);
         }
@@ -345,6 +346,8 @@ function buildPanel(container: HTMLElement): () => void {
   /** Whether `axes` belongs to the chosen variable; Add waits for it. */
   let axesReady = false;
   let sliceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the status line holds a re-slice failure, which the next success clears. */
+  let sliceErrorShown = false;
 
   const statusBox = element("div");
   const setStatus = (message: string | null, error = false): void => {
@@ -674,6 +677,7 @@ function buildPanel(container: HTMLElement): () => void {
     sliceTimer = setTimeout(() => {
       sliceTimer = null;
       sliceChain = sliceChain.then(applyLiveSlice).catch((error: unknown) => {
+        sliceErrorShown = true;
         setStatus(
           tr("resliceFailed", "Could not show that slice: {{message}}", {
             message: errorMessage(error),
@@ -694,6 +698,11 @@ function buildPanel(container: HTMLElement): () => void {
     const indices = { ...state.indices };
     const applied = await setZarrLayerSelector(live.id, selectorFor(sliceAxes, indices));
     if (!applied || disposed) return;
+    // The slice now shown is fine, whatever an earlier one reported.
+    if (sliceErrorShown) {
+      sliceErrorShown = false;
+      setStatus(null);
+    }
     const store = useAppStore.getState();
     const layer = store.layers.find((entry) => entry.id === live.id);
     // The variable that was sliced, even if another is chosen by now.
