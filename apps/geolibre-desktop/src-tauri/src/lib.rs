@@ -6074,30 +6074,76 @@ mod tests {
     // The sidecar probes must reach 127.0.0.1 directly. A corporate proxy picked
     // up from the environment or the Windows system settings would otherwise
     // answer them itself, so a healthy sidecar never reads as ready (#3003).
-    // Run with `HTTP_PROXY` pointing at a server that refuses everything to
-    // exercise the bypass; without one this still checks the probe end to end.
+    // reqwest reads the proxy env vars each time a client is built, so pointing
+    // them at a proxy that refuses everything shows whether the probes bypass it.
     #[cfg(not(feature = "mas"))]
     #[test]
-    fn sidecar_probes_reach_a_loopback_server_directly() {
+    fn sidecar_probes_bypass_a_configured_proxy() {
         use std::io::Read;
         use std::net::TcpListener;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
         use std::thread;
 
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind a loopback port");
-        let base_url = format!("http://{}", listener.local_addr().unwrap());
-        thread::spawn(move || {
-            for stream in listener.incoming() {
-                let Ok(mut stream) = stream else { continue };
-                let mut buffer = [0_u8; 1024];
-                let _ = stream.read(&mut buffer);
-                let _ = stream.write_all(
-                    b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
-                );
-            }
-        });
+        /// Serves every connection with `response` and returns the server's
+        /// address plus a count of the requests it answered.
+        fn serve(response: &'static [u8]) -> (String, Arc<AtomicUsize>) {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind a loopback port");
+            let address = listener.local_addr().unwrap().to_string();
+            let hits = Arc::new(AtomicUsize::new(0));
+            let counter = Arc::clone(&hits);
+            thread::spawn(move || {
+                for stream in listener.incoming() {
+                    let Ok(mut stream) = stream else { continue };
+                    let mut buffer = [0_u8; 1024];
+                    let _ = stream.read(&mut buffer);
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    let _ = stream.write_all(response);
+                }
+            });
+            (address, hits)
+        }
 
+        /// Restores the proxy env vars even when an assertion fails.
+        struct ProxyEnv(Vec<(&'static str, Option<OsString>)>);
+        impl Drop for ProxyEnv {
+            fn drop(&mut self) {
+                for (name, value) in &self.0 {
+                    match value {
+                        Some(value) => env::set_var(name, value),
+                        None => env::remove_var(name),
+                    }
+                }
+            }
+        }
+
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (sidecar, _) =
+            serve(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
+        let (proxy, proxy_hits) =
+            serve(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+
+        let names = [
+            "HTTP_PROXY",
+            "http_proxy",
+            "ALL_PROXY",
+            "all_proxy",
+            "NO_PROXY",
+            "no_proxy",
+        ];
+        let saved = names.iter().map(|name| (*name, env::var_os(name)));
+        let _restore = ProxyEnv(saved.collect());
+        for name in names {
+            env::remove_var(name);
+        }
+        env::set_var("HTTP_PROXY", format!("http://{proxy}"));
+        env::set_var("http_proxy", format!("http://{proxy}"));
+
+        let base_url = format!("http://{sidecar}");
         assert!(sidecar_health_is_ready(&base_url));
         assert!(sidecar_accepts_token(&base_url, "token"));
+        let proxy_requests = proxy_hits.load(Ordering::SeqCst);
+        assert_eq!(proxy_requests, 0, "a probe went through the proxy");
     }
 
     // A Martin that died or was killed from outside must not keep blocking new
