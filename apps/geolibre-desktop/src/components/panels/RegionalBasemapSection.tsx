@@ -8,6 +8,8 @@ interface RegionalBasemapSectionProps {
   /** Id of the currently selected basemap, so one button highlights. */
   selectedId?: string;
   onSelect: (basemap: RegionalBasemap) => void;
+  /** Double-click handler, for panels where a double-click also confirms. */
+  onActivate?: (basemap: RegionalBasemap) => void;
 }
 
 /**
@@ -24,7 +26,11 @@ interface RegionalBasemapSectionProps {
  * auto-expanded when one of them is the current selection so an active choice
  * is never hidden behind a closed heading.
  */
-export function RegionalBasemapSection({ selectedId, onSelect }: RegionalBasemapSectionProps) {
+export function RegionalBasemapSection({
+  selectedId,
+  onSelect,
+  onActivate,
+}: RegionalBasemapSectionProps) {
   const { t } = useTranslation();
   const selectionIsRegional = REGIONAL_BASEMAP_GROUPS.some((group) =>
     group.basemaps.some((basemap) => basemap.id === selectedId),
@@ -55,6 +61,7 @@ export function RegionalBasemapSection({ selectedId, onSelect }: RegionalBasemap
                       : "border-input bg-background",
                   )}
                   onClick={() => onSelect(basemap)}
+                  onDoubleClick={onActivate ? () => onActivate(basemap) : undefined}
                 >
                   {basemap.name}
                 </button>

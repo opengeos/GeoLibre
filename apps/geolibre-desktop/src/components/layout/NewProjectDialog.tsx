@@ -66,9 +66,11 @@ interface BasemapButtonProps {
   name: string;
   selected: boolean;
   onSelect: (id: BasemapChoice) => void;
+  /** Double-click selects and creates in one step, skipping the Create button. */
+  onActivate?: (id: BasemapChoice) => void;
 }
 
-function BasemapButton({ id, name, selected, onSelect }: BasemapButtonProps) {
+function BasemapButton({ id, name, selected, onSelect, onActivate }: BasemapButtonProps) {
   return (
     <button
       type="button"
@@ -81,6 +83,7 @@ function BasemapButton({ id, name, selected, onSelect }: BasemapButtonProps) {
           : "border-input bg-background",
       )}
       onClick={() => onSelect(id)}
+      onDoubleClick={onActivate ? () => onActivate(id) : undefined}
     >
       {name}
     </button>
@@ -226,13 +229,39 @@ export function NewProjectDialog({
         : (selectedPreset ?? selectedPlanetary ?? selectedRegional)?.styleUrl;
     if (basemapStyleUrl == null) return;
 
+    createWithBasemap(selectedBasemapId, basemapStyleUrl, selectedPlanetary?.ellipsoidId);
+  };
+
+  // Double-clicking a preset basemap creates the project straight away. The id
+  // is resolved here rather than read from state, so the result never depends
+  // on whether the first click's selection has re-rendered yet. Custom URL is
+  // excluded: it still needs a URL typed in before it can create anything.
+  const createWithBasemapId = (id: BasemapChoice) => {
+    if (id === CUSTOM_BASEMAP_ID) return;
+    if (id === BLANK_BASEMAP_ID) {
+      createWithBasemap(id, BLANK_BASEMAP);
+      return;
+    }
+    const preset = [...OPENFREEMAP_BASEMAPS, ...protomapsPresets].find((b) => b.id === id);
+    const planetary = PLANETARY_BASEMAPS.find((b) => b.id === id);
+    const regional = REGIONAL_BASEMAPS.find((b) => b.id === id);
+    const styleUrl = (preset ?? planetary ?? regional)?.styleUrl;
+    if (styleUrl == null) return;
+    createWithBasemap(id, styleUrl, planetary?.ellipsoidId);
+  };
+
+  const createWithBasemap = (
+    basemapId: BasemapChoice,
+    basemapStyleUrl: string,
+    ellipsoidId?: string,
+  ) => {
     newProject({
       name: projectName.trim() || DEFAULT_PROJECT_NAME,
       basemapStyleUrl,
       // A planetary basemap seeds the matching celestial body; other basemaps
       // leave the project on the default Earth ellipsoid.
-      ellipsoidId: selectedPlanetary?.ellipsoidId,
-      mapView: selectedBasemapId === LIBERTY_3D_ID ? THREE_D_MAP_VIEW : createDefaultMapView(),
+      ellipsoidId,
+      mapView: basemapId === LIBERTY_3D_ID ? THREE_D_MAP_VIEW : createDefaultMapView(),
     });
     void clearProjectSnapshots().catch((error) =>
       console.error("Could not clear project history for the new project.", error),
@@ -420,6 +449,7 @@ export function NewProjectDialog({
                         name={basemap.name}
                         selected={selectedBasemapId === basemap.id}
                         onSelect={setSelectedBasemapId}
+                        onActivate={createWithBasemapId}
                       />
                     ))}
                   </div>
@@ -438,6 +468,7 @@ export function NewProjectDialog({
                           name={basemap.name}
                           selected={selectedBasemapId === basemap.id}
                           onSelect={setSelectedBasemapId}
+                          onActivate={createWithBasemapId}
                         />
                       ))}
                     </div>
@@ -447,6 +478,7 @@ export function NewProjectDialog({
                 <RegionalBasemapSection
                   selectedId={selectedBasemapId}
                   onSelect={(basemap) => setSelectedBasemapId(basemap.id)}
+                  onActivate={(basemap) => createWithBasemapId(basemap.id)}
                 />
 
                 {PLANETARY_BASEMAP_GROUPS.map((group) => {
@@ -460,6 +492,7 @@ export function NewProjectDialog({
                           name={planetaryBasemapLabel(basemap, group.id)}
                           selected={selectedBasemapId === basemap.id}
                           onSelect={setSelectedBasemapId}
+                          onActivate={createWithBasemapId}
                         />
                       ))}
                     </div>
@@ -493,6 +526,7 @@ export function NewProjectDialog({
                       name="Blank"
                       selected={selectedBasemapId === BLANK_BASEMAP_ID}
                       onSelect={setSelectedBasemapId}
+                      onActivate={createWithBasemapId}
                     />
                     <BasemapButton
                       id={CUSTOM_BASEMAP_ID}
