@@ -161,6 +161,10 @@ describe("arcGISNewFeatureProperties", () => {
       });
     });
 
+    it("matches a subtype code reported as a string", () => {
+      assert.equal(arcGISNewFeatureProperties(subtyped, { ASSET_TYPE: "2" }).PRESSURE, 40);
+    });
+
     it("ranks a template prototype above subtype defaults", () => {
       const withTemplate: ArcGISEditInfo = {
         ...subtyped,
@@ -187,10 +191,17 @@ describe("arcGISCopiedFeatureProperties", () => {
       { STATUS: 2, MANUFACTURER: "CL" },
     );
     assert.deepEqual([...arcGISServerManagedFields(base)].sort(), [
-      "GlobalID",
-      "OBJECTID",
       "created_user",
+      "globalid",
+      "objectid",
     ]);
+  });
+
+  it("matches server-managed fields case-insensitively", () => {
+    assert.deepEqual(
+      arcGISCopiedFeatureProperties(base, { objectid: 4, globalId: "{abc}", STATUS: 2 }),
+      { STATUS: 2 },
+    );
   });
 });
 

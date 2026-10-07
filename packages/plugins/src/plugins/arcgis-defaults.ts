@@ -24,14 +24,17 @@ const SERVER_MANAGED_TYPES = new Set([
  * and any field it marks read-only, such as editor tracking).
  *
  * @param info - The layer's `?f=json` metadata.
- * @returns The server-managed field names.
+ * @returns The server-managed field names, lower-cased: ArcGIS field names are
+ *   case-insensitive, so compare with `name.toLowerCase()`.
  */
 export function arcGISServerManagedFields(info: ArcGISEditInfo): Set<string> {
   const managed = new Set<string>();
   for (const field of info.fields ?? []) {
-    if (field.editable === false || SERVER_MANAGED_TYPES.has(field.type)) managed.add(field.name);
+    if (field.editable === false || SERVER_MANAGED_TYPES.has(field.type))
+      managed.add(field.name.toLowerCase());
   }
-  for (const name of [info.objectIdField, info.globalIdField]) if (name) managed.add(name);
+  for (const name of [info.objectIdField, info.globalIdField])
+    if (name) managed.add(name.toLowerCase());
   return managed;
 }
 
@@ -50,7 +53,9 @@ export function arcGISCopiedFeatureProperties(
 ): Record<string, unknown> | null {
   if (!properties) return properties;
   const managed = arcGISServerManagedFields(info);
-  return Object.fromEntries(Object.entries(properties).filter(([key]) => !managed.has(key)));
+  return Object.fromEntries(
+    Object.entries(properties).filter(([key]) => !managed.has(key.toLowerCase())),
+  );
 }
 
 /** Re-key `values` by the field names as `fields[]` spells them (ArcGIS names are case-insensitive). */
@@ -65,6 +70,15 @@ function byFieldName(
     if (name && value != null) result.set(name, value);
   }
   return result;
+}
+
+/**
+ * Whether two type/subtype codes name the same type. Metadata can report a type
+ * id as a number in one place and a string in another; this only selects which
+ * template or subtype defaults apply, never a stored value's type.
+ */
+function sameCode(a: unknown, b: unknown): boolean {
+  return a != null && b != null && String(a) === String(b);
 }
 
 interface TemplateChoice {
@@ -110,7 +124,7 @@ export function arcGISNewFeatureProperties(
   const result: Record<string, unknown> = {};
   // Drawn features start empty, but drop anything the service assigns anyway.
   for (const [key, value] of Object.entries(properties ?? {}))
-    if (!managed.has(key)) result[key] = value;
+    if (!managed.has(key.toLowerCase())) result[key] = value;
 
   const selector = arcGISSubtypeField(info);
   const fieldDefaults = new Map(
@@ -130,19 +144,20 @@ export function arcGISNewFeatureProperties(
     }
     if (typeValue == null && info.defaultSubtypeCode != null) typeValue = info.defaultSubtypeCode;
     if (typeValue == null) typeValue = fieldDefaults.get(selector);
-    if (typeValue != null && !managed.has(selector)) result[selector] = typeValue;
+    if (typeValue != null && !managed.has(selector.toLowerCase())) result[selector] = typeValue;
   }
   if (!chosen) {
     const candidates = !selector
       ? choices
       : typeValue == null
         ? []
-        : choices.filter(
-            (choice) =>
-              (choice.typeId !== undefined
+        : choices.filter((choice) =>
+            sameCode(
+              choice.typeId !== undefined
                 ? choice.typeId
-                : byFieldName(info, choice.template.prototype?.attributes).get(selector)) ===
+                : byFieldName(info, choice.template.prototype?.attributes).get(selector),
               typeValue,
+            ),
           );
     if (candidates.length === 1) chosen = candidates[0];
   }
@@ -150,12 +165,12 @@ export function arcGISNewFeatureProperties(
   const prototype = byFieldName(info, chosen?.template.prototype?.attributes);
   const subtype =
     selector && typeValue != null
-      ? info.subtypes?.find((entry) => entry.code === typeValue)
+      ? info.subtypes?.find((entry) => sameCode(entry.code, typeValue))
       : undefined;
   const subtypeDefaults = byFieldName(info, subtype?.defaultValues);
   for (const field of info.fields ?? []) {
     const name = field.name;
-    if (name === selector || managed.has(name) || result[name] != null) continue;
+    if (name === selector || managed.has(name.toLowerCase()) || result[name] != null) continue;
     const value = prototype.get(name) ?? subtypeDefaults.get(name) ?? fieldDefaults.get(name);
     if (value != null) result[name] = value;
   }
