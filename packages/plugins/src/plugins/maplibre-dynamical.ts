@@ -336,6 +336,10 @@ function buildPanel(container: HTMLElement): () => void {
   let axes: SliceAxis[] = [];
   let axesRequest = 0;
   let busy = false;
+  /** Whether `axes` belongs to the chosen variable; Add waits for it. */
+  let axesReady = false;
+  /** Re-slices run one after another, so an older one cannot land last. */
+  let sliceChain: Promise<void> = Promise.resolve();
   let sliceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const statusBox = element("div");
@@ -602,6 +606,7 @@ function buildPanel(container: HTMLElement): () => void {
     if (!dataset || !variable) return;
     const request = ++axesRequest;
     axes = [];
+    axesReady = false;
     slidersBox.replaceChildren(
       element("div", CSS.hint, tr("readingAxes", "Reading the time axes…")),
     );
@@ -620,6 +625,7 @@ function buildPanel(container: HTMLElement): () => void {
             : defaultSliceIndex(dataset, axis.name, axis.labels.length);
       }
       state.indices = indices;
+      axesReady = true;
       renderSliders();
       addButton.disabled = busy;
     } catch (error) {
@@ -663,7 +669,7 @@ function buildPanel(container: HTMLElement): () => void {
     if (sliceTimer) clearTimeout(sliceTimer);
     sliceTimer = setTimeout(() => {
       sliceTimer = null;
-      void applyLiveSlice();
+      sliceChain = sliceChain.then(applyLiveSlice, applyLiveSlice);
     }, SLICE_DEBOUNCE_MS);
   };
 
@@ -671,20 +677,29 @@ function buildPanel(container: HTMLElement): () => void {
     const live = state.live;
     const dataset = currentDataset();
     if (!liveLayerExists(live) || !dataset || live.datasetId !== dataset.id) return;
-    if (live.variable !== state.variable) return;
-    const applied = await setZarrLayerSelector(live.id, selectorFor(axes, state.indices));
+    if (live.variable !== state.variable || !axesReady) return;
+    const sliceAxes = axes;
+    const indices = { ...state.indices };
+    const applied = await setZarrLayerSelector(live.id, selectorFor(sliceAxes, indices));
     if (!applied || disposed) return;
     const store = useAppStore.getState();
     const layer = store.layers.find((entry) => entry.id === live.id);
     const variable = currentVariable();
-    if (!layer || !variable || layer.name !== live.name) return;
-    const name = layerName(dataset, variable);
+    // The current record, not the one read before the await: a name the user typed meanwhile wins.
+    const current = state.live;
+    if (!layer || !variable || current?.id !== live.id || layer.name !== current.name) return;
+    const name = layerName(dataset, variable, sliceAxes, indices);
     store.updateLayer(live.id, { name });
-    state.live = { ...live, name };
+    state.live = { ...current, name };
   };
 
-  const layerName = (dataset: DynamicalDataset, variable: DynamicalVariable): string =>
-    [dataset.title, variable.longName, sliceLabel(axes, state.indices)].filter(Boolean).join(" · ");
+  const layerName = (
+    dataset: DynamicalDataset,
+    variable: DynamicalVariable,
+    sliceAxes: SliceAxis[],
+    indices: Record<string, number>,
+  ): string =>
+    [dataset.title, variable.longName, sliceLabel(sliceAxes, indices)].filter(Boolean).join(" · ");
 
   const readRange = (): [number, number] | null => {
     const min = state.min.trim() === "" ? Number.NaN : Number(state.min);
@@ -696,9 +711,13 @@ function buildPanel(container: HTMLElement): () => void {
     const app = appRef;
     const dataset = currentDataset();
     const variable = currentVariable();
-    if (!app || !dataset || !variable || busy) return;
+    if (!app || !dataset || !variable || busy || !axesReady) return;
     busy = true;
     addButton.disabled = true;
+    // The slice as it was clicked: changing the selection mid-add reloads the shared axes.
+    const sliceAxes = axes;
+    const indices = { ...state.indices };
+    const stillChosen = () => state.datasetId === dataset.id && state.variable === variable.name;
     try {
       setStatus(tr("opening", "Opening {{name}}…", { name: dataset.title }));
       const store = await openRepository(dataset);
@@ -710,11 +729,11 @@ function buildPanel(container: HTMLElement): () => void {
           dataset,
           variable,
           store,
-          axes,
-          state.indices,
+          sliceAxes,
+          indices,
           Boolean(style.diverging),
         );
-        if (clim && !disposed) {
+        if (clim && !disposed && stillChosen()) {
           state.min = String(clim[0]);
           state.max = String(clim[1]);
           renderStyle();
@@ -723,7 +742,7 @@ function buildPanel(container: HTMLElement): () => void {
       const projected = projectedDimensions(dataset);
       const proj4 = projected ? await readProjection(store) : null;
       const bounds = projected ? projectedBounds(dataset) : null;
-      const name = layerName(dataset, variable);
+      const name = layerName(dataset, variable, sliceAxes, indices);
       setStatus(tr("adding", "Adding {{name}}…", { name: variable.longName }));
       const layerId = await addZarrRasterLayer(app, {
         url: icechunkLayerUrl(dataset.repositoryUrl, DEFAULT_ICECHUNK_BRANCH),
@@ -733,7 +752,7 @@ function buildPanel(container: HTMLElement): () => void {
         readTimeAttributes: icechunkTimeAttributesReader(store),
         variable: variable.name,
         name,
-        selector: selectorFor(axes, state.indices),
+        selector: selectorFor(sliceAxes, indices),
         colormap: state.colormap ?? style.colormap,
         ...(clim ? { clim } : {}),
         ...(projected ? { spatialDimensions: projected } : {}),
@@ -754,7 +773,7 @@ function buildPanel(container: HTMLElement): () => void {
       }
       state.live = { id: layerId, datasetId: dataset.id, variable: variable.name, name };
       setStatus(
-        axes.length
+        sliceAxes.length
           ? tr(
               "addedLive",
               "Added {{name}}. Move the sliders to re-slice it; the first view of a region can take a few seconds.",
@@ -769,7 +788,7 @@ function buildPanel(container: HTMLElement): () => void {
       );
     } finally {
       busy = false;
-      if (!disposed) addButton.disabled = false;
+      if (!disposed) addButton.disabled = !axesReady;
     }
   };
 
@@ -867,6 +886,8 @@ export const maplibreDynamicalPlugin: GeoLibrePlugin = {
     disposePanel = null;
     panelContainer = null;
     state = initialState();
+    // A later session reads the axes afresh.
+    axesCache.clear();
     appRef = null;
   },
 };
