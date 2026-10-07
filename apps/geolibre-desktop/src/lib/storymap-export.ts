@@ -469,8 +469,8 @@ const STORY_LABEL_LAYER_SUFFIX = "::label";
 
 /**
  * Glyph server the exported page falls back to for labels when the basemap
- * style has no `glyphs` of its own. MapLibre's demo font server serves the
- * page's fallback "Noto Sans Regular" stack.
+ * style has no text layer whose font they could borrow. MapLibre's demo font
+ * server serves the page's fallback "Noto Sans Regular" stack.
  */
 const STORY_LABEL_GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
@@ -971,7 +971,7 @@ function renderTemplate(
         }
         // Labels borrow a font the basemap style already serves glyphs for (as
         // the live map does), falling back to Noto Sans on a public glyph server
-        // when the basemap carries no glyphs (e.g. a blank or raster basemap).
+        // when the basemap has no text layers (e.g. a blank or raster basemap).
         // resolveLabelFont mirrors resolveTextFontFromStyleLayers in
         // @geolibre/map's text-font.ts; keep the two in step.
         var labelFont = null;
@@ -979,7 +979,13 @@ function renderTemplate(
             if (!labelFont) {
                 var style = map.getStyle();
                 labelFont = resolveLabelFont(style.layers);
-                if (!style.glyphs) map.setGlyphs(config.labelGlyphs);
+                // No basemap text means no basemap font to borrow, and nothing
+                // else reads the glyphs, so point them at the fallback server
+                // that serves the fallback font.
+                if (!labelFont) {
+                    labelFont = ['Noto Sans Regular'];
+                    map.setGlyphs(config.labelGlyphs);
+                }
             }
             spec.layout['text-font'] = labelFont;
             map.addLayer(spec);
@@ -994,7 +1000,7 @@ function renderTemplate(
                 var fonts = font[0] === 'literal' && Array.isArray(font[1]) ? font[1] : font;
                 if (fonts.length > 0 && fonts.every(function (f) { return typeof f === 'string'; }) && operators.indexOf(fonts[0]) === -1) return fonts;
             }
-            return ['Noto Sans Regular'];
+            return null;
         }
 
         var story = document.getElementById('story');
