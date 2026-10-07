@@ -1,5 +1,6 @@
 import type { FeatureCollection, Geometry } from "geojson";
 import {
+  circleRadiusValue,
   documentLocale,
   extrusionColorValue,
   extrusionHeightValue,
@@ -7,16 +8,26 @@ import {
   isPopupClickEnabled,
   isPopupHoverEnabled,
   isSafePopupUrl,
+  lineWidthValue,
+  mapZoomStepOutputs,
   resolveConfiguredPopupTitle,
   resolvePopupBody,
   resolvePopupRows,
   resolvePopupTitle,
+  simpleStyleNumberValue,
   styleValue,
+  vectorCircleColorValue,
+  vectorFillColorValue,
+  vectorFillOpacityValue,
+  vectorLineColorValue,
+  vectorOutlineColorValue,
+  vectorStrokeWidthValue,
   type GeoLibreLayer,
   type MapProjection,
   type PopupRow,
   type StoryMap,
 } from "@geolibre/core";
+import { buildMapboxStyle } from "@geolibre/map/style-export";
 import { NO_EXTERNAL_CDN } from "./build-flags";
 import { sanitizeStoryHtml } from "./sanitize-html";
 import {
@@ -92,6 +103,8 @@ interface InlineLayerExport {
   /** MapLibre source spec (a GeoJSON source, or a raster tile source). */
   source: Record<string, unknown>;
   layerSpec: Record<string, unknown>;
+  /** The layer's text label (symbol) spec, drawn above it when labels are on. */
+  labelSpec?: Record<string, unknown>;
   /** GeoLibre layer-level opacity, combined with the style's per-geometry one. */
   layerOpacity: number;
   /**
@@ -195,6 +208,7 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
       id: layer.id,
       source: built.source,
       layerSpec: built.layerSpec,
+      ...(built.labelSpec ? { labelSpec: built.labelSpec } : {}),
       // Hidden layers export fully transparent so the export matches what
       // GeoLibre renders (the opacity slider value alone ignores visibility).
       layerOpacity: layer.visible ? layer.opacity : 0,
@@ -255,6 +269,8 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     startStepId: STORY_START_STEP_ID,
     endStepId: STORY_END_STEP_ID,
     navToggleLabel,
+    labelLayerSuffix: STORY_LABEL_LAYER_SUFFIX,
+    labelGlyphs: STORY_LABEL_GLYPHS_URL,
     markerImages: usedMarkerImages,
     popups,
     title: storymap.title,
@@ -287,30 +303,36 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
   const inlineLayerScript = inlineLayers
     .map((entry) => {
       const sourceId = `${entry.id}-source`;
-      const paint = { ...(entry.layerSpec.paint as Record<string, unknown>) };
-      // Seed every opacity paint property the layer type fades. When chapter 0
-      // assigns this layer an opacity, start there (matching the in-app first
-      // frame, #950); otherwise use the style's per-property opacity scaled by
-      // the layer opacity so the export matches what GeoLibre renders. A chapter
-      // 0 opacity wins outright, including over a hidden layer's 0, exactly as
-      // the in-app presenter's setLayerOpacity overwrites the live value. Circles
-      // carry both fill and stroke opacity so a faded point hides fully (#934).
-      for (const opacityProp of opacityProperties(entry.layerSpec.type as string)) {
-        const styleOpacity =
-          typeof paint[opacityProp] === "number" ? (paint[opacityProp] as number) : 1;
-        paint[opacityProp] =
-          entry.chapterZeroOpacity !== undefined
-            ? entry.chapterZeroOpacity
-            : styleOpacity * entry.layerOpacity;
-      }
       const spec = {
         ...entry.layerSpec,
         id: entry.id,
         source: sourceId,
-        paint,
+        paint: seedOpacity(
+          entry.layerSpec.paint as Record<string, unknown>,
+          opacityProperties(entry.layerSpec.type as string),
+          entry,
+        ),
       };
-      return `    map.addSource(${jsonForScript(sourceId)}, ${jsonForScript(entry.source)});
-    map.addLayer(${jsonForScript(spec)});`;
+      const lines = [
+        `    map.addSource(${jsonForScript(sourceId)}, ${jsonForScript(entry.source)});`,
+        `    map.addLayer(${jsonForScript(spec)});`,
+      ];
+      if (entry.labelSpec) {
+        // The label fades with its layer: the page's setLayerOpacity applies a
+        // chapter's opacity to the companion label layer too.
+        const labelSpec = {
+          ...entry.labelSpec,
+          id: `${entry.id}${STORY_LABEL_LAYER_SUFFIX}`,
+          source: sourceId,
+          paint: seedOpacity(
+            entry.labelSpec.paint as Record<string, unknown>,
+            ["text-opacity"],
+            entry,
+          ),
+        };
+        lines.push(`    addLabelLayer(${jsonForScript(labelSpec)});`);
+      }
+      return lines.join("\n");
     })
     .join("\n");
 
@@ -439,6 +461,62 @@ function jsonForScript(value: unknown, space?: number): string {
   return JSON.stringify(value, null, space).replace(/<\//g, "<\\/").replace(/<!--/g, "<\\!--");
 }
 
+/**
+ * Suffix of a layer's companion label layer id in the exported page. The page
+ * runtime appends the same suffix to fade a layer's labels with it.
+ */
+const STORY_LABEL_LAYER_SUFFIX = "::label";
+
+/**
+ * Glyph server the exported page falls back to for labels when the basemap
+ * style has no `glyphs` of its own. MapLibre's demo font server serves the
+ * page's fallback "Noto Sans Regular" stack.
+ */
+const STORY_LABEL_GLYPHS_URL = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
+
+/**
+ * Seed the opacity paint properties an exported layer fades.
+ *
+ * When chapter 0 assigns the layer an opacity, start there (matching the in-app
+ * first frame, #950); otherwise use the style's per-property opacity scaled by
+ * the layer opacity so the export matches what GeoLibre renders. A chapter 0
+ * opacity wins outright, including over a hidden layer's 0, exactly as the
+ * in-app presenter's setLayerOpacity overwrites the live value. Circles carry
+ * both fill and stroke opacity so a faded point hides fully (#934). A
+ * data-driven opacity (a graduated or rule-based renderer) is scaled inside any
+ * zoom step, as the live map's paint builders do.
+ *
+ * @param paint The layer spec's paint, left unmodified.
+ * @param props The opacity paint properties to seed.
+ * @param entry The exported layer's opacity inputs.
+ * @returns A copy of `paint` with the opacity properties seeded.
+ */
+function seedOpacity(
+  paint: Record<string, unknown>,
+  props: string[],
+  entry: Pick<InlineLayerExport, "layerOpacity" | "chapterZeroOpacity">,
+): Record<string, unknown> {
+  const seeded = { ...paint };
+  for (const prop of props) {
+    if (entry.chapterZeroOpacity !== undefined) {
+      seeded[prop] = entry.chapterZeroOpacity;
+      continue;
+    }
+    const value = seeded[prop] ?? 1;
+    seeded[prop] =
+      typeof value === "number"
+        ? value * entry.layerOpacity
+        : entry.layerOpacity === 1
+          ? value
+          : mapZoomStepOutputs(value, (output) =>
+              typeof output === "number"
+                ? output * entry.layerOpacity
+                : ["*", output, entry.layerOpacity],
+            );
+  }
+  return seeded;
+}
+
 function opacityProperties(type: string): string[] {
   switch (type) {
     case "fill":
@@ -472,13 +550,19 @@ function opacityProperties(type: string): string[] {
 function buildInlineLayer(
   layer: GeoLibreLayer,
   markerImage?: StoryMarkerImage,
-): { source: Record<string, unknown>; layerSpec: Record<string, unknown> } | null {
+): {
+  source: Record<string, unknown>;
+  layerSpec: Record<string, unknown>;
+  labelSpec?: Record<string, unknown>;
+} | null {
   if (layer.type === "geojson" && layer.geojson) {
     const layerSpec = buildLayerSpec(layer, markerImage);
     if (!layerSpec) return null;
+    const labelSpec = buildLabelSpec(layer);
     return {
       source: { type: "geojson", data: layer.geojson },
       layerSpec,
+      ...(labelSpec ? { labelSpec } : {}),
     };
   }
   const rasterSource = buildRasterTileSource(layer) ?? buildCogSource(layer);
@@ -651,12 +735,23 @@ function buildLayerSpec(
         },
       };
     }
+    // The color/width/opacity values come from the same core builders the
+    // live map's paint uses, so categorized, graduated, rule-based and
+    // expression renderers export as the data-driven expressions the app draws
+    // rather than the single-symbol fallback color (#3033).
     return {
       type: "fill",
       paint: {
-        "fill-color": styleValue(layer.style, "fillColor"),
-        "fill-opacity": styleValue(layer.style, "fillOpacity"),
-        "fill-outline-color": styleValue(layer.style, "strokeColor"),
+        "fill-color": vectorFillColorValue(layer.style),
+        "fill-opacity": vectorFillOpacityValue(
+          layer.style,
+          simpleStyleNumberValue(
+            layer.style,
+            "fill-opacity",
+            styleValue(layer.style, "fillOpacity"),
+          ),
+        ),
+        "fill-outline-color": vectorLineColorValue(layer.style),
       },
     };
   }
@@ -664,9 +759,9 @@ function buildLayerSpec(
     return {
       type: "line",
       paint: {
-        "line-color": styleValue(layer.style, "strokeColor"),
-        "line-width": styleValue(layer.style, "strokeWidth"),
-        "line-opacity": 1,
+        "line-color": vectorLineColorValue(layer.style),
+        "line-width": lineWidthValue(layer.style),
+        "line-opacity": simpleStyleNumberValue(layer.style, "stroke-opacity", 1),
       },
     };
   }
@@ -686,15 +781,55 @@ function buildLayerSpec(
   return {
     type: "circle",
     paint: {
-      "circle-color": styleValue(layer.style, "fillColor"),
-      "circle-radius": styleValue(layer.style, "circleRadius"),
-      "circle-stroke-color": styleValue(layer.style, "strokeColor"),
-      "circle-stroke-width": styleValue(layer.style, "strokeWidth"),
+      "circle-color": vectorCircleColorValue(layer.style),
+      "circle-radius": circleRadiusValue(layer.style),
+      "circle-stroke-color": vectorOutlineColorValue(layer.style),
+      "circle-stroke-width": vectorStrokeWidthValue(
+        layer.style,
+        styleValue(layer.style, "strokeWidth"),
+      ),
       // In-app circle-opacity is fillOpacity * layerOpacity; seed fillOpacity
       // here so the later layerOpacity scaling matches.
-      "circle-opacity": styleValue(layer.style, "fillOpacity"),
+      "circle-opacity": vectorFillOpacityValue(
+        layer.style,
+        simpleStyleNumberValue(
+          layer.style,
+          "marker-opacity",
+          styleValue(layer.style, "fillOpacity"),
+        ),
+      ),
+      "circle-stroke-opacity": simpleStyleNumberValue(layer.style, "stroke-opacity", 1),
     },
   };
+}
+
+/**
+ * The text label (symbol) layer spec for a layer whose labels are enabled, or
+ * `null` when it draws none.
+ *
+ * Taken from the Mapbox/MapLibre style exporter so the story labels exactly as
+ * that export does: the same text-field (field, expression, number format),
+ * zoom window, per-feature filters, and suppression on extruded and heatmap
+ * layers. It is built at full opacity and visible, since the story seeds and
+ * fades opacity itself. `text-font` is left for the page to resolve against the
+ * basemap's glyphs at load time (`addLabelLayer`), as the live map does.
+ *
+ * @param layer The project layer.
+ * @returns The label layer spec without `id`/`source`, or `null`.
+ */
+function buildLabelSpec(layer: GeoLibreLayer): Record<string, unknown> | null {
+  if (!layer.style.labels?.enabled) return null;
+  const { style } = buildMapboxStyle(
+    { ...layer, opacity: 1, visible: true },
+    layer.geojson ?? null,
+  );
+  const label = style.layers.find((styleLayer) => styleLayer.type === "symbol");
+  if (!label) return null;
+  const { id: _id, source: _source, ...spec } = label as unknown as Record<string, unknown>;
+  const layout = { ...(spec.layout as Record<string, unknown>) };
+  delete layout["text-font"];
+  delete layout.visibility;
+  return { ...spec, layout };
 }
 
 /**
@@ -818,16 +953,48 @@ function renderTemplate(
         var alignments = { 'left': 'lefty', 'center': 'centered', 'right': 'righty', 'full': 'fully' };
 
         function getLayerPaintType(layer) { var sl = map.getLayer(layer); return sl ? layerTypes[sl.type] : null; }
-        function setLayerOpacity(layer) {
-            if (!map.getLayer(layer.layer)) return;
-            var paintProps = getLayerPaintType(layer.layer);
+        function fadeLayer(id, opacity, duration) {
+            if (!map.getLayer(id)) return;
+            var paintProps = getLayerPaintType(id);
             if (!paintProps) return;
             paintProps.forEach(function (prop) {
-                if (layer.duration) {
-                    map.setPaintProperty(layer.layer, prop + '-transition', { duration: layer.duration });
+                if (duration) {
+                    map.setPaintProperty(id, prop + '-transition', { duration: duration });
                 }
-                map.setPaintProperty(layer.layer, prop, layer.opacity);
+                map.setPaintProperty(id, prop, opacity);
             });
+        }
+        // A layer's text labels live in a companion symbol layer that fades with it.
+        function setLayerOpacity(layer) {
+            fadeLayer(layer.layer, layer.opacity, layer.duration);
+            fadeLayer(layer.layer + config.labelLayerSuffix, layer.opacity, layer.duration);
+        }
+        // Labels borrow a font the basemap style already serves glyphs for (as
+        // the live map does), falling back to Noto Sans on a public glyph server
+        // when the basemap carries no glyphs (e.g. a blank or raster basemap).
+        // resolveLabelFont mirrors resolveTextFontFromStyleLayers in
+        // @geolibre/map's text-font.ts; keep the two in step.
+        var labelFont = null;
+        function addLabelLayer(spec) {
+            if (!labelFont) {
+                var style = map.getStyle();
+                labelFont = resolveLabelFont(style.layers);
+                if (!style.glyphs) map.setGlyphs(config.labelGlyphs);
+            }
+            spec.layout['text-font'] = labelFont;
+            map.addLayer(spec);
+        }
+        function resolveLabelFont(layers) {
+            var operators = ['literal', 'get', 'has', 'at', 'in', 'case', 'match', 'coalesce', 'step', 'interpolate', 'let', 'var', 'concat', 'to-string', 'string', 'array', 'format'];
+            for (var i = 0; i < (layers || []).length; i++) {
+                var layer = layers[i];
+                if (layer.type !== 'symbol' || !layer.layout || !layer.layout['text-field']) continue;
+                var font = layer.layout['text-font'];
+                if (!Array.isArray(font)) continue;
+                var fonts = font[0] === 'literal' && Array.isArray(font[1]) ? font[1] : font;
+                if (fonts.length > 0 && fonts.every(function (f) { return typeof f === 'string'; }) && operators.indexOf(fonts[0]) === -1) return fonts;
+            }
+            return ['Noto Sans Regular'];
         }
 
         var story = document.getElementById('story');

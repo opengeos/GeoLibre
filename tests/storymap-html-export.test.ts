@@ -370,3 +370,128 @@ describe("buildStoryMapHtml popup expressions (#2597)", () => {
     assert.equal(popups.markers[0].t, "12");
   });
 });
+
+/** A categorized polygon layer, labelled by a field when `labels` is set. */
+function categorizedPolygons(patch: Partial<GeoLibreLayer["style"]> = {}): GeoLibreLayer {
+  return {
+    id: "zones",
+    name: "Zones",
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 0.5,
+    style: {
+      ...DEFAULT_LAYER_STYLE,
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "kind",
+      vectorStyleStops: [
+        { value: "park", color: "#00ff00" },
+        { value: "lake", color: "#0000ff" },
+      ],
+      ...patch,
+    },
+    metadata: {},
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 0],
+              ],
+            ],
+          },
+          properties: { kind: "park", name: "Central" },
+        },
+      ],
+    },
+  };
+}
+
+/** The spec the page passes to `map.addLayer`/`addLabelLayer` for `id`. */
+function exportedLayerSpec(html: string, call: string, id: string): Record<string, unknown> {
+  for (const line of html.split("\n")) {
+    const match = new RegExp(`^\\s*${call}\\((\\{.*\\})\\);$`).exec(line);
+    if (!match) continue;
+    const spec = JSON.parse(match[1]) as Record<string, unknown>;
+    if (spec.id === id) return spec;
+  }
+  throw new Error(`no ${call} for ${id}`);
+}
+
+describe("buildStoryMapHtml symbology and labels (#3033)", () => {
+  it("exports a categorized renderer as its data-driven color expression", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [categorizedPolygons()],
+    });
+    const spec = exportedLayerSpec(html, "map.addLayer", "zones");
+    const paint = spec.paint as Record<string, unknown>;
+    const color = JSON.stringify(paint["fill-color"]);
+    assert.match(color, /"match"/);
+    assert.match(color, /"park","#00ff00"/);
+    assert.match(color, /"lake","#0000ff"/);
+    assert.equal(paint["fill-opacity"], DEFAULT_LAYER_STYLE.fillOpacity * 0.5);
+  });
+
+  it("adds a label layer that fades with its layer", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [
+        categorizedPolygons({
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "name", size: 16 },
+        }),
+      ],
+    });
+    const label = exportedLayerSpec(html, "addLabelLayer", "zones::label");
+    assert.equal(label.type, "symbol");
+    assert.equal(label.source, "zones-source");
+    const layout = label.layout as Record<string, unknown>;
+    assert.match(JSON.stringify(layout["text-field"]), /"name"/);
+    assert.equal(layout["text-size"], 16);
+    // The page resolves the font against the basemap at load time.
+    assert.equal(layout["text-font"], undefined);
+    assert.equal((label.paint as Record<string, unknown>)["text-opacity"], 0.5);
+    const config = exportedConfig(html);
+    assert.equal(config.labelLayerSuffix, "::label");
+    assert.match(String(config.labelGlyphs), /^https:\/\/.*\{fontstack\}\/\{range\}\.pbf$/);
+    assert.match(html, /fadeLayer\(layer\.layer \+ config\.labelLayerSuffix/);
+  });
+
+  it("adds no label layer when labels are off", () => {
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [categorizedPolygons()],
+    });
+    assert.doesNotMatch(html, /addLabelLayer\(\{/);
+  });
+
+  it("seeds the label from chapter 0's opacity", () => {
+    const html = buildStoryMapHtml({
+      storymap: story({
+        chapters: story().chapters.map((chapter, index) =>
+          index === 0
+            ? { ...chapter, onChapterEnter: [{ layerId: "zones", opacity: 0 }] }
+            : chapter,
+        ),
+      }),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [
+        categorizedPolygons({
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "name" },
+        }),
+      ],
+    });
+    const label = exportedLayerSpec(html, "addLabelLayer", "zones::label");
+    assert.equal((label.paint as Record<string, unknown>)["text-opacity"], 0);
+  });
+});
