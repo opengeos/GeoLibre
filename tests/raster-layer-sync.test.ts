@@ -360,6 +360,26 @@ describe("syncRasterLayersToStore", () => {
     }
   });
 
+  // A plugin tags the layer addCogLayer returned (the Sentinel-2 Explorer's
+  // scene id drives its Add/Remove button); the header-load sync that follows
+  // must not wipe the tag, while control-owned keys still rebuild.
+  it("keeps metadata keys the control does not own across repeated syncs", () => {
+    syncRasterLayersToStore(fakeControl([rasterInfo({ error: new Error("stale") })]).control);
+    const layer = useAppStore.getState().layers[0];
+    useAppStore.getState().updateLayer(layer.id, {
+      metadata: { ...layer.metadata, sentinel2Scene: "S2B_10SEG", attribution: "ESA" },
+    });
+
+    // The header load: the error clears and the band count arrives.
+    syncRasterLayersToStore(fakeControl([rasterInfo({ bandCount: 1 })]).control);
+
+    const synced = useAppStore.getState().layers[0];
+    assert.equal(synced.metadata.bandCount, 1);
+    assert.equal(synced.metadata.sentinel2Scene, "S2B_10SEG");
+    assert.equal(synced.metadata.attribution, "ESA");
+    assert.equal(synced.metadata.error, undefined);
+  });
+
   it("keeps STAC access metadata across repeated syncs", () => {
     const access = {
       catalogUrl: "https://planetarycomputer.microsoft.com/api/stac/v1/",
