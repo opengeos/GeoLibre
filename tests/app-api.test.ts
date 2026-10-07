@@ -260,7 +260,7 @@ describe("plugin app API map tools", () => {
 
   it("reports live tool transitions, gives feature selection precedence, and unsubscribes", () => {
     const api = createAppAPI(undefined, fakeHost().host);
-    const events: Array<"identify" | "feature-selection" | null> = [];
+    const events: Array<GeoLibreActiveMapTool> = [];
     assert.equal(api.getActiveMapTool(), null);
     const unsubscribe = api.onActiveMapToolChange((activeTool) => events.push(activeTool));
 
