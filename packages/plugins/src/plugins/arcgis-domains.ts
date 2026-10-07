@@ -355,8 +355,17 @@ export function arcGISServiceAttributeForm(
   info: ArcGISEditInfo,
   properties: Record<string, unknown> | null | undefined,
 ): AttributeFormConfig | undefined {
-  const selector = domainModel(info).selector;
-  const key = selector ? codeKey(properties?.[selector] ?? null) : "";
+  const model = domainModel(info);
+  // Key by the matched entry, so unpublished codes share one cache entry
+  // (they all resolve the same way) instead of growing the cache.
+  const selected = model.selector ? properties?.[model.selector] : undefined;
+  const key = !model.selector
+    ? ""
+    : selected == null
+      ? "null"
+      : model.entries.some((entry) => entry.code === selected)
+        ? codeKey(selected)
+        : "unknown";
   let byKey = forms.get(info);
   if (!byKey) forms.set(info, (byKey = new Map()));
   if (!byKey.has(key)) byKey.set(key, buildServiceForm(info, properties));

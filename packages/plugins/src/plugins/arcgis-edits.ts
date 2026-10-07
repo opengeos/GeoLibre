@@ -291,6 +291,8 @@ function attributes(
   if (previous && selector && !same(candidate[selector], previous.properties?.[selector])) {
     for (const field of info.fields ?? []) {
       if (field.name === selector || Object.hasOwn(result, field.name)) continue;
+      // A value the user cannot write cannot be corrected, so it cannot block the save.
+      if (field.editable === false || field.name === info.objectIdField) continue;
       if (!Object.hasOwn(candidate, field.name)) continue;
       const error = arcGISDomainError(
         field.name,

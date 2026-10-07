@@ -228,6 +228,22 @@ for (const [label, info] of [
       assert.deepEqual(plan2.updates[0].payload, { attributes: { STATUS: 2, OBJECTID: 3 } });
     });
 
+    it("does not let a read-only field block a type change", () => {
+      const withReadOnly: ArcGISEditInfo = {
+        ...info,
+        fields: info.fields!.map((f) =>
+          f.name === "MANUFACTURER" ? { ...f, editable: false } : f,
+        ),
+      };
+      const before = point(4, { ASSET_TYPE: 1, STATUS: 1, MANUFACTURER: "CL" });
+      const plan = planArcGISEdits(
+        fc(before),
+        fc({ ...before, properties: { ...before.properties, ASSET_TYPE: 2 } }),
+        withReadOnly,
+      );
+      assert.deepEqual(plan.updates[0].payload, { attributes: { ASSET_TYPE: 2, OBJECTID: 4 } });
+    });
+
     it("rejects an unknown type code at save", () => {
       const before = point(1, { ASSET_TYPE: 1 });
       assert.throws(
@@ -285,6 +301,11 @@ for (const [label, info] of [
       );
       // Memoized per type value, so per-cell lookups are cheap.
       assert.equal(arcGISServiceAttributeForm(info, { ASSET_TYPE: 1, STATUS: 2 }), hydrant);
+      // Unpublished codes share one entry.
+      assert.equal(
+        arcGISServiceAttributeForm(info, { ASSET_TYPE: 8 }),
+        arcGISServiceAttributeForm(info, { ASSET_TYPE: 9 }),
+      );
     });
   });
 }
