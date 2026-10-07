@@ -91,7 +91,7 @@ const IMMEDIATE_RESTART_MS = 350;
  * is dead air between the last word and the map moving. Push-to-talk needs none
  * of this: releasing the key is the endpoint.
  */
-const OPEN_MIC_ENDPOINT_MS = 1500;
+const OPEN_MIC_ENDPOINT_MS = 2500;
 
 /** Owns the microphone, the recognizer and the spoken reply for one panel. */
 export class VoiceSession {

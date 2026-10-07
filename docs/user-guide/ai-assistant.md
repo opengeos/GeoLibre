@@ -392,7 +392,7 @@ There are two ways in, and they behave differently on purpose:
 
 | Gesture | Mode | How it ends |
 | --- | --- | --- |
-| **Click the microphone** | Open mic — it keeps listening, and a request is sent once you pause for about a second and a half, so short pauses mid-sentence are kept together | Click it again |
+| **Click the microphone** | Open mic — it keeps listening, and a request is sent once you pause for about two and a half seconds, so short pauses mid-sentence are kept together | Click it again |
 | **Hold Space for half a second** | Push-to-talk — one turn | Release Space |
 
 Push-to-talk is deliberately a *hold*. A short tap on Space still activates
