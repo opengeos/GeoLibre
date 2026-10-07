@@ -70,9 +70,9 @@ widths then vary, so the legend must show the breaks.
 
 ## Layer types
 
-`geojson`, `xyz`, `raster`, `wms`, `vector-tiles`, `mbtiles`, `arcgis`,
+`geojson`, `xyz`, `raster`, `wms`, `wmts`, `vector-tiles`, `mbtiles`, `arcgis`,
 `pmtiles`, `cog`, `flatgeobuf`, `zarr`, `lidar`, `gaussian-splat`, `geoparquet`,
-`duckdb-query`, `3d-tiles`.
+`duckdb-query`, `3d-tiles`, `deckgl-viz`, `video`, `image`.
 
 ## Data formats
 

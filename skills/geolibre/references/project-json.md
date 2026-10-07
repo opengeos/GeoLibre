@@ -109,9 +109,9 @@ Useful style keys: `minZoom`, `maxZoom`, `fillColor`, `fillOpacity`,
 
 ### Layer types
 
-`geojson`, `xyz`, `raster`, `wms`, `vector-tiles`, `mbtiles`, `arcgis`,
+`geojson`, `xyz`, `raster`, `wms`, `wmts`, `vector-tiles`, `mbtiles`, `arcgis`,
 `pmtiles`, `cog`, `flatgeobuf`, `zarr`, `lidar`, `gaussian-splat`, `geoparquet`,
-`duckdb-query`, `3d-tiles`.
+`duckdb-query`, `3d-tiles`, `deckgl-viz`, `video`, `image`.
 
 ArcGIS FeatureServer layers are saved as `geojson`; MapServer and ImageServer as
 `raster`. GeoParquet imported from a local file becomes `geojson`.

@@ -28,8 +28,8 @@ describe("NewProjectDialog basemap double-click", () => {
     const calls = renderDialog();
     const target = OPENFREEMAP_BASEMAPS.find((b) => b.id !== "liberty")!;
     const button = await screen.findByRole("button", { name: target.name });
-    fireEvent.click(button);
-    fireEvent.click(button);
+    // No preliminary clicks: the selection stays on the default ("liberty"), so
+    // this proves creation uses the double-clicked id, not the selection state.
     fireEvent.doubleClick(button);
     assert.equal(calls.created, 1);
     assert.deepEqual(calls.openChange, [false]);
