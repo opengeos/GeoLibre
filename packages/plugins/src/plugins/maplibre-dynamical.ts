@@ -652,7 +652,8 @@ function buildPanel(container: HTMLElement): () => void {
       return;
     }
     if (changed) state.indices = {};
-    editor.style.display = "";
+    // Back to its flex column: an empty display would make it a block and drop the gaps.
+    editor.style.display = "flex";
     attribution.textContent = [
       dataset.attribution,
       dataset.license ? tr("license", "License: {{license}}", { license: dataset.license }) : "",
