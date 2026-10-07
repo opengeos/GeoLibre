@@ -607,6 +607,7 @@ export {
   setOceanDataPlatformFileSaver,
   type OceanDataPlatformFileSaver,
 } from "./plugins/maplibre-ocean-data-platform";
+export { DYNAMICAL_PLUGIN_ID, maplibreDynamicalPlugin } from "./plugins/maplibre-dynamical";
 export {
   maplibreSatelliteEmbeddingsPlugin,
   SATELLITE_EMBEDDINGS_PLUGIN_ID,

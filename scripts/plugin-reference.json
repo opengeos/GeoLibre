@@ -134,6 +134,10 @@
     "description": "HUB Ocean's public ocean datasets: habitats, protected areas, fisheries, and observations.",
     "docs": "web-services.md#ocean-data-platform"
   },
+  "geolibre-dynamical": {
+    "description": "dynamical.org weather forecasts (NOAA GFS and HRRR, ECMWF AIFS, DWD ICON-EU, ECCC HRDPS) as Zarr layers.",
+    "docs": "web-services.md#dynamical"
+  },
   "maplibre-gl-geolens": {
     "description": "A self-hosted GeoLens spatial catalog.",
     "docs": "web-services.md#geolens"

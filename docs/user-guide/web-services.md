@@ -48,6 +48,7 @@ They are grouped together because they behave the same way, not because they sha
 | [Fields of the World](#fields-of-the-world) | Source.coop | Global agricultural field boundaries (2024, 2025) |
 | [Sentinel-2 Explorer](#sentinel-2-explorer) | Source.coop, AWS | Every Sentinel-2 L2A scene since 2015, searched from static GeoParquet |
 | [Ocean Data Platform](#ocean-data-platform) | HUB Ocean | Public ocean datasets: habitats, protected areas, fisheries, observations |
+| [Dynamical](#dynamical) | dynamical.org | Weather forecasts (NOAA GFS and HRRR, ECMWF AIFS, DWD ICON-EU, ECCC HRDPS) as Zarr layers with forecast run and lead time sliders |
 | [GeoLens](#geolens) | your server | A self-hosted spatial catalog |
 
 ---
@@ -368,6 +369,19 @@ Browses the public datasets on HUB Ocean's [Ocean Data Platform](https://app.hub
 
 !!! note "Public datasets only"
     The panel lists and reads only datasets shared publicly on ODP; it does not sign in or take an API key. ODP's tile and features endpoints do not allow other websites to read them directly, so GeoLibre reads them through its own tile proxy (`tiles.geolibre.app`). Each dataset keeps its provider's license, shown in the result list; check it before reuse.
+
+## Dynamical
+
+Browses the open weather data catalog of [dynamical.org](https://dynamical.org/catalog/), which republishes forecasts and analyses from NOAA, ECMWF, DWD, ECCC, and NASA as cloud-optimized Icechunk (Zarr) archives, updated as each model run lands. GeoLibre reads a variable straight from its archive and draws it as a Zarr raster layer.
+
+- Pick a **Dataset**: the list loads the whole catalog when the panel opens, with the map-ready datasets first. The card below shows its summary, domain, resolution, and time range, a **Documentation** link to the dataset's page, and **Zoom to extent**.
+- Pick a **Variable**, then a slice: **Forecast run** starts on the newest run and **Lead time** on the analysis hour, and the panel shows the valid time they add up to. An analysis has a single **Time** slider instead.
+- **Colormap**, **Min**, and **Max** start from the variable: fixed ranges for temperature (-30 to 40 °C), percentages, wind components, precipitation rate, and sea-level pressure; for anything else leave them empty and the panel reads one chunk of the chosen slice to set a range.
+- **Add to map** adds the layer, named after the dataset, variable, and slice. Moving the sliders afterwards re-slices that layer in place, so you can step through a forecast; stepping lead times is quick, since each chunk already holds a run's lead times. Add the variable again to keep a slice side by side.
+- Projected grids are placed from the archive's own CRS: HRRR's Lambert conformal conic grid and HRDPS's rotated-pole grid.
+
+!!! note "Which datasets can be drawn"
+    A map draws one slice, but the reader has to decode whole chunks. The forecasts dynamical.org stores one run per chunk (NOAA GFS forecast, NOAA HRRR 48-hour forecast, ECMWF AIFS Single, DWD ICON-EU, ECCC HRDPS) draw in seconds; a global GFS slice is about 70 MB. The analyses and ensembles pack hundreds to thousands of time steps or members into each chunk, so a single map would read gigabytes, and the low-latency *virtual* datasets point into the original GRIB2 files, which the browser cannot decode yet. These are listed but disabled. The data is free under CC BY 4.0; credit the source shown under the panel.
 
 ## GeoLens
 
