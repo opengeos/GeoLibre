@@ -90,8 +90,31 @@ function fieldNamed(info: ArcGISEditInfo, name: string | undefined) {
   return info.fields?.find((field) => field.name.toLowerCase() === lower);
 }
 
-function sameJson(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+/**
+ * Whether two type/subtype domain entries for a field mean the same thing.
+ * An absent entry and `inherited` both fall back to the field-level domain;
+ * an explicit `null` stays distinct.
+ */
+function sameDomain(
+  a: ArcGISDomain | null | undefined,
+  b: ArcGISDomain | null | undefined,
+): boolean {
+  const canonical = (d: ArcGISDomain | null | undefined) =>
+    d === undefined || d?.type === "inherited" ? "inherited" : JSON.stringify(d);
+  return canonical(a) === canonical(b);
+}
+
+/** Key domain overrides by the field's name as `fields[]` spells it (ArcGIS names are case-insensitive). */
+function canonicalDomains(
+  info: ArcGISEditInfo,
+  domains: Record<string, ArcGISDomain | null> | undefined,
+): Record<string, ArcGISDomain | null> {
+  return Object.fromEntries(
+    Object.entries(domains ?? {}).map(([key, domain]) => [
+      fieldNamed(info, key)?.name ?? key,
+      domain,
+    ]),
+  );
 }
 
 /** Exact-type key so the code 1 and the code "1" never collide. */
@@ -122,13 +145,13 @@ function domainModel(info: ArcGISEditInfo): DomainModel {
   const typeEntries: SubtypeEntry[] = (fromTypes ? (info.types ?? []) : []).map((type) => ({
     code: type.id,
     name: type.name ?? String(type.id),
-    domains: type.domains ?? {},
+    domains: canonicalDomains(info, type.domains),
   }));
   const subtypeEntries: SubtypeEntry[] = (fromSubtypes ? (info.subtypes ?? []) : []).map(
     (subtype) => ({
       code: subtype.code,
       name: subtype.name ?? String(subtype.code),
-      domains: subtype.domains ?? {},
+      domains: canonicalDomains(info, subtype.domains),
     }),
   );
   const overridden = new Set(
@@ -157,7 +180,7 @@ function domainModel(info: ArcGISEditInfo): DomainModel {
           ...Object.keys(entry.domains),
           ...Object.keys(twin.domains),
         ])) {
-          if (!sameJson(entry.domains[field], twin.domains[field])) {
+          if (!sameDomain(entry.domains[field], twin.domains[field])) {
             conflict(fromSubtypes);
             selector = undefined;
             break;

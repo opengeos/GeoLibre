@@ -217,13 +217,15 @@ for (const [label, info] of [
           ),
         /MANUFACTURER is outside its coded value domain\. It does not fit the new ASSET_TYPE value/,
       );
-      // An unrelated edit does not require repairing a historical value.
+      // An unrelated edit does not require repairing a historical value:
+      // "CL" is not a Valve manufacturer, but only STATUS changes.
+      const historical = point(3, { ASSET_TYPE: 2, STATUS: 1, MANUFACTURER: "CL" });
       const plan2 = planArcGISEdits(
-        fc(invalidated),
-        fc({ ...invalidated, properties: { ...invalidated.properties, STATUS: 2 } }),
+        fc(historical),
+        fc({ ...historical, properties: { ...historical.properties, STATUS: 2 } }),
         info,
       );
-      assert.equal(plan2.updates.length, 1);
+      assert.deepEqual(plan2.updates[0].payload, { attributes: { STATUS: 2, OBJECTID: 3 } });
     });
 
     it("rejects an unknown type code at save", () => {
@@ -349,6 +351,32 @@ describe("ArcGIS domain metadata edge cases", () => {
     });
     // A field whose domain no type overrides is still enforced.
     assert.equal(resolveArcGISFieldDomain(info, "ZONE", {}).kind, "codedValue");
+  });
+
+  it("treats an absent type entry and inherited as the same fallback", () => {
+    const info: ArcGISEditInfo = {
+      ...editBits,
+      fields: baseFields,
+      typeIdField: "ASSET_TYPE",
+      types: typesInfo.types,
+      subtypeField: "ASSET_TYPE",
+      subtypes: subtypesInfo.subtypes,
+    };
+    assert.deepEqual(arcGISDomainDiagnostics(info), []);
+    assert.equal(arcGISSubtypeField(info), "ASSET_TYPE");
+  });
+
+  it("matches domain override keys to fields case-insensitively", () => {
+    const info: ArcGISEditInfo = {
+      ...editBits,
+      fields: baseFields,
+      subtypeField: "ASSET_TYPE",
+      subtypes: [{ code: 1, name: "Hydrant", domains: { manufacturer: hydrantMakers } }],
+    };
+    assert.deepEqual(resolveArcGISFieldDomain(info, "MANUFACTURER", { ASSET_TYPE: 1 }), {
+      kind: "codedValue",
+      codedValues: hydrantMakers.codedValues,
+    });
   });
 
   it("reconciles agreeing types[] and subtypes[] into one selector", () => {
