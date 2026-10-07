@@ -112,7 +112,7 @@ export interface GeoLibreSelection {
   features: Feature<Geometry | null>[];
 }
 
-export type GeoLibreActiveMapTool = "identify" | "feature-selection" | null;
+export type GeoLibreActiveMapTool = "identify" | "feature-selection" | "geo-editor" | null;
 
 export interface GeoLibreRasterWindowOptions {
   bounds: [number, number, number, number]; // WGS84 [west, south, east, north]
@@ -714,8 +714,9 @@ and use host APIs such as `addGeoJsonLayer` when they need to add data.
 
 Plugins that handle map clicks or hover can avoid presenting their own
 interaction while a GeoLibre map tool owns the pointer. The optional live
-getter and subscription cover Identify and feature selection across map
-renderers; they do not depend on the cursor style or saved project snapshot.
+getter and subscription cover Identify, feature selection and the GeoEditor
+across map renderers; they do not depend on the cursor style or saved project
+snapshot.
 
 ```typescript
 const currentTool = app.getActiveMapTool?.() ?? null;
@@ -739,8 +740,11 @@ unsubscribe?.();
 ```
 
 `getActiveMapTool` returns `"identify"` while Identify is enabled,
-`"feature-selection"` while a selection gesture owns map clicks, and `null`
-otherwise. Feature selection takes precedence if both states briefly overlap.
+`"feature-selection"` while a selection gesture owns map clicks, `"geo-editor"`
+while the GeoEditor plugin is on (its toolbar is on the map, so any click may
+draw, place a vertex or pick a feature to edit, including while a layer is in
+"Edit geometry"), and `null` otherwise. When states overlap, feature selection
+takes precedence over Identify, and both take precedence over the GeoEditor.
 Changing the Identify target does not emit a tool change. Subscribers receive
 only changes after registration, not an initial callback; read the getter to
 initialize plugin state. Keep and call the returned unsubscribe function on

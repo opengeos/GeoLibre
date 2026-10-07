@@ -465,7 +465,7 @@ export interface GeoLibreSelection {
 }
 
 /** The host tool currently owning map clicks, or null for ordinary map interaction. */
-export type GeoLibreActiveMapTool = "identify" | "feature-selection" | null;
+export type GeoLibreActiveMapTool = "identify" | "feature-selection" | "geo-editor" | null;
 
 /** A lightweight assistant tool for standalone plugins. No runtime SDK import is needed.
  * JSON Schema describes input to the model but does NOT validate it at runtime.
@@ -538,8 +538,8 @@ export interface GeoLibreAppAPI {
   onSelectionChange?: (callback: (selection: GeoLibreSelection) => void) => () => void;
   /**
    * Live, renderer-independent click-tool state, not a project snapshot.
-   * Feature selection takes precedence while its gesture owns map clicks.
-   * Plugins can skip their own click/hover handling while a tool is active.
+   * Feature selection takes precedence while its gesture owns map clicks, then
+   * Identify, then the GeoEditor (active while its plugin is on). Plugins can skip their own click/hover handling while a tool is active.
    */
   getActiveMapTool?: () => GeoLibreActiveMapTool;
   /**

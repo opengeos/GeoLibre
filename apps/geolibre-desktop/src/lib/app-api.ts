@@ -40,6 +40,7 @@ import type {
   PluginManager,
   TemporalLayerAdapter,
 } from "@geolibre/plugins";
+import { GEO_EDITOR_PLUGIN_ID } from "@geolibre/plugins/plugin-ids";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
@@ -124,7 +125,10 @@ export interface AppApiHost extends Pick<
   | "getOpenFloatingPanels"
 > {
   /** The shared plugin manager, for `activatePlugin`/`deactivatePlugin`. */
-  plugins: Pick<PluginManager, "activate" | "deactivate" | "isActive" | "applyPluginState">;
+  plugins: Pick<
+    PluginManager,
+    "activate" | "deactivate" | "isActive" | "applyPluginState" | "subscribe"
+  >;
   /** The project's plugin state as it would be persisted right now. */
   projectPluginStateSnapshot: () => unknown;
   /** Writes the plugin state to the project when it differs from `previousJson`. */
@@ -191,11 +195,24 @@ function effectiveBasemapUrl(
     : state.basemapStyleUrl;
 }
 
+/**
+ * The host tool that owns map clicks right now.
+ *
+ * Feature selection wins over Identify, and both win over the GeoEditor, which
+ * counts as active for as long as its plugin is on (its toolbar is on the map
+ * and any click may place a vertex or pick a feature to edit).
+ *
+ * @param state - The store fields Identify and feature selection live in.
+ * @param plugins - The plugin manager, read for the GeoEditor's active state.
+ * @returns The active tool, or null for ordinary map interaction.
+ */
 function activeMapTool(
   state: Pick<AppState, "identifyLayerId" | "featureSelectionActive">,
+  plugins: Pick<PluginManager, "isActive">,
 ): GeoLibreActiveMapTool {
   if (state.featureSelectionActive) return "feature-selection";
-  return state.identifyLayerId !== null ? "identify" : null;
+  if (state.identifyLayerId !== null) return "identify";
+  return plugins.isActive(GEO_EDITOR_PLUGIN_ID) ? "geo-editor" : null;
 }
 
 /**
@@ -237,18 +254,25 @@ export function createAppAPI(
       return id;
     },
     ...createPluginLayerQueries(),
-    getActiveMapTool: () => activeMapTool(useAppStore.getState()),
+    getActiveMapTool: () => activeMapTool(useAppStore.getState(), manager),
     onActiveMapToolChange: (callback: (tool: GeoLibreActiveMapTool) => void) => {
-      let previousTool = activeMapTool(useAppStore.getState());
-      return useAppStore.subscribe(() => {
+      let previousTool = activeMapTool(useAppStore.getState(), manager);
+      const emitIfChanged = () => {
         // Renderer subscriptions can cancel selection in a nested store
         // update. Read the live state and remember the delivered value so
         // the outer update cannot emit a stale or duplicate notification.
-        const tool = activeMapTool(useAppStore.getState());
+        const tool = activeMapTool(useAppStore.getState(), manager);
         if (tool === previousTool) return;
         previousTool = tool;
         callback(tool);
-      });
+      };
+      // The GeoEditor's on/off state lives in the plugin manager, not the store.
+      const unsubscribeStore = useAppStore.subscribe(emitIfChanged);
+      const unsubscribePlugins = manager.subscribe(emitIfChanged);
+      return () => {
+        unsubscribeStore();
+        unsubscribePlugins();
+      };
     },
     addTileLayer: (name: string, url: string, options?: GeoLibreTileLayerOptions) =>
       store.addTileLayer(

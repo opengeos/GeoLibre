@@ -24,6 +24,7 @@ import {
   registerMenuContribution,
   unregisterMenuContribution,
 } from "../packages/plugins/src/menu-contribution-registry";
+import { GEO_EDITOR_PLUGIN_ID } from "../packages/plugins/src/plugin-ids";
 import { PluginManager } from "../packages/plugins/src/plugin-manager";
 import {
   closeRightPanel,
@@ -39,7 +40,11 @@ import {
   registerToolbarMenu,
   unregisterToolbarMenu,
 } from "../packages/plugins/src/toolbar-menu-registry";
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "../packages/plugins/src/types";
+import type {
+  GeoLibreActiveMapTool,
+  GeoLibreAppAPI,
+  GeoLibrePlugin,
+} from "../packages/plugins/src/types";
 
 // Contract tests for the plugin API object (`GeoLibreAppAPI`) the host hands to
 // every plugin. `createAppAPI` takes the `@geolibre/plugins` barrel services and
@@ -118,6 +123,7 @@ function fakeHost(overrides: Partial<AppApiHost> = {}): { host: AppApiHost; call
       },
       isActive: (id: string) => active.has(id),
       applyPluginState: () => true,
+      subscribe: () => () => undefined,
     },
     projectPluginStateSnapshot: () => ({ active: [...active] }),
     persistProjectPluginState: (previousJson: string) => {
@@ -275,6 +281,47 @@ describe("plugin app API map tools", () => {
 
     useAppStore.getState().setIdentifyLayer("after-unsubscribe");
     assert.deepEqual(events, ["identify", "feature-selection", null]);
+  });
+
+  it("reports the GeoEditor while its plugin is active, below Identify and selection", async () => {
+    const manager = new PluginManager();
+    manager.register({
+      id: GEO_EDITOR_PLUGIN_ID,
+      name: "GeoEditor",
+      version: "0.0.0",
+      activate: () => undefined,
+      deactivate: () => undefined,
+    });
+    const api = createAppAPI(undefined, fakeHost({ plugins: manager }).host);
+    const events: Array<GeoLibreActiveMapTool> = [];
+    const unsubscribe = api.onActiveMapToolChange((activeTool) => events.push(activeTool));
+
+    await manager.activate(GEO_EDITOR_PLUGIN_ID, api as unknown as GeoLibreAppAPI);
+    assert.equal(api.getActiveMapTool(), "geo-editor");
+    assert.deepEqual(events, ["geo-editor"]);
+
+    useAppStore.getState().setIdentifyLayer("points");
+    assert.equal(api.getActiveMapTool(), "identify");
+    useAppStore.getState().setFeatureSelectionActive(true);
+    assert.equal(api.getActiveMapTool(), "feature-selection");
+    useAppStore.getState().setFeatureSelectionActive(false);
+    useAppStore.getState().setIdentifyLayer(null);
+    assert.equal(api.getActiveMapTool(), "geo-editor");
+
+    manager.deactivate(GEO_EDITOR_PLUGIN_ID, api as unknown as GeoLibreAppAPI);
+    assert.equal(api.getActiveMapTool(), null);
+    assert.deepEqual(events, [
+      "geo-editor",
+      "identify",
+      "feature-selection",
+      "identify",
+      "geo-editor",
+      null,
+    ]);
+    unsubscribe();
+
+    await manager.activate(GEO_EDITOR_PLUGIN_ID, api as unknown as GeoLibreAppAPI);
+    assert.equal(events.length, 6);
   });
 });
 
