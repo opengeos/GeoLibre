@@ -228,9 +228,12 @@ export class VoiceSession {
       const { final, interim } = readSpeechResults(event);
       // Speech is intent: it supersedes a reply still being read out.
       if (!final && !interim) {
-        // A phrase revised away to nothing: drop it from the preview, but it is
-        // not speech, so the silence window is left to run.
+        // A phrase revised away to nothing: drop it from the preview. It is not
+        // speech, so it does not restart the silence window — and with nothing
+        // left to send, there is no request in progress for the window (or the
+        // reply guard in `speak()`) to wait on.
         this.emit({ type: "interim", text: joinPhrases(this.pendingPhrases) });
+        if (!this.pendingPhrases.length) this.clearEndpoint();
         return;
       }
       this.cancelSpeech();

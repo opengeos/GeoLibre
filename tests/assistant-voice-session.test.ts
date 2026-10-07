@@ -679,6 +679,15 @@ describe("voice session end-of-phrase", () => {
     assert.equal(last.text, "");
   });
 
+  it("still reads a reply once a lone interim phrase is retracted", () => {
+    const h = harness({ synthesis: true });
+    h.session.start("open-mic");
+    h.current.say("um", false);
+    h.current.say("", false);
+    h.session.speak("Here is the answer.");
+    assert.equal(h.synthesis!.spoken.length, 1);
+  });
+
   it("previews the whole request, not just the phrase in progress", () => {
     const h = harness();
     h.session.start("open-mic");
