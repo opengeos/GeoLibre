@@ -3108,10 +3108,8 @@ fn wait_for_jupyter_health(
 ) -> Result<(), String> {
     // Build the HTTP client once and reuse it across all health polls (this loop
     // runs up to JUPYTER_HEALTH_ATTEMPTS = 240 times).
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-        .map_err(|error| format!("Could not build HTTP client: {error}"))?;
+    let client =
+        loopback_http_client().map_err(|error| format!("Could not build HTTP client: {error}"))?;
     for _ in 0..JUPYTER_HEALTH_ATTEMPTS {
         if let Some(status) = child
             .try_wait()
@@ -3176,6 +3174,24 @@ fn sidecar_base_url() -> String {
     format!("http://127.0.0.1:{SIDECAR_PORT}")
 }
 
+/// A short-timeout HTTP client for the app's own loopback servers (the
+/// sidecar, Jupyter and Martin health, token and shutdown probes).
+///
+/// The proxy is disabled: reqwest otherwise follows `HTTP_PROXY`-style env vars
+/// and, on Windows, the system proxy, whose `ProxyOverride` list it copies
+/// verbatim without expanding `<local>`. A corporate proxy then answers these
+/// `127.0.0.1` requests itself (often with a 403), so a healthy sidecar never
+/// reads as ready and startup waits out every attempt (issue #3003). The
+/// webview's own sidecar requests already bypass the proxy in
+/// `src/lib/sidecar-fetch.ts`.
+#[cfg(not(feature = "mas"))]
+fn loopback_http_client() -> reqwest::Result<reqwest::blocking::Client> {
+    reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .no_proxy()
+        .build()
+}
+
 /// A per-launch shared secret the frontend must present on every sidecar
 /// request. The sidecar binds loopback and is CORS-restricted, but neither stops
 /// a cross-origin simple POST (CSRF) or a DNS-rebinding read; this token does.
@@ -3194,9 +3210,7 @@ fn sidecar_token() -> &'static str {
 
 #[cfg(not(feature = "mas"))]
 fn sidecar_health_is_ready(base_url: &str) -> bool {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build();
+    let client = loopback_http_client();
     let Ok(client) = client else {
         return false;
     };
@@ -3218,10 +3232,7 @@ fn sidecar_health_is_ready(base_url: &str) -> bool {
 /// still reused.
 #[cfg(not(feature = "mas"))]
 fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
-    let Ok(client) = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-    else {
+    let Ok(client) = loopback_http_client() else {
         return false;
     };
     client
@@ -3234,9 +3245,7 @@ fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
 
 #[cfg(not(feature = "mas"))]
 fn request_sidecar_shutdown(base_url: &str) {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build();
+    let client = loopback_http_client();
     if let Ok(client) = client {
         // /shutdown is token-protected (only /health is exempt), so attach this
         // session's token. This shuts down a sidecar we started or adopted (same
@@ -4608,10 +4617,8 @@ fn wait_for_martin_health(
     output: &CapturedOutput,
 ) -> Result<(), String> {
     let health_url = format!("{base_url}/health");
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+    let client =
+        loopback_http_client().map_err(|error| format!("Could not create HTTP client: {error}"))?;
 
     for _ in 0..MARTIN_HEALTH_ATTEMPTS {
         if let Some(status) = child
@@ -5151,7 +5158,8 @@ mod tests {
     use super::{
         add_main_sidecar_extras, child_failure_message, clear_appimage_python_env,
         find_zip_manifest_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
-        CapturedOutput, CAPTURED_LOG_MAX_LINES, CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
+        sidecar_accepts_token, sidecar_health_is_ready, CapturedOutput, CAPTURED_LOG_MAX_LINES,
+        CAPTURED_LOG_REPORTED_LINES, CAPTURED_LOG_SETTLE,
     };
     // Only the unix-only Martin tests (they spawn `sh`) use these.
     #[cfg(all(unix, not(feature = "mas")))]
@@ -6061,6 +6069,35 @@ mod tests {
         let _ = child.wait();
         assert!(error.contains("exited before it was ready"), "got: {error}");
         assert!(error.contains("error: last line"), "got: {error}");
+    }
+
+    // The sidecar probes must reach 127.0.0.1 directly. A corporate proxy picked
+    // up from the environment or the Windows system settings would otherwise
+    // answer them itself, so a healthy sidecar never reads as ready (#3003).
+    // Run with `HTTP_PROXY` pointing at a server that refuses everything to
+    // exercise the bypass; without one this still checks the probe end to end.
+    #[cfg(not(feature = "mas"))]
+    #[test]
+    fn sidecar_probes_reach_a_loopback_server_directly() {
+        use std::io::Read;
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind a loopback port");
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut buffer = [0_u8; 1024];
+                let _ = stream.read(&mut buffer);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+                );
+            }
+        });
+
+        assert!(sidecar_health_is_ready(&base_url));
+        assert!(sidecar_accepts_token(&base_url, "token"));
     }
 
     // A Martin that died or was killed from outside must not keep blocking new
