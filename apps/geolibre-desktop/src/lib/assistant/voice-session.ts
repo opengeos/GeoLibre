@@ -81,17 +81,17 @@ const MAX_IMMEDIATE_RESTARTS = 5;
 const IMMEDIATE_RESTART_MS = 350;
 
 /**
- * How long an open mic waits after the last word before it forces the phrase
- * to be finalized.
+ * How long an open mic waits after the last recognized word before it treats
+ * the request as finished and sends it.
  *
- * Recognizers decide on their own when a phrase has ended, and Chrome is
- * deliberately patient about it — well over a second of silence — which shows
- * up as dead air between finishing a sentence and the map moving. Stopping the
- * recognizer ourselves ends the phrase immediately; the open-mic session then
- * re-arms as it does after any other silence, so nothing is lost. Push-to-talk
- * needs none of this: releasing the key is the endpoint.
+ * A continuous recognizer finalizes phrases at short pauses but never decides
+ * the user is done, so this silence window is the open mic's endpoint. Too
+ * short and a pause for thought splits one request in two — the first half is
+ * sent, starts a run, and the second half then cancels it. Too long and there
+ * is dead air between the last word and the map moving. Push-to-talk needs none
+ * of this: releasing the key is the endpoint.
  */
-const OPEN_MIC_ENDPOINT_MS = 900;
+const OPEN_MIC_ENDPOINT_MS = 1500;
 
 /** Owns the microphone, the recognizer and the spoken reply for one panel. */
 export class VoiceSession {
@@ -144,7 +144,7 @@ export class VoiceSession {
    * request when the key is released. A hold is one request however many
    * phrases the engine decides it contains.
    */
-  private heldPhrases: string[] = [];
+  private pendingPhrases: string[] = [];
 
   /**
    * Identifies the turn, as opposed to the recognizer. Unlike `generation` it
@@ -196,7 +196,7 @@ export class VoiceSession {
     this.mode = mode;
     this.restartCount = 0;
     this.turnId += 1;
-    this.heldPhrases = [];
+    this.pendingPhrases = [];
     this.pushToTalkHeld = mode === "push-to-talk";
     this.cancelSpeech();
     const generation = ++this.generation;
@@ -221,20 +221,20 @@ export class VoiceSession {
       if (generation !== this.generation) return;
       const { final, interim } = readSpeechResults(event);
       // Speech is intent: it supersedes a reply still being read out.
-      if (final || interim) this.cancelSpeech();
-      if (interim) {
-        this.emit({ type: "interim", text: interim });
-        this.armEndpoint(generation);
-      }
+      if (!final && !interim) return;
+      this.cancelSpeech();
+      // An utterance is one request, but the engine finalizes a phrase at every
+      // short pause — mid-sentence, while the user is still talking. Sending
+      // each one would start a run on half a sentence, and the next half would
+      // then cancel it and be sent alone. So finals are kept until the endpoint
+      // (the key release, or the open mic's silence window) and sent together.
       if (final) {
-        this.clearEndpoint();
         this.restartCount = 0;
-        this.emit({ type: "interim", text: "" });
-        // A hold is one request. The engine may split it into several phrases,
-        // so they are kept until the key is released and sent together.
-        if (this.mode === "push-to-talk") this.heldPhrases.push(final);
-        else this.emit({ type: "transcript", text: final });
+        this.pendingPhrases.push(final);
       }
+      this.emit({ type: "interim", text: joinPhrases([...this.pendingPhrases, interim]) });
+      // Any speech, final or not, means the user has not finished yet.
+      this.armEndpoint(generation);
     };
     recognizer.onerror = (event) => {
       if (generation !== this.generation) return;
@@ -274,7 +274,7 @@ export class VoiceSession {
     this.pushToTalkHeld = false;
     if (!this.recognizer) {
       // Defensive: nothing is listening, so the turn is whatever was heard.
-      this.flushHeldPhrases();
+      this.flushPendingPhrases();
       return;
     }
     try {
@@ -356,6 +356,12 @@ export class VoiceSession {
     // Keyed on the turn rather than on a live recognizer, so an answer that
     // beats the engine's own `end` event for its *own* turn is still read out.
     if (this.runTurn !== null && this.runTurn !== this.turnId) return;
+    // The same rule inside one open-mic turn: words heard since the last
+    // endpoint mean the user is mid-request, and a reply read over them would
+    // abort the recognizer and lose the rest of what they are saying.
+    if (this.mode === "open-mic" && (this.endpointTimer !== null || this.pendingPhrases.length)) {
+      return;
+    }
     this.cancelSpeech();
     const generation = this.generation;
     let utterance: SpeechSynthesisUtterance;
@@ -456,12 +462,16 @@ export class VoiceSession {
       }
       // The turn is over. Keep the session alive while its agent run or spoken
       // reply is still in flight so the panel keeps reporting it.
-      this.flushHeldPhrases();
+      this.flushPendingPhrases();
       this.releaseStream();
       if (this.running || this.speaking) return;
       this.stop();
       return;
     }
+    // An open mic ends its recognizer at the endpoint (or the engine ends it on
+    // a silence of its own), and every final the stop delivered has landed by
+    // now, so whatever was heard is one complete request.
+    this.flushPendingPhrases();
     if (!this.allowRestart()) return;
     this.restartListening(generation);
   }
@@ -505,7 +515,7 @@ export class VoiceSession {
     // same phrases behind it and the same key still held.
     const turn = this.turnId;
     const held = this.pushToTalkHeld;
-    const phrases = this.heldPhrases;
+    const phrases = this.pendingPhrases;
     // start() no-ops on an unchanged mode while active, so the status is
     // dropped to idle first — the session identity (generation) still moves,
     // which is what fences the recognizer being replaced.
@@ -530,7 +540,7 @@ export class VoiceSession {
     this.running = running;
     this.turnId = turn;
     this.pushToTalkHeld = held;
-    this.heldPhrases = phrases;
+    this.pendingPhrases = phrases;
     // A restart is not a new turn; keep reporting the run that is still going.
     if (running) this.setStatus("executing");
   }
@@ -607,7 +617,7 @@ export class VoiceSession {
     this.suspendedForPlayback = false;
     this.restartCount = 0;
     this.pushToTalkHeld = false;
-    this.heldPhrases = [];
+    this.pendingPhrases = [];
     this.clearEndpoint();
     const recognizer = this.recognizer;
     this.abortRecognizer();
@@ -618,9 +628,9 @@ export class VoiceSession {
   /**
    * (Re)starts the end-of-phrase timer for an open mic.
    *
-   * Stopping the recognizer is what ends the phrase: it delivers the final
-   * result at once instead of after the engine's own, much longer, silence
-   * window, and `onend` then re-arms the session.
+   * Stopping the recognizer is what ends the request: it finalizes the phrase
+   * in progress at once instead of after the engine's own, much longer, silence
+   * window, and `onend` then sends everything heard and re-arms the session.
    */
   private armEndpoint(generation: number): void {
     if (this.mode !== "open-mic") return;
@@ -629,24 +639,31 @@ export class VoiceSession {
     this.endpointTimer = setTimeout(() => {
       this.endpointTimer = null;
       if (generation !== this.generation || this.disposed) return;
+      const recognizer = this.recognizer;
+      if (!recognizer) {
+        this.flushPendingPhrases();
+        return;
+      }
       try {
-        this.recognizer?.stop();
+        recognizer.stop();
       } catch {
-        // A recognizer that refuses to stop will end on its own.
+        // A recognizer that refuses to stop will end on its own; the words
+        // already heard need not wait for it.
+        this.flushPendingPhrases();
       }
     }, endpointMs);
   }
 
   /**
-   * Publishes everything heard during a push-to-talk hold as one request.
+   * Publishes everything heard since the last endpoint as one request.
    *
-   * The engine may have split the hold into several phrases — a pause for
-   * thought is enough — but the user made one request, so they are joined.
+   * The engine may have split it into several phrases — a pause for thought is
+   * enough — but the user made one request, so they are joined.
    */
-  private flushHeldPhrases(): void {
-    const phrases = this.heldPhrases;
-    this.heldPhrases = [];
-    const text = phrases.join(" ").replace(/\s+/g, " ").trim();
+  private flushPendingPhrases(): void {
+    const phrases = this.pendingPhrases;
+    this.pendingPhrases = [];
+    const text = joinPhrases(phrases);
     if (!text) return;
     this.emit({ type: "interim", text: "" });
     this.emit({ type: "transcript", text });
@@ -679,4 +696,9 @@ export class VoiceSession {
       // An observer cannot break the session.
     }
   }
+}
+
+/** Joins recognized fragments into one request, dropping empty ones. */
+function joinPhrases(phrases: readonly string[]): string {
+  return phrases.join(" ").replace(/\s+/g, " ").trim();
 }
