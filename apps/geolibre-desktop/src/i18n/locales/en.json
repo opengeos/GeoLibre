@@ -9628,6 +9628,7 @@
       "addedLive": "Added {{name}}. Move the sliders to re-slice it; the first view of a region can take a few seconds.",
       "added": "Added {{name}}.",
       "addFailed": "Could not add the layer: {{message}}",
+      "resliceFailed": "Could not show that slice: {{message}}",
       "catalogFailed": "Could not load the dynamical.org catalog: {{message}}"
     },
     "geolibre-point-cloud-annotation": {

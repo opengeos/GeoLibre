@@ -240,6 +240,20 @@ describe("datasetMapSupport", () => {
     assert.equal(datasetMapSupport(dataset), "supported");
   });
 
+  it("judges a dataset by its worst variable", () => {
+    const mixed = parsed({
+      ...gfsForecast,
+      "cube:variables": {
+        ...gfsForecast["cube:variables"],
+        precipitation_sum: {
+          ...gfsForecast["cube:variables"].temperature_2m,
+          chunks: [1440, 1, 50, 50],
+        },
+      },
+    });
+    assert.equal(datasetMapSupport(mixed), "time-series");
+  });
+
   it("refuses a time-series layout and a virtual repository", () => {
     assert.equal(datasetMapSupport(parsed(gfsAnalysis)), "time-series");
     assert.equal(datasetMapSupport(parsed(gfsVirtual)), "virtual");

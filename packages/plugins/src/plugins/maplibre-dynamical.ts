@@ -328,6 +328,12 @@ function liveLayerExists(live: LiveLayer | null): live is LiveLayer {
   return Boolean(live && useAppStore.getState().layers.some((layer) => layer.id === live.id));
 }
 
+/**
+ * Re-slices run one after another, so an older one cannot land last. Module-wide, so a panel
+ * rebuilt for a language change queues behind the one it replaced.
+ */
+let sliceChain: Promise<void> = Promise.resolve();
+
 function buildPanel(container: HTMLElement): () => void {
   container.replaceChildren();
   container.style.cssText = CSS.panel;
@@ -338,8 +344,6 @@ function buildPanel(container: HTMLElement): () => void {
   let busy = false;
   /** Whether `axes` belongs to the chosen variable; Add waits for it. */
   let axesReady = false;
-  /** Re-slices run one after another, so an older one cannot land last. */
-  let sliceChain: Promise<void> = Promise.resolve();
   let sliceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const statusBox = element("div");
@@ -669,11 +673,19 @@ function buildPanel(container: HTMLElement): () => void {
     if (sliceTimer) clearTimeout(sliceTimer);
     sliceTimer = setTimeout(() => {
       sliceTimer = null;
-      sliceChain = sliceChain.then(applyLiveSlice, applyLiveSlice);
+      sliceChain = sliceChain.then(applyLiveSlice).catch((error: unknown) => {
+        setStatus(
+          tr("resliceFailed", "Could not show that slice: {{message}}", {
+            message: errorMessage(error),
+          }),
+          true,
+        );
+      });
     }, SLICE_DEBOUNCE_MS);
   };
 
   const applyLiveSlice = async (): Promise<void> => {
+    if (disposed) return;
     const live = state.live;
     const dataset = currentDataset();
     if (!liveLayerExists(live) || !dataset || live.datasetId !== dataset.id) return;
@@ -684,7 +696,8 @@ function buildPanel(container: HTMLElement): () => void {
     if (!applied || disposed) return;
     const store = useAppStore.getState();
     const layer = store.layers.find((entry) => entry.id === live.id);
-    const variable = currentVariable();
+    // The variable that was sliced, even if another is chosen by now.
+    const variable = dataset.variables.find((entry) => entry.name === live.variable);
     // The current record, not the one read before the await: a name the user typed meanwhile wins.
     const current = state.live;
     if (!layer || !variable || current?.id !== live.id || layer.name !== current.name) return;

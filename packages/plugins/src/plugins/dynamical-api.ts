@@ -283,9 +283,12 @@ export function slicesPerChunk(dataset: DynamicalDataset, variable: DynamicalVar
  */
 export function datasetMapSupport(dataset: DynamicalDataset): DynamicalMapSupport {
   if (dataset.virtual) return "virtual";
-  const variable = dataset.variables[0];
-  if (variable && slicesPerChunk(dataset, variable) > MAX_SLICES_PER_CHUNK) return "time-series";
-  return "supported";
+  // The worst variable decides: the panel offers every variable of a dataset it lists as ready.
+  const worst = Math.max(
+    1,
+    ...dataset.variables.map((variable) => slicesPerChunk(dataset, variable)),
+  );
+  return worst > MAX_SLICES_PER_CHUNK ? "time-series" : "supported";
 }
 
 /** A variable's non-spatial dimensions, in array order: the ones the panel picks a slice of. */
