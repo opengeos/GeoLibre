@@ -7392,6 +7392,11 @@
     "collapse": "Collapse {{title}}"
   },
   "attributeTable": {
+    "serviceDomains": {
+      "unresolvedDomain": "The service only names the domain of {{field}}, so the server checks its values.",
+      "subtypeFieldMissing": "The service's subtype field {{field}} is not in its field list, so the server checks subtype-specific values.",
+      "subtypeConflict": "The service's types and subtypes for {{field}} disagree, so the server checks subtype-specific values."
+    },
     "refresh": "Refresh features",
     "refreshTitle": "Re-read features from the source to pick up changes made elsewhere",
     "refreshTitleLocalFile": "Reload features from the file on disk",
@@ -8748,6 +8753,8 @@
     "error": {
       "required": "A value is required",
       "number": "Must be a number",
+      "integer": "Must be a whole number",
+      "text": "Must be text",
       "range": "Must be between {{min}} and {{max}}",
       "rangeMin": "Must be at least {{min}}",
       "rangeMax": "Must be at most {{max}}",

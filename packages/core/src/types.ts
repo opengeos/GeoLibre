@@ -880,6 +880,15 @@ export interface AttributeFormFieldConfig {
   required?: boolean;
   /** Dropdown entries for the `valueMap` widget. */
   valueMap?: AttributeFormValueMapEntry[];
+  /**
+   * Declared storage type of the field. When set, coercion follows it instead
+   * of guessing from the value map (a text field whose codes are "1" and "2"
+   * still stores strings), and validation rejects values of another type or,
+   * for `integer`, fractional numbers. Service-derived configs (ArcGIS domains)
+   * set it from the field's declared type; designer-authored configs leave it
+   * unset.
+   */
+  valueType?: "string" | "number" | "integer";
   /** Lower bound for `number`/`range` widgets (inclusive). */
   min?: number;
   /** Upper bound for `number`/`range` widgets (inclusive). */

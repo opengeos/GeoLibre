@@ -13,9 +13,53 @@ back to an editable ArcGIS Feature Service in the web and desktop apps.
 The save action appears when the service advertises supported editing operations
 and supplies its field schema and object ID field. GeoLibre checks the latest
 service metadata again before each save. The server remains responsible for
-user permissions, ownership restrictions, attribute rules, and subtype constraints.
+user permissions, ownership restrictions, and attribute rules.
 Write requests require HTTPS. Browser deployments also require the service to
 permit cross-origin requests; desktop uses the native ArcGIS HTTP transport.
+
+## Domains, types and subtypes
+
+GeoLibre reads the attribute domains the layer publishes in its own metadata
+(no extra request) and applies them in the attribute table and before saving:
+
+- A **coded-value domain** becomes a dropdown of the published names. The
+  stored code keeps the field's declared type, so an integer field saves `1`
+  and a text field saves `"1"`, `"01"` or `"0"` exactly. Read-only cells show
+  the name, with the stored code in the tooltip. Exports and feature properties
+  keep the codes.
+- A **range domain** on an integer or floating-point field becomes a bounded
+  number input. Bounds are inclusive and integer fields reject decimals.
+- A **type or subtype field** (`typeIdField`/`types[]` or
+  `subtypeField`/`subtypes[]`) becomes a dropdown of the published types.
+  Fields whose domain the selected type overrides switch their choices and
+  bounds as soon as the type changes, including before it is saved. A domain of
+  `inherited`, or a field the type does not list, uses the field-level domain.
+
+Changing a type never clears or replaces dependent values. A value that no
+longer fits stays visible, is flagged, and must be corrected before the edit
+can be saved. An edit that does not change the type only checks the fields it
+changes, so existing records with historical values can still be edited.
+
+A designer-authored Attributes Form on the layer is kept: its aliases, layout,
+visibility rules and constraint expressions still apply, and its value map or
+bounds may narrow the service's, but never widen them. A field the form hides
+is still checked against the service domain.
+
+Some metadata cannot be resolved with confidence. In each of these cases
+GeoLibre leaves the check to the server and does not offer a constrained
+editor for that field. Where the problem affects the whole layer, a notice
+appears in the attribute table toolbar while editing:
+
+- a domain referenced by name only, without its codes or range;
+- `types[]` and `subtypes[]` that disagree about the same type, or name
+  different fields (subtype-specific domains are then not applied);
+- a type or subtype field that is not in the layer's field list;
+- a record whose type code is not published, or a type that sets a field's
+  domain to `null`.
+
+Range domains on date fields and coded-value domains on date or GUID fields
+keep the generic editor; the save check still validates them. New-feature
+defaults from types, subtypes and templates are not applied yet.
 
 ## Pending edits and refresh
 
@@ -88,7 +132,8 @@ and multipolygons. For Z-enabled services, 2D edits use the service's finite def
 that default is explicitly enabled. Otherwise every vertex must supply a finite Z.
 Object IDs must remain unchanged. New fields and changes to server-managed fields
 cannot be written through feature editing. GeoLibre validates basic field types,
-nullability, string lengths, and field-level coded-value and range domains.
+nullability, string lengths, and coded-value and range domains, including those
+a type or subtype overrides.
 
 Versioned services, M coordinates, dates in an unknown timezone, attachments,
 related-record editing, and offline synchronization are outside this implementation.

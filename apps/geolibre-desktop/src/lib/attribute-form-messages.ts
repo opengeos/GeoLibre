@@ -11,6 +11,8 @@ import type { TFunction } from "i18next";
 export function attributeFormErrorMessage(t: TFunction, error: AttributeFormFieldError): string {
   if (error.code === "required") return t("attributeForm.error.required");
   if (error.code === "number") return t("attributeForm.error.number");
+  if (error.code === "integer") return t("attributeForm.error.integer");
+  if (error.code === "text") return t("attributeForm.error.text");
   if (error.code === "range") {
     if (error.min != null && error.max != null)
       return t("attributeForm.error.range", {

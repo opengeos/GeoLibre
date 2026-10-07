@@ -27,6 +27,13 @@ export interface AttributeFormEvalOptions {
   /** Map zoom for `["zoom"]` in expressions; defaults to 0. */
   zoom?: number;
   /**
+   * Constraints a data service enforces regardless of the form's
+   * presentation (ArcGIS domains). A field the form hides is still checked
+   * against its entry here, so a visibility rule cannot let an invalid value
+   * reach the service.
+   */
+  serviceForm?: AttributeFormConfig;
+  /**
    * Real feature backing the properties, when the caller has one — its
    * geometry feeds `["geometry-type"]` and geometry-aware operators. Its
    * `properties` are ignored in favor of the candidate record being
@@ -37,7 +44,7 @@ export interface AttributeFormEvalOptions {
 
 /** Why a field's value was rejected; codes map to localized messages. */
 export interface AttributeFormFieldError {
-  code: "required" | "number" | "range" | "valueMap" | "constraint";
+  code: "required" | "number" | "integer" | "text" | "range" | "valueMap" | "constraint";
   /**
    * For `constraint`: the author's `constraintDescription`, or the
    * expression's own error text when it failed to evaluate.
@@ -113,6 +120,17 @@ export function valueMapLabelFor(config: AttributeFormFieldConfig, value: unknow
 export function coerceAttributeFormValue(config: AttributeFormFieldConfig, raw: string): unknown {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
+  if (config.valueType) {
+    // A declared type wins over the widget heuristics below. A value-map pick
+    // is kept verbatim so a code with surrounding spaces still matches.
+    const picked =
+      config.widget === "valueMap" && config.valueMap?.some((entry) => entry.value === raw)
+        ? raw
+        : trimmed;
+    if (config.valueType === "string") return picked;
+    const parsed = Number(picked);
+    return Number.isFinite(parsed) ? parsed : raw;
+  }
   if (config.widget === "number" || config.widget === "range") {
     const parsed = Number(trimmed);
     return Number.isFinite(parsed) ? parsed : raw;
@@ -182,6 +200,12 @@ export function validateAttributeFormField(
     // requiring it would block every save with a confusing "value required".
     if (config.required && config.widget !== "checkbox") return { code: "required" };
   } else {
+    if (config.valueType === "string" && typeof value !== "string") return { code: "text" };
+    if (config.valueType === "number" || config.valueType === "integer") {
+      if (typeof value !== "number" || !Number.isFinite(value)) return { code: "number" };
+      if (config.valueType === "integer" && !Number.isSafeInteger(value))
+        return { code: "integer" };
+    }
     if (config.widget === "number" || config.widget === "range") {
       const numeric = typeof value === "number" ? value : Number(value);
       if (!Number.isFinite(numeric)) return { code: "number" };
@@ -227,8 +251,9 @@ export function validateAttributeFormField(
 
 /**
  * Validate a whole candidate properties record against a form config. Hidden
- * fields (visibility expression currently false) are skipped entirely — a
- * field the form does not show cannot block a save.
+ * fields (visibility expression currently false) skip the form's own rules —
+ * a field the form does not show cannot block a save — but are still checked
+ * against `options.serviceForm`, whose constraints the data service enforces.
  */
 export function validateAttributeFormValues(
   form: AttributeFormConfig | undefined,
@@ -236,12 +261,95 @@ export function validateAttributeFormValues(
   options: AttributeFormEvalOptions = {},
 ): AttributeFormValidation {
   const errors: Record<string, AttributeFormFieldError> = {};
+  const checked = new Set<string>();
   for (const config of form?.fields ?? []) {
     if (!isAttributeFormFieldVisible(config, properties, options)) continue;
+    checked.add(config.field);
+    const error = validateAttributeFormField(config, properties, options);
+    if (error) errors[config.field] = error;
+  }
+  for (const config of options.serviceForm?.fields ?? []) {
+    if (checked.has(config.field)) continue;
     const error = validateAttributeFormField(config, properties, options);
     if (error) errors[config.field] = error;
   }
   return { ok: Object.keys(errors).length === 0, errors };
+}
+
+/**
+ * Combine a layer's designer-authored form with the constraints its data
+ * service publishes (for example ArcGIS coded-value and range domains) into
+ * the form the editing surfaces use. The author's presentation choices
+ * (alias, visibility, constraint expression, a narrower value map or bounds)
+ * survive, but never widen what the service accepts: a service value map
+ * forces the value-map widget and keeps only author entries the service also
+ * lists (all service entries when none overlap), bounds take the tighter of
+ * each side, and the service's declared value type always applies.
+ *
+ * @param form - The layer's designer-authored config, if any.
+ * @param service - Service-derived configs, if the layer has any.
+ * @returns The effective config, or `form` itself when there is no service form.
+ */
+export function mergeAttributeFormConfigs(
+  form: AttributeFormConfig | undefined,
+  service: AttributeFormConfig | undefined,
+): AttributeFormConfig | undefined {
+  if (!service?.fields.length) return form;
+  const serviceFields = new Map(service.fields.map((entry) => [entry.field, entry]));
+  const fields: AttributeFormFieldConfig[] = [];
+  for (const own of form?.fields ?? []) {
+    const constraint = serviceFields.get(own.field);
+    serviceFields.delete(own.field);
+    fields.push(constraint ? mergeAttributeFormField(own, constraint) : own);
+  }
+  fields.push(...serviceFields.values());
+  return { fields };
+}
+
+function mergeAttributeFormField(
+  own: AttributeFormFieldConfig,
+  service: AttributeFormFieldConfig,
+): AttributeFormFieldConfig {
+  const merged: AttributeFormFieldConfig = { ...own, valueType: service.valueType };
+  if (!own.alias?.trim() && service.alias) merged.alias = service.alias;
+  if (service.required) merged.required = true;
+  if (service.widget === "valueMap" && service.valueMap) {
+    const allowed = new Map(service.valueMap.map((entry) => [entry.value, entry]));
+    const narrowed =
+      own.widget === "valueMap"
+        ? (own.valueMap ?? [])
+            .filter((entry) => allowed.has(entry.value))
+            .map((entry) => ({
+              value: entry.value,
+              label: entry.label ?? allowed.get(entry.value)!.label,
+            }))
+        : [];
+    merged.widget = "valueMap";
+    merged.valueMap = narrowed.length ? narrowed : service.valueMap;
+    delete merged.min;
+    delete merged.max;
+    delete merged.step;
+    return merged;
+  }
+  if (own.widget !== "number" && own.widget !== "range") {
+    merged.widget = service.widget;
+    delete merged.valueMap;
+  }
+  merged.min = tighter(own.min, service.min, Math.max);
+  merged.max = tighter(own.max, service.max, Math.min);
+  if (merged.min === undefined) delete merged.min;
+  if (merged.max === undefined) delete merged.max;
+  return merged;
+}
+
+function tighter(
+  a: number | undefined,
+  b: number | undefined,
+  pick: (a: number, b: number) => number,
+): number | undefined {
+  if (a == null) return b;
+  if (b == null) return a;
+  return pick(a, b);
 }
 
 /**

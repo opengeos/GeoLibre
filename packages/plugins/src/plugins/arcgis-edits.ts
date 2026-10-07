@@ -1,4 +1,12 @@
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
+import {
+  arcGISDomainError,
+  arcGISSubtypeField,
+  resolveArcGISFieldDomain,
+  type ArcGISDomain,
+  type ArcGISFeatureType,
+  type ArcGISSubtype,
+} from "./arcgis-domains";
 
 /** The subset of layer metadata needed to validate an edit before sending it. */
 export interface ArcGISEditInfo {
@@ -20,11 +28,20 @@ export interface ArcGISEditInfo {
   fields?: Array<{
     name: string;
     type: string;
+    alias?: string;
     editable?: boolean;
     nullable?: boolean;
     length?: number;
-    domain?: { type: string; codedValues?: Array<{ code: unknown }>; range?: number[] };
+    domain?: ArcGISDomain | null;
   }>;
+  /** Field whose value selects an entry of {@link types}. */
+  typeIdField?: string;
+  /** Feature types, each optionally overriding field domains. */
+  types?: ArcGISFeatureType[];
+  /** Field whose value selects an entry of {@link subtypes}. */
+  subtypeField?: string;
+  /** Subtypes, each optionally overriding field domains. */
+  subtypes?: ArcGISSubtype[];
 }
 
 export function arcGISEditCapabilities(info: ArcGISEditInfo) {
@@ -212,6 +229,8 @@ function attributes(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const fields = new Map(info.fields?.map((f) => [f.name, f]));
+  // Domains follow the record's own (possibly just edited) type or subtype.
+  const candidate = feature.properties ?? {};
   for (const name of new Set([
     ...Object.keys(feature.properties ?? {}),
     ...Object.keys(previous?.properties ?? {}),
@@ -256,20 +275,30 @@ function attributes(
       } else if (typeof normalized !== "string") throw new Error(`Field ${name} requires text.`);
       if (typeof normalized === "string" && field.length && normalized.length > field.length)
         throw new Error(`Field ${name} exceeds its maximum length.`);
-      if (
-        field.domain?.type === "codedValue" &&
-        !field.domain.codedValues?.some((entry) => entry.code === normalized)
-      )
-        throw new Error(`Field ${name} is outside its coded value domain.`);
-      if (
-        field.domain?.type === "range" &&
-        field.domain.range &&
-        typeof normalized === "number" &&
-        (normalized < field.domain.range[0] || normalized > field.domain.range[1])
-      )
-        throw new Error(`Field ${name} is outside its allowed range.`);
+      const error = arcGISDomainError(
+        name,
+        normalized,
+        resolveArcGISFieldDomain(info, name, candidate),
+      );
+      if (error) throw new Error(error);
     }
     result[name] = normalized;
+  }
+  // A changed type or subtype revalidates every field whose domain it governs,
+  // including values the edit did not touch: they are never cleared or
+  // replaced, but must be corrected before the change can be saved.
+  const selector = arcGISSubtypeField(info);
+  if (previous && selector && !same(candidate[selector], previous.properties?.[selector])) {
+    for (const field of info.fields ?? []) {
+      if (field.name === selector || Object.hasOwn(result, field.name)) continue;
+      if (!Object.hasOwn(candidate, field.name)) continue;
+      const error = arcGISDomainError(
+        field.name,
+        candidate[field.name],
+        resolveArcGISFieldDomain(info, field.name, candidate),
+      );
+      if (error) throw new Error(`${error} It does not fit the new ${selector} value.`);
+    }
   }
   return result;
 }

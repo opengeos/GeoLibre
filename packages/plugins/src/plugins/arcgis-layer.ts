@@ -2,6 +2,7 @@
 
 import {
   DEFAULT_LAYER_STYLE,
+  type AttributeFormConfig,
   type GeoLibreLayer,
   shouldZoomToNewLayers,
   useAppStore,
@@ -19,6 +20,12 @@ import {
   sameArcGISFeatures,
   type ArcGISEditInfo,
 } from "./arcgis-edits";
+import {
+  arcGISDomainDiagnostics,
+  arcGISServiceAttributeForm,
+  arcGISSubtypeField,
+  type ArcGISDomainDiagnostic,
+} from "./arcgis-domains";
 import {
   arcgisQuantizationParams,
   decodeArcGISQuantizedFeatures,
@@ -2854,6 +2861,39 @@ export function isArcGISWritableLayer(layer: GeoLibreLayer): boolean {
   if (!info) return false;
   const caps = arcGISEditCapabilities(info);
   return caps.create || caps.update || caps.delete;
+}
+
+/** The domain constraints an ArcGIS feature layer's metadata imposes on attribute editing. */
+export interface ArcGISAttributeConstraints {
+  /** Constraints for one candidate record, resolved for its type/subtype. */
+  formFor: (
+    properties: Record<string, unknown> | null | undefined,
+  ) => AttributeFormConfig | undefined;
+  /** The type/subtype field whose value selects the dependent domains, if any. */
+  subtypeField?: string;
+  /** Metadata problems that leave some checks to the server. */
+  diagnostics: ArcGISDomainDiagnostic[];
+}
+
+/**
+ * The service-published domains of an ArcGIS feature layer, ready for the
+ * generic attribute editors, or `undefined` for other layers. Reads the
+ * metadata the layer already holds; nothing is requested.
+ *
+ * @param layer - Any layer.
+ * @returns The constraints, or `undefined` when the layer is not an ArcGIS feature layer.
+ */
+export function arcGISAttributeConstraints(
+  layer: GeoLibreLayer | null | undefined,
+): ArcGISAttributeConstraints | undefined {
+  if (layer?.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND) return undefined;
+  const info = layer.metadata.arcgisEditInfo as ArcGISEditInfo | undefined;
+  if (!info?.fields?.length) return undefined;
+  return {
+    formFor: (properties) => arcGISServiceAttributeForm(info, properties),
+    subtypeField: arcGISSubtypeField(info),
+    diagnostics: arcGISDomainDiagnostics(info),
+  };
 }
 
 /** Pause replacement downloads while edits are pending or an editor owns the features. */

@@ -11,6 +11,7 @@ import {
   editorTrackingFieldNames,
   ensureEditorTrackingFields,
   isDuckDBQueryLayer,
+  mergeAttributeFormConfigs,
   stampFeaturePropertiesEditorTracking,
   useAppStore,
   validateAttributeFormValues,
@@ -24,6 +25,7 @@ import {
   useLayer,
 } from "@geolibre/core";
 import {
+  arcGISAttributeConstraints,
   arcGISLayerHasPendingEdits,
   getDuckDBLayerRows,
   getVectorLayerGeoJSON,
@@ -257,10 +259,109 @@ function hasDraftEdits(drafts: AttributeDrafts): boolean {
   return Object.values(drafts).some((columns) => Object.keys(columns).length > 0);
 }
 
+/**
+ * The effective Attribute Form for one record: the layer's designer config
+ * merged with the constraints its data service publishes for that record
+ * (ArcGIS domains, which can depend on the record's type/subtype).
+ */
+interface RowForm {
+  form?: AttributeFormConfig;
+  fields: Map<string, AttributeFormFieldConfig>;
+  /** Service-published constraints, enforced even on fields the form hides. */
+  serviceForm?: AttributeFormConfig;
+  /** Field whose value selects the record's service constraints. */
+  selectorField?: string;
+}
+
+type RowFormResolver = (properties: Record<string, unknown>) => RowForm;
+
+const EMPTY_ROW_FORM: RowForm = { fields: new Map() };
+
+function toRowForm(
+  form: AttributeFormConfig | undefined,
+  serviceForm?: AttributeFormConfig,
+  selectorField?: string,
+): RowForm {
+  if (!form?.fields.length) return EMPTY_ROW_FORM;
+  return {
+    form,
+    fields: new Map(form.fields.map((entry) => [entry.field, entry])),
+    serviceForm,
+    selectorField,
+  };
+}
+
+/**
+ * Build the per-record form resolver. Without service constraints every row
+ * shares the designer form. Otherwise rows are merged once per distinct
+ * service form, which the ArcGIS adapter memoizes per type/subtype value.
+ */
+function makeRowFormResolver(
+  attributeForm: AttributeFormConfig | undefined,
+  constraints: ReturnType<typeof arcGISAttributeConstraints>,
+): RowFormResolver {
+  const plain = toRowForm(attributeForm);
+  if (!constraints) return () => plain;
+  const merged = new Map<AttributeFormConfig | undefined, RowForm>();
+  return (properties) => {
+    const service = constraints.formFor(properties);
+    let rowForm = merged.get(service);
+    if (!rowForm) {
+      rowForm = service
+        ? toRowForm(
+            mergeAttributeFormConfigs(attributeForm, service),
+            service,
+            constraints.subtypeField,
+          )
+        : plain;
+      merged.set(service, rowForm);
+    }
+    return rowForm;
+  };
+}
+
+/**
+ * Apply one row's drafts to its properties. Coercion depends on the row's
+ * form, which can depend on a drafted type/subtype, so a row whose drafts
+ * select different constraints is coerced again under them.
+ */
+function draftCandidate(
+  properties: Record<string, unknown>,
+  rowDrafts: Record<string, string>,
+  formForRow: RowFormResolver,
+  columnTypes?: ReturnType<typeof inferColumnTypes>,
+): { candidate: Record<string, unknown>; rowForm: RowForm } {
+  const coerce = (rowForm: RowForm) => {
+    const candidate = { ...properties };
+    for (const [column, draft] of Object.entries(rowDrafts)) {
+      const previousValue = properties[column];
+      // Skip drafts that are invalid JSON for an object-typed cell so we never
+      // persist or export a type-corrupted value; the existing value is kept.
+      if (isInvalidObjectDraft(draft, previousValue)) continue;
+      // A column with an Attribute Form widget coerces by widget type (a
+      // number widget stores a number even into a previously-null cell);
+      // unconfigured columns keep the previous-value type inference.
+      const config = rowForm.fields.get(column);
+      candidate[column] = config
+        ? coerceAttributeFormValue(config, draft)
+        : parseAttributeDraft(draft, previousValue, columnTypes?.get(column));
+    }
+    return candidate;
+  };
+  let rowForm = formForRow(properties);
+  let candidate = coerce(rowForm);
+  const next = formForRow(candidate);
+  if (next !== rowForm) {
+    rowForm = next;
+    candidate = coerce(rowForm);
+  }
+  return { candidate, rowForm };
+}
+
 function applyDraftsToFeatures(
   features: Feature[],
   drafts: AttributeDrafts,
-  formFields?: Map<string, AttributeFormFieldConfig>,
+  formForRow: RowFormResolver,
   tracking?: EditorTrackingStampOptions,
 ): Feature[] {
   // Derived from the whole collection, so an edit to an empty cell adopts the
@@ -271,20 +372,12 @@ function applyDraftsToFeatures(
     const rowDrafts = drafts[featureId];
     if (!rowDrafts) return feature;
 
-    let properties: Record<string, unknown> = { ...(feature.properties ?? {}) };
-    for (const [column, draft] of Object.entries(rowDrafts)) {
-      const previousValue = feature.properties?.[column];
-      // Skip drafts that are invalid JSON for an object-typed cell so we never
-      // persist or export a type-corrupted value; the existing value is kept.
-      if (isInvalidObjectDraft(draft, previousValue)) continue;
-      // A column with an Attribute Form widget coerces by widget type (a
-      // number widget stores a number even into a previously-null cell);
-      // unconfigured columns keep the previous-value type inference.
-      const config = formFields?.get(column);
-      properties[column] = config
-        ? coerceAttributeFormValue(config, draft)
-        : parseAttributeDraft(draft, previousValue, columnTypes?.get(column));
-    }
+    let properties = draftCandidate(
+      feature.properties ?? {},
+      rowDrafts,
+      formForRow,
+      columnTypes,
+    ).candidate;
 
     // Only the rows that carried a draft reach here, so this stamps exactly the
     // features the user edited. Passed only on save — the export preview runs
@@ -306,16 +399,14 @@ function applyDraftsToFeatures(
  * featureId → field → error for every blocking violation.
  */
 function computeFormDraftErrors(
-  form: AttributeFormConfig | undefined,
+  formForRow: RowFormResolver,
   drafts: AttributeDrafts,
   featureById: Map<string, Feature> | null,
 ): Record<string, Record<string, AttributeFormFieldError>> {
   const result: Record<string, Record<string, AttributeFormFieldError>> = {};
-  if (!form?.fields.length || !featureById || !hasDraftEdits(drafts)) {
+  if (!featureById || !hasDraftEdits(drafts)) {
     return result;
   }
-
-  const formFields = new Map(form.fields.map((entry) => [entry.field, entry]));
 
   for (const [featureId, rowDrafts] of Object.entries(drafts)) {
     if (Object.keys(rowDrafts).length === 0) continue;
@@ -323,27 +414,31 @@ function computeFormDraftErrors(
     if (!feature) continue;
     const properties = (feature.properties ?? {}) as Record<string, unknown>;
 
-    const candidate = { ...properties };
-    for (const [column, draft] of Object.entries(rowDrafts)) {
-      const previousValue = properties[column];
-      if (isInvalidObjectDraft(draft, previousValue)) continue;
-      const config = formFields.get(column);
-      candidate[column] = config
-        ? coerceAttributeFormValue(config, draft)
-        : parseAttributeDraft(draft, previousValue);
-    }
-
-    const validation = validateAttributeFormValues(form, candidate, {
+    const { candidate, rowForm } = draftCandidate(properties, rowDrafts, formForRow);
+    const validation = validateAttributeFormValues(rowForm.form, candidate, {
       feature,
+      serviceForm: rowForm.serviceForm,
     });
     if (validation.ok) continue;
 
-    const baseline = validateAttributeFormValues(form, properties, {
+    const baselineForm = formForRow(properties);
+    const baseline = validateAttributeFormValues(baselineForm.form, properties, {
       feature,
+      serviceForm: baselineForm.serviceForm,
     });
+    // A changed type/subtype revalidates every field whose service domain it
+    // governs, even untouched ones: their values are kept but must fit.
+    const selectorChanged =
+      rowForm.selectorField !== undefined &&
+      candidate[rowForm.selectorField] !== properties[rowForm.selectorField];
+    const serviceFields = new Set(rowForm.serviceForm?.fields.map((entry) => entry.field));
     const rowErrors: Record<string, AttributeFormFieldError> = {};
     for (const [field, error] of Object.entries(validation.errors)) {
-      if (rowDrafts[field] !== undefined || !baseline.errors[field]) {
+      if (
+        rowDrafts[field] !== undefined ||
+        !baseline.errors[field] ||
+        (selectorChanged && serviceFields.has(field))
+      ) {
         rowErrors[field] = error;
       }
     }
@@ -605,14 +700,33 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
   // validation of drafted rows. DuckDB layers keep the plain text editor —
   // the designer is only offered for store-backed geojson layers.
   const attributeForm = isDuckDBLayer ? undefined : layer?.attributeForm;
-  const formFields = useMemo(
-    () => new Map((attributeForm?.fields ?? []).map((entry) => [entry.field, entry])),
-    [attributeForm],
+  // Constraints the layer's data service publishes (ArcGIS coded-value and
+  // range domains, per type/subtype), merged per record with the designer
+  // config. Derived from metadata the layer already holds.
+  const serviceConstraints = useMemo(
+    () => (isDuckDBLayer ? undefined : arcGISAttributeConstraints(layer)),
+    [isDuckDBLayer, layer],
   );
+  const formForRow = useMemo(
+    () => makeRowFormResolver(attributeForm, serviceConstraints),
+    [attributeForm, serviceConstraints],
+  );
+  // Metadata the ArcGIS adapter could not resolve: those checks fall to the
+  // server, so say so rather than imply the form validated them.
+  const domainNotice = serviceConstraints?.diagnostics
+    .map((diagnostic) =>
+      diagnostic.code === "unresolvedDomain"
+        ? t("attributeTable.serviceDomains.unresolvedDomain", { field: diagnostic.field })
+        : diagnostic.code === "subtypeFieldMissing"
+          ? t("attributeTable.serviceDomains.subtypeFieldMissing", { field: diagnostic.field })
+          : t("attributeTable.serviceDomains.subtypeConflict", { field: diagnostic.field }),
+    )
+    .join(" ");
+  const hasRowForms = Boolean(attributeForm?.fields.length || serviceConstraints);
   // Feature index for validation, rebuilt only when the layer data (not a
   // draft keystroke) changes; null when no form config is active.
   const formFeatureIndex = useMemo(() => {
-    if (!attributeForm?.fields.length) return null;
+    if (!hasRowForms) return null;
     const geojsonFeatures = layer?.geojson?.features ?? [];
     return new Map(
       geojsonFeatures.map((feature, index): [string, Feature] => [
@@ -620,10 +734,10 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
         feature,
       ]),
     );
-  }, [attributeForm, layer?.geojson]);
+  }, [hasRowForms, layer?.geojson]);
   const formDraftErrors = useMemo(
-    () => computeFormDraftErrors(attributeForm, drafts, formFeatureIndex),
-    [attributeForm, drafts, formFeatureIndex],
+    () => computeFormDraftErrors(formForRow, drafts, formFeatureIndex),
+    [formForRow, drafts, formFeatureIndex],
   );
   const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 
@@ -1076,7 +1190,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
       features: applyDraftsToFeatures(
         layer.geojson.features,
         drafts,
-        formFields,
+        formForRow,
         editorTrackingFieldNames(layer.editorTracking)
           ? {
               config: layer.editorTracking,
@@ -1109,7 +1223,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
 
     return {
       ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts, formFields),
+      features: applyDraftsToFeatures(layer.geojson.features, drafts, formForRow),
     };
   };
 
@@ -1690,6 +1804,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             {refreshStatus.message}
           </span>
         ) : null}
+        {isEditing && domainNotice ? (
+          <span
+            className="max-w-48 truncate text-xs text-amber-600"
+            title={domainNotice}
+            role="status"
+          >
+            {domainNotice}
+          </span>
+        ) : null}
         <Button
           variant={isEditing ? "secondary" : "outline"}
           size="sm"
@@ -2078,6 +2201,12 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 {virtualRows.map((virtualRow) => {
                   const { featureId, properties } = sorted[virtualRow.index];
                   const selected = selectedIdSet.has(featureId);
+                  const rowDrafts = drafts[featureId];
+                  // Follows a drafted type/subtype, so dependent dropdowns
+                  // and bounds update as soon as the selector changes.
+                  const rowForm = rowDrafts
+                    ? draftCandidate(properties, rowDrafts, formForRow).rowForm
+                    : formForRow(properties);
                   return (
                     <TableRow
                       key={featureId}
@@ -2111,7 +2240,15 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                           : changed
                             ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
                             : "h-7 min-w-0 px-2 text-xs";
-                        const config = formFields.get(col);
+                        const config = rowForm.fields.get(col);
+                        // Service coded values read as their published names;
+                        // the stored code stays in the tooltip.
+                        const codeLabel =
+                          config?.widget === "valueMap" &&
+                          rowForm.serviceForm?.fields.some((entry) => entry.field === col) &&
+                          value != null
+                            ? config.valueMap?.find((entry) => entry.value === String(value))?.label
+                            : undefined;
                         const current = draft ?? formatAttributeValue(value);
                         const isEditableCell = isEditing && !readOnlyColumns.has(col);
                         const linkUrl = isEditableCell ? null : attributeLinkUrl(value);
@@ -2215,6 +2352,8 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                               >
                                 {linkUrl}
                               </a>
+                            ) : codeLabel ? (
+                              <span title={formatAttributeValue(value)}>{codeLabel}</span>
                             ) : (
                               formatAttributeValue(value)
                             )}
