@@ -7440,6 +7440,8 @@
     "error": {
       "readImage": "Could not read this layer's GeoTIFF data in the browser.",
       "noBands": "Select at least one band.",
+      "imageTooLarge": "This image has {{width}} × {{height}} pixels, more than the {{max}} the in-browser workbench handles. Clip it to a smaller area first.",
+      "noSuchBand": "The image has no band {{index}}.",
       "failed": "Segmentation failed."
     },
     "measure": {

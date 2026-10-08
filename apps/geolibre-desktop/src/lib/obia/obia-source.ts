@@ -5,6 +5,9 @@ import { fetchLayerBytes } from "../whitebox-layer-inputs";
 // The last image read, so listing bands, segmenting and measuring the same
 // layer fetch its bytes once. One entry: the workbench works on one image.
 let cached: { key: string; bytes: Uint8Array } | null = null;
+// Bumped by clearObiaSourceCache, so a fetch that was in flight when the cache
+// was cleared does not store its bytes afterwards.
+let generation = 0;
 
 /**
  * Identity of a layer's data: its id plus wherever its bytes come from, so a
@@ -21,6 +24,7 @@ export function obiaSourceKey(layer: GeoLibreLayer): string {
  */
 export function clearObiaSourceCache(): void {
   cached = null;
+  generation += 1;
 }
 
 /**
@@ -33,8 +37,9 @@ export function clearObiaSourceCache(): void {
 export async function obiaSourceBytes(layer: GeoLibreLayer): Promise<Uint8Array | null> {
   const key = obiaSourceKey(layer);
   if (cached?.key === key) return cached.bytes;
+  const started = generation;
   const bytes = await fetchLayerBytes(layer);
-  if (bytes) cached = { key, bytes };
+  if (bytes && started === generation) cached = { key, bytes };
   return bytes;
 }
 
