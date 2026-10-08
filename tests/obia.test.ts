@@ -663,3 +663,16 @@ describe("splitImageBands input errors", () => {
     assert.equal(third.bands[0][0], 30);
   });
 });
+
+describe("classifyByRules input checks", () => {
+  it("rejects a rule without a numeric value before running the tool", async () => {
+    const table = {
+      fields: ["a"],
+      rows: new Map([[1, { a: 1 } as Record<string, number | null>]]),
+    };
+    await assert.rejects(
+      classifyByRules(table, [{ field: "a", op: ">", value: Number.NaN, className: "x" }], "y"),
+      /Every rule needs a numeric value/,
+    );
+  });
+});

@@ -95,6 +95,7 @@ interface ObiaSessionState {
   /** A new segmentation invalidates the features measured on the old one. */
   setSegmentation: (run: ObiaSegmentationRun | null) => void;
   setFeatureOptions: (patch: Partial<ObiaFeatureOptions>) => void;
+  /** New features clear the classification built on the previous ones. */
   setFeatures: (run: ObiaFeatureRun | null) => void;
   setClasses: (classes: ObiaClass[]) => void;
   setLabelRole: (role: ObiaSampleRole) => void;
@@ -129,7 +130,8 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
   setSegmentation: (segmentation) => set({ segmentation, features: null, classification: null }),
   setFeatureOptions: (patch) => set((s) => ({ featureOptions: { ...s.featureOptions, ...patch } })),
-  setFeatures: (features) => set({ features }),
+  // New features make the classification built on the old ones stale.
+  setFeatures: (features) => set({ features, classification: null }),
   setClasses: (classes) => set({ classes }),
   setLabelRole: (labelRole) => set({ labelRole }),
   setClassifier: (patch) => set((s) => ({ classifier: { ...s.classifier, ...patch } })),

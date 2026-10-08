@@ -896,6 +896,9 @@ export async function classifyByRules(
   defaultClass: string,
 ): Promise<ObiaClassification> {
   if (!rules.length) throw new Error("Add at least one rule.");
+  if (rules.some((rule) => !Number.isFinite(rule.value))) {
+    throw new Error("Every rule needs a numeric value.");
+  }
   const ruleFields = [...new Set(rules.map((rule) => rule.field))];
   const missing = ruleFields.filter((field) => !table.fields.includes(field));
   if (missing.length) throw new Error(`Not measured: ${missing.join(", ")}.`);
