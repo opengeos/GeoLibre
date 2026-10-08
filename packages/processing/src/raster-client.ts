@@ -165,22 +165,46 @@ export function writeRasterData(raster: RasterData): ArrayBuffer {
 
 /** Encode all bands of a {@link RasterData} as a Float32 GeoTIFF. */
 export function writeRasterBands(raster: RasterData): ArrayBuffer {
-  const bandCount = raster.bands.length;
+  return writeInterleaved(raster, raster.bands, Float32Array);
+}
+
+/**
+ * Encode 8-bit bands with a raster's georeferencing as a uint8 GeoTIFF, e.g. a
+ * class-code raster or an RGB rendering. Each band holds `width * height`
+ * values; `nodata` (when given) is written as the GDAL NoData value.
+ *
+ * @param grid Size, georeferencing and GeoKeys to copy (its own bands are ignored).
+ * @param bands The 8-bit bands to write.
+ * @param nodata NoData value, or null for none.
+ */
+export function writeUint8Bands(
+  grid: RasterData,
+  bands: Uint8Array[],
+  nodata: number | null,
+): ArrayBuffer {
+  return writeInterleaved({ ...grid, nodata }, bands, Uint8Array);
+}
+
+function writeInterleaved<T extends Float32Array | Uint8Array>(
+  raster: RasterData,
+  bands: T[],
+  ArrayType: { new (length: number): T },
+): ArrayBuffer {
+  const bandCount = bands.length;
   // Interleave bands into a single flat array the writer can consume (it infers
   // band count from `values.length / (width * height)`).
-  let values: Float32Array;
+  let values: T;
   if (bandCount === 1) {
-    values = raster.bands[0];
+    values = bands[0];
   } else {
     const pixels = raster.width * raster.height;
-    values = new Float32Array(pixels * bandCount);
+    values = new ArrayType(pixels * bandCount);
     for (let p = 0; p < pixels; p += 1) {
       for (let b = 0; b < bandCount; b += 1) {
-        values[p * bandCount + b] = raster.bands[b][p];
+        values[p * bandCount + b] = bands[b][p];
       }
     }
   }
-
   const metadata: Record<string, unknown> = {
     width: raster.width,
     height: raster.height,
@@ -192,9 +216,8 @@ export function writeRasterBands(raster: RasterData): ArrayBuffer {
     const value = raster.geoKeys[key];
     if (value != null) metadata[key] = value;
   }
-
   // The geotiff writer's metadata type is broad; the runtime accepts the fields
-  // set above (it derives SampleFormat/BitsPerSample from the Float32Array).
+  // set above (it derives SampleFormat/BitsPerSample from the typed array).
   const bytes: ArrayBuffer = writeArrayBuffer(
     values,
     metadata as Parameters<typeof writeArrayBuffer>[1],

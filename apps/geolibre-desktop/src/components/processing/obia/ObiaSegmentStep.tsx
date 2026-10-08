@@ -5,13 +5,13 @@ import { Button, Label, Select } from "@geolibre/ui";
 import { Info, Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { useObiaSession } from "../../../lib/obia/obia-session";
+import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
 import { obiaSourceBands, obiaSourceBytes } from "../../../lib/obia/obia-source";
 import { ObiaNumberField, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
 interface ObiaSegmentStepProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
-  onAddRaster: (bytes: Uint8Array, name: string, fileName?: string) => Promise<void>;
+  onAddRaster: ObiaAddRaster;
 }
 
 /** Raster layers the workbench can read in the browser (GeoTIFF/COG). */

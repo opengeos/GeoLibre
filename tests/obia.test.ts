@@ -7,6 +7,9 @@ import { writeArrayBuffer } from "geotiff";
 import { initTools } from "geolibre-wasm/tools";
 import { runTool } from "geolibre-wasm/tools";
 import {
+  classifiedRaster,
+  legendCsv,
+  readRasterData,
   accuracyReportCsv,
   assessAccuracy,
   applyPredictions,
@@ -522,5 +525,50 @@ describe("assessAccuracy", () => {
     const ours = assessAccuracy(samples, predictions);
     assert.ok(Math.abs(tool.overall_accuracy - ours.overallAccuracy) < 1e-12);
     assert.ok(Math.abs(tool.kappa - ours.kappa) < 1e-12);
+  });
+});
+
+describe("classifiedRaster", () => {
+  it("burns predictions onto the label grid as codes and class colors", async () => {
+    // Labels: objects 1, 1, 2 / 3, 0 (NoData), 2.
+    const labels = new Uint8Array(
+      writeArrayBuffer(new Float32Array([1, 1, 2, 3, 0, 2]), {
+        width: 3,
+        height: 2,
+        ModelPixelScale: [1, 1, 0],
+        ModelTiepoint: [0, 0, 0, 500000, 4000000, 0],
+        ProjectedCSTypeGeoKey: 32617,
+        GTModelTypeGeoKey: 1,
+      } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer,
+    );
+    const result = await classifiedRaster(
+      labels,
+      new Map([
+        [1, "water"],
+        [2, "trees, shrubs"],
+        [3, "unclassified"],
+      ]),
+      [
+        { name: "trees, shrubs", color: "#16a34a" },
+        { name: "water", color: "#000000" },
+      ],
+    );
+    assert.deepEqual(result.legend, [
+      { code: 1, className: "trees, shrubs", color: "#16a34a" },
+      { code: 2, className: "water", color: "#000000" },
+      { code: 3, className: "unclassified", color: "#9ca3af" },
+    ]);
+    const codes = await readRasterData(result.codes.buffer as ArrayBuffer);
+    assert.deepEqual(Array.from(codes.bands[0]), [2, 2, 1, 3, 0, 1]);
+    assert.equal(codes.nodata, 0);
+    assert.equal(codes.originX, 500000);
+    const rgb = await readRasterData(result.rgb.buffer as ArrayBuffer);
+    assert.equal(rgb.bands.length, 3);
+    // A black class color is lifted to 1 so it is not NoData; NoData stays 0.
+    assert.deepEqual(Array.from(rgb.bands[0]), [1, 1, 22, 156, 0, 22]);
+    assert.equal(
+      legendCsv(result.legend),
+      'code,class,color\n1,"trees, shrubs",#16a34a\n2,water,#000000\n3,unclassified,#9ca3af\n',
+    );
   });
 });

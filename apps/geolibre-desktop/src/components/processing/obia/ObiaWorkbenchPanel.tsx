@@ -4,8 +4,10 @@ import { GripVertical, Shapes, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useFloatingPanelDrag } from "../../../hooks/useFloatingPanelDrag";
+import type { ObiaAddRaster } from "../../../lib/obia/obia-session";
 import { ObiaAccuracyStep } from "./ObiaAccuracyStep";
 import { ObiaClassifyStep } from "./ObiaClassifyStep";
+import { ObiaExportStep } from "./ObiaExportStep";
 import { ObiaMeasureStep } from "./ObiaMeasureStep";
 import { ObiaSegmentStep } from "./ObiaSegmentStep";
 import { ObiaTrainStep } from "./ObiaTrainStep";
@@ -13,15 +15,16 @@ import { ObiaTrainStep } from "./ObiaTrainStep";
 interface ObiaWorkbenchPanelProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
   /** Add GeoTIFF bytes to the map as a raster layer. */
-  onAddRaster: (bytes: Uint8Array, name: string, fileName?: string) => Promise<void>;
+  onAddRaster: ObiaAddRaster;
 }
 
 /**
  * Object-Based Analysis workbench (#3053). A floating panel that runs the OBIA
  * pipeline on the WASM tool runner, one step per section: segment a raster
  * layer into objects (one polygon per object, `id` = `segment_id`), measure
- * them, label training and validation samples, classify them, and assess the
- * accuracy. Each later step appears once the one before it has run.
+ * them, label training and validation samples, classify them, assess the
+ * accuracy, and export the result. Each later step appears once the one before
+ * it has run.
  */
 export function ObiaWorkbenchPanel({
   mapControllerRef,
@@ -73,6 +76,7 @@ export function ObiaWorkbenchPanel({
         <ObiaTrainStep />
         <ObiaClassifyStep />
         <ObiaAccuracyStep />
+        <ObiaExportStep onAddRaster={onAddRaster} />
       </div>
     </div>
   );

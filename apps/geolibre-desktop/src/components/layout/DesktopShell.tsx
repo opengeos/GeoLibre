@@ -942,11 +942,11 @@ export function DesktopShell({
               <Suspense fallback={null}>
                 <ObiaWorkbenchPanel
                   mapControllerRef={mapControllerRef}
-                  onAddRaster={async (bytes, name, fileName) => {
+                  onAddRaster={async (bytes, name, fileName, state) => {
                     const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
                       type: "image/tiff",
                     });
-                    await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
+                    await addRasterToMap(createAppAPI(mapControllerRef), file, { name, state });
                   }}
                 />
               </Suspense>

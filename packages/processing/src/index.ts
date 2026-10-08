@@ -165,6 +165,7 @@ export {
   TERRAIN_NODATA,
   supportsClientRaster,
   readRasterData,
+  writeUint8Bands,
   writeRasterData,
   writeRasterBands,
   runRasterToolClient,
@@ -419,6 +420,10 @@ export {
   type RunModelGraphOptions,
 } from "./model-graph";
 export {
+  classifiedRaster,
+  legendCsv,
+  type ObiaClassifiedRaster,
+  type ObiaLegendEntry,
   accuracyReportCsv,
   assessAccuracy,
   type ObiaAccuracyReport,

@@ -7416,7 +7416,8 @@
       "measure": "Measure",
       "train": "Label samples",
       "classify": "Classify",
-      "accuracy": "Assess accuracy"
+      "accuracy": "Assess accuracy",
+      "export": "Export"
     },
     "image": "Image",
     "imagePlaceholder": "Choose a raster layer",
@@ -7539,6 +7540,18 @@
       "saved": "Report saved.",
       "error": {
         "save": "Saving the report failed."
+      }
+    },
+    "export": {
+      "hint": "The objects layer is the vector result: its obia_predicted field holds each object's class, and its layer menu exports it. Here you can also burn the classes onto the image grid.",
+      "addToMap": "Add classified raster",
+      "saveCodes": "Save class codes (GeoTIFF)",
+      "saveLegend": "Save legend (CSV)",
+      "layerName": "{{name}} classified",
+      "added": "Classified raster added to the map.",
+      "saved": "Saved.",
+      "error": {
+        "failed": "Export failed."
       }
     }
   },

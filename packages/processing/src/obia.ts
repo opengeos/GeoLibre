@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, MultiPolygon, Polygon, Position } from "geojson";
 import { fromArrayBuffer } from "geotiff";
-import { readRasterData, writeRasterBands } from "./raster-client";
+import { readRasterData, writeRasterBands, writeUint8Bands } from "./raster-client";
 import { runWasmToolInBackground } from "./wasm-tool-runner";
 
 /**
@@ -1021,4 +1021,93 @@ export function accuracyReportCsv(report: ObiaAccuracyReport): string {
     lines.push(`area_weighted_accuracy,${report.areaWeightedAccuracy.toFixed(4)}`);
   }
   return `${lines.join("\n")}\n`;
+}
+
+// --- Export -----------------------------------------------------------------
+
+/** One class of a classified raster. */
+export interface ObiaLegendEntry {
+  /** Pixel value (1-based; 0 is NoData). */
+  code: number;
+  className: string;
+  color: string;
+}
+
+/** A classification burned onto the segmentation's pixel grid. */
+export interface ObiaClassifiedRaster {
+  /** Single-band uint8 GeoTIFF of class codes, 0 = NoData. */
+  codes: Uint8Array;
+  /** 3-band uint8 GeoTIFF in the class colors, 0 = NoData, for display. */
+  rgb: Uint8Array;
+  legend: ObiaLegendEntry[];
+}
+
+function hexToRgb(color: string): [number, number, number] {
+  const match = color.trim().match(/^#?([0-9a-f]{6})$/i);
+  if (!match) return [128, 128, 128];
+  const n = parseInt(match[1], 16);
+  // Keep every channel above 0 so a class color never reads as NoData.
+  return [Math.max(1, (n >> 16) & 255), Math.max(1, (n >> 8) & 255), Math.max(1, n & 255)];
+}
+
+/**
+ * Burn object predictions onto the label raster's grid: a class-code raster
+ * for analysis and an RGB rendering in the class colors for display.
+ *
+ * @param labels Label raster from {@link segmentImage}.
+ * @param predictions Predicted class per object.
+ * @param classes Class colors; codes follow this order, then any other
+ *   predicted class (e.g. a rules default class) alphabetically, in gray.
+ */
+export async function classifiedRaster(
+  labels: Uint8Array,
+  predictions: ReadonlyMap<number, string>,
+  classes: readonly ObiaClass[],
+): Promise<ObiaClassifiedRaster> {
+  const grid = await readRasterData(toArrayBuffer(labels));
+  const predicted = new Set(predictions.values());
+  const names = [
+    ...classes.map((cls) => cls.name).filter((name) => predicted.has(name)),
+    ...[...predicted].filter((name) => !classes.some((cls) => cls.name === name)).sort(),
+  ];
+  if (names.length > 255) throw new Error("A classified raster holds at most 255 classes.");
+  const legend = names.map((className, i) => ({
+    code: i + 1,
+    className,
+    color: classes.find((cls) => cls.name === className)?.color ?? "#9ca3af",
+  }));
+  const codeOf = new Map(legend.map((entry) => [entry.className, entry.code]));
+  const objectCode = new Map<number, number>();
+  for (const [id, name] of predictions) objectCode.set(id, codeOf.get(name) ?? 0);
+  const rgbOf = legend.map((entry) => hexToRgb(entry.color));
+
+  const pixels = grid.width * grid.height;
+  const codes = new Uint8Array(pixels);
+  const r = new Uint8Array(pixels);
+  const g = new Uint8Array(pixels);
+  const b = new Uint8Array(pixels);
+  const band = grid.bands[0];
+  for (let p = 0; p < pixels; p += 1) {
+    const label = band[p];
+    if (!(label > 0) || label === grid.nodata) continue;
+    const code = objectCode.get(Math.round(label)) ?? 0;
+    if (!code) continue;
+    codes[p] = code;
+    const [cr, cg, cb] = rgbOf[code - 1];
+    r[p] = cr;
+    g[p] = cg;
+    b[p] = cb;
+  }
+  return {
+    codes: new Uint8Array(writeUint8Bands(grid, [codes], 0)),
+    rgb: new Uint8Array(writeUint8Bands(grid, [r, g, b], 0)),
+    legend,
+  };
+}
+
+/** The legend as CSV (`code,class,color`). */
+export function legendCsv(legend: readonly ObiaLegendEntry[]): string {
+  const quote = (value: string) =>
+    /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  return `code,class,color\n${legend.map((e) => `${e.code},${quote(e.className)},${e.color}`).join("\n")}\n`;
 }

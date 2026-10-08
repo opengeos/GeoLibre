@@ -121,6 +121,19 @@ For an honest score, label validation samples spread across the scene rather
 than next to training samples, and do not tune the classifier on them
 repeatedly; otherwise they stop being independent.
 
+## 6. Export
+
+The objects layer is already the vector result: each object's
+`obia_predicted` property holds its class, so its layer menu exports the
+classification to GeoJSON, GeoPackage, Shapefile and the other vector formats
+(and **Processing → GeoLibre Toolbox → Vector → Dissolve** merges objects by
+class). The Export step also burns the classes onto the image's pixel grid:
+
+- **Add classified raster** adds a color rendering in the class colors.
+- **Save class codes (GeoTIFF)** saves a single-band Cloud-Optimized GeoTIFF of
+  class codes (1, 2, ... with 0 as NoData) on the source image's grid and CRS.
+- **Save legend (CSV)** saves the code, class name and color of each class.
+
 ### About the algorithm
 
 The method is Whitebox's seeded region growing (`image_segmentation`). It is
