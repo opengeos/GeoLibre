@@ -520,7 +520,14 @@ function locateCell(
   let column: number | null;
   let row: number | null;
   if (grid.projection) {
-    const [x, y] = proj4("EPSG:4326", grid.projection, [lng, lat]) as [number, number];
+    let x: number;
+    let y: number;
+    try {
+      [x, y] = proj4("EPSG:4326", grid.projection, [lng, lat]) as [number, number];
+    } catch {
+      // Outside the projection's domain, so outside the grid.
+      return null;
+    }
     column = nearestIndex(grid.x.values, x);
     row = nearestIndex(grid.y.values, y);
   } else {

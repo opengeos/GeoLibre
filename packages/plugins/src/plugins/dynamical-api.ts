@@ -968,7 +968,7 @@ export function seriesCsv(steps: readonly SeriesStep[], valueHeader: string): st
     : ["time_utc", valueHeader];
   const rows = steps.map((step) =>
     [
-      new Date(step.time).toISOString(),
+      Number.isFinite(step.time) ? new Date(step.time).toISOString() : "",
       cell(step.value),
       ...(ensemble ? [cell(step.min), cell(step.max)] : []),
     ].join(","),
