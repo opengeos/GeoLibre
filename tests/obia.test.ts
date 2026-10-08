@@ -4,6 +4,7 @@ import { before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
+import { featureSelectionId } from "@geolibre/core";
 import { initTools } from "geolibre-wasm/tools";
 import {
   applyPredictions,
@@ -384,6 +385,37 @@ describe("OBIA training samples", () => {
       [2, 3],
     );
     assert.equal("obia_sample" in (fc.features[0].properties ?? {}), false);
+  });
+
+  it("uses the map selection's ids as segment ids", () => {
+    // GeoLibre's selection identifies a feature by featureSelectionId (its
+    // feature id, else its index). Objects carry id = segment_id, so the ids
+    // the Train step reads from the selection are the segment ids it labels,
+    // even when the objects are not in segment order.
+    const objects = dissolveSegmentPolygons({
+      type: "FeatureCollection",
+      features: [9, 4].map((value) => ({
+        type: "Feature" as const,
+        properties: { VALUE: value },
+        geometry: {
+          type: "Polygon" as const,
+          coordinates: [
+            [
+              [value, 0],
+              [value + 1, 0],
+              [value + 1, 1],
+              [value, 0],
+            ],
+          ],
+        },
+      })),
+    });
+    const selected = objects.features.map((f, i) => Number(featureSelectionId(f, i)));
+    assert.deepEqual(selected, [4, 9]);
+    const labeled = labelObjects(objects, new Set([9]), { className: "roof", role: "training" });
+    assert.deepEqual(collectSamples(labeled), [
+      { segmentId: 9, className: "roof", role: "training" },
+    ]);
   });
 
   it("holds out a reproducible, stratified share of each class", () => {
