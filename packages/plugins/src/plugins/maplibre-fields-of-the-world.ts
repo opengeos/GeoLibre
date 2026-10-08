@@ -1207,7 +1207,7 @@ function buildPanel(container: HTMLElement): () => void {
       } catch (error) {
         // The old rows and footprints would describe a different area than
         // the error does.
-        if (!disposed) clearResults();
+        if (!disposed && !isAbort(error)) clearResults();
         throw error;
       }
     });

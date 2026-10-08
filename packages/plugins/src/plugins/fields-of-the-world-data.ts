@@ -462,7 +462,7 @@ export class FtwTooManyFieldsError extends Error {
     readonly count: number,
     readonly limit: number,
   ) {
-    super(`The area holds more than ${count} matching fields (limit ${limit})`);
+    super(`The area holds more than ${limit} matching fields`);
     this.name = "FtwTooManyFieldsError";
   }
 }
