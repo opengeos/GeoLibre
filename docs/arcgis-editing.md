@@ -98,6 +98,16 @@ the copied attributes, minus the values the service assigns, so they save as
 inserts. The original keeps its identity: the piece whose shape is unchanged,
 or the first piece when a split changed them all.
 
+An insert into an enterprise geodatabase runs as the database user the
+service connects with, not as your ArcGIS account. If that user lacks the
+database privilege to allocate object IDs, every insert fails with a message
+such as `The EXECUTE permission was denied on the object 'i12_get_ids'`, from
+GeoLibre, Map Viewer, or any other client, while updates and deletes still
+succeed. GeoLibre marks this cause in the save status and keeps the new
+features local. The data owner or DBA fixes it by granting the service's
+database user its edit privileges on the feature class, including EXECUTE on
+that procedure. Then save again.
+
 ## Pending edits and refresh
 
 GeoLibre retains a baseline of the features actually downloaded. Deletions are

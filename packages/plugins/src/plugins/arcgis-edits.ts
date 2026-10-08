@@ -85,6 +85,27 @@ export function arcGISEditCapabilities(info: ArcGISEditInfo) {
   };
 }
 
+/** A database refusing the service's own account, as SQL Server, Oracle and PostgreSQL word it. */
+const DATABASE_PERMISSION_ERROR =
+  /permission was denied|permission denied|insufficient privileges|ORA-01031|ORA-00942/i;
+
+/**
+ * Explain an edit the service's database refused.
+ *
+ * Inserting into an enterprise geodatabase runs the object ID allocation
+ * procedure (`i<n>_get_ids` on SQL Server) as the database user the service
+ * connects with, not as the signed-in ArcGIS user. Without EXECUTE on it every
+ * insert fails, whichever client sends it and however privileged the ArcGIS
+ * account, so the error is not something GeoLibre can retry around.
+ *
+ * @param description - The `error.description` of a failed edit result.
+ * @returns The description, followed by the cause when it is a database permission.
+ */
+export function describeArcGISEditError(description: string): string {
+  if (!DATABASE_PERMISSION_ERROR.test(description)) return description;
+  return `${description} The service's database account lacks a permission this edit needs. This is set in the geodatabase, not in ArcGIS: your ArcGIS sign-in does not change it, and the same edit fails from any client. Ask the data owner or DBA to grant the service's database user its edit privileges, including EXECUTE on the object ID allocation procedure that inserts use.`;
+}
+
 /** Whether a value can be an ArcGIS object ID: a non-negative safe integer. */
 function isArcGISObjectIdValue(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;

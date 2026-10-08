@@ -15,6 +15,7 @@ import {
   arcGISEditCapabilities,
   arcGISObjectId,
   identifyArcGISFeatures,
+  describeArcGISEditError,
   planArcGISEdits,
   reconcileArcGISRefresh,
   sameArcGISFeatures,
@@ -3093,7 +3094,7 @@ export async function saveArcGISLayerEdits(
     const failed = (entry: EditResult, operation: string, id: number): boolean => {
       if (entry.success) return false;
       result.errors.push(
-        `${operation} ${id}: ${entry.error?.description ?? `ArcGIS error ${entry.error?.code ?? "unknown"}`}`,
+        `${operation} ${id}: ${entry.error?.description ? describeArcGISEditError(entry.error.description) : `ArcGIS error ${entry.error?.code ?? "unknown"}`}`,
       );
       return true;
     };

@@ -5,6 +5,7 @@ import { useAppStore } from "@geolibre/core";
 import {
   arcGISEditCapabilities,
   arcGISGeometry,
+  describeArcGISEditError,
   identifyArcGISFeatures,
   reconcileArcGISRefresh,
   planArcGISEdits,
@@ -215,6 +216,32 @@ it("reconciles partial results and server IDs; retry does not repeat successful 
   assert.equal(arcGISLayerHasPendingEdits(connection.id), false);
   await saveArcGISLayerEdits(connection.id);
   assert.equal(connection.posts(), 2);
+});
+
+it("explains an insert the geodatabase refused for lack of a database permission", async () => {
+  // The response reported against ArcGIS Enterprise 11.1 on SQL Server (#3022).
+  const denied =
+    "Internal error during object insert. Insufficient permissions [42000:[Microsoft][ODBC Driver 18 for SQL Server][SQL Server]The EXECUTE permission was denied on the object 'i12_get_ids', database 'gis', schema 'dbo'.] [HYDRANT]";
+  const connection = await load(() => ({
+    addResults: [{ success: false, error: { code: 1000, description: denied } }],
+  }));
+  useAppStore
+    .getState()
+    .updateLayer(connection.id, { geojson: fc(feature(1), feature(2), feature()) });
+  const result = await saveArcGISLayerEdits(connection.id);
+  assert.equal(result.inserted, 0);
+  assert.equal(result.errors.length, 1);
+  assert.ok(result.errors[0].startsWith(`Add 1: ${denied} `));
+  assert.match(result.errors[0], /database account lacks a permission/);
+  assert.equal(arcGISLayerHasPendingEdits(connection.id), true, "the new feature stays local");
+});
+
+it("leaves other edit failures as the service words them", () => {
+  assert.equal(describeArcGISEditError("Locked"), "Locked");
+  assert.match(
+    describeArcGISEditError("ORA-01031: insufficient privileges"),
+    /database account lacks a permission/,
+  );
 });
 
 const refreshGeometry: Array<string | null> = [];
