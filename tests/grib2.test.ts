@@ -119,6 +119,26 @@ describe("decodeGrib2", () => {
     assert.throws(() => decodeGrib2(bytes), /values for 1152 grid points/);
   });
 
+  it("refuses groups that cover fewer values than the message declares", () => {
+    const bytes = fixture("complex-bitmap").slice();
+    let offset = 16;
+    const view = new DataView(bytes.buffer);
+    while (bytes[offset + 4] !== 5) offset += view.getUint32(offset);
+    // 1098 values are encoded (1152 points less 54 masked); claim two more.
+    view.setUint32(offset + 5, view.getUint32(offset + 5) + 2);
+    assert.throws(() => decodeGrib2(bytes), /groups hold 1098 values, not 1100/);
+  });
+
+  it("refuses a spatial differencing order it does not implement", () => {
+    const bytes = fixture("complex-bitmap").slice();
+    let offset = 16;
+    const view = new DataView(bytes.buffer);
+    while (bytes[offset + 4] !== 5) offset += view.getUint32(offset);
+    // Template 5.3 octet 48: the order of spatial differencing (1 or 2).
+    bytes[offset + 47] = 3;
+    assert.throws(() => decodeGrib2(bytes), /order 3/);
+  });
+
   it("refuses bytes that are not a GRIB2 message", () => {
     assert.throws(() => decodeGrib2(new TextEncoder().encode("not a grib message")), /GRIB/);
   });

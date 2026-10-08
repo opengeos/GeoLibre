@@ -310,7 +310,7 @@ export function slicesPerChunk(dataset: DynamicalDataset, variable: DynamicalVar
 }
 
 /** Decoded bytes in one chunk of a variable. */
-export function chunkBytes(dataset: DynamicalDataset, variable: DynamicalVariable): number {
+export function chunkBytes(variable: DynamicalVariable): number {
   if (!variable.chunks.length) return 0;
   return variable.chunks.reduce((product, length) => product * (length || 1), BYTES_PER_VALUE);
 }
@@ -330,10 +330,7 @@ export function datasetMapSupport(dataset: DynamicalDataset): DynamicalMapSuppor
     ...dataset.variables.map((variable) => slicesPerChunk(dataset, variable)),
   );
   if (worst <= MAX_SLICES_PER_CHUNK) return "supported";
-  const largest = Math.max(
-    0,
-    ...dataset.variables.map((variable) => chunkBytes(dataset, variable)),
-  );
+  const largest = Math.max(0, ...dataset.variables.map((variable) => chunkBytes(variable)));
   return largest > 0 && largest <= MAX_REGIONAL_CHUNK_BYTES ? "regional" : "time-series";
 }
 
@@ -410,7 +407,7 @@ export function regionalMinZoom(
 ): number {
   if (!needsRegionalView(dataset, variable)) return 0;
   const footprint = chunkFootprint(dataset, variable);
-  const bytes = chunkBytes(dataset, variable);
+  const bytes = chunkBytes(variable);
   if (!footprint || !bytes) return MAX_REGIONAL_MIN_ZOOM;
   const allowed = Math.max(1, Math.floor(budget / bytes));
   const width = Math.max(1, viewport.width);

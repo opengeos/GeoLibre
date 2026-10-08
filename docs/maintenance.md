@@ -470,6 +470,21 @@ checks the hook points in both nested copies' `dist/maplibre-geoman.es.js`
 right-click a MultiLineString vertex in Edit mode. If upstream adds MultiLineString support, delete the
 wrapper.
 
+### `@carbonplan/zarr-layer` — private `minZoom`
+
+The Dynamical plugin draws its regional datasets (analyses and ensembles, which
+pack long time series into each chunk) only from a minimum zoom, so a zoomed-out
+view cannot read gigabytes. MapLibre's layer zoom range covers every render, but
+zarr-layer also fetches once while it initializes, gated on its own private
+`minZoom` field (set from the constructor's `minzoom`, read by
+`isZoomInRange`). The Zarr control does not forward `minzoom`, so
+`applyRegionalZoomRange` in `packages/plugins/src/plugins/maplibre-dynamical.ts`
+writes the field on the live layer, guarded by a type check. If upstream renames
+it the write silently stops, and only that first fetch loses its gate (the panel
+also jumps the map to the minimum zoom before adding, which covers the common
+case). `tests/upstream-contracts.test.ts` checks the field and its use; on a
+bump, check whether the Zarr control now forwards `minzoom` so the write can go.
+
 ### `zarr-cesium` (`packages/map/package.json`) — private internals
 
 `packages/map/src/cesium-zarr-imagery.ts` draws Zarr layers on the globe and

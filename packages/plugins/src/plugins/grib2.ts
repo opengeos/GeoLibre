@@ -15,8 +15,12 @@
 
 import { decodeAec } from "./grib2-aec";
 
-/** The largest grid decoded: 100 million points, about four times the densest one dynamical.org serves (MRMS, 24.5 million). */
-const MAX_GRID_POINTS = 100_000_000;
+/**
+ * The largest grid decoded: 16 million points, eight times the largest grid a virtual repository
+ * references (HRRR, 1.9 million). A decode holds a few float64 copies of the field, so this keeps
+ * one to about 128 MB each, where a corrupt message could otherwise ask for gigabytes.
+ */
+const MAX_GRID_POINTS = 16_000_000;
 
 /** What a decoded field's grid looks like. */
 export interface Grib2Grid {
@@ -213,6 +217,14 @@ function unpackComplex(
   const cursor = new BitCursor(data);
 
   // Template 5.3 leads with the differencing's initial values and its overall minimum.
+  if (
+    spatial &&
+    (order < 1 || order > 2 || extraOctets < 1 || data.length < (order + 1) * extraOctets)
+  ) {
+    throw new Error(
+      `Unsupported GRIB2 spatial differencing (order ${order}, ${extraOctets} extra octets)`,
+    );
+  }
   const initial: number[] = [];
   let minimum = 0;
   if (order > 0) {
@@ -265,6 +277,9 @@ function unpackComplex(
       }
     }
   }
+
+  // Group lengths that cover fewer values than declared would leave zeros that decode as data.
+  if (index !== count) throw new Error(`GRIB2 groups hold ${index} values, not ${count}`);
 
   // Undo the differencing over the values that are present.
   if (order > 0) {

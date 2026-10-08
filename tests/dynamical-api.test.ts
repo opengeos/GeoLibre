@@ -271,7 +271,7 @@ describe("datasetMapSupport", () => {
 
   it("draws a time-series layout a region at a time", () => {
     const dataset = parsed(gfsAnalysis);
-    assert.equal(chunkBytes(dataset, dataset.variables[0]), 1440 * 50 * 50 * 4);
+    assert.equal(chunkBytes(dataset.variables[0]), 1440 * 50 * 50 * 4);
     assert.equal(datasetMapSupport(dataset), "regional");
   });
 
@@ -289,7 +289,7 @@ describe("datasetMapSupport", () => {
         },
       },
     });
-    assert.ok(chunkBytes(dataset, dataset.variables[0]) > MAX_REGIONAL_CHUNK_BYTES);
+    assert.ok(chunkBytes(dataset.variables[0]) > MAX_REGIONAL_CHUNK_BYTES);
     assert.equal(datasetMapSupport(dataset), "time-series");
   });
 });

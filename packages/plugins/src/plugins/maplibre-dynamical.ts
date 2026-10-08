@@ -354,21 +354,26 @@ function viewportSize(app: GeoLibreAppAPI): { width: number; height: number } {
  * Bring the map in to a regional layer's minimum zoom before it is added, so the renderer's first
  * read covers a region rather than the globe. Stays over the current view when the dataset covers
  * it, and moves to the dataset otherwise.
+ *
+ * Returns:
+ *   A function that puts the camera back, for an add that fails; null when nothing moved.
  */
 function zoomInForRegionalLayer(
   app: GeoLibreAppAPI,
   dataset: DynamicalDataset,
   minZoom: number,
-): void {
+): (() => void) | null {
   const map = getStyleMap(app);
-  if (!map || map.getZoom() >= minZoom) return;
+  if (!map || map.getZoom() >= minZoom) return null;
   const center = map.getCenter();
+  const zoom = map.getZoom();
   const bbox = dataset.bbox;
   if (!bbox || bboxContains(bbox, center.lng, center.lat)) {
     map.jumpTo({ center, zoom: minZoom });
   } else {
     map.jumpTo({ center: bboxCenter(bbox), zoom: minZoom });
   }
+  return () => map.jumpTo({ center, zoom });
 }
 
 /**
@@ -388,7 +393,7 @@ function applyRegionalZoomRange(app: GeoLibreAppAPI, layerId: string, minZoom: n
   if (!map || !layer) return;
   // A zoom animation can settle a hair short of a whole level (3.9999 shows as "4.00"), which
   // would leave the layer hidden at the zoom the panel names; the margin widens a view by ~3%.
-  const threshold = minZoom - REGIONAL_ZOOM_TOLERANCE;
+  const threshold = Math.max(0, minZoom - REGIONAL_ZOOM_TOLERANCE);
   const nativeIds = layer.metadata.nativeLayerIds;
   for (const nativeId of Array.isArray(nativeIds) ? nativeIds : []) {
     if (typeof nativeId !== "string") continue;
@@ -894,6 +899,7 @@ function buildPanel(container: HTMLElement): () => void {
     const sliceAxes = axes;
     const indices = { ...state.indices };
     const stillChosen = () => state.datasetId === dataset.id && state.variable === variable.name;
+    let restoreCamera: (() => void) | null = null;
     try {
       setStatus(tr("opening", "Opening {{name}}…", { name: dataset.title }));
       const store = await openRepository(dataset);
@@ -922,7 +928,9 @@ function buildPanel(container: HTMLElement): () => void {
       const minZoom = needsRegionalView(dataset, variable)
         ? regionalMinZoom(dataset, variable, viewportSize(app))
         : 0;
-      if (minZoom > 0) zoomInForRegionalLayer(app, dataset, minZoom);
+      // The jump has to come before the add, which fetches as it initializes; a failed add puts
+      // the camera back.
+      restoreCamera = minZoom > 0 ? zoomInForRegionalLayer(app, dataset, minZoom) : null;
       setStatus(tr("adding", "Adding {{name}}…", { name: variable.longName }));
       const layerId = await addZarrRasterLayer(app, {
         url: icechunkLayerUrl(dataset.repositoryUrl, DEFAULT_ICECHUNK_BRANCH),
@@ -939,8 +947,11 @@ function buildPanel(container: HTMLElement): () => void {
         ...(proj4 ? { proj4 } : {}),
         ...(bounds ? { bounds } : {}),
       });
-      if (minZoom > 0) {
-        applyRegionalZoomRange(app, layerId, minZoom);
+      // The layer is on the map, drawing at the zoom the camera moved to.
+      restoreCamera = null;
+      if (minZoom > 0) applyRegionalZoomRange(app, layerId, minZoom);
+      // Tracked even at a minimum zoom of 0: a larger map later can need one.
+      if (needsRegionalView(dataset, variable)) {
         watchRegionalLayer(app, layerId, dataset, variable);
       }
       const layer = useAppStore.getState().layers.find((entry) => entry.id === layerId);
@@ -972,6 +983,7 @@ function buildPanel(container: HTMLElement): () => void {
             : tr("added", "Added {{name}}.", { name: variable.longName }),
       );
     } catch (error) {
+      restoreCamera?.();
       setStatus(
         tr("addFailed", "Could not add the layer: {{message}}", { message: errorMessage(error) }),
         true,
