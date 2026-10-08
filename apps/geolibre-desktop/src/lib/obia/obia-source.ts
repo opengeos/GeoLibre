@@ -16,6 +16,14 @@ export function obiaSourceKey(layer: GeoLibreLayer): string {
 }
 
 /**
+ * Release the cached image so its bytes are not pinned while the workbench is
+ * closed; the next read fetches the layer afresh.
+ */
+export function clearObiaSourceCache(): void {
+  cached = null;
+}
+
+/**
  * GeoTIFF bytes of a workbench source layer, cached for the last layer read.
  *
  * @param layer A raster/COG layer.
