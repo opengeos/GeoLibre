@@ -595,9 +595,9 @@ function wmtsCapabilities(
  * each layer kind. The globe has no plugin controls, so almost every kind it
  * draws is `"native"` (some only for certain data: a raster archive, a draped
  * style, a tileset URL). `deckgl-viz` is `"plugin"`: only the records the
- * Deck.gl Layer builder wrote are drawn, rewritten from its config. The `"unsupported"` kinds stay in the 2D panes, unless their
- * record carries a FeatureCollection, CZML or KML, which the globe draws
- * whatever the kind.
+ * Deck.gl Layer builder wrote are drawn, rewritten from its config. The
+ * `"unsupported"` kinds stay in the 2D panes, unless their record carries a
+ * FeatureCollection, CZML or KML, which the globe draws whatever the kind.
  */
 export const CESIUM_SUPPORTED_LAYER_KINDS = Object.freeze({
   geojson: "native",

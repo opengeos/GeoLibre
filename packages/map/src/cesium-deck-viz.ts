@@ -43,8 +43,11 @@ const GLOBE_DECK_VIZ_KINDS: ReadonlySet<string> = new Set([
   "scenegraph",
 ]);
 
-/** The deck viz style defaults (`DEFAULT_DECK_VIZ_STYLE` in the plugin registry). */
-const DEFAULT_VIZ_STYLE = {
+/**
+ * The deck viz style defaults, mirroring `DEFAULT_DECK_VIZ_STYLE` in the plugin
+ * registry (`tests/cesium-deck-viz.test.ts` pins the two together).
+ */
+export const DEFAULT_VIZ_STYLE = {
   color: "#3b82f6",
   radius: 40,
   cellSize: 1000,
@@ -53,8 +56,8 @@ const DEFAULT_VIZ_STYLE = {
   elevationScale: 30,
 };
 
-/** The aggregation layers' yellow-to-red ramp, matching the 2D registry. */
-const COLOR_RANGE = ["#ffffb2", "#fed976", "#feb24c", "#fd8d3c", "#f03b20", "#bd0026"];
+/** The aggregation layers' yellow-to-red ramp, mirroring the registry's `COLOR_RANGE`. */
+export const COLOR_RANGE = ["#ffffb2", "#fed976", "#feb24c", "#fd8d3c", "#f03b20", "#bd0026"];
 
 /**
  * Screen radius of a scatterplot dot. deck.gl sizes them in metres with a 1 px
@@ -143,7 +146,17 @@ function readVizConfig(layer: GeoLibreLayer): VizConfig | null {
 export function isGlobeDeckVizLayer(layer: GeoLibreLayer): boolean {
   if (!isDeckVizRecord(layer)) return false;
   const config = readVizConfig(layer);
-  return config !== null && GLOBE_DECK_VIZ_KINDS.has(config.layerKind);
+  if (config === null || !GLOBE_DECK_VIZ_KINDS.has(config.layerKind)) return false;
+  // The same data deckVizGlobeLayer converts: without it there is nothing to
+  // rewrite, and calling the layer globe-capable would report it as broken.
+  return dataOwner(layer, config) !== undefined;
+}
+
+/** The array or FeatureCollection a record's globe form is derived from. */
+function dataOwner(layer: GeoLibreLayer, config: VizConfig): object | undefined {
+  const owner: unknown =
+    config.layerKind === "geojson" ? layer.geojson : (layer.source as { data?: unknown }).data;
+  return owner && typeof owner === "object" ? owner : undefined;
 }
 
 /** Reads `record[key]` as a number, or NaN when missing or blank. */
@@ -585,10 +598,8 @@ function derivedData(
   config: VizConfig,
 ): FeatureCollection | CzmlPacket[] | null {
   const isGeoJson = config.layerKind === "geojson";
-  const owner: object | undefined = isGeoJson
-    ? layer.geojson
-    : ((layer.source as { data?: unknown }).data as object | undefined);
-  if (!owner || typeof owner !== "object") return null;
+  const owner = dataOwner(layer, config);
+  if (!owner) return null;
   const key = JSON.stringify({
     kind: config.layerKind,
     mapping: config.fieldMapping,

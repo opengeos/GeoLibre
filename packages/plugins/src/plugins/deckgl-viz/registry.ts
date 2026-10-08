@@ -168,7 +168,7 @@ const DATA_BASE = "https://raw.githubusercontent.com/visgl/deck.gl-data/master/e
 
 // Yellow→red sequential ramp shared by the aggregation layers (matches the
 // deck.gl website examples), typed as deck.gl's RGB/RGBA color tuple list.
-const COLOR_RANGE: [number, number, number][] = [
+export const COLOR_RANGE: [number, number, number][] = [
   [255, 255, 178],
   [254, 217, 118],
   [254, 178, 76],

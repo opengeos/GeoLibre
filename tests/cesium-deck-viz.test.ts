@@ -3,7 +3,13 @@ import { describe, it } from "node:test";
 import { CZML_SOURCE_KIND, DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection, LineString, Polygon } from "geojson";
 import {
+  COLOR_RANGE as REGISTRY_COLOR_RANGE,
+  DEFAULT_DECK_VIZ_STYLE,
+} from "../packages/plugins/src/plugins/deckgl-viz/registry";
+import {
   aggregateBins,
+  COLOR_RANGE,
+  DEFAULT_VIZ_STYLE,
   deckVizGlobeLayer,
   headingQuaternion,
   interpolateGreatCircle,
@@ -285,6 +291,10 @@ describe("deckVizGlobeLayer", () => {
   it("flags drawable viz kinds as globe-capable before conversion", () => {
     const layer = vizLayer("scatterplot", { lng: 0, lat: 1 }, { rows: [[0, 0]] });
     assert.equal(isCesiumSupportedLayerType(layer), true);
+    // A record with no inline rows has nothing to rewrite, so it stays 2D-only.
+    const empty = vizLayer("scatterplot", { lng: 0, lat: 1 });
+    assert.equal(deckVizGlobeLayer(empty), null);
+    assert.equal(isCesiumSupportedLayerType(empty), false);
     // A record with no viz config (a hand-edited project) stays 2D-only.
     assert.equal(
       isCesiumSupportedLayerType({ ...layer, metadata: { sourceKind: "deckgl-viz" } }),
@@ -322,5 +332,20 @@ describe("deck viz globe geometry helpers", () => {
     const close = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
     assert.ok(close(rotateX(headingQuaternion(0, 0, 0)), [0, 0, 1]), "bearing 0 faces north");
     assert.ok(close(rotateX(headingQuaternion(0, 0, 90)), [0, 1, 0]), "bearing 90 faces east");
+  });
+});
+
+describe("deck viz constants mirrored from the plugin registry", () => {
+  // @geolibre/map cannot import @geolibre/plugins, so these are copied by
+  // hand; a drift would change the globe's look without failing anything else.
+  it("matches the registry's style defaults", () => {
+    assert.deepEqual(DEFAULT_VIZ_STYLE, DEFAULT_DECK_VIZ_STYLE);
+  });
+
+  it("matches the registry's aggregation colour ramp", () => {
+    const hex = REGISTRY_COLOR_RANGE.map(
+      (rgb) => `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`,
+    );
+    assert.deepEqual([...COLOR_RANGE], hex);
   });
 });
