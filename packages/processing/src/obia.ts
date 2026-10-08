@@ -341,6 +341,8 @@ function csvToTable(
     columns.push({ index, name });
   });
   for (const row of csv.rows) {
+    // A blank cell would read as id 0 and create a phantom object.
+    if (!row[idCol]) continue;
     const id = Number(row[idCol]);
     if (!Number.isFinite(id)) continue;
     let record = table.rows.get(id);
