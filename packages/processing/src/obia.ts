@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, MultiPolygon, Polygon, Position } from "geojson";
 import { fromArrayBuffer } from "geotiff";
-import { readRasterData, writeRasterBands } from "./raster-client";
+import { MAX_CLIENT_RASTER_BYTES, readRasterData, writeRasterBands } from "./raster-client";
 import { runWasmToolInBackground } from "./wasm-tool-runner";
 
 /**
@@ -14,7 +14,7 @@ import { runWasmToolInBackground } from "./wasm-tool-runner";
  */
 
 /** Why an OBIA call refused its input, for the UI to translate. */
-export type ObiaErrorCode = "image-too-large" | "no-such-band" | "no-bands";
+export type ObiaErrorCode = "image-too-large" | "too-many-bands" | "no-such-band" | "no-bands";
 
 /**
  * An input the workbench rejects, with a stable `code` and `params` the app
@@ -112,7 +112,7 @@ export async function splitImageBands(
   if (width * height > OBIA_MAX_PIXELS) {
     throw new ObiaError(
       "image-too-large",
-      `This image has ${width} x ${height} pixels, more than the ${OBIA_MAX_PIXELS.toLocaleString("en-US")} the in-browser workbench handles. Clip it to a smaller area first.`,
+      `This image has ${width} x ${height} pixels, over the workbench's limit of ${OBIA_MAX_PIXELS.toLocaleString("en-US")} pixels. Clip it to a smaller area first.`,
       { width, height, max: OBIA_MAX_PIXELS },
     );
   }
@@ -124,6 +124,15 @@ export async function splitImageBands(
   );
   if (missing !== undefined) {
     throw new ObiaError("no-such-band", `The image has no band ${missing}.`, { index: missing });
+  }
+  // The decoder holds each chosen band as Float32; refuse up front, with a
+  // translatable error, a selection it would reject for memory.
+  if (width * height * wanted.length * Float32Array.BYTES_PER_ELEMENT > MAX_CLIENT_RASTER_BYTES) {
+    throw new ObiaError(
+      "too-many-bands",
+      `${wanted.length} bands of this image need more memory than the in-browser workbench allows. Select fewer bands, or clip the image.`,
+      { bands: wanted.length },
+    );
   }
   // Decode only the chosen bands, in the order asked for.
   const raster = await readRasterData(buffer, { samples: wanted.map((index) => index - 1) });
