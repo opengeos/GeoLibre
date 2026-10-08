@@ -241,6 +241,67 @@ describe("PointCloudStreamer", () => {
     assert.ok(streamer.shownKeys.includes("3-7-7-0"));
   });
 
+  it("keeps the primitives under the cap while refreshes overtake each other", async () => {
+    const { viewer, state } = fakeViewer();
+    // Big nodes: each fine node alone is a large share of the cap.
+    const tree = fullTree(3, 1);
+    const source = streamSource(tree, []);
+    const big = (key: string): DecodedPointCloud => {
+      const n = 400_000;
+      return {
+        positions: new Float64Array(n * 3),
+        colors: null,
+        count: n,
+        zMin: 0,
+        zMax: 1,
+        truncated: false,
+      };
+    };
+    source.loadNode = async (key) => (key === "0-0-0-0" ? decoded(key) : big(key));
+    const streamer = new PointCloudStreamer(fakeCesium() as never, viewer as never, source, {
+      opacity: () => 1,
+    });
+    state.height = 50;
+    // Pan across the corners without letting any refresh complete first.
+    const corners = [
+      { west: 0, south: 0, east: 100, north: 100 },
+      { west: 924, south: 0, east: 1024, north: 100 },
+      { west: 0, south: 924, east: 100, north: 1024 },
+      { west: 924, south: 924, east: 1024, north: 1024 },
+    ];
+    const runs = corners.map((rect) => {
+      state.rect = rect;
+      return streamer.refresh();
+    });
+    await Promise.all(runs);
+    assert.ok(
+      streamer.pointCount <= 1_500_000,
+      `${streamer.pointCount} points held after overtaken refreshes`,
+    );
+  });
+
+  it("reports a failed scheduled refresh instead of swallowing it", async () => {
+    const { viewer, state, listeners } = fakeViewer();
+    // Close in, so the walk reaches the unread subtree.
+    state.rect = { west: 0, south: 0, east: 100, north: 100 };
+    state.height = 50;
+    const source = streamSource(counts({ "0-0-0-0": 1, "1-0-0-0": -1 }), []);
+    source.loadSubtree = async () => {
+      throw new Error("hierarchy 500");
+    };
+    const errors: string[] = [];
+    const streamer = new PointCloudStreamer(fakeCesium() as never, viewer as never, source, {
+      opacity: () => 1,
+      onError: (message) => errors.push(message),
+    });
+    await streamer.start().catch(() => {});
+    errors.length = 0;
+    listeners[0]();
+    await new Promise((r) => setTimeout(r, 400));
+    assert.deepEqual(errors, ["hierarchy 500"]);
+    streamer.destroy();
+  });
+
   it("reports a node that fails to load and keeps the rest", async () => {
     const loads: string[] = [];
     const { viewer, state } = fakeViewer();

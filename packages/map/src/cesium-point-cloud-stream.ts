@@ -213,6 +213,8 @@ export class PointCloudStreamer {
   private zRange: { zMin: number; zMax: number } | null = null;
   private readonly ramp = getVectorColorRamp("viridis").colors;
   private destroyed = false;
+  /** The nodes the newest refresh selected, which {@link trim} keeps. */
+  private latest = new Set<string>();
 
   constructor(
     private readonly Cesium: CesiumNs,
@@ -252,7 +254,12 @@ export class PointCloudStreamer {
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.refresh().catch(() => {});
+      void this.refresh().catch((error) => {
+        // A failed subtree read would otherwise leave the view stuck at a
+        // coarse level with nothing said; destroy()'s abort is not a failure.
+        if (this.destroyed) return;
+        this.options.onError?.(error instanceof Error ? error.message : String(error));
+      });
     }, REFRESH_DELAY_MS);
   }
 
@@ -318,10 +325,11 @@ export class PointCloudStreamer {
       await Promise.all(
         selection.pendingSubtrees.map((key) => this.source.loadSubtree(key, signal)),
       );
-      if (this.stale(generation)) return;
+      if (this.stale(generation)) return this.trim();
       selection = selectOctreeNodes(this.source, view);
     }
     const wanted = new Set(selection.keys);
+    this.latest = wanted;
     const missing = selection.keys.filter((key) => !this.shown.has(key));
     // Fetch coarse to fine and show each batch as it lands, so the view fills
     // in progressively rather than all at once at the end.
@@ -330,21 +338,38 @@ export class PointCloudStreamer {
       const nodes = await Promise.all(
         batch.map((key) =>
           this.node(key).catch((error) => {
-            this.options.onError?.(error instanceof Error ? error.message : String(error));
+            if (!this.destroyed)
+              this.options.onError?.(error instanceof Error ? error.message : String(error));
             return null;
           }),
         ),
       );
-      if (this.stale(generation)) return;
+      if (this.stale(generation)) return this.trim();
       batch.forEach((key, i) => {
         const node = nodes[i];
         if (node && !this.shown.has(key)) this.show(key, node);
       });
+      this.trim();
       this.viewer.scene?.requestRender?.();
     }
     // Only now drop what the new view no longer needs, so a move never flashes empty.
     for (const key of [...this.shown.keys()]) if (!wanted.has(key)) this.hide(key);
     this.viewer.scene?.requestRender?.();
+  }
+
+  /**
+   * Keep the primitives under {@link STREAM_MAX_SHOWN_POINTS} while refreshes
+   * overtake one another: a refresh only drops old nodes when it completes,
+   * so a user panning faster than nodes load would otherwise pile up every
+   * partly applied selection. Nodes the newest selection does not want go
+   * first, oldest first; what it wants is itself under the cap.
+   */
+  private trim(): void {
+    if (this.collection.length <= STREAM_MAX_SHOWN_POINTS) return;
+    for (const key of [...this.shown.keys()]) {
+      if (this.collection.length <= STREAM_MAX_SHOWN_POINTS) break;
+      if (!this.latest.has(key)) this.hide(key);
+    }
   }
 
   private stale(generation: number): boolean {
