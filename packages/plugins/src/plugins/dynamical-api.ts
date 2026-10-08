@@ -646,3 +646,234 @@ function roundSignificant(value: number, round: (value: number) => number): numb
   // The quotient is trimmed first: 0.3 / 0.01 is 29.999999999999996, which would floor to 29.
   return Number((round(Number((value / magnitude).toPrecision(12))) * magnitude).toPrecision(12));
 }
+
+// --- Point time series -------------------------------------------------------
+
+/**
+ * Most decoded bytes one point time series may read. A point's series still decodes whole
+ * chunks, so the window is cut to whole chunks around the chosen step ({@link seriesWindow}).
+ */
+export const POINT_SERIES_BUDGET_BYTES = 96 * 2 ** 20;
+
+/** The dimension a point's series runs along: lead time for a forecast, time for an analysis. */
+export function seriesDimension(
+  dataset: DynamicalDataset,
+  variable: DynamicalVariable,
+): string | null {
+  const dimensions = sliceDimensions(dataset, variable);
+  return (
+    dimensions.find(isLeadTimeDimension) ??
+    dimensions.find((name) => isTemporalDimension(dataset, name)) ??
+    null
+  );
+}
+
+/** The ensemble dimension, whose members a point series reads all of. */
+export function memberDimension(
+  dataset: DynamicalDataset,
+  variable: DynamicalVariable,
+): string | null {
+  return sliceDimensions(dataset, variable).find((name) => name === "ensemble_member") ?? null;
+}
+
+/**
+ * The steps a point series reads: whole chunks along `dimension`, centred on the chunk holding
+ * `index`, as many as the budget allows (at least one).
+ *
+ * Every member is read too, so an ensemble whose members span several chunks pays for each.
+ *
+ * Args:
+ *   dataset: The dataset.
+ *   variable: The variable.
+ *   dimension: The series dimension ({@link seriesDimension}).
+ *   index: The step the panel shows.
+ *   length: How many steps the dimension has.
+ *   budget: Decoded bytes the series may read.
+ *
+ * Returns:
+ *   `[start, end)` step indices, holding `index`.
+ */
+export function seriesWindow(
+  dataset: DynamicalDataset,
+  variable: DynamicalVariable,
+  dimension: string,
+  index: number,
+  length: number,
+  budget: number = POINT_SERIES_BUDGET_BYTES,
+): [number, number] {
+  if (length <= 0) return [0, 0];
+  const position = variable.dimensions.indexOf(dimension);
+  const chunk = Math.max(1, variable.chunks[position] || length);
+  const member = memberDimension(dataset, variable);
+  const memberPosition = member ? variable.dimensions.indexOf(member) : -1;
+  const memberChunks =
+    memberPosition >= 0
+      ? Math.ceil(
+          (dataset.dimensions[member as string]?.size ?? variable.chunks[memberPosition] ?? 1) /
+            Math.max(1, variable.chunks[memberPosition] || 1),
+        )
+      : 1;
+  const bytes = Math.max(1, chunkBytes(dataset, variable)) * memberChunks;
+  const allowed = Math.max(1, Math.floor(budget / bytes));
+  const chunks = Math.ceil(length / chunk);
+  const current = Math.min(chunks - 1, Math.max(0, Math.floor(index / chunk)));
+  const first = Math.min(
+    Math.max(0, current - Math.floor((allowed - 1) / 2)),
+    Math.max(0, chunks - allowed),
+  );
+  const last = Math.min(chunks, first + allowed);
+  return [first * chunk, Math.min(length, last * chunk)];
+}
+
+/**
+ * The index of the coordinate nearest `value` in a monotonic coordinate array.
+ *
+ * Returns:
+ *   The index, or null when `value` lies more than half a step outside the coordinates.
+ */
+export function nearestIndex(coordinates: ArrayLike<number>, value: number): number | null {
+  const count = coordinates.length;
+  if (!count || !Number.isFinite(value)) return null;
+  if (count === 1) return 0;
+  const ascending = coordinates[count - 1] >= coordinates[0];
+  const at = (index: number) => (ascending ? coordinates[index] : -coordinates[index]);
+  const target = ascending ? value : -value;
+  const half = Math.abs(coordinates[1] - coordinates[0]) / 2;
+  if (target < at(0) - half || target > at(count - 1) + half) return null;
+  let low = 0;
+  let high = count - 1;
+  while (high - low > 1) {
+    const middle = (low + high) >> 1;
+    if (at(middle) <= target) low = middle;
+    else high = middle;
+  }
+  return Math.abs(at(high) - target) < Math.abs(target - at(low)) ? high : low;
+}
+
+/** Bring a longitude into the convention of a longitude axis: [-180, 180) or [0, 360). */
+export function wrapLongitude(longitude: number, coordinates: ArrayLike<number>): number {
+  let max = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < coordinates.length; index += 1) {
+    max = Math.max(max, coordinates[index]);
+  }
+  const wrapped = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return max > 180 && wrapped < 0 ? wrapped + 360 : wrapped;
+}
+
+/** One step of a point series: the value, or an ensemble's mean and spread. */
+export interface SeriesStep {
+  /** The step's time in epoch milliseconds (the valid time, for a forecast). */
+  time: number;
+  /** The value, or the ensemble mean; NaN where the data has none. */
+  value: number;
+  /** The smallest and largest member, for an ensemble. */
+  min?: number;
+  max?: number;
+}
+
+/**
+ * Reduce each step's members to their mean and range, skipping missing members.
+ *
+ * Args:
+ *   times: Each step's time in epoch milliseconds.
+ *   members: Each step's member values (one value for a deterministic series).
+ *
+ * Returns:
+ *   One step per time; `min`/`max` only when there is more than one member.
+ */
+export function summarizeSeries(
+  times: readonly number[],
+  members: ReadonlyArray<ArrayLike<number>>,
+): SeriesStep[] {
+  return times.map((time, step) => {
+    const values = members[step] ?? [];
+    let sum = 0;
+    let count = 0;
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (let index = 0; index < values.length; index += 1) {
+      const value = values[index];
+      if (!Number.isFinite(value)) continue;
+      sum += value;
+      count += 1;
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    }
+    const value = count ? sum / count : Number.NaN;
+    return values.length > 1
+      ? { time, value, min: count ? min : Number.NaN, max: count ? max : Number.NaN }
+      : { time, value };
+  });
+}
+
+/**
+ * Clean value-axis ticks inside `[min, max]`: a step of 1, 2 or 5 times a power of ten, rounded
+ * from `(max - min) / count` the way d3's `ticks` does.
+ *
+ * Returns:
+ *   Ascending tick values, about `count` of them.
+ */
+export function niceTicks(min: number, max: number, count = 4): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return [];
+  if (max === min) return [min];
+  const raw = (max - min) / Math.max(1, count);
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const error = raw / magnitude;
+  const factor =
+    error >= Math.sqrt(50) ? 10 : error >= Math.sqrt(10) ? 5 : error >= Math.SQRT2 ? 2 : 1;
+  const step = factor * magnitude;
+  const ticks: number[] = [];
+  for (let tick = Math.ceil(min / step) * step; tick <= max + step * 1e-9; tick += step) {
+    ticks.push(Number(tick.toPrecision(12)));
+  }
+  return ticks;
+}
+
+const HOUR_MS = 3_600_000;
+const TIME_STEPS_MS = [1, 3, 6, 12, 24, 48, 96, 168, 336, 720, 1440, 2160, 4320, 8760].map(
+  (hours) => hours * HOUR_MS,
+);
+
+/**
+ * Time-axis ticks on whole UTC hours or days: the smallest standard step (1 h to a year) that
+ * gives at most `count` ticks across `[start, end]`.
+ */
+export function timeTicks(start: number, end: number, count = 4): number[] {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return Number.isFinite(start) ? [start] : [];
+  }
+  const step =
+    TIME_STEPS_MS.find((candidate) => (end - start) / candidate <= count) ??
+    TIME_STEPS_MS[TIME_STEPS_MS.length - 1];
+  const ticks: number[] = [];
+  for (let tick = Math.ceil(start / step) * step; tick <= end; tick += step) ticks.push(tick);
+  return ticks;
+}
+
+/**
+ * A point series as CSV: UTC time, then the value (or mean, min and max for an ensemble).
+ *
+ * Args:
+ *   steps: The series.
+ *   valueHeader: The value column's name, e.g. `temperature_2m (degree_Celsius)`.
+ *
+ * Returns:
+ *   The CSV text, one row per step; missing values are empty cells.
+ */
+export function seriesCsv(steps: readonly SeriesStep[], valueHeader: string): string {
+  const ensemble = steps.some((step) => step.min !== undefined);
+  const quote = (text: string) => (/[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
+  const cell = (value: number | undefined) =>
+    value !== undefined && Number.isFinite(value) ? String(value) : "";
+  const header = ensemble
+    ? ["time_utc", `${valueHeader} mean`, `${valueHeader} min`, `${valueHeader} max`]
+    : ["time_utc", valueHeader];
+  const rows = steps.map((step) =>
+    [
+      new Date(step.time).toISOString(),
+      cell(step.value),
+      ...(ensemble ? [cell(step.min), cell(step.max)] : []),
+    ].join(","),
+  );
+  return [header.map(quote).join(","), ...rows].join("\n") + "\n";
+}

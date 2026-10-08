@@ -11,7 +11,10 @@ import {
   fetchDynamicalCatalog,
   formatLeadTime,
   formatUtc,
+  memberDimension,
+  nearestIndex,
   needsRegionalView,
+  niceTicks,
   parseDynamicalCatalog,
   parseDynamicalCollection,
   projectedBounds,
@@ -19,6 +22,12 @@ import {
   projectionFromSpatialRef,
   regionalMinZoom,
   sampleRange,
+  seriesCsv,
+  seriesDimension,
+  seriesWindow,
+  summarizeSeries,
+  timeTicks,
+  wrapLongitude,
   sliceDimensions,
   sliceSelectorValue,
   slicesPerChunk,
@@ -504,6 +513,146 @@ describe("isIcechunkAsset", () => {
     assert.equal(
       isIcechunkAsset({ href: "https://host/data.zarr", type: "application/vnd+zarr" }),
       false,
+    );
+  });
+});
+
+describe("point series", () => {
+  const ensemble = parsed({
+    ...gfsForecast,
+    id: "noaa-gefs-forecast-35-day",
+    "cube:dimensions": {
+      ...gfsForecast["cube:dimensions"],
+      ensemble_member: { type: "other", size: 31 },
+    },
+    "cube:variables": {
+      temperature_2m: {
+        dimensions: ["init_time", "ensemble_member", "lead_time", "latitude", "longitude"],
+        type: "data",
+        chunks: [1, 31, 64, 17, 16],
+        unit: "degree_Celsius",
+      },
+    },
+  });
+
+  it("runs a forecast along its lead times and an analysis along time", () => {
+    const forecast = parsed(gfsForecast);
+    assert.equal(seriesDimension(forecast, forecast.variables[0]), "lead_time");
+    assert.equal(memberDimension(forecast, forecast.variables[0]), null);
+    const analysis = parsed(gfsAnalysis);
+    assert.equal(seriesDimension(analysis, analysis.variables[0]), "time");
+    assert.equal(seriesDimension(ensemble, ensemble.variables[0]), "lead_time");
+    assert.equal(memberDimension(ensemble, ensemble.variables[0]), "ensemble_member");
+  });
+
+  it("reads whole chunks around the chosen step, as many as the budget allows", () => {
+    const forecast = parsed(gfsForecast);
+    // Two 6 MB chunks of lead times: the whole run fits.
+    assert.deepEqual(
+      seriesWindow(forecast, forecast.variables[0], "lead_time", 150, 209),
+      [0, 209],
+    );
+    // One GRIB message per step: 24 steps of 4 MB around step 100.
+    const virtual = parsed(gfsVirtual);
+    assert.deepEqual(seriesWindow(virtual, virtual.variables[0], "lead_time", 100, 209), [89, 113]);
+    // 14.4 MB chunks of 1440 hours: six of them, ending at the newest.
+    const analysis = parsed(gfsAnalysis);
+    assert.deepEqual(seriesWindow(analysis, analysis.variables[0], "time", 19_999, 20_000), [
+      8 * 1440,
+      20_000,
+    ]);
+    // At least one chunk, however small the budget.
+    assert.deepEqual(
+      seriesWindow(analysis, analysis.variables[0], "time", 3000, 20_000, 1),
+      [2880, 4320],
+    );
+  });
+
+  it("pays for every member chunk of an ensemble", () => {
+    const split = parsed({
+      ...gfsForecast,
+      "cube:dimensions": {
+        ...gfsForecast["cube:dimensions"],
+        ensemble_member: { type: "other", size: 31 },
+      },
+      "cube:variables": {
+        temperature_2m: {
+          dimensions: ["init_time", "ensemble_member", "lead_time", "latitude", "longitude"],
+          type: "data",
+          chunks: [1, 1, 64, 17, 16],
+        },
+      },
+    });
+    const whole = seriesWindow(ensemble, ensemble.variables[0], "lead_time", 0, 181);
+    assert.deepEqual(whole, [0, 181]);
+    // 31 member chunks of 70 KB each per lead chunk: a 4.3 MB budget reads two lead chunks.
+    const bytes = 64 * 17 * 16 * 4 * 31;
+    assert.deepEqual(
+      seriesWindow(split, split.variables[0], "lead_time", 70, 181, bytes * 2),
+      [64, 181],
+    );
+  });
+
+  it("finds the nearest coordinate on ascending and descending axes", () => {
+    const latitudes = [90, 89.75, 89.5, 89.25];
+    assert.equal(nearestIndex(latitudes, 89.6), 2);
+    assert.equal(nearestIndex(latitudes, 90.1), 0);
+    assert.equal(nearestIndex(latitudes, 88), null);
+    const longitudes = [-180, -179.75, -179.5];
+    assert.equal(nearestIndex(longitudes, -179.7), 1);
+    assert.equal(nearestIndex(longitudes, -180.2), null);
+    assert.equal(nearestIndex([], 1), null);
+  });
+
+  it("wraps a longitude into the axis convention", () => {
+    assert.equal(wrapLongitude(200, [-180, 0, 179.75]), -160);
+    assert.equal(wrapLongitude(-10, [0, 180, 359.75]), 350);
+    assert.equal(wrapLongitude(-10, [-180, 179.75]), -10);
+  });
+
+  it("summarizes members into a mean and range, skipping missing ones", () => {
+    assert.deepEqual(summarizeSeries([0, 1], [[2], [Number.NaN]]), [
+      { time: 0, value: 2 },
+      { time: 1, value: Number.NaN },
+    ]);
+    assert.deepEqual(summarizeSeries([0], [[1, 3, Number.NaN, 5]]), [
+      { time: 0, value: 3, min: 1, max: 5 },
+    ]);
+  });
+
+  it("picks clean value and time ticks", () => {
+    assert.deepEqual(niceTicks(-3.2, 17.8, 4), [0, 5, 10, 15]);
+    assert.deepEqual(niceTicks(0.0011, 0.0019, 4), [0.0012, 0.0014, 0.0016, 0.0018]);
+    assert.deepEqual(niceTicks(4, 4), [4]);
+    const day = 24 * 3_600_000;
+    const start = Date.UTC(2026, 9, 8, 5);
+    const ticks = timeTicks(start, start + 2 * day, 4);
+    assert.deepEqual(
+      ticks.map((tick) => new Date(tick).toISOString()),
+      [
+        "2026-10-08T12:00:00.000Z",
+        "2026-10-09T00:00:00.000Z",
+        "2026-10-09T12:00:00.000Z",
+        "2026-10-10T00:00:00.000Z",
+      ],
+    );
+  });
+
+  it("writes the series as CSV, with mean and range columns for an ensemble", () => {
+    const time = Date.UTC(2026, 9, 8, 6);
+    assert.equal(
+      seriesCsv(
+        [
+          { time, value: 12.5 },
+          { time: time + 3_600_000, value: Number.NaN },
+        ],
+        "t2m (°C)",
+      ),
+      "time_utc,t2m (°C)\n2026-10-08T06:00:00.000Z,12.5\n2026-10-08T07:00:00.000Z,\n",
+    );
+    assert.equal(
+      seriesCsv([{ time, value: 1, min: 0, max: 2 }], 'a,"b"'),
+      'time_utc,"a,""b"" mean","a,""b"" min","a,""b"" max"\n2026-10-08T06:00:00.000Z,1,0,2\n',
     );
   });
 });

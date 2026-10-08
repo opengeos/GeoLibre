@@ -1,4 +1,5 @@
 import { useAppStore, VECTOR_COLOR_RAMPS } from "@geolibre/core";
+import proj4 from "proj4";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { createPluginTranslator, pluginDisplayTitle } from "../plugin-i18n";
 import { addZarrRasterLayer, setZarrLayerSelector } from "./components/zarr";
@@ -15,15 +16,24 @@ import {
   formatUtc,
   isLeadTimeDimension,
   isTemporalDimension,
+  memberDimension,
+  nearestIndex,
   needsRegionalView,
   projectedBounds,
   projectedDimensions,
   projectionFromSpatialRef,
   regionalMinZoom,
   sampleRange,
+  seriesCsv,
+  seriesDimension,
+  seriesWindow,
   sliceDimensions,
   sliceSelectorValue,
+  summarizeSeries,
+  wrapLongitude,
+  type SeriesStep,
 } from "./dynamical-api";
+import { renderSeriesChart } from "./dynamical-series-chart";
 import { registerGribberishCodec } from "./grib2-codec";
 import { getStyleMap } from "./style-map";
 import {
@@ -72,6 +82,14 @@ const CSS = {
   primary:
     "padding:7px 10px;border:none;border-radius:6px;background:hsl(var(--primary));" +
     "color:hsl(var(--primary-foreground));cursor:pointer;font-weight:600;",
+  secondary:
+    "padding:6px 10px;border:1px solid hsl(var(--border));border-radius:6px;" +
+    "background:hsl(var(--background));color:hsl(var(--foreground));cursor:pointer;font-weight:600;",
+  textButton:
+    "padding:0;border:none;background:none;color:hsl(var(--primary));text-decoration:underline;" +
+    "cursor:pointer;font-size:11px;",
+  table: "width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums;",
+  cell: "padding:2px 6px;border-bottom:1px solid hsl(var(--border));text-align:end;",
   status:
     "box-sizing:border-box;width:100%;padding:8px;border-radius:6px;background:hsl(var(--muted));" +
     "color:hsl(var(--muted-foreground));line-height:1.45;",
@@ -90,6 +108,14 @@ interface SliceAxis {
   coordinates: number[];
   /** Epoch milliseconds for a timestamp axis, seconds for a lead-time axis. */
   values: number[];
+}
+
+/** A grid's horizontal coordinates, and how a longitude/latitude reaches them. */
+interface GridCoordinates {
+  x: { name: string; values: Float64Array };
+  y: { name: string; values: Float64Array };
+  /** proj4 definition of a projected grid; null for a latitude/longitude grid. */
+  projection: string | null;
 }
 
 /** The layer this panel added last, which its sliders keep re-slicing. */
@@ -115,6 +141,8 @@ interface PanelState {
   max: string;
   aboutOpen: boolean;
   live: LiveLayer | null;
+  /** The point a time series was read at; it carries over to other variables and datasets. */
+  point: { lng: number; lat: number } | null;
 }
 
 function initialState(): PanelState {
@@ -127,6 +155,7 @@ function initialState(): PanelState {
     max: "",
     aboutOpen: false,
     live: null,
+    point: null,
   };
 }
 
@@ -140,6 +169,11 @@ let disposePanel: (() => void) | null = null;
 let catalogPromise: Promise<DynamicalDataset[]> | null = null;
 /** Slice axes per repository and variable, read once per session. */
 const axesCache = new Map<string, Promise<SliceAxis[]>>();
+/** Horizontal grid coordinates per repository, read once per session. */
+const gridCache = new Map<string, Promise<GridCoordinates>>();
+/** The source and layer marking the point a series was read at. */
+const POINT_SOURCE_ID = "geolibre-dynamical-point";
+const POINT_LAYER_ID = "geolibre-dynamical-point-circle";
 
 const tr = createPluginTranslator(() => appRef, DYNAMICAL_PLUGIN_ID);
 
@@ -403,6 +437,171 @@ function applyRegionalZoomRange(app: GeoLibreAppAPI, layerId: string, minZoom: n
   }
 }
 
+/** Read a 1-D coordinate array. */
+async function readCoordinate(store: ZarrKeyReader, name: string): Promise<Float64Array> {
+  const { zarr, root } = await zarrRoot(store);
+  const array = await zarr.open.v3(root.resolve(name), { kind: "array" });
+  return Float64Array.from((await zarr.get(array)).data as ArrayLike<number>, Number);
+}
+
+/** A grid's horizontal coordinates and CRS, read once per repository. */
+function readGridCoordinates(
+  dataset: DynamicalDataset,
+  store: ZarrKeyReader,
+): Promise<GridCoordinates> {
+  let pending = gridCache.get(dataset.repositoryUrl);
+  if (!pending) {
+    pending = (async () => {
+      const spatial = Object.values(dataset.dimensions).filter((dim) => dim.type === "spatial");
+      const xName =
+        spatial.find((dim) => dim.axis === "x" || dim.name === "longitude")?.name ?? "longitude";
+      const yName =
+        spatial.find((dim) => dim.axis === "y" || dim.name === "latitude")?.name ?? "latitude";
+      const projected = projectedDimensions(dataset);
+      const [x, y, projection] = await Promise.all([
+        readCoordinate(store, xName),
+        readCoordinate(store, yName),
+        projected ? readProjection(store) : Promise.resolve(null),
+      ]);
+      if (projected && !projection) throw new Error("The grid's CRS could not be read.");
+      return { x: { name: xName, values: x }, y: { name: yName, values: y }, projection };
+    })();
+    gridCache.set(dataset.repositoryUrl, pending);
+    void pending.catch(() => gridCache.delete(dataset.repositoryUrl));
+  }
+  return pending;
+}
+
+/**
+ * The grid cell nearest a longitude/latitude, as an index per horizontal dimension.
+ *
+ * Returns:
+ *   The indices, or null when the point falls outside the grid.
+ */
+function locateCell(
+  grid: GridCoordinates,
+  lng: number,
+  lat: number,
+): Record<string, number> | null {
+  let x = lng;
+  let y = lat;
+  if (grid.projection) {
+    [x, y] = proj4("EPSG:4326", grid.projection, [lng, lat]) as [number, number];
+  } else {
+    x = wrapLongitude(lng, grid.x.values);
+  }
+  const column = nearestIndex(grid.x.values, x);
+  const row = nearestIndex(grid.y.values, y);
+  return column === null || row === null ? null : { [grid.x.name]: column, [grid.y.name]: row };
+}
+
+/** A point's series, read and summarized, with what the chart and CSV need to say about it. */
+interface PointSeries {
+  steps: SeriesStep[];
+  /** The window's first step along the series dimension. */
+  start: number;
+  dimension: string;
+  members: number;
+}
+
+/**
+ * Read one grid cell of a variable along its series dimension, every ensemble member included,
+ * over the window {@link seriesWindow} allows; other dimensions stay at the panel's steps.
+ */
+async function readPointSeries(
+  dataset: DynamicalDataset,
+  variable: DynamicalVariable,
+  store: ZarrKeyReader,
+  axes: SliceAxis[],
+  indices: Record<string, number>,
+  cell: Record<string, number>,
+): Promise<PointSeries | null> {
+  const dimension = seriesDimension(dataset, variable);
+  const axis = axes.find((candidate) => candidate.name === dimension);
+  if (!dimension || !axis) return null;
+  const [start, end] = seriesWindow(
+    dataset,
+    variable,
+    dimension,
+    indices[dimension] ?? 0,
+    axis.labels.length,
+  );
+  const member = memberDimension(dataset, variable);
+  const { zarr, root } = await zarrRoot(store);
+  const array = await zarr.open.v3(root.resolve(variable.name), { kind: "array" });
+  const selection = variable.dimensions.map((name) => {
+    if (name === dimension) return zarr.slice(start, end);
+    if (name === member) return null;
+    return cell[name] ?? indices[name] ?? 0;
+  });
+  const chunk = await zarr.get(array, selection);
+  const data = chunk.data as ArrayLike<number>;
+  // What is left of the array's dimensions: the series and, for an ensemble, the members.
+  const kept = variable.dimensions.filter((name) => name === dimension || name === member);
+  const stepStride = chunk.stride[kept.indexOf(dimension)] ?? 1;
+  const memberAxis = member ? kept.indexOf(member) : -1;
+  const memberCount = memberAxis >= 0 ? chunk.shape[memberAxis] : 1;
+  const memberStride = memberAxis >= 0 ? chunk.stride[memberAxis] : 0;
+
+  // A forecast's steps are lead times after its run; an analysis's are times already.
+  const init = axes.find((candidate) => candidate.name === "init_time");
+  const runStart = init ? init.values[indices[init.name] ?? 0] : 0;
+  const times: number[] = [];
+  const values: Float64Array[] = [];
+  for (let step = 0; step < end - start; step += 1) {
+    const raw = axis.values[start + step];
+    times.push(isLeadTimeDimension(dimension) ? runStart + raw * 1000 : raw);
+    const row = new Float64Array(memberCount);
+    for (let m = 0; m < memberCount; m += 1) {
+      row[m] = Number(data[step * stepStride + m * memberStride]);
+    }
+    values.push(row);
+  }
+  return { steps: summarizeSeries(times, values), start, dimension, members: memberCount };
+}
+
+/** Mark the point a series was read at. */
+function showPointMarker(app: GeoLibreAppAPI, lng: number, lat: number): void {
+  const map = getStyleMap(app);
+  if (!map) return;
+  const data = {
+    type: "FeatureCollection" as const,
+    features: [
+      {
+        type: "Feature" as const,
+        properties: {},
+        geometry: { type: "Point" as const, coordinates: [lng, lat] },
+      },
+    ],
+  };
+  const source = map.getSource(POINT_SOURCE_ID) as
+    | { setData?: (data: unknown) => void }
+    | undefined;
+  if (source?.setData) {
+    source.setData(data);
+    return;
+  }
+  map.addSource(POINT_SOURCE_ID, { type: "geojson", data });
+  map.addLayer({
+    id: POINT_LAYER_ID,
+    type: "circle",
+    source: POINT_SOURCE_ID,
+    paint: {
+      "circle-radius": 6,
+      "circle-color": "#ffffff",
+      "circle-stroke-color": "#111827",
+      "circle-stroke-width": 2,
+    },
+  });
+}
+
+function removePointMarker(app: GeoLibreAppAPI | null): void {
+  const map = getStyleMap(app);
+  if (!map) return;
+  if (map.getLayer(POINT_LAYER_ID)) map.removeLayer(POINT_LAYER_ID);
+  if (map.getSource(POINT_SOURCE_ID)) map.removeSource(POINT_SOURCE_ID);
+}
+
 /**
  * Re-slices run one after another, so an older one cannot land last. Module-wide, so a panel
  * rebuilt for a language change queues behind the one it replaced.
@@ -511,6 +710,40 @@ function buildPanel(container: HTMLElement): () => void {
   );
   editor.style.display = "none";
 
+  // --- Point time series ----------------------------------------------------
+  const seriesBox = element("div", CSS.info);
+  seriesBox.style.display = "none";
+  const seriesHint = element("p", CSS.infoText);
+  const pickButton = element("button", CSS.secondary, tr("pickPoint", "Pick a point on the map"));
+  pickButton.type = "button";
+  const seriesStatus = element("p", CSS.infoText);
+  const seriesHeading = element("div", "font-weight:600;font-size:12px;");
+  const seriesSubtitle = element("div", `${CSS.hint}font-size:11px;`);
+  const chartBox = element("div");
+  const seriesFooter = element("div", CSS.links);
+  const csvButton = element("button", CSS.textButton, tr("downloadCsv", "Download CSV"));
+  csvButton.type = "button";
+  seriesFooter.append(
+    element(
+      "span",
+      CSS.hint,
+      tr("seriesPickHint", "Click the chart to show that step on the map."),
+    ),
+    csvButton,
+  );
+  const tableDetails = element("details");
+  tableDetails.append(element("summary", CSS.infoSummary, tr("showValues", "Show values")));
+  const seriesResult = element("div", "display:flex;flex-direction:column;gap:6px;");
+  seriesResult.append(seriesHeading, seriesSubtitle, chartBox, seriesFooter, tableDetails);
+  seriesResult.style.display = "none";
+  seriesBox.append(
+    element("div", CSS.infoSummary, tr("seriesTitle", "Time series at a point")),
+    seriesHint,
+    pickButton,
+    seriesStatus,
+    seriesResult,
+  );
+
   container.append(
     element(
       "p",
@@ -524,6 +757,7 @@ function buildPanel(container: HTMLElement): () => void {
     labelled(tr("dataset", "Dataset"), datasetSelect),
     datasetInfo,
     editor,
+    seriesBox,
     statusBox,
   );
 
@@ -702,6 +936,7 @@ function buildPanel(container: HTMLElement): () => void {
         value.textContent = axis.labels[state.indices[axis.name]] ?? "";
         renderValidTime();
         scheduleLiveSlice();
+        refreshSeries(axis.name);
       });
       wrap.append(head, range);
       slidersBox.append(wrap);
@@ -717,6 +952,7 @@ function buildPanel(container: HTMLElement): () => void {
     const request = ++axesRequest;
     axes = [];
     axesReady = false;
+    seriesBox.style.display = "none";
     slidersBox.replaceChildren(
       element("div", CSS.hint, tr("readingAxes", "Reading the time axes…")),
     );
@@ -738,6 +974,10 @@ function buildPanel(container: HTMLElement): () => void {
       axesReady = true;
       renderSliders();
       addButton.disabled = busy;
+      renderSeriesHint();
+      // A picked point carries over to the new variable or dataset.
+      if (state.point) void readSeries();
+      else clearSeries();
     } catch (error) {
       if (disposed || request !== axesRequest) return;
       slidersBox.replaceChildren();
@@ -752,6 +992,7 @@ function buildPanel(container: HTMLElement): () => void {
     renderDatasetInfo(dataset);
     if (!dataset) {
       editor.style.display = "none";
+      seriesBox.style.display = "none";
       return;
     }
     if (changed) state.indices = {};
@@ -930,6 +1171,263 @@ function buildPanel(container: HTMLElement): () => void {
     }
   };
 
+  // --- Point time series: reading and drawing --------------------------------
+  let series: (PointSeries & { datasetId: string; variable: DynamicalVariable }) | null = null;
+  let seriesRequest = 0;
+  let seriesTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopChart: (() => void) | null = null;
+  let cancelPick: (() => void) | null = null;
+
+  const setSeriesStatus = (message: string | null): void => {
+    seriesStatus.textContent = message ?? "";
+    seriesStatus.style.display = message ? "" : "none";
+  };
+  setSeriesStatus(null);
+
+  const clearSeries = (): void => {
+    series = null;
+    seriesResult.style.opacity = "";
+    stopChart?.();
+    stopChart = null;
+    chartBox.replaceChildren();
+    seriesResult.style.display = "none";
+  };
+
+  /** Show the card, with the window a pick would read, once the slice axes are known. */
+  const renderSeriesHint = (): void => {
+    const dataset = currentDataset();
+    const variable = currentVariable();
+    const dimension = dataset && variable ? seriesDimension(dataset, variable) : null;
+    const axis = axes.find((candidate) => candidate.name === dimension);
+    if (!dataset || !variable || !dimension || !axis || !axesReady) {
+      seriesBox.style.display = "none";
+      return;
+    }
+    seriesBox.style.cssText = CSS.info;
+    const [start, end] = seriesWindow(
+      dataset,
+      variable,
+      dimension,
+      state.indices[dimension] ?? 0,
+      axis.labels.length,
+    );
+    seriesHint.textContent = tr(
+      "seriesHint",
+      "Click the map to chart {{name}} at one grid cell, from {{from}} to {{to}} ({{count}} steps).",
+      {
+        name: variable.longName,
+        from: axis.labels[start] ?? "",
+        to: axis.labels[end - 1] ?? "",
+        count: end - start,
+      },
+    );
+  };
+
+  const renderTable = (): void => {
+    tableDetails.querySelector("table")?.remove();
+    if (!tableDetails.open || !series) return;
+    const ensemble = series.members > 1;
+    const table = element("table", CSS.table);
+    const head = element("tr");
+    for (const text of [
+      tr("seriesTime", "Time (UTC)"),
+      ...(ensemble
+        ? [tr("seriesMean", "Ensemble mean"), tr("min", "Min"), tr("max", "Max")]
+        : [series.variable.unit || tr("seriesValue", "Value")]),
+    ]) {
+      head.append(element("th", CSS.cell, text));
+    }
+    table.append(head);
+    const cell = (value: number | undefined) =>
+      value !== undefined && Number.isFinite(value) ? String(Number(value.toPrecision(6))) : "—";
+    for (const step of series.steps) {
+      const row = element("tr");
+      row.append(element("td", `${CSS.cell}text-align:start;`, formatUtc(step.time)));
+      row.append(element("td", CSS.cell, cell(step.value)));
+      if (ensemble)
+        row.append(
+          element("td", CSS.cell, cell(step.min)),
+          element("td", CSS.cell, cell(step.max)),
+        );
+      table.append(row);
+    }
+    tableDetails.append(table);
+  };
+
+  const renderSeries = (): void => {
+    const current = series;
+    if (!current || !state.point) return;
+    const lat = state.point.lat.toFixed(3);
+    const lon = state.point.lng.toFixed(3);
+    const name = current.variable.longName;
+    seriesHeading.textContent = tr("seriesHeading", "{{name}} at {{lat}}, {{lon}}", {
+      name,
+      lat,
+      lon,
+    });
+    const init = axes.find((axis) => axis.name === "init_time");
+    seriesSubtitle.textContent = [
+      current.variable.unit,
+      init && isLeadTimeDimension(current.dimension)
+        ? tr("seriesRun", "Run {{time}}", { time: init.labels[state.indices.init_time ?? 0] ?? "" })
+        : "",
+      current.members > 1
+        ? tr("seriesMembers", "{{count}} members: mean and range", { count: current.members })
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    seriesResult.style.display = "flex";
+    seriesResult.style.opacity = "";
+    stopChart?.();
+    stopChart = renderSeriesChart(chartBox, {
+      steps: current.steps,
+      currentIndex: (state.indices[current.dimension] ?? 0) - current.start,
+      labels: {
+        // The heading names the variable; the tooltip only needs the unit.
+        value: current.variable.unit || name,
+        mean: tr("seriesMean", "Ensemble mean"),
+        range: tr("seriesRange", "Member range"),
+        shown: tr("seriesShown", "The step shown on the map"),
+        description: tr(
+          "seriesDescription",
+          "Time series of {{name}} at {{lat}}, {{lon}}. The arrow keys step through the values; Enter shows that step on the map.",
+          { name, lat, lon },
+        ),
+      },
+      onPick: (index) => {
+        state.indices[current.dimension] = current.start + index;
+        renderSliders();
+        scheduleLiveSlice();
+        renderSeries();
+      },
+    });
+    renderTable();
+  };
+
+  /** Read the series at the picked state.point for the chosen dataset, variable and slice. */
+  const readSeries = async (): Promise<void> => {
+    const app = appRef;
+    const dataset = currentDataset();
+    const variable = currentVariable();
+    const picked = state.point;
+    if (!app || !dataset || !variable || !picked || !axesReady) return;
+    const request = ++seriesRequest;
+    const sliceAxes = axes;
+    const indices = { ...state.indices };
+    setSeriesStatus(tr("readingSeries", "Reading the series…"));
+    // The previous chart stays while the new one loads, dimmed, so the panel does not jump.
+    seriesResult.style.opacity = "0.5";
+    try {
+      const store = await openRepository(dataset);
+      const grid = await readGridCoordinates(dataset, store);
+      const cell = locateCell(grid, picked.lng, picked.lat);
+      if (disposed || request !== seriesRequest) return;
+      if (!cell) {
+        clearSeries();
+        setSeriesStatus(
+          tr("outsideGrid", "That point is outside the {{name}} grid.", { name: dataset.title }),
+        );
+        return;
+      }
+      const read = await readPointSeries(dataset, variable, store, sliceAxes, indices, cell);
+      if (disposed || request !== seriesRequest) return;
+      if (!read) {
+        clearSeries();
+        setSeriesStatus(null);
+        return;
+      }
+      series = { ...read, datasetId: dataset.id, variable };
+      setSeriesStatus(null);
+      renderSeries();
+    } catch (error) {
+      if (disposed || request !== seriesRequest) return;
+      clearSeries();
+      setSeriesStatus(
+        tr("seriesFailed", "Could not read the series: {{message}}", {
+          message: errorMessage(error),
+        }),
+      );
+    }
+  };
+
+  const scheduleSeriesRead = (): void => {
+    if (!state.point) return;
+    if (seriesTimer) clearTimeout(seriesTimer);
+    seriesTimer = setTimeout(() => {
+      seriesTimer = null;
+      void readSeries();
+    }, SLICE_DEBOUNCE_MS);
+  };
+
+  /**
+   * Keep the chart in step with a slider: the series slider moves the chart's marker while it
+   * stays inside the window read, and anything else (another run) reads the series again.
+   */
+  const refreshSeries = (dimension: string): void => {
+    if (!state.point) return;
+    renderSeriesHint();
+    const current = series;
+    const index = state.indices[dimension] ?? 0;
+    if (
+      current &&
+      dimension === current.dimension &&
+      index >= current.start &&
+      index < current.start + current.steps.length
+    ) {
+      renderSeries();
+      return;
+    }
+    scheduleSeriesRead();
+  };
+
+  const stopPicking = (): void => {
+    cancelPick?.();
+    cancelPick = null;
+    pickButton.textContent = tr("pickPoint", "Pick a point on the map");
+  };
+
+  const startPicking = (): void => {
+    const map = getStyleMap(appRef);
+    if (!map) return;
+    if (cancelPick) {
+      stopPicking();
+      return;
+    }
+    const canvas = map.getCanvas();
+    canvas.style.cursor = "crosshair";
+    const onClick = (event: { lngLat: { lng: number; lat: number } }) => {
+      stopPicking();
+      state.point = { lng: event.lngLat.lng, lat: event.lngLat.lat };
+      if (appRef) showPointMarker(appRef, state.point.lng, state.point.lat);
+      void readSeries();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") stopPicking();
+    };
+    map.once("click", onClick);
+    document.addEventListener("keydown", onKey);
+    cancelPick = () => {
+      map.off("click", onClick);
+      document.removeEventListener("keydown", onKey);
+      canvas.style.cursor = "";
+    };
+    pickButton.textContent = tr("picking", "Click the map… (Esc to cancel)");
+  };
+
+  pickButton.addEventListener("click", startPicking);
+  tableDetails.addEventListener("toggle", renderTable);
+  csvButton.addEventListener("click", () => {
+    const current = series;
+    if (!current || !state.point) return;
+    const unit = current.variable.unit ? ` (${current.variable.unit})` : "";
+    appRef?.exportTextFile?.(
+      `${current.datasetId}-${current.variable.name}-${state.point.lat.toFixed(3)}_${state.point.lng.toFixed(3)}.csv`,
+      seriesCsv(current.steps, `${current.variable.name}${unit}`),
+      { description: "CSV", extensions: ["csv"], mimeType: "text/csv", promptName: true },
+    );
+  });
+
   datasetSelect.addEventListener("change", () => chooseDataset(datasetSelect.value));
   variableSelect.addEventListener("change", () => {
     state.variable = variableSelect.value || null;
@@ -970,6 +1468,9 @@ function buildPanel(container: HTMLElement): () => void {
   return () => {
     disposed = true;
     if (sliceTimer) clearTimeout(sliceTimer);
+    if (seriesTimer) clearTimeout(seriesTimer);
+    cancelPick?.();
+    stopChart?.();
     container.replaceChildren();
   };
 }
@@ -1019,6 +1520,7 @@ export const maplibreDynamicalPlugin: GeoLibrePlugin = {
   },
   deactivate: (app) => {
     app.closeRightPanel?.(PANEL_ID);
+    removePointMarker(app);
     unsubscribeLocale?.();
     unsubscribeLocale = null;
     unregisterPanel?.();
@@ -1029,6 +1531,7 @@ export const maplibreDynamicalPlugin: GeoLibrePlugin = {
     state = initialState();
     // A later session reads the axes afresh.
     axesCache.clear();
+    gridCache.clear();
     appRef = null;
   },
 };
