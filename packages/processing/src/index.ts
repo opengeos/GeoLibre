@@ -419,6 +419,16 @@ export {
   type RunModelGraphOptions,
 } from "./model-graph";
 export {
+  OBIA_CLASS_FIELD,
+  OBIA_SAMPLE_FIELD,
+  collectSamples,
+  labelObjects,
+  renameObjectClass,
+  seededRandom,
+  stratifiedHoldout,
+  type ObiaClass,
+  type ObiaSample,
+  type ObiaSampleRole,
   DEFAULT_OBIA_FEATURE_OPTIONS,
   DEFAULT_REGION_GROWING_PARAMS,
   addSpectralIndices,

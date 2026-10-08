@@ -526,3 +526,144 @@ export function applyObjectFeatures(
     }),
   };
 }
+
+// --- Training samples -------------------------------------------------------
+
+/** Object property holding a sample's class name. */
+export const OBIA_CLASS_FIELD = "obia_class";
+/** Object property holding a sample's role: training or validation. */
+export const OBIA_SAMPLE_FIELD = "obia_sample";
+
+export type ObiaSampleRole = "training" | "validation";
+
+/** A labeled object. */
+export interface ObiaSample {
+  segmentId: number;
+  className: string;
+  role: ObiaSampleRole;
+}
+
+/** A land-cover class the user labels objects with. */
+export interface ObiaClass {
+  name: string;
+  /** CSS hex color, e.g. "#22c55e". */
+  color: string;
+}
+
+function objectSegmentId(feature: Feature): number {
+  return Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
+}
+
+/**
+ * Label objects as samples of a class, or clear their labels.
+ *
+ * @param objects The objects layer's features.
+ * @param segmentIds Objects to change.
+ * @param label Class and role to assign, or null to clear.
+ */
+export function labelObjects(
+  objects: FeatureCollection,
+  segmentIds: ReadonlySet<number>,
+  label: { className: string; role: ObiaSampleRole } | null,
+): FeatureCollection {
+  return {
+    ...objects,
+    features: objects.features.map((feature) => {
+      if (!segmentIds.has(objectSegmentId(feature))) return feature;
+      const properties: Record<string, unknown> = { ...(feature.properties ?? {}) };
+      if (label) {
+        properties[OBIA_CLASS_FIELD] = label.className;
+        properties[OBIA_SAMPLE_FIELD] = label.role;
+      } else {
+        delete properties[OBIA_CLASS_FIELD];
+        delete properties[OBIA_SAMPLE_FIELD];
+      }
+      return { ...feature, properties };
+    }),
+  };
+}
+
+/**
+ * Rename a class on every object labeled with it.
+ *
+ * @param objects The objects layer's features.
+ * @param from Current class name.
+ * @param to New class name.
+ */
+export function renameObjectClass(
+  objects: FeatureCollection,
+  from: string,
+  to: string,
+): FeatureCollection {
+  return {
+    ...objects,
+    features: objects.features.map((feature) =>
+      feature.properties?.[OBIA_CLASS_FIELD] === from
+        ? { ...feature, properties: { ...feature.properties, [OBIA_CLASS_FIELD]: to } }
+        : feature,
+    ),
+  };
+}
+
+/** The labeled objects, read back from their properties. */
+export function collectSamples(objects: FeatureCollection): ObiaSample[] {
+  const samples: ObiaSample[] = [];
+  for (const feature of objects.features) {
+    const className = feature.properties?.[OBIA_CLASS_FIELD];
+    if (typeof className !== "string" || !className) continue;
+    const role: ObiaSampleRole =
+      feature.properties?.[OBIA_SAMPLE_FIELD] === "validation" ? "validation" : "training";
+    samples.push({ segmentId: objectSegmentId(feature), className, role });
+  }
+  return samples;
+}
+
+/** Deterministic PRNG (mulberry32) so a split is reproducible from its seed. */
+export function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Pick a stratified, seeded subset of the training samples to hold out for
+ * validation: `fraction` of each class (rounded, at least one per class that
+ * has two or more samples, and never a class's last training sample).
+ *
+ * @param samples All samples; only training samples are candidates.
+ * @param fraction Share of each class to hold out, 0 to 1.
+ * @param seed Seed for the shuffle.
+ * @returns Segment ids to relabel as validation.
+ */
+export function stratifiedHoldout(
+  samples: readonly ObiaSample[],
+  fraction: number,
+  seed: number,
+): Set<number> {
+  const random = seededRandom(seed);
+  const byClass = new Map<string, number[]>();
+  for (const sample of samples) {
+    if (sample.role !== "training") continue;
+    const list = byClass.get(sample.className) ?? [];
+    list.push(sample.segmentId);
+    byClass.set(sample.className, list);
+  }
+  const held = new Set<number>();
+  for (const className of [...byClass.keys()].sort()) {
+    const ids = byClass.get(className)!.sort((a, b) => a - b);
+    // Fisher-Yates with the seeded generator.
+    for (let i = ids.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    if (ids.length < 2) continue;
+    const count = Math.min(ids.length - 1, Math.max(1, Math.round(ids.length * fraction)));
+    for (const id of ids.slice(0, count)) held.add(id);
+  }
+  return held;
+}

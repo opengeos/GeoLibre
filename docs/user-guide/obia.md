@@ -52,6 +52,31 @@ training labels.
 Segmenting again starts a new set of objects, so measure them again before
 training a classifier.
 
+## 3. Label samples
+
+Classification needs examples. Add a class for each land cover with **Add
+class**, then name it and pick its color. To label objects:
+
+1. Select objects on the objects layer with any of GeoLibre's selection tools:
+   the map selection tools, rows in the attribute table, or **Edit → Select by
+   Expression...** (for example `[">", ["get", "ndvi"], 0.2]` to pick
+   vegetated objects once they are measured).
+2. Choose whether new labels are **Training** or **Validation** samples.
+3. Click the tag button on a class. The objects fill in the class color, and
+   the class row counts its training / validation samples.
+
+**Clear labels of selected** removes labels from the selection. Removing a
+class removes its labels too, and renaming a class relabels its objects.
+
+Accuracy assessment needs validation samples the classifier never trained on.
+Label them separately, or **Split** to move a share of each class's training
+samples (rounded, at least one per class) to validation. The split is
+stratified by class and reproducible: the same seed picks the same samples.
+
+Labels are stored on the objects themselves, in the `obia_class` and
+`obia_sample` (`training` or `validation`) properties, so they are saved with
+the project and visible in the attribute table.
+
 ### About the algorithm
 
 The method is Whitebox's seeded region growing (`image_segmentation`). It is

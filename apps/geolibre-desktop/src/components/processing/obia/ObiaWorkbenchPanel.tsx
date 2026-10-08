@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useFloatingPanelDrag } from "../../../hooks/useFloatingPanelDrag";
 import { ObiaMeasureStep } from "./ObiaMeasureStep";
 import { ObiaSegmentStep } from "./ObiaSegmentStep";
+import { ObiaTrainStep } from "./ObiaTrainStep";
 
 interface ObiaWorkbenchPanelProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
@@ -16,8 +17,9 @@ interface ObiaWorkbenchPanelProps {
 /**
  * Object-Based Analysis workbench (#3053). A floating panel that runs the OBIA
  * pipeline on the WASM tool runner, one step per section: segment a raster
- * layer into objects (one polygon per object, `id` = `segment_id`), then
- * measure them. Each later step appears once the one before it has run.
+ * layer into objects (one polygon per object, `id` = `segment_id`), measure
+ * them, and label training and validation samples. Each later step appears
+ * once the one before it has run.
  */
 export function ObiaWorkbenchPanel({
   mapControllerRef,
@@ -66,6 +68,7 @@ export function ObiaWorkbenchPanel({
         <p className="text-xs text-muted-foreground">{t("obia.description")}</p>
         <ObiaSegmentStep mapControllerRef={mapControllerRef} onAddRaster={onAddRaster} />
         <ObiaMeasureStep />
+        <ObiaTrainStep />
       </div>
     </div>
   );

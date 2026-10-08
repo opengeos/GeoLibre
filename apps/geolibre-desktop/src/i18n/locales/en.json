@@ -7413,7 +7413,8 @@
     "description": "Segment imagery into objects, measure them, train a classifier and assess its accuracy. Runs in the browser.",
     "steps": {
       "segment": "Segment",
-      "measure": "Measure"
+      "measure": "Measure",
+      "train": "Label samples"
     },
     "image": "Image",
     "imagePlaceholder": "Choose a raster layer",
@@ -7459,6 +7460,37 @@
       "error": {
         "layersMissing": "The source image or the objects layer was removed. Segment again.",
         "failed": "Measuring the objects failed."
+      }
+    },
+    "train": {
+      "hint": "Add a class for each land cover, select objects on the map (selection tools) or in the attribute table, then click the tag button on a class to label them. Label validation samples separately, or hold out part of the training samples below.",
+      "role": "Label as",
+      "roles": {
+        "training": "Training",
+        "validation": "Validation"
+      },
+      "selected_one": "{{count}} object selected",
+      "selected_other": "{{count}} objects selected",
+      "defaultClassName": "Class {{n}}",
+      "name": "Class name",
+      "color": "Color of {{name}}",
+      "countsTitle": "Training / validation samples",
+      "assign": "Label the selected objects as {{name}}",
+      "remove": "Remove {{name}} and its labels",
+      "addClass": "Add class",
+      "clearSelected": "Clear labels of selected",
+      "holdout": "Hold out (%)",
+      "seed": "Seed",
+      "splitButton": "Split",
+      "assigned_one": "Labeled {{count}} object as {{name}}.",
+      "assigned_other": "Labeled {{count}} objects as {{name}}.",
+      "cleared_one": "Cleared the label of {{count}} object.",
+      "cleared_other": "Cleared the labels of {{count}} objects.",
+      "split_one": "Moved {{count}} training sample to validation.",
+      "split_other": "Moved {{count}} training samples to validation.",
+      "error": {
+        "duplicateName": "Each class needs a unique, non-empty name.",
+        "nothingToSplit": "Each class needs at least two training samples to hold some out."
       }
     }
   },

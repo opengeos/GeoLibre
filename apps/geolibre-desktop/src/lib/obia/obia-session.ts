@@ -1,7 +1,9 @@
 import {
   DEFAULT_OBIA_FEATURE_OPTIONS,
   DEFAULT_REGION_GROWING_PARAMS,
+  type ObiaClass,
   type ObiaFeatureOptions,
+  type ObiaSampleRole,
   type ObiaFeatureTable,
   type ObiaToolCall,
   type RegionGrowingParams,
@@ -48,6 +50,10 @@ interface ObiaSessionState {
   segmentation: ObiaSegmentationRun | null;
   featureOptions: ObiaFeatureOptions;
   features: ObiaFeatureRun | null;
+  /** Land-cover classes, in legend order. */
+  classes: ObiaClass[];
+  /** Role new labels get: training or validation samples. */
+  labelRole: ObiaSampleRole;
   setSourceLayerId: (id: string) => void;
   setBandIndexes: (bands: number[]) => void;
   setParams: (patch: Partial<RegionGrowingParams>) => void;
@@ -55,6 +61,8 @@ interface ObiaSessionState {
   setSegmentation: (run: ObiaSegmentationRun | null) => void;
   setFeatureOptions: (patch: Partial<ObiaFeatureOptions>) => void;
   setFeatures: (run: ObiaFeatureRun | null) => void;
+  setClasses: (classes: ObiaClass[]) => void;
+  setLabelRole: (role: ObiaSampleRole) => void;
 }
 
 /**
@@ -69,10 +77,14 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   segmentation: null,
   featureOptions: { ...DEFAULT_OBIA_FEATURE_OPTIONS },
   features: null,
+  classes: [],
+  labelRole: "training",
   setSourceLayerId: (sourceLayerId) => set({ sourceLayerId, bandIndexes: [] }),
   setBandIndexes: (bandIndexes) => set({ bandIndexes }),
   setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
   setSegmentation: (segmentation) => set({ segmentation, features: null }),
   setFeatureOptions: (patch) => set((s) => ({ featureOptions: { ...s.featureOptions, ...patch } })),
   setFeatures: (features) => set({ features }),
+  setClasses: (classes) => set({ classes }),
+  setLabelRole: (labelRole) => set({ labelRole }),
 }));
