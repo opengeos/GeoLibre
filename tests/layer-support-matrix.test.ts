@@ -61,6 +61,16 @@ const point: GeoLibreLayer["geojson"] = {
  * Types whose support depends on the data (a tile archive's tile type, a point
  * cloud's format) get one row per variant.
  */
+/** A Deck.gl Layer builder config for `layerKind`, mapping an origin-destination row. */
+function deckVizConfig(layerKind: string) {
+  return {
+    layerKind,
+    format: "json-array",
+    fieldMapping: { lng: 0, lat: 1, sourceLng: 0, sourceLat: 1, targetLng: 2, targetLat: 3 },
+    style: {},
+  };
+}
+
 const FIXTURES: Record<string, GeoLibreLayer> = {
   geojson: layer("geojson", { type: "geojson" }, { geojson: point }),
   raster: layer("raster", { type: "raster", tiles: ["https://t.example/{z}/{x}/{y}.png"] }),
@@ -148,6 +158,16 @@ const FIXTURES: Record<string, GeoLibreLayer> = {
   "duckdb-query (no plugin)": layer("duckdb-query", {}),
   "deckgl-viz": layer("deckgl-viz", {}, { metadata: { sourceKind: "deckgl-viz" } }),
   "deckgl-viz (no plugin)": layer("deckgl-viz", {}),
+  "deckgl-viz (arc)": layer(
+    "deckgl-viz",
+    { data: [[0, 0, 1, 1]] },
+    { metadata: { sourceKind: "deckgl-viz", vizConfig: deckVizConfig("arc") } },
+  ),
+  "deckgl-viz (heatmap)": layer(
+    "deckgl-viz",
+    { data: [[0, 0]] },
+    { metadata: { sourceKind: "deckgl-viz", vizConfig: deckVizConfig("heatmap") } },
+  ),
   video: layer("video", { type: "video", urls: ["https://m.example/a.mp4"], coordinates: corners }),
   image: layer("image", { type: "image", url: "https://m.example/a.png", coordinates: corners }),
 };
@@ -196,6 +216,8 @@ const MATRIX: Record<string, Row> = {
   "duckdb-query (no plugin)":     { maplibre: "plugin", mapbox: false, arcgis: false, cesium: false },
   "deckgl-viz":                   { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: false },
   "deckgl-viz (no plugin)":       { maplibre: "plugin", mapbox: false, arcgis: false, cesium: false },
+  "deckgl-viz (arc)":             { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: true },
+  "deckgl-viz (heatmap)":         { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: false },
   video:                          { maplibre: "sync",   mapbox: true,  arcgis: false, cesium: false },
   image:                          { maplibre: "sync",   mapbox: true,  arcgis: true,  cesium: true },
 };

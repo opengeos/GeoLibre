@@ -33,6 +33,11 @@ import {
 } from "./cesium-cog-imagery";
 import { drapeSignature, isDrapedLayer, MapLibreDrape } from "./cesium-drape";
 import {
+  DECK_VIZ_GLOBE_METADATA_KEY,
+  deckVizGlobeLayer,
+  isGlobeDeckVizLayer,
+} from "./cesium-deck-viz";
+import {
   applyZarrRender,
   createZarrImageryProvider,
   isZarrImageryProvider,
@@ -587,9 +592,10 @@ function wmtsCapabilities(
 
 /**
  * What the globe's kind dispatch ({@link isCesiumSupportedLayerType}) does with
- * each layer kind. The globe has no plugin controls, so every kind it draws is
- * `"native"` (some only for certain data: a raster archive, a draped style, a
- * tileset URL). The `"unsupported"` kinds stay in the 2D panes, unless their
+ * each layer kind. The globe has no plugin controls, so almost every kind it
+ * draws is `"native"` (some only for certain data: a raster archive, a draped
+ * style, a tileset URL). `deckgl-viz` is `"plugin"`: only the records the
+ * Deck.gl Layer builder wrote are drawn, rewritten from its config. The `"unsupported"` kinds stay in the 2D panes, unless their
  * record carries a FeatureCollection, CZML or KML, which the globe draws
  * whatever the kind.
  */
@@ -606,7 +612,7 @@ export const CESIUM_SUPPORTED_LAYER_KINDS = Object.freeze({
   cog: "native",
   "vector-file": "unsupported",
   "duckdb-query": "unsupported",
-  "deckgl-viz": "unsupported",
+  "deckgl-viz": "plugin",
   video: "unsupported",
   image: "native",
 } as const satisfies SupportedLayerKinds);
@@ -621,8 +627,8 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
   // FeatureCollection on a kind that takes the GeoJSON path.
   if (isCzmlLayer(layer) || isCesiumKmlLayer(layer) || hasGeoJsonCollection(layer)) return true;
   const kind = classifyLayer(layer);
-  // No globe renderer (vector files, DuckDB queries, deck.gl, video), or an
-  // unknown type: these stay in the 2D panes.
+  // No globe renderer (vector files, DuckDB queries, video), or an unknown
+  // type: these stay in the 2D panes.
   if (hasLayerKindSupport(CESIUM_SUPPORTED_LAYER_KINDS, kind, "unsupported")) return false;
   switch (kind) {
     // GeoJSON (loaded or not yet), imagery (tile templates and a georeferenced
@@ -643,6 +649,10 @@ export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
     case "vector-tiles":
     case "arcgis":
       return isDrapedLayer(layer);
+    // Rewritten into a GeoJSON or CZML record by sync() (cesium-deck-viz.ts);
+    // the screen-space and density kinds (heatmap, screen grid, contour) stay 2D.
+    case "deckgl-viz":
+      return isGlobeDeckVizLayer(layer);
   }
 }
 
@@ -2073,7 +2083,7 @@ export class CesiumLayerSync {
     for (const layer of this.currentLayers) {
       if (!layer.visible || layer.opacity === 0) continue;
       if (hasGeoJsonCollection(layer) && !layer.geojson?.features.length) continue;
-      // "2D only" kinds (vector files, DuckDB queries, deck.gl-viz, ...) are skipped on
+      // "2D only" kinds (vector files, DuckDB queries, deck.gl heatmaps, ...) are skipped on
       // the globe by design and flagged as such in the layer list, so they are
       // not load failures: reporting them in `errors` would make every capture
       // throw for an ordinary mixed project.
@@ -2236,7 +2246,11 @@ export class CesiumLayerSync {
   }
 
   /** Reconcile the globe to `layers` (order preserved for imagery stacking). */
-  sync(layers: GeoLibreLayer[]): void {
+  sync(storeLayers: GeoLibreLayer[]): void {
+    // deck.gl has no globe renderer: a Deck.gl Layer builder record is drawn
+    // as the GeoJSON or CZML record it rewrites to (issue #2261). The rewrite
+    // is memoized per record, so an unchanged layer maps to the same object.
+    const layers = storeLayers.map((layer) => deckVizGlobeLayer(layer) ?? layer);
     this.restoreHighlight();
     this.currentLayers = layers;
     this.watchEnvironment();
@@ -3372,6 +3386,12 @@ export class CesiumLayerSync {
 
       entry.handle = dataSource;
       dataSource.show = entry.layer.visible;
+      // A deck.gl model layer fades with the layer opacity like the 2D overlay.
+      if (entry.layer.metadata?.[DECK_VIZ_GLOBE_METADATA_KEY]) {
+        entry.documentCleanup = bindDocumentOpacity(Cesium, dataSource, () =>
+          this.effectiveOpacity(entry),
+        );
+      }
 
       await viewer.dataSources.add(dataSource);
       if (entry.cancelled) {

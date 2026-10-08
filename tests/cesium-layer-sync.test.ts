@@ -471,6 +471,35 @@ describe("CesiumLayerSync", () => {
     assert.equal(isCesiumSupportedLayerType(layer), false);
   });
 
+  it("draws a deck.gl viz record through the GeoJSON path without reloading on opacity", async () => {
+    const sync = newSync(f);
+    const viz = mkLayer({
+      id: "viz",
+      type: "deckgl-viz",
+      source: { type: "deckgl-viz", data: [[-74, 40.7]] },
+      metadata: {
+        sourceKind: "deckgl-viz",
+        externalDeckLayer: true,
+        vizConfig: {
+          layerKind: "scatterplot",
+          format: "json-array",
+          fieldMapping: { lng: 0, lat: 1 },
+          style: { color: "#3b82f6", radius: 40 },
+        },
+      },
+    });
+
+    sync.sync([viz]);
+    await f.flush();
+    assert.equal(f.calls.geojsonLoads.length, 1);
+    assert.equal(f.calls.dataSourcesAdded.length, 1);
+
+    sync.sync([{ ...viz, opacity: 0.4 }]);
+    await f.flush();
+    assert.equal(f.calls.geojsonLoads.length, 1, "an opacity change reuses the data source");
+    assert.deepEqual(sync.getRenderStatus().errors, []);
+  });
+
   it("keeps ArcGIS vector tiles without a FeatureCollection marked 2D-only", () => {
     const layer = mkLayer({
       type: "arcgis",
