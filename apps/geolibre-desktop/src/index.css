@@ -802,7 +802,9 @@ body,
    With viewport-fit=cover (see index.html) the webview draws edge-to-edge on
    Android/iOS, so without this the top toolbar renders under the status bar —
    where the system intercepts taps, making those menu buttons unclickable. The
-   insets are 0 on desktop/web, so this only affects mobile. */
+   insets are 0 on desktop/web, so this only affects mobile. Android WebViews
+   often report them as 0 too, so the Android build insets natively instead
+   (src-tauri/android/MainActivity.kt, GeoLibre#3044); this stays for iOS/PWA. */
 #root {
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top);

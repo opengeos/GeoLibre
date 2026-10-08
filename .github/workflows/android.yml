@@ -156,6 +156,18 @@ jobs:
         working-directory: apps/geolibre-desktop
         run: cp -r src-tauri/icons/android/. src-tauri/gen/android/app/src/main/res/
 
+      - name: Apply GeoLibre MainActivity
+        # The generated MainActivity draws edge-to-edge without insetting the
+        # content, so the toolbar sits under the status bar on WebViews that
+        # report env(safe-area-inset-*) as 0 (GeoLibre#3044). Fail if the
+        # template moved the file rather than silently shipping the default.
+        working-directory: apps/geolibre-desktop
+        run: |
+          set -euo pipefail
+          target=src-tauri/gen/android/app/src/main/java/org/geolibre/app/MainActivity.kt
+          test -f "$target" || { echo "::error::$target not generated"; exit 1; }
+          cp src-tauri/android/MainActivity.kt "$target"
+
       - name: Build release APKs (per ABI)
         # Release (not --debug): the size-optimized + stripped Cargo profile keeps
         # each .so small. --split-per-abi emits one ~40 MB APK per architecture

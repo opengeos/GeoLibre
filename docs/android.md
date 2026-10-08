@@ -114,11 +114,19 @@ regression.
 ```bash
 cd apps/geolibre-desktop
 npx tauri android init                          # generate src-tauri/gen/android (once)
+cp -r src-tauri/icons/android/. src-tauri/gen/android/app/src/main/res/
+cp src-tauri/android/MainActivity.kt \
+  src-tauri/gen/android/app/src/main/java/org/geolibre/app/MainActivity.kt
 npx tauri android build --apk --split-per-abi    # release APKs, one per ABI (~40 MB each)
 npx tauri android build --aab                    # universal AAB for Google Play
 ```
 
-- `gen/android` is generated (git-ignored) and regenerated on demand.
+- `gen/android` is generated (git-ignored) and regenerated on demand. After
+  `init`, copy in the GeoLibre launcher icons and `src-tauri/android/MainActivity.kt`
+  (as above; CI does the same). The template's `MainActivity` draws edge-to-edge
+  without insetting the content, so on WebViews that report
+  `env(safe-area-inset-*)` as 0 the toolbar ends up under the status bar and
+  stops taking taps (GeoLibre#3044).
 - Build **release**, not `--debug`: the stripped, size-optimized Cargo profile
   makes each APK ~40 MB; a debug build is ~200 MB (unstripped `.so` with
   debuginfo).
