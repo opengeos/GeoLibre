@@ -20,6 +20,7 @@ import {
   isTemporalDimension,
   memberDimension,
   nearestIndex,
+  nearestLongitudeIndex,
   needsRegionalView,
   projectedBounds,
   projectedDimensions,
@@ -483,15 +484,16 @@ function locateCell(
   lng: number,
   lat: number,
 ): Record<string, number> | null {
-  let x = lng;
-  let y = lat;
+  let column: number | null;
+  let row: number | null;
   if (grid.projection) {
-    [x, y] = proj4("EPSG:4326", grid.projection, [lng, lat]) as [number, number];
+    const [x, y] = proj4("EPSG:4326", grid.projection, [lng, lat]) as [number, number];
+    column = nearestIndex(grid.x.values, x);
+    row = nearestIndex(grid.y.values, y);
   } else {
-    x = wrapLongitude(lng, grid.x.values);
+    column = nearestLongitudeIndex(grid.x.values, wrapLongitude(lng, grid.x.values));
+    row = nearestIndex(grid.y.values, lat);
   }
-  const column = nearestIndex(grid.x.values, x);
-  const row = nearestIndex(grid.y.values, y);
   return column === null || row === null ? null : { [grid.x.name]: column, [grid.y.name]: row };
 }
 
@@ -560,10 +562,33 @@ async function readPointSeries(
   return { steps: summarizeSeries(times, values), start, dimension, members: memberCount };
 }
 
-/** Mark the point a series was read at. */
+/**
+ * The map's `styledata` listener that puts the point marker back after a basemap change drops it,
+ * while a marker is shown.
+ */
+let markerHeal: {
+  map: { off(type: "styledata", listener: () => void): unknown };
+  listener: () => void;
+} | null = null;
+
+/** Mark the point a series was read at, and keep it marked across style changes. */
 function showPointMarker(app: GeoLibreAppAPI, lng: number, lat: number): void {
   const map = getStyleMap(app);
   if (!map) return;
+  markerHeal?.map.off("styledata", markerHeal.listener);
+  const listener = () => {
+    if (map.isStyleLoaded() && !map.getSource(POINT_SOURCE_ID)) addPointMarker(map, lng, lat);
+  };
+  map.on("styledata", listener);
+  markerHeal = { map, listener };
+  addPointMarker(map, lng, lat);
+}
+
+function addPointMarker(
+  map: NonNullable<ReturnType<typeof getStyleMap>>,
+  lng: number,
+  lat: number,
+) {
   const data = {
     type: "FeatureCollection" as const,
     features: [
@@ -596,6 +621,8 @@ function showPointMarker(app: GeoLibreAppAPI, lng: number, lat: number): void {
 }
 
 function removePointMarker(app: GeoLibreAppAPI | null): void {
+  markerHeal?.map.off("styledata", markerHeal.listener);
+  markerHeal = null;
   const map = getStyleMap(app);
   if (!map) return;
   if (map.getLayer(POINT_LAYER_ID)) map.removeLayer(POINT_LAYER_ID);
@@ -1359,10 +1386,13 @@ function buildPanel(container: HTMLElement): () => void {
         ),
       },
       onPick: (index) => {
+        // The redraw replaces the chart, so a keyboard user keeps their place in the new one.
+        const focused = chartBox.contains(document.activeElement);
         state.indices[current.dimension] = current.start + index;
         renderSliders();
         scheduleLiveSlice();
         renderSeries();
+        if (focused) chartBox.querySelector<SVGElement>("svg[tabindex]")?.focus();
       },
     });
     renderTable();
@@ -1425,12 +1455,17 @@ function buildPanel(container: HTMLElement): () => void {
 
   /**
    * Keep the chart in step with a slider: the series slider moves the chart's marker while it
-   * stays inside the window read, and anything else (another run) reads the series again.
+   * stays inside the window read, the member slider changes nothing (every member is read), and
+   * anything else (another run) reads the series again.
    */
   const refreshSeries = (dimension: string): void => {
-    if (!state.point) return;
     renderSeriesHint();
+    if (!state.point) return;
     const current = series;
+    const dataset = currentDataset();
+    const variable = currentVariable();
+    // The series reads every member, so another member reads the same values.
+    if (current && dataset && variable && dimension === memberDimension(dataset, variable)) return;
     const index = state.indices[dimension] ?? 0;
     if (
       current &&

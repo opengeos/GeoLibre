@@ -15,6 +15,7 @@ import {
   formatUtc,
   memberDimension,
   nearestIndex,
+  nearestLongitudeIndex,
   needsRegionalView,
   niceTicks,
   parseDynamicalCatalog,
@@ -626,6 +627,16 @@ describe("point series", () => {
     assert.equal(nearestIndex(longitudes, -179.7), 1);
     assert.equal(nearestIndex(longitudes, -180.2), null);
     assert.equal(nearestIndex([], 1), null);
+  });
+
+  it("treats a whole-circle longitude axis as periodic", () => {
+    const global = Array.from({ length: 1440 }, (_, index) => index * 0.25);
+    assert.equal(nearestLongitudeIndex(global, 359.9), 0);
+    assert.equal(nearestLongitudeIndex(global, 359.8), 1439);
+    const centred = Array.from({ length: 1440 }, (_, index) => -180 + index * 0.25);
+    assert.equal(nearestLongitudeIndex(centred, 179.9), 0);
+    // A regional axis stays bounded.
+    assert.equal(nearestLongitudeIndex([-130, -129.75, -129.5], -120), null);
   });
 
   it("wraps a longitude into the axis convention", () => {

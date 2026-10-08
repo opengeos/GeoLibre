@@ -360,7 +360,10 @@ export function renderSeriesChart(container: HTMLElement, options: SeriesChartOp
       }
     });
 
+    // A resize redraw replaces the chart; keep keyboard focus on it.
+    const focused = frame.contains(document.activeElement);
     frame.replaceChildren(chart, tooltip);
+    if (focused) chart.focus();
   };
 
   // The legend, for an ensemble only: a line key for the mean and a swatch for the range.

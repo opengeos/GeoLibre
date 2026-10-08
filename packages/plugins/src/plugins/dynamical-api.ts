@@ -767,6 +767,26 @@ export function nearestIndex(coordinates: ArrayLike<number>, value: number): num
   return Math.abs(at(high) - target) < Math.abs(target - at(low)) ? high : low;
 }
 
+/**
+ * {@link nearestIndex} on a longitude axis. An axis that goes the whole way round is periodic, so
+ * a point in the half step past its last coordinate is next to the first one.
+ *
+ * Returns:
+ *   The index, or null when the longitude lies off a regional axis.
+ */
+export function nearestLongitudeIndex(
+  coordinates: ArrayLike<number>,
+  longitude: number,
+): number | null {
+  const index = nearestIndex(coordinates, longitude);
+  const count = coordinates.length;
+  if (index !== null || count < 2) return index;
+  const step = Math.abs(coordinates[1] - coordinates[0]);
+  const span = Math.abs(coordinates[count - 1] - coordinates[0]) + step;
+  if (Math.abs(span - 360) > step / 2) return null;
+  return nearestIndex(coordinates, longitude - 360) ?? nearestIndex(coordinates, longitude + 360);
+}
+
 /** Bring a longitude into the convention of a longitude axis: [-180, 180) or [0, 360). */
 export function wrapLongitude(longitude: number, coordinates: ArrayLike<number>): number {
   let max = Number.NEGATIVE_INFINITY;
