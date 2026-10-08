@@ -120,8 +120,18 @@ function padShortSampleFormat(image: GeoTiffImage): void {
   fields.set(SAMPLE_FORMAT_TAG, padded);
 }
 
-/** Decode GeoTIFF bytes into a {@link RasterData}. */
-export async function readRasterData(bytes: ArrayBuffer): Promise<RasterData> {
+/**
+ * Decode GeoTIFF bytes into a {@link RasterData}.
+ *
+ * @param bytes GeoTIFF bytes.
+ * @param options `samples`: 0-based bands to decode, in this order (all bands
+ *   when omitted), so a caller needing a few bands of a large image does not
+ *   decode the rest.
+ */
+export async function readRasterData(
+  bytes: ArrayBuffer,
+  options: { samples?: readonly number[] } = {},
+): Promise<RasterData> {
   const tiff = await fromArrayBuffer(bytes);
   const image = await tiff.getImage();
   padShortSampleFormat(image);
@@ -130,7 +140,10 @@ export async function readRasterData(bytes: ArrayBuffer): Promise<RasterData> {
   // Guard against decoding a raster too large to hold in browser memory before
   // we materialize the band arrays (which would freeze or OOM the tab).
   const estimatedBytes =
-    width * height * image.getSamplesPerPixel() * Float32Array.BYTES_PER_ELEMENT;
+    width *
+    height *
+    (options.samples?.length ?? image.getSamplesPerPixel()) *
+    Float32Array.BYTES_PER_ELEMENT;
   if (!Number.isFinite(estimatedBytes) || estimatedBytes > MAX_CLIENT_RASTER_BYTES) {
     throw new Error(
       "This raster is too large for the in-browser engine. Use the sidecar (rasterio/GDAL) engine instead.",
@@ -139,7 +152,9 @@ export async function readRasterData(bytes: ArrayBuffer): Promise<RasterData> {
   const [originX, originY] = image.getOrigin();
   const [resolutionX, resolutionY] = image.getResolution();
 
-  const result = await image.readRasters();
+  const result = await image.readRasters(
+    options.samples ? { samples: [...options.samples] } : undefined,
+  );
   const rawBands = (Array.isArray(result) ? result : [result]) as ArrayLike<number>[];
   const bands = rawBands.map((band) => Float32Array.from(band));
 

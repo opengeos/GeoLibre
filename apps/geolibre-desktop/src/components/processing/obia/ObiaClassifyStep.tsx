@@ -251,6 +251,13 @@ export function ObiaClassifyStep(): ReactElement | null {
                   value={rule.field}
                   onChange={(event) => updateRule(index, { field: event.target.value })}
                 >
+                  {/* A feature dropped by a re-measure stays visible, flagged,
+                      rather than the select silently showing another one. */}
+                  {!measured.includes(rule.field) && (
+                    <option value={rule.field}>
+                      {t("obia.classify.missingOption", { name: rule.field })}
+                    </option>
+                  )}
                   {measured.map((field) => (
                     <option key={field} value={field}>
                       {field}
@@ -279,6 +286,11 @@ export function ObiaClassifyStep(): ReactElement | null {
                   value={rule.className}
                   onChange={(event) => updateRule(index, { className: event.target.value })}
                 >
+                  {!classes.some((cls) => cls.name === rule.className) && (
+                    <option value={rule.className}>
+                      {t("obia.classify.missingOption", { name: rule.className })}
+                    </option>
+                  )}
                   {classes.map((cls) => (
                     <option key={cls.name} value={cls.name}>
                       {cls.name}

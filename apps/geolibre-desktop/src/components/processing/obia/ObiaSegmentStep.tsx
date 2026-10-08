@@ -6,6 +6,7 @@ import { Info, Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
+import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { obiaSourceBands, obiaSourceBytes, obiaSourceKey } from "../../../lib/obia/obia-source";
 import { ObiaNumberField, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
@@ -165,7 +166,7 @@ export function ObiaSegmentStep({
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("obia.error.failed"));
+      setError(obiaErrorMessage(err, t, t("obia.error.failed")));
     } finally {
       runningRef.current = false;
       setRunning(false);
