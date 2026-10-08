@@ -186,6 +186,9 @@ export function selectOctreeNodes(
     if (!view.box || error(key, box) <= 1) continue;
     for (const child of children(key)) {
       const childBox = nodeBox(source.cube, child);
+      // Out-of-view children never enter the queue, which keeps its linear
+      // scan short on a deep, dense tree.
+      if (overlap(childBox, view.box) === 0) continue;
       queue.push({ key: child, error: error(child, childBox) });
     }
   }
@@ -382,7 +385,8 @@ export class PointCloudStreamer {
    * first, oldest first; what it wants is itself under the cap.
    */
   private trim(): void {
-    if (this.collection.length <= STREAM_MAX_SHOWN_POINTS) return;
+    // After destroy() the entry may already have removed the collection.
+    if (this.destroyed || this.collection.length <= STREAM_MAX_SHOWN_POINTS) return;
     for (const key of [...this.shown.keys()]) {
       if (this.collection.length <= STREAM_MAX_SHOWN_POINTS) break;
       if (!this.latest.has(key)) this.hide(key);

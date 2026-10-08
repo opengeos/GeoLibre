@@ -360,6 +360,30 @@ describe("PointCloudStreamer", () => {
     assert.equal(child.color.alpha, 0.7, "alpha is kept");
   });
 
+  it("does nothing to the collection once destroyed", async () => {
+    const { viewer, state } = fakeViewer();
+    const source = streamSource(fullTree(1, 1), []);
+    const waiting: (() => void)[] = [];
+    const load = source.loadNode;
+    source.loadNode = async (key, signal) => {
+      if (key !== "0-0-0-0") await new Promise<void>((r) => waiting.push(r));
+      return load(key, signal);
+    };
+    const streamer = new PointCloudStreamer(fakeCesium() as never, viewer as never, source, {
+      opacity: () => 1,
+    });
+    state.height = 1;
+    const pending = streamer.refresh();
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
+    const collection = streamer.collection as unknown as { remove: () => boolean };
+    streamer.destroy();
+    collection.remove = () => {
+      throw new Error("collection already destroyed");
+    };
+    for (const go of waiting) go();
+    await pending;
+  });
+
   it("reports a node that fails to load and keeps the rest", async () => {
     const loads: string[] = [];
     const { viewer, state } = fakeViewer();
