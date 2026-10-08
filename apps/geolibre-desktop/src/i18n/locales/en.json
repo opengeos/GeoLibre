@@ -7513,6 +7513,7 @@
       "ruleValue": "Value",
       "ruleClass": "Class",
       "removeRule": "Remove rule",
+      "missingOption": "{{name}} (missing)",
       "addRule": "Add rule",
       "defaultClass": "Default class",
       "run": "Classify",
