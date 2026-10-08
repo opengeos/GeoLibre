@@ -103,7 +103,7 @@ export interface CopcModule {
 /** A reprojection from the cloud's CRS to WGS84 degrees (injectable for tests). */
 export type PointCloudProjector = (x: number, y: number) => [number, number];
 
-export interface LoadCopcOptions {
+export interface OpenCopcOptions {
   signal?: AbortSignal;
   /** The `copc` module; defaults to a dynamic import. */
   copc?: CopcModule;
@@ -244,7 +244,7 @@ export function horizontalWkt(wkt: string): string {
  */
 export async function openCopcSource(
   url: string,
-  options: LoadCopcOptions = {},
+  options: OpenCopcOptions = {},
 ): Promise<PointCloudOctree> {
   const signal = options.signal;
   const { Copc } = options.copc ?? ((await import("copc")) as unknown as CopcModule);
@@ -256,12 +256,17 @@ export async function openCopcSource(
   if (options.projector) {
     const flat = await options.projector(copc.wkt);
     const zScale = wktHeightScale(copc.wkt);
-    project = flat
-      ? (x: number, y: number, z: number) => {
-          const [lng, lat] = flat(x, y);
-          return [lng, lat, z * zScale];
-        }
-      : null;
+    if (flat) {
+      const projectFlat: LasProjector = (x, y, z) => {
+        const [lng, lat] = flat(x, y);
+        return [lng, lat, z * zScale];
+      };
+      // An injected projector may carry its own inverse, as the default does.
+      const extras = flat as Partial<Pick<LasProjector, "inverse" | "metresPerUnit">>;
+      projectFlat.inverse = extras.inverse;
+      projectFlat.metresPerUnit = extras.metresPerUnit;
+      project = projectFlat;
+    } else project = null;
   } else {
     project = copc.wkt ? await lasProjector({ wkt: copc.wkt }) : null;
   }
@@ -283,6 +288,7 @@ export async function openCopcSource(
   const nodes = new Map<string, Node>();
   const pages = new Map<string, Page>();
   const counts = new Map<string, number>();
+  const subtreeLoads = new Map<string, Promise<void>>();
   const absorb = (page: {
     nodes: Record<string, Node | undefined>;
     pages: Record<string, Page | undefined>;
@@ -320,15 +326,25 @@ export async function openCopcSource(
     span,
     project: projectPoint,
     counts,
-    loadSubtree: async (key, subtreeSignal) => {
+    loadSubtree: (key, subtreeSignal) => {
+      // Concurrent refreshes share one read of a page.
+      const running = subtreeLoads.get(key);
+      if (running) return running;
       const page = pages.get(key);
-      if (!page) return;
-      pages.delete(key);
-      // Clear the marker first, so a sub-page that does not restate its
-      // root does not leave the key pending forever.
-      if (counts.get(key) === -1) counts.delete(key);
-      absorb(await Copc.loadHierarchyPage(url, page));
-      subtreeSignal?.throwIfAborted();
+      if (!page) return Promise.resolve();
+      const load = (async () => {
+        const read = await Copc.loadHierarchyPage(url, page);
+        subtreeSignal?.throwIfAborted();
+        // Only now is the page consumed: a failed or aborted read leaves the
+        // marker, so a later refresh retries it. A sub-page need not restate
+        // its own root; a zero count keeps the key as a structural node, so
+        // the walk still descends through it to the nodes the page holds.
+        pages.delete(key);
+        if (counts.get(key) === -1) counts.set(key, 0);
+        absorb(read);
+      })().finally(() => subtreeLoads.delete(key));
+      subtreeLoads.set(key, load);
+      return load;
     },
     loadNode: async (key, nodeSignal) => {
       const node = nodes.get(key);
@@ -504,7 +520,7 @@ export interface LoadLasOptions {
   signal?: AbortSignal;
   /** The `copc` module; defaults to a dynamic import. */
   las?: LasModule;
-  /** The LAZ decoder, as for {@link LoadCopcOptions.lazPerf}. */
+  /** The LAZ decoder, as for {@link OpenCopcOptions.lazPerf}. */
   lazPerf?: () => Promise<unknown>;
   /** Downloads the whole file; defaults to `fetch` with a size check. */
   fetchBytes?: (url: string, signal?: AbortSignal) => Promise<Uint8Array>;
@@ -829,7 +845,7 @@ export interface LoadEptOptions {
   signal?: AbortSignal;
   /** The `copc` module (its LAS reader decodes the nodes); defaults to a dynamic import. */
   las?: LasModule;
-  /** The LAZ decoder, as for {@link LoadCopcOptions.lazPerf}. */
+  /** The LAZ decoder, as for {@link OpenCopcOptions.lazPerf}. */
   lazPerf?: () => Promise<unknown>;
   /** Fetches the manifest and hierarchy JSON; defaults to `fetch`. */
   fetchJson?: (url: string, signal?: AbortSignal) => Promise<unknown>;

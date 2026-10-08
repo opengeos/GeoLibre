@@ -56,7 +56,7 @@ import {
   loadLasPointCloud,
   pointCloudSourceKind,
   setPointCloudOpacity,
-  type LoadCopcOptions,
+  type OpenCopcOptions,
   type LoadEptOptions,
   type LoadLasOptions,
 } from "./cesium-point-cloud";
@@ -955,7 +955,7 @@ export interface CesiumLayerSyncDeps {
   /** Rasterises the fill-pattern tile; defaults to the 2D map's renderer. */
   renderFillPattern?: typeof renderFillPatternCanvas;
   /** Overrides for the COPC reader (the module, the projector, the LAZ decoder). */
-  copcOptions?: Omit<LoadCopcOptions, "signal">;
+  copcOptions?: Omit<OpenCopcOptions, "signal">;
   /** Overrides for the plain LAS/LAZ decoder (the module, the download, the projector). */
   lasOptions?: Omit<LoadLasOptions, "signal" | "fallbackWkt">;
   /** Overrides for the EPT decoder (the module, the fetchers, the projector). */

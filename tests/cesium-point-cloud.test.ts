@@ -203,10 +203,34 @@ describe("openCopcSource", () => {
     await source.loadSubtree("0-0-0-0");
     assert.equal(source.counts.get("2-0-0-0"), 300);
     assert.equal(
-      source.counts.has("0-0-0-0"),
-      false,
-      "a sub-page without its root clears the marker",
+      source.counts.get("0-0-0-0"),
+      0,
+      "a sub-page without its root leaves a structural node the walk descends through",
     );
+  });
+
+  it("keeps a sub-page whose read failed, so a later refresh retries it", async () => {
+    const fake = fakeCopc();
+    let fail = true;
+    const flaky: CopcModule = {
+      Copc: {
+        ...fake.module.Copc,
+        loadHierarchyPage: async (source, page) => {
+          if (page.pageOffset !== 0 && fail) throw new Error("page 503");
+          return fake.module.Copc.loadHierarchyPage(source, page);
+        },
+      },
+    };
+    const source = await openCopcSource("https://x/a.copc.laz", {
+      copc: flaky,
+      projector: async () => identity,
+      lazPerf: async () => ({}),
+    });
+    await assert.rejects(source.loadSubtree("2-0-0-0"), /page 503/);
+    assert.equal(source.counts.get("2-0-0-0"), -1, "still unread after the failure");
+    fail = false;
+    await source.loadSubtree("2-0-0-0");
+    assert.equal(source.counts.get("2-0-0-0"), 300);
   });
 
   it("takes the octree cube and span from the COPC info, else the header", async () => {
@@ -281,6 +305,11 @@ function makeCesium(calls: { tilesets: unknown[]; i3s: unknown[] }) {
     get(index: number) {
       return this.points[index];
     }
+    remove(primitive: unknown) {
+      const i = this.points.indexOf(primitive as never);
+      if (i >= 0) this.points.splice(i, 1);
+      return i >= 0;
+    }
   }
   class Color {
     constructor(
@@ -299,6 +328,7 @@ function makeCesium(calls: { tilesets: unknown[]; i3s: unknown[] }) {
   return {
     PointPrimitiveCollection,
     Color,
+    Math: { toDegrees: (r: number) => r },
     Cartesian3: class {
       static fromDegrees = (lng: number, lat: number, z: number) => ({ lng, lat, z });
       static fromRadians = (lng: number, lat: number, z: number) => ({ lng, lat, z });
@@ -540,6 +570,64 @@ describe("CesiumLayerSync native 3D routing", () => {
     assert.equal(lifted.get(0).position.z, 20);
     sync.sync([]);
     assert.equal(f.primitives.length, 0);
+  });
+
+  it("streams a COPC layer's sub-page and child nodes when the camera moves in", async () => {
+    const fake = fakeCopc();
+    let pageReads = 0;
+    const counted: CopcModule = {
+      Copc: {
+        ...fake.module.Copc,
+        loadHierarchyPage: async (source, page) => {
+          pageReads++;
+          return fake.module.Copc.loadHierarchyPage(source, page);
+        },
+      },
+    };
+    const f = makeViewer();
+    const listeners: (() => void)[] = [];
+    let rect: { west: number; south: number; east: number; north: number } | undefined;
+    f.viewer.camera = {
+      moveEnd: {
+        addEventListener: (fn: () => void) => listeners.push(fn),
+        removeEventListener: (fn: () => void) => listeners.splice(listeners.indexOf(fn), 1),
+      },
+      computeViewRectangle: () => rect,
+      get positionCartographic() {
+        return rect
+          ? { longitude: rect.west, latitude: rect.south, height: 1e-6 }
+          : { longitude: 0, latitude: 0, height: 1e9 };
+      },
+      frustum: { fovy: Math.PI / 3 },
+      pitch: -Math.PI / 2,
+    } as never;
+    // Identity in both directions: the fake archive's coordinates are degrees.
+    const projector = Object.assign((x: number, y: number) => [x, y] as [number, number], {
+      inverse: (lng: number, lat: number) => [lng, lat] as [number, number],
+      metresPerUnit: 1,
+    });
+    const sync = new CesiumLayerSync(
+      makeCesium({ tilesets: [], i3s: [] }) as never,
+      f.viewer as never,
+      () => 10,
+      {
+        copcOptions: { copc: counted, projector: async () => projector, lazPerf: async () => ({}) },
+      },
+    );
+    sync.sync([layer({ id: "c", type: "lidar", source: { url: "https://x/a.copc.laz" } })]);
+    for (let i = 0; i < 10; i++) await flush();
+    assert.deepEqual(fake.loads, ["100"], "from afar only the root outline loads");
+    const readsBefore = pageReads;
+
+    // Close over the corner the sub-page covers.
+    rect = { west: 0, south: 0, east: 0.1, north: 0.1 };
+    listeners.forEach((fn) => fn());
+    await new Promise((r) => setTimeout(r, 400));
+    for (let i = 0; i < 10; i++) await flush();
+    assert.ok(pageReads > readsBefore, "the sub-page under the view is read");
+    assert.ok(fake.loads.includes("300"), `child node loaded (loads: ${fake.loads.join(",")})`);
+    sync.sync([]);
+    assert.equal(listeners.length, 0, "the streamer stops following the camera");
   });
 
   it("keeps a slow decode from landing after its layer was removed", async () => {
