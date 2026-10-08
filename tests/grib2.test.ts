@@ -212,8 +212,9 @@ describe("decodeGrib2", () => {
   it("fails on a truncated message rather than reading zeros", () => {
     const values = Array.from({ length: 64 }, (_, index) => index);
     const bytes = buildGrib2({ ni: 8, nj: 8, values });
-    // Drop the end of the data section and the end marker; the section header still claims them.
-    assert.throws(() => decodeGrib2(bytes.subarray(0, bytes.length - 40)), /ended early/);
+    // Drop the end of the data section and the end marker; the section header still claims them,
+    // so the section is refused for running past the buffer.
+    assert.throws(() => decodeGrib2(bytes.subarray(0, bytes.length - 40)), /Corrupt GRIB section/);
   });
 
   it("refuses a value count larger than the grid before allocating for it", () => {

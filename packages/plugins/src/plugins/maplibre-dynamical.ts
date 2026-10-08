@@ -364,15 +364,13 @@ function zoomInForRegionalLayer(
   minZoom: number,
 ): (() => void) | null {
   const map = getStyleMap(app);
-  if (!map || map.getZoom() >= minZoom) return null;
+  if (!map) return null;
   const center = map.getCenter();
   const zoom = map.getZoom();
   const bbox = dataset.bbox;
-  if (!bbox || bboxContains(bbox, center.lng, center.lat)) {
-    map.jumpTo({ center, zoom: minZoom });
-  } else {
-    map.jumpTo({ center: bboxCenter(bbox), zoom: minZoom });
-  }
+  const inside = !bbox || bboxContains(bbox, center.lng, center.lat);
+  if (zoom >= minZoom && inside) return null;
+  map.jumpTo({ center: inside ? center : bboxCenter(bbox), zoom: Math.max(zoom, minZoom) });
   return () => map.jumpTo({ center, zoom });
 }
 
@@ -946,6 +944,7 @@ function buildPanel(container: HTMLElement): () => void {
         ...(projected ? { spatialDimensions: projected } : {}),
         ...(proj4 ? { proj4 } : {}),
         ...(bounds ? { bounds } : {}),
+        ...(minZoom > 0 ? { minZoom: Math.max(0, minZoom - REGIONAL_ZOOM_TOLERANCE) } : {}),
       });
       // The layer is on the map, drawing at the zoom the camera moved to.
       restoreCamera = null;

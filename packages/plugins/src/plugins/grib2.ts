@@ -257,6 +257,8 @@ function unpackComplex(
     const reference = references[group];
     const width = widths[group];
     const length = lengths[group];
+    // A group running past the declared count would be cut short and the layout read as valid.
+    if (index + length > count) throw new Error(`GRIB2 groups hold more than ${count} values`);
     if (width === 0) {
       // A constant group, or a run of missing values.
       let flag = 0;
@@ -359,7 +361,7 @@ export function decodeGrib2(bytes: Uint8Array): Grib2Field {
     }
     const length = message.u32(offset);
     const number = message.u8(offset + 4);
-    if (length < 5) throw new Error("Corrupt GRIB section");
+    if (length < 5 || offset + length > bytes.length) throw new Error("Corrupt GRIB section");
     if (number === 3) {
       grid = parseGrid(message, offset);
     } else if (number === 5) {
