@@ -17,8 +17,9 @@ interface ObiaWorkbenchPanelProps {
  * Object-Based Analysis workbench (#3053), the content of a dockable right
  * panel (see `lib/obia/obia-panel.ts`). It runs the OBIA pipeline on the WASM
  * tool runner, one section per step: segment a raster layer into objects (one
- * polygon per object, `id` = `segment_id`), measure them, and label training and validation samples. Each later step appears once
- * the one before it has run.
+ * polygon per object, `id` = `segment_id`), measure them, and label training
+ * and validation samples. Each later step appears once the one before it has
+ * run.
  */
 export function ObiaWorkbenchPanel({ mapControllerRef }: ObiaWorkbenchPanelProps): ReactElement {
   const { t } = useTranslation();
