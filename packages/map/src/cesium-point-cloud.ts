@@ -906,7 +906,8 @@ export async function loadEptPointCloud(
     throw new Error(`EPT hierarchy type "${manifest.hierarchyType}" is not supported on the globe`);
   const crs = eptCrs(manifest.srs);
   const project = await (options.projector ?? lasProjector)(crs);
-  if (!project) throw new Error("EPT dataset has no usable CRS (no EPSG code or WKT proj4 can build)");
+  if (!project)
+    throw new Error("EPT dataset has no usable CRS (no EPSG code or WKT proj4 can build)");
   const { Las } = options.las ?? ((await import("copc")) as unknown as LasModule);
   const lazPerf = await (options.lazPerf ?? defaultLazPerf)();
   signal?.throwIfAborted();

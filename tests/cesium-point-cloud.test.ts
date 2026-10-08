@@ -951,9 +951,18 @@ describe("heightRange", () => {
 function fakeEpt(
   docs: Record<string, unknown>,
   nodes: Record<string, number[][]>,
-): { las: LasModule; fetchJson: (url: string) => Promise<unknown>; fetchBytes: (url: string) => Promise<Uint8Array>; fetched: string[] } {
+): {
+  las: LasModule;
+  fetchJson: (url: string) => Promise<unknown>;
+  fetchBytes: (url: string) => Promise<Uint8Array>;
+  fetched: string[];
+} {
   const fetched: string[] = [];
-  const keyOf = (url: string) => new URL(url).pathname.split("/").pop()!.replace(/\.(laz|json)$/, "");
+  const keyOf = (url: string) =>
+    new URL(url).pathname
+      .split("/")
+      .pop()!
+      .replace(/\.(laz|json)$/, "");
   const las = {
     Las: {
       Header: { parse: (file: Uint8Array) => ({ key: new TextDecoder().decode(file) }) },

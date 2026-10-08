@@ -2811,17 +2811,17 @@ export class CesiumLayerSync {
         kind === "ept"
           ? await loadEptPointCloud(url, { ...this.deps.eptOptions, signal: abort.signal })
           : kind === "las"
-          ? await loadLasPointCloud(url, {
-              ...this.deps.lasOptions,
-              // The LiDAR control records the WKT it read, for a file whose
-              // own CRS records are missing or unreadable.
-              fallbackWkt: str(entry.layer.metadata?.wkt),
-              signal: abort.signal,
-            })
-          : await loadCopcPointCloud(url, {
-              ...this.deps.copcOptions,
-              signal: abort.signal,
-            });
+            ? await loadLasPointCloud(url, {
+                ...this.deps.lasOptions,
+                // The LiDAR control records the WKT it read, for a file whose
+                // own CRS records are missing or unreadable.
+                fallbackWkt: str(entry.layer.metadata?.wkt),
+                signal: abort.signal,
+              })
+            : await loadCopcPointCloud(url, {
+                ...this.deps.copcOptions,
+                signal: abort.signal,
+              });
       if (entry.cancelled) return;
       const collection = buildPointCloudCollection(
         Cesium,
