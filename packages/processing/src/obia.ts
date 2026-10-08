@@ -884,3 +884,141 @@ export function applyPredictions(
     }),
   };
 }
+
+// --- Accuracy assessment ----------------------------------------------------
+
+/** Per-class accuracy figures. */
+export interface ObiaClassAccuracy {
+  className: string;
+  /** Validation samples of this class (row total). */
+  support: number;
+  /** Producer's accuracy (recall): share of this class's samples predicted as it. */
+  producers: number | null;
+  /** User's accuracy (precision): share of objects predicted as this class that are it. */
+  users: number | null;
+  f1: number | null;
+}
+
+/** Accuracy of a classification against independent validation samples. */
+export interface ObiaAccuracyReport {
+  /** Class names, the order of the matrix rows (reference) and columns (predicted). */
+  labels: string[];
+  /** matrix[reference][predicted] = sample count. */
+  matrix: number[][];
+  sampleCount: number;
+  overallAccuracy: number;
+  kappa: number;
+  perClass: ObiaClassAccuracy[];
+  /** Overall accuracy with each sample weighted by its area, when areas are known. */
+  areaWeightedAccuracy: number | null;
+  /** Validation samples that had no prediction (not counted). */
+  unpredicted: number;
+}
+
+const ratio = (a: number, b: number) => (b > 0 ? a / b : null);
+
+/**
+ * Score predictions against validation samples: confusion matrix, overall
+ * accuracy, Cohen's kappa, per-class producer's/user's accuracy and F1, and an
+ * area-weighted overall accuracy.
+ *
+ * @param samples Labeled objects; only validation samples are scored.
+ * @param predictions Predicted class per object.
+ * @param areas Optional object areas (e.g. pixel counts) for the area-weighted score.
+ * @param classOrder Preferred class order; other classes follow alphabetically.
+ */
+export function assessAccuracy(
+  samples: readonly ObiaSample[],
+  predictions: ReadonlyMap<number, string>,
+  areas?: ReadonlyMap<number, number>,
+  classOrder: readonly string[] = [],
+): ObiaAccuracyReport {
+  const scored: { reference: string; predicted: string; area: number | null }[] = [];
+  let unpredicted = 0;
+  for (const sample of samples) {
+    if (sample.role !== "validation") continue;
+    const predicted = predictions.get(sample.segmentId);
+    if (predicted === undefined) {
+      unpredicted += 1;
+      continue;
+    }
+    scored.push({
+      reference: sample.className,
+      predicted,
+      area: areas?.get(sample.segmentId) ?? null,
+    });
+  }
+  const seen = new Set(scored.flatMap((s) => [s.reference, s.predicted]));
+  const labels = [
+    ...classOrder.filter((name) => seen.has(name)),
+    ...[...seen].filter((name) => !classOrder.includes(name)).sort(),
+  ];
+  const index = new Map(labels.map((name, i) => [name, i]));
+  const matrix = labels.map(() => labels.map(() => 0));
+  for (const s of scored) matrix[index.get(s.reference)!][index.get(s.predicted)!] += 1;
+
+  const n = scored.length;
+  const diagonal = labels.reduce((sum, _, i) => sum + matrix[i][i], 0);
+  const rowTotals = matrix.map((row) => row.reduce((a, b) => a + b, 0));
+  const colTotals = labels.map((_, j) => matrix.reduce((sum, row) => sum + row[j], 0));
+  const overallAccuracy = n ? diagonal / n : 0;
+  const expected = n ? rowTotals.reduce((sum, r, i) => sum + r * colTotals[i], 0) / (n * n) : 0;
+  const kappa = 1 - expected > 1e-12 ? (overallAccuracy - expected) / (1 - expected) : 0;
+
+  const perClass = labels.map((className, i) => {
+    const producers = ratio(matrix[i][i], rowTotals[i]);
+    const users = ratio(matrix[i][i], colTotals[i]);
+    const f1 =
+      producers != null && users != null && producers + users > 0
+        ? (2 * producers * users) / (producers + users)
+        : null;
+    return { className, support: rowTotals[i], producers, users, f1 };
+  });
+
+  let areaWeightedAccuracy: number | null = null;
+  if (n && scored.every((s) => s.area != null)) {
+    const total = scored.reduce((sum, s) => sum + (s.area ?? 0), 0);
+    const correct = scored
+      .filter((s) => s.reference === s.predicted)
+      .reduce((sum, s) => sum + (s.area ?? 0), 0);
+    areaWeightedAccuracy = total > 0 ? correct / total : null;
+  }
+
+  return {
+    labels,
+    matrix,
+    sampleCount: n,
+    overallAccuracy,
+    kappa,
+    perClass,
+    areaWeightedAccuracy,
+    unpredicted,
+  };
+}
+
+/** The confusion matrix and per-class figures as CSV, for a report. */
+export function accuracyReportCsv(report: ObiaAccuracyReport): string {
+  const quote = (value: string) =>
+    /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  const pct = (value: number | null) => (value == null ? "" : value.toFixed(4));
+  const lines = [
+    ["reference / predicted", ...report.labels, "total", "producers_accuracy"].map(quote).join(","),
+    ...report.labels.map((name, i) =>
+      [
+        quote(name),
+        ...report.matrix[i],
+        report.perClass[i].support,
+        pct(report.perClass[i].producers),
+      ].join(","),
+    ),
+    ["users_accuracy", ...report.perClass.map((c) => pct(c.users)), "", ""].join(","),
+    "",
+    `overall_accuracy,${report.overallAccuracy.toFixed(4)}`,
+    `kappa,${report.kappa.toFixed(4)}`,
+    `samples,${report.sampleCount}`,
+  ];
+  if (report.areaWeightedAccuracy != null) {
+    lines.push(`area_weighted_accuracy,${report.areaWeightedAccuracy.toFixed(4)}`);
+  }
+  return `${lines.join("\n")}\n`;
+}

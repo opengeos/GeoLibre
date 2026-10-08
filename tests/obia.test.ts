@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url";
 import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
 import { initTools } from "geolibre-wasm/tools";
+import { runTool } from "geolibre-wasm/tools";
 import {
+  accuracyReportCsv,
+  assessAccuracy,
   applyPredictions,
   classifyByRules,
   classifyRandomForest,
@@ -428,5 +431,96 @@ describe("featureTableCsv", () => {
       fields: ["a", "b"],
       imputed: { b: 1 },
     });
+  });
+});
+
+describe("assessAccuracy", () => {
+  before(async () => {
+    await initTools(
+      readFileSync(
+        fileURLToPath(new URL("../node_modules/geolibre-wasm/geolibre-cli.wasm", import.meta.url)),
+      ),
+    );
+  });
+
+  // Reference A: 8 right, 2 called B. Reference B: 1 called A, 9 right.
+  const samples: ObiaSample[] = [];
+  const predictions = new Map<number, string>();
+  const add = (reference: string, predicted: string, count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      const id = samples.length + 1;
+      samples.push({ segmentId: id, className: reference, role: "validation" });
+      predictions.set(id, predicted);
+    }
+  };
+  add("A", "A", 8);
+  add("A", "B", 2);
+  add("B", "A", 1);
+  add("B", "B", 9);
+  // A training sample and an unpredicted validation sample are not scored.
+  samples.push({ segmentId: 100, className: "A", role: "training" });
+  predictions.set(100, "B");
+  samples.push({ segmentId: 101, className: "B", role: "validation" });
+
+  it("computes the confusion matrix, OA, kappa and per-class accuracy", () => {
+    const report = assessAccuracy(samples, predictions, undefined, ["B", "A"]);
+    assert.deepEqual(report.labels, ["B", "A"]);
+    assert.deepEqual(report.matrix, [
+      [9, 1],
+      [2, 8],
+    ]);
+    assert.equal(report.sampleCount, 20);
+    assert.equal(report.unpredicted, 1);
+    assert.equal(report.overallAccuracy, 0.85);
+    assert.ok(Math.abs(report.kappa - 0.7) < 1e-12);
+    const a = report.perClass.find((c) => c.className === "A")!;
+    assert.equal(a.producers, 0.8);
+    assert.ok(Math.abs((a.users ?? 0) - 8 / 9) < 1e-12);
+    assert.equal(report.areaWeightedAccuracy, null);
+  });
+
+  it("weights overall accuracy by object area when areas are given", () => {
+    // Make the two misclassified A objects large.
+    const areas = new Map(
+      [...predictions.keys()].map((id) => [id, id === 9 || id === 10 ? 100 : 1]),
+    );
+    areas.set(101, 1);
+    const report = assessAccuracy(samples, predictions, areas);
+    // Correct: 8 + 9 = 17 unit areas; wrong: 2 x 100 + 1 = 201.
+    assert.ok(Math.abs((report.areaWeightedAccuracy ?? 0) - 17 / 218) < 1e-12);
+  });
+
+  it("writes a CSV report", () => {
+    const csv = accuracyReportCsv(assessAccuracy(samples, predictions));
+    assert.match(csv, /^reference \/ predicted,A,B,total,producers_accuracy\nA,8,2,10,0\.8000\n/);
+    assert.match(csv, /overall_accuracy,0\.8500\nkappa,0\.7000\nsamples,20\n$/);
+  });
+
+  it("agrees with the Whitebox accuracy tool on OA and kappa", async () => {
+    const validation = samples.filter(
+      (s) => s.role === "validation" && predictions.has(s.segmentId),
+    );
+    const encoder = new TextEncoder();
+    const result = await runTool("evaluate_object_classification_accuracy", {
+      args: ["--predictions=/work/p.csv", "--reference=/work/r.csv", "--output=/work/acc.json"],
+      input: {
+        "p.csv": encoder.encode(
+          [
+            "segment_id,predicted_class",
+            ...validation.map((s) => `${s.segmentId},${predictions.get(s.segmentId)}`),
+          ].join("\n"),
+        ),
+        "r.csv": encoder.encode(
+          ["segment_id,class", ...validation.map((s) => `${s.segmentId},${s.className}`)].join(
+            "\n",
+          ),
+        ),
+      },
+    });
+    assert.equal(result.exitCode, 0);
+    const tool = JSON.parse(new TextDecoder().decode(result.files["acc.json"]));
+    const ours = assessAccuracy(samples, predictions);
+    assert.ok(Math.abs(tool.overall_accuracy - ours.overallAccuracy) < 1e-12);
+    assert.ok(Math.abs(tool.kappa - ours.kappa) < 1e-12);
   });
 });

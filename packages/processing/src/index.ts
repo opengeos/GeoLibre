@@ -419,6 +419,10 @@ export {
   type RunModelGraphOptions,
 } from "./model-graph";
 export {
+  accuracyReportCsv,
+  assessAccuracy,
+  type ObiaAccuracyReport,
+  type ObiaClassAccuracy,
   OBIA_PREDICTED_FIELD,
   OBIA_RULE_OPS,
   applyPredictions,

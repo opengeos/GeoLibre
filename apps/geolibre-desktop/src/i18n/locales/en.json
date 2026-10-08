@@ -7415,7 +7415,8 @@
       "segment": "Segment",
       "measure": "Measure",
       "train": "Label samples",
-      "classify": "Classify"
+      "classify": "Classify",
+      "accuracy": "Assess accuracy"
     },
     "image": "Image",
     "imagePlaceholder": "Choose a raster layer",
@@ -7518,6 +7519,26 @@
       "imputed": "Objects missing a value used the feature's mean: {{fields}}.",
       "error": {
         "failed": "Classification failed."
+      }
+    },
+    "accuracy": {
+      "noValidation": "Label some objects as Validation samples (or Split the training samples) to score the classification against data it never trained on.",
+      "rulesNote": "Rules use no training data; the score still counts only the validation samples.",
+      "overall": "Overall accuracy",
+      "kappa": "Kappa",
+      "areaWeighted": "Area-weighted",
+      "samples_one": "Scored on {{count}} validation sample.",
+      "samples_other": "Scored on {{count}} validation samples.",
+      "unpredicted_one": "{{count}} validation sample had no prediction and was skipped.",
+      "unpredicted_other": "{{count}} validation samples had no prediction and were skipped.",
+      "matrixCaption": "Confusion matrix: rows are the reference class, columns the predicted class.",
+      "referenceVsPredicted": "Reference / predicted",
+      "producers": "Producer's",
+      "users": "User's",
+      "download": "Download report (CSV)",
+      "saved": "Report saved.",
+      "error": {
+        "save": "Saving the report failed."
       }
     }
   },

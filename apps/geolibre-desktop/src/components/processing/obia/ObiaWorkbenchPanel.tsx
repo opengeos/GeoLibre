@@ -4,6 +4,7 @@ import { GripVertical, Shapes, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useFloatingPanelDrag } from "../../../hooks/useFloatingPanelDrag";
+import { ObiaAccuracyStep } from "./ObiaAccuracyStep";
 import { ObiaClassifyStep } from "./ObiaClassifyStep";
 import { ObiaMeasureStep } from "./ObiaMeasureStep";
 import { ObiaSegmentStep } from "./ObiaSegmentStep";
@@ -19,8 +20,8 @@ interface ObiaWorkbenchPanelProps {
  * Object-Based Analysis workbench (#3053). A floating panel that runs the OBIA
  * pipeline on the WASM tool runner, one step per section: segment a raster
  * layer into objects (one polygon per object, `id` = `segment_id`), measure
- * them, label training and validation samples, and classify them. Each later
- * step appears once the one before it has run.
+ * them, label training and validation samples, classify them, and assess the
+ * accuracy. Each later step appears once the one before it has run.
  */
 export function ObiaWorkbenchPanel({
   mapControllerRef,
@@ -38,8 +39,8 @@ export function ObiaWorkbenchPanel({
       ref={panelRef}
       className={
         pos
-          ? "pointer-events-auto absolute z-20 flex max-h-[calc(100%-2rem)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-          : "pointer-events-auto absolute end-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+          ? "pointer-events-auto absolute z-20 flex max-h-[calc(100%-2rem)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+          : "pointer-events-auto absolute end-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
       }
       style={pos ? { left: pos.x, top: pos.y } : undefined}
       role="region"
@@ -71,6 +72,7 @@ export function ObiaWorkbenchPanel({
         <ObiaMeasureStep />
         <ObiaTrainStep />
         <ObiaClassifyStep />
+        <ObiaAccuracyStep />
       </div>
     </div>
   );

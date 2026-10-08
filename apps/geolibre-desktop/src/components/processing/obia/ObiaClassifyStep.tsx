@@ -228,7 +228,7 @@ export function ObiaClassifyStep(): ReactElement | null {
             {settings.rules.map((rule, index) => (
               <li
                 key={index}
-                className="grid grid-cols-[minmax(0,1.3fr)_3.5rem_minmax(0,1fr)_minmax(0,1.2fr)_auto] items-center gap-1"
+                className="grid grid-cols-[minmax(0,1.2fr)_3.5rem_4.5rem_minmax(0,1.5fr)_auto] items-center gap-1"
                 data-testid="obia-rule-row"
               >
                 <Select

@@ -98,6 +98,29 @@ The Whitebox catalog's "SVM" and "ensemble" object classifiers are the same
 random forest with a different number of trees, so the workbench offers only
 the random forest.
 
+## 5. Assess accuracy
+
+After classifying, the workbench scores the predictions against the
+validation samples, which the random forest never trained on. The score
+updates as you relabel samples.
+
+- **Overall accuracy**: the share of validation objects whose predicted class
+  matches their label.
+- **Kappa**: Cohen's kappa, agreement beyond what chance would give.
+- **Area-weighted**: overall accuracy with each validation object weighted by
+  its pixel area, since a large misclassified object misstates more of the map
+  than a small one. It needs the shape features.
+- The **confusion matrix** has the reference classes as rows and the
+  predicted classes as columns, with each class's producer's accuracy (how
+  much of the class was found) and user's accuracy (how reliable a prediction
+  of the class is).
+
+**Download report (CSV)** saves the matrix and the figures.
+
+For an honest score, label validation samples spread across the scene rather
+than next to training samples, and do not tune the classifier on them
+repeatedly; otherwise they stop being independent.
+
 ### About the algorithm
 
 The method is Whitebox's seeded region growing (`image_segmentation`). It is
