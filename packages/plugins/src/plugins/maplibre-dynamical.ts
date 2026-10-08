@@ -1440,6 +1440,8 @@ function buildPanel(container: HTMLElement): () => void {
         return;
       }
       series = { ...read, datasetId: dataset.id, variable };
+      // A reopened panel re-reads the point it kept; its marker went with the closed panel.
+      showPointMarker(app, picked.lng, picked.lat);
       setSeriesStatus(null);
       renderSeries();
     } catch (error) {
@@ -1478,6 +1480,8 @@ function buildPanel(container: HTMLElement): () => void {
     const index = state.indices[dimension] ?? 0;
     if (
       current &&
+      current.datasetId === dataset?.id &&
+      current.variable.name === variable?.name &&
       dimension === current.dimension &&
       index >= current.start &&
       index < current.start + current.steps.length
@@ -1615,6 +1619,8 @@ export const maplibreDynamicalPlugin: GeoLibrePlugin = {
           return () => {
             disposePanel?.();
             disposePanel = null;
+            // The marker belongs with the chart; a reopened panel puts both back for state.point.
+            removePointMarker(appRef);
             if (panelContainer === container) panelContainer = null;
           };
         },
