@@ -86,7 +86,7 @@ const PRESERVED_GEO_KEYS = [
  * Upper bound on the Float32 pixel buffers the client engine will allocate
  * (512 MB). Larger rasters should use the sidecar, which streams from disk.
  */
-const MAX_CLIENT_RASTER_BYTES = 512 * 1024 * 1024;
+export const MAX_CLIENT_RASTER_BYTES = 512 * 1024 * 1024;
 
 const SAMPLE_FORMAT_TAG = 339;
 
