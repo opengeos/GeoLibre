@@ -7465,7 +7465,7 @@
       }
     },
     "train": {
-      "hint": "Add a class for each land cover, select objects on the map (selection tools) or in the attribute table, then click the tag button on a class to label them. Label validation samples separately, or hold out part of the training samples below.",
+      "hint": "Add a class for each land cover, select objects on the map (selection tools) or in the attribute table, then click the tag button on a class to label them. Label validation samples separately, or hold out part of the training samples below. Each Split holds out a share of the training samples still left, so splitting again moves more.",
       "role": "Label as",
       "roles": {
         "training": "Training",

@@ -10,7 +10,7 @@ let cached: { key: string; bytes: Uint8Array } | null = null;
  * Identity of a layer's data: its id plus wherever its bytes come from, so a
  * layer whose source is replaced (re-added file, new URL) is read afresh.
  */
-function sourceKey(layer: GeoLibreLayer): string {
+export function obiaSourceKey(layer: GeoLibreLayer): string {
   const src = layer.source as Record<string, unknown>;
   return [layer.id, layer.metadata.localBytesUrl, src.url, layer.sourcePath].join("|");
 }
@@ -23,7 +23,7 @@ function sourceKey(layer: GeoLibreLayer): string {
  *   browser.
  */
 export async function obiaSourceBytes(layer: GeoLibreLayer): Promise<Uint8Array | null> {
-  const key = sourceKey(layer);
+  const key = obiaSourceKey(layer);
   if (cached?.key === key) return cached.bytes;
   const bytes = await fetchLayerBytes(layer);
   if (bytes) cached = { key, bytes };
