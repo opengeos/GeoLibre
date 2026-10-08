@@ -770,6 +770,8 @@ function buildPanel(container: HTMLElement): () => void {
   const renderSliders = (): void => {
     slidersBox.replaceChildren();
     for (const axis of axes) {
+      const title = axisTitle(axis.name);
+      const last = Math.max(0, axis.labels.length - 1);
       const wrap = element("div", CSS.slider);
       const head = element("div", CSS.sliderHead);
       const value = element("span", CSS.sliderValue);
@@ -779,8 +781,6 @@ function buildPanel(container: HTMLElement): () => void {
       range.min = "0";
       range.max = String(last);
       range.step = "1";
-      const title = axisTitle(axis.name);
-      const last = Math.max(0, axis.labels.length - 1);
       range.setAttribute("aria-label", title);
       // A long archive packs many steps into each pixel of the slider, so the buttons step one at
       // a time and a timestamp axis also takes a day and a run.
