@@ -36,6 +36,10 @@ const lidarControlPosition: GeoLibreMapControlPosition = "top-left";
 
 const LIDAR_SAMPLE_URL = "https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz";
 
+/** A USGS 3DEP Entwine Point Tile dataset, for trying the EPT path. */
+const LIDAR_EPT_SAMPLE_URL =
+  "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/USGS_LPC_IL_4County_Cook_2017_LAS_2019/ept.json";
+
 const LIDAR_OPTIONS = {
   title: "Add LiDAR Layer",
   collapsed: false,
@@ -52,7 +56,10 @@ const LIDAR_OPTIONS = {
   autoZoom: true,
   // Empty input; the sample point cloud is the explicit, opt-in way to load
   // one (replaces the former seedLidarDefaultUrl DOM injection).
-  sampleData: [{ label: "Autzen", url: LIDAR_SAMPLE_URL }],
+  sampleData: [
+    { label: "Autzen", url: LIDAR_SAMPLE_URL },
+    { label: "Cook County, IL (EPT)", url: LIDAR_EPT_SAMPLE_URL },
+  ],
   // The panel doubles as the Add LiDAR Layer dialog, so it stays open until
   // the user closes it; clicking the map must not collapse it.
   closeOnOutsideClick: false,

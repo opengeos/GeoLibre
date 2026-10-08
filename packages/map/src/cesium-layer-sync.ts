@@ -45,13 +45,14 @@ import {
   type ZarrCesiumModule,
 } from "./cesium-zarr-imagery";
 import { getZarrStore } from "./zarr-source";
+import { PointCloudStreamer } from "./cesium-point-cloud-stream";
 import { createFeatureStyleResolver, type FeatureStyleResolver } from "./feature-style";
 import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
 import {
   buildPointCloudCollection,
   isSplatTilesetUrl,
   loadCopcPointCloud,
-  loadEptPointCloud,
+  openEptSource,
   loadLasPointCloud,
   pointCloudSourceKind,
   setPointCloudOpacity,
@@ -310,6 +311,8 @@ interface LayerEntry {
     | null;
   /** Aborts a decoded point cloud's download when the entry goes. */
   abort?: AbortController;
+  /** Streams an EPT cloud by view; destroyed with the entry. */
+  streamer?: PointCloudStreamer;
   /** Removes the one-shot tile listener that reads a tileset's attribute names. */
   fieldsListener?: () => void;
   /** Stops counting an imagery entry's tile loads and failures. */
@@ -2807,21 +2810,40 @@ export class CesiumLayerSync {
     entry.abort = abort;
     try {
       const kind = pointCloudSourceKind(url);
+      if (kind === "ept") {
+        // A large EPT dataset needs detail where the camera is, not one
+        // sample of the whole cloud: stream it by view.
+        const source = await openEptSource(url, { ...this.deps.eptOptions, signal: abort.signal });
+        if (entry.cancelled) return;
+        const streamer = new PointCloudStreamer(Cesium, viewer, source, {
+          opacity: () => this.effectiveOpacity(entry),
+          altitudeOffset: Number(entry.layer.source.altitudeOffset),
+          onError: (message) => {
+            entry.loadError ??= message;
+          },
+        });
+        entry.streamer = streamer;
+        viewer.scene.primitives.add(streamer.collection);
+        await streamer.start();
+        if (entry.cancelled) return;
+        entry.handle = streamer.collection;
+        entry.appliedAlpha = String(this.effectiveOpacity(entry));
+        this.applyAppearance(entry);
+        return;
+      }
       const cloud =
-        kind === "ept"
-          ? await loadEptPointCloud(url, { ...this.deps.eptOptions, signal: abort.signal })
-          : kind === "las"
-            ? await loadLasPointCloud(url, {
-                ...this.deps.lasOptions,
-                // The LiDAR control records the WKT it read, for a file whose
-                // own CRS records are missing or unreadable.
-                fallbackWkt: str(entry.layer.metadata?.wkt),
-                signal: abort.signal,
-              })
-            : await loadCopcPointCloud(url, {
-                ...this.deps.copcOptions,
-                signal: abort.signal,
-              });
+        kind === "las"
+          ? await loadLasPointCloud(url, {
+              ...this.deps.lasOptions,
+              // The LiDAR control records the WKT it read, for a file whose
+              // own CRS records are missing or unreadable.
+              fallbackWkt: str(entry.layer.metadata?.wkt),
+              signal: abort.signal,
+            })
+          : await loadCopcPointCloud(url, {
+              ...this.deps.copcOptions,
+              signal: abort.signal,
+            });
       if (entry.cancelled) return;
       const collection = buildPointCloudCollection(
         Cesium,
@@ -4142,6 +4164,14 @@ export class CesiumLayerSync {
     // A fit still waiting on this entry has nothing left to frame.
     if (this.pendingZoomLayerId === entry.layer.id) this.pendingZoomLayerId = null;
     entry.abort?.abort();
+    if (entry.streamer) {
+      entry.streamer.destroy();
+      // Removed before its first load landed: the collection is already in
+      // the scene but not yet the entry's handle.
+      if (entry.handle !== entry.streamer.collection)
+        this.viewer.scene.primitives.remove(entry.streamer.collection);
+      entry.streamer = undefined;
+    }
     entry.documentCleanup?.();
     entry.documentCleanup = undefined;
     entry.overlayContainer?.remove();

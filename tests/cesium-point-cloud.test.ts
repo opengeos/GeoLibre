@@ -1089,6 +1089,37 @@ describe("loadEptPointCloud", () => {
     assert.equal(cloud.positions[2], 300);
   });
 
+  it("streams an EPT layer on the globe and tears it down on removal", async () => {
+    const fake = fakeEpt(
+      { "ept.json": manifest, "ept-hierarchy/0-0-0-0.json": { "0-0-0-0": 2 } },
+      { "0-0-0-0": nodePoints(2, 10) },
+    );
+    const f = makeViewer();
+    const sync = new CesiumLayerSync(
+      makeCesium({ tilesets: [], i3s: [] }) as never,
+      f.viewer as never,
+      () => 10,
+      {
+        eptOptions: {
+          las: fake.las,
+          fetchJson: fake.fetchJson,
+          fetchBytes: fake.fetchBytes,
+          projector: metresProjector,
+          lazPerf: async () => ({}),
+        },
+      },
+    );
+    const ept = layer({ id: "e", type: "lidar", source: { url: "https://h/data/ept.json" } });
+    sync.sync([ept]);
+    assert.deepEqual(sync.getRenderStatus().pending, ["Layer"], "pending while the root loads");
+    for (let i = 0; i < 10; i++) await flush();
+    assert.equal(f.primitives.length, 1);
+    assert.equal((f.primitives[0] as { length: number }).length, 2, "the root node is shown");
+    assert.deepEqual(sync.getRenderStatus(), { pending: [], errors: [] });
+    sync.sync([]);
+    assert.equal(f.primitives.length, 0);
+  });
+
   it("refuses data types it cannot decode", async () => {
     const fake = fakeEpt({ "ept.json": { ...manifest, dataType: "binary" } }, {});
     await assert.rejects(
