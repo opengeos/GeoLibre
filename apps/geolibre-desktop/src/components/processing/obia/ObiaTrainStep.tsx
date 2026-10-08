@@ -180,14 +180,18 @@ export function ObiaTrainStep(): ReactElement | null {
       return;
     }
     setError(null);
+    // Relabel exactly the held-out samples, grouped by their own class (not
+    // the class list), so the count reported is the count moved.
+    const heldByClass = new Map<string, Set<number>>();
+    for (const sample of samples) {
+      if (!held.has(sample.segmentId)) continue;
+      const ids = heldByClass.get(sample.className) ?? new Set<number>();
+      ids.add(sample.segmentId);
+      heldByClass.set(sample.className, ids);
+    }
     let next = objects;
-    for (const cls of classes) {
-      const ids = new Set(
-        samples
-          .filter((s) => s.className === cls.name && held.has(s.segmentId))
-          .map((s) => s.segmentId),
-      );
-      if (ids.size) next = labelObjects(next, ids, { className: cls.name, role: "validation" });
+    for (const [className, ids] of heldByClass) {
+      next = labelObjects(next, ids, { className, role: "validation" });
     }
     writeObjects(next);
     setMessage(t("obia.train.split", { count: held.size }));

@@ -6,7 +6,7 @@ import { Info, Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
-import { obiaSourceBands, obiaSourceBytes } from "../../../lib/obia/obia-source";
+import { obiaSourceBands, obiaSourceBytes, obiaSourceKey } from "../../../lib/obia/obia-source";
 import { ObiaNumberField, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
 interface ObiaSegmentStepProps {
@@ -64,9 +64,13 @@ export function ObiaSegmentStep({
     setSourceLayerId(imageLayers[0].id);
   }, [sourceLayer, imageLayers, setSourceLayerId]);
 
-  // Read the chosen layer's header to list its bands.
+  // Read the chosen layer's header to list its bands. Keyed on the layer's
+  // data source, not the layer object, so restyling or renaming it does not
+  // re-read the header or clear an error the user has not read yet.
+  const sourceKey = sourceLayer ? obiaSourceKey(sourceLayer) : "";
   useEffect(() => {
-    if (!sourceLayer) {
+    const layer = useAppStore.getState().layers.find((item) => item.id === sourceLayerId);
+    if (!sourceKey || !layer) {
       setSummary(null);
       return;
     }
@@ -75,7 +79,7 @@ export function ObiaSegmentStep({
     setError(null);
     void (async () => {
       try {
-        const bytes = await obiaSourceBytes(sourceLayer);
+        const bytes = await obiaSourceBytes(layer);
         if (cancelled) return;
         if (!bytes) throw new Error(t("obia.error.readImage"));
         const info = await readImageSummary(bytes);
@@ -96,7 +100,9 @@ export function ObiaSegmentStep({
     return () => {
       cancelled = true;
     };
-  }, [sourceLayer, setBandIndexes, t]);
+    // sourceLayerId is folded into sourceKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceKey, setBandIndexes, t]);
 
   const toggleBand = useCallback(
     (index: number, checked: boolean) => {

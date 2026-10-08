@@ -91,6 +91,8 @@ Accuracy assessment needs validation samples the classifier never trained on.
 Label them separately, or **Split** to move a share of each class's training
 samples (rounded, at least one per class) to validation. The split is
 stratified by class and reproducible: the same seed picks the same samples.
+Each **Split** works on the training samples still left, so splitting again
+moves a further share to validation.
 
 Labels are stored on the objects themselves, in the `obia_class` and
 `obia_sample` (`training` or `validation`) properties, so they are saved with

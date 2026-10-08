@@ -425,6 +425,7 @@ export {
   type ObiaClassifiedRaster,
   type ObiaLegendEntry,
   accuracyReportCsv,
+  csvCell,
   assessAccuracy,
   type ObiaAccuracyReport,
   type ObiaClassAccuracy,

@@ -4,10 +4,11 @@ import { before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
-import { initTools } from "geolibre-wasm/tools";
-import { runTool } from "geolibre-wasm/tools";
+import { featureSelectionId } from "@geolibre/core";
+import { initTools, runTool } from "geolibre-wasm/tools";
 import {
   classifiedRaster,
+  csvCell,
   legendCsv,
   readRasterData,
   accuracyReportCsv,
@@ -392,6 +393,37 @@ describe("OBIA training samples", () => {
     assert.equal("obia_sample" in (fc.features[0].properties ?? {}), false);
   });
 
+  it("uses the map selection's ids as segment ids", () => {
+    // GeoLibre's selection identifies a feature by featureSelectionId (its
+    // feature id, else its index). Objects carry id = segment_id, so the ids
+    // the Train step reads from the selection are the segment ids it labels,
+    // even when the objects are not in segment order.
+    const objects = dissolveSegmentPolygons({
+      type: "FeatureCollection",
+      features: [9, 4].map((value) => ({
+        type: "Feature" as const,
+        properties: { VALUE: value },
+        geometry: {
+          type: "Polygon" as const,
+          coordinates: [
+            [
+              [value, 0],
+              [value + 1, 0],
+              [value + 1, 1],
+              [value, 0],
+            ],
+          ],
+        },
+      })),
+    });
+    const selected = objects.features.map((f, i) => Number(featureSelectionId(f, i)));
+    assert.deepEqual(selected, [4, 9]);
+    const labeled = labelObjects(objects, new Set([9]), { className: "roof", role: "training" });
+    assert.deepEqual(collectSamples(labeled), [
+      { segmentId: 9, className: "roof", role: "training" },
+    ]);
+  });
+
   it("holds out a reproducible, stratified share of each class", () => {
     const samples: ObiaSample[] = [
       ...Array.from({ length: 10 }, (_, i) => ({
@@ -493,6 +525,14 @@ describe("assessAccuracy", () => {
     assert.ok(Math.abs((report.areaWeightedAccuracy ?? 0) - 17 / 218) < 1e-12);
   });
 
+  it("quotes user text safely for spreadsheets", () => {
+    assert.equal(csvCell("water"), "water");
+    assert.equal(csvCell('trees, "tall"'), '"trees, ""tall"""');
+    assert.equal(csvCell("a\rb"), '"a\rb"');
+    assert.equal(csvCell("=SUM(A1)"), "'=SUM(A1)");
+    assert.equal(csvCell("-1"), "'-1");
+  });
+
   it("writes a CSV report", () => {
     const csv = accuracyReportCsv(assessAccuracy(samples, predictions));
     assert.match(csv, /^reference \/ predicted,A,B,total,producers_accuracy\nA,8,2,10,0\.8000\n/);
@@ -569,6 +609,25 @@ describe("classifiedRaster", () => {
     assert.equal(
       legendCsv(result.legend),
       'code,class,color\n1,"trees, shrubs",#16a34a\n2,water,#000000\n3,unclassified,#9ca3af\n',
+    );
+  });
+
+  it("reads #rgb shorthand class colors", async () => {
+    const labels = new Uint8Array(
+      writeArrayBuffer(new Float32Array([1, 1]), {
+        width: 2,
+        height: 1,
+        ModelPixelScale: [1, 1, 0],
+        ModelTiepoint: [0, 0, 0, 0, 0, 0],
+      } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer,
+    );
+    const result = await classifiedRaster(labels, new Map([[1, "roof"]]), [
+      { name: "roof", color: "#a5c" },
+    ]);
+    const rgb = await readRasterData(result.rgb.buffer as ArrayBuffer);
+    assert.deepEqual(
+      rgb.bands.map((band) => band[0]),
+      [0xaa, 0x55, 0xcc],
     );
   });
 });

@@ -87,12 +87,14 @@ export async function splitImageBands(
   bytes: ArrayBuffer | Uint8Array,
   bandIndexes?: readonly number[],
 ): Promise<ObiaImage> {
-  const raster = await readRasterData(toArrayBuffer(bytes));
-  if (raster.width * raster.height > OBIA_MAX_PIXELS) {
+  // Check the size from the header before decoding every band.
+  const { width, height } = await readImageSummary(bytes);
+  if (width * height > OBIA_MAX_PIXELS) {
     throw new Error(
-      `This image has ${raster.width} x ${raster.height} pixels, more than the ${OBIA_MAX_PIXELS.toLocaleString("en-US")} the in-browser workbench handles. Clip it to a smaller area first.`,
+      `This image has ${width} x ${height} pixels, more than the ${OBIA_MAX_PIXELS.toLocaleString("en-US")} the in-browser workbench handles. Clip it to a smaller area first.`,
     );
   }
+  const raster = await readRasterData(toArrayBuffer(bytes));
   const wanted = bandIndexes?.length ? bandIndexes : raster.bands.map((_, index) => index + 1);
   const bands = wanted.map((index) => {
     const band = raster.bands[index - 1];
@@ -339,6 +341,8 @@ function csvToTable(
     columns.push({ index, name });
   });
   for (const row of csv.rows) {
+    // A blank cell would read as id 0 and create a phantom object.
+    if (!row[idCol]) continue;
     const id = Number(row[idCol]);
     if (!Number.isFinite(id)) continue;
     let record = table.rows.get(id);
@@ -775,10 +779,12 @@ function readPredictions(
   if (idCol < 0 || classCol < 0) throw new Error(`${tool} wrote an unexpected table.`);
   const predictions = new Map<number, string>();
   for (const row of csv.rows) {
-    const id = Number(row[idCol]);
     const token = row[classCol];
-    // Skip a malformed row rather than storing a NaN id or an undefined class.
-    if (!Number.isFinite(id) || !token) continue;
+    // Skip a malformed row rather than storing a NaN or blank (0) id or an
+    // undefined class.
+    if (!row[idCol] || !token) continue;
+    const id = Number(row[idCol]);
+    if (!Number.isFinite(id)) continue;
     predictions.set(id, decodeClass(token));
   }
   return predictions;
@@ -1013,10 +1019,19 @@ export function assessAccuracy(
   };
 }
 
+/**
+ * Quote a CSV cell holding user text (a class name). Cells with a quote,
+ * comma or line break are quoted, and a leading `=`, `+`, `-` or `@` gets an
+ * apostrophe so a spreadsheet opening the report does not run it as a formula.
+ */
+export function csvCell(value: string): string {
+  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
 /** The confusion matrix and per-class figures as CSV, for a report. */
 export function accuracyReportCsv(report: ObiaAccuracyReport): string {
-  const quote = (value: string) =>
-    /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  const quote = csvCell;
   const pct = (value: number | null) => (value == null ? "" : value.toFixed(4));
   const lines = [
     ["reference / predicted", ...report.labels, "total", "producers_accuracy"].map(quote).join(","),
