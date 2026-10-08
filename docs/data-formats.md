@@ -17,7 +17,7 @@ workflow and [Projects](user-guide/projects.md) for saving and reopening data.
 | Shapefile | `.shp` with companion files, or `.zip` | Vector Layer | Keep `.shx`, `.dbf`, and `.prj` companions together; use a ZIP for browser imports. |
 | GML | `.gml` | Vector Layer | Imported through the vector reader. |
 | MapInfo TAB | `.tab` and companion files | Vector Layer | Requires access to the dataset's companion files. |
-| KML / KMZ | `.kml`, `.kmz` | KML / KMZ or Vector Layer | Supports folders, styles, placemark icons, ground overlays, embedded models, and Super-Overlays; behavior depends on the renderer. Remote icon URLs (such as Google Earth's built-in icons) are downloaded from their public host when the file is opened and saved inline with the layer; private-network hosts are skipped. |
+| KML / KMZ | `.kml`, `.kmz` | KML / KMZ or Vector Layer | Supports folders, styles, placemark icons, ground overlays, embedded models, and Super-Overlays; behavior depends on the renderer. Remote icon URLs (such as Google Earth's built-in icons) are downloaded from their public host when the file is opened and saved inline with the layer. Icon URLs that name a loopback or private-network address are skipped, and redirects are not followed. |
 | GPX | `.gpx` | GPX Layer | Waypoints, tracks, and routes can become separate layers. |
 | LandXML | `.xml`, `.landxml`, LandXML URL | LandXML Layer | Imports TIN surfaces, horizontal alignments, vertical profile metadata, and survey points; projected data requires a source CRS. |
 | Delimited text | CSV, TSV, and custom-delimited text | Delimited Text Layer | Map coordinate columns, specify their CRS, or geocode address columns. CSV without coordinates can also be loaded as a table. |

@@ -248,7 +248,20 @@ export function isPrivateHostname(hostname: string): boolean {
   // Only an IPv6 literal can carry these prefixes; a registered domain may
   // legitimately start with "fd" or "fe80".
   if (host.includes(":")) {
-    return /^f[cd][0-9a-f]{0,2}:/.test(host) || host.startsWith("fe80:");
+    if (host === "::") return true;
+    // An IPv4-mapped address (`::ffff:127.0.0.1`, which `URL` normalizes to
+    // `::ffff:7f00:1`) reaches the embedded IPv4 host.
+    const mapped = /^::ffff:(?:(\d{1,3}(?:\.\d{1,3}){3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(
+      host,
+    );
+    if (mapped) {
+      if (mapped[1]) return isPrivateHostname(mapped[1]);
+      const high = Number.parseInt(mapped[2], 16);
+      const low = Number.parseInt(mapped[3], 16);
+      return isPrivateHostname(`${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`);
+    }
+    // fc00::/7 unique-local and fe80::/10 link-local (fe80 through febf).
+    return /^f[cd][0-9a-f]{0,2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
   }
   // A single-label name has no public DNS answer.
   return !host.includes(".");

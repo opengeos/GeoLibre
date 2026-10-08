@@ -47,7 +47,8 @@ export type KmlLocalIconResolver = (href: string) => Promise<string | null>;
  *
  * A KML is untrusted input, so an href naming a loopback, private, or
  * link-local host yields no candidates: opening a file must not make the app
- * probe services on the user's machine or network.
+ * probe services on the user's machine or network. This checks the literal
+ * host only; a public name whose DNS points at a private address is not caught.
  *
  * @param href - The icon href as written in the KML.
  * @returns The candidate URLs (empty for a private host), or null for a
@@ -148,11 +149,13 @@ export async function fetchRemoteIconDataUrl(
   for (const url of remoteIconCandidates(href) ?? []) {
     try {
       const response = await fetchImpl(url, {
+        // A redirect is refused outright rather than checked afterwards: by
+        // then the request to its target (possibly a private host) is already
+        // sent, and a browser cannot inspect a manual redirect's target.
+        redirect: "error",
         signal: AbortSignal.timeout(REMOTE_ICON_TIMEOUT_MS),
       });
       if (!response.ok) continue;
-      // A public host may redirect to a private one; refuse to read that body.
-      if (response.redirected && isPrivateHostname(new URL(response.url).hostname)) continue;
       const mime = iconMime(response.headers.get("content-type"), url);
       if (!mime) continue;
       const contentLength = response.headers.get("content-length");
