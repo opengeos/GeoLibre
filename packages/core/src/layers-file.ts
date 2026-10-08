@@ -166,11 +166,27 @@ export function serializeLayersFile(content: LayersFileContent): string {
  * @returns The usable layers and the folders they sit in.
  */
 export function normalizeLayersFileContent(value: unknown): LayersFileContent {
-  if (!isPlainObject(value) || !Array.isArray(value.layers)) {
-    return { layers: [], layerGroups: [] };
+  const empty: LayersFileContent = { layers: [], layerGroups: [] };
+  if (!isPlainObject(value) || !Array.isArray(value.layers)) return empty;
+  try {
+    return normalizeLayers(value.layers, value.layerGroups);
+  } catch {
+    // A corrupt copy in settings must not break loading the rest of them.
+    return empty;
   }
+}
+
+/**
+ * The body of {@link normalizeLayersFileContent}, which catches what it throws.
+ *
+ * @param rawLayers - The raw `layers` array.
+ * @param rawGroups - The raw `layerGroups` value.
+ * @returns The usable layers and the folders they sit in, or nothing when the
+ *   layers are past {@link MAX_LAYERS_FILE_BYTES}.
+ */
+function normalizeLayers(rawLayers: unknown[], rawGroups: unknown): LayersFileContent {
   const seen = new Set<string>();
-  const candidates = value.layers.filter((layer): layer is Record<string, unknown> => {
+  const candidates = rawLayers.filter((layer): layer is Record<string, unknown> => {
     if (!isPlainObject(layer)) return false;
     if (typeof layer.id !== "string" || !layer.id.trim() || seen.has(layer.id)) return false;
     if (typeof layer.name !== "string") return false;
@@ -181,19 +197,22 @@ export function normalizeLayersFileContent(value: unknown): LayersFileContent {
   });
   // Borrow the project parser rather than duplicate its per-layer rules: the
   // layers below are exactly what a project file with only these layers holds.
-  const parsed = parseProject(
-    JSON.stringify({
-      version: PROJECT_VERSION,
-      name: "layers",
-      mapView: createDefaultMapView(),
-      layers: candidates.map((layer) => ({
-        ...layer,
-        metadata: isPlainObject(layer.metadata) ? layer.metadata : {},
-        style: isPlainObject(layer.style) ? layer.style : {},
-      })),
-      layerGroups: Array.isArray(value.layerGroups) ? value.layerGroups : [],
-    }),
-  );
+  // The round trip through JSON also bounds the size of what is kept.
+  const json = JSON.stringify({
+    version: PROJECT_VERSION,
+    name: "layers",
+    mapView: createDefaultMapView(),
+    layers: candidates.map((layer) => ({
+      ...layer,
+      metadata: isPlainObject(layer.metadata) ? layer.metadata : {},
+      style: isPlainObject(layer.style) ? layer.style : {},
+    })),
+    layerGroups: Array.isArray(rawGroups) ? rawGroups : [],
+  });
+  if (new TextEncoder().encode(json).length > MAX_LAYERS_FILE_BYTES) {
+    return { layers: [], layerGroups: [] };
+  }
+  const parsed = parseProject(json);
   const layers = parsed.layers.filter(isReferencedLayer);
   return { layers, layerGroups: groupsForLayers(layers, parsed.layerGroups ?? []) };
 }

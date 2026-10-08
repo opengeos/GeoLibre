@@ -20,7 +20,11 @@ import {
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { clearProjectSnapshots } from "../../lib/project-history-store";
-import { fetchStartupLayerData, withStartupLayers } from "../../lib/startup-layers";
+import {
+  fetchStartupLayerData,
+  startupLayerIds,
+  withStartupLayers,
+} from "../../lib/startup-layers";
 import { CollapsibleSection } from "../CollapsibleSection";
 import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
 import { StarterProjectsSection } from "./StarterProjectsSection";
@@ -258,7 +262,7 @@ export function NewProjectDialog({
     const seeded = withStartupLayers(createEmptyProject(name, options));
     if (seeded.layers.length > 0) {
       loadProject(seeded, null, { rememberRecent: false, presenting: false });
-      void fetchStartupLayerData();
+      void fetchStartupLayerData(startupLayerIds(seeded));
     } else {
       newProject({ name, ...options });
     }

@@ -132,6 +132,15 @@ describe("parseLayersFile", () => {
     );
   });
 
+  it("keeps nothing from a corrupt or oversized copy instead of throwing", () => {
+    const huge = layer({ metadata: { blob: "x".repeat(MAX_LAYERS_FILE_BYTES) } });
+    assert.deepEqual(normalizeLayersFileContent({ layers: [huge] }).layers, []);
+    assert.deepEqual(
+      normalizeLayersFileContent({ layers: [layer()], layerGroups: "bad" }).layers.length,
+      1,
+    );
+  });
+
   it("refuses other files, newer versions, empty and oversized files", () => {
     assert.throws(() => parseLayersFile("{"), /invalid JSON/);
     assert.throws(() => parseLayersFile(JSON.stringify({ type: "x", version: 1 })), /Not a valid/);

@@ -25,6 +25,12 @@ export const INTERFACE_FILE_VERSION = 1;
 
 const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
+/**
+ * Size ceiling for an interface file, in characters. A real one is a few
+ * kilobytes, so anything past this is not one, and is refused before parsing.
+ */
+export const MAX_INTERFACE_FILE_CHARS = 256 * 1024;
+
 /** The settings an interface file sets. A file may set only some of them. */
 export interface InterfaceSettings {
   /** UI language code, or "" to follow automatic detection. */
@@ -111,9 +117,13 @@ export function readInterfaceSettings(value: unknown): InterfaceSettings {
  *
  * @param json - The file content.
  * @returns The settings the file sets.
- * @throws Error when the content is not valid JSON or not an interface file.
+ * @throws Error when the content is too large, not valid JSON, or not an
+ *   interface file.
  */
 export function parseInterfaceFile(json: string): InterfaceSettings {
+  if (json.length > MAX_INTERFACE_FILE_CHARS) {
+    throw new Error("The interface file is too large to be an interface file.");
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -153,6 +163,12 @@ export async function fetchInterfaceFile(
   });
   if (!response.ok) {
     throw new Error(`Could not load the interface file (HTTP ${response.status}).`);
+  }
+  // Refuse a declared oversize body before reading it; the parser's own check
+  // still covers a server that sends no length.
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_INTERFACE_FILE_CHARS * 4) {
+    throw new Error("The interface file is too large to be an interface file.");
   }
   return parseInterfaceFile(await response.text());
 }

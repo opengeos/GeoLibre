@@ -75,6 +75,13 @@ describe("interface files", () => {
     assert.equal(next.shareToken, "secret-token");
   });
 
+  it("refuse a file too large to be one", () => {
+    assert.throws(
+      () => parseInterfaceFile(JSON.stringify({ language: "x".repeat(300 * 1024) })),
+      /too large/,
+    );
+  });
+
   it("refuse other files and newer versions", () => {
     assert.throws(() => parseInterfaceFile("nope"), /invalid JSON/);
     assert.throws(() => parseInterfaceFile("{}"), /sets no interface settings/);

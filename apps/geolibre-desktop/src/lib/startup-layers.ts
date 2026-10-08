@@ -7,6 +7,7 @@
 
 import {
   addLayersToProject,
+  clearHistory,
   extractLayersFileContent,
   parseLayersFile,
   projectFromStore,
@@ -147,9 +148,21 @@ export function withStartupLayers(project: GeoLibreProject): GeoLibreProject {
 }
 
 /**
+ * The ids of the layers {@link withStartupLayers} added to a project.
+ *
+ * @param project - A project returned by {@link withStartupLayers}.
+ * @returns The ids of the Startup setting's layers in it.
+ */
+export function startupLayerIds(project: GeoLibreProject): Set<string> {
+  const ids = new Set((startupLayersContent()?.layers ?? []).map((layer) => layer.id));
+  return new Set(project.layers.map((layer) => layer.id).filter((id) => ids.has(id)));
+}
+
+/**
  * Fetch the features of the layers a layers file added without them (GeoJSON
  * layers loaded from a URL). Each result lands only while the same workspace is
- * open, and a workspace that was clean stays clean: the user did not edit it.
+ * open, and a workspace that was clean stays clean, with no undo step for the
+ * fetch: the user did not edit it.
  *
  * @param needsFetch - Whether a store layer is one to fetch.
  * @param fetchFeatures - Fetches a layer's features.
@@ -170,7 +183,12 @@ export async function fetchStartupLayerFeatures(
         if (!state.layers.some((entry) => entry.id === layer.id)) return;
         const wasDirty = state.isDirty;
         state.updateLayer(layer.id, { geojson });
-        if (!wasDirty) useAppStore.setState({ isDirty: false });
+        if (!wasDirty) {
+          // Nothing in a clean workspace's history is the user's, so dropping
+          // it removes only the fetch, which undo must not take back out.
+          useAppStore.setState({ isDirty: false });
+          clearHistory();
+        }
       } catch (error) {
         console.warn(`[GeoLibre] Could not load startup layer "${layer.name}".`, error);
       }
@@ -204,11 +222,13 @@ function needsStartupFetch(layer: GeoLibreLayer): boolean {
  * Fetch the features of the URL GeoJSON layers the Startup setting just added
  * to the untitled workspace.
  *
+ * @param layerIds - The ids of the layers the setting added. Other layers are
+ *   left to whatever loaded them.
  * @returns Resolves once every fetch has settled.
  */
-export function fetchStartupLayerData(): Promise<void> {
+export function fetchStartupLayerData(layerIds: ReadonlySet<string>): Promise<void> {
   return fetchStartupLayerFeatures(
-    needsStartupFetch,
+    (layer) => layerIds.has(layer.id) && needsStartupFetch(layer),
     async (layer) => (await refreshGeoJsonLayer(layer)).geojson,
   );
 }
