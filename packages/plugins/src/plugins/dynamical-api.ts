@@ -12,14 +12,39 @@ export const DYNAMICAL_HOME_URL = "https://dynamical.org/";
 export const DYNAMICAL_CATALOG_PAGE_URL = "https://dynamical.org/catalog/";
 
 /**
- * Most slices of the other dimensions one chunk may hold for the dataset to count as drawable.
+ * Most slices of the other dimensions one chunk may hold for the dataset to draw at any zoom.
  *
  * A map draws one slice, but the reader decodes whole chunks. dynamical.org's "time-optimized"
  * archives pack a forecast's lead times into each chunk (49-105 of them, so a global GFS slice is
  * ~70 MB), and the analyses and ensembles pack hundreds to thousands (1-6 GB per global slice).
- * The first group renders in seconds and steps lead times from cache; the second never finishes.
+ * The first group draws the whole globe in seconds; the second only draws a region at a time
+ * ({@link REGIONAL_VIEW_BUDGET_BYTES}).
  */
 export const MAX_SLICES_PER_CHUNK = 128;
+
+/**
+ * Most decoded bytes one view of a regional dataset may read: the renderer fetches one region per
+ * chunk in view, so a minimum zoom ({@link regionalMinZoom}) keeps the chunks in view under this.
+ */
+export const REGIONAL_VIEW_BUDGET_BYTES = 256 * 2 ** 20;
+
+/**
+ * Largest single chunk a regional dataset may decode. Past this one region alone is too much to
+ * hold, at any zoom (the biggest dynamical.org has today, NASA IMERG's, is ~58 MB).
+ */
+export const MAX_REGIONAL_CHUNK_BYTES = 96 * 2 ** 20;
+
+/** Every dynamical.org data variable is stored as 32-bit floats (or decodes to them). */
+const BYTES_PER_VALUE = 4;
+
+/** The deepest minimum zoom a regional dataset is given. */
+const MAX_REGIONAL_MIN_ZOOM = 12;
+
+/** MapLibre's tile size: at zoom `z` the world is `512 * 2^z` pixels wide. */
+const WORLD_TILE_PIXELS = 512;
+
+/** Metres per degree along a meridian, to size a projected grid's chunks in degrees. */
+const METRES_PER_DEGREE = 111_320;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -50,8 +75,11 @@ export interface DynamicalVariable {
   comment?: string;
 }
 
-/** Why a dataset can or cannot be drawn in the browser. */
-export type DynamicalMapSupport = "supported" | "virtual" | "time-series";
+/**
+ * How a dataset can be drawn in the browser: at any zoom, a region at a time (from a minimum
+ * zoom), or not at all.
+ */
+export type DynamicalMapSupport = "supported" | "regional" | "time-series";
 
 /** A dataset (one STAC collection) reduced to what the panel shows and reads. */
 export interface DynamicalDataset {
@@ -66,7 +94,10 @@ export interface DynamicalDataset {
   docsUrl: string;
   /** The repository's HTTPS address, which the Icechunk reader opens. */
   repositoryUrl: string;
-  /** Whether chunks point into the producer's GRIB files rather than at Zarr chunks. */
+  /**
+   * Whether chunks point into the producer's GRIB files rather than at Zarr chunks; those decode
+   * through the `gribberish` codec ({@link registerGribberishCodec}).
+   */
   virtual: boolean;
   bbox: [number, number, number, number] | null;
   dimensions: Record<string, DynamicalDimension>;
@@ -278,21 +309,122 @@ export function slicesPerChunk(dataset: DynamicalDataset, variable: DynamicalVar
   );
 }
 
+/** Decoded bytes in one chunk of a variable. */
+export function chunkBytes(dataset: DynamicalDataset, variable: DynamicalVariable): number {
+  if (!variable.chunks.length) return 0;
+  return variable.chunks.reduce((product, length) => product * (length || 1), BYTES_PER_VALUE);
+}
+
 /**
  * Whether the browser can draw a dataset.
  *
- * Virtual repositories reference the producer's GRIB2 files and decode them with the `gribberish`
- * codec, which has no JavaScript build; the others are judged on their chunk layout
- * ({@link MAX_SLICES_PER_CHUNK}).
+ * Virtual repositories decode the producer's GRIB2 messages through the `gribberish` codec, one
+ * whole field per chunk, so they draw like any other. The others are judged on their chunk layout:
+ * few slices per chunk draws everywhere ({@link MAX_SLICES_PER_CHUNK}), many draws a region at a
+ * time while each chunk stays small enough to decode ({@link MAX_REGIONAL_CHUNK_BYTES}).
  */
 export function datasetMapSupport(dataset: DynamicalDataset): DynamicalMapSupport {
-  if (dataset.virtual) return "virtual";
   // The worst variable decides: the panel offers every variable of a dataset it lists as ready.
   const worst = Math.max(
     1,
     ...dataset.variables.map((variable) => slicesPerChunk(dataset, variable)),
   );
-  return worst > MAX_SLICES_PER_CHUNK ? "time-series" : "supported";
+  if (worst <= MAX_SLICES_PER_CHUNK) return "supported";
+  const largest = Math.max(
+    0,
+    ...dataset.variables.map((variable) => chunkBytes(dataset, variable)),
+  );
+  return largest > 0 && largest <= MAX_REGIONAL_CHUNK_BYTES ? "regional" : "time-series";
+}
+
+/** Whether a variable's chunks hold more slices than a whole-world view can afford. */
+export function needsRegionalView(dataset: DynamicalDataset, variable: DynamicalVariable): boolean {
+  return slicesPerChunk(dataset, variable) > MAX_SLICES_PER_CHUNK;
+}
+
+/** The step between a dimension's cells, from its extent and size. */
+function cellStep(dimension: DynamicalDimension | undefined): number | null {
+  const [first, last] = (dimension?.extent ?? []).map(Number);
+  const size = dimension?.size ?? 0;
+  if (!Number.isFinite(first) || !Number.isFinite(last) || size < 2) return null;
+  const step = Math.abs(last - first) / (size - 1);
+  return step > 0 ? step : null;
+}
+
+/** Whether a dimension counts in metres (a projected grid) rather than degrees. */
+function inMetres(dimension: DynamicalDimension): boolean {
+  return /^(m|metre|metres|meter|meters)$/i.test(dimension.unit ?? "");
+}
+
+/**
+ * How far one chunk of a variable reaches, and how many chunks span the grid, along x and y.
+ *
+ * A projected grid's metres are read as degrees of latitude, which overstates how many of its
+ * chunks a view away from the equator holds; the minimum zoom errs deeper for it.
+ *
+ * Returns:
+ *   Degrees per chunk and chunk counts, or null when the extents or chunks are missing.
+ */
+export function chunkFootprint(
+  dataset: DynamicalDataset,
+  variable: DynamicalVariable,
+): { x: number; y: number; columns: number; rows: number } | null {
+  let x: { span: number; count: number } | null = null;
+  let y: { span: number; count: number } | null = null;
+  for (const [index, name] of variable.dimensions.entries()) {
+    const dimension = dataset.dimensions[name];
+    if (!dimension || dimension.type !== "spatial") continue;
+    const step = cellStep(dimension);
+    const cells = variable.chunks[index];
+    if (!step || !cells) continue;
+    const span = (step * cells) / (inMetres(dimension) ? METRES_PER_DEGREE : 1);
+    const count = Math.ceil((dimension.size ?? cells) / cells);
+    if (dimension.axis === "x" || name === "longitude") x = { span, count };
+    else y = { span, count };
+  }
+  if (!x || !y) return null;
+  return { x: x.span, y: y.span, columns: x.count, rows: y.count };
+}
+
+/**
+ * The lowest zoom at which a view of a regional variable stays within the decode budget.
+ *
+ * A view `width` pixels wide spans `360 * width / (512 * 2^zoom)` degrees of longitude, and as
+ * many of latitude per pixel at the equator, where a Mercator pixel covers the most; the chunks it
+ * touches are counted with one extra row and column for a view that straddles chunk edges.
+ *
+ * Args:
+ *   dataset: The dataset.
+ *   variable: The variable to draw.
+ *   viewport: The map's size in CSS pixels.
+ *   budget: Decoded bytes a view may read.
+ *
+ * Returns:
+ *   A whole zoom level; 0 when the variable draws at any zoom.
+ */
+export function regionalMinZoom(
+  dataset: DynamicalDataset,
+  variable: DynamicalVariable,
+  viewport: { width: number; height: number },
+  budget: number = REGIONAL_VIEW_BUDGET_BYTES,
+): number {
+  if (!needsRegionalView(dataset, variable)) return 0;
+  const footprint = chunkFootprint(dataset, variable);
+  const bytes = chunkBytes(dataset, variable);
+  if (!footprint || !bytes) return MAX_REGIONAL_MIN_ZOOM;
+  const allowed = Math.max(1, Math.floor(budget / bytes));
+  const width = Math.max(1, viewport.width);
+  const height = Math.max(1, viewport.height);
+  for (let zoom = 0; zoom < MAX_REGIONAL_MIN_ZOOM; zoom += 1) {
+    const degreesPerPixel = 360 / (WORLD_TILE_PIXELS * 2 ** zoom);
+    const columns = Math.min(
+      footprint.columns,
+      Math.ceil((width * degreesPerPixel) / footprint.x) + 1,
+    );
+    const rows = Math.min(footprint.rows, Math.ceil((height * degreesPerPixel) / footprint.y) + 1);
+    if (columns * rows <= allowed) return zoom;
+  }
+  return MAX_REGIONAL_MIN_ZOOM;
 }
 
 /** A variable's non-spatial dimensions, in array order: the ones the panel picks a slice of. */

@@ -67,7 +67,7 @@ GeoLibre registers 69 built-in plugins.
 | **Fields of the World** | Plugins → Web Services | `fields-of-the-world` | Global agricultural field boundaries colored by model confidence. See [Fields of the World](web-services.md#fields-of-the-world). |
 | **Sentinel-2 Explorer** | Plugins → Web Services | `sentinel2-explorer` | Sentinel-2 imagery search and viewer over static STAC-GeoParquet, with no API. See [Sentinel-2 Explorer](web-services.md#sentinel-2-explorer). |
 | **Ocean Data Platform** | Plugins → Web Services | `ocean-data-platform` | HUB Ocean's public ocean datasets: habitats, protected areas, fisheries, and observations. See [Ocean Data Platform](web-services.md#ocean-data-platform). |
-| **Dynamical** | Plugins → Web Services | `dynamical` | dynamical.org weather forecasts (NOAA GFS and HRRR, ECMWF AIFS, DWD ICON-EU, ECCC HRDPS) as Zarr layers. See [Dynamical](web-services.md#dynamical). |
+| **Dynamical** | Plugins → Web Services | `dynamical` | dynamical.org weather forecasts, ensembles and analyses (NOAA GFS, GEFS, HRRR and MRMS, ECMWF AIFS and IFS, DWD ICON-EU, ECCC HRDPS, NASA IMERG) as Zarr layers. See [Dynamical](web-services.md#dynamical). |
 | **GeoLens** | Plugins → Web Services | `geolens` | A self-hosted GeoLens spatial catalog. See [GeoLens](web-services.md#geolens). |
 | **Street View** | Plugins | `streetview` | Google Street View panoramas at a clicked point. |
 | **Mapillary** | Plugins | `mapillary` | Mapillary street-level imagery. |

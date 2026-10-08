@@ -135,7 +135,7 @@
     "docs": "web-services.md#ocean-data-platform"
   },
   "geolibre-dynamical": {
-    "description": "dynamical.org weather forecasts (NOAA GFS and HRRR, ECMWF AIFS, DWD ICON-EU, ECCC HRDPS) as Zarr layers.",
+    "description": "dynamical.org weather forecasts, ensembles and analyses (NOAA GFS, GEFS, HRRR and MRMS, ECMWF AIFS and IFS, DWD ICON-EU, ECCC HRDPS, NASA IMERG) as Zarr layers.",
     "docs": "web-services.md#dynamical"
   },
   "maplibre-gl-geolens": {

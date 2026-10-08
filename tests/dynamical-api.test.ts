@@ -2,17 +2,22 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DYNAMICAL_CATALOG_URL,
+  MAX_REGIONAL_CHUNK_BYTES,
+  chunkBytes,
+  chunkFootprint,
   datasetMapSupport,
   defaultSliceIndex,
   defaultVariableStyle,
   fetchDynamicalCatalog,
   formatLeadTime,
   formatUtc,
+  needsRegionalView,
   parseDynamicalCatalog,
   parseDynamicalCollection,
   projectedBounds,
   projectedDimensions,
   projectionFromSpatialRef,
+  regionalMinZoom,
   sampleRange,
   sliceDimensions,
   sliceSelectorValue,
@@ -259,12 +264,72 @@ describe("datasetMapSupport", () => {
         },
       },
     });
-    assert.equal(datasetMapSupport(mixed), "time-series");
+    assert.equal(datasetMapSupport(mixed), "regional");
   });
 
-  it("refuses a time-series layout and a virtual repository", () => {
-    assert.equal(datasetMapSupport(parsed(gfsAnalysis)), "time-series");
-    assert.equal(datasetMapSupport(parsed(gfsVirtual)), "virtual");
+  it("draws a time-series layout a region at a time", () => {
+    const dataset = parsed(gfsAnalysis);
+    assert.equal(chunkBytes(dataset, dataset.variables[0]), 1440 * 50 * 50 * 4);
+    assert.equal(datasetMapSupport(dataset), "regional");
+  });
+
+  it("draws a virtual repository, whose chunks are one GRIB message each", () => {
+    assert.equal(datasetMapSupport(parsed(gfsVirtual)), "supported");
+  });
+
+  it("refuses a chunk too large to decode even for one region", () => {
+    const dataset = parsed({
+      ...gfsAnalysis,
+      "cube:variables": {
+        temperature_2m: {
+          ...gfsAnalysis["cube:variables"].temperature_2m,
+          chunks: [24000, 50, 50],
+        },
+      },
+    });
+    assert.ok(chunkBytes(dataset, dataset.variables[0]) > MAX_REGIONAL_CHUNK_BYTES);
+    assert.equal(datasetMapSupport(dataset), "time-series");
+  });
+});
+
+describe("regional views", () => {
+  const viewport = { width: 1600, height: 900 };
+
+  it("needs no minimum zoom for a forecast or a virtual repository", () => {
+    for (const document of [gfsForecast, gfsVirtual]) {
+      const dataset = parsed(document);
+      assert.equal(needsRegionalView(dataset, dataset.variables[0]), false);
+      assert.equal(regionalMinZoom(dataset, dataset.variables[0], viewport), 0);
+    }
+  });
+
+  it("sizes a chunk in degrees, and a projected grid's from metres", () => {
+    const analysis = parsed(gfsAnalysis);
+    assert.deepEqual(chunkFootprint(analysis, analysis.variables[0]), {
+      x: 12.5,
+      y: 12.5,
+      columns: 29,
+      rows: 15,
+    });
+    const projected = parsed(hrrr);
+    const footprint = chunkFootprint(projected, projected.variables[0]);
+    assert.ok(footprint);
+    // 300 cells of 3 km.
+    assert.ok(Math.abs(footprint.x - 900_000 / 111_320) < 1e-6);
+    assert.deepEqual([footprint.columns, footprint.rows], [6, 4]);
+  });
+
+  it("zooms in until the chunks in view fit the budget", () => {
+    const dataset = parsed(gfsAnalysis);
+    const variable = dataset.variables[0];
+    assert.equal(needsRegionalView(dataset, variable), true);
+    // 13.7 MB chunks of 12.5 degrees: 18 fit in 256 MB, a 4 x 3 block at zoom 5.
+    assert.equal(regionalMinZoom(dataset, variable, viewport), 5);
+    // A larger map, or a smaller budget, needs a deeper zoom.
+    assert.ok(regionalMinZoom(dataset, variable, { width: 3840, height: 2160 }) > 5);
+    assert.ok(regionalMinZoom(dataset, variable, viewport, 64 * 2 ** 20) > 5);
+    // A budget that holds the whole grid draws at any zoom.
+    assert.equal(regionalMinZoom(dataset, variable, viewport, 29 * 15 * 14_400_000), 0);
   });
 });
 

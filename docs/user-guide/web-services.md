@@ -48,7 +48,7 @@ They are grouped together because they behave the same way, not because they sha
 | [Fields of the World](#fields-of-the-world) | Source.coop | Global agricultural field boundaries (2024, 2025) |
 | [Sentinel-2 Explorer](#sentinel-2-explorer) | Source.coop, AWS | Every Sentinel-2 L2A scene since 2015, searched from static GeoParquet |
 | [Ocean Data Platform](#ocean-data-platform) | HUB Ocean | Public ocean datasets: habitats, protected areas, fisheries, observations |
-| [Dynamical](#dynamical) | dynamical.org | Weather forecasts (NOAA GFS and HRRR, ECMWF AIFS, DWD ICON-EU, ECCC HRDPS) as Zarr layers with forecast run and lead time sliders |
+| [Dynamical](#dynamical) | dynamical.org | Weather forecasts, ensembles and analyses (NOAA GFS, GEFS, HRRR and MRMS, ECMWF AIFS and IFS, DWD ICON-EU, ECCC HRDPS, NASA IMERG) as Zarr layers with forecast run, lead time and member sliders |
 | [GeoLens](#geolens) | your server | A self-hosted spatial catalog |
 
 ---
@@ -374,14 +374,15 @@ Browses the public datasets on HUB Ocean's [Ocean Data Platform](https://app.hub
 
 Browses the open weather data catalog of [dynamical.org](https://dynamical.org/catalog/), which republishes forecasts and analyses from NOAA, ECMWF, DWD, ECCC, and NASA as cloud-optimized Icechunk (Zarr) archives, updated as each model run lands. GeoLibre reads a variable straight from its archive and draws it as a Zarr raster layer.
 
-- Pick a **Dataset**: the list loads the whole catalog when the panel opens, with the map-ready datasets first. The card below shows its summary, domain, resolution, and time range, a **Documentation** link to the dataset's page, and **Zoom to extent**.
-- Pick a **Variable**, then a slice: **Forecast run** starts on the newest run and **Lead time** on the analysis hour, and the panel shows the valid time they add up to. An analysis has a single **Time** slider instead.
+- Pick a **Dataset**: the list loads the whole catalog when the panel opens, with the map-ready datasets first and the regional ones (see below) after them. The card below shows its summary, domain, resolution, and time range, a **Documentation** link to the dataset's page, and **Zoom to extent**.
+- Pick a **Variable**, then a slice: **Forecast run** starts on the newest run and **Lead time** on the analysis hour, and the panel shows the valid time they add up to. An analysis has a single **Time** slider instead, and an ensemble adds an **Ensemble member** slider.
 - **Colormap**, **Min**, and **Max** start from the variable: fixed ranges for temperature (-30 to 40 °C), percentages, wind components, precipitation rate, and sea-level pressure; for anything else leave them empty and the panel reads one chunk of the chosen slice to set a range.
 - **Add to map** adds the layer, named after the dataset, variable, and slice. Moving the sliders afterward re-slices that layer in place, so you can step through a forecast; stepping lead times is quick, since each chunk already holds a run's lead times. Add the variable again to keep a slice side by side. Unlike the other panels' layers, a Dynamical layer is not restored when a saved project is reopened (true of every Zarr layer on the MapLibre renderer); add it again from the panel.
 - Projected grids are placed from the archive's own CRS: HRRR's Lambert conformal conic grid and HRDPS's rotated-pole grid.
+- The low-latency *virtual* datasets (marked "virtual") do not copy the data: each chunk points at one message in the producer's own GRIB2 files on NOAA's and ECMWF's open-data buckets, which GeoLibre decodes in the browser. They carry many more variables than the copied archives, including pressure levels, and a new run appears as soon as the producer publishes it.
 
-!!! note "Which datasets can be drawn"
-    A map draws one slice, but the reader has to decode whole chunks. The forecasts dynamical.org stores one run per chunk (NOAA GFS forecast, NOAA HRRR 48-hour forecast, ECMWF AIFS Single, DWD ICON-EU, ECCC HRDPS) draw in seconds; a global GFS slice is about 70 MB. The analyses and ensembles pack hundreds to thousands of time steps or members into each chunk, so a single map would read gigabytes, and the low-latency *virtual* datasets point into the original GRIB2 files, which the browser cannot decode yet. These are listed but disabled. The data is free under CC BY 4.0; credit the source shown under the panel.
+!!! note "Regional datasets draw when zoomed in"
+    A map draws one slice, but the reader has to decode whole chunks. The forecasts dynamical.org stores one run per chunk (NOAA GFS forecast, NOAA HRRR 48-hour forecast, ECMWF AIFS Single, DWD ICON-EU, ECCC HRDPS) and the virtual datasets (one GRIB2 message per chunk) draw the whole globe in seconds. The analyses and ensembles (NOAA GFS, GEFS, HRRR and MRMS analyses, GEFS 35-day, ECMWF AIFS and IFS ensembles, NASA IMERG) pack hundreds to thousands of time steps or members into each chunk, so a whole-globe map would read gigabytes. They are listed as **Regional** and draw from a minimum zoom, worked out from the chunk size and the size of the map so a view reads at most about 256 MB: around zoom 3 to 6 for the global ones, 8 for HRRR and 9 to 10 for MRMS. The panel names that zoom, **Add to map** zooms the map in to it (over the dataset, if the view is elsewhere), and the layer hides when you zoom out past it. Moving the sliders while zoomed out reads nothing until you zoom back in, and stepping through time is quick once a region is loaded, since its chunks already hold the neighbouring steps. The data is free under CC BY 4.0; credit the source shown under the panel.
 
 ## GeoLens
 
