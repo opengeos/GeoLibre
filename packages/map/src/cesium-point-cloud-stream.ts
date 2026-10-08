@@ -166,14 +166,16 @@ export function selectOctreeNodes(
     const { key } = queue.splice(best, 1)[0];
     const count = source.counts.get(key);
     if (count === undefined) continue;
+    const isRoot = key === ROOT;
+    const box = nodeBox(source.cube, key);
+    const share = view.box ? overlap(box, view.box) : isRoot ? 1 : 0;
+    // Out of view first: an unread subtree off screen must not cost a
+    // hierarchy download, nor one of the refresh's subtree rounds.
+    if (!isRoot && share === 0) continue;
     if (count === -1) {
       pendingSubtrees.push(key);
       continue;
     }
-    const isRoot = key === ROOT;
-    const box = nodeBox(source.cube, key);
-    const share = view.box ? overlap(box, view.box) : isRoot ? 1 : 0;
-    if (!isRoot && share === 0) continue;
     if (count > 0) {
       const estimate = count * share;
       if (!isRoot && (inView + estimate > budget || shown + count > maxShown)) continue;
@@ -216,6 +218,8 @@ export class PointCloudStreamer {
   private readonly abort = new AbortController();
   private removeListener: (() => void) | null = null;
   private zRange: { zMin: number; zMax: number } | null = null;
+  /** Whether {@link zRange} came from the root rather than a fallback node. */
+  private rootRange = false;
   private readonly ramp = getVectorColorRamp("viridis").colors;
   private destroyed = false;
   /** The nodes the newest refresh selected, which {@link trim} keeps. */
@@ -428,8 +432,14 @@ export class PointCloudStreamer {
     // The height ramp spans the root's sample of the whole cloud, so every
     // node colours on one scale and a node's colour never changes as others
     // load. Should the root be empty or fail, the first node shown stands in.
-    if (key === ROOT && node.count > 0) this.zRange = { zMin: node.zMin, zMax: node.zMax };
-    else this.zRange ??= { zMin: node.zMin, zMax: node.zMax };
+    if (key === ROOT && node.count > 0) {
+      const fallback = this.zRange && !this.rootRange;
+      this.zRange = { zMin: node.zMin, zMax: node.zMax };
+      this.rootRange = true;
+      // Nodes shown on a fallback range while the root was failing take
+      // the root's scale now, so the whole cloud colours consistently.
+      if (fallback) this.recolorShown();
+    } else this.zRange ??= { zMin: node.zMin, zMax: node.zMax };
     const ramp = { ...node, ...this.zRange };
     const alpha = Math.min(1, Math.max(0, this.options.opacity()));
     const lift = Number.isFinite(this.options.altitudeOffset)
@@ -452,6 +462,20 @@ export class PointCloudStreamer {
       );
     }
     this.shown.set(key, points);
+  }
+
+  /** Re-apply the height ramp to every shown node, keeping each point's alpha. */
+  private recolorShown(): void {
+    const { Cesium } = this;
+    for (const [key, points] of this.shown) {
+      const node = this.cache.get(key);
+      if (!node || !this.zRange) continue;
+      const ramp = { ...node, ...this.zRange };
+      points.forEach((point, i) => {
+        const [r, g, b] = pointCloudColor(ramp, i, this.ramp);
+        point.color = new Cesium.Color(r / 255, g / 255, b / 255, point.color.alpha);
+      });
+    }
   }
 
   private hide(key: string): void {

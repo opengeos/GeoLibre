@@ -314,6 +314,52 @@ describe("PointCloudStreamer", () => {
     streamer.destroy();
   });
 
+  it("never downloads a hierarchy page for a subtree out of view", async () => {
+    const { viewer, state } = fakeViewer();
+    const tree = counts({ "0-0-0-0": 1, "1-0-0-0": -1, "1-1-1-0": -1 });
+    const source = streamSource(tree, []);
+    const read: string[] = [];
+    source.loadSubtree = async (key) => {
+      read.push(key);
+      tree.set(key, 1);
+    };
+    const streamer = new PointCloudStreamer(fakeCesium() as never, viewer as never, source, {
+      opacity: () => 1,
+    });
+    state.rect = { west: 0, south: 0, east: 100, north: 100 };
+    state.height = 50;
+    await streamer.refresh();
+    assert.deepEqual(read, ["1-0-0-0"], "only the subtree under the view is read");
+  });
+
+  it("recolours fallback-coloured nodes once the root loads", async () => {
+    const { viewer, state } = fakeViewer();
+    const source = streamSource(fullTree(1, 1), []);
+    let rootFails = true;
+    source.loadNode = async (key) => {
+      if (key === "0-0-0-0" && rootFails) throw new Error("root 503");
+      const node = decoded(key);
+      // The child's own range is far from the root's, so its colour moves.
+      return key === "0-0-0-0"
+        ? { ...node, zMin: 0, zMax: 10 }
+        : { ...node, positions: new Float64Array([0, 0, 5]), zMin: 5, zMax: 9 };
+    };
+    const streamer = new PointCloudStreamer(fakeCesium() as never, viewer as never, source, {
+      opacity: () => 0.7,
+    });
+    state.height = 1;
+    await streamer.refresh();
+    const collection = streamer.collection as unknown as {
+      points: Set<{ color: { red: number; alpha: number } }>;
+    };
+    const child = [...collection.points][0];
+    const before = child.color.red;
+    rootFails = false;
+    await streamer.refresh();
+    assert.notEqual(child.color.red, before, "the child's colour moved to the root's scale");
+    assert.equal(child.color.alpha, 0.7, "alpha is kept");
+  });
+
   it("reports a node that fails to load and keeps the rest", async () => {
     const loads: string[] = [];
     const { viewer, state } = fakeViewer();
