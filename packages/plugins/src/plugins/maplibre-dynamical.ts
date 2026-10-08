@@ -13,6 +13,7 @@ import {
   fetchDynamicalCatalog,
   formatLeadTime,
   formatUtc,
+  formatUtcTimeOfDay,
   bboxCenter,
   bboxContains,
   isLeadTimeDimension,
@@ -25,6 +26,9 @@ import {
   sampleRange,
   sliceDimensions,
   sliceSelectorValue,
+  stepForUtcDate,
+  stepsOnUtcDate,
+  utcDateKey,
 } from "./dynamical-api";
 import { registerGribberishCodec } from "./grib2-codec";
 import { getStyleMap } from "./style-map";
@@ -69,7 +73,17 @@ const CSS = {
   sliderHead: "display:flex;justify-content:space-between;gap:8px;font-size:11px;font-weight:600;",
   sliderValue:
     "font-weight:400;color:hsl(var(--muted-foreground));font-variant-numeric:tabular-nums;",
-  range: "width:100%;",
+  range: "flex:1;min-width:0;",
+  sliderRow: "display:flex;align-items:center;gap:4px;",
+  stepButton:
+    "flex:none;width:24px;height:24px;padding:0;border:1px solid hsl(var(--border));" +
+    "border-radius:6px;background:hsl(var(--background));color:hsl(var(--foreground));" +
+    "cursor:pointer;line-height:1;",
+  pickerRow: "display:flex;gap:6px;margin-top:4px;",
+  pickerInput:
+    "flex:1;min-width:0;box-sizing:border-box;padding:4px 6px;border:1px solid hsl(var(--border));" +
+    "border-radius:6px;background:hsl(var(--background));color:hsl(var(--foreground));" +
+    "font-size:11px;",
   row: "display:flex;gap:8px;",
   primary:
     "padding:7px 10px;border:none;border-radius:6px;background:hsl(var(--primary));" +
@@ -92,6 +106,8 @@ interface SliceAxis {
   coordinates: number[];
   /** Epoch milliseconds for a timestamp axis, seconds for a lead-time axis. */
   values: number[];
+  /** Whether `values` are timestamps, which also get a day and run picker. */
+  temporal: boolean;
 }
 
 /** The layer this panel added last, which its sliders keep re-slicing. */
@@ -249,13 +265,31 @@ function readSliceAxes(
           : null;
         if (time) {
           const values = coordinates.map((value) => time.epochMs + value * time.unitMs);
-          axes.push({ name, coordinates, values, labels: values.map(formatUtc) });
+          axes.push({
+            name,
+            coordinates,
+            values,
+            labels: values.map(formatUtc),
+            temporal: true,
+          });
         } else if (isLeadTimeDimension(name)) {
           const unitMs = durationUnitMs(attributes.units ?? dataset.dimensions[name]?.unit) ?? 1000;
           const values = coordinates.map((value) => (value * unitMs) / 1000);
-          axes.push({ name, coordinates, values, labels: values.map(formatLeadTime) });
+          axes.push({
+            name,
+            coordinates,
+            values,
+            labels: values.map(formatLeadTime),
+            temporal: false,
+          });
         } else {
-          axes.push({ name, coordinates, values: coordinates, labels: coordinates.map(String) });
+          axes.push({
+            name,
+            coordinates,
+            values: coordinates,
+            labels: coordinates.map(String),
+            temporal: false,
+          });
         }
       }
       return axes;
@@ -739,23 +773,99 @@ function buildPanel(container: HTMLElement): () => void {
       const wrap = element("div", CSS.slider);
       const head = element("div", CSS.sliderHead);
       const value = element("span", CSS.sliderValue);
-      head.append(element("span", undefined, axisTitle(axis.name)), value);
+      head.append(element("span", undefined, title), value);
       const range = element("input", CSS.range);
       range.type = "range";
       range.min = "0";
-      range.max = String(Math.max(0, axis.labels.length - 1));
+      range.max = String(last);
       range.step = "1";
-      range.value = String(state.indices[axis.name] ?? 0);
-      range.setAttribute("aria-label", axisTitle(axis.name));
-      value.textContent = axis.labels[state.indices[axis.name] ?? 0] ?? "";
-      range.disabled = axis.labels.length < 2;
-      range.addEventListener("input", () => {
-        state.indices[axis.name] = Number(range.value);
-        value.textContent = axis.labels[state.indices[axis.name]] ?? "";
+      const title = axisTitle(axis.name);
+      const last = Math.max(0, axis.labels.length - 1);
+      range.setAttribute("aria-label", title);
+      // A long archive packs many steps into each pixel of the slider, so the buttons step one at
+      // a time and a timestamp axis also takes a day and a run.
+      const stepButton = (text: string, label: string, delta: number): HTMLButtonElement => {
+        const button = element("button", CSS.stepButton, text);
+        button.type = "button";
+        button.title = label;
+        button.setAttribute("aria-label", label);
+        button.addEventListener("click", () => select((state.indices[axis.name] ?? 0) + delta));
+        return button;
+      };
+      const previous = stepButton(
+        "‹",
+        tr("stepPrevious", "Previous {{axis}}", { axis: title }),
+        -1,
+      );
+      const next = stepButton("›", tr("stepNext", "Next {{axis}}", { axis: title }), 1);
+      const row = element("div", CSS.sliderRow);
+      row.append(previous, range, next);
+      wrap.append(head, row);
+
+      let dateInput: HTMLInputElement | null = null;
+      let runSelect: HTMLSelectElement | null = null;
+      if (axis.temporal && axis.labels.length > 1) {
+        dateInput = element("input", CSS.pickerInput);
+        dateInput.type = "date";
+        // A loop, not a spread: an hourly analysis holds more steps than a call takes arguments.
+        const finite = axis.values.filter(Number.isFinite);
+        dateInput.min = utcDateKey(finite.reduce((low, value) => Math.min(low, value), Infinity));
+        dateInput.max = utcDateKey(
+          finite.reduce((high, value) => Math.max(high, value), -Infinity),
+        );
+        dateInput.setAttribute(
+          "aria-label",
+          tr("pickDate", "{{axis}} date (UTC)", { axis: title }),
+        );
+        dateInput.addEventListener("change", () => {
+          const index = stepForUtcDate(
+            axis.values,
+            dateInput!.value,
+            state.indices[axis.name] ?? 0,
+          );
+          if (index >= 0) select(index);
+          else sync();
+        });
+        runSelect = element("select", CSS.pickerInput);
+        runSelect.setAttribute("aria-label", tr("pickRun", "{{axis}} time (UTC)", { axis: title }));
+        runSelect.addEventListener("change", () => select(Number(runSelect!.value)));
+        const picker = element("div", CSS.pickerRow);
+        picker.append(dateInput, runSelect);
+        wrap.append(picker);
+      }
+
+      /** Show the chosen step in every control of this axis. */
+      const sync = (): void => {
+        const index = state.indices[axis.name] ?? 0;
+        range.value = String(index);
+        value.textContent = axis.labels[index] ?? "";
+        range.disabled = axis.labels.length < 2;
+        previous.disabled = range.disabled || index <= 0;
+        next.disabled = range.disabled || index >= last;
+        if (dateInput && runSelect) {
+          const day = utcDateKey(axis.values[index]);
+          dateInput.value = day;
+          runSelect.replaceChildren(
+            ...stepsOnUtcDate(axis.values, day).map((step) => {
+              const option = element("option", undefined, formatUtcTimeOfDay(axis.values[step]));
+              option.value = String(step);
+              return option;
+            }),
+          );
+          runSelect.value = String(index);
+        }
+      };
+      const select = (index: number): void => {
+        const clamped = Math.min(last, Math.max(0, Math.round(index)));
+        const changed = clamped !== (state.indices[axis.name] ?? 0);
+        state.indices[axis.name] = clamped;
+        sync();
+        if (!changed) return;
         renderValidTime();
         scheduleLiveSlice();
-      });
-      wrap.append(head, range);
+      };
+      range.addEventListener("input", () => select(Number(range.value)));
+      sync();
       slidersBox.append(wrap);
     }
     renderValidTime();
