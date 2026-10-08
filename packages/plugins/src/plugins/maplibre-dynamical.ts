@@ -1282,6 +1282,8 @@ function buildPanel(container: HTMLElement): () => void {
   setSeriesStatus(null);
 
   const clearSeries = (): void => {
+    // A read still in flight is for what was cleared.
+    seriesRequest += 1;
     series = null;
     seriesResult.style.opacity = "";
     stopChart?.();
