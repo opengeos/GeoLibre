@@ -573,7 +573,9 @@ export function labelObjects(
   return {
     ...objects,
     features: objects.features.map((feature) => {
-      if (!segmentIds.has(objectSegmentId(feature))) return feature;
+      const id = objectSegmentId(feature);
+      // An object with no usable id is never a match (Set.has(NaN) can be true).
+      if (!Number.isFinite(id) || !segmentIds.has(id)) return feature;
       const properties: Record<string, unknown> = { ...(feature.properties ?? {}) };
       if (label) {
         properties[OBIA_CLASS_FIELD] = label.className;
@@ -615,9 +617,11 @@ export function collectSamples(objects: FeatureCollection): ObiaSample[] {
   for (const feature of objects.features) {
     const className = feature.properties?.[OBIA_CLASS_FIELD];
     if (typeof className !== "string" || !className) continue;
+    const segmentId = objectSegmentId(feature);
+    if (!Number.isFinite(segmentId)) continue;
     const role: ObiaSampleRole =
       feature.properties?.[OBIA_SAMPLE_FIELD] === "validation" ? "validation" : "training";
-    samples.push({ segmentId: objectSegmentId(feature), className, role });
+    samples.push({ segmentId, className, role });
   }
   return samples;
 }
@@ -1021,11 +1025,12 @@ export function assessAccuracy(
 
 /**
  * Quote a CSV cell holding user text (a class name). Cells with a quote,
- * comma or line break are quoted, and a leading `=`, `+`, `-` or `@` gets an
- * apostrophe so a spreadsheet opening the report does not run it as a formula.
+ * comma or line break are quoted, and a leading `=`, `+`, `-`, `@`, tab or CR
+ * gets an apostrophe so a spreadsheet opening the report does not run it as a
+ * formula.
  */
 export function csvCell(value: string): string {
-  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 

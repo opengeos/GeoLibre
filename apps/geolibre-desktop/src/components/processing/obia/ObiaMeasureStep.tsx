@@ -75,14 +75,23 @@ export function ObiaMeasureStep(): ReactElement | null {
       const { table, calls } = await computeObjectFeatures(segmentation.labels, image, options);
       // A re-segmentation while the tools ran makes this table describe
       // objects that are gone; drop it rather than write it anywhere.
-      if (useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt) return;
+      if (useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt) {
+        setError(t("obia.measure.error.resegmented"));
+        return;
+      }
       // Re-read the layer: the user may have edited it while the tools ran.
       const latest = useAppStore
         .getState()
         .layers.find((layer) => layer.id === segmentation.objectsLayerId);
       if (!latest?.geojson) throw new Error(t("obia.measure.error.layersMissing"));
       updateLayer(latest.id, {
-        geojson: applyObjectFeatures(latest.geojson, table, features?.table.fields ?? []),
+        // Read the previous run at write time, not from the click's closure, so
+        // the fields it wrote are always the ones removed.
+        geojson: applyObjectFeatures(
+          latest.geojson,
+          table,
+          useObiaSession.getState().features?.table.fields ?? [],
+        ),
       });
       setFeatures({
         segmentationAt: segmentation.finishedAt,
@@ -97,7 +106,7 @@ export function ObiaMeasureStep(): ReactElement | null {
       runningRef.current = false;
       setRunning(false);
     }
-  }, [segmentation, layers, options, features, updateLayer, setFeatures, t]);
+  }, [segmentation, layers, options, updateLayer, setFeatures, t]);
 
   if (!segmentation) return null;
 

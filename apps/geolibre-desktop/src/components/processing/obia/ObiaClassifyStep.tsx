@@ -17,18 +17,23 @@ import { useTranslation } from "react-i18next";
 import { useObiaSession } from "../../../lib/obia/obia-session";
 import { ObiaNumberField, ObiaNumberInput, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
-/** Color of objects no rule matched. */
+/** Color of predicted classes outside the class list (a rules default class). */
 const UNCLASSIFIED_COLOR = "#9ca3af";
 
-/** Style the objects layer by predicted class, in the class colors. */
+/**
+ * Style the objects layer by predicted class, in the class colors. Any
+ * predicted class not in the list (the rules default class, or a rule's class
+ * renamed or removed since) gets a gray stop, so every object is styled.
+ */
 export function predictionStylePatch(
   layer: GeoLibreLayer,
   classes: readonly ObiaClass[],
-  defaultClass?: string,
+  predicted: Iterable<string> = [],
 ) {
   const stops = classes.map((cls) => ({ value: cls.name, color: cls.color, label: cls.name }));
-  if (defaultClass && !classes.some((cls) => cls.name === defaultClass)) {
-    stops.push({ value: defaultClass, color: UNCLASSIFIED_COLOR, label: defaultClass });
+  const listed = new Set(classes.map((cls) => cls.name));
+  for (const name of new Set(predicted)) {
+    if (!listed.has(name)) stops.push({ value: name, color: UNCLASSIFIED_COLOR, label: name });
   }
   return {
     ...layer.style,
@@ -133,11 +138,7 @@ export function ObiaClassifyStep(): ReactElement | null {
       if (!latest?.geojson) throw new Error(t("obia.measure.error.layersMissing"));
       updateLayer(latest.id, {
         geojson: applyPredictions(latest.geojson, result.predictions),
-        style: predictionStylePatch(
-          latest,
-          classes,
-          settings.method === "rules" ? defaultClass : undefined,
-        ),
+        style: predictionStylePatch(latest, classes, result.predictions.values()),
       });
       setClassification({
         ...result,
