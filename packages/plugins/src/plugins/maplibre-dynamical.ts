@@ -629,7 +629,8 @@ function showPointMarker(app: GeoLibreAppAPI, lng: number, lat: number): void {
   map.on("styledata", listener);
   map.on("sourcedata", listener);
   markerHeal = { map, listener };
-  addPointMarker(map, lng, lat);
+  // A style still loading would refuse the source; the listener adds it once the style is ready.
+  if (map.isStyleLoaded()) addPointMarker(map, lng, lat);
 }
 
 function addPointMarker(
