@@ -433,6 +433,8 @@ export {
   type ObiaToolCall,
   OBIA_MAX_PIXELS,
   OBIA_SEGMENT_ID_FIELD,
+  ObiaError,
+  type ObiaErrorCode,
   dissolveSegmentPolygons,
   readImageSummary,
   regionGrowingArgs,

@@ -17,6 +17,8 @@ import {
   regionGrowingArgs,
   splitImageBands,
   stageBands,
+  ObiaError,
+  readRasterData,
 } from "@geolibre/processing";
 
 /** A 3 x 2, 3-band Float32 GeoTIFF with band b holding values b*10 + pixel. */
@@ -266,5 +268,23 @@ describe("OBIA on the WASM tool engine", () => {
     assert.deepEqual(areas, [800, 800]);
     const dark = [...table.rows.values()].find((row) => (row.mean_b1 ?? 0) < 100)!;
     assert.ok((dark.ndvi ?? 0) > 0.4, "the dark half is vegetation-like (NIR > red)");
+  });
+});
+
+describe("splitImageBands input errors", () => {
+  it("raises a coded ObiaError for a band the image lacks", async () => {
+    await assert.rejects(splitImageBands(threeBandTiff(), [2, 7]), (err: unknown) => {
+      assert.ok(err instanceof ObiaError);
+      assert.equal(err.code, "no-such-band");
+      assert.deepEqual(err.params, { index: 7 });
+      return true;
+    });
+  });
+
+  it("decodes only the chosen bands, in the order asked for", async () => {
+    const image = await splitImageBands(threeBandTiff(), [3, 1]);
+    const third = await readRasterData(image.bands[0].bytes.buffer as ArrayBuffer);
+    // Band b holds (b + 1) * 10 + pixel in threeBandTiff.
+    assert.equal(third.bands[0][0], 30);
   });
 });
