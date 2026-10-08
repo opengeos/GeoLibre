@@ -230,6 +230,7 @@ export function LayerRow({
       geometryEditActive,
       layer.geojson,
       layer.metadata.arcgisEditBaseline,
+      layer.metadata.arcgisEditInfo,
       layer.metadata.arcgisSaveUncertain,
     ],
   );
