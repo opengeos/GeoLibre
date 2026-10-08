@@ -142,10 +142,14 @@ export function ObiaTrainStep(): ReactElement | null {
       i === index ? { ...cls, ...patch, name: name ?? cls.name } : cls,
     );
     setClasses(next);
-    if (!objects) return true;
-    const renamed =
-      name && name !== current.name ? renameObjectClass(objects, current.name, name) : objects;
-    writeObjects(renamed, next);
+    if (!objects || !objectsLayer) return true;
+    if (name && name !== current.name) {
+      writeObjects(renameObjectClass(objects, current.name, name), next);
+    } else {
+      // A color change (the picker fires on every drag step) only restyles;
+      // rewriting the features would re-sync the whole source each time.
+      updateLayer(objectsLayer.id, { style: labelStylePatch(objectsLayer, next) });
+    }
     return true;
   };
 
