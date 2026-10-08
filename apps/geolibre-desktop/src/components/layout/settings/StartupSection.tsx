@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import type { StartupSettings } from "../../../hooks/useDesktopSettings";
 import { isTauri } from "../../../lib/is-tauri";
 import { pickLayerStylesFile } from "../../../lib/layer-style-files";
+import { pickLayersFile } from "../../../lib/startup-layers";
 import { openProjectFile } from "../../../lib/tauri-io";
 import { roundCoordinate } from "./settings-draft";
 import { useSettingsDraft } from "./SettingsDraftContext";
@@ -15,8 +16,8 @@ interface StartupSectionProps {
 }
 
 /**
- * The Startup section: which project opens at launch, the default view, and a
- * startup layer-styles file.
+ * The Startup section: which project opens at launch, the default view, and the
+ * startup layer-styles and layers files.
  *
  * Args:
  *   props: The section props.
@@ -79,6 +80,28 @@ export function StartupSection({ mapControllerRef }: StartupSectionProps) {
       console.error("Could not select a layer styles file.", error);
       setError(
         t("settings.startup.layerStylesSelectError", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  };
+
+  const chooseStartupLayers = async () => {
+    try {
+      const picked = await pickLayersFile();
+      if (!picked) return;
+      updateDraftStartupSettings({
+        layers: {
+          fileName: picked.name,
+          path: picked.path,
+          layers: picked.layers,
+          layerGroups: picked.layerGroups,
+        },
+      });
+    } catch (error) {
+      console.error("Could not select a layers file.", error);
+      setError(
+        t("settings.startup.layersSelectError", {
           message: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -264,6 +287,47 @@ export function StartupSection({ mapControllerRef }: StartupSectionProps) {
                 count: draftDesktopSettings.startup.layerStyles.entries.length,
               })
             : t("settings.startup.noLayerStylesSelected")}
+        </p>
+      </div>
+      <div className="space-y-3 rounded-md border p-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm">{t("settings.startup.layers")}</p>
+            <p className="text-xs text-muted-foreground">{t("settings.startup.layersHint")}</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void chooseStartupLayers()}
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              {t("settings.startup.chooseLayers")}
+            </Button>
+            {draftDesktopSettings.startup.layers ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => updateDraftStartupSettings({ layers: null })}
+              >
+                {t("settings.startup.clearLayers")}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <p
+          className="truncate text-xs text-muted-foreground"
+          title={draftDesktopSettings.startup.layers?.path}
+          data-testid="settings-startup-layers-file"
+        >
+          {draftDesktopSettings.startup.layers
+            ? t("settings.startup.layersSelected", {
+                file: draftDesktopSettings.startup.layers.fileName,
+                count: draftDesktopSettings.startup.layers.layers.length,
+              })
+            : t("settings.startup.noLayersSelected")}
         </p>
       </div>
     </div>

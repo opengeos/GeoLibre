@@ -26,6 +26,7 @@ import {
   HardDriveDownload,
   History,
   Import,
+  Layers,
   LayoutGrid,
   Link2,
   Palette,
@@ -81,6 +82,7 @@ interface ProjectMenuProps {
   onShare: () => void;
   onExportHtml: () => void;
   onExportLayerStyles: () => void;
+  onExportLayers: () => void;
   onCollaborate: () => void;
   onPrintLayout: () => void;
   onOpenOfflineBasemap: () => void;
@@ -107,6 +109,7 @@ export function ProjectMenu({
   onShare,
   onExportHtml,
   onExportLayerStyles,
+  onExportLayers,
   onCollaborate,
   onPrintLayout,
   onOpenOfflineBasemap,
@@ -178,6 +181,7 @@ export function ProjectMenu({
     (!shareHidden && show("project.share")) ||
     show("project.exportHtml") ||
     show("project.exportLayerStyles") ||
+    show("project.exportLayers") ||
     (collaborationEnabled && show("project.collaborate"));
   // Narrower than showSaveGroup, which also covers share/export/collaborate: the
   // `project:save` note must not render when only those siblings are on screen.
@@ -191,8 +195,10 @@ export function ProjectMenu({
   const showExportDataActions =
     show("project.exportHtml") ||
     show("project.exportLayerStyles") ||
+    show("project.exportLayers") ||
     show("project.offlineRegion");
-  const showExportMenu = show("project.exportHtml") || show("project.exportLayerStyles");
+  const showExportMenu =
+    show("project.exportHtml") || show("project.exportLayerStyles") || show("project.exportLayers");
   // Same for the two `project:share` entries, which straddle Export HTML.
   const showShareActions =
     (!shareHidden && show("project.share")) ||
@@ -431,6 +437,16 @@ export function ProjectMenu({
                 >
                   <Palette className="me-2 h-3.5 w-3.5" />
                   {t("toolbar.item.exportLayerStylesEllipsis")}
+                </DropdownMenuItem>
+              )}
+              {show("project.exportLayers") && (
+                <DropdownMenuItem
+                  onSelect={onExportLayers}
+                  disabled={!exportDataCapability.granted}
+                  aria-describedby={exportDataDeniedBy}
+                >
+                  <Layers className="me-2 h-3.5 w-3.5" />
+                  {t("toolbar.item.exportLayersEllipsis")}
                 </DropdownMenuItem>
               )}
             </DropdownMenuSubContent>

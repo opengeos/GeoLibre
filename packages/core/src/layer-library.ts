@@ -110,7 +110,9 @@ export function hasRestorableLayerSource(
  * Every candidate is re-validated, because a hand-edited project or an imported
  * bundle can set these fields to anything.
  */
-function layerLocalPath(layer: Pick<GeoLibreLayer, "sourcePath" | "metadata">): string | undefined {
+export function layerLocalPath(
+  layer: Pick<GeoLibreLayer, "sourcePath" | "metadata">,
+): string | undefined {
   const metadata = layer.metadata ?? {};
   if (isReReadablePath(metadata.localFilePath)) return metadata.localFilePath;
   if (metadata.localFileReloadable !== true) return undefined;

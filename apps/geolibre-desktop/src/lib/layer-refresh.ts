@@ -856,7 +856,14 @@ function layerHttpUrl(layer: GeoLibreLayer): string | null {
   return isHttpUrl(url) ? url : null;
 }
 
-function refreshSourceUrl(layer: GeoLibreLayer): string | null {
+/**
+ * The http(s) URL a GeoJSON layer's features can be fetched again from, or null
+ * when the layer has none or is a kind that refreshes another way.
+ *
+ * @param layer - A store layer.
+ * @returns The URL to re-fetch, or null.
+ */
+export function refreshSourceUrl(layer: GeoLibreLayer): string | null {
   if (layer.type !== "geojson") return null;
 
   const url = layerHttpUrl(layer);

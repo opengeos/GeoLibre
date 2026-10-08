@@ -112,6 +112,10 @@ The dialog warns even before a share token is configured, because uploading a sa
 
 **Project → Export → Export Layer Styles...** writes every layer's style to one JSON file keyed by layer name. **Project → Import → Import Layer Styles...** applies such a file to the open project, restyling each layer whose name matches in one undoable step, and reports any styles that matched no layer. To apply a styles file automatically, choose it under **Default layer styles** in [Settings → Startup](settings.md#startup): each layer you add whose name matches is styled as it arrives, while layers in opened projects keep their saved styles.
 
+## Layers files
+
+**Project → Export → Export Layers...** writes the project's layers to a JSON file (`"type": "geolibre-layers"`) for the **Default layers** setting in [Settings → Startup](settings.md#startup), which adds them to every new project. Each layer keeps its style, labels, visibility, opacity, and folder, but the file holds only a *reference* to its data: a tile or service URL, a remote file URL, or a local file path the desktop app can re-read. Features are never embedded, so a layer whose data exists only in the project (drawn features, processing results, or a file opened in the browser) is left out, and GeoLibre lists the layers it skipped. Credentials such as API keys and tokens are removed from the exported layers, as they are when sharing a project.
+
 ## Collaborate
 
 **Project → Collaborate...** starts or joins a live session in which several people edit the same project at once, with presence cursors, chat, and per-participant permissions. The feature is off unless the build configures a relay URL — see [Collaboration](../collaboration.md).

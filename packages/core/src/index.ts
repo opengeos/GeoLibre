@@ -38,6 +38,7 @@ export * from "./layer-library";
 export * from "./layer-defaults";
 export * from "./layer-style-clipboard";
 export * from "./layer-style-file";
+export * from "./layers-file";
 export * from "./layer-groups";
 export * from "./pixel-format";
 export * from "./s3";

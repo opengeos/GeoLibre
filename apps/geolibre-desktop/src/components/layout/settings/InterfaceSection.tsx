@@ -1,11 +1,26 @@
-import { Button } from "@geolibre/ui";
-import { RotateCcw } from "lucide-react";
+import { Button, Input, Label } from "@geolibre/ui";
+import { Download, FolderOpen, Link2, RotateCcw } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   DEFAULT_UI_PROFILE_SETTINGS,
+  useDesktopSettingsStore,
   type ExperienceLevel,
   type UiProfileSettings,
 } from "../../../hooks/useDesktopSettings";
+import { useLanguage } from "../../../hooks/useLanguage";
+import {
+  openLocalDataFileWithFallback,
+  saveTextFileWithFallback,
+} from "../../../lib/file-io/file-dialogs";
+import {
+  applyInterfaceSettings,
+  fetchInterfaceFile,
+  parseInterfaceFile,
+  serializeInterfaceFile,
+  type InterfaceSettings,
+} from "../../../lib/interface-settings-file";
+import { notify } from "../../../lib/notify";
 import { pluginDisplayName } from "../../../lib/plugin-display-name";
 import {
   DATA_SOURCE_CATALOG,
@@ -39,6 +54,93 @@ interface InterfaceSectionProps {
 export function InterfaceSection({ profilePlugins }: InterfaceSectionProps) {
   const { t } = useTranslation();
   const { draftDesktopSettings, setDraftDesktopSettings, setError } = useSettingsDraft();
+  const { setLanguage } = useLanguage();
+  const [interfaceUrl, setInterfaceUrl] = useState("");
+  const [loadingUrl, setLoadingUrl] = useState(false);
+  const locked = draftDesktopSettings.uiProfile.locked;
+
+  // Export what the dialog shows: the draft layout and profile, with the
+  // language and theme, which those sections commit as they change.
+  const exportInterface = async () => {
+    try {
+      const current = useDesktopSettingsStore.getState().desktopSettings;
+      await saveTextFileWithFallback(
+        serializeInterfaceFile({
+          ...current,
+          layout: draftDesktopSettings.layout,
+          uiProfile: draftDesktopSettings.uiProfile,
+        }),
+        {
+          defaultName: "geolibre-interface.json",
+          filters: [{ name: t("settings.interface.fileFilter"), extensions: ["json"] }],
+          browserTypes: [
+            {
+              description: t("settings.interface.fileFilter"),
+              accept: { "application/json": [".json"] },
+            },
+          ],
+          mimeType: "application/json",
+        },
+      );
+    } catch (error) {
+      console.error("Could not export the interface settings.", error);
+      setError(
+        t("settings.interface.exportError", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  };
+
+  // An import applies at once, like a theme or language change, and the draft
+  // follows so Save does not put the old layout and profile back.
+  const applyImported = (imported: InterfaceSettings) => {
+    const store = useDesktopSettingsStore.getState();
+    store.setDesktopSettings(applyInterfaceSettings(store.desktopSettings, imported));
+    setDraftDesktopSettings((current) => ({
+      ...current,
+      ...(imported.layout ? { layout: imported.layout } : {}),
+      ...(imported.uiProfile ? { uiProfile: imported.uiProfile } : {}),
+    }));
+    if (imported.language !== undefined) setLanguage(imported.language);
+    setError(null);
+    notify.success(t("settings.interface.imported"), { dedupeKey: "interface-imported" });
+  };
+
+  const reportImportError = (error: unknown) => {
+    console.error("Could not import the interface settings.", error);
+    setError(
+      t("settings.interface.importError", {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  };
+
+  const importInterfaceFile = async () => {
+    try {
+      const result = await openLocalDataFileWithFallback({
+        filters: [{ name: t("settings.interface.fileFilter"), extensions: ["json"] }],
+        accept: ".json,application/json",
+        readText: true,
+      });
+      if (!result || result.text === undefined) return;
+      applyImported(parseInterfaceFile(result.text));
+    } catch (error) {
+      reportImportError(error);
+    }
+  };
+
+  const importInterfaceUrl = async () => {
+    setLoadingUrl(true);
+    try {
+      applyImported(await fetchInterfaceFile(interfaceUrl));
+      setInterfaceUrl("");
+    } catch (error) {
+      reportImportError(error);
+    } finally {
+      setLoadingUrl(false);
+    }
+  };
 
   const updateUiProfile = (patch: Partial<UiProfileSettings>) => {
     setDraftDesktopSettings((current) => ({
@@ -177,6 +279,63 @@ export function InterfaceSection({ profilePlugins }: InterfaceSectionProps) {
           {t("settings.interface.lockedNote")}
         </div>
       ) : null}
+      <div className="space-y-3 rounded-md border p-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm">{t("settings.interface.fileTitle")}</p>
+            <p className="text-xs text-muted-foreground">{t("settings.interface.fileHint")}</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void exportInterface()}
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t("settings.interface.export")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={locked}
+              onClick={() => void importInterfaceFile()}
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              {t("settings.interface.import")}
+            </Button>
+          </div>
+        </div>
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void importInterfaceUrl();
+          }}
+        >
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Label htmlFor="settings-interface-url">{t("settings.interface.importUrl")}</Label>
+            <Input
+              id="settings-interface-url"
+              type="url"
+              placeholder="https://example.com/geolibre-interface.json"
+              value={interfaceUrl}
+              disabled={locked || loadingUrl}
+              onChange={(event) => setInterfaceUrl(event.target.value)}
+            />
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            disabled={locked || loadingUrl || !interfaceUrl.trim()}
+          >
+            <Link2 className="h-3.5 w-3.5" />
+            {loadingUrl ? t("settings.interface.loadingUrl") : t("settings.interface.loadUrl")}
+          </Button>
+        </form>
+      </div>
       <div className="space-y-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("settings.interface.presets")}

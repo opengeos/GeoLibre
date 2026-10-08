@@ -47,6 +47,9 @@ Open **Settings → Interface** to:
   items within the Project, Edit, View, Processing, Controls, Settings, and Help
   menus.
   Editing any item switches the selector to **Custom**.
+- **Export** the profile, with the language, layout, and accent theme, to an
+  interface file, or **Import** one from a file or a URL to apply a colleague's
+  setup. See [Settings → Interface](user-guide/settings.md#interface).
 
 The **Settings** menu itself, and its Language / Layout / Interface entries, are
 always shown so the profile UI can never be hidden away.

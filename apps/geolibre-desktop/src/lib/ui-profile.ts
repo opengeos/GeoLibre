@@ -362,6 +362,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "project.exportLayers",
+    menuId: "project",
+    labelKey: "toolbar.item.exportLayersEllipsis",
+    tier: "intermediate",
+  },
+  {
     id: "project.collaborate",
     menuId: "project",
     labelKey: "toolbar.item.collaborateEllipsis",

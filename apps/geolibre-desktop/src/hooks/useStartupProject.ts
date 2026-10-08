@@ -1,4 +1,9 @@
-import { useAppStore, type MapProjection, type MapViewState } from "@geolibre/core";
+import {
+  createEmptyProject,
+  useAppStore,
+  type MapProjection,
+  type MapViewState,
+} from "@geolibre/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataUrlParameters, serviceUrlParameter, stacUrlParameter } from "../lib/data-url";
@@ -9,6 +14,7 @@ import { projectUrlFromLocation } from "../lib/project-url";
 import { planStartup, startupDefaultWorkspace, type StartupPlan } from "../lib/startup-project";
 import { openRecentProjectFile, RecentProjectGoneError } from "../lib/tauri-io";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
+import { fetchStartupLayerData, withStartupLayers } from "../lib/startup-layers";
 import { DEFAULT_STARTUP_SETTINGS, useDesktopSettingsStore } from "./useDesktopSettings";
 import { loadRecentProjects } from "./useRecentProjectsPersistence";
 import { consumeInlineProjectFragment } from "../lib/inline-project-fragment";
@@ -94,6 +100,24 @@ function applyDefaultWorkspace(
   }));
 }
 
+/**
+ * Add the Startup setting's layers to the untitled workspace, if any are set.
+ * Loading them as a project, rather than adding each layer, gives them the
+ * same restore passes an opened project's layers get (local files re-read from
+ * disk, plugin-painted layers replayed) and leaves the workspace clean.
+ */
+function seedStartupLayers(): void {
+  const state = useAppStore.getState();
+  const project = withStartupLayers(
+    createEmptyProject(state.projectName, {
+      basemapStyleUrl: state.basemapStyleUrl,
+      mapView: state.mapView,
+    }),
+  );
+  if (project.layers.length === 0) return;
+  state.loadProject(project, null, { rememberRecent: false, presenting: false });
+}
+
 export function useStartupProject(): {
   restoring: boolean;
 } {
@@ -134,6 +158,7 @@ export function useStartupProject(): {
     const location =
       initialNativeCoordinateTarget() ?? coordinateTargetFromSearch(window.location.search);
     if (location && !hasExplicitLaunchPayload() && !openedProjectPath) {
+      seedStartupLayers();
       applyDefaultWorkspace({
         ...startupDefaultWorkspace(useDesktopSettingsStore.getState().desktopSettings.startup),
         ...location,
@@ -141,9 +166,19 @@ export function useStartupProject(): {
       return false;
     }
     const plan = currentStartupPlan(openedProjectPath);
-    if (plan.kind === "default") applyDefaultWorkspace(plan);
+    if (plan.kind === "default") {
+      seedStartupLayers();
+      applyDefaultWorkspace(plan);
+    }
     return plan.kind === "restore";
   });
+
+  // Fetch the features of any URL layers the seeding above added. In an
+  // effect, not the initializer, so a render that is thrown away fetches
+  // nothing; with no such layers this is a no-op.
+  useEffect(() => {
+    void fetchStartupLayerData();
+  }, []);
 
   // End native startup in the same synchronous render that reads its target.
   // Waiting for the passive effect would drop intents received after render.
@@ -162,7 +197,13 @@ export function useStartupProject(): {
     if (plan.kind !== "restore") return;
     const path = plan.path;
     const settings = useDesktopSettingsStore.getState().desktopSettings.startup;
-    const openDefaultWorkspace = () => {
+    const openDefaultWorkspace = (options: { seedLayers?: boolean } = {}) => {
+      // Only once the restore has given up: seeding bumps the project
+      // generation, which would make a restore still in flight stand down.
+      if (options.seedLayers) {
+        seedStartupLayers();
+        void fetchStartupLayerData();
+      }
       applyDefaultWorkspace(startupDefaultWorkspace(settings));
       setRestoring(false);
     };
@@ -243,7 +284,7 @@ export function useStartupProject(): {
         // A warning toast (8 s, like the banner it replaced): the app is usable,
         // just not with the project the user asked to start with.
         notify.warning(t("settings.startup.loadWarning"), { dedupeKey: "startup-project" });
-        openDefaultWorkspace();
+        openDefaultWorkspace({ seedLayers: true });
       } finally {
         window.clearTimeout(gateTimer);
         if (!cancelled) setRestoring(false);

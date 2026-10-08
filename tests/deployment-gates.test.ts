@@ -130,6 +130,7 @@ describe("projectMenuItemCapability", () => {
       "project.share",
       "project.exportHtml",
       "project.exportLayerStyles",
+      "project.exportLayers",
       "project.print",
       "project.printLayout",
       "project.offlineRegion",

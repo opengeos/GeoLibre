@@ -1,6 +1,7 @@
 import {
   BLANK_BASEMAP,
   createDefaultMapView,
+  createEmptyProject,
   detachProjectCopy,
   OPENFREEMAP_BASEMAPS,
   PLANETARY_BASEMAP_GROUPS,
@@ -19,6 +20,7 @@ import {
 import { planetaryBasemapLabel, planetaryBasemapSectionKey } from "../../lib/planetary-sections";
 import { buildRemotePmtilesBasemap, isPmtilesStyleUrl } from "../../lib/pmtiles-basemap-url";
 import { clearProjectSnapshots } from "../../lib/project-history-store";
+import { fetchStartupLayerData, withStartupLayers } from "../../lib/startup-layers";
 import { CollapsibleSection } from "../CollapsibleSection";
 import { RegionalBasemapSection } from "../panels/RegionalBasemapSection";
 import { StarterProjectsSection } from "./StarterProjectsSection";
@@ -242,14 +244,24 @@ export function NewProjectDialog({
     basemapId: BasemapChoice,
     { styleUrl, ellipsoidId }: ResolvedBasemap,
   ) => {
-    newProject({
-      name: projectName.trim() || DEFAULT_PROJECT_NAME,
+    const name = projectName.trim() || DEFAULT_PROJECT_NAME;
+    const options = {
       basemapStyleUrl: styleUrl,
       // A planetary basemap seeds the matching celestial body; other basemaps
       // leave the project on the default Earth ellipsoid.
       ellipsoidId,
       mapView: basemapId === LIBERTY_3D_ID ? THREE_D_MAP_VIEW : createDefaultMapView(),
-    });
+    };
+    // The Startup setting's layers join every new project. They are loaded as
+    // a project so the restore passes an opened project gets (local files
+    // re-read from disk, plugin-painted layers replayed) run for them too.
+    const seeded = withStartupLayers(createEmptyProject(name, options));
+    if (seeded.layers.length > 0) {
+      loadProject(seeded, null, { rememberRecent: false, presenting: false });
+      void fetchStartupLayerData();
+    } else {
+      newProject({ name, ...options });
+    }
     void clearProjectSnapshots().catch((error) =>
       console.error("Could not clear project history for the new project.", error),
     );

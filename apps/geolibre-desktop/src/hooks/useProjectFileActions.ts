@@ -7,6 +7,7 @@ import {
   excludeHiddenFieldsFromProject,
   extractLayerStyleEntries,
   serializeLayerStylesFile,
+  serializeLayersFile,
   serializeProject,
   splitProjectCredentials,
   useAppStore,
@@ -51,6 +52,8 @@ import { buildProjectHtml, viewerChromeParams } from "../lib/html-export";
 import { isLayersPanelCollapsed } from "../lib/layer-panel-collapse";
 import { ensureHtmlFileName, ensureJsonFileName, ensureProjectFileName } from "../lib/file-names";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
+import { notify } from "../lib/notify";
+import { APP_LAYERS_FILE_HOST, buildLayersFileContent } from "../lib/startup-layers";
 import { mergeStringLists } from "../lib/string-lists";
 import { fetchProjectFromUrl } from "../lib/project-url";
 import { getShareFetch } from "../lib/share-fetch";
@@ -1854,6 +1857,85 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  // Write the project's layers to a layers file: references to their data
+  // (URLs and local paths) with their styling, for the Startup setting that
+  // adds them to every new project. Layers whose data lives only in the app
+  // are left out, and the user is told which.
+  const handleExportLayers = async (): Promise<boolean> => {
+    if (isSavingRef.current) return false;
+    const build = buildLayersFileContent(APP_LAYERS_FILE_HOST);
+    if (build.content.layers.length === 0) {
+      setActionError(
+        build.skipped.length > 0
+          ? t("toolbar.error.noReferencedLayersToExport")
+          : t("toolbar.error.noLayersToExport"),
+      );
+      return false;
+    }
+    isSavingRef.current = true;
+    try {
+      const exportProjectGeneration = useAppStore.getState().projectGeneration;
+      const projectName = useAppStore.getState().projectName.trim() || DEFAULT_PROJECT_NAME;
+      const slug = `${
+        projectName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "geolibre-map"
+      }-layers`;
+      let defaultName = `${slug}.json`;
+      if (browserSaveFallsBackToDownload()) {
+        const chosen = await askSaveName(
+          defaultName,
+          {
+            title: t("toolbar.item.exportLayersAsTitle"),
+            description: t("toolbar.item.exportLayersAsDesc"),
+            label: t("toolbar.item.exportLayersFileName"),
+            placeholder: t("toolbar.item.exportLayersFileNamePlaceholder"),
+          },
+          exportProjectGeneration,
+        );
+        if (chosen === null) return false;
+        defaultName = ensureJsonFileName(chosen, slug);
+      }
+      // Same rule as Export Layer Styles: never write a project no longer open.
+      if (useAppStore.getState().projectGeneration !== exportProjectGeneration) return false;
+      const savedPath = await saveTextFileWithFallback(serializeLayersFile(build.content), {
+        defaultName,
+        filters: [{ name: t("toolbar.item.layersFile"), extensions: ["json"] }],
+        browserTypes: [
+          {
+            description: t("toolbar.item.layersFile"),
+            accept: { "application/json": [".json"] },
+          },
+        ],
+        mimeType: "application/json",
+      });
+      if (savedPath === null) return false;
+      if (build.skipped.length > 0) {
+        notify.warning(
+          t("toolbar.item.layersExportSkipped", {
+            count: build.skipped.length,
+            names: build.skipped.join(", "),
+          }),
+          { dedupeKey: "export-layers-skipped" },
+        );
+      }
+      if (build.redactedCount > 0) {
+        notify.info(t("toolbar.item.layersExportRedacted", { count: build.redactedCount }), {
+          dedupeKey: "export-layers-redacted",
+        });
+      }
+      return true;
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : t("toolbar.error.couldNotExportLayers"),
+      );
+      return false;
+    } finally {
+      isSavingRef.current = false;
+    }
+  };
+
   // Restyle the current project's layers from a layer styles file, matching
   // each entry to a layer by name, then report what matched.
   const handleImportLayerStyles = async () => {
@@ -1958,6 +2040,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     handleSaveAs,
     handleExportHtml,
     handleExportLayerStyles,
+    handleExportLayers,
     handleImportLayerStyles,
     layerStyleImportResult,
     setLayerStyleImportResult,

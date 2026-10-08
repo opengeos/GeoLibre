@@ -22,6 +22,7 @@ describe("startup project settings", () => {
       center: [-100, 40],
       zoom: 2,
       layerStyles: null,
+      layers: null,
       openS3Browser: false,
     });
   });
@@ -46,6 +47,7 @@ describe("startup project settings", () => {
         center: [-84.388, 33.749],
         zoom: 10.25,
         layerStyles: null,
+        layers: null,
         openS3Browser: false,
       },
     );

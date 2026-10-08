@@ -330,6 +330,7 @@ export function TopToolbar({
           onShare={() => dialogs.setShareDialogOpen(true)}
           onExportHtml={() => void projectFiles.handleExportHtml()}
           onExportLayerStyles={() => void projectFiles.handleExportLayerStyles()}
+          onExportLayers={() => void projectFiles.handleExportLayers()}
           onCollaborate={() => setCollaborateDialogOpen(true)}
           onPrintLayout={() => dialogs.setPrintLayoutOpen(true)}
           onOpenOfflineBasemap={onOpenBasemapExtract}
