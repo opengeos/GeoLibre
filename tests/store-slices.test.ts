@@ -47,6 +47,7 @@ function uiSetterCalls(layerId: string): Array<[string, () => void]> {
     ["setSegmentationOpen", () => store().setSegmentationOpen(true)],
     ["setObjectDetectionOpen", () => store().setObjectDetectionOpen(true)],
     ["setSegmentEverythingOpen", () => store().setSegmentEverythingOpen(true)],
+    ["setObiaWorkbenchOpen", () => store().setObiaWorkbenchOpen(true)],
     ["setGeocodeOpen", () => store().setGeocodeOpen(true)],
     ["setSqlWorkspaceOpen", () => store().setSqlWorkspaceOpen(true)],
     ["setLoadEditorFeaturesOpen", () => store().setLoadEditorFeaturesOpen(true, layerId)],

@@ -59,6 +59,7 @@ const COMMAND_MENU_ITEMS: ReadonlyArray<readonly [string, string]> = [
   ["proc.assistant", "processing.assistant"],
   ["proc.geocode", "processing.geocode"],
   ["proc.modelBuilder", "processing.modelBuilder"],
+  ["proc.obiaWorkbench", "processing.obiaWorkbench"],
   ["proc.batchTools", "processing.batchTools"],
   ["proc.segmentation", "processing.segmentation"],
   ["proc.objectDetection", "processing.objectDetection"],

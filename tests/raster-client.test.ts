@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { writeArrayBuffer } from "geotiff";
 import {
   aspect,
   clipByExtent,
@@ -400,5 +401,30 @@ describe("raster-client GeoTIFF round-trip", () => {
     // terrain NoData and the interior pixel has a real (>0) slope.
     assert.equal(back.nodata, TERRAIN_NODATA);
     assert.ok(back.bands[0][4] > 0);
+  });
+});
+
+describe("readRasterData with a short SampleFormat tag", () => {
+  it("decodes every band when SampleFormat holds one value for several samples", async () => {
+    // Older geolibre-wasm COGs wrote a single SampleFormat value for a
+    // multi-band image; geotiff.js alone throws on band 2.
+    const values = Uint8Array.from({ length: 2 * 2 * 3 }, (_, i) => i);
+    const bytes = writeArrayBuffer(values, {
+      width: 2,
+      height: 2,
+      SampleFormat: [1],
+      BitsPerSample: [8, 8, 8],
+      ModelPixelScale: [1, 1, 0],
+      ModelTiepoint: [0, 0, 0, 0, 0, 0],
+    } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer;
+    const raster = await readRasterData(bytes);
+    assert.deepEqual(
+      raster.bands.map((band) => Array.from(band)),
+      [
+        [0, 3, 6, 9],
+        [1, 4, 7, 10],
+        [2, 5, 8, 11],
+      ],
+    );
   });
 });

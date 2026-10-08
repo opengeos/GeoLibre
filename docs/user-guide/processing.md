@@ -40,6 +40,7 @@ Processing
 │   └─ Segment Everything
 ├─────────────────────────
 ├─ Model Builder
+├─ Object-Based Analysis
 ├─ SQL Workspace
 ├─ Python Console
 ├─ Jupyter Notebook
@@ -367,6 +368,10 @@ Every run is recorded in **Processing → History**, newest first, with the tool
 - **Save** stores the model with the project, **Import** / **Export** move it between projects as a file, and **Copy Python script** puts the equivalent [`geolibre` Python](../python.md) code on the clipboard.
 
 See [Model Builder](model-builder.md) for the full guide, including node types, validation messages, how runs execute, the model file format, and Python export. The [AI Assistant](ai-assistant.md) can also author a model from a plain-language description and open it here for review before you run it.
+
+## Object-Based Analysis
+
+**Processing → Object-Based Analysis** opens a floating workbench for object-based image analysis (OBIA). It segments a raster layer into image objects and adds them to the map as one polygon per object, ready to measure, label and classify. It runs entirely in the browser on the WASM engine, so it needs no sidecar. See [Object-Based Analysis](obia.md) for the full guide.
 
 ## Dashboard
 

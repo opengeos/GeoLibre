@@ -115,6 +115,8 @@ export interface UiSlice {
     segmentationOpen: boolean;
     objectDetectionOpen: boolean;
     segmentEverythingOpen: boolean;
+    /** The Object-Based Analysis (OBIA) workbench panel (#3053). */
+    obiaWorkbenchOpen: boolean;
     geocodeOpen: boolean;
     sqlWorkspaceOpen: boolean;
     loadEditorFeaturesOpen: boolean;
@@ -197,6 +199,7 @@ export interface UiSlice {
   setSegmentationOpen: (open: boolean) => void;
   setObjectDetectionOpen: (open: boolean) => void;
   setSegmentEverythingOpen: (open: boolean) => void;
+  setObiaWorkbenchOpen: (open: boolean) => void;
   setGeocodeOpen: (open: boolean) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
   setLoadEditorFeaturesOpen: (open: boolean, layerId?: string | null) => void;
@@ -245,6 +248,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
     segmentationOpen: false,
     objectDetectionOpen: false,
     segmentEverythingOpen: false,
+    obiaWorkbenchOpen: false,
     geocodeOpen: false,
     sqlWorkspaceOpen: false,
     loadEditorFeaturesOpen: false,
@@ -299,6 +303,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set) => ({
   setObjectDetectionOpen: (open) => set((s) => ({ ui: { ...s.ui, objectDetectionOpen: open } })),
   setSegmentEverythingOpen: (open) =>
     set((s) => ({ ui: { ...s.ui, segmentEverythingOpen: open } })),
+  setObiaWorkbenchOpen: (open) => set((s) => ({ ui: { ...s.ui, obiaWorkbenchOpen: open } })),
   setGeocodeOpen: (open) => set((s) => ({ ui: { ...s.ui, geocodeOpen: open } })),
   setSqlWorkspaceOpen: (open) => set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
   setLoadEditorFeaturesOpen: (open, layerId) =>

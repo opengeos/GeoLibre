@@ -3335,6 +3335,7 @@
       "geocode": "Geocode Addresses",
       "batchTools": "Batch tools",
       "modelBuilder": "Model Builder",
+      "obiaWorkbench": "Object-Based Analysis (OBIA)",
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI Segmentation",
@@ -3695,6 +3696,7 @@
       "whitebox": "Whitebox",
       "geocode": "Geocode Addresses",
       "modelBuilder": "Model Builder",
+      "obiaWorkbench": "Object-Based Analysis",
       "processingHistory": "History",
       "conversion": "Conversion",
       "vector": "Vector",
@@ -7406,6 +7408,39 @@
       "failed": "Segmentation failed."
     }
   },
+  "obia": {
+    "title": "Object-Based Analysis",
+    "description": "Segment imagery into objects, measure them, train a classifier and assess its accuracy. Runs in the browser.",
+    "steps": {
+      "segment": "Segment"
+    },
+    "image": "Image",
+    "imagePlaceholder": "Choose a raster layer",
+    "noRasterLayers": "Add a GeoTIFF raster layer to the map first.",
+    "loadingImage": "Reading image…",
+    "imageSummary": "{{width}} × {{height}} pixels, {{bands}} bands",
+    "bands": "Bands",
+    "bandN": "Band {{index}}",
+    "bandsHint": "Segmentation uses the selected bands, each standardized so no band dominates.",
+    "method": "Method",
+    "methodRegionGrowing": "Seeded region growing (Whitebox)",
+    "methodNote": "Pixels join a region while they stay within the threshold of its seed in standardized band space, then objects below the minimum size merge into their most similar neighbor. This is not eCognition multiresolution segmentation, so its scale values do not transfer.",
+    "threshold": "Similarity threshold",
+    "thresholdHint": "Larger values give fewer, larger objects.",
+    "minArea": "Minimum object size (pixels)",
+    "seedSteps": "Seed steps",
+    "addLabels": "Also add the label raster to the map",
+    "run": "Segment",
+    "running": "Segmenting…",
+    "result": "{{count}} objects, about {{area}} pixels each",
+    "layerName": "{{name}} objects",
+    "labelsLayerName": "{{name}} segments",
+    "error": {
+      "readImage": "Could not read this layer's GeoTIFF data in the browser.",
+      "noBands": "Select at least one band.",
+      "failed": "Segmentation failed."
+    }
+  },
   "pluginPanel": {
     "expand": "Expand panel",
     "collapse": "Collapse panel",
@@ -8952,6 +8987,7 @@
       "map": "Map",
       "pluginFloatingPanels": "Plugin floating panels",
       "modelBuilder": "Model Builder",
+      "obiaWorkbench": "Object-Based Analysis",
       "selectionPanels": "Selection panels",
       "sunSimulationPanel": "Sun simulation panel",
       "routeAnimationPanel": "Route animation panel",

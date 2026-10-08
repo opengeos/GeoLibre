@@ -100,6 +100,7 @@ const FULL_REGISTRY_IDS = [
   "proc.assistant",
   "proc.geocode",
   "proc.modelBuilder",
+  "proc.obiaWorkbench",
   "proc.batchTools",
   "proc.segmentation",
   "proc.objectDetection",

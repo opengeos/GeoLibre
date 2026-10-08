@@ -79,6 +79,7 @@ export function ProcessingMenu({
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
+  const setObiaWorkbenchOpen = useAppStore((s) => s.setObiaWorkbenchOpen);
   // Object detection and segment-everything read pixels off the MapLibre canvas
   // and drive the map directly, so they need a live native map instance — not
   // merely "not Cesium".
@@ -162,6 +163,7 @@ export function ProcessingMenu({
   const showGeolibre = showGeolibreTools || showGeolibreActions;
   const showWorkspacesOrServices =
     show("processing.modelBuilder") ||
+    show("processing.obiaWorkbench") ||
     show("processing.history") ||
     show("processing.sqlWorkspace") ||
     show("processing.pythonConsole") ||
@@ -751,6 +753,19 @@ export function ProcessingMenu({
             aria-describedby={processingDeniedBy}
           >
             {t("toolbar.item.modelBuilder")}
+          </DropdownMenuItem>
+        )}
+        {/* The OBIA workbench chains segmentation, object features, training
+            and classification tools, so it carries the same gate as Model
+            Builder. It runs on the WASM tool runner and the store, so it needs
+            neither the sidecar nor a 2D map. */}
+        {show("processing.obiaWorkbench") && (
+          <DropdownMenuItem
+            onSelect={() => setObiaWorkbenchOpen(true)}
+            disabled={processingDenied}
+            aria-describedby={processingDeniedBy}
+          >
+            {t("toolbar.item.obiaWorkbench")}
           </DropdownMenuItem>
         )}
         {show("processing.sqlWorkspace") && (

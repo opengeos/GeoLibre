@@ -560,6 +560,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "advanced",
   },
   {
+    id: "processing.obiaWorkbench",
+    menuId: "processing",
+    labelKey: "toolbar.item.obiaWorkbench",
+    tier: "advanced",
+  },
+  {
     id: "processing.segmentation",
     menuId: "processing",
     labelKey: "toolbar.command.segmentation",

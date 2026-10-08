@@ -74,6 +74,20 @@ export const BatchToolsDialog = lazy(() =>
     }),
 );
 
+export const ObiaWorkbenchPanel = lazy(() =>
+  import("../processing/obia/ObiaWorkbenchPanel")
+    .then((module) => ({
+      default: module.ObiaWorkbenchPanel,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load ObiaWorkbenchPanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/obia/ObiaWorkbenchPanel").ObiaWorkbenchPanel;
+      return { default: Fallback };
+    }),
+);
+
 export const ModelBuilderPanel = lazy(() =>
   import("../processing/model-builder/ModelBuilderPanel")
     .then((module) => ({

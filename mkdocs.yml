@@ -64,6 +64,7 @@ nav:
       - Print Layout: user-guide/print-layout.md
       - Processing Tools: user-guide/processing.md
       - Model Builder: user-guide/model-builder.md
+      - Object-Based Analysis: user-guide/obia.md
       - AI Segmentation: user-guide/segmentation.md
       - Point Cloud Annotation: user-guide/point-cloud-annotation.md
       - SQL Workspace: user-guide/sql-workspace.md

@@ -32,6 +32,7 @@ import {
   Printer,
   RefreshCw,
   Save,
+  Shapes,
   Share2,
   SlidersHorizontal,
   Sparkles,
@@ -145,6 +146,7 @@ export interface ToolbarCommandContext {
   setAssistantOpen: AppState["setAssistantOpen"];
   setGeocodeOpen: AppState["setGeocodeOpen"];
   setModelBuilderOpen: AppState["setModelBuilderOpen"];
+  setObiaWorkbenchOpen: AppState["setObiaWorkbenchOpen"];
   setBatchToolsOpen: AppState["setBatchToolsOpen"];
   setSegmentationOpen: AppState["setSegmentationOpen"];
   setObjectDetectionOpen: AppState["setObjectDetectionOpen"];
@@ -215,6 +217,7 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
     setAssistantOpen,
     setGeocodeOpen,
     setModelBuilderOpen,
+    setObiaWorkbenchOpen,
     setBatchToolsOpen,
     setSegmentationOpen,
     setObjectDetectionOpen,
@@ -466,6 +469,15 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       keywords: "model builder pipeline chain modeler workflow graph canvas node",
       icon: Workflow,
       run: () => setModelBuilderOpen(true),
+    },
+    {
+      id: "proc.obiaWorkbench",
+      title: t("toolbar.command.obiaWorkbench"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords:
+        "obia object based image analysis segmentation segment classify land cover ecognition",
+      icon: Shapes,
+      run: () => setObiaWorkbenchOpen(true),
     },
     {
       id: "proc.batchTools",

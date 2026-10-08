@@ -88,10 +88,36 @@ const PRESERVED_GEO_KEYS = [
  */
 const MAX_CLIENT_RASTER_BYTES = 512 * 1024 * 1024;
 
+const SAMPLE_FORMAT_TAG = 339;
+
+type GeoTiffImage = Awaited<ReturnType<Awaited<ReturnType<typeof fromArrayBuffer>>["getImage"]>>;
+
+/**
+ * Let geotiff.js decode a multi-band file whose SampleFormat tag holds fewer
+ * values than SamplesPerPixel. TIFF sizes the tag per sample, but writers
+ * (including geolibre-wasm's COG converter before the whitebox-wasm fix) emit
+ * a single value; geotiff.js indexes it per sample and throws "Unsupported data
+ * format/bitsPerSample" for band 2+. Reusing the last value matches GDAL.
+ */
+function padShortSampleFormat(image: GeoTiffImage): void {
+  const samples = image.getSamplesPerPixel();
+  const formats = image.fileDirectory.getValue("SampleFormat") as ArrayLike<number> | undefined;
+  if (!formats || formats.length === 0 || formats.length >= samples) return;
+  const padded = Uint16Array.from({ length: samples }, (_, i) =>
+    i < formats.length ? formats[i] : formats[formats.length - 1],
+  );
+  // geotiff.js reads the tag from several places (getSampleFormat and the
+  // per-sample readers), so replace the parsed value itself. 339 = SampleFormat.
+  const fields = (image.fileDirectory as unknown as { actualizedFields?: Map<number, unknown> })
+    .actualizedFields;
+  fields?.set(SAMPLE_FORMAT_TAG, padded);
+}
+
 /** Decode GeoTIFF bytes into a {@link RasterData}. */
 export async function readRasterData(bytes: ArrayBuffer): Promise<RasterData> {
   const tiff = await fromArrayBuffer(bytes);
   const image = await tiff.getImage();
+  padShortSampleFormat(image);
   const width = image.getWidth();
   const height = image.getHeight();
   // Guard against decoding a raster too large to hold in browser memory before

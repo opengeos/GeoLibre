@@ -54,6 +54,7 @@ type HookSuppliedContext =
   | "setAssistantOpen"
   | "setGeocodeOpen"
   | "setModelBuilderOpen"
+  | "setObiaWorkbenchOpen"
   | "setBatchToolsOpen"
   | "setSegmentationOpen"
   | "setObjectDetectionOpen"
@@ -104,6 +105,7 @@ export function useToolbarCommands(options: UseToolbarCommandsOptions): Command[
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
+  const setObiaWorkbenchOpen = useAppStore((s) => s.setObiaWorkbenchOpen);
   const setBatchToolsOpen = useAppStore((s) => s.setBatchToolsOpen);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
@@ -130,6 +132,7 @@ export function useToolbarCommands(options: UseToolbarCommandsOptions): Command[
     setAssistantOpen,
     setGeocodeOpen,
     setModelBuilderOpen,
+    setObiaWorkbenchOpen,
     setBatchToolsOpen,
     setSegmentationOpen,
     setObjectDetectionOpen,

@@ -132,6 +132,7 @@ import {
   DashboardPanel,
   GeocodeDialog,
   ModelBuilderPanel,
+  ObiaWorkbenchPanel,
   NetworkToolsDialog,
   NotebookPanel,
   ObjectDetectionDialog,
@@ -926,6 +927,26 @@ export function DesktopShell({
                     await addRasterToMap(createAppAPI(mapControllerRef), file, {
                       name,
                     });
+                  }}
+                />
+              </Suspense>
+            </MountWhenOpened>
+          </SectionErrorBoundary>
+          {/* Mounted inside the map area like Model Builder: the workbench
+              floats over the map so the objects it adds stay in view. */}
+          <SectionErrorBoundary
+            label="Object-Based Analysis"
+            displayName={t("shell.section.obiaWorkbench")}
+          >
+            <MountWhenOpened isOpen={(ui) => ui.obiaWorkbenchOpen}>
+              <Suspense fallback={null}>
+                <ObiaWorkbenchPanel
+                  mapControllerRef={mapControllerRef}
+                  onAddRaster={async (bytes, name, fileName) => {
+                    const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
+                      type: "image/tiff",
+                    });
+                    await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
                   }}
                 />
               </Suspense>
