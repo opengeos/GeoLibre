@@ -10,8 +10,18 @@ back to an editable ArcGIS Feature Service in the web and desktop apps.
 3. Choose **Layer actions → Save edits to ArcGIS service**. The status reports
    inserted, updated, and deleted records, followed by any individual failures.
 
+Edits stay local until step 3. The **Save** button of an Edit geometry session,
+and **Save** in the attribute table, only commit the edits to the layer in
+GeoLibre; the layer row then reminds you that they are not on the service yet.
+After the service save, a new feature shows its service-assigned object ID and
+any server-calculated fields such as area and length.
+
 The save action appears when the service advertises supported editing operations
-and supplies its field schema and object ID field. GeoLibre checks the latest
+and supplies its field schema and object ID field. Versioned layers and layers
+whose dates are in an unknown time zone are read-only. A layer that stores
+measure (M) values, common for Enterprise polylines, accepts attribute edits and
+deletions, but GeoLibre cannot author M values, so adding or reshaping its
+features is refused at save. GeoLibre checks the latest
 service metadata again before each save. The server remains responsible for
 user permissions, ownership restrictions, and attribute rules.
 Write requests require HTTPS. Browser deployments also require the service to
@@ -29,6 +39,8 @@ GeoLibre reads the attribute domains the layer publishes in its own metadata
   keep the codes.
 - A **range domain** on an integer or floating-point field becomes a bounded
   number input. Bounds are inclusive and integer fields reject decimals.
+- A numeric field **without a domain** edits as a number, so a value typed into
+  a column that holds no values yet is still saved as a number.
 - A **type or subtype field** (`typeIdField`/`types[]` or
   `subtypeField`/`subtypes[]`) becomes a dropdown of the published types.
   Fields whose domain the selected type overrides switch their choices and

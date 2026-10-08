@@ -537,6 +537,62 @@ export function formatUtc(ms: number): string {
   return `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
+/** The UTC calendar day of a timestamp as `2026-10-07`, the value a date input holds. */
+export function utcDateKey(ms: number): string {
+  return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : "";
+}
+
+/** The time of day of a timestamp as `06:00 UTC`, what a run on a known day reads as. */
+export function formatUtcTimeOfDay(ms: number): string {
+  if (!Number.isFinite(ms)) return "—";
+  return `${new Date(ms).toISOString().slice(11, 16)} UTC`;
+}
+
+/** The indices of the steps that fall on a UTC calendar day, in axis order. */
+export function stepsOnUtcDate(values: readonly number[], dateKey: string): number[] {
+  const steps: number[] = [];
+  // An unreadable timestamp keys as "", which would otherwise match every other one.
+  if (!dateKey) return steps;
+  values.forEach((value, index) => {
+    if (utcDateKey(value) === dateKey) steps.push(index);
+  });
+  return steps;
+}
+
+/**
+ * The step to jump to when a day is picked: the one at the current step's time of day if that
+ * day has it, else the day's first step, else the step nearest that time on that day (a day the
+ * archive skips).
+ *
+ * @param values - Epoch milliseconds of each step.
+ * @param dateKey - The picked day, `YYYY-MM-DD`.
+ * @param current - The step shown now, whose time of day is kept.
+ * @returns The step index, or -1 when the day does not parse or the axis is empty.
+ */
+export function stepForUtcDate(
+  values: readonly number[],
+  dateKey: string,
+  current: number,
+): number {
+  const day = Date.parse(`${dateKey}T00:00:00Z`);
+  if (!Number.isFinite(day) || values.length === 0) return -1;
+  const now = values[current];
+  const timeOfDay = Number.isFinite(now) ? ((now % 86_400_000) + 86_400_000) % 86_400_000 : 0;
+  const target = day + timeOfDay;
+  const onDay = stepsOnUtcDate(values, dateKey);
+  if (onDay.length) return onDay.find((index) => values[index] === target) ?? onDay[0];
+  let best = -1;
+  let bestDistance = Infinity;
+  values.forEach((value, index) => {
+    const distance = Math.abs(value - target);
+    if (distance < bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
+
 /** A lead time in seconds as `+6 h`, or `+3 d 6 h` from two days on. */
 export function formatLeadTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "—";

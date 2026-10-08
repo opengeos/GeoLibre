@@ -13,6 +13,7 @@ import {
   fetchDynamicalCatalog,
   formatLeadTime,
   formatUtc,
+  formatUtcTimeOfDay,
   memberDimension,
   nearestIndex,
   nearestLongitudeIndex,
@@ -34,6 +35,9 @@ import {
   sliceDimensions,
   sliceSelectorValue,
   slicesPerChunk,
+  stepForUtcDate,
+  stepsOnUtcDate,
+  utcDateKey,
   type DynamicalVariable,
 } from "../packages/plugins/src/plugins/dynamical-api";
 import { isIcechunkAsset } from "../packages/plugins/src/plugins/stac-api";
@@ -689,5 +693,38 @@ describe("point series", () => {
       seriesCsv([{ time, value: 1, min: 0, max: 2 }], 'a,"b"'),
       'time_utc,"a,""b"" mean","a,""b"" min","a,""b"" max"\n2026-10-08T06:00:00.000Z,1,0,2\n',
     );
+  });
+});
+
+describe("forecast run day picker", () => {
+  const hour = 3_600_000;
+  // Six-hourly runs from 2026-10-01 00Z, with 2026-10-03 missing from the archive.
+  const runs = [0, 6, 12, 18, 24, 30, 36, 42, 72, 78, 84, 90].map(
+    (offset) => Date.UTC(2026, 9, 1) + offset * hour,
+  );
+
+  it("keys and labels a timestamp by its UTC day and time", () => {
+    assert.equal(utcDateKey(runs[5]), "2026-10-02");
+    assert.equal(formatUtcTimeOfDay(runs[5]), "06:00 UTC");
+    assert.equal(utcDateKey(Number.NaN), "");
+  });
+
+  it("lists the runs on a day", () => {
+    assert.deepEqual(stepsOnUtcDate(runs, "2026-10-02"), [4, 5, 6, 7]);
+    assert.deepEqual(stepsOnUtcDate(runs, "2026-10-03"), []);
+    assert.deepEqual(stepsOnUtcDate([Number.NaN, Number.NaN], ""), []);
+  });
+
+  it("keeps the run's time of day when the day changes", () => {
+    assert.equal(stepForUtcDate(runs, "2026-10-04", 2), 10);
+  });
+
+  it("falls back to the day's first run, then the nearest run", () => {
+    assert.equal(stepForUtcDate([runs[0], runs[1]], "2026-10-01", 0), 0);
+    assert.equal(stepForUtcDate(runs.slice(0, 2).concat(runs[6]), "2026-10-02", 1), 2);
+    // 2026-10-03 06Z is missing; 2026-10-03 18Z (index 7) is 12 h away, 2026-10-04 00Z is 18 h.
+    assert.equal(stepForUtcDate(runs, "2026-10-03", 1), 7);
+    assert.equal(stepForUtcDate(runs, "not a day", 1), -1);
+    assert.equal(stepForUtcDate([], "2026-10-01", 0), -1);
   });
 });

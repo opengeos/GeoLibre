@@ -1,4 +1,8 @@
-import { type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  type MouseEvent as ReactMouseEvent,
+  useMemo,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   IDENTIFY_ALL_LAYERS_ID,
@@ -21,6 +25,7 @@ import {
   isPlaceholderLayer,
   placeholderMessage,
 } from "@geolibre/map";
+import { arcGISLayerHasPendingEdits, isArcGISWritableLayer } from "@geolibre/plugins";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@geolibre/ui";
 import {
   ChevronDown,
@@ -211,6 +216,24 @@ export function LayerRow({
       : t("layers.identifyCapabilityDisabled");
   const geometryEditActive = geometryEditLayerId === layer.id;
   const geometryEditElsewhere = geometryEditLayerId !== null && !geometryEditActive;
+  // Edits to an ArcGIS layer stay local until Save edits to ArcGIS service, so
+  // say so once a geometry session or table edit leaves some unsent. Keyed on
+  // the features and baseline, which every edit and save replaces.
+  const arcgisEditsUnsent = useMemo(
+    () =>
+      !geometryEditActive &&
+      layer.metadata.arcgisSaveUncertain !== true &&
+      isArcGISWritableLayer(layer) &&
+      arcGISLayerHasPendingEdits(layer.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+    [
+      geometryEditActive,
+      layer.geojson,
+      layer.metadata.arcgisEditBaseline,
+      layer.metadata.arcgisEditInfo,
+      layer.metadata.arcgisSaveUncertain,
+    ],
+  );
   const isLayerLocked =
     collaboration.isActive && (collaboration.lockedLayerIds ?? []).includes(layer.id);
   // Whether collaboration lets this session touch the layer at all —
@@ -466,6 +489,9 @@ export function LayerRow({
         >
           {refreshStatus.message}
         </p>
+      )}
+      {arcgisEditsUnsent && !refreshStatus && (
+        <p className="mt-1 text-[10px] text-amber-600">{t("layers.arcgisEditsUnsent")}</p>
       )}
       {geometryEditActive && (
         <div className="mt-1 flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-1">
