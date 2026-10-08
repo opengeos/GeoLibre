@@ -135,6 +135,32 @@ describe("convertGeoTiffToCog", () => {
     });
   }
 
+  it("skips the overview pyramid when asked, for categorical rasters", async () => {
+    const { fromArrayBuffer, writeArrayBuffer } = await import("geotiff");
+    // 600 x 600 is large enough to get averaged overviews by default.
+    const codes = new Uint8Array(600 * 600).map((_, i) => (i % 2 ? 1 : 3));
+    const tiff = new Uint8Array(
+      writeArrayBuffer(codes, {
+        width: 600,
+        height: 600,
+        ModelPixelScale: [1, 1, 0],
+        ModelTiepoint: [0, 0, 0, 500000, 4000000, 0],
+        ProjectedCSTypeGeoKey: 32617,
+        GTModelTypeGeoKey: 1,
+      } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer,
+    );
+    const imageCount = async (bytes: Uint8Array) =>
+      (
+        await fromArrayBuffer(
+          bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+        )
+      ).getImageCount();
+    assert.ok((await imageCount(await convertGeoTiffToCog(tiff))) > 1);
+    const flat = await convertGeoTiffToCog(tiff, { overviews: false });
+    assert.equal(await imageCount(flat), 1);
+    assert.equal(await isTiledGeoTiff(flat), true);
+  });
+
   it("defaults to deflate, which compresses better than storing raw", async () => {
     const [deflate, none] = await Promise.all([
       convertGeoTiffToCog(stripedTiff),

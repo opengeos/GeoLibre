@@ -48,12 +48,15 @@ export function ObiaExportStep({ onAddRaster }: ObiaExportStepProps): ReactEleme
       );
       // Cloud-optimize both: the map renders COGs directly (a striped TIFF
       // would prompt for conversion), and a COG is the better file to hand out.
+      // No overviews: the encoder averages them, which would blend class codes
+      // and colors. The workbench's pixel cap keeps both well inside the
+      // converter's sample limit (3 bands x 16.7M pixels < 100M samples).
       cache.current = {
         key,
         raster: {
           ...raster,
-          codes: await convertGeoTiffToCog(raster.codes),
-          rgb: await convertGeoTiffToCog(raster.rgb),
+          codes: await convertGeoTiffToCog(raster.codes, { overviews: false }),
+          rgb: await convertGeoTiffToCog(raster.rgb, { overviews: false }),
         },
       };
     }

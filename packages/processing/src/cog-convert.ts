@@ -52,6 +52,12 @@ export type CogWasmCompression = (typeof COG_WASM_COMPRESSIONS)[number];
 export interface ConvertGeoTiffToCogOptions {
   /** Tile compression codec. Defaults to `"deflate"`. */
   compression?: CogWasmCompression;
+  /**
+   * Build the overview pyramid (default true). The encoder downsamples with a
+   * 2x2 average that ignores NoData, which blends categorical values (class
+   * codes, colors at class edges), so categorical rasters should pass false.
+   */
+  overviews?: boolean;
 }
 
 /** Hard ceiling for the browser converter's decoded sample count. */
@@ -178,7 +184,10 @@ export async function convertGeoTiffToCog(
       }
       builder.set_tile_size(COG_TILE_SIZE);
       builder.set_compression(options.compression ?? "deflate");
-      builder.set_overview_levels(overviewLevels(width, height));
+      // An explicit empty list writes no overviews (unset would auto-compute them).
+      builder.set_overview_levels(
+        options.overviews === false ? new Uint32Array() : overviewLevels(width, height),
+      );
 
       // read_all_f64 is the one reader that decodes any source dtype (Int16,
       // Float32, ...) to a common type; the typed per-band readers

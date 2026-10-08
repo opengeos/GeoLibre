@@ -36,6 +36,22 @@ its feature id) is the object's label, so the attribute table, selection and
 the later workbench steps all refer to the same objects. Tick **Also add the
 label raster to the map** to add the label raster itself.
 
+### About the algorithm
+
+The method is Whitebox's seeded region growing (`image_segmentation`). It is
+not eCognition's multiresolution segmentation, so an eCognition scale
+parameter does not carry over: tune the threshold and minimum size on your own
+imagery. The Whitebox catalog's other segmentation tools (SLIC superpixels,
+Felzenszwalb graph, marker watershed) are wrappers around this same region
+growing with a remapped threshold, which is why the workbench offers it under
+its real name.
+
+### Limits
+
+The workbench processes up to about 16.7 million pixels (4096 × 4096) per
+image. Clip a larger scene to your area of interest first, for example with
+**Processing → GeoLibre Toolbox → Raster → Clip by extent**.
+
 ## 2. Measure
 
 Once objects exist, **Measure** computes per-object features on the original
@@ -136,19 +152,3 @@ class). The Export step also burns the classes onto the image's pixel grid:
 - **Save class codes (GeoTIFF)** saves a single-band Cloud-Optimized GeoTIFF of
   class codes (1, 2, ... with 0 as NoData) on the source image's grid and CRS.
 - **Save legend (CSV)** saves the code, class name and color of each class.
-
-### About the algorithm
-
-The method is Whitebox's seeded region growing (`image_segmentation`). It is
-not eCognition's multiresolution segmentation, so an eCognition scale
-parameter does not carry over: tune the threshold and minimum size on your own
-imagery. The Whitebox catalog's other segmentation tools (SLIC superpixels,
-Felzenszwalb graph, marker watershed) are wrappers around this same region
-growing with a remapped threshold, which is why the workbench offers it under
-its real name.
-
-### Limits
-
-The workbench processes up to about 16.7 million pixels (4096 × 4096) per
-image. Clip a larger scene to your area of interest first, for example with
-**Processing → GeoLibre Toolbox → Raster → Clip by extent**.
