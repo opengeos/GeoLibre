@@ -32,6 +32,7 @@ import {
 import { openAddData } from "../../layout/add-data/open-add-data";
 import type { ADD_DATA_DIALOG_SOURCES } from "./layer-panel-utils";
 import { LayerOpacitySlider } from "./LayerOpacitySlider";
+import { useCompactLayerList } from "./useCompactLayerList";
 import type { LayerRename } from "./useLayerRename";
 
 interface LayerGroupHeaderProps {
@@ -84,6 +85,7 @@ export function LayerGroupHeader({
     commitGroupRename,
     cancelGroupRename,
   } = rename;
+  const [compactLayerList] = useCompactLayerList();
   return (
     <div
       data-group-header=""
@@ -94,7 +96,9 @@ export function LayerGroupHeader({
       // the collapse toggle, which is where a listitem may carry it.
       role="listitem"
       aria-level={depth + 1}
-      className={`w-full min-w-0 max-w-full rounded-md border p-2 transition-colors ${
+      className={`w-full min-w-0 max-w-full rounded-md border transition-colors ${
+        compactLayerList ? "px-2 py-0.5" : "p-2"
+      } ${
         isDropTarget
           ? "border-primary bg-primary/10"
           : "border-border bg-muted/30 hover:border-muted-foreground/40"
@@ -303,7 +307,7 @@ export function LayerGroupHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {!group.collapsed && (
+      {!group.collapsed && !compactLayerList && (
         <LayerOpacitySlider
           label={t("layers.groupOpacity")}
           ariaLabel={t("layers.groupOpacityAria", { name: group.name })}

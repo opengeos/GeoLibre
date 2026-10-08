@@ -217,6 +217,13 @@ export interface DesktopLayoutSettings {
   browserPanelVisible: boolean;
   /** Same as {@link browserPanelVisible}, for the Comments right panel. */
   commentsPanelVisible: boolean;
+  /**
+   * Compact Layers panel: each row shows only its visibility toggle, swatch,
+   * and name, and the opacity slider and action buttons appear on the selected
+   * row alone. Keeps a project with hundreds of layers (e.g. a KMZ of
+   * placemarks) scannable, like the Places tree in Google Earth (#3045).
+   */
+  compactLayerList: boolean;
   layerPanelVisible: boolean;
   showProjectInfo: boolean;
   stylePanelVisible: boolean;
@@ -287,6 +294,7 @@ export function setSettingsKeychainWritable(writable: boolean): void {
 export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
   browserPanelVisible: true,
   commentsPanelVisible: true,
+  compactLayerList: false,
   layerPanelVisible: true,
   showProjectInfo: true,
   stylePanelVisible: true,
@@ -603,6 +611,10 @@ function normalizeDesktopLayoutSettings(layout: unknown): DesktopLayoutSettings 
       typeof candidate.commentsPanelVisible === "boolean"
         ? candidate.commentsPanelVisible
         : DEFAULT_DESKTOP_LAYOUT_SETTINGS.commentsPanelVisible,
+    compactLayerList:
+      typeof candidate.compactLayerList === "boolean"
+        ? candidate.compactLayerList
+        : DEFAULT_DESKTOP_LAYOUT_SETTINGS.compactLayerList,
     layerPanelVisible:
       typeof candidate.layerPanelVisible === "boolean"
         ? candidate.layerPanelVisible

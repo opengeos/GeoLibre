@@ -2,6 +2,7 @@ import { Button } from "@geolibre/ui";
 import {
   FolderCog,
   FolderTree,
+  ListCollapse,
   MessageSquare,
   PanelLeft,
   PanelRight,
@@ -144,6 +145,20 @@ export function LayoutSection() {
           />
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
           <span>{t("settings.layout.showCommentsPanel")}</span>
+        </label>
+        <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+          <input
+            className="h-4 w-4"
+            type="checkbox"
+            checked={draftDesktopSettings.layout.compactLayerList}
+            onChange={(event) =>
+              updateDraftLayoutSettings({
+                compactLayerList: event.target.checked,
+              })
+            }
+          />
+          <ListCollapse className="h-4 w-4 text-muted-foreground" />
+          <span>{t("settings.layout.compactLayerList")}</span>
         </label>
       </div>
       {showsAdvancedNotices(desktopSettings.uiProfile) ? (

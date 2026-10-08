@@ -2777,6 +2777,7 @@
       "showStylePanel": "Show Style panel",
       "showBrowserPanel": "Show Browser panel",
       "showCommentsPanel": "Show Comments panel",
+      "compactLayerList": "Compact Layers panel (show layer controls only on the selected layer)",
       "showAttributePanel": "Show Attribute panel",
       "urlParamsNote": "URL layout parameters still apply when present in shared viewer links."
     },
@@ -8479,6 +8480,8 @@
     "emptyBeginner": "No layers yet. Add basemaps via Plugins → Basemaps, or your own data via the Add Data menu.",
     "hideAllLayers": "Hide all layers",
     "showAllLayers": "Show all layers",
+    "compactView": "Compact view",
+    "compactViewHint": "Compact view: show opacity and layer buttons only on the selected layer",
     "hoverTooltips": "Hover tooltips",
     "dragNamedToReorder": "Drag {{name}} to reorder",
     "hideLayer": "Hide layer",
