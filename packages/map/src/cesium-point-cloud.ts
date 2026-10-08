@@ -615,11 +615,15 @@ export function parseGeoKeyDirectory(
   return keys;
 }
 
-async function defaultFetchBytes(url: string, signal?: AbortSignal): Promise<Uint8Array> {
+async function defaultFetchBytes(
+  url: string,
+  signal?: AbortSignal,
+  maxBytes = MAX_LAS_FILE_BYTES,
+): Promise<Uint8Array> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Point cloud download failed (HTTP ${response.status})`);
   const length = Number(response.headers.get("content-length"));
-  if (Number.isFinite(length) && length > MAX_LAS_FILE_BYTES) {
+  if (Number.isFinite(length) && length > maxBytes) {
     // Cancel rather than read a body we are about to refuse.
     await response.body?.cancel();
     throw tooLargeError(length);
@@ -634,7 +638,7 @@ async function defaultFetchBytes(url: string, signal?: AbortSignal): Promise<Uin
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > MAX_LAS_FILE_BYTES) {
+    if (total > maxBytes) {
       await reader.cancel();
       throw tooLargeError(total);
     }
@@ -841,6 +845,16 @@ interface EptManifest {
 /** EPT nodes fetched and decoded at once. */
 const EPT_CONCURRENCY = 4;
 
+/**
+ * Largest EPT node, compressed or decoded, the globe reads. Entwine writes
+ * nodes of tens of thousands of points (a few MB); with four in flight, a
+ * cap this size bounds the peak memory a malformed dataset can claim.
+ */
+export const MAX_EPT_NODE_BYTES = 64 * 1024 * 1024;
+
+/** An EPT octree key: `depth-x-y-z`. */
+const EPT_KEY = /^\d+-\d+-\d+-\d+$/;
+
 export interface LoadEptOptions {
   /** Points to load at most; defaults to {@link MAX_POINT_CLOUD_POINTS}. */
   budget?: number;
@@ -896,7 +910,10 @@ export async function loadEptPointCloud(
     : MAX_POINT_CLOUD_POINTS;
   const signal = options.signal;
   const fetchJson = options.fetchJson ?? defaultFetchJson;
-  const fetchBytes = options.fetchBytes ?? defaultFetchBytes;
+  const fetchBytes =
+    options.fetchBytes ??
+    ((nodeUrl: string, nodeSignal?: AbortSignal) =>
+      defaultFetchBytes(nodeUrl, nodeSignal, MAX_EPT_NODE_BYTES));
   const manifest = (await fetchJson(url, signal)) as EptManifest;
   signal?.throwIfAborted();
   const dataType = manifest.dataType ?? "laszip";
@@ -926,7 +943,10 @@ export async function loadEptPointCloud(
       number
     >;
     signal?.throwIfAborted();
-    for (const [k, n] of Object.entries(page)) if (typeof n === "number") counts.set(k, n);
+    // Keys become request paths that carry the manifest's query (often a
+    // signed token), so anything but an octree key is ignored.
+    for (const [k, n] of Object.entries(page))
+      if (typeof n === "number" && EPT_KEY.test(k)) counts.set(k, n);
   };
   await readPage("0-0-0-0");
   const queue = [...counts.keys()].sort((a, b) => keyDepth(a) - keyDepth(b));
@@ -966,6 +986,8 @@ export async function loadEptPointCloud(
     const file = await fetchBytes(resource(`ept-data/${key}.laz`), signal);
     signal?.throwIfAborted();
     const header = Las.Header.parse(file);
+    if (header.pointCount * header.pointDataRecordLength > MAX_EPT_NODE_BYTES)
+      throw new Error(`EPT node ${key} is too large to decode on the globe`);
     const points = await Las.PointData.decompressFile(file, lazPerf);
     return Las.View.create(points, header, [], POINT_DIMENSIONS);
   };

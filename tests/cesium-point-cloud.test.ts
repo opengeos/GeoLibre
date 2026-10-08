@@ -1028,6 +1028,67 @@ describe("loadEptPointCloud", () => {
     assert.deepEqual([cloud.zMin, cloud.zMax], [10, 30]);
   });
 
+  it("ignores hierarchy keys that are not octree keys", async () => {
+    const fake = fakeEpt(
+      {
+        "ept.json": manifest,
+        "ept-hierarchy/0-0-0-0.json": { "0-0-0-0": 1, "../../secret": 5, "1-0-0-0/x": 5 },
+      },
+      { "0-0-0-0": nodePoints(1, 10) },
+    );
+    const cloud = await loadEptPointCloud("https://h/data/ept.json", {
+      las: fake.las,
+      fetchJson: fake.fetchJson,
+      fetchBytes: fake.fetchBytes,
+      projector: metresProjector,
+      lazPerf: async () => ({}),
+    });
+    assert.equal(cloud.count, 1);
+    assert.ok(!fake.fetched.some((u) => u.includes("secret") || u.includes("/x")));
+  });
+
+  it("refuses a node too large to decode", async () => {
+    const fake = fakeEpt(
+      { "ept.json": manifest, "ept-hierarchy/0-0-0-0.json": { "0-0-0-0": 1 } },
+      { "0-0-0-0": nodePoints(1, 10) },
+    );
+    const huge = {
+      Las: {
+        ...fake.las.Las,
+        Header: { parse: () => ({ pointCount: 1e9, pointDataRecordLength: 34 }) },
+      },
+    } as unknown as LasModule;
+    await assert.rejects(
+      loadEptPointCloud("https://h/data/ept.json", {
+        las: huge,
+        fetchJson: fake.fetchJson,
+        fetchBytes: fake.fetchBytes,
+        projector: metresProjector,
+        lazPerf: async () => ({}),
+      }),
+      /too large to decode/,
+    );
+  });
+
+  it("reads a geographic EPSG code through the default projector", async () => {
+    const fake = fakeEpt(
+      {
+        "ept.json": { ...manifest, srs: { authority: "EPSG", horizontal: "4326" } },
+        "ept-hierarchy/0-0-0-0.json": { "0-0-0-0": 1 },
+      },
+      { "0-0-0-0": [[-95.5, 41.25, 300]] },
+    );
+    const cloud = await loadEptPointCloud("https://h/data/ept.json", {
+      las: fake.las,
+      fetchJson: fake.fetchJson,
+      fetchBytes: fake.fetchBytes,
+      lazPerf: async () => ({}),
+    });
+    assert.ok(Math.abs(cloud.positions[0] + 95.5) < 1e-9, `lng ${cloud.positions[0]}`);
+    assert.ok(Math.abs(cloud.positions[1] - 41.25) < 1e-9, `lat ${cloud.positions[1]}`);
+    assert.equal(cloud.positions[2], 300);
+  });
+
   it("refuses data types it cannot decode", async () => {
     const fake = fakeEpt({ "ept.json": { ...manifest, dataType: "binary" } }, {});
     await assert.rejects(
