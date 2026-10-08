@@ -105,9 +105,9 @@ describe("ArcGIS edit validation", () => {
     const loaded = identifyArcGISFeatures(
       fc(
         // Only in the GeoJSON id.
-        { type: "Feature", id: 1, properties: { name: "a" }, geometry: null },
+        { ...feature(), id: 1, properties: { name: "a" } },
         // Under a name that differs in case.
-        { type: "Feature", properties: { objectid: 2 }, geometry: null },
+        { ...feature(), properties: { objectid: 2 } },
         feature(3),
         // The same record from an overlapping page.
         feature(3, "again"),
