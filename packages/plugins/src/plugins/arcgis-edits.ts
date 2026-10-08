@@ -85,10 +85,15 @@ export function arcGISEditCapabilities(info: ArcGISEditInfo) {
   };
 }
 
+/** Whether a value can be an ArcGIS object ID: a non-negative safe integer. */
+function isArcGISObjectIdValue(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
 export function arcGISObjectId(feature: Feature, field: string): number | undefined {
   const value = feature.properties?.[field];
   if (value == null) return undefined;
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+  if (!isArcGISObjectIdValue(value)) {
     throw new Error(`Invalid ArcGIS object ID in ${field}.`);
   }
   return value;
@@ -141,9 +146,7 @@ function recoveredArcGISObjectId(
     (name) => name !== field && name.toLowerCase() === lower && properties[name] != null,
   );
   const value = key === undefined ? feature.id : properties[key];
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-    ? { id: value, key }
-    : undefined;
+  return isArcGISObjectIdValue(value) ? { id: value, key } : undefined;
 }
 
 /**
@@ -171,8 +174,7 @@ export function identifyArcGISFeatures(data: FeatureCollection, field?: string):
     }
     // Loading never fails on an odd ID; saving validates it with a clear error.
     const value = feature.properties?.[field];
-    const id =
-      typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+    const id = isArcGISObjectIdValue(value) ? value : undefined;
     if (id !== undefined) {
       // Overlapping pages can repeat a record; the first copy is kept.
       if (seen.has(id)) continue;
