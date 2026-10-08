@@ -7414,7 +7414,8 @@
     "steps": {
       "segment": "Segment",
       "measure": "Measure",
-      "train": "Label samples"
+      "train": "Label samples",
+      "classify": "Classify"
     },
     "image": "Image",
     "imagePlaceholder": "Choose a raster layer",
@@ -7491,6 +7492,32 @@
       "error": {
         "duplicateName": "Each class needs a unique, non-empty name.",
         "nothingToSplit": "Each class needs at least two training samples to hold some out."
+      }
+    },
+    "classify": {
+      "method": "Classifier",
+      "methods": {
+        "random-forest": "Random forest",
+        "rules": "Threshold rules"
+      },
+      "rfHint_one": "Trains on {{count}} training sample and predicts a class for every object. The engine fixes the random seed, so the same inputs give the same result.",
+      "rfHint_other": "Trains on {{count}} training samples and predicts a class for every object. The engine fixes the random seed, so the same inputs give the same result.",
+      "trees": "Trees",
+      "features": "Features ({{count}} of {{total}})",
+      "rulesHint": "Each object gets the class of the first rule it matches, top to bottom; objects matching none get the default class.",
+      "ruleField": "Feature",
+      "ruleOp": "Comparison",
+      "ruleValue": "Value",
+      "ruleClass": "Class",
+      "removeRule": "Remove rule",
+      "addRule": "Add rule",
+      "defaultClass": "Default class",
+      "run": "Classify",
+      "running": "Classifying…",
+      "result": "Classified {{count}} objects: {{summary}}",
+      "imputed": "Objects missing a value used the feature's mean: {{fields}}.",
+      "error": {
+        "failed": "Classification failed."
       }
     }
   },

@@ -77,6 +77,27 @@ Labels are stored on the objects themselves, in the `obia_class` and
 `obia_sample` (`training` or `validation`) properties, so they are saved with
 the project and visible in the attribute table.
 
+## 4. Classify
+
+Once objects are measured, **Classify** predicts a class for every object and
+writes it to the `obia_predicted` property; the layer is then filled by
+predicted class in the class colors.
+
+- **Random forest** trains on the training samples (validation samples are left
+  out) using the ticked features, all of them by default. The engine
+  (`classify_objects_random_forest`) fixes its random seed, so the same inputs
+  always give the same classification. Objects missing a feature value (GLCM
+  texture of a tiny object, for example) get the feature's mean, and the step
+  says which features that affected.
+- **Threshold rules** assign classes without training: each rule compares one
+  feature with a value, and an object takes the class of the first rule it
+  matches, top to bottom. Objects matching no rule get the default class
+  (shown in gray). Order the rules from most to least specific.
+
+The Whitebox catalog's "SVM" and "ensemble" object classifiers are the same
+random forest with a different number of trees, so the workbench offers only
+the random forest.
+
 ### About the algorithm
 
 The method is Whitebox's seeded region growing (`image_segmentation`). It is

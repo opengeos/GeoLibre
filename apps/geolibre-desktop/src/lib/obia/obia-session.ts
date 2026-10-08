@@ -2,6 +2,8 @@ import {
   DEFAULT_OBIA_FEATURE_OPTIONS,
   DEFAULT_REGION_GROWING_PARAMS,
   type ObiaClass,
+  type ObiaClassification,
+  type ObiaRule,
   type ObiaFeatureOptions,
   type ObiaSampleRole,
   type ObiaFeatureTable,
@@ -43,6 +45,26 @@ export interface ObiaFeatureRun {
   finishedAt: string;
 }
 
+export type ObiaClassifierMethod = "random-forest" | "rules";
+
+/** Classifier settings the Classify step edits. */
+export interface ObiaClassifierSettings {
+  method: ObiaClassifierMethod;
+  trees: number;
+  /** Feature columns for the random forest; null = every measured feature. */
+  fields: string[] | null;
+  rules: ObiaRule[];
+  defaultClass: string;
+}
+
+/** A finished classification. */
+export interface ObiaClassificationRun extends ObiaClassification {
+  settings: ObiaClassifierSettings;
+  /** The feature run it used (its `finishedAt`). */
+  featuresAt: string;
+  finishedAt: string;
+}
+
 interface ObiaSessionState {
   sourceLayerId: string;
   bandIndexes: number[];
@@ -54,6 +76,8 @@ interface ObiaSessionState {
   classes: ObiaClass[];
   /** Role new labels get: training or validation samples. */
   labelRole: ObiaSampleRole;
+  classifier: ObiaClassifierSettings;
+  classification: ObiaClassificationRun | null;
   setSourceLayerId: (id: string) => void;
   setBandIndexes: (bands: number[]) => void;
   setParams: (patch: Partial<RegionGrowingParams>) => void;
@@ -63,6 +87,8 @@ interface ObiaSessionState {
   setFeatures: (run: ObiaFeatureRun | null) => void;
   setClasses: (classes: ObiaClass[]) => void;
   setLabelRole: (role: ObiaSampleRole) => void;
+  setClassifier: (patch: Partial<ObiaClassifierSettings>) => void;
+  setClassification: (run: ObiaClassificationRun | null) => void;
 }
 
 /**
@@ -79,12 +105,22 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   features: null,
   classes: [],
   labelRole: "training",
+  classifier: {
+    method: "random-forest",
+    trees: 200,
+    fields: null,
+    rules: [],
+    defaultClass: "unclassified",
+  },
+  classification: null,
   setSourceLayerId: (sourceLayerId) => set({ sourceLayerId, bandIndexes: [] }),
   setBandIndexes: (bandIndexes) => set({ bandIndexes }),
   setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
-  setSegmentation: (segmentation) => set({ segmentation, features: null }),
+  setSegmentation: (segmentation) => set({ segmentation, features: null, classification: null }),
   setFeatureOptions: (patch) => set((s) => ({ featureOptions: { ...s.featureOptions, ...patch } })),
   setFeatures: (features) => set({ features }),
   setClasses: (classes) => set({ classes }),
   setLabelRole: (labelRole) => set({ labelRole }),
+  setClassifier: (patch) => set((s) => ({ classifier: { ...s.classifier, ...patch } })),
+  setClassification: (classification) => set({ classification }),
 }));

@@ -419,6 +419,15 @@ export {
   type RunModelGraphOptions,
 } from "./model-graph";
 export {
+  OBIA_PREDICTED_FIELD,
+  OBIA_RULE_OPS,
+  applyPredictions,
+  classifyByRules,
+  classifyRandomForest,
+  featureTableCsv,
+  type ObiaClassification,
+  type ObiaRule,
+  type ObiaRuleOp,
   OBIA_CLASS_FIELD,
   OBIA_SAMPLE_FIELD,
   collectSamples,

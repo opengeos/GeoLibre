@@ -4,6 +4,7 @@ import { GripVertical, Shapes, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useFloatingPanelDrag } from "../../../hooks/useFloatingPanelDrag";
+import { ObiaClassifyStep } from "./ObiaClassifyStep";
 import { ObiaMeasureStep } from "./ObiaMeasureStep";
 import { ObiaSegmentStep } from "./ObiaSegmentStep";
 import { ObiaTrainStep } from "./ObiaTrainStep";
@@ -18,8 +19,8 @@ interface ObiaWorkbenchPanelProps {
  * Object-Based Analysis workbench (#3053). A floating panel that runs the OBIA
  * pipeline on the WASM tool runner, one step per section: segment a raster
  * layer into objects (one polygon per object, `id` = `segment_id`), measure
- * them, and label training and validation samples. Each later step appears
- * once the one before it has run.
+ * them, label training and validation samples, and classify them. Each later
+ * step appears once the one before it has run.
  */
 export function ObiaWorkbenchPanel({
   mapControllerRef,
@@ -69,6 +70,7 @@ export function ObiaWorkbenchPanel({
         <ObiaSegmentStep mapControllerRef={mapControllerRef} onAddRaster={onAddRaster} />
         <ObiaMeasureStep />
         <ObiaTrainStep />
+        <ObiaClassifyStep />
       </div>
     </div>
   );

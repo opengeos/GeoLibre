@@ -6,6 +6,10 @@ import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
 import { initTools } from "geolibre-wasm/tools";
 import {
+  applyPredictions,
+  classifyByRules,
+  classifyRandomForest,
+  featureTableCsv,
   collectSamples,
   labelObjects,
   renameObjectClass,
@@ -271,6 +275,84 @@ describe("OBIA on the WASM tool engine", () => {
     assert.deepEqual(areas, [800, 800]);
     const dark = [...table.rows.values()].find((row) => (row.mean_b1 ?? 0) < 100)!;
     assert.ok((dark.ndvi ?? 0) > 0.4, "the dark half is vegetation-like (NIR > red)");
+
+    const darkId = [...table.rows.entries()].find(([, row]) => (row.mean_b1 ?? 0) < 100)![0];
+    const brightId = darkId === 1 ? 2 : 1;
+    const rules = await classifyByRules(
+      table,
+      [
+        { field: "ndvi", op: ">", value: 0.3, className: "vegetation" },
+        { field: "mean_b1", op: ">", value: 1000, className: "never" },
+      ],
+      "other",
+    );
+    assert.equal(rules.predictions.get(darkId), "vegetation");
+    assert.equal(rules.predictions.get(brightId), "other");
+
+    const labeled = applyPredictions(segmentation.objects, rules.predictions);
+    assert.deepEqual(labeled.features.map((f) => f.properties?.obia_predicted).sort(), [
+      "other",
+      "vegetation",
+    ]);
+  });
+
+  it("trains a random forest on labeled objects and predicts the rest", async () => {
+    // Eight vertical stripes, alternating dark (vegetation-like) and bright.
+    const width = 40;
+    const height = 20;
+    const values = new Float32Array(width * height * 2);
+    for (let row = 0; row < height; row += 1) {
+      for (let col = 0; col < width; col += 1) {
+        const p = row * width + col;
+        const dark = Math.floor(col / 5) % 2 === 0;
+        const noise = ((row * 5 + col * 3) % 4) * 0.5;
+        values[p * 2] = (dark ? 20 : 200) + noise;
+        values[p * 2 + 1] = (dark ? 90 : 40) + noise;
+      }
+    }
+    const bytes = writeArrayBuffer(values, {
+      width,
+      height,
+      ModelPixelScale: [10, 10, 0],
+      ModelTiepoint: [0, 0, 0, 500000, 4000000, 0],
+      ProjectedCSTypeGeoKey: 32617,
+      GTModelTypeGeoKey: 1,
+    } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer;
+    const image = await splitImageBands(bytes);
+    const segmentation = await segmentImage(image, { threshold: 0.5, minArea: 20, steps: 10 });
+    assert.equal(segmentation.objectCount, 8);
+    const { table } = await computeObjectFeatures(segmentation.labels, image, {
+      spectral: true,
+      shape: false,
+      context: false,
+    });
+    const truth = new Map(
+      [...table.rows.entries()].map(([id, row]) => [
+        id,
+        (row.mean_b1 ?? 0) < 100 ? "trees, shrubs" : "roof",
+      ]),
+    );
+    const ids = [...truth.keys()];
+    // Three of each class train; the remaining two objects are predicted.
+    const training = (["trees, shrubs", "roof"] as const).flatMap((name) =>
+      ids
+        .filter((id) => truth.get(id) === name)
+        .slice(0, 3)
+        .map((segmentId) => ({ segmentId, className: name, role: "training" as const })),
+    );
+    const rf = await classifyRandomForest(table, training, {
+      fields: ["mean_b1", "mean_b2"],
+      trees: 50,
+    });
+    assert.equal(rf.trainingCount, 6);
+    assert.equal(rf.predictions.size, 8);
+    for (const [id, name] of truth) assert.equal(rf.predictions.get(id), name, `object ${id}`);
+    // Deterministic: the engine fixes the seed.
+    const again = await classifyRandomForest(table, training, {
+      fields: ["mean_b1", "mean_b2"],
+      trees: 50,
+    });
+    assert.deepEqual([...again.predictions], [...rf.predictions]);
   });
 });
 
@@ -329,5 +411,22 @@ describe("OBIA training samples", () => {
     assert.equal(held.has(21), false);
     assert.deepEqual([...stratifiedHoldout(samples, 0.3, 7)].sort(), [...held].sort());
     assert.notDeepEqual([...stratifiedHoldout(samples, 0.3, 8)].sort(), [...held].sort());
+  });
+});
+
+describe("featureTableCsv", () => {
+  it("fills missing values with the column mean and drops empty columns", () => {
+    const table = {
+      fields: ["a", "b", "c"],
+      rows: new Map<number, Record<string, number | null>>([
+        [2, { a: 1, b: null, c: null }],
+        [1, { a: 3, b: 4, c: null }],
+      ]),
+    };
+    assert.deepEqual(featureTableCsv(table, ["a", "b", "c"]), {
+      csv: "segment_id,a,b\n1,3,4\n2,1,4\n",
+      fields: ["a", "b"],
+      imputed: { b: 1 },
+    });
   });
 });
