@@ -19,6 +19,8 @@ export function obiaErrorMessage(err: unknown, t: TFunction, fallback: string): 
           height: err.params.height,
           max: err.params.max.toLocaleString(),
         });
+      case "too-many-bands":
+        return t("obia.error.tooManyBands", { count: err.params.bands });
       case "no-such-band":
         return t("obia.error.noSuchBand", { index: err.params.index });
       case "no-bands":
