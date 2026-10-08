@@ -660,10 +660,12 @@ fn is_msix_install(exe: &Path) -> bool {
 /// Whether a scheme's registered `shell\open\command` fails to launch an
 /// existing program: nothing registered, an unparsable command, or a program
 /// that was moved or deleted (such as a bare exe run once from Downloads).
+/// A program path with `%` (an unexpanded `REG_EXPAND_SZ` variable) counts as
+/// live, so another handler is never overwritten on a guess.
 #[cfg(any(windows, test))]
 fn scheme_handler_missing(command: Option<&str>, exists: impl Fn(&Path) -> bool) -> bool {
     match command.and_then(handler_program) {
-        Some(program) => !exists(Path::new(program)),
+        Some(program) => !program.contains('%') && !exists(Path::new(program)),
         None => true,
     }
 }
@@ -5409,6 +5411,10 @@ mod tests {
         assert!(super::scheme_handler_missing(Some(""), |_| true));
         assert!(!super::scheme_handler_missing(Some(installed), |_| true));
         assert!(super::scheme_handler_missing(Some(installed), |_| false));
+        assert!(!super::scheme_handler_missing(
+            Some(r#""%ProgramFiles%\GeoLibre Desktop\geolibre-desktop.exe" "%1""#),
+            |_| false
+        ));
     }
 
     #[cfg(not(feature = "mas"))]
