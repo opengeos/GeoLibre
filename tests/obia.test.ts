@@ -390,6 +390,23 @@ describe("OBIA training samples", () => {
     assert.equal("obia_sample" in (fc.features[0].properties ?? {}), false);
   });
 
+  it("ignores objects without a usable id", () => {
+    const fc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { obia_class: "x" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [1, 1] } },
+      ],
+    };
+    assert.deepEqual(collectSamples(fc), []);
+    const labeled = labelObjects(fc, new Set([Number.NaN]), { className: "y", role: "training" });
+    assert.equal(labeled.features[1].properties?.obia_class, undefined);
+  });
+
   it("uses the map selection's ids as segment ids", () => {
     // GeoLibre's selection identifies a feature by featureSelectionId (its
     // feature id, else its index). Objects carry id = segment_id, so the ids
