@@ -310,7 +310,7 @@ export function slicesPerChunk(dataset: DynamicalDataset, variable: DynamicalVar
 }
 
 /** Decoded bytes in one chunk of a variable. */
-export function chunkBytes(dataset: DynamicalDataset, variable: DynamicalVariable): number {
+export function chunkBytes(variable: DynamicalVariable): number {
   if (!variable.chunks.length) return 0;
   return variable.chunks.reduce((product, length) => product * (length || 1), BYTES_PER_VALUE);
 }
@@ -330,10 +330,7 @@ export function datasetMapSupport(dataset: DynamicalDataset): DynamicalMapSuppor
     ...dataset.variables.map((variable) => slicesPerChunk(dataset, variable)),
   );
   if (worst <= MAX_SLICES_PER_CHUNK) return "supported";
-  const largest = Math.max(
-    0,
-    ...dataset.variables.map((variable) => chunkBytes(dataset, variable)),
-  );
+  const largest = Math.max(0, ...dataset.variables.map((variable) => chunkBytes(variable)));
   return largest > 0 && largest <= MAX_REGIONAL_CHUNK_BYTES ? "regional" : "time-series";
 }
 
@@ -410,7 +407,7 @@ export function regionalMinZoom(
 ): number {
   if (!needsRegionalView(dataset, variable)) return 0;
   const footprint = chunkFootprint(dataset, variable);
-  const bytes = chunkBytes(dataset, variable);
+  const bytes = chunkBytes(variable);
   if (!footprint || !bytes) return MAX_REGIONAL_MIN_ZOOM;
   const allowed = Math.max(1, Math.floor(budget / bytes));
   const width = Math.max(1, viewport.width);
@@ -647,6 +644,26 @@ function roundSignificant(value: number, round: (value: number) => number): numb
   return Number((round(Number((value / magnitude).toPrecision(12))) * magnitude).toPrecision(12));
 }
 
+/** Whether a `[west, south, east, north]` box holds a point; `west > east` crosses 180°. */
+export function bboxContains(
+  bbox: readonly [number, number, number, number],
+  lng: number,
+  lat: number,
+): boolean {
+  const [west, south, east, north] = bbox;
+  if (lat < south || lat > north) return false;
+  const wrapped = ((((lng + 180) % 360) + 360) % 360) - 180;
+  return west <= east ? wrapped >= west && wrapped <= east : wrapped >= west || wrapped <= east;
+}
+
+/** The centre of a `[west, south, east, north]` box, across 180° when `west > east`. */
+export function bboxCenter(bbox: readonly [number, number, number, number]): [number, number] {
+  const [west, south, east, north] = bbox;
+  const span = west <= east ? east - west : east + 360 - west;
+  const lng = west + span / 2;
+  return [lng > 180 ? lng - 360 : lng, (south + north) / 2];
+}
+
 // --- Point time series -------------------------------------------------------
 
 /**
@@ -713,7 +730,7 @@ export function seriesWindow(
             Math.max(1, variable.chunks[memberPosition] || 1),
         )
       : 1;
-  const bytes = Math.max(1, chunkBytes(dataset, variable)) * memberChunks;
+  const bytes = Math.max(1, chunkBytes(variable)) * memberChunks;
   const allowed = Math.max(1, Math.floor(budget / bytes));
   const chunks = Math.ceil(length / chunk);
   const current = Math.min(chunks - 1, Math.max(0, Math.floor(index / chunk)));

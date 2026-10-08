@@ -22,6 +22,11 @@ import {
   type KmlTimeBounds,
 } from "../kml";
 import {
+  createRemoteIconFetcher,
+  type KmlLocalIconResolver,
+  resolveKmlFeatureIcons,
+} from "../kml-icons";
+import {
   findArchiveEntry,
   findArchiveEntryKey,
   imageMimeFromName,
@@ -244,7 +249,17 @@ export function splitKmlFolderLayers(
   return sequenceTimeFrames([...ungroupedLayers.reverse(), ...folderLayers.reverse()]);
 }
 
-function readKmlEntries(entries: Record<string, Uint8Array>): DuckDbVectorFile[] {
+/**
+ * A KML document inside a KMZ: the file handed to the vector loaders, whose
+ * `name` is a display name, plus the entry's full path in the archive, which
+ * relative hrefs (e.g. icons) must resolve against.
+ */
+interface KmzKmlEntry {
+  file: DuckDbVectorFile;
+  archivePath: string;
+}
+
+function readKmlEntries(entries: Record<string, Uint8Array>): KmzKmlEntry[] {
   const kmlEntries = Object.entries(entries)
     .filter(([entryName]) => entryName.toLowerCase().endsWith(".kml"))
     .sort(([leftName], [rightName]) => {
@@ -260,15 +275,14 @@ function readKmlEntries(entries: Record<string, Uint8Array>): DuckDbVectorFile[]
   return kmlEntries.map(([entryName, data], index) => {
     const entryBaseName = browserSafeFileName(entryName) || `document-${index + 1}.kml`;
     return {
-      name: kmlEntries.length === 1 ? entryBaseName : `${index + 1}-${entryBaseName}`,
-      extension: "kml",
-      data: toDuckDbVectorData(data),
+      file: {
+        name: kmlEntries.length === 1 ? entryBaseName : `${index + 1}-${entryBaseName}`,
+        extension: "kml",
+        data: toDuckDbVectorData(data),
+      },
+      archivePath: entryName,
     };
   });
-}
-
-async function readKmzKmlFiles(data: ArrayBuffer | Uint8Array): Promise<DuckDbVectorFile[]> {
-  return readKmlEntries(await unzipArchive(data));
 }
 
 /**
@@ -764,17 +778,23 @@ export async function modelsFromKml(text: string, path: string): Promise<LoadedM
 // (skipping the whole archive) when every entry was declined and nothing else
 // loaded.
 async function kmzVectorFeatures(
-  kmlFiles: DuckDbVectorFile[],
+  kmlFiles: KmzKmlEntry[],
   entries: Record<string, Uint8Array>,
   options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
   let cancellation: unknown;
+  // One fetcher for the whole archive, so its KML entries share the remote-icon
+  // cache and request budget.
+  const fetchRemoteIcon = createRemoteIconFetcher();
   const settled = await Promise.all(
-    kmlFiles.map((file) =>
+    kmlFiles.map(({ file, archivePath }) =>
       loadKmlFile(file, options).then(
         async (collection): Promise<FeatureCollection | null> => {
-          await resolveKmzFeatureIcons(collection, entries, file.name);
-          return collection;
+          return resolveKmlFeatureIcons(
+            collection,
+            kmzArchiveIconResolver(entries, archivePath),
+            fetchRemoteIcon,
+          );
         },
         (error): null => {
           if (isVectorLoadCancelled(error)) {
@@ -797,47 +817,29 @@ async function kmzVectorFeatures(
   return mergeFeatureCollections(collections);
 }
 
-const KML_ICON_HREF_PROPERTY = "__geolibre_kml_icon_href";
-const KML_ICON_URL_PROPERTY = "__geolibre_kml_icon_url";
-
-/** Replace archive-relative KML icon hrefs with persistent inline raster URLs. */
-async function resolveKmzFeatureIcons(
-  collection: FeatureCollection,
+/**
+ * Resolve a KMZ placemark's non-remote icon href to the archive file it names,
+ * as a persistent inline raster URL. Remote icons are handled by
+ * `resolveKmlFeatureIcons` itself.
+ */
+function kmzArchiveIconResolver(
   entries: Record<string, Uint8Array>,
   kmlEntryName: string,
-): Promise<void> {
-  const resolved = new Map<string, Promise<string | null>>();
-  const iconUrl = (href: string): Promise<string | null> => {
-    const cached = resolved.get(href);
-    if (cached) return cached;
-    const promise = (async () => {
-      const key = findArchiveEntryKey(entries, resolveArchiveRelativeHref(kmlEntryName, href));
-      if (!key) {
-        console.warn(`Could not resolve embedded KMZ icon: ${href}`);
-        return null;
-      }
-      const mime = imageMimeFromName(key);
-      if (!mime.startsWith("image/") || mime === "image/svg+xml") return null;
-      if (entries[key].byteLength > MAX_OVERLAY_IMAGE_BYTES) {
-        console.warn(`Skipping oversized embedded KMZ icon: ${key}`);
-        return null;
-      }
-      return bytesToDataUrl(entries[key], mime);
-    })();
-    resolved.set(href, promise);
-    return promise;
+): KmlLocalIconResolver {
+  return async (href) => {
+    const key = findArchiveEntryKey(entries, resolveArchiveRelativeHref(kmlEntryName, href));
+    if (!key) {
+      console.warn(`Could not resolve embedded KMZ icon: ${href}`);
+      return null;
+    }
+    const mime = imageMimeFromName(key);
+    if (!mime.startsWith("image/") || mime === "image/svg+xml") return null;
+    if (entries[key].byteLength > MAX_OVERLAY_IMAGE_BYTES) {
+      console.warn(`Skipping oversized embedded KMZ icon: ${key}`);
+      return null;
+    }
+    return bytesToDataUrl(entries[key], mime);
   };
-
-  await Promise.all(
-    collection.features.map(async (feature) => {
-      const properties = feature.properties;
-      const href = properties?.[KML_ICON_HREF_PROPERTY];
-      if (!properties || typeof href !== "string") return;
-      const url = await iconUrl(href);
-      delete properties[KML_ICON_HREF_PROPERTY];
-      if (url) properties[KML_ICON_URL_PROPERTY] = url;
-    }),
-  );
 }
 
 function resolveArchiveRelativeHref(owner: string, href: string): string {
@@ -1126,15 +1128,24 @@ export async function parseKmz(
   data: ArrayBuffer | Uint8Array,
   options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
-  const kmlFiles = await readKmzKmlFiles(data);
+  const entries = await unzipArchive(data);
+  const kmlFiles = readKmlEntries(entries);
   // Load each KML independently so declining one large KML inside a multi-KML
   // archive drops just that layer instead of failing the whole KMZ (Promise.all
   // is fail-fast). Real load errors still reject and abort the archive.
   let cancellation: unknown;
+  // One fetcher for the whole archive, so its KML entries share the remote-icon
+  // cache and request budget.
+  const fetchRemoteIcon = createRemoteIconFetcher();
   const settled = await Promise.all(
-    kmlFiles.map((file) =>
+    kmlFiles.map(({ file, archivePath }) =>
       loadKmlFile(file, options).then(
-        (collection): FeatureCollection | null => collection,
+        (collection): Promise<FeatureCollection> =>
+          resolveKmlFeatureIcons(
+            collection,
+            kmzArchiveIconResolver(entries, archivePath),
+            fetchRemoteIcon,
+          ),
         (error): null => {
           if (!isVectorLoadCancelled(error)) throw error;
           cancellation = error;

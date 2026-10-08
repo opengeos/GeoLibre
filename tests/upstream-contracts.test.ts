@@ -182,6 +182,20 @@ describe("@carbonplan/zarr-layer", () => {
       );
     }
   });
+
+  it("gates its own fetches on the private minZoom the Dynamical plugin writes", () => {
+    const section = "`@carbonplan/zarr-layer` — private `minZoom`";
+    const text = readPublishedText("@carbonplan/zarr-layer", { workspace: "packages/plugins" });
+    for (const [token, what] of [
+      ["this.minZoom = minzoom", "the constructor no longer stores `minzoom` on `this.minZoom`"],
+      ["zoom >= this.minZoom", "isZoomInRange no longer reads `this.minZoom`"],
+    ]) {
+      assert.ok(
+        text.includes(token),
+        contractMessage("@carbonplan/zarr-layer", section, what, "packages/plugins"),
+      );
+    }
+  });
 });
 
 describe("Web Services control packages", () => {

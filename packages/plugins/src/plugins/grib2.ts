@@ -15,6 +15,13 @@
 
 import { decodeAec } from "./grib2-aec";
 
+/**
+ * The largest grid decoded: 16 million points, eight times the largest grid a virtual repository
+ * references (HRRR, 1.9 million). A decode holds a few float64 copies of the field, so this keeps
+ * one to about 128 MB each, where a corrupt message could otherwise ask for gigabytes.
+ */
+const MAX_GRID_POINTS = 16_000_000;
+
 /** What a decoded field's grid looks like. */
 export interface Grib2Grid {
   /** The grid definition template (3.x). */
@@ -101,7 +108,9 @@ class BitCursor {
     let value = 0;
     let remaining = count;
     while (remaining > 0) {
-      const byte = this.bytes[this.position >>> 3] ?? 0;
+      const byte = this.bytes[this.position >>> 3];
+      // A truncated message must fail, not decode the missing tail as zeros.
+      if (byte === undefined) throw new Error("GRIB2 data section ended early");
       const offset = this.position & 7;
       const take = Math.min(8 - offset, remaining);
       value = value * (1 << take) + ((byte >>> (8 - offset - take)) & ((1 << take) - 1));
@@ -135,18 +144,24 @@ function parseGrid(section: Octets, start: number): Grib2Grid {
     const nj = section.u32(start + 34);
     const basicAngle = section.u32(start + 38);
     const subdivisions = section.u32(start + 42);
-    // Microdegrees unless the grid names another unit (template 3.0 note 1).
+    // Microdegrees unless the grid names another unit (template 3.0 note 1); a zero or missing
+    // subdivision count names none.
     const unit =
-      basicAngle === 0 || basicAngle === 0xffffffff || subdivisions === 0xffffffff
+      basicAngle === 0 ||
+      basicAngle === 0xffffffff ||
+      subdivisions === 0 ||
+      subdivisions === 0xffffffff
         ? 1e-6
         : basicAngle / subdivisions;
+    const increment = section.u32(start + 63);
     return {
       template,
       ni,
       nj,
       scanningMode: section.u8(start + 71),
       firstLongitude: section.s32(start + 50) * unit,
-      longitudeStep: section.u32(start + 63) * unit,
+      // All ones is "missing": no step, so the longitude roll is skipped.
+      ...(increment === 0xffffffff ? {} : { longitudeStep: increment * unit }),
     };
   }
   if (template === 30) {
@@ -192,12 +207,24 @@ function unpackComplex(
   const lengthBits = section5.u8(start5 + 46);
   const order = spatial ? section5.u8(start5 + 47) : 0;
   const extraOctets = spatial ? section5.u8(start5 + 48) : 0;
+  // Every group holds at least one value, so more groups than values is a corrupt count that
+  // would otherwise size the arrays below.
+  if (groups > count)
+    throw new Error(`GRIB2 message declares ${groups} groups for ${count} values`);
 
   const out = new Float64Array(count);
   const missing = new Uint8Array(count);
   const cursor = new BitCursor(data);
 
   // Template 5.3 leads with the differencing's initial values and its overall minimum.
+  if (
+    spatial &&
+    (order < 1 || order > 2 || extraOctets < 1 || data.length < (order + 1) * extraOctets)
+  ) {
+    throw new Error(
+      `Unsupported GRIB2 spatial differencing (order ${order}, ${extraOctets} extra octets)`,
+    );
+  }
   const initial: number[] = [];
   let minimum = 0;
   if (order > 0) {
@@ -230,6 +257,8 @@ function unpackComplex(
     const reference = references[group];
     const width = widths[group];
     const length = lengths[group];
+    // A group running past the declared count would be cut short and the layout read as valid.
+    if (index + length > count) throw new Error(`GRIB2 groups hold more than ${count} values`);
     if (width === 0) {
       // A constant group, or a run of missing values.
       let flag = 0;
@@ -250,6 +279,9 @@ function unpackComplex(
       }
     }
   }
+
+  // Group lengths that cover fewer values than declared would leave zeros that decode as data.
+  if (index !== count) throw new Error(`GRIB2 groups hold ${index} values, not ${count}`);
 
   // Undo the differencing over the values that are present.
   if (order > 0) {
@@ -329,7 +361,7 @@ export function decodeGrib2(bytes: Uint8Array): Grib2Field {
     }
     const length = message.u32(offset);
     const number = message.u8(offset + 4);
-    if (length < 5) throw new Error("Corrupt GRIB section");
+    if (length < 5 || offset + length > bytes.length) throw new Error("Corrupt GRIB section");
     if (number === 3) {
       grid = parseGrid(message, offset);
     } else if (number === 5) {
@@ -343,6 +375,11 @@ export function decodeGrib2(bytes: Uint8Array): Grib2Field {
         throw new Error(`Unsupported GRIB2 bitmap indicator ${indicator}`);
     } else if (number === 7) {
       if (!grid || start5 < 0) throw new Error("GRIB2 data section before its grid or packing");
+      // The counts size the decode's arrays, so a corrupt one is refused before it allocates.
+      const points = grid.ni * grid.nj;
+      if (points > MAX_GRID_POINTS || encodedCount > points) {
+        throw new Error(`GRIB2 message declares ${encodedCount} values for ${points} grid points`);
+      }
       const data = bytes.subarray(offset + 5, offset + length);
       const scaling: Scaling = {
         reference: message.f32(start5 + 11),
@@ -409,7 +446,7 @@ export function orientGrib2Field(
   }
   const westward = (scanningMode & 0x80) !== 0;
   const northward = (scanningMode & 0x40) !== 0;
-  const flipRows = northward && options.northUp !== false;
+  const flipRows = northward && options.northUp === true;
 
   let roll = 0;
   if (

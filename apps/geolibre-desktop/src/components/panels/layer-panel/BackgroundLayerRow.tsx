@@ -15,6 +15,7 @@ import { Eye, EyeOff, GripVertical, Layers, MoreHorizontal, Palette } from "luci
 import type { ThemeMode } from "../../../hooks/useThemeMode";
 import { BACKGROUND_SELECTION_ID } from "./layer-panel-utils";
 import { LayerOpacitySlider } from "./LayerOpacitySlider";
+import { useCompactLayerList } from "./useCompactLayerList";
 
 interface BackgroundLayerRowProps {
   /** Whether the background card is the panel's current selection. */
@@ -39,9 +40,11 @@ export function BackgroundLayerRow({
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
   const setBasemapVisible = useAppStore((s) => s.setBasemapVisible);
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
+  const [compactLayerList] = useCompactLayerList();
+  const showDetails = !compactLayerList || selected;
   return (
     <div
-      className={`rounded-md border p-2 transition-colors ${
+      className={`rounded-md border transition-colors ${showDetails ? "p-2" : "px-2 py-0.5"} ${
         selected
           ? "border-primary bg-primary/5"
           : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
@@ -120,12 +123,14 @@ export function BackgroundLayerRow({
           <MoreHorizontal className="h-3.5 w-3.5" />
         </Button>
       </div>
-      <LayerOpacitySlider
-        label={t("layers.opacity")}
-        ariaLabel={t("layers.backgroundOpacity")}
-        value={basemapOpacity}
-        onChange={setBasemapOpacity}
-      />
+      {showDetails && (
+        <LayerOpacitySlider
+          label={t("layers.opacity")}
+          ariaLabel={t("layers.backgroundOpacity")}
+          value={basemapOpacity}
+          onChange={setBasemapOpacity}
+        />
+      )}
     </div>
   );
 }

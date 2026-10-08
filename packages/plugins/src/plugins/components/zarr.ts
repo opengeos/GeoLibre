@@ -451,6 +451,12 @@ export interface ZarrRasterLayerOptions {
    * metadata walk when the layer turns out to have a time axis.
    */
   readTimeAttributes?: ZarrTimeAttributesReader;
+  /**
+   * The lowest zoom the renderer fetches at. It is set on the renderer as soon as
+   * the layer is on the map, before its metadata loads, so a view zoomed out while
+   * the layer initializes cannot start a whole-globe read.
+   */
+  minZoom?: number;
 }
 
 /** The minimum of zarrita's `Readable` that the renderer calls. */
@@ -632,7 +638,16 @@ async function addZarrLayerExclusively(
   let addedLayerId: string | null = null;
   let failure: string | null = null;
   const handleLayerAdd: ZarrLayerEventHandler = (event) => {
-    if (event.layerId) addedLayerId = event.layerId;
+    if (!event.layerId) return;
+    addedLayerId = event.layerId;
+    // The control emits this synchronously after `map.addLayer`, before the
+    // renderer's metadata (and so its first fetch, gated on `minZoom`) loads.
+    if (options.minZoom !== undefined) {
+      const renderer = control.getLayersMap().get(event.layerId) as
+        | { minZoom?: unknown }
+        | undefined;
+      if (renderer) renderer.minZoom = options.minZoom;
+    }
   };
   const handleError: ZarrLayerEventHandler = (event) => {
     failure = event.error ?? null;

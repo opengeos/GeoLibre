@@ -105,11 +105,20 @@ let registration: Promise<void> | null = null;
  * Teach zarrita the `gribberish` codec. Idempotent; call before reading a virtual repository.
  */
 export function registerGribberishCodec(): Promise<void> {
-  registration ??= import("zarrita").then(({ registry }) => {
-    if (!registry.has("gribberish")) {
-      // zarrita's registry is typed for its own codec classes; this one honours the same contract.
-      registry.set("gribberish", () => GribberishCodec as never);
-    }
-  });
+  registration ??= import("zarrita")
+    .then(({ registry }) => {
+      if (!registry.has("gribberish")) {
+        // zarrita's registry is typed for its own codec classes. This one honours the same
+        // contract (`kind`, static `fromConfig(config, meta)`, `decode(bytes)` returning `{ data,
+        // shape, stride }`), checked against zarrita 0.7.5's `codecs.js`; a change there shows up
+        // in tests/grib2.test.ts, which reads through the registered codec.
+        registry.set("gribberish", () => GribberishCodec as never);
+      }
+    })
+    .catch((error: unknown) => {
+      // A failed chunk load is not cached, so the next read tries again.
+      registration = null;
+      throw error;
+    });
   return registration;
 }

@@ -137,6 +137,9 @@ export function LayerPanel({
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
   );
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
+  const compactLayerList = useDesktopSettingsStore(
+    (s) => s.desktopSettings.layout.compactLayerList,
+  );
   // Same visibility rules the Add Data menu applies (profile, Mac App Store,
   // and the mobile-only database rule); the user agent is stable for the
   // session, so evaluate it once.
@@ -546,7 +549,7 @@ export function LayerPanel({
           data-layer-list=""
           role="list"
           aria-label={t("sharedRail.layers")}
-          className="w-full min-w-0 space-y-1 p-2"
+          className={`w-full min-w-0 p-2 ${compactLayerList ? "space-y-0.5" : "space-y-1"}`}
         >
           {visibleLayers.map((layer, displayIndex) => {
             const group = layer.groupId ? groupById.get(layer.groupId) : undefined;

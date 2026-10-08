@@ -21,6 +21,7 @@ import type { DuckDbVectorFile } from "../duckdb-vector-loader";
 import type { FileDialogFilter } from "../file-dialog-filters";
 import { isTauri } from "../is-tauri";
 import { parseKmlText } from "../kml";
+import { resolveKmlFeatureIcons } from "../kml-icons";
 import { SHAPEFILE_COMPANION_EXTENSIONS, shapefileCompanionPathsFromSelection } from "../mas-build";
 import {
   groundOverlaysFromKml,
@@ -242,7 +243,7 @@ async function loadBrowserVectorFile(
   if (!streamViaDuckDb && extension === "kml") {
     try {
       return {
-        data: parseKmlText(await file.text()),
+        data: await resolveKmlFeatureIcons(parseKmlText(await file.text())),
         path: file.name,
       };
     } catch {
@@ -504,7 +505,7 @@ async function loadTauriVectorFile(
   if (!streamViaDuckDb && extension === "kml") {
     try {
       return {
-        data: parseKmlText(await readLocalFileText(path)),
+        data: await resolveKmlFeatureIcons(parseKmlText(await readLocalFileText(path))),
         path,
       };
     } catch {

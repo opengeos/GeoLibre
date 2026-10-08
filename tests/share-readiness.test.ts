@@ -80,6 +80,14 @@ describe("isPrivateHostname", () => {
       "::1",
       "fd00::1",
       "fe80::1",
+      // The whole fe80::/10 link-local block, through febf.
+      "fe90::1",
+      "febf::1",
+      "::",
+      // IPv4-mapped IPv6, dotted and as `URL` normalizes it.
+      "::ffff:127.0.0.1",
+      "::ffff:7f00:1",
+      "[::ffff:c0a8:101]",
       "gis-server",
       "tiles.local",
       "maps.internal",
@@ -101,6 +109,10 @@ describe("isPrivateHostname", () => {
       // A registered domain may start with the IPv6 unique-local prefix.
       "fd-services.com",
       "fe80.example.com",
+      // Just past fe80::/10, and IPv4-mapped public addresses.
+      "fec0::1",
+      "::ffff:8.8.8.8",
+      "::ffff:808:808",
     ]) {
       assert.equal(isPrivateHostname(host), false, host);
     }

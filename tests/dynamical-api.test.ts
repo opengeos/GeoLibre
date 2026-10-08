@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   DYNAMICAL_CATALOG_URL,
   MAX_REGIONAL_CHUNK_BYTES,
+  bboxCenter,
+  bboxContains,
   chunkBytes,
   chunkFootprint,
   datasetMapSupport,
@@ -278,7 +280,7 @@ describe("datasetMapSupport", () => {
 
   it("draws a time-series layout a region at a time", () => {
     const dataset = parsed(gfsAnalysis);
-    assert.equal(chunkBytes(dataset, dataset.variables[0]), 1440 * 50 * 50 * 4);
+    assert.equal(chunkBytes(dataset.variables[0]), 1440 * 50 * 50 * 4);
     assert.equal(datasetMapSupport(dataset), "regional");
   });
 
@@ -296,7 +298,7 @@ describe("datasetMapSupport", () => {
         },
       },
     });
-    assert.ok(chunkBytes(dataset, dataset.variables[0]) > MAX_REGIONAL_CHUNK_BYTES);
+    assert.ok(chunkBytes(dataset.variables[0]) > MAX_REGIONAL_CHUNK_BYTES);
     assert.equal(datasetMapSupport(dataset), "time-series");
   });
 });
@@ -514,6 +516,28 @@ describe("isIcechunkAsset", () => {
       isIcechunkAsset({ href: "https://host/data.zarr", type: "application/vnd+zarr" }),
       false,
     );
+  });
+});
+
+describe("dataset boxes", () => {
+  it("contains points inside a box and across 180 degrees", () => {
+    const conus: [number, number, number, number] = [-130, 20, -60, 55];
+    assert.equal(bboxContains(conus, -100, 40), true);
+    assert.equal(bboxContains(conus, 10, 40), false);
+    assert.equal(bboxContains(conus, -100, 60), false);
+    // A Pacific box from 160 E to 160 W.
+    const pacific: [number, number, number, number] = [160, -10, -160, 10];
+    assert.equal(bboxContains(pacific, 175, 0), true);
+    assert.equal(bboxContains(pacific, -170, 0), true);
+    assert.equal(bboxContains(pacific, 190, 0), true);
+    assert.equal(bboxContains(pacific, 0, 0), false);
+  });
+
+  it("centres a box, across 180 degrees too", () => {
+    assert.deepEqual(bboxCenter([-130, 20, -60, 50]), [-95, 35]);
+    assert.deepEqual(bboxCenter([160, -10, -160, 10]), [180, 0]);
+    assert.deepEqual(bboxCenter([170, -10, -170, 10]), [180, 0]);
+    assert.deepEqual(bboxCenter([150, -10, -170, 10]), [170, 0]);
   });
 });
 
