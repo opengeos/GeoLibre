@@ -75,6 +75,8 @@ export function ObiaSegmentStep({
       return;
     }
     let cancelled = false;
+    // Drop the previous image's band list while the new header is read.
+    setSummary(null);
     setLoadingImage(true);
     setError(null);
     void (async () => {
