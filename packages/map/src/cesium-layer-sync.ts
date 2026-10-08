@@ -51,7 +51,7 @@ import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
 import {
   buildPointCloudCollection,
   isSplatTilesetUrl,
-  loadCopcPointCloud,
+  openCopcSource,
   openEptSource,
   loadLasPointCloud,
   pointCloudSourceKind,
@@ -954,7 +954,7 @@ export interface CesiumLayerSyncDeps {
   renderMarker?: typeof renderMarkerCanvas;
   /** Rasterises the fill-pattern tile; defaults to the 2D map's renderer. */
   renderFillPattern?: typeof renderFillPatternCanvas;
-  /** Overrides for the COPC decoder (the module, the projector, the budget). */
+  /** Overrides for the COPC reader (the module, the projector, the LAZ decoder). */
   copcOptions?: Omit<LoadCopcOptions, "signal">;
   /** Overrides for the plain LAS/LAZ decoder (the module, the download, the projector). */
   lasOptions?: Omit<LoadLasOptions, "signal" | "fallbackWkt">;
@@ -2810,10 +2810,13 @@ export class CesiumLayerSync {
     entry.abort = abort;
     try {
       const kind = pointCloudSourceKind(url);
-      if (kind === "ept") {
-        // A large EPT dataset needs detail where the camera is, not one
-        // sample of the whole cloud: stream it by view.
-        const source = await openEptSource(url, { ...this.deps.eptOptions, signal: abort.signal });
+      if (kind === "ept" || kind === "copc") {
+        // An octree cloud needs detail where the camera is, not one sample
+        // of the whole cloud: stream it by view.
+        const source =
+          kind === "ept"
+            ? await openEptSource(url, { ...this.deps.eptOptions, signal: abort.signal })
+            : await openCopcSource(url, { ...this.deps.copcOptions, signal: abort.signal });
         if (entry.cancelled) return;
         const streamer = new PointCloudStreamer(Cesium, viewer, source, {
           opacity: () => this.effectiveOpacity(entry),
@@ -2831,19 +2834,14 @@ export class CesiumLayerSync {
         this.applyAppearance(entry);
         return;
       }
-      const cloud =
-        kind === "las"
-          ? await loadLasPointCloud(url, {
-              ...this.deps.lasOptions,
-              // The LiDAR control records the WKT it read, for a file whose
-              // own CRS records are missing or unreadable.
-              fallbackWkt: str(entry.layer.metadata?.wkt),
-              signal: abort.signal,
-            })
-          : await loadCopcPointCloud(url, {
-              ...this.deps.copcOptions,
-              signal: abort.signal,
-            });
+      // A plain LAS/LAZ file has no octree to stream: one bounded sample.
+      const cloud = await loadLasPointCloud(url, {
+        ...this.deps.lasOptions,
+        // The LiDAR control records the WKT it read, for a file whose own
+        // CRS records are missing or unreadable.
+        fallbackWkt: str(entry.layer.metadata?.wkt),
+        signal: abort.signal,
+      });
       if (entry.cancelled) return;
       const collection = buildPointCloudCollection(
         Cesium,

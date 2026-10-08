@@ -16,7 +16,7 @@ import {
   parseGeoKeyDirectory,
   wktHeightScale,
   isSplatTilesetUrl,
-  loadCopcPointCloud,
+  openCopcSource,
   pointCloudColor,
   pointCloudSourceKind,
   rampColor,
@@ -136,13 +136,12 @@ function fakeCopc(options: { color?: boolean; scaleTo16Bit?: boolean; wkt?: stri
   return { module, loads, pages };
 }
 
-describe("loadCopcPointCloud", () => {
-  it("walks the octree breadth-first within the budget and reprojects", async () => {
+describe("openCopcSource", () => {
+  it("builds the projector from the archive's WKT and reprojects a node", async () => {
     const fake = fakeCopc();
     const wkts: string[] = [];
-    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
+    const source = await openCopcSource("https://x/a.copc.laz", {
       copc: fake.module,
-      budget: 550,
       projector: async (wkt) => {
         wkts.push(wkt ?? "");
         return (x, y) => [x / 1000, y / 1000];
@@ -150,40 +149,38 @@ describe("loadCopcPointCloud", () => {
       lazPerf: async () => ({}),
     });
     assert.deepEqual(wkts, ["PROJCS[fake]"], "the projector is built from the archive's WKT");
-    // Root (100) + two depth-1 nodes (200 each) fit the 550 budget; the depth-2
-    // node (300) would overshoot and stops the walk.
-    assert.deepEqual(fake.loads, ["100", "200", "200"]);
-    assert.equal(cloud.count, 500);
-    assert.equal(cloud.truncated, true);
-    assert.ok(Math.abs(cloud.positions[0] - 0.1) < 1e-12, "x reprojected");
-    assert.ok(Math.abs(cloud.positions[1] - 0.2) < 1e-12, "y reprojected");
-    assert.equal(cloud.positions[2], 10);
-    assert.equal(cloud.zMin, 10);
-    assert.equal(cloud.zMax, 14);
-    assert.equal(cloud.colors, null);
+    assert.equal(source.counts.get("0-0-0-0"), 100);
+    assert.equal(source.counts.get("2-0-0-0"), -1, "a key in a sub-page reads as unread");
+    const root = await source.loadNode("0-0-0-0");
+    assert.deepEqual(fake.loads, ["100"], "only the requested node is decoded");
+    assert.equal(root.count, 100);
+    assert.ok(Math.abs(root.positions[0] - 0.1) < 1e-12, "x reprojected");
+    assert.ok(Math.abs(root.positions[1] - 0.2) < 1e-12, "y reprojected");
+    assert.equal(root.positions[2], 10);
+    assert.equal(root.colors, null);
   });
 
-  it("loads sub-pages lazily when the walk reaches them and keeps 16-bit colour", async () => {
+  it("reads sub-pages on request and keeps 16-bit colour", async () => {
     const fake = fakeCopc({ color: true, scaleTo16Bit: true });
-    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
+    const source = await openCopcSource("https://x/a.copc.laz", {
       copc: fake.module,
-      budget: MAX_POINT_CLOUD_POINTS,
       projector: async () => identity,
       lazPerf: async () => ({}),
     });
-    assert.deepEqual(fake.loads, ["100", "200", "200", "300", "400"]);
-    assert.equal(cloud.count, 1200);
-    assert.equal(cloud.truncated, false);
-    assert.ok(cloud.colors);
+    await source.loadSubtree("2-0-0-0");
+    assert.equal(source.counts.get("2-0-0-0"), 300);
+    assert.equal(source.counts.get("3-0-0-0"), 400);
+    const node = await source.loadNode("2-0-0-0");
+    assert.ok(node.colors);
     assert.deepEqual(
-      Array.from(cloud.colors!.subarray(0, 3)),
+      Array.from(node.colors!.subarray(0, 3)),
       [10, 20, 30],
-      "16-bit colour scaled to 8-bit",
+      "16-bit scaled to 8-bit",
     );
-    assert.equal(cloud.positions[0], 100, "identity projector: coordinates pass through");
+    assert.equal(node.positions[0], 100, "identity projector: coordinates pass through");
   });
 
-  it("walks into a sub-page the root only points at", async () => {
+  it("reads a sub-page the root only points at", async () => {
     const fake = fakeCopc();
     const rootless: CopcModule = {
       Copc: {
@@ -197,91 +194,60 @@ describe("loadCopcPointCloud", () => {
         },
       },
     };
-    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
+    const source = await openCopcSource("https://x/a.copc.laz", {
       copc: rootless,
-      budget: MAX_POINT_CLOUD_POINTS,
       projector: async () => identity,
       lazPerf: async () => ({}),
     });
-    assert.deepEqual(fake.loads, ["300", "400"], "the sub-page's nodes are decoded");
-    assert.equal(cloud.count, 700);
+    assert.equal(source.counts.get("0-0-0-0"), -1);
+    await source.loadSubtree("0-0-0-0");
+    assert.equal(source.counts.get("2-0-0-0"), 300);
+    assert.equal(
+      source.counts.has("0-0-0-0"),
+      false,
+      "a sub-page without its root clears the marker",
+    );
   });
 
-  it("normalises a NaN or fractional budget", async () => {
-    const load = (budget: number) =>
-      loadCopcPointCloud("https://x/a.copc.laz", {
-        copc: fakeCopc().module,
-        budget,
-        projector: async () => identity,
-        lazPerf: async () => ({}),
-      });
-    assert.equal((await load(Number.NaN)).count, 1200, "NaN falls back to the default budget");
-    assert.equal((await load(2.5)).count, 2, "a fractional budget is floored");
-  });
-
-  it("treats a cloud whose nodes disagree on colour as colourless", async () => {
-    const fake = fakeCopc({ color: true });
-    let views = 0;
-    const mixed: CopcModule = {
+  it("takes the octree cube and span from the COPC info, else the header", async () => {
+    const fake = fakeCopc();
+    const withInfo: CopcModule = {
       Copc: {
         ...fake.module.Copc,
-        loadPointDataView: async (source, copc, n, options) => {
-          const view = await fake.module.Copc.loadPointDataView(source, copc, n, options);
-          // The second node carries no RGB.
-          if (views++ === 1) {
-            const { Red: _r, Green: _g, Blue: _b, ...rest } = view.dimensions;
-            return { ...view, dimensions: rest };
-          }
-          return view;
+        create: async (source) => {
+          const copc = await fake.module.Copc.create(source);
+          return {
+            ...copc,
+            info: { ...copc.info, cube: [0, 0, 0, 1280, 1280, 1280], spacing: 10 },
+          };
         },
       },
     };
-    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
-      copc: mixed,
-      budget: 550,
-      projector: async () => identity,
-      lazPerf: async () => ({}),
-    });
-    assert.equal(cloud.count, 500);
-    assert.equal(cloud.colors, null, "no point is left black");
-  });
-
-  it("reads only up to the budget from a first node bigger than the budget", async () => {
-    const fake = fakeCopc();
-    const budget = 60;
-    const big = {
-      Copc: {
-        ...fake.module.Copc,
-        loadHierarchyPage: async () => ({
-          nodes: {
-            "0-0-0-0": { pointCount: budget + 1000, pointDataOffset: 0, pointDataLength: 0 },
-          },
-          pages: {},
-        }),
-      },
-    };
-    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
-      copc: big,
-      budget,
-      projector: async () => identity,
-      lazPerf: async () => ({}),
-    });
-    assert.equal(cloud.count, budget, "the primitive count never exceeds the budget");
-    assert.equal(cloud.positions.length, budget * 3);
-    assert.equal(cloud.truncated, true);
+    const open = (copc: CopcModule) =>
+      openCopcSource("https://x/a.copc.laz", {
+        copc,
+        projector: async () => identity,
+        lazPerf: async () => ({}),
+      });
+    const a = await open(withInfo);
+    assert.deepEqual(a.cube, [0, 0, 0, 1280, 1280, 1280]);
+    assert.equal(a.span, 128);
+    const b = await open(fake.module);
+    assert.deepEqual(b.cube, [0, 0, 0, 1, 1, 1], "header bounds without a cube");
+    assert.equal(b.span, 128, "the EPT default without a spacing");
   });
 
   it("refuses an archive whose CRS cannot be used", async () => {
     const fake = fakeCopc();
     await assert.rejects(
-      loadCopcPointCloud("https://x/a.copc.laz", {
+      openCopcSource("https://x/a.copc.laz", {
         copc: fake.module,
         projector: async () => null,
         lazPerf: async () => ({}),
       }),
       /COPC archive has no usable CRS/,
     );
-    assert.equal(fake.pages, 0, "nothing is walked without a CRS");
+    assert.equal(fake.pages, 0, "nothing is read without a CRS");
   });
 
   it("stops when aborted", async () => {
@@ -289,7 +255,7 @@ describe("loadCopcPointCloud", () => {
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(
-      loadCopcPointCloud("https://x/a.copc.laz", {
+      openCopcSource("https://x/a.copc.laz", {
         copc: fake.module,
         signal: controller.signal,
         projector: async () => identity,
@@ -538,7 +504,6 @@ describe("CesiumLayerSync native 3D routing", () => {
         copc: fake.module,
         projector: async () => identity,
         lazPerf: async () => ({}),
-        budget: 500,
       },
     });
     const copc = layer({
@@ -555,7 +520,8 @@ describe("CesiumLayerSync native 3D routing", () => {
       length: number;
       get(i: number): { color: { alpha: number } };
     };
-    assert.equal(collection.length, 500);
+    // No camera view to stream by: the root node is shown as the outline.
+    assert.equal(collection.length, 100);
     assert.equal(collection.get(0).color.alpha, 0.5);
     assert.equal(
       (collection.get(0) as unknown as { position: { z: number } }).position.z,
@@ -863,18 +829,14 @@ describe("loadLasPointCloud", () => {
 describe("COPC heights", () => {
   it("converts heights in feet to metres from the WKT", async () => {
     const fake = fakeCopc({ wkt: 'PROJCS["x (ft)",UNIT["foot",0.3048]]' });
-    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
-      copc: fake.module,
-      projector: async () => identity,
-      lazPerf: async () => ({}),
-      budget: 100,
-    });
-    const plain = await loadCopcPointCloud("https://x/a.copc.laz", {
-      copc: fakeCopc().module,
-      projector: async () => identity,
-      lazPerf: async () => ({}),
-      budget: 100,
-    });
+    const open = (copc: CopcModule) =>
+      openCopcSource("https://x/a.copc.laz", {
+        copc,
+        projector: async () => identity,
+        lazPerf: async () => ({}),
+      }).then((source) => source.loadNode("0-0-0-0"));
+    const cloud = await open(fake.module);
+    const plain = await open(fakeCopc().module);
     assert.ok(plain.positions[2] !== 0, "the fixture has non-zero heights");
     assert.ok(Math.abs(cloud.positions[2] - plain.positions[2] * 0.3048) < 1e-9);
   });

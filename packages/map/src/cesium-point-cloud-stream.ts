@@ -4,7 +4,7 @@ import {
   POINT_CLOUD_PIXEL_SIZE,
   pointCloudColor,
   type DecodedPointCloud,
-  type EptSource,
+  type PointCloudOctree,
 } from "./cesium-point-cloud";
 
 // View-dependent streaming of an octree point cloud on the globe (issue #2261).
@@ -23,9 +23,9 @@ import {
 
 type CesiumNs = typeof import("@cesium/engine");
 
-/** The octree a streamer reads; an {@link EptSource} satisfies it. */
+/** The octree a streamer reads: an opened COPC archive or EPT dataset. */
 export type OctreeSource = Pick<
-  EptSource,
+  PointCloudOctree,
   "cube" | "span" | "project" | "counts" | "loadSubtree" | "loadNode"
 >;
 

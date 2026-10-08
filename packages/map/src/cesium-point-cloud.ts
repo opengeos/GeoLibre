@@ -1,31 +1,26 @@
 import { getVectorColorRamp } from "@geolibre/core";
 import type { PointPrimitiveCollection } from "@cesium/engine";
 
-// Point clouds on the globe (issue #2285).
+// Point clouds on the globe (issues #2285, #2261).
 //
 // The 2D map streams LiDAR through the LiDAR control's deck.gl overlay, which
-// has no Cesium interop. On the globe a point cloud takes one of two native
-// paths: a source already in 3D Tiles form (a `tileset.json`, the format
+// has no Cesium interop. On the globe a point cloud takes one of three native
+// paths. A source already in 3D Tiles form (a `tileset.json`, the format
 // Cesium was built for, with `pointCloudShading` for eye-dome lighting) loads
-// as a `Cesium3DTileset`; a Cloud Optimized Point Cloud (`.copc.laz`) is
-// decoded in the browser with the `copc` package — the same decoder the 2D
-// control uses — and drawn as a `PointPrimitiveCollection`. A plain LAS or
-// LAZ file has no octree to sample, so it is downloaded whole (up to
-// {@link MAX_LAS_FILE_BYTES}), decoded with the same package's LAS reader,
-// and thinned to every n-th point (issue #2261). An Entwine Point Tile (EPT)
-// dataset is walked breadth-first like COPC, its LASzip nodes decoded with
-// that LAS reader.
-//
-// The COPC path is a bounded preview, not a streaming renderer: it walks the
-// octree breadth-first from the root, which COPC populates with a coarse
-// sample of the whole cloud, and stops at {@link MAX_POINT_CLOUD_POINTS}.
-// That keeps memory bounded (each primitive is a JavaScript object) while
-// showing the cloud's shape at every zoom; a level-of-detail streamer is the
-// follow-up once Cesium exposes a public point-cloud primitive.
+// as a `Cesium3DTileset`. A Cloud Optimized Point Cloud (`.copc.laz`) or an
+// Entwine Point Tile dataset (`ept.json`) is an octree: it is opened here
+// (`openCopcSource`, `openEptSource`) and streamed by view
+// (`cesium-point-cloud-stream.ts`), its nodes decoded in the browser with the
+// `copc` package, the same decoder the 2D control uses, and drawn into a
+// `PointPrimitiveCollection`. A plain LAS or LAZ file has no octree to
+// stream, so it is downloaded whole (up to {@link MAX_LAS_FILE_BYTES}),
+// decoded with the same package's LAS reader, and thinned to every n-th
+// point, at most {@link MAX_POINT_CLOUD_POINTS}, which keeps memory bounded
+// (each primitive is a JavaScript object).
 
 type CesiumNs = typeof import("@cesium/engine");
 
-/** Points a COPC preview loads at most. */
+/** Points a plain LAS/LAZ preview keeps at most. */
 export const MAX_POINT_CLOUD_POINTS = 400_000;
 
 /** Pixel size of a decoded point on the globe. */
@@ -109,8 +104,6 @@ export interface CopcModule {
 export type PointCloudProjector = (x: number, y: number) => [number, number];
 
 export interface LoadCopcOptions {
-  /** Points to stop at; defaults to {@link MAX_POINT_CLOUD_POINTS}. */
-  budget?: number;
   signal?: AbortSignal;
   /** The `copc` module; defaults to a dynamic import. */
   copc?: CopcModule;
@@ -177,11 +170,6 @@ export function heightRange(
   };
 }
 
-/** Octree key depth: keys are `D-X-Y-Z`. */
-function keyDepth(key: string): number {
-  return Number(key.split("-")[0]);
-}
-
 async function defaultLazPerf(): Promise<unknown> {
   const [{ createLazPerf }, wasmUrl] = await Promise.all([
     import("laz-perf"),
@@ -243,38 +231,40 @@ export function horizontalWkt(wkt: string): string {
   return wkt;
 }
 
-async function proj4Projector(wkt: string | undefined): Promise<PointCloudProjector | null> {
-  if (!wkt) return null;
-  const proj4 = (await import("proj4")).default;
-  try {
-    const converter = proj4(horizontalWkt(wkt), "EPSG:4326");
-    return (x, y) => {
-      const [lng, lat] = converter.forward([x, y]);
-      return [lng, lat];
-    };
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Decode a bounded preview of a COPC archive: the octree walked
- * breadth-first from the root, points reprojected to WGS84, colour kept
- * when the point format carries one.
+ * Open a COPC archive for streaming: read its header, octree cube and
+ * spacing, and root hierarchy page, and build the projector from its WKT.
+ * Nodes are decoded one at a time by the streamer
+ * (`cesium-point-cloud-stream.ts`), so a large archive resolves at street
+ * level instead of showing one sample of the whole cloud.
+ *
+ * @param url - The `.copc.laz` URL.
+ * @param options - Abort signal and injectable dependencies.
+ * @returns The opened source.
  */
-export async function loadCopcPointCloud(
+export async function openCopcSource(
   url: string,
   options: LoadCopcOptions = {},
-): Promise<DecodedPointCloud> {
-  // A NaN, infinite, or fractional budget would size buffers badly; normalise.
-  const budget = Number.isFinite(options.budget)
-    ? Math.max(1, Math.floor(options.budget as number))
-    : MAX_POINT_CLOUD_POINTS;
+): Promise<PointCloudOctree> {
   const signal = options.signal;
   const { Copc } = options.copc ?? ((await import("copc")) as unknown as CopcModule);
   const copc = await Copc.create(url);
   signal?.throwIfAborted();
-  const project = await (options.projector ?? proj4Projector)(copc.wkt);
+  // An injected projector maps X/Y only (tests); the default one also maps
+  // back, which the streamer needs to find which nodes a view covers.
+  let project: LasProjector | null;
+  if (options.projector) {
+    const flat = await options.projector(copc.wkt);
+    const zScale = wktHeightScale(copc.wkt);
+    project = flat
+      ? (x: number, y: number, z: number) => {
+          const [lng, lat] = flat(x, y);
+          return [lng, lat, z * zScale];
+        }
+      : null;
+  } else {
+    project = copc.wkt ? await lasProjector({ wkt: copc.wkt }) : null;
+  }
   // Without a projector the raw X/Y would be fed to the globe as degrees and
   // land a projected cloud somewhere near Null Island; refuse instead.
   if (!project) {
@@ -284,118 +274,72 @@ export async function loadCopcPointCloud(
         : "COPC archive has no usable CRS (no WKT in the header)",
     );
   }
+  const projectPoint = project;
   const lazPerf = await (options.lazPerf ?? defaultLazPerf)();
   signal?.throwIfAborted();
-  // Heights in the CRS's units (often feet) become metres for the globe.
-  const zScale = wktHeightScale(copc.wkt);
 
-  // Breadth-first over the hierarchy: pages are loaded lazily as the walk
-  // reaches keys that live in a deeper page, and the walk stops at the budget.
-  const root = await Copc.loadHierarchyPage(url, copc.info.rootHierarchyPage);
-  const nodes = new Map(Object.entries(root.nodes));
-  const pages = new Map(Object.entries(root.pages));
-  // The frontier starts from both the nodes the root page carries and the keys
-  // it only points at through sub-pages (the normal case for a large cloud).
-  const keys = [...new Set([...nodes.keys(), ...pages.keys()])].sort(
-    (a, b) => keyDepth(a) - keyDepth(b),
-  );
-  const chosen: string[] = [];
-  const chosenKeys = new Set<string>();
-  let planned = 0;
-  let truncated = false;
-  while (keys.length && planned < budget) {
-    const key = keys.shift()!;
-    const node = nodes.get(key);
-    if (!node) {
-      // The node's data lives in a sub-page; load it and queue its keys.
-      const page = pages.get(key);
-      if (!page) continue;
-      const subtree = await Copc.loadHierarchyPage(url, page);
-      signal?.throwIfAborted();
-      const queued = new Set(keys);
-      for (const [k, n] of Object.entries(subtree.nodes)) {
-        if (n) nodes.set(k, n);
-        if (!queued.has(k) && !chosenKeys.has(k)) {
-          keys.push(k);
-          queued.add(k);
-        }
-      }
-      for (const [k, p] of Object.entries(subtree.pages)) {
-        if (p) pages.set(k, p);
-        if (!queued.has(k) && !nodes.has(k)) {
-          keys.push(k);
-          queued.add(k);
-        }
-      }
-      pages.delete(key);
-      keys.sort((a, b) => keyDepth(a) - keyDepth(b));
-      continue;
+  type Node = { pointCount: number; pointDataOffset: number; pointDataLength: number };
+  type Page = { pageOffset: number; pageLength: number };
+  const nodes = new Map<string, Node>();
+  const pages = new Map<string, Page>();
+  const counts = new Map<string, number>();
+  const absorb = (page: {
+    nodes: Record<string, Node | undefined>;
+    pages: Record<string, Page | undefined>;
+  }) => {
+    for (const [key, node] of Object.entries(page.nodes)) {
+      if (!node) continue;
+      nodes.set(key, node);
+      counts.set(key, node.pointCount);
     }
-    if (node.pointCount === 0) continue;
-    if (planned + node.pointCount > budget) {
-      if (chosen.length > 0) {
-        truncated = true;
-        break;
-      }
-      // A first node bigger than the whole budget is read partially, so the
-      // primitive count never exceeds the budget.
-      truncated = true;
+    // A key whose data lives in a sub-page reads as an unread subtree.
+    for (const [key, sub] of Object.entries(page.pages)) {
+      if (!sub || nodes.has(key)) continue;
+      pages.set(key, sub);
+      counts.set(key, -1);
     }
-    chosen.push(key);
-    chosenKeys.add(key);
-    planned = Math.min(budget, planned + node.pointCount);
-  }
-  if (keys.length) truncated = true;
+  };
+  absorb(await Copc.loadHierarchyPage(url, copc.info.rootHierarchyPage));
+  signal?.throwIfAborted();
 
-  const positions = new Float64Array(planned * 3);
-  // A LAS file has one point record format, so the first node decides whether
-  // the cloud carries RGB and the buffer is allocated up front. Should a node
-  // ever disagree, the cloud is treated as colourless rather than leaving
-  // those points black: `undefined` until the first node, `null` for no colour.
-  let colors: Uint8Array | null | undefined;
-  let count = 0;
-  for (const key of chosen) {
-    const node = nodes.get(key)!;
-    const view = await Copc.loadPointDataView(url, copc, node, {
-      include: POINT_DIMENSIONS,
-      lazPerf,
-    });
-    signal?.throwIfAborted();
-    const x = view.getter("X");
-    const y = view.getter("Y");
-    const z = view.getter("Z");
-    const hasColor =
-      "Red" in view.dimensions && "Green" in view.dimensions && "Blue" in view.dimensions;
-    if (colors === undefined) colors = hasColor ? new Uint8Array(planned * 3) : null;
-    else if (hasColor !== (colors !== null)) colors = null;
-    const r = colors ? view.getter("Red") : null;
-    const g = colors ? view.getter("Green") : null;
-    const b = colors ? view.getter("Blue") : null;
-    const isNoise = noiseTest(view);
-    for (let i = 0; i < view.pointCount && count < planned; i++) {
-      if (isNoise?.(i)) continue;
-      const [lng, lat] = project(x(i), y(i));
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-      const height = z(i) * zScale;
-      positions[count * 3] = lng;
-      positions[count * 3 + 1] = lat;
-      positions[count * 3 + 2] = height;
-      if (colors && r && g && b) {
-        // LAS colour is 16-bit; many writers store 8-bit values unscaled.
-        const scale = (v: number) => (v > 255 ? v >> 8 : v);
-        colors[count * 3] = scale(r(i));
-        colors[count * 3 + 1] = scale(g(i));
-        colors[count * 3 + 2] = scale(b(i));
-      }
-      count++;
-    }
-  }
+  const info = copc.info as { cube?: number[]; spacing?: number };
+  const { min, max } = copc.header;
+  const cube = (
+    Array.isArray(info.cube) && info.cube.length === 6 && info.cube.every(Number.isFinite)
+      ? info.cube
+      : [min[0], min[1], min[2], max[0], max[1], max[2]]
+  ) as PointCloudOctree["cube"];
+  // COPC records the root's point spacing; the span is how many of those fit
+  // across the cube, as EPT states it directly.
+  const width = cube[3] - cube[0];
+  const span =
+    info.spacing && info.spacing > 0 ? Math.max(1, Math.round(width / info.spacing)) : 128;
+
   return {
-    positions: count === planned ? positions : positions.subarray(0, count * 3),
-    colors: colors ? (count === planned ? colors : colors.subarray(0, count * 3)) : null,
-    count,
-    ...heightRange(positions, count),
-    truncated,
+    cube,
+    span,
+    project: projectPoint,
+    counts,
+    loadSubtree: async (key, subtreeSignal) => {
+      const page = pages.get(key);
+      if (!page) return;
+      pages.delete(key);
+      // Clear the marker first, so a sub-page that does not restate its
+      // root does not leave the key pending forever.
+      if (counts.get(key) === -1) counts.delete(key);
+      absorb(await Copc.loadHierarchyPage(url, page));
+      subtreeSignal?.throwIfAborted();
+    },
+    loadNode: async (key, nodeSignal) => {
+      const node = nodes.get(key);
+      if (!node) throw new Error(`COPC node ${key} is not in the hierarchy`);
+      const view = await Copc.loadPointDataView(url, copc, node, {
+        include: POINT_DIMENSIONS,
+        lazPerf,
+      });
+      nodeSignal?.throwIfAborted();
+      return decodeView(view, projectPoint);
+    },
   };
 }
 
@@ -914,8 +858,11 @@ export function eptCrs(srs: EptManifest["srs"]): LasCrs {
   return crs;
 }
 
-/** An EPT dataset opened for reading: its octree geometry, CRS, hierarchy, and node decoder. */
-export interface EptSource {
+/**
+ * A COPC archive or EPT dataset opened for reading: its octree geometry, CRS,
+ * hierarchy, and node decoder, which the globe's streamer walks.
+ */
+export interface PointCloudOctree {
   /** The octree cube in the dataset's CRS: `[minX, minY, minZ, maxX, maxY, maxZ]`. */
   cube: [number, number, number, number, number, number];
   /** Grid cells per axis in a node, so a node's point spacing is its width / span. */
@@ -938,7 +885,10 @@ export interface EptSource {
  * @param options - Abort signal and injectable dependencies.
  * @returns The opened source.
  */
-export async function openEptSource(url: string, options: LoadEptOptions = {}): Promise<EptSource> {
+export async function openEptSource(
+  url: string,
+  options: LoadEptOptions = {},
+): Promise<PointCloudOctree> {
   const signal = options.signal;
   const fetchJson = options.fetchJson ?? defaultFetchJson;
   const fetchBytes =
@@ -982,7 +932,7 @@ export async function openEptSource(url: string, options: LoadEptOptions = {}): 
   const bounds = Array.isArray(manifest.bounds) ? manifest.bounds.map(Number) : [];
   const cube = (
     bounds.length === 6 && bounds.every(Number.isFinite) ? bounds : [0, 0, 0, 0, 0, 0]
-  ) as EptSource["cube"];
+  ) as PointCloudOctree["cube"];
   const span = Number(manifest.span) > 0 ? Number(manifest.span) : 128;
 
   const loadNode = async (key: string, nodeSignal?: AbortSignal): Promise<DecodedPointCloud> => {
