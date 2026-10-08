@@ -577,7 +577,29 @@ async function defaultFetchBytes(url: string, signal?: AbortSignal): Promise<Uin
     await response.body?.cancel();
     throw tooLargeError(length);
   }
-  return new Uint8Array(await response.arrayBuffer());
+  if (!response.body) return new Uint8Array(await response.arrayBuffer());
+  // A chunked or compressed response has no usable length, so count while
+  // reading and stop at the cap instead of buffering an unbounded body.
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_LAS_FILE_BYTES) {
+      await reader.cancel();
+      throw tooLargeError(total);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return bytes;
 }
 
 function tooLargeError(bytes: number): Error {
@@ -604,6 +626,7 @@ export function proj4LinearUnit(definition: string): number {
  */
 async function lasProjector(crs: LasCrs): Promise<LasProjector | null> {
   const proj4 = (await import("proj4")).default;
+  let geoKeyFailure: string | undefined;
   if (crs.geoKeys && Object.keys(crs.geoKeys).length > 0) {
     try {
       const { toProj4 } = await import("geotiff-geokeys-to-proj4");
@@ -617,19 +640,26 @@ async function lasProjector(crs: LasCrs): Promise<LasProjector | null> {
         // linear unit (the LAS convention). A user-defined CRS carries that
         // unit in the conversion multipliers; a predefined EPSG code leaves it
         // in the proj4 string.
-        const zScale =
+        const scale =
           crs.geoKeys.VerticalUnitsGeoKey !== undefined || resolved.isGCS
             ? resolved.conversionParameters.z
             : resolved.conversionParameters.x * proj4LinearUnit(definition);
+        // Some user-defined CRSs leave a multiplier unset; a NaN would drop
+        // every point, so read the heights as metres instead.
+        const zScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
         return (x, y, z) => {
           const c = resolved.convertCoordinates({ x, y });
           const [lng, lat] = converter.forward([c.x, c.y]);
           return [lng, lat, z * zScale];
         };
       }
-    } catch {
-      // Fall through to the WKT.
+      geoKeyFailure = "the GeoKeys name a CRS the EPSG tables do not support";
+    } catch (error) {
+      geoKeyFailure = error instanceof Error ? error.message : String(error);
     }
+  }
+  if (!crs.wkt && geoKeyFailure) {
+    throw new Error(`Point cloud has no usable CRS (${geoKeyFailure})`);
   }
   if (crs.wkt) {
     try {
@@ -705,6 +735,9 @@ export async function loadLasPointCloud(
   // `copc` masks the point format's compression bit off, so the LASzip
   // record every LAZ writer adds decides whether the points need decoding.
   const compressed = vlrs.some((v) => v.userId === "laszip encoded");
+  if (!compressed && header.pointDataOffset + decodedBytes > file.byteLength) {
+    throw new Error("Point cloud file is truncated (its point data runs past the end of the file)");
+  }
   const points = compressed
     ? await Las.PointData.decompressFile(file, await (options.lazPerf ?? defaultLazPerf)())
     : file.subarray(header.pointDataOffset, header.pointDataOffset + decodedBytes);
@@ -727,7 +760,7 @@ export async function loadLasPointCloud(
   let count = 0;
   let zMin = Number.POSITIVE_INFINITY;
   let zMax = Number.NEGATIVE_INFINITY;
-  for (let i = 0; i < view.pointCount && count < planned; i += stride) {
+  for (let i = 0; i < view.pointCount; i += stride) {
     const [lng, lat, height] = project(x(i), y(i), z(i));
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(height)) continue;
     positions[count * 3] = lng;

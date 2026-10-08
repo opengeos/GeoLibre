@@ -74,7 +74,7 @@ describe("ramp and point colours", () => {
 });
 
 /** A fake COPC archive: a root page with one node per depth, plus a sub-page. */
-function fakeCopc(options: { color?: boolean; scaleTo16Bit?: boolean } = {}): {
+function fakeCopc(options: { color?: boolean; scaleTo16Bit?: boolean; wkt?: string } = {}): {
   module: CopcModule;
   loads: string[];
   pages: number;
@@ -93,7 +93,7 @@ function fakeCopc(options: { color?: boolean; scaleTo16Bit?: boolean } = {}): {
           max: [1, 1, 1],
         },
         info: { rootHierarchyPage: { pageOffset: 0, pageLength: 0 } },
-        wkt: "PROJCS[fake]",
+        wkt: options.wkt ?? "PROJCS[fake]",
       }),
       loadHierarchyPage: async (_source, page) => {
         pages++;
@@ -772,6 +772,45 @@ describe("loadLasPointCloud", () => {
     assert.ok(Math.abs(cloud.positions[0] + 123) < 1e-6);
   });
 
+  it("refuses a truncated file with a clear message", async () => {
+    const file = makeLas(
+      [
+        [500000, 4877000, 1],
+        [500001, 4877000, 2],
+      ],
+      { epsg: 32610 },
+    );
+    await assert.rejects(
+      loadLasPointCloud("https://x/a.las", {
+        fetchBytes: bytes(file.subarray(0, file.length - 10)),
+      }),
+      /truncated/,
+    );
+  });
+
+  it("stops a download that has no length once it passes the cap", async () => {
+    const realFetch = globalThis.fetch;
+    let cancelled = false;
+    const chunk = new Uint8Array(64 * 1024 * 1024);
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.enqueue(chunk);
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+      )) as typeof fetch;
+    try {
+      await assert.rejects(loadLasPointCloud("https://x/huge.laz"), /too large to preview/);
+      assert.equal(cancelled, true, "the stream is cancelled, not drained");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("refuses a file with no CRS rather than reading metres as degrees", async () => {
     await assert.rejects(
       loadLasPointCloud("https://x/a.las", { fetchBytes: bytes(makeLas([[1, 2, 3]])) }),
@@ -798,6 +837,26 @@ describe("loadLasPointCloud", () => {
         signal: abort.signal,
       }),
     );
+  });
+});
+
+describe("COPC heights", () => {
+  it("converts heights in feet to metres from the WKT", async () => {
+    const fake = fakeCopc({ wkt: 'PROJCS["x (ft)",UNIT["foot",0.3048]]' });
+    const cloud = await loadCopcPointCloud("https://x/a.copc.laz", {
+      copc: fake.module,
+      projector: async () => identity,
+      lazPerf: async () => ({}),
+      budget: 100,
+    });
+    const plain = await loadCopcPointCloud("https://x/a.copc.laz", {
+      copc: fakeCopc().module,
+      projector: async () => identity,
+      lazPerf: async () => ({}),
+      budget: 100,
+    });
+    assert.ok(plain.positions[2] !== 0, "the fixture has non-zero heights");
+    assert.ok(Math.abs(cloud.positions[2] - plain.positions[2] * 0.3048) < 1e-9);
   });
 });
 
