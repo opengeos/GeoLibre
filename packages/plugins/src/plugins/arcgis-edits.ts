@@ -287,6 +287,9 @@ export function arcGISGeometry(geometry: Geometry | null, info: ArcGISEditInfo):
   }
 }
 
+/** Numeric text that converts to a number at save: plain decimals only. */
+const DECIMAL_TEXT = /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/;
+
 function attributes(
   feature: Feature,
   previous: Feature | undefined,
@@ -326,12 +329,13 @@ function attributes(
           "esriFieldTypeDate",
         ].includes(field.type)
       ) {
-        if (field.type === "esriFieldTypeDate" && typeof normalized === "string")
+        if (field.type === "esriFieldTypeDate" && typeof normalized === "string") {
           normalized = Date.parse(normalized);
-        // A value typed into a column that held no numbers can arrive as text.
-        // Only plain decimals convert; "0x1A" or "1e3" stay text and are rejected.
-        else if (typeof normalized === "string" && DECIMAL_TEXT.test(normalized))
+        } else if (typeof normalized === "string" && DECIMAL_TEXT.test(normalized)) {
+          // A value typed into a column that held no numbers can arrive as text.
+          // Only plain decimals convert; "0x1A" or "1e3" stay text and are rejected.
           normalized = Number(normalized);
+        }
         if (typeof normalized !== "number" || !Number.isFinite(normalized))
           throw new Error(`Field ${name} requires a number or valid date.`);
         if (
@@ -373,8 +377,6 @@ function attributes(
   }
   return result;
 }
-
-const DECIMAL_TEXT = /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/;
 
 const M_AWARE_GEOMETRY_ERROR =
   "This ArcGIS layer stores measure (M) values, which GeoLibre cannot edit. Attribute edits and deletions can be saved; add or reshape features in ArcGIS.";
