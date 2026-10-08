@@ -1075,9 +1075,12 @@ export interface ObiaClassifiedRaster {
 }
 
 function hexToRgb(color: string): [number, number, number] {
-  const match = color.trim().match(/^#?([0-9a-f]{6})$/i);
+  // The class color picker writes #rrggbb; accept the #rgb shorthand too.
+  const match = color.trim().match(/^#?([0-9a-f]{6}|[0-9a-f]{3})$/i);
   if (!match) return [128, 128, 128];
-  const n = parseInt(match[1], 16);
+  const hex =
+    match[1].length === 3 ? [...match[1]].map((digit) => digit + digit).join("") : match[1];
+  const n = parseInt(hex, 16);
   // Keep every channel above 0 so a class color never reads as NoData.
   return [Math.max(1, (n >> 16) & 255), Math.max(1, (n >> 8) & 255), Math.max(1, n & 255)];
 }
@@ -1139,7 +1142,5 @@ export async function classifiedRaster(
 
 /** The legend as CSV (`code,class,color`). */
 export function legendCsv(legend: readonly ObiaLegendEntry[]): string {
-  const quote = (value: string) =>
-    /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-  return `code,class,color\n${legend.map((e) => `${e.code},${quote(e.className)},${e.color}`).join("\n")}\n`;
+  return `code,class,color\n${legend.map((e) => `${e.code},${csvCell(e.className)},${e.color}`).join("\n")}\n`;
 }

@@ -39,7 +39,13 @@ export function ObiaExportStep({ onAddRaster }: ObiaExportStepProps): ReactEleme
 
   const baseName = segmentation.sourceName.replace(/\.[^.]+$/, "");
   const build = async () => {
-    const key = `${classification.finishedAt}|${classes.map((c) => c.name + c.color).join(",")}`;
+    // One raster per segmentation, classification and class styling; JSON so
+    // no class name can collide with a separator.
+    const key = JSON.stringify([
+      segmentation.finishedAt,
+      classification.finishedAt,
+      classes.map((cls) => [cls.name, cls.color]),
+    ]);
     if (cache.current?.key !== key) {
       const raster = await classifiedRaster(
         segmentation.labels,
