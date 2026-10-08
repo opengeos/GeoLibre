@@ -545,6 +545,7 @@ describe("assessAccuracy", () => {
     assert.equal(csvCell("a\rb"), '"a\rb"');
     assert.equal(csvCell("=SUM(A1)"), "'=SUM(A1)");
     assert.equal(csvCell("-1"), "'-1");
+    assert.equal(csvCell("\t=1"), "'\t=1");
   });
 
   it("writes a CSV report", () => {

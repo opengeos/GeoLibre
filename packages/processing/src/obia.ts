@@ -1025,11 +1025,12 @@ export function assessAccuracy(
 
 /**
  * Quote a CSV cell holding user text (a class name). Cells with a quote,
- * comma or line break are quoted, and a leading `=`, `+`, `-` or `@` gets an
- * apostrophe so a spreadsheet opening the report does not run it as a formula.
+ * comma or line break are quoted, and a leading `=`, `+`, `-`, `@`, tab or CR
+ * gets an apostrophe so a spreadsheet opening the report does not run it as a
+ * formula.
  */
 export function csvCell(value: string): string {
-  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
