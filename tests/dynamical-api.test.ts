@@ -559,9 +559,11 @@ describe("forecast run day picker", () => {
     assert.equal(stepForUtcDate(runs, "2026-10-04", 2), 10);
   });
 
-  it("falls back to the day's first run, then the nearest run", () => {
-    assert.equal(stepForUtcDate([runs[0], runs[1]], "2026-10-01", 0), 0);
-    assert.equal(stepForUtcDate(runs.slice(0, 2).concat(runs[6]), "2026-10-02", 1), 2);
+  it("falls back to the day's nearest run, then the nearest run overall", () => {
+    // 18Z is selected and 2026-10-02 has only 00Z and 12Z: 12Z is nearer.
+    assert.equal(stepForUtcDate([runs[3], runs[4], runs[6]], "2026-10-02", 0), 2);
+    // A tie (06Z between 00Z and 12Z) goes to the earlier run.
+    assert.equal(stepForUtcDate([runs[1], runs[4], runs[6]], "2026-10-02", 0), 1);
     // 2026-10-03 06Z is missing; 2026-10-03 18Z (index 7) is 12 h away, 2026-10-04 00Z is 18 h.
     assert.equal(stepForUtcDate(runs, "2026-10-03", 1), 7);
     assert.equal(stepForUtcDate(runs, "not a day", 1), -1);

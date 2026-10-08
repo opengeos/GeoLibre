@@ -560,9 +560,8 @@ export function stepsOnUtcDate(values: readonly number[], dateKey: string): numb
 }
 
 /**
- * The step to jump to when a day is picked: the one at the current step's time of day if that
- * day has it, else the day's first step, else the step nearest that time on that day (a day the
- * archive skips).
+ * The step to jump to when a day is picked: the day's step nearest the current step's time of
+ * day, or the nearest step overall when the archive skips that day. Ties go to the earlier step.
  *
  * @param values - Epoch milliseconds of each step.
  * @param dateKey - The picked day, `YYYY-MM-DD`.
@@ -580,16 +579,16 @@ export function stepForUtcDate(
   const timeOfDay = Number.isFinite(now) ? ((now % 86_400_000) + 86_400_000) % 86_400_000 : 0;
   const target = day + timeOfDay;
   const onDay = stepsOnUtcDate(values, dateKey);
-  if (onDay.length) return onDay.find((index) => values[index] === target) ?? onDay[0];
+  const candidates = onDay.length ? onDay : values.map((_, index) => index);
   let best = -1;
   let bestDistance = Infinity;
-  values.forEach((value, index) => {
-    const distance = Math.abs(value - target);
+  for (const index of candidates) {
+    const distance = Math.abs(values[index] - target);
     if (distance < bestDistance) {
       best = index;
       bestDistance = distance;
     }
-  });
+  }
   return best;
 }
 

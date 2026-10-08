@@ -852,7 +852,11 @@ function buildPanel(container: HTMLElement): () => void {
           if (day !== shownDay) {
             shownDay = day;
             const steps: number[] = [];
-            if (day) dayKeys.forEach((key, step) => key === day && steps.push(step));
+            if (day) {
+              dayKeys.forEach((key, step) => {
+                if (key === day) steps.push(step);
+              });
+            }
             runSelect.replaceChildren(
               ...steps.map((step) => {
                 const option = element("option", undefined, formatUtcTimeOfDay(axis.values[step]));
