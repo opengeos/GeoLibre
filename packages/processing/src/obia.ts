@@ -779,10 +779,12 @@ function readPredictions(
   if (idCol < 0 || classCol < 0) throw new Error(`${tool} wrote an unexpected table.`);
   const predictions = new Map<number, string>();
   for (const row of csv.rows) {
-    const id = Number(row[idCol]);
     const token = row[classCol];
-    // Skip a malformed row rather than storing a NaN id or an undefined class.
-    if (!Number.isFinite(id) || !token) continue;
+    // Skip a malformed row rather than storing a NaN or blank (0) id or an
+    // undefined class.
+    if (!row[idCol] || !token) continue;
+    const id = Number(row[idCol]);
+    if (!Number.isFinite(id)) continue;
     predictions.set(id, decodeClass(token));
   }
   return predictions;

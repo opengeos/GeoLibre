@@ -15,7 +15,7 @@ import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useObiaSession } from "../../../lib/obia/obia-session";
-import { ObiaNumberField, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
+import { ObiaNumberField, ObiaNumberInput, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
 /** Color of objects no rule matched. */
 const UNCLASSIFIED_COLOR = "#9ca3af";
@@ -99,6 +99,10 @@ export function ObiaClassifyStep(): ReactElement | null {
       ],
     });
 
+  // The class objects matching no rule get, used for both the predictions and
+  // the legend so the two always agree.
+  const defaultClass = settings.defaultClass.trim() || "unclassified";
+
   const handleClassify = useCallback(async () => {
     if (runningRef.current || !segmentation || !features) return;
     const layer = useAppStore
@@ -121,7 +125,7 @@ export function ObiaClassifyStep(): ReactElement | null {
           : await classifyByRules(
               features.table,
               settings.rules.filter((rule) => rule.field && rule.className),
-              settings.defaultClass.trim() || "unclassified",
+              defaultClass,
             );
       const latest = useAppStore
         .getState()
@@ -132,7 +136,7 @@ export function ObiaClassifyStep(): ReactElement | null {
         style: predictionStylePatch(
           latest,
           classes,
-          settings.method === "rules" ? settings.defaultClass : undefined,
+          settings.method === "rules" ? defaultClass : undefined,
         ),
       });
       setClassification({
@@ -147,7 +151,17 @@ export function ObiaClassifyStep(): ReactElement | null {
       runningRef.current = false;
       setRunning(false);
     }
-  }, [segmentation, features, settings, chosen, classes, updateLayer, setClassification, t]);
+  }, [
+    segmentation,
+    features,
+    settings,
+    chosen,
+    classes,
+    defaultClass,
+    updateLayer,
+    setClassification,
+    t,
+  ]);
 
   const summary = useMemo(() => {
     if (!classification) return null;
@@ -253,14 +267,11 @@ export function ObiaClassifyStep(): ReactElement | null {
                     </option>
                   ))}
                 </Select>
-                <Input
-                  type="number"
+                <ObiaNumberInput
                   aria-label={t("obia.classify.ruleValue")}
-                  value={String(rule.value)}
-                  onChange={(event) => {
-                    const value = Number(event.target.value);
-                    if (Number.isFinite(value)) updateRule(index, { value });
-                  }}
+                  value={rule.value}
+                  step="any"
+                  onChange={(value) => updateRule(index, { value })}
                 />
                 <Select
                   aria-label={t("obia.classify.ruleClass")}
