@@ -422,6 +422,8 @@ export {
   DEFAULT_REGION_GROWING_PARAMS,
   OBIA_MAX_PIXELS,
   OBIA_SEGMENT_ID_FIELD,
+  ObiaError,
+  type ObiaErrorCode,
   dissolveSegmentPolygons,
   readImageSummary,
   regionGrowingArgs,

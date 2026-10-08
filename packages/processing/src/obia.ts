@@ -13,6 +13,25 @@ import { runWasmToolInBackground } from "./wasm-tool-runner";
  * map, so the app layer owns layers and UI state.
  */
 
+/** Why an OBIA call refused its input, for the UI to translate. */
+export type ObiaErrorCode = "image-too-large" | "no-such-band" | "no-bands";
+
+/**
+ * An input the workbench rejects, with a stable `code` and `params` the app
+ * maps to a translated message (`message` stays English for logs and scripts).
+ */
+export class ObiaError extends Error {
+  readonly code: ObiaErrorCode;
+  readonly params: Record<string, number>;
+
+  constructor(code: ObiaErrorCode, message: string, params: Record<string, number> = {}) {
+    super(message);
+    this.name = "ObiaError";
+    this.code = code;
+    this.params = params;
+  }
+}
+
 /** Object ids are the segment label values the segmentation raster carries. */
 export const OBIA_SEGMENT_ID_FIELD = "segment_id";
 
@@ -87,25 +106,35 @@ export async function splitImageBands(
   bytes: ArrayBuffer | Uint8Array,
   bandIndexes?: readonly number[],
 ): Promise<ObiaImage> {
-  // Check the size from the header before decoding every band.
-  const { width, height } = await readImageSummary(bytes);
+  const buffer = toArrayBuffer(bytes);
+  // Check the size from the header before decoding anything.
+  const { width, height, bandCount } = await readImageSummary(buffer);
   if (width * height > OBIA_MAX_PIXELS) {
-    throw new Error(
+    throw new ObiaError(
+      "image-too-large",
       `This image has ${width} x ${height} pixels, more than the ${OBIA_MAX_PIXELS.toLocaleString("en-US")} the in-browser workbench handles. Clip it to a smaller area first.`,
+      { width, height, max: OBIA_MAX_PIXELS },
     );
   }
-  const raster = await readRasterData(toArrayBuffer(bytes));
-  const wanted = bandIndexes?.length ? bandIndexes : raster.bands.map((_, index) => index + 1);
-  const bands = wanted.map((index) => {
-    const band = raster.bands[index - 1];
-    if (!band) throw new Error(`The image has no band ${index}.`);
-    const single = writeRasterBands({ ...raster, bands: [band] });
+  const wanted = bandIndexes?.length
+    ? [...bandIndexes]
+    : Array.from({ length: bandCount }, (_, index) => index + 1);
+  const missing = wanted.find(
+    (index) => !Number.isInteger(index) || index < 1 || index > bandCount,
+  );
+  if (missing !== undefined) {
+    throw new ObiaError("no-such-band", `The image has no band ${missing}.`, { index: missing });
+  }
+  // Decode only the chosen bands, in the order asked for.
+  const raster = await readRasterData(buffer, { samples: wanted.map((index) => index - 1) });
+  const bands = wanted.map((index, i) => {
+    const single = writeRasterBands({ ...raster, bands: [raster.bands[i]] });
     return { index, bytes: new Uint8Array(single) };
   });
   return {
     width: raster.width,
     height: raster.height,
-    bandCount: raster.bands.length,
+    bandCount,
     nodata: raster.nodata,
     bands,
   };
@@ -236,7 +265,9 @@ export async function segmentImage(
   image: ObiaImage,
   params: RegionGrowingParams,
 ): Promise<ObiaSegmentation> {
-  if (!image.bands.length) throw new Error("Choose at least one band to segment.");
+  if (!image.bands.length) {
+    throw new ObiaError("no-bands", "Choose at least one band to segment.");
+  }
   const { paths, input } = stageBands(image.bands);
   const tool = "image_segmentation";
   const args = regionGrowingArgs(paths, params);

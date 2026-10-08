@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
 import {
+  ObiaError,
+  readRasterData,
   dissolveSegmentPolygons,
   readImageSummary,
   regionGrowingArgs,
@@ -120,5 +122,23 @@ describe("dissolveSegmentPolygons", () => {
         [7, 7, "MultiPolygon"],
       ],
     );
+  });
+});
+
+describe("splitImageBands input errors", () => {
+  it("raises a coded ObiaError for a band the image lacks", async () => {
+    await assert.rejects(splitImageBands(threeBandTiff(), [2, 7]), (err: unknown) => {
+      assert.ok(err instanceof ObiaError);
+      assert.equal(err.code, "no-such-band");
+      assert.deepEqual(err.params, { index: 7 });
+      return true;
+    });
+  });
+
+  it("decodes only the chosen bands, in the order asked for", async () => {
+    const image = await splitImageBands(threeBandTiff(), [3, 1]);
+    const third = await readRasterData(image.bands[0].bytes.buffer as ArrayBuffer);
+    // Band b holds (b + 1) * 10 + pixel in threeBandTiff.
+    assert.equal(third.bands[0][0], 30);
   });
 });
