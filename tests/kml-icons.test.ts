@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Feature, FeatureCollection } from "geojson";
+import { DOMParser } from "linkedom";
+import { KML_ICON_URL_PROPERTY as MAP_KML_ICON_URL_PROPERTY } from "../packages/map/src/markers";
+import { parseKmlText } from "../apps/geolibre-desktop/src/lib/kml";
 import {
+  createRemoteIconFetcher,
   fetchRemoteIconDataUrl,
   KML_ICON_HREF_PROPERTY,
   KML_ICON_URL_PROPERTY,
   remoteIconCandidates,
   resolveKmlFeatureIcons,
 } from "../apps/geolibre-desktop/src/lib/kml-icons";
+
+globalThis.DOMParser = DOMParser as unknown as typeof globalThis.DOMParser;
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 const PNG_DATA_URL = `data:image/png;base64,${Buffer.from(PNG_BYTES).toString("base64")}`;
@@ -104,13 +110,43 @@ describe("fetchRemoteIconDataUrl", () => {
   });
 });
 
+describe("fetchRemoteIconDataUrl body checks", () => {
+  it("rejects a non-image content type even when the URL ends in .png", async () => {
+    const fetchImpl = fakeFetch({
+      "https://example.com/a.png": () =>
+        new Response("<html>not found</html>", { headers: { "content-type": "text/html" } }),
+    });
+    assert.equal(await fetchRemoteIconDataUrl("https://example.com/a.png", fetchImpl), null);
+  });
+
+  it("stops reading a body with no Content-Length once it passes the cap", async () => {
+    let pulled = 0;
+    const chunk = new Uint8Array(256 * 1024);
+    const fetchImpl = fakeFetch({
+      "https://example.com/stream.png": () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              pulled += 1;
+              controller.enqueue(chunk);
+            },
+          }),
+          { headers: { "content-type": "image/png" } },
+        ),
+    });
+    assert.equal(await fetchRemoteIconDataUrl("https://example.com/stream.png", fetchImpl), null);
+    // 1 MB cap / 256 KB chunks: the fifth chunk crosses it, and reading stops.
+    assert.ok(pulled <= 6, `pulled ${pulled} chunks from an endless stream`);
+  });
+});
+
 describe("resolveKmlFeatureIcons", () => {
   it("resolves remote icons, fetching each distinct href once", async () => {
     const href = "http://maps.google.com/mapfiles/kml/shapes/star.png";
     const fetchImpl = fakeFetch({ "https://maps.google.com/mapfiles/kml/shapes/star.png": png });
     const data = collection(pointWithIcon(href), pointWithIcon(href));
 
-    await resolveKmlFeatureIcons(data, undefined, fetchImpl);
+    await resolveKmlFeatureIcons(data, undefined, createRemoteIconFetcher(fetchImpl));
 
     for (const feature of data.features) {
       assert.equal(feature.properties?.[KML_ICON_URL_PROPERTY], PNG_DATA_URL);
@@ -129,7 +165,7 @@ describe("resolveKmlFeatureIcons", () => {
         seen.push(href);
         return PNG_DATA_URL;
       },
-      fakeFetch({}),
+      createRemoteIconFetcher(fakeFetch({})),
     );
     assert.deepEqual(seen, ["files/icon.png"]);
     assert.equal(data.features[0].properties?.[KML_ICON_URL_PROPERTY], PNG_DATA_URL);
@@ -146,7 +182,7 @@ describe("resolveKmlFeatureIcons", () => {
       async () => {
         throw new Error("boom");
       },
-      fakeFetch({}),
+      createRemoteIconFetcher(fakeFetch({})),
     );
     for (const feature of data.features) {
       assert.deepEqual(feature.properties, { name: "pin" });
@@ -164,11 +200,34 @@ describe("resolveKmlFeatureIcons", () => {
     const warn = console.warn;
     console.warn = () => {};
     try {
-      await resolveKmlFeatureIcons(collection(...features), undefined, fetchImpl);
+      await resolveKmlFeatureIcons(
+        collection(...features),
+        undefined,
+        createRemoteIconFetcher(fetchImpl),
+      );
     } finally {
       console.warn = warn;
     }
     assert.equal(fetchImpl.calls.length, 64);
     assert.equal(features.filter((f) => f.properties?.[KML_ICON_URL_PROPERTY]).length, 64);
+  });
+
+  it("shares one fetcher's cache and budget across collections", async () => {
+    const fetchImpl = fakeFetch({ "https://example.com/shared.png": png });
+    const fetchRemote = createRemoteIconFetcher(fetchImpl);
+    const first = collection(pointWithIcon("https://example.com/shared.png"));
+    const second = collection(pointWithIcon("https://example.com/shared.png"));
+    await resolveKmlFeatureIcons(first, undefined, fetchRemote);
+    await resolveKmlFeatureIcons(second, undefined, fetchRemote);
+    assert.equal(fetchImpl.calls.length, 1);
+    assert.equal(second.features[0].properties?.[KML_ICON_URL_PROPERTY], PNG_DATA_URL);
+  });
+
+  it("keeps its property names in sync with the KML parser and the map package", () => {
+    const parsed = parseKmlText(`<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark>
+      <Style><IconStyle><Icon><href>files/a.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>0,0</coordinates></Point></Placemark></kml>`);
+    assert.equal(parsed.features[0].properties?.[KML_ICON_HREF_PROPERTY], "files/a.png");
+    assert.equal(KML_ICON_URL_PROPERTY, MAP_KML_ICON_URL_PROPERTY);
   });
 });

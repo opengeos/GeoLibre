@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, GeoJsonProperties, Geometry, Position } from "geojson";
+import { KML_ICON_HREF_PROPERTY } from "./kml-icons";
 
 /**
  * A minimal KML reader that, unlike the DuckDB/GDAL path, preserves the
@@ -27,8 +28,8 @@ interface KmlStyle {
   // that the spec has no key for, so it is round-tripped here and wired into
   // circle-opacity by the map package.
   "marker-opacity"?: number;
-  /** Archive-relative/remote KML icon reference, resolved by the KMZ loader. */
-  __geolibre_kml_icon_href?: string;
+  /** Archive-relative/remote KML icon reference, resolved by `resolveKmlFeatureIcons`. */
+  [KML_ICON_HREF_PROPERTY]?: string;
 }
 
 /** Internal import metadata used to reconstruct KML Folder groups. */
@@ -530,7 +531,7 @@ function styleFromElement(element: Element): KmlStyle {
     }
     const icon = directChild(iconStyle, "Icon");
     const href = icon ? childText(icon, "href") : undefined;
-    if (href) style.__geolibre_kml_icon_href = href;
+    if (href) style[KML_ICON_HREF_PROPERTY] = href;
   }
 
   return style;

@@ -21,7 +21,11 @@ import {
   type KmlModel,
   type KmlTimeBounds,
 } from "../kml";
-import { type KmlLocalIconResolver, resolveKmlFeatureIcons } from "../kml-icons";
+import {
+  createRemoteIconFetcher,
+  type KmlLocalIconResolver,
+  resolveKmlFeatureIcons,
+} from "../kml-icons";
 import {
   findArchiveEntry,
   findArchiveEntryKey,
@@ -766,11 +770,18 @@ async function kmzVectorFeatures(
   options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
   let cancellation: unknown;
+  // One fetcher for the whole archive, so its KML entries share the remote-icon
+  // cache and request budget.
+  const fetchRemoteIcon = createRemoteIconFetcher();
   const settled = await Promise.all(
     kmlFiles.map((file) =>
       loadKmlFile(file, options).then(
         async (collection): Promise<FeatureCollection | null> => {
-          return resolveKmlFeatureIcons(collection, kmzArchiveIconResolver(entries, file.name));
+          return resolveKmlFeatureIcons(
+            collection,
+            kmzArchiveIconResolver(entries, file.name),
+            fetchRemoteIcon,
+          );
         },
         (error): null => {
           if (isVectorLoadCancelled(error)) {
@@ -1110,11 +1121,18 @@ export async function parseKmz(
   // archive drops just that layer instead of failing the whole KMZ (Promise.all
   // is fail-fast). Real load errors still reject and abort the archive.
   let cancellation: unknown;
+  // One fetcher for the whole archive, so its KML entries share the remote-icon
+  // cache and request budget.
+  const fetchRemoteIcon = createRemoteIconFetcher();
   const settled = await Promise.all(
     kmlFiles.map((file) =>
       loadKmlFile(file, options).then(
         (collection): Promise<FeatureCollection> =>
-          resolveKmlFeatureIcons(collection, kmzArchiveIconResolver(entries, file.name)),
+          resolveKmlFeatureIcons(
+            collection,
+            kmzArchiveIconResolver(entries, file.name),
+            fetchRemoteIcon,
+          ),
         (error): null => {
           if (!isVectorLoadCancelled(error)) throw error;
           cancellation = error;
