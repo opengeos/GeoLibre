@@ -630,10 +630,18 @@ fn windows_deep_link_needs_registration() -> bool {
     if is_msix_install(&exe) {
         return false;
     }
+    // Without a `URL Protocol` value Windows never launches the key's command
+    // for a URI, so such a key counts as no handler at all.
     let command = windows_registry::CLASSES_ROOT
-        .open(format!("{DEEP_LINK_SCHEME}\\shell\\open\\command"))
-        .and_then(|key| key.get_string(""))
-        .ok();
+        .open(DEEP_LINK_SCHEME)
+        .ok()
+        .filter(|scheme| scheme.get_string("URL Protocol").is_ok())
+        .and_then(|scheme| {
+            scheme
+                .open("shell\\open\\command")
+                .and_then(|key| key.get_string(""))
+                .ok()
+        });
     scheme_handler_missing(command.as_deref(), Path::is_file)
 }
 
@@ -660,25 +668,30 @@ fn is_msix_install(exe: &Path) -> bool {
 /// Whether a scheme's registered `shell\open\command` fails to launch an
 /// existing program: nothing registered, an unparsable command, or a program
 /// that was moved or deleted (such as a bare exe run once from Downloads).
-/// A program path with `%` (an unexpanded `REG_EXPAND_SZ` variable) counts as
-/// live, so another handler is never overwritten on a guess.
+/// So another handler is never overwritten on a guess, a program path with `%`
+/// (an unexpanded `REG_EXPAND_SZ` variable) counts as live, and so does an
+/// unquoted command: its path may contain spaces, and the handlers Tauri, NSIS
+/// and MSI write are always quoted, so an unquoted one belongs to another app.
 #[cfg(any(windows, test))]
 fn scheme_handler_missing(command: Option<&str>, exists: impl Fn(&Path) -> bool) -> bool {
-    match command.and_then(handler_program) {
+    let Some(command) = command.map(str::trim).filter(|command| !command.is_empty()) else {
+        return true;
+    };
+    if !command.starts_with('"') {
+        return false;
+    }
+    match handler_program(command) {
         Some(program) => !program.contains('%') && !exists(Path::new(program)),
         None => true,
     }
 }
 
-/// The program path of a `shell\open\command` value: the quoted first token
-/// (`"C:\Program Files\App\app.exe" "%1"`) or, unquoted, up to the first space.
+/// The program path of a quoted `shell\open\command` value
+/// (`"C:\Program Files\App\app.exe" "%1"`), or `None` when the value is
+/// unquoted or the quotes are empty.
 #[cfg(any(windows, test))]
 fn handler_program(command: &str) -> Option<&str> {
-    let command = command.trim_start();
-    let program = match command.strip_prefix('"') {
-        Some(rest) => rest.split('"').next()?,
-        None => command.split_whitespace().next()?,
-    };
+    let program = command.trim_start().strip_prefix('"')?.split('"').next()?;
     (!program.is_empty()).then_some(program)
 }
 
@@ -5400,10 +5413,7 @@ mod tests {
             super::handler_program(installed),
             Some(r"C:\Program Files\GeoLibre Desktop\geolibre-desktop.exe")
         );
-        assert_eq!(
-            super::handler_program(r"C:\Tools\geolibre.exe %1"),
-            Some(r"C:\Tools\geolibre.exe")
-        );
+        assert_eq!(super::handler_program(r"C:\Tools\geolibre.exe %1"), None);
         assert_eq!(super::handler_program(r#""" "%1""#), None);
         assert_eq!(super::handler_program("   "), None);
 
@@ -5415,6 +5425,12 @@ mod tests {
             Some(r#""%ProgramFiles%\GeoLibre Desktop\geolibre-desktop.exe" "%1""#),
             |_| false
         ));
+        // An unquoted path may hold spaces, so another app's handler is kept.
+        assert!(!super::scheme_handler_missing(
+            Some(r"C:\Program Files\Other App\app.exe %1"),
+            |_| false
+        ));
+        assert!(super::scheme_handler_missing(Some(r#""" "%1""#), |_| true));
     }
 
     #[cfg(not(feature = "mas"))]
