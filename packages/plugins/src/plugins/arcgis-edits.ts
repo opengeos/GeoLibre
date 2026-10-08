@@ -53,6 +53,18 @@ export interface ArcGISEditInfo {
   subtypes?: ArcGISSubtype[];
 }
 
+/**
+ * The edit operations GeoLibre can save to a layer, given what the service
+ * allows and what GeoLibre can represent faithfully.
+ *
+ * An M-aware layer (`hasM`) stays editable for attributes and deletes, but not
+ * for inserts: features load as GeoJSON, which has no measure values, so a new
+ * shape would be stored without the measures the layer is built around.
+ * Geometry updates on such a layer are refused by {@link planArcGISEdits}.
+ *
+ * @param info - The layer's `?f=json` metadata.
+ * @returns Which of create, update and delete may be saved.
+ */
 export function arcGISEditCapabilities(info: ArcGISEditInfo) {
   const caps = new Set(
     info.capabilities
@@ -64,11 +76,10 @@ export function arcGISEditCapabilities(info: ArcGISEditInfo) {
     info.objectIdField &&
     info.fields?.length &&
     !info.isDataVersioned &&
-    !info.hasM &&
     !info.datesInUnknownTimezone,
   );
   return {
-    create: supported && caps.has("create"),
+    create: supported && !info.hasM && caps.has("create"),
     update: supported && caps.has("update"),
     delete: supported && caps.has("delete"),
   };
@@ -114,17 +125,51 @@ export function reconcileArcGISRefresh(
   };
 }
 
-/** Assign stable local identities only to features freshly read from the service. */
+/**
+ * The object ID of a record freshly read from the service, recovered when the
+ * response does not carry it under the exact `objectIdField` name: from a
+ * property whose name differs only in case, or from the GeoJSON feature `id`,
+ * which ArcGIS fills from the object ID.
+ */
+function recoveredArcGISObjectId(feature: Feature, field: string): number | undefined {
+  const properties = feature.properties ?? {};
+  const lower = field.toLowerCase();
+  const key = Object.keys(properties).find((name) => name.toLowerCase() === lower);
+  const value = key === undefined ? feature.id : (properties[key] ?? feature.id);
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+/**
+ * Prepare features freshly read from the service for editing: each keeps its
+ * object ID under the layer's `objectIdField` and gets it as a stable local
+ * identity, and a record the service returned twice is kept once.
+ *
+ * @param data - The downloaded features.
+ * @param field - The layer's object ID field, if it names one.
+ * @returns The features, ready to serve as an edit baseline.
+ */
 export function identifyArcGISFeatures(data: FeatureCollection, field?: string): FeatureCollection {
   if (!field) return data;
-  return {
-    ...data,
-    features: data.features.map((feature) => {
-      if (feature.id !== undefined) return feature;
-      const id = arcGISObjectId(feature, field);
-      return id === undefined ? feature : { ...feature, id };
-    }),
-  };
+  const seen = new Set<number>();
+  const features: Feature[] = [];
+  for (let feature of data.features) {
+    if (feature.properties?.[field] == null) {
+      const recovered = recoveredArcGISObjectId(feature, field);
+      if (recovered !== undefined)
+        feature = { ...feature, properties: { ...feature.properties, [field]: recovered } };
+    }
+    // Loading never fails on an odd ID; saving validates it with a clear error.
+    const value = feature.properties?.[field];
+    const id =
+      typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+    if (id !== undefined) {
+      // Overlapping pages can repeat a record; one copy is the record.
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    features.push(feature.id !== undefined || id === undefined ? feature : { ...feature, id });
+  }
+  return { ...data, features };
 }
 
 /** Match downloaded records by object ID so sorting never pins a viewport. */
@@ -272,6 +317,9 @@ function attributes(
       ) {
         if (field.type === "esriFieldTypeDate" && typeof normalized === "string")
           normalized = Date.parse(normalized);
+        // A value typed into a column that held no numbers can arrive as text.
+        else if (typeof normalized === "string" && normalized.trim() !== "")
+          normalized = Number(normalized);
         if (typeof normalized !== "number" || !Number.isFinite(normalized))
           throw new Error(`Field ${name} requires a number or valid date.`);
         if (
@@ -314,6 +362,9 @@ function attributes(
   return result;
 }
 
+const M_AWARE_GEOMETRY_ERROR =
+  "This ArcGIS layer stores measure (M) values, which GeoLibre cannot edit. Attribute edits and deletions can be saved; add or reshape features in ArcGIS.";
+
 export interface ArcGISEditPlan {
   adds: Array<{ feature: Feature; index: number; payload: unknown }>;
   updates: Array<{ feature: Feature; objectId: number; payload: unknown }>;
@@ -334,8 +385,12 @@ export function planArcGISEdits(
   );
   for (const feature of baseline.features) {
     const id = arcGISObjectId(feature, field);
-    if (id === undefined || previous.has(id))
-      throw new Error("ArcGIS baseline has missing or duplicate object IDs. Reload the layer.");
+    if (id === undefined)
+      throw new Error(
+        `A downloaded ArcGIS record has no ${field} value. Check that the service returns its object ID field, then reload the layer.`,
+      );
+    if (previous.has(id))
+      throw new Error(`ArcGIS returned ${field} ${id} more than once. Reload the layer.`);
     previous.set(id, feature);
   }
   const plan: ArcGISEditPlan = { adds: [], updates: [], deletes: [] };
@@ -367,6 +422,7 @@ export function planArcGISEdits(
     const geometryChanged = !same(feature.geometry, prior.geometry);
     if (geometryChanged && info.allowGeometryUpdates === false)
       throw new Error("This ArcGIS layer does not allow geometry updates.");
+    if (geometryChanged && info.hasM) throw new Error(M_AWARE_GEOMETRY_ERROR);
     if (geometryChanged && info.geometryGeneralized)
       throw new Error(
         "This layer's shapes are simplified at the current zoom. Zoom in to edit their geometry.",
@@ -381,6 +437,7 @@ export function planArcGISEdits(
     });
   });
   plan.deletes = [...previous.keys()].filter((id) => !seen.has(id));
+  if (plan.adds.length && info.hasM) throw new Error(M_AWARE_GEOMETRY_ERROR);
   const caps = arcGISEditCapabilities(info);
   if (
     (plan.adds.length && !caps.create) ||

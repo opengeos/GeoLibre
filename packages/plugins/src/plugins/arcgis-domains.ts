@@ -341,6 +341,10 @@ function buildServiceForm(
       fields.push({ ...base, widget: "valueMap", valueMap });
     } else if (domain.kind === "range" && valueType !== "string") {
       fields.push({ ...base, widget: "number", min: domain.min, max: domain.max });
+    } else if (valueType !== "string") {
+      // No domain still means a numeric column: a value typed into a cell must
+      // be stored as a number even when no record holds one yet.
+      fields.push({ ...base, widget: "number" });
     }
   }
   return fields.length ? { fields } : undefined;
@@ -350,8 +354,9 @@ function buildServiceForm(
  * The Attribute Form constraints a record's ArcGIS domains impose: a labeled
  * value map (stored codes keep the field's declared type) for coded-value
  * domains and inclusive bounds for numeric range domains, resolved for the
- * record's type/subtype. Fields without a resolvable domain are omitted so
- * they keep the existing editor. Results are memoized per metadata object
+ * record's type/subtype. Numeric fields without a resolvable domain get an
+ * unbounded number editor; other fields without one are omitted so they keep
+ * the existing editor. Results are memoized per metadata object
  * and type/subtype value, so callers may ask per row or per cell.
  *
  * @param info - The layer's `?f=json` metadata.

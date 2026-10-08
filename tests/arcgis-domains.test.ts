@@ -349,7 +349,11 @@ describe("ArcGIS typed codes", () => {
     assert.equal(edit({ ZONE: "01" }).updates.length, 1);
     assert.throws(() => edit({ ZONE: 1 }), /ZONE requires text/);
     assert.throws(() => edit({ ZONE: "001" }), /ZONE is outside its coded value domain/);
-    assert.throws(() => edit({ STATUS: "1" }), /STATUS requires a number/);
+    // Numeric text (from a column that held no numbers) is sent as the number.
+    assert.deepEqual(edit({ STATUS: "1" }).updates[0].payload, {
+      attributes: { OBJECTID: 1, STATUS: 1 },
+    });
+    assert.throws(() => edit({ STATUS: "one" }), /STATUS requires a number/);
   });
 });
 
@@ -440,9 +444,28 @@ describe("ArcGIS domain metadata edge cases", () => {
     });
     const form = arcGISServiceAttributeForm(info, { ASSET_TYPE: 1 })!;
     assert.equal(
-      form.fields.some((f) => f.field === "ZONE" || f.field === "STATUS"),
+      form.fields.some((f) => f.field === "ZONE"),
       false,
     );
+    // A numeric field still edits as a number, with no bounds or choices.
+    assert.deepEqual(
+      form.fields.find((f) => f.field === "STATUS"),
+      { field: "STATUS", valueType: "integer", alias: "Status", required: true, widget: "number" },
+    );
+  });
+
+  it("edits numeric fields without a domain as numbers", () => {
+    const info: ArcGISEditInfo = {
+      ...editBits,
+      fields: [
+        { name: "OBJECTID", type: "esriFieldTypeOID", editable: false },
+        { name: "FLOW_GPM", type: "esriFieldTypeDouble" },
+        { name: "NOTE", type: "esriFieldTypeString" },
+      ],
+    };
+    const form = arcGISServiceAttributeForm(info, {})!;
+    assert.deepEqual(form.fields, [{ field: "FLOW_GPM", valueType: "number", widget: "number" }]);
+    assert.equal(coerceAttributeFormValue(form.fields[0], "1000"), 1000);
   });
 
   it("reports a subtype field that is not in the field list", () => {

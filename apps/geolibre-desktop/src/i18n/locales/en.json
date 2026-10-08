@@ -8487,6 +8487,7 @@
     "hideLayer": "Hide layer",
     "showLayer": "Show layer",
     "editingGeometry": "Editing geometry",
+    "arcgisEditsUnsent": "Edits are not on the ArcGIS service yet. Choose Layer actions → Save edits to ArcGIS service to send them.",
     "rename": "Rename",
     "materializeToEditable": "Materialize to editable layer",
     "finishEditingGeometry": "Finish editing geometry",
