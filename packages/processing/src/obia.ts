@@ -790,6 +790,27 @@ export function featureTableCsv(
 }
 
 /**
+ * The feature table with an empty row for every object a feature tool skipped
+ * (e.g. GLCM texture of a 1-pixel object), so every object is classified: the
+ * random forest fills the gaps with column means, and rules give it the
+ * default class.
+ *
+ * @param table Feature table.
+ * @param objects The objects layer's features.
+ */
+export function tableForAllObjects(
+  table: ObiaFeatureTable,
+  objects: FeatureCollection,
+): ObiaFeatureTable {
+  const rows = new Map(table.rows);
+  for (const feature of objects.features) {
+    const id = objectSegmentId(feature);
+    if (Number.isFinite(id) && !rows.has(id)) rows.set(id, {});
+  }
+  return { fields: table.fields, rows };
+}
+
+/**
  * CSV-safe stand-ins for class names: the tools' CSV has no quoting, so a
  * class named "trees, shrubs" would split a row.
  */

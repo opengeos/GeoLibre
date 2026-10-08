@@ -7526,6 +7526,8 @@
       "result_other": "Classified {{count}} objects: {{summary}}",
       "imputed": "Objects missing a value used the feature's mean: {{fields}}.",
       "error": {
+        "incompleteRule": "Give every rule a feature and a class, or remove it.",
+        "remeasured": "The objects were measured again while classifying, so these predictions were discarded. Classify again.",
         "failed": "Classification failed."
       }
     }

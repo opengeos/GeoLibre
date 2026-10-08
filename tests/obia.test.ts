@@ -7,6 +7,7 @@ import { writeArrayBuffer } from "geotiff";
 import { featureSelectionId } from "@geolibre/core";
 import { initTools } from "geolibre-wasm/tools";
 import {
+  tableForAllObjects,
   applyPredictions,
   classifyByRules,
   classifyRandomForest,
@@ -674,5 +675,27 @@ describe("classifyByRules input checks", () => {
       classifyByRules(table, [{ field: "a", op: ">", value: Number.NaN, className: "x" }], "y"),
       /Every rule needs a numeric value/,
     );
+  });
+});
+
+describe("tableForAllObjects", () => {
+  it("adds an empty row for objects no feature tool wrote", () => {
+    const table = {
+      fields: ["a"],
+      rows: new Map([[1, { a: 2 } as Record<string, number | null>]]),
+    };
+    const objects: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [1, 2].map((id) => ({
+        type: "Feature" as const,
+        id,
+        properties: { segment_id: id },
+        geometry: { type: "Point" as const, coordinates: [id, 0] },
+      })),
+    };
+    const all = tableForAllObjects(table, objects);
+    assert.deepEqual([...all.rows.keys()].sort(), [1, 2]);
+    assert.deepEqual(all.rows.get(2), {});
+    assert.equal(table.rows.size, 1, "the input table is not modified");
   });
 });
