@@ -54,6 +54,7 @@ import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../../../lib/cvd-previe
 import { CVD_MODES } from "../../../lib/cvd-simulation";
 import { useLineOfSightTool } from "../../../lib/line-of-sight-store";
 import { masHidesDataSource } from "../../../lib/mas-build";
+import { openObiaWorkbench } from "../../../lib/obia/obia-panel";
 import { pluginDisplayName } from "../../../lib/plugin-display-name";
 import { IS_STORE_BUILD } from "../../../lib/updates";
 import type { AddDataKind } from "../AddDataDialog";
@@ -146,7 +147,6 @@ export interface ToolbarCommandContext {
   setAssistantOpen: AppState["setAssistantOpen"];
   setGeocodeOpen: AppState["setGeocodeOpen"];
   setModelBuilderOpen: AppState["setModelBuilderOpen"];
-  setObiaWorkbenchOpen: AppState["setObiaWorkbenchOpen"];
   setBatchToolsOpen: AppState["setBatchToolsOpen"];
   setSegmentationOpen: AppState["setSegmentationOpen"];
   setObjectDetectionOpen: AppState["setObjectDetectionOpen"];
@@ -217,7 +217,6 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
     setAssistantOpen,
     setGeocodeOpen,
     setModelBuilderOpen,
-    setObiaWorkbenchOpen,
     setBatchToolsOpen,
     setSegmentationOpen,
     setObjectDetectionOpen,
@@ -477,7 +476,7 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       keywords:
         "obia object based image analysis segmentation segment classify land cover ecognition",
       icon: Shapes,
-      run: () => setObiaWorkbenchOpen(true),
+      run: openObiaWorkbench,
     },
     {
       id: "proc.batchTools",
