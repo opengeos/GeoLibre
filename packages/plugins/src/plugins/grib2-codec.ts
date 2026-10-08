@@ -107,7 +107,10 @@ let registration: Promise<void> | null = null;
 export function registerGribberishCodec(): Promise<void> {
   registration ??= import("zarrita").then(({ registry }) => {
     if (!registry.has("gribberish")) {
-      // zarrita's registry is typed for its own codec classes; this one honours the same contract.
+      // zarrita's registry is typed for its own codec classes. This one honours the same contract
+      // (`kind`, static `fromConfig(config, meta)`, `decode(bytes)` returning `{ data, shape,
+      // stride }`), checked against zarrita 0.7.5's `codecs.js`; a change there shows up in
+      // tests/grib2.test.ts, which reads through the registered codec.
       registry.set("gribberish", () => GribberishCodec as never);
     }
   });

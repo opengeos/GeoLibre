@@ -13,6 +13,8 @@ import {
   fetchDynamicalCatalog,
   formatLeadTime,
   formatUtc,
+  bboxCenter,
+  bboxContains,
   isLeadTimeDimension,
   isTemporalDimension,
   needsRegionalView,
@@ -362,16 +364,11 @@ function zoomInForRegionalLayer(
   if (!map || map.getZoom() >= minZoom) return;
   const center = map.getCenter();
   const bbox = dataset.bbox;
-  const covered =
-    !bbox ||
-    (center.lng >= bbox[0] &&
-      center.lng <= bbox[2] &&
-      center.lat >= bbox[1] &&
-      center.lat <= bbox[3]);
-  map.jumpTo({
-    center: covered ? center : [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2],
-    zoom: minZoom,
-  });
+  if (!bbox || bboxContains(bbox, center.lng, center.lat)) {
+    map.jumpTo({ center, zoom: minZoom });
+  } else {
+    map.jumpTo({ center: bboxCenter(bbox), zoom: minZoom });
+  }
 }
 
 /**
@@ -401,6 +398,58 @@ function applyRegionalZoomRange(app: GeoLibreAppAPI, layerId: string, minZoom: n
     const renderer = native.implementation;
     if (renderer && typeof renderer.minZoom === "number") renderer.minZoom = threshold;
   }
+}
+
+/**
+ * The regional layers this panel added, by layer id, so a resize can recompute their minimum
+ * zoom: the budget is per view, and a larger map at the same zoom holds more chunks.
+ */
+const regionalLayers = new Map<
+  string,
+  { dataset: DynamicalDataset; variable: DynamicalVariable }
+>();
+/** The map the resize listener is on, and the listener, while any regional layer exists. */
+let resizeWatch: {
+  map: { off(type: "resize", listener: () => void): unknown };
+  listener: () => void;
+} | null = null;
+
+function stopResizeWatch(): void {
+  resizeWatch?.map.off("resize", resizeWatch.listener);
+  resizeWatch = null;
+}
+
+/** Re-apply every live regional layer's minimum zoom for the map's current size. */
+function refreshRegionalZoomRanges(app: GeoLibreAppAPI): void {
+  const layers = useAppStore.getState().layers;
+  for (const [layerId, entry] of regionalLayers) {
+    if (!layers.some((layer) => layer.id === layerId)) {
+      regionalLayers.delete(layerId);
+      continue;
+    }
+    applyRegionalZoomRange(
+      app,
+      layerId,
+      regionalMinZoom(entry.dataset, entry.variable, viewportSize(app)),
+    );
+  }
+  if (!regionalLayers.size) stopResizeWatch();
+}
+
+/** Track a regional layer, listening for map resizes while any exists. */
+function watchRegionalLayer(
+  app: GeoLibreAppAPI,
+  layerId: string,
+  dataset: DynamicalDataset,
+  variable: DynamicalVariable,
+): void {
+  regionalLayers.set(layerId, { dataset, variable });
+  const map = getStyleMap(app);
+  if (!map || resizeWatch?.map === map) return;
+  stopResizeWatch();
+  const listener = () => refreshRegionalZoomRanges(app);
+  map.on("resize", listener);
+  resizeWatch = { map, listener };
 }
 
 /**
@@ -890,7 +939,10 @@ function buildPanel(container: HTMLElement): () => void {
         ...(proj4 ? { proj4 } : {}),
         ...(bounds ? { bounds } : {}),
       });
-      if (minZoom > 0) applyRegionalZoomRange(app, layerId, minZoom);
+      if (minZoom > 0) {
+        applyRegionalZoomRange(app, layerId, minZoom);
+        watchRegionalLayer(app, layerId, dataset, variable);
+      }
       const layer = useAppStore.getState().layers.find((entry) => entry.id === layerId);
       if (layer) {
         useAppStore.getState().updateLayer(layerId, {
@@ -1029,6 +1081,8 @@ export const maplibreDynamicalPlugin: GeoLibrePlugin = {
     state = initialState();
     // A later session reads the axes afresh.
     axesCache.clear();
+    stopResizeWatch();
+    regionalLayers.clear();
     appRef = null;
   },
 };

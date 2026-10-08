@@ -646,3 +646,23 @@ function roundSignificant(value: number, round: (value: number) => number): numb
   // The quotient is trimmed first: 0.3 / 0.01 is 29.999999999999996, which would floor to 29.
   return Number((round(Number((value / magnitude).toPrecision(12))) * magnitude).toPrecision(12));
 }
+
+/** Whether a `[west, south, east, north]` box holds a point; `west > east` crosses 180°. */
+export function bboxContains(
+  bbox: readonly [number, number, number, number],
+  lng: number,
+  lat: number,
+): boolean {
+  const [west, south, east, north] = bbox;
+  if (lat < south || lat > north) return false;
+  const wrapped = ((((lng + 180) % 360) + 360) % 360) - 180;
+  return west <= east ? wrapped >= west && wrapped <= east : wrapped >= west || wrapped <= east;
+}
+
+/** The centre of a `[west, south, east, north]` box, across 180° when `west > east`. */
+export function bboxCenter(bbox: readonly [number, number, number, number]): [number, number] {
+  const [west, south, east, north] = bbox;
+  const span = west <= east ? east - west : east + 360 - west;
+  const lng = west + span / 2;
+  return [lng > 180 ? lng - 360 : lng, (south + north) / 2];
+}

@@ -103,6 +103,22 @@ describe("decodeGrib2", () => {
     assert.throws(() => decodeGrib2(bytes), /5\.40/);
   });
 
+  it("fails on a truncated message rather than reading zeros", () => {
+    const bytes = fixture("complex-bitmap");
+    // Drop the end of the data section and the end marker; the section header still claims them.
+    assert.throws(() => decodeGrib2(bytes.subarray(0, bytes.length - 200)), /ended early/);
+  });
+
+  it("refuses a value count larger than the grid before allocating for it", () => {
+    const bytes = fixture("simple-bitmap").slice();
+    let offset = 16;
+    const view = new DataView(bytes.buffer);
+    while (bytes[offset + 4] !== 5) offset += view.getUint32(offset);
+    // Section 5 octets 6-9: the number of encoded values.
+    view.setUint32(offset + 5, 0xfffffff0);
+    assert.throws(() => decodeGrib2(bytes), /values for 1152 grid points/);
+  });
+
   it("refuses bytes that are not a GRIB2 message", () => {
     assert.throws(() => decodeGrib2(new TextEncoder().encode("not a grib message")), /GRIB/);
   });
@@ -162,5 +178,36 @@ describe("GribberishCodec", () => {
     await registerGribberishCodec();
     await registerGribberishCodec();
     assert.equal(await registry.get("gribberish")?.(), GribberishCodec);
+  });
+
+  it("decodes a chunk read through zarrita, as a virtual repository is read", async () => {
+    const zarr = await import("zarrita");
+    await registerGribberishCodec();
+    const metadata = {
+      zarr_format: 3,
+      node_type: "array",
+      shape: [1, 24, 48],
+      data_type: "float64",
+      chunk_grid: { name: "regular", configuration: { chunk_shape: [1, 24, 48] } },
+      chunk_key_encoding: { name: "default", configuration: { separator: "/" } },
+      fill_value: "NaN",
+      codecs: [
+        { name: "scale_offset", configuration: { offset: -273.15 } },
+        { name: "gribberish", configuration: { var: "TMP", north_up: true } },
+      ],
+    };
+    const files = new Map<string, Uint8Array>([
+      ["/t/zarr.json", new TextEncoder().encode(JSON.stringify(metadata))],
+      ["/t/c/0/0/0", fixture("lambert")],
+    ]);
+    const store = { get: async (key: string) => files.get(key) };
+    const array = await zarr.open.v3(zarr.root(store).resolve("t"), { kind: "array" });
+    const chunk = await zarr.get(array);
+    const values = decodeGrib2(fixture("lambert")).values;
+    assert.deepEqual(chunk.shape, [1, 24, 48]);
+    // North row first, then scale_offset's decode adds the offset.
+    const data = chunk.data as Float64Array;
+    assert.ok(Math.abs(data[0] - (values[23 * 48] - 273.15)) < 1e-9);
+    assert.ok(Math.abs(data[24 * 48 - 1] - (values[47] - 273.15)) < 1e-9);
   });
 });
