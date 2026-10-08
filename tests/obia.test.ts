@@ -540,6 +540,112 @@ describe("classifyByRules with missing values", () => {
   });
 });
 
+describe("OBIA training samples", () => {
+  const objects = (n: number): FeatureCollection => ({
+    type: "FeatureCollection",
+    features: Array.from({ length: n }, (_, i) => ({
+      type: "Feature" as const,
+      id: i + 1,
+      properties: { segment_id: i + 1, ndvi: i / n },
+      geometry: { type: "Point" as const, coordinates: [i, 0] },
+    })),
+  });
+
+  it("labels, renames, collects and clears samples", () => {
+    let fc = labelObjects(objects(4), new Set([1, 2]), { className: "tree", role: "training" });
+    fc = labelObjects(fc, new Set([3]), { className: "roof", role: "validation" });
+    fc = renameObjectClass(fc, "tree", "vegetation");
+    assert.deepEqual(collectSamples(fc), [
+      { segmentId: 1, className: "vegetation", role: "training" },
+      { segmentId: 2, className: "vegetation", role: "training" },
+      { segmentId: 3, className: "roof", role: "validation" },
+    ]);
+    // Features are kept intact apart from the label fields.
+    assert.equal(fc.features[0].properties?.ndvi, 0);
+    fc = labelObjects(fc, new Set([1]), null);
+    assert.deepEqual(
+      collectSamples(fc).map((s) => s.segmentId),
+      [2, 3],
+    );
+    assert.equal("obia_sample" in (fc.features[0].properties ?? {}), false);
+  });
+
+  it("ignores objects without a usable id", () => {
+    const fc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { obia_class: "x" },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [1, 1] } },
+      ],
+    };
+    assert.deepEqual(collectSamples(fc), []);
+    const labeled = labelObjects(fc, new Set([Number.NaN]), { className: "y", role: "training" });
+    assert.equal(labeled.features[1].properties?.obia_class, undefined);
+  });
+
+  it("uses the map selection's ids as segment ids", () => {
+    // GeoLibre's selection identifies a feature by featureSelectionId (its
+    // feature id, else its index). Objects carry id = segment_id, so the ids
+    // the Train step reads from the selection are the segment ids it labels,
+    // even when the objects are not in segment order.
+    const objects = dissolveSegmentPolygons({
+      type: "FeatureCollection",
+      features: [9, 4].map((value) => ({
+        type: "Feature" as const,
+        properties: { VALUE: value },
+        geometry: {
+          type: "Polygon" as const,
+          coordinates: [
+            [
+              [value, 0],
+              [value + 1, 0],
+              [value + 1, 1],
+              [value, 0],
+            ],
+          ],
+        },
+      })),
+    });
+    const selected = objects.features.map((f, i) => Number(featureSelectionId(f, i)));
+    assert.deepEqual(selected, [4, 9]);
+    const labeled = labelObjects(objects, new Set([9]), { className: "roof", role: "training" });
+    assert.deepEqual(collectSamples(labeled), [
+      { segmentId: 9, className: "roof", role: "training" },
+    ]);
+  });
+
+  it("holds out a reproducible, stratified share of each class", () => {
+    const samples: ObiaSample[] = [
+      ...Array.from({ length: 10 }, (_, i) => ({
+        segmentId: i + 1,
+        className: "a",
+        role: "training" as const,
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        segmentId: i + 11,
+        className: "b",
+        role: "training" as const,
+      })),
+      { segmentId: 20, className: "c", role: "training" },
+      { segmentId: 21, className: "a", role: "validation" },
+    ];
+    const held = stratifiedHoldout(samples, 0.3, 7);
+    const inClass = (name: string) =>
+      samples.filter((s) => s.className === name && held.has(s.segmentId)).length;
+    assert.equal(inClass("a"), 3);
+    assert.equal(inClass("b"), 1);
+    // A class with one training sample keeps it; validation samples are not candidates.
+    assert.equal(inClass("c"), 0);
+    assert.equal(held.has(21), false);
+    assert.deepEqual([...stratifiedHoldout(samples, 0.3, 7)].sort(), [...held].sort());
+    assert.notDeepEqual([...stratifiedHoldout(samples, 0.3, 8)].sort(), [...held].sort());
+  });
+});
+
 describe("splitImageBands input errors", () => {
   it("raises a coded ObiaError for a band the image lacks", async () => {
     await assert.rejects(splitImageBands(threeBandTiff(), [2, 7]), (err: unknown) => {
