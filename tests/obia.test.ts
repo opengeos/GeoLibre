@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
 import { featureSelectionId } from "@geolibre/core";
-import { initTools } from "geolibre-wasm/tools";
-import { runTool } from "geolibre-wasm/tools";
+import { initTools, runTool } from "geolibre-wasm/tools";
 import {
+  csvCell,
   accuracyReportCsv,
   assessAccuracy,
   applyPredictions,
@@ -520,6 +520,14 @@ describe("assessAccuracy", () => {
     const report = assessAccuracy(samples, predictions, areas);
     // Correct: 8 + 9 = 17 unit areas; wrong: 2 x 100 + 1 = 201.
     assert.ok(Math.abs((report.areaWeightedAccuracy ?? 0) - 17 / 218) < 1e-12);
+  });
+
+  it("quotes user text safely for spreadsheets", () => {
+    assert.equal(csvCell("water"), "water");
+    assert.equal(csvCell('trees, "tall"'), '"trees, ""tall"""');
+    assert.equal(csvCell("a\rb"), '"a\rb"');
+    assert.equal(csvCell("=SUM(A1)"), "'=SUM(A1)");
+    assert.equal(csvCell("-1"), "'-1");
   });
 
   it("writes a CSV report", () => {

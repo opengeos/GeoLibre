@@ -420,6 +420,7 @@ export {
 } from "./model-graph";
 export {
   accuracyReportCsv,
+  csvCell,
   assessAccuracy,
   type ObiaAccuracyReport,
   type ObiaClassAccuracy,
