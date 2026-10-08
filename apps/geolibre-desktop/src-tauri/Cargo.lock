@@ -1773,6 +1773,7 @@ dependencies = [
  "tauri-plugin-persisted-scope",
  "tauri-plugin-single-instance",
  "webkit2gtk-sys",
+ "windows-registry",
  "windows-sys 0.61.2",
  "zip 8.6.0",
 ]
