@@ -73,6 +73,9 @@ export function ObiaMeasureStep(): ReactElement | null {
       const image = await obiaSourceBands(sourceLayer, segmentation.bandIndexes);
       if (!image) throw new Error(t("obia.error.readImage"));
       const { table, calls } = await computeObjectFeatures(segmentation.labels, image, options);
+      // A re-segmentation while the tools ran makes this table describe
+      // objects that are gone; drop it rather than write it anywhere.
+      if (useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt) return;
       // Re-read the layer: the user may have edited it while the tools ran.
       const latest = useAppStore
         .getState()
