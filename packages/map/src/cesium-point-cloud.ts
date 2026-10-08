@@ -12,7 +12,9 @@ import type { PointPrimitiveCollection } from "@cesium/engine";
 // control uses — and drawn as a `PointPrimitiveCollection`. A plain LAS or
 // LAZ file has no octree to sample, so it is downloaded whole (up to
 // {@link MAX_LAS_FILE_BYTES}), decoded with the same package's LAS reader,
-// and thinned to every n-th point (issue #2261).
+// and thinned to every n-th point (issue #2261). An Entwine Point Tile (EPT)
+// dataset is walked breadth-first like COPC, its LASzip nodes decoded with
+// that LAS reader.
 //
 // The COPC path is a bounded preview, not a streaming renderer: it walks the
 // octree breadth-first from the root, which COPC populates with a coarse
@@ -30,18 +32,18 @@ export const MAX_POINT_CLOUD_POINTS = 400_000;
 export const POINT_CLOUD_PIXEL_SIZE = 2;
 
 /** How the globe can draw a point-cloud URL. */
-export type PointCloudSourceKind = "tileset" | "copc" | "las" | null;
+export type PointCloudSourceKind = "tileset" | "copc" | "las" | "ept" | null;
 
 /**
  * Classify a point-cloud layer's URL: a 3D Tiles tileset, a COPC archive, a
- * plain LAS/LAZ file, or something the globe cannot draw yet (EPT). An EPT
- * manifest is JSON too, but not a tileset: it stays 2D-only rather than
- * failing inside `Cesium3DTileset.fromUrl`.
+ * plain LAS/LAZ file, or an Entwine Point Tile manifest. An EPT manifest is
+ * JSON too, but not a tileset, so it is matched by name before the tileset
+ * rule rather than failing inside `Cesium3DTileset.fromUrl`.
  */
 export function pointCloudSourceKind(url: string | undefined): PointCloudSourceKind {
   if (!url) return null;
   const path = url.split(/[?#]/)[0].toLowerCase();
-  if (path.endsWith("/ept.json") || path === "ept.json") return null;
+  if (path.endsWith("/ept.json") || path === "ept.json") return "ept";
   if (path.endsWith(".json")) return "tileset";
   if (path.endsWith(".copc.laz")) return "copc";
   if (path.endsWith(".las") || path.endsWith(".laz")) return "las";
@@ -125,6 +127,54 @@ export interface LoadCopcOptions {
    * refuses rather than reading raw coordinates as degrees.
    */
   projector?: (wkt: string | undefined) => Promise<PointCloudProjector | null>;
+}
+
+/** The dimensions every decoder reads; Classification only to drop noise. */
+const POINT_DIMENSIONS = ["X", "Y", "Z", "Red", "Green", "Blue", "Classification"];
+
+/** ASPRS low (7) and high (18) noise, which 2D viewers hide and which would stretch the height ramp. */
+const NOISE_CLASSES = new Set([7, 18]);
+
+/**
+ * A per-point noise test for a decoded view, or null when the point format
+ * carries no classification.
+ */
+function noiseTest(view: {
+  dimensions: Record<string, unknown>;
+  getter(name: string): (index: number) => number;
+}): ((index: number) => boolean) | null {
+  if (!("Classification" in view.dimensions)) return null;
+  const classification = view.getter("Classification");
+  return (index) => NOISE_CLASSES.has(classification(index));
+}
+
+/** Heights sampled at most when estimating a cloud's height range. */
+const HEIGHT_RANGE_SAMPLE = 20_000;
+
+/**
+ * The span the height ramp stretches over: the 1st to 99th percentile of the
+ * decoded heights, so a few unclassified outliers (a bird, a multipath
+ * return hundreds of metres off) do not squash every real point into one
+ * colour. A small cloud reads as its exact minimum and maximum.
+ *
+ * @param positions - `[lng, lat, height, ...]`.
+ * @param count - Points filled in `positions`.
+ * @returns `{ zMin, zMax }`, both 0 for an empty cloud.
+ */
+export function heightRange(
+  positions: Float64Array,
+  count: number,
+): { zMin: number; zMax: number } {
+  if (count <= 0) return { zMin: 0, zMax: 0 };
+  const step = Math.max(1, Math.floor(count / HEIGHT_RANGE_SAMPLE));
+  const heights: number[] = [];
+  for (let i = 0; i < count; i += step) heights.push(positions[i * 3 + 2]);
+  heights.sort((a, b) => a - b);
+  const last = heights.length - 1;
+  return {
+    zMin: heights[Math.floor(last * 0.01)],
+    zMax: heights[Math.ceil(last * 0.99)],
+  };
 }
 
 /** Octree key depth: keys are `D-X-Y-Z`. */
@@ -304,12 +354,10 @@ export async function loadCopcPointCloud(
   // those points black: `undefined` until the first node, `null` for no colour.
   let colors: Uint8Array | null | undefined;
   let count = 0;
-  let zMin = Number.POSITIVE_INFINITY;
-  let zMax = Number.NEGATIVE_INFINITY;
   for (const key of chosen) {
     const node = nodes.get(key)!;
     const view = await Copc.loadPointDataView(url, copc, node, {
-      include: ["X", "Y", "Z", "Red", "Green", "Blue"],
+      include: POINT_DIMENSIONS,
       lazPerf,
     });
     signal?.throwIfAborted();
@@ -323,15 +371,15 @@ export async function loadCopcPointCloud(
     const r = colors ? view.getter("Red") : null;
     const g = colors ? view.getter("Green") : null;
     const b = colors ? view.getter("Blue") : null;
+    const isNoise = noiseTest(view);
     for (let i = 0; i < view.pointCount && count < planned; i++) {
+      if (isNoise?.(i)) continue;
       const [lng, lat] = project(x(i), y(i));
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
       const height = z(i) * zScale;
       positions[count * 3] = lng;
       positions[count * 3 + 1] = lat;
       positions[count * 3 + 2] = height;
-      if (height < zMin) zMin = height;
-      if (height > zMax) zMax = height;
       if (colors && r && g && b) {
         // LAS colour is 16-bit; many writers store 8-bit values unscaled.
         const scale = (v: number) => (v > 255 ? v >> 8 : v);
@@ -346,8 +394,7 @@ export async function loadCopcPointCloud(
     positions: count === planned ? positions : positions.subarray(0, count * 3),
     colors: colors ? (count === planned ? colors : colors.subarray(0, count * 3)) : null,
     count,
-    zMin: Number.isFinite(zMin) ? zMin : 0,
-    zMax: Number.isFinite(zMax) ? zMax : 0,
+    ...heightRange(positions, count),
     truncated,
   };
 }
@@ -742,7 +789,7 @@ export async function loadLasPointCloud(
     ? await Las.PointData.decompressFile(file, await (options.lazPerf ?? defaultLazPerf)())
     : file.subarray(header.pointDataOffset, header.pointDataOffset + decodedBytes);
   signal?.throwIfAborted();
-  const view = Las.View.create(points, header, [], ["X", "Y", "Z", "Red", "Green", "Blue"]);
+  const view = Las.View.create(points, header, [], POINT_DIMENSIONS);
 
   const stride = Math.max(1, Math.ceil(view.pointCount / budget));
   const planned = Math.ceil(view.pointCount / stride);
@@ -758,16 +805,14 @@ export async function loadLasPointCloud(
   const b = colors ? view.getter("Blue") : null;
   const scale = (v: number) => (v > 255 ? v >> 8 : v);
   let count = 0;
-  let zMin = Number.POSITIVE_INFINITY;
-  let zMax = Number.NEGATIVE_INFINITY;
+  const isNoise = noiseTest(view);
   for (let i = 0; i < view.pointCount; i += stride) {
+    if (isNoise?.(i)) continue;
     const [lng, lat, height] = project(x(i), y(i), z(i));
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(height)) continue;
     positions[count * 3] = lng;
     positions[count * 3 + 1] = lat;
     positions[count * 3 + 2] = height;
-    if (height < zMin) zMin = height;
-    if (height > zMax) zMax = height;
     if (colors && r && g && b) {
       colors[count * 3] = scale(r(i));
       colors[count * 3 + 1] = scale(g(i));
@@ -779,8 +824,188 @@ export async function loadLasPointCloud(
     positions: count === planned ? positions : positions.subarray(0, count * 3),
     colors: colors ? (count === planned ? colors : colors.subarray(0, count * 3)) : null,
     count,
-    zMin: Number.isFinite(zMin) ? zMin : 0,
-    zMax: Number.isFinite(zMax) ? zMax : 0,
+    ...heightRange(positions, count),
     truncated: stride > 1,
+  };
+}
+
+// --- Entwine Point Tiles ---------------------------------------------------
+
+/** The `ept.json` fields the loader reads. */
+interface EptManifest {
+  dataType?: string;
+  hierarchyType?: string;
+  srs?: { wkt?: string; authority?: string; horizontal?: string; vertical?: string };
+}
+
+/** EPT nodes fetched and decoded at once. */
+const EPT_CONCURRENCY = 4;
+
+export interface LoadEptOptions {
+  /** Points to load at most; defaults to {@link MAX_POINT_CLOUD_POINTS}. */
+  budget?: number;
+  signal?: AbortSignal;
+  /** The `copc` module (its LAS reader decodes the nodes); defaults to a dynamic import. */
+  las?: LasModule;
+  /** The LAZ decoder, as for {@link LoadCopcOptions.lazPerf}. */
+  lazPerf?: () => Promise<unknown>;
+  /** Fetches the manifest and hierarchy JSON; defaults to `fetch`. */
+  fetchJson?: (url: string, signal?: AbortSignal) => Promise<unknown>;
+  /** Fetches one node's `.laz`; defaults to the bounded LAS download. */
+  fetchBytes?: (url: string, signal?: AbortSignal) => Promise<Uint8Array>;
+  /** Builds the projector; defaults to the EPSG code, then the WKT, as for LAS. */
+  projector?: (crs: LasCrs) => Promise<LasProjector | null>;
+}
+
+async function defaultFetchJson(url: string, signal?: AbortSignal): Promise<unknown> {
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(`EPT request failed (HTTP ${response.status}): ${url}`);
+  return response.json();
+}
+
+/**
+ * The CRS an EPT manifest names. An EPSG `horizontal` code goes through the
+ * GeoKey path, which knows the code's linear unit; the WKT is the fallback.
+ */
+export function eptCrs(srs: EptManifest["srs"]): LasCrs {
+  const crs: LasCrs = {};
+  const code = Number(srs?.horizontal);
+  if (srs?.authority?.toUpperCase() === "EPSG" && Number.isInteger(code) && code > 0)
+    crs.geoKeys = { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: code };
+  if (srs?.wkt) crs.wkt = srs.wkt;
+  return crs;
+}
+
+/**
+ * Decode a bounded preview of an EPT dataset: the octree hierarchy walked
+ * breadth-first from the root (whose nodes hold a coarse sample of the whole
+ * cloud) until the budget, each LASzip node decoded and reprojected to WGS84
+ * with heights in metres. Only the `laszip` data type is read; `binary` and
+ * `zstandard` datasets are refused with a message saying so.
+ *
+ * @param url - The `ept.json` URL.
+ * @param options - Budget, abort signal, and injectable dependencies.
+ * @returns The decoded cloud.
+ */
+export async function loadEptPointCloud(
+  url: string,
+  options: LoadEptOptions = {},
+): Promise<DecodedPointCloud> {
+  const budget = Number.isFinite(options.budget)
+    ? Math.max(1, Math.floor(options.budget as number))
+    : MAX_POINT_CLOUD_POINTS;
+  const signal = options.signal;
+  const fetchJson = options.fetchJson ?? defaultFetchJson;
+  const fetchBytes = options.fetchBytes ?? defaultFetchBytes;
+  const manifest = (await fetchJson(url, signal)) as EptManifest;
+  signal?.throwIfAborted();
+  const dataType = manifest.dataType ?? "laszip";
+  if (dataType !== "laszip")
+    throw new Error(`EPT data type "${dataType}" is not supported on the globe (only laszip)`);
+  if (manifest.hierarchyType && manifest.hierarchyType !== "json")
+    throw new Error(`EPT hierarchy type "${manifest.hierarchyType}" is not supported on the globe`);
+  const crs = eptCrs(manifest.srs);
+  const project = await (options.projector ?? lasProjector)(crs);
+  if (!project) throw new Error("EPT dataset has no usable CRS (no EPSG code or WKT proj4 can build)");
+  const { Las } = options.las ?? ((await import("copc")) as unknown as LasModule);
+  const lazPerf = await (options.lazPerf ?? defaultLazPerf)();
+  signal?.throwIfAborted();
+
+  // Keys resolve against the directory holding ept.json, whatever its query.
+  const base = new URL(".", new URL(url, globalThis.location?.href ?? "http://localhost/"));
+  const query = new URL(url, base).search;
+  const resource = (path: string) => new URL(`${path}${query}`, base).href;
+
+  // Breadth-first over the hierarchy; a count of -1 marks a subtree whose
+  // counts live in their own file, loaded when the walk reaches it.
+  const counts = new Map<string, number>();
+  const readPage = async (key: string) => {
+    const page = (await fetchJson(resource(`ept-hierarchy/${key}.json`), signal)) as Record<
+      string,
+      number
+    >;
+    signal?.throwIfAborted();
+    for (const [k, n] of Object.entries(page)) if (typeof n === "number") counts.set(k, n);
+  };
+  await readPage("0-0-0-0");
+  const queue = [...counts.keys()].sort((a, b) => keyDepth(a) - keyDepth(b));
+  const loadedPages = new Set(["0-0-0-0"]);
+  const chosen: string[] = [];
+  let planned = 0;
+  let truncated = false;
+  while (queue.length && planned < budget) {
+    const key = queue.shift()!;
+    const count = counts.get(key) ?? 0;
+    if (count === -1) {
+      if (loadedPages.has(key)) continue;
+      loadedPages.add(key);
+      const before = new Set(counts.keys());
+      await readPage(key);
+      // The subtree file restates its root with a real count; requeue it.
+      const fresh = [...counts.keys()].filter((k) => !before.has(k) || k === key);
+      queue.push(...fresh);
+      queue.sort((a, b) => keyDepth(a) - keyDepth(b));
+      continue;
+    }
+    if (count <= 0) continue;
+    if (planned + count > budget && chosen.length > 0) {
+      truncated = true;
+      break;
+    }
+    chosen.push(key);
+    planned = Math.min(budget, planned + count);
+  }
+  if (queue.length) truncated = true;
+
+  const positions = new Float64Array(planned * 3);
+  let colors: Uint8Array | null | undefined;
+  let written = 0;
+  const scale8 = (v: number) => (v > 255 ? v >> 8 : v);
+  const decode = async (key: string) => {
+    const file = await fetchBytes(resource(`ept-data/${key}.laz`), signal);
+    signal?.throwIfAborted();
+    const header = Las.Header.parse(file);
+    const points = await Las.PointData.decompressFile(file, lazPerf);
+    return Las.View.create(points, header, [], POINT_DIMENSIONS);
+  };
+  for (let start = 0; start < chosen.length && written < planned; start += EPT_CONCURRENCY) {
+    const views = await Promise.all(chosen.slice(start, start + EPT_CONCURRENCY).map(decode));
+    signal?.throwIfAborted();
+    for (const view of views) {
+      const hasColor =
+        "Red" in view.dimensions && "Green" in view.dimensions && "Blue" in view.dimensions;
+      // One schema per dataset, so the first node decides; a disagreeing
+      // node makes the cloud colourless rather than leaving points black.
+      if (colors === undefined) colors = hasColor ? new Uint8Array(planned * 3) : null;
+      else if (hasColor !== (colors !== null)) colors = null;
+      const x = view.getter("X");
+      const y = view.getter("Y");
+      const z = view.getter("Z");
+      const r = colors ? view.getter("Red") : null;
+      const g = colors ? view.getter("Green") : null;
+      const b = colors ? view.getter("Blue") : null;
+      const isNoise = noiseTest(view);
+      for (let i = 0; i < view.pointCount && written < planned; i++) {
+        if (isNoise?.(i)) continue;
+        const [lng, lat, height] = project(x(i), y(i), z(i));
+        if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(height)) continue;
+        positions[written * 3] = lng;
+        positions[written * 3 + 1] = lat;
+        positions[written * 3 + 2] = height;
+        if (colors && r && g && b) {
+          colors[written * 3] = scale8(r(i));
+          colors[written * 3 + 1] = scale8(g(i));
+          colors[written * 3 + 2] = scale8(b(i));
+        }
+        written++;
+      }
+    }
+  }
+  return {
+    positions: written === planned ? positions : positions.subarray(0, written * 3),
+    colors: colors ? (written === planned ? colors : colors.subarray(0, written * 3)) : null,
+    count: written,
+    ...heightRange(positions, written),
+    truncated,
   };
 }

@@ -4,6 +4,10 @@ import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/ty
 import { CesiumLayerSync, isCesiumSupportedLayerType } from "../packages/map/src/cesium-layer-sync";
 import {
   MAX_LAS_FILE_BYTES,
+  eptCrs,
+  heightRange,
+  loadEptPointCloud,
+  type LasModule,
   MAX_POINT_CLOUD_POINTS,
   buildPointCloudCollection,
   horizontalWkt,
@@ -35,10 +39,10 @@ describe("pointCloudSourceKind", () => {
     assert.equal(pointCloudSourceKind("https://s3/autzen-classified.copc.laz"), "copc");
     assert.equal(
       pointCloudSourceKind("https://x/ept.json"),
-      null,
+      "ept",
       "an EPT manifest is JSON but not a tileset",
     );
-    assert.equal(pointCloudSourceKind("https://x/EPT.json?token=1"), null);
+    assert.equal(pointCloudSourceKind("https://x/EPT.json?token=1"), "ept");
     assert.equal(pointCloudSourceKind("https://x/plain.laz"), "las");
     assert.equal(pointCloudSourceKind("https://x/PLAIN.LAS?sig=1"), "las");
     assert.equal(pointCloudSourceKind(undefined), null);
@@ -456,8 +460,8 @@ describe("CesiumLayerSync native 3D routing", () => {
     );
     assert.equal(
       isCesiumSupportedLayerType(layer({ type: "lidar", source: { url: "https://x/ept.json" } })),
-      false,
-      "EPT stays 2D-only",
+      true,
+      "an EPT dataset is walked and decoded like COPC",
     );
     assert.equal(isCesiumSupportedLayerType(layer({ type: "deckgl-viz" })), false);
   });
@@ -707,8 +711,9 @@ function makeLas(points: number[][], options: { epsg?: number; wkt?: string } = 
     out.set(vlr.body, at + 54);
     at += 54 + vlr.body.byteLength;
   }
-  points.forEach(([x, y, z, r = 0, g = 0, b = 0], i) => {
+  points.forEach(([x, y, z, r = 0, g = 0, b = 0, classification = 0], i) => {
     const p = offset + i * recordLength;
+    dv.setUint8(p + 15, classification);
     dv.setInt32(p, Math.round(x / scale), true);
     dv.setInt32(p + 4, Math.round(y / scale), true);
     dv.setInt32(p + 8, Math.round(z / scale), true);
@@ -770,6 +775,21 @@ describe("loadLasPointCloud", () => {
       fallbackWkt: wkt,
     });
     assert.ok(Math.abs(cloud.positions[0] + 123) < 1e-6);
+  });
+
+  it("drops points classified as noise", async () => {
+    const file = makeLas(
+      [
+        [500000, 4877000, 120, 0, 0, 0, 2],
+        [500001, 4877000, 9000, 0, 0, 0, 7],
+        [500002, 4877000, -500, 0, 0, 0, 18],
+        [500003, 4877000, 125, 0, 0, 0, 1],
+      ],
+      { epsg: 32610 },
+    );
+    const cloud = await loadLasPointCloud("https://x/a.las", { fetchBytes: bytes(file) });
+    assert.equal(cloud.count, 2);
+    assert.deepEqual([cloud.positions[2], cloud.positions[5]], [120, 125]);
   });
 
   it("refuses a truncated file with a clear message", async () => {
@@ -901,5 +921,126 @@ describe("point cloud CRS helpers", () => {
       ProjNatOriginLatGeoKey: 41.75,
       GTCitationGeoKey: "Test",
     });
+  });
+});
+
+describe("heightRange", () => {
+  it("is the exact span for a small cloud and ignores outliers in a large one", () => {
+    const pack = (hs: number[]) => {
+      const out = new Float64Array(hs.length * 3);
+      hs.forEach((h, i) => (out[i * 3 + 2] = h));
+      return out;
+    };
+    assert.deepEqual(heightRange(pack([5, 1, 3]), 3), { zMin: 1, zMax: 5 });
+    assert.deepEqual(heightRange(new Float64Array(0), 0), { zMin: 0, zMax: 0 });
+    const hs = Array.from({ length: 1000 }, (_, i) => 100 + (i % 50));
+    hs[0] = -5000;
+    hs[1] = 9000;
+    const range = heightRange(pack(hs), hs.length);
+    assert.equal(range.zMin, 100);
+    assert.equal(range.zMax, 149);
+  });
+});
+
+// --- Entwine Point Tiles (issue #2261) -------------------------------------
+
+/**
+ * A fake EPT dataset: JSON documents by path, and a `copc` LAS module whose
+ * "LAZ" nodes are tagged buffers decoded into points by key.
+ */
+function fakeEpt(
+  docs: Record<string, unknown>,
+  nodes: Record<string, number[][]>,
+): { las: LasModule; fetchJson: (url: string) => Promise<unknown>; fetchBytes: (url: string) => Promise<Uint8Array>; fetched: string[] } {
+  const fetched: string[] = [];
+  const keyOf = (url: string) => new URL(url).pathname.split("/").pop()!.replace(/\.(laz|json)$/, "");
+  const las = {
+    Las: {
+      Header: { parse: (file: Uint8Array) => ({ key: new TextDecoder().decode(file) }) },
+      Vlr: { walk: async () => [] },
+      PointData: { decompressFile: async (file: Uint8Array) => file },
+      View: {
+        create: (file: Uint8Array) => {
+          const points = nodes[new TextDecoder().decode(file)] ?? [];
+          return {
+            pointCount: points.length,
+            dimensions: { X: {}, Y: {}, Z: {} },
+            getter: (name: string) => (i: number) => points[i]["XYZ".indexOf(name)],
+          };
+        },
+      },
+    },
+  } as unknown as LasModule;
+  return {
+    las,
+    fetched,
+    fetchJson: async (url) => {
+      fetched.push(url);
+      const path = new URL(url).pathname.replace(/^\/data\//, "");
+      if (!(path in docs)) throw new Error(`404 ${path}`);
+      return docs[path];
+    },
+    fetchBytes: async (url) => {
+      fetched.push(url);
+      return new TextEncoder().encode(keyOf(url));
+    },
+  };
+}
+
+const metresProjector = async () => (x: number, y: number, z: number) =>
+  [x, y, z] as [number, number, number];
+
+describe("loadEptPointCloud", () => {
+  const manifest = { dataType: "laszip", hierarchyType: "json", srs: { wkt: "PROJCS[x]" } };
+  const nodePoints = (n: number, z: number) => Array.from({ length: n }, () => [1, 2, z]);
+
+  it("walks the hierarchy breadth-first, into subtree files, within the budget", async () => {
+    const fake = fakeEpt(
+      {
+        "ept.json": manifest,
+        "ept-hierarchy/0-0-0-0.json": { "0-0-0-0": 3, "1-0-0-0": 2, "1-1-0-0": -1 },
+        "ept-hierarchy/1-1-0-0.json": { "1-1-0-0": 2, "2-2-0-0": 5 },
+      },
+      { "0-0-0-0": nodePoints(3, 10), "1-0-0-0": nodePoints(2, 20), "1-1-0-0": nodePoints(2, 30) },
+    );
+    const cloud = await loadEptPointCloud("https://h/data/ept.json?sig=abc", {
+      las: fake.las,
+      fetchJson: fake.fetchJson,
+      fetchBytes: fake.fetchBytes,
+      projector: metresProjector,
+      lazPerf: async () => ({}),
+      budget: 7,
+    });
+    assert.equal(cloud.count, 7);
+    assert.equal(cloud.truncated, true, "the depth-2 node is left out");
+    assert.ok(fake.fetched.includes("https://h/data/ept-hierarchy/1-1-0-0.json?sig=abc"));
+    assert.ok(fake.fetched.includes("https://h/data/ept-data/1-1-0-0.laz?sig=abc"));
+    assert.ok(!fake.fetched.some((u) => u.includes("2-2-0-0")));
+    assert.deepEqual([cloud.zMin, cloud.zMax], [10, 30]);
+  });
+
+  it("refuses data types it cannot decode", async () => {
+    const fake = fakeEpt({ "ept.json": { ...manifest, dataType: "binary" } }, {});
+    await assert.rejects(
+      loadEptPointCloud("https://h/data/ept.json", { fetchJson: fake.fetchJson, las: fake.las }),
+      /data type "binary" is not supported/,
+    );
+  });
+
+  it("refuses a dataset with no usable CRS", async () => {
+    const fake = fakeEpt({ "ept.json": { ...manifest, srs: {} } }, {});
+    await assert.rejects(
+      loadEptPointCloud("https://h/data/ept.json", { fetchJson: fake.fetchJson, las: fake.las }),
+      /no usable CRS/,
+    );
+  });
+
+  it("takes the CRS from the EPSG code first, the WKT second", () => {
+    assert.deepEqual(eptCrs({ authority: "EPSG", horizontal: "3857", wkt: "W" }), {
+      geoKeys: { GTModelTypeGeoKey: 1, ProjectedCSTypeGeoKey: 3857 },
+      wkt: "W",
+    });
+    assert.deepEqual(eptCrs({ wkt: "W" }), { wkt: "W" });
+    assert.deepEqual(eptCrs(undefined), {});
   });
 });

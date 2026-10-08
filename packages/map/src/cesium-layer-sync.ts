@@ -51,10 +51,12 @@ import {
   buildPointCloudCollection,
   isSplatTilesetUrl,
   loadCopcPointCloud,
+  loadEptPointCloud,
   loadLasPointCloud,
   pointCloudSourceKind,
   setPointCloudOpacity,
   type LoadCopcOptions,
+  type LoadEptOptions,
   type LoadLasOptions,
 } from "./cesium-point-cloud";
 import {
@@ -285,13 +287,13 @@ function isTilesetLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
- * A point cloud the globe decodes itself: a COPC archive (issue #2285) or a
- * plain LAS/LAZ file (issue #2261).
+ * A point cloud the globe decodes itself: a COPC archive (issue #2285), or a
+ * plain LAS/LAZ file or an EPT dataset (issue #2261).
  */
 function isDecodedPointCloudLayer(layer: GeoLibreLayer): boolean {
   if (layer.type !== "lidar") return false;
   const kind = pointCloudSourceKind(pointCloudUrl(layer));
-  return kind === "copc" || kind === "las";
+  return kind === "copc" || kind === "las" || kind === "ept";
 }
 
 interface LayerEntry {
@@ -953,6 +955,8 @@ export interface CesiumLayerSyncDeps {
   copcOptions?: Omit<LoadCopcOptions, "signal">;
   /** Overrides for the plain LAS/LAZ decoder (the module, the download, the projector). */
   lasOptions?: Omit<LoadLasOptions, "signal" | "fallbackWkt">;
+  /** Overrides for the EPT decoder (the module, the fetchers, the projector). */
+  eptOptions?: Omit<LoadEptOptions, "signal">;
   /**
    * Publishes the attribute names read off a tileset's first rendered tile
    * (issue #2290). A 3D Tiles layer has no `layer.geojson` for the Style panel
@@ -2802,8 +2806,11 @@ export class CesiumLayerSync {
     const abort = new AbortController();
     entry.abort = abort;
     try {
+      const kind = pointCloudSourceKind(url);
       const cloud =
-        pointCloudSourceKind(url) === "las"
+        kind === "ept"
+          ? await loadEptPointCloud(url, { ...this.deps.eptOptions, signal: abort.signal })
+          : kind === "las"
           ? await loadLasPointCloud(url, {
               ...this.deps.lasOptions,
               // The LiDAR control records the WKT it read, for a file whose
