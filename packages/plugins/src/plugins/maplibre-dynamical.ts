@@ -27,7 +27,6 @@ import {
   sliceDimensions,
   sliceSelectorValue,
   stepForUtcDate,
-  stepsOnUtcDate,
   utcDateKey,
 } from "./dynamical-api";
 import { registerGribberishCodec } from "./grib2-codec";
@@ -804,9 +803,14 @@ function buildPanel(container: HTMLElement): () => void {
 
       let dateInput: HTMLInputElement | null = null;
       let runSelect: HTMLSelectElement | null = null;
+      /** Each step's UTC day, read once: the slider re-syncs on every drag event. */
+      let dayKeys: string[] = [];
+      /** The day the run select lists, so it is rebuilt only when the day changes. */
+      let shownDay: string | null = null;
       if (axis.temporal && axis.labels.length > 1) {
         dateInput = element("input", CSS.pickerInput);
         dateInput.type = "date";
+        dayKeys = axis.values.map(utcDateKey);
         // A loop, not a spread: an hourly analysis holds more steps than a call takes arguments.
         const finite = axis.values.filter(Number.isFinite);
         dateInput.min = utcDateKey(finite.reduce((low, value) => Math.min(low, value), Infinity));
@@ -843,15 +847,20 @@ function buildPanel(container: HTMLElement): () => void {
         previous.disabled = range.disabled || index <= 0;
         next.disabled = range.disabled || index >= last;
         if (dateInput && runSelect) {
-          const day = utcDateKey(axis.values[index]);
+          const day = dayKeys[index] ?? "";
           dateInput.value = day;
-          runSelect.replaceChildren(
-            ...stepsOnUtcDate(axis.values, day).map((step) => {
-              const option = element("option", undefined, formatUtcTimeOfDay(axis.values[step]));
-              option.value = String(step);
-              return option;
-            }),
-          );
+          if (day !== shownDay) {
+            shownDay = day;
+            const steps: number[] = [];
+            if (day) dayKeys.forEach((key, step) => key === day && steps.push(step));
+            runSelect.replaceChildren(
+              ...steps.map((step) => {
+                const option = element("option", undefined, formatUtcTimeOfDay(axis.values[step]));
+                option.value = String(step);
+                return option;
+              }),
+            );
+          }
           runSelect.value = String(index);
         }
       };

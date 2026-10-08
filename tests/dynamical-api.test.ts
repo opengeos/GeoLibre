@@ -552,6 +552,7 @@ describe("forecast run day picker", () => {
   it("lists the runs on a day", () => {
     assert.deepEqual(stepsOnUtcDate(runs, "2026-10-02"), [4, 5, 6, 7]);
     assert.deepEqual(stepsOnUtcDate(runs, "2026-10-03"), []);
+    assert.deepEqual(stepsOnUtcDate([Number.NaN, Number.NaN], ""), []);
   });
 
   it("keeps the run's time of day when the day changes", () => {

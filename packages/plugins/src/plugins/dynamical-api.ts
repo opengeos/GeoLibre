@@ -551,6 +551,8 @@ export function formatUtcTimeOfDay(ms: number): string {
 /** The indices of the steps that fall on a UTC calendar day, in axis order. */
 export function stepsOnUtcDate(values: readonly number[], dateKey: string): number[] {
   const steps: number[] = [];
+  // An unreadable timestamp keys as "", which would otherwise match every other one.
+  if (!dateKey) return steps;
   values.forEach((value, index) => {
     if (utcDateKey(value) === dateKey) steps.push(index);
   });
@@ -620,10 +622,7 @@ export function defaultVariableStyle(variable: DynamicalVariable): DynamicalVari
   const unit = variable.unit;
   if (unit === "degree_Celsius" || unit === "K") {
     if (name.includes("dew_point") || name.includes("temperature") || name.includes("tmp")) {
-      return {
-        colormap: "coolwarm",
-        clim: unit === "K" ? [243.15, 313.15] : [-30, 40],
-      };
+      return { colormap: "coolwarm", clim: unit === "K" ? [243.15, 313.15] : [-30, 40] };
     }
     return { colormap: "coolwarm" };
   }
