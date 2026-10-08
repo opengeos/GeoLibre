@@ -80,6 +80,11 @@ function nodeUnitsPerPixel(view: StreamView, box: SourceBox): number {
   return distance * camera.pixelAngle;
 }
 
+/** Lets the browser paint and handle input between long synchronous steps. */
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /** A node's XY footprint in the source CRS, from the octree cube and its key. */
 export function nodeBox(cube: OctreeSource["cube"], key: string): SourceBox {
   const [depth, x, y] = key.split("-").map(Number);
@@ -302,6 +307,7 @@ export class PointCloudStreamer {
     }
     if (!Number.isFinite(minX)) return { box: null, unitsPerPixel: Number.POSITIVE_INFINITY };
     const position = camera.positionCartographic;
+    if (!position) return { box: null, unitsPerPixel: Number.POSITIVE_INFINITY };
     const [cx, cy] = inverse(toDeg(position.longitude), toDeg(position.latitude));
     const pixelAngle = (2 * Math.tan(fovy / 2)) / canvasHeight;
     return {
@@ -345,11 +351,18 @@ export class PointCloudStreamer {
         ),
       );
       if (this.stale(generation)) return this.trim();
-      batch.forEach((key, i) => {
+      for (let i = 0; i < batch.length; i++) {
         const node = nodes[i];
-        if (node && !this.shown.has(key)) this.show(key, node);
-      });
-      this.trim();
+        if (!node || this.shown.has(batch[i])) continue;
+        this.show(batch[i], node);
+        this.trim();
+        this.viewer.scene?.requestRender?.();
+        // Creating a node's primitives is synchronous (a position and a
+        // colour per point); yield between nodes so a batch of large ones
+        // does not hold the main thread for the whole batch.
+        await yieldToBrowser();
+        if (this.stale(generation)) return this.trim();
+      }
       this.viewer.scene?.requestRender?.();
     }
     // Only now drop what the new view no longer needs, so a move never flashes empty.
@@ -413,8 +426,10 @@ export class PointCloudStreamer {
   private show(key: string, node: DecodedPointCloud): void {
     const { Cesium } = this;
     // The height ramp spans the root's sample of the whole cloud, so every
-    // node colours on one scale and a node's colour never changes as others load.
-    this.zRange ??= { zMin: node.zMin, zMax: node.zMax };
+    // node colours on one scale and a node's colour never changes as others
+    // load. Should the root be empty or fail, the first node shown stands in.
+    if (key === ROOT && node.count > 0) this.zRange = { zMin: node.zMin, zMax: node.zMax };
+    else this.zRange ??= { zMin: node.zMin, zMax: node.zMax };
     const ramp = { ...node, ...this.zRange };
     const alpha = Math.min(1, Math.max(0, this.options.opacity()));
     const lift = Number.isFinite(this.options.altitudeOffset)

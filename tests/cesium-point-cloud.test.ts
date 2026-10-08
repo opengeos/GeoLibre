@@ -6,7 +6,7 @@ import {
   MAX_LAS_FILE_BYTES,
   eptCrs,
   heightRange,
-  loadEptPointCloud,
+  openEptSource,
   type LasModule,
   MAX_POINT_CLOUD_POINTS,
   buildPointCloudCollection,
@@ -999,11 +999,11 @@ function fakeEpt(
 const metresProjector = async () => (x: number, y: number, z: number) =>
   [x, y, z] as [number, number, number];
 
-describe("loadEptPointCloud", () => {
+describe("openEptSource", () => {
   const manifest = { dataType: "laszip", hierarchyType: "json", srs: { wkt: "PROJCS[x]" } };
   const nodePoints = (n: number, z: number) => Array.from({ length: n }, () => [1, 2, z]);
 
-  it("walks the hierarchy breadth-first, into subtree files, within the budget", async () => {
+  it("reads subtree files and nodes with the manifest's query string", async () => {
     const fake = fakeEpt(
       {
         "ept.json": manifest,
@@ -1012,20 +1012,22 @@ describe("loadEptPointCloud", () => {
       },
       { "0-0-0-0": nodePoints(3, 10), "1-0-0-0": nodePoints(2, 20), "1-1-0-0": nodePoints(2, 30) },
     );
-    const cloud = await loadEptPointCloud("https://h/data/ept.json?sig=abc", {
+    const source = await openEptSource("https://h/data/ept.json?sig=abc", {
       las: fake.las,
       fetchJson: fake.fetchJson,
       fetchBytes: fake.fetchBytes,
       projector: metresProjector,
       lazPerf: async () => ({}),
-      budget: 7,
     });
-    assert.equal(cloud.count, 7);
-    assert.equal(cloud.truncated, true, "the depth-2 node is left out");
+    assert.equal(source.counts.get("1-1-0-0"), -1, "the subtree is unread at first");
+    await source.loadSubtree("1-1-0-0");
+    assert.equal(source.counts.get("1-1-0-0"), 2);
+    assert.equal(source.counts.get("2-2-0-0"), 5);
     assert.ok(fake.fetched.includes("https://h/data/ept-hierarchy/1-1-0-0.json?sig=abc"));
+    const node = await source.loadNode("1-1-0-0");
     assert.ok(fake.fetched.includes("https://h/data/ept-data/1-1-0-0.laz?sig=abc"));
-    assert.ok(!fake.fetched.some((u) => u.includes("2-2-0-0")));
-    assert.deepEqual([cloud.zMin, cloud.zMax], [10, 30]);
+    assert.equal(node.count, 2);
+    assert.deepEqual([node.zMin, node.zMax], [30, 30]);
   });
 
   it("ignores hierarchy keys that are not octree keys", async () => {
@@ -1036,15 +1038,14 @@ describe("loadEptPointCloud", () => {
       },
       { "0-0-0-0": nodePoints(1, 10) },
     );
-    const cloud = await loadEptPointCloud("https://h/data/ept.json", {
+    const source = await openEptSource("https://h/data/ept.json", {
       las: fake.las,
       fetchJson: fake.fetchJson,
       fetchBytes: fake.fetchBytes,
       projector: metresProjector,
       lazPerf: async () => ({}),
     });
-    assert.equal(cloud.count, 1);
-    assert.ok(!fake.fetched.some((u) => u.includes("secret") || u.includes("/x")));
+    assert.deepEqual([...source.counts.keys()], ["0-0-0-0"]);
   });
 
   it("refuses a node too large to decode", async () => {
@@ -1058,16 +1059,14 @@ describe("loadEptPointCloud", () => {
         Header: { parse: () => ({ pointCount: 1e9, pointDataRecordLength: 34 }) },
       },
     } as unknown as LasModule;
-    await assert.rejects(
-      loadEptPointCloud("https://h/data/ept.json", {
-        las: huge,
-        fetchJson: fake.fetchJson,
-        fetchBytes: fake.fetchBytes,
-        projector: metresProjector,
-        lazPerf: async () => ({}),
-      }),
-      /too large to decode/,
-    );
+    const source = await openEptSource("https://h/data/ept.json", {
+      las: huge,
+      fetchJson: fake.fetchJson,
+      fetchBytes: fake.fetchBytes,
+      projector: metresProjector,
+      lazPerf: async () => ({}),
+    });
+    await assert.rejects(source.loadNode("0-0-0-0"), /too large to decode/);
   });
 
   it("reads a geographic EPSG code through the default projector", async () => {
@@ -1078,12 +1077,13 @@ describe("loadEptPointCloud", () => {
       },
       { "0-0-0-0": [[-95.5, 41.25, 300]] },
     );
-    const cloud = await loadEptPointCloud("https://h/data/ept.json", {
+    const source = await openEptSource("https://h/data/ept.json", {
       las: fake.las,
       fetchJson: fake.fetchJson,
       fetchBytes: fake.fetchBytes,
       lazPerf: async () => ({}),
     });
+    const cloud = await source.loadNode("0-0-0-0");
     assert.ok(Math.abs(cloud.positions[0] + 95.5) < 1e-9, `lng ${cloud.positions[0]}`);
     assert.ok(Math.abs(cloud.positions[1] - 41.25) < 1e-9, `lat ${cloud.positions[1]}`);
     assert.equal(cloud.positions[2], 300);
@@ -1123,7 +1123,7 @@ describe("loadEptPointCloud", () => {
   it("refuses data types it cannot decode", async () => {
     const fake = fakeEpt({ "ept.json": { ...manifest, dataType: "binary" } }, {});
     await assert.rejects(
-      loadEptPointCloud("https://h/data/ept.json", { fetchJson: fake.fetchJson, las: fake.las }),
+      openEptSource("https://h/data/ept.json", { fetchJson: fake.fetchJson, las: fake.las }),
       /data type "binary" is not supported/,
     );
   });
@@ -1131,7 +1131,7 @@ describe("loadEptPointCloud", () => {
   it("refuses a dataset with no usable CRS", async () => {
     const fake = fakeEpt({ "ept.json": { ...manifest, srs: {} } }, {});
     await assert.rejects(
-      loadEptPointCloud("https://h/data/ept.json", { fetchJson: fake.fetchJson, las: fake.las }),
+      openEptSource("https://h/data/ept.json", { fetchJson: fake.fetchJson, las: fake.las }),
       /no usable CRS/,
     );
   });

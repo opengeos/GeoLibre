@@ -241,43 +241,55 @@ describe("PointCloudStreamer", () => {
     assert.ok(streamer.shownKeys.includes("3-7-7-0"));
   });
 
-  it("keeps the primitives under the cap while refreshes overtake each other", async () => {
+  it("keeps the primitives under the cap while a newer refresh is still loading", async () => {
     const { viewer, state } = fakeViewer();
-    // Big nodes: each fine node alone is a large share of the cap.
-    const tree = fullTree(3, 1);
-    const source = streamSource(tree, []);
-    const big = (key: string): DecodedPointCloud => {
-      const n = 400_000;
-      return {
-        positions: new Float64Array(n * 3),
-        colors: null,
-        count: n,
-        zMin: 0,
-        zMax: 1,
-        truncated: false,
-      };
+    // Header counts of 1 let every node through the selection; decoded, each
+    // non-root node is 250k points, so two views' worth overflow the 1.5M cap.
+    const source = streamSource(fullTree(4, 1), []);
+    const big = (): DecodedPointCloud => ({
+      positions: new Float64Array(250_000 * 3),
+      colors: null,
+      count: 250_000,
+      zMin: 0,
+      zMax: 1,
+      truncated: false,
+    });
+    // Once armed, the fifth load (the first of the second four-node batch)
+    // waits until released.
+    let calls = -1;
+    let release: (() => void) | null = null;
+    source.loadNode = async (key) => {
+      if (calls >= 0 && ++calls === 5) await new Promise<void>((r) => (release = r));
+      return key === "0-0-0-0" ? decoded(key) : big();
     };
-    source.loadNode = async (key) => (key === "0-0-0-0" ? decoded(key) : big(key));
     const streamer = new PointCloudStreamer(fakeCesium() as never, viewer as never, source, {
       opacity: () => 1,
     });
     state.height = 50;
-    // Pan across the corners without letting any refresh complete first.
-    const corners = [
-      { west: 0, south: 0, east: 100, north: 100 },
-      { west: 924, south: 0, east: 1024, north: 100 },
-      { west: 0, south: 924, east: 100, north: 1024 },
-      { west: 924, south: 924, east: 1024, north: 1024 },
-    ];
-    const runs = corners.map((rect) => {
-      state.rect = rect;
-      return streamer.refresh();
-    });
-    await Promise.all(runs);
+    // View A spans two depth-4 nodes in the bottom-left: root + 5 nodes.
+    state.rect = { west: 0, south: 0, east: 120, north: 50 };
+    await streamer.refresh();
+    const viewA = streamer.shownKeys;
+    assert.equal(viewA.length, 6);
+    assert.equal(streamer.pointCount, 1 + 5 * 250_000);
+
+    // View B in the top-right needs five new nodes, two batches. Its second
+    // batch is held back, so the refresh shows its first four and then
+    // waits, before it could drop view A at the end.
+    state.rect = { west: 904, south: 974, east: 1024, north: 1024 };
+    calls = 0;
+    const pending = streamer.refresh();
+    for (let i = 0; i < 100 && !release; i++) await new Promise((r) => setTimeout(r, 0));
+    assert.ok(release, "view B is waiting on its second batch");
+    assert.ok(streamer.pointCount <= 1_500_000, `${streamer.pointCount} points held mid-refresh`);
     assert.ok(
-      streamer.pointCount <= 1_500_000,
-      `${streamer.pointCount} points held after overtaken refreshes`,
+      viewA.some((key) => key !== "0-0-0-0" && !streamer.shownKeys.includes(key)),
+      "trim dropped nodes only view A wanted",
     );
+    (release as unknown as () => void)();
+    await pending;
+    assert.equal(streamer.shownKeys.length, 6, "view B complete: root + 5 nodes");
+    assert.ok(!viewA.some((key) => key !== "0-0-0-0" && streamer.shownKeys.includes(key)));
   });
 
   it("reports a failed scheduled refresh instead of swallowing it", async () => {

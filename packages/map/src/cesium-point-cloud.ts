@@ -871,9 +871,6 @@ interface EptManifest {
   srs?: { wkt?: string; authority?: string; horizontal?: string; vertical?: string };
 }
 
-/** EPT nodes fetched and decoded at once. */
-const EPT_CONCURRENCY = 4;
-
 /**
  * Largest EPT node, compressed or decoded, the globe reads. Entwine writes
  * nodes of tens of thousands of points (a few MB); with four in flight, a
@@ -885,8 +882,6 @@ export const MAX_EPT_NODE_BYTES = 64 * 1024 * 1024;
 const EPT_KEY = /^\d+-\d+-\d+-\d+$/;
 
 export interface LoadEptOptions {
-  /** Points to load at most; defaults to {@link MAX_POINT_CLOUD_POINTS}. */
-  budget?: number;
   signal?: AbortSignal;
   /** The `copc` module (its LAS reader decodes the nodes); defaults to a dynamic import. */
   las?: LasModule;
@@ -940,7 +935,7 @@ export interface EptSource {
  * is a `laszip` dataset with a JSON hierarchy, and build its projector.
  *
  * @param url - The `ept.json` URL.
- * @param options - Abort signal and injectable dependencies (the budget is ignored).
+ * @param options - Abort signal and injectable dependencies.
  * @returns The opened source.
  */
 export async function openEptSource(url: string, options: LoadEptOptions = {}): Promise<EptSource> {
@@ -1050,88 +1045,5 @@ function decodeView(view: LasPointView, project: LasProjector): DecodedPointClou
     count,
     ...heightRange(positions, count),
     truncated: false,
-  };
-}
-
-/**
- * Decode a bounded preview of an EPT dataset: the octree hierarchy walked
- * breadth-first from the root (whose nodes hold a coarse sample of the whole
- * cloud) until the budget, each LASzip node decoded and reprojected to WGS84
- * with heights in metres. Only the `laszip` data type is read; `binary` and
- * `zstandard` datasets are refused with a message saying so. The globe
- * streams by view instead (`cesium-point-cloud-stream.ts`); this one-shot
- * preview is its building block and fallback.
- *
- * @param url - The `ept.json` URL.
- * @param options - Budget, abort signal, and injectable dependencies.
- * @returns The decoded cloud.
- */
-export async function loadEptPointCloud(
-  url: string,
-  options: LoadEptOptions = {},
-): Promise<DecodedPointCloud> {
-  const budget = Number.isFinite(options.budget)
-    ? Math.max(1, Math.floor(options.budget as number))
-    : MAX_POINT_CLOUD_POINTS;
-  const signal = options.signal;
-  const source = await openEptSource(url, options);
-  const { counts } = source;
-
-  // Breadth-first over the hierarchy; a count of -1 marks a subtree whose
-  // counts live in their own file, loaded when the walk reaches it.
-  const queue = [...counts.keys()].sort((a, b) => keyDepth(a) - keyDepth(b));
-  const loadedPages = new Set(["0-0-0-0"]);
-  const chosen: string[] = [];
-  let planned = 0;
-  let truncated = false;
-  while (queue.length && planned < budget) {
-    const key = queue.shift()!;
-    const count = counts.get(key) ?? 0;
-    if (count === -1) {
-      if (loadedPages.has(key)) continue;
-      loadedPages.add(key);
-      const before = new Set(counts.keys());
-      await source.loadSubtree(key, signal);
-      // The subtree file restates its root with a real count; requeue it.
-      const fresh = [...counts.keys()].filter((k) => !before.has(k) || k === key);
-      queue.push(...fresh);
-      queue.sort((a, b) => keyDepth(a) - keyDepth(b));
-      continue;
-    }
-    if (count <= 0) continue;
-    if (planned + count > budget && chosen.length > 0) {
-      truncated = true;
-      break;
-    }
-    chosen.push(key);
-    planned = Math.min(budget, planned + count);
-  }
-  if (queue.length) truncated = true;
-
-  const positions = new Float64Array(planned * 3);
-  let colors: Uint8Array | null | undefined;
-  let written = 0;
-  for (let start = 0; start < chosen.length && written < planned; start += EPT_CONCURRENCY) {
-    const nodes = await Promise.all(
-      chosen.slice(start, start + EPT_CONCURRENCY).map((key) => source.loadNode(key, signal)),
-    );
-    signal?.throwIfAborted();
-    for (const node of nodes) {
-      // One schema per dataset, so the first node decides; a disagreeing
-      // node makes the cloud colourless rather than leaving points black.
-      if (colors === undefined) colors = node.colors ? new Uint8Array(planned * 3) : null;
-      else if (Boolean(node.colors) !== (colors !== null)) colors = null;
-      const take = Math.min(node.count, planned - written);
-      positions.set(node.positions.subarray(0, take * 3), written * 3);
-      if (colors && node.colors) colors.set(node.colors.subarray(0, take * 3), written * 3);
-      written += take;
-    }
-  }
-  return {
-    positions: written === planned ? positions : positions.subarray(0, written * 3),
-    colors: colors ? (written === planned ? colors : colors.subarray(0, written * 3)) : null,
-    count: written,
-    ...heightRange(positions, written),
-    truncated,
   };
 }
