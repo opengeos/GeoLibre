@@ -45,14 +45,21 @@ const PANEL_ID = FIELDS_OF_THE_WORLD_PLUGIN_ID;
 
 /** Most fields added to the map as one GeoJSON layer. */
 const MAX_MAP_FEATURES = 250_000;
-/** Most fields written to one GeoJSON file. */
-const MAX_GEOJSON_FEATURES = 1_000_000;
+/**
+ * Most fields written to one GeoJSON file. Decoded polygons, and the
+ * per-feature strings joined into the file, take far more memory than their
+ * compressed bytes, so this matches the map limit.
+ */
+const MAX_GEOJSON_FEATURES = 250_000;
 /** Most compressed bytes one Add to map reads (row groups run ~17 MB each). */
 const MAX_MAP_READ_BYTES = 512 * 1024 ** 2;
 /** Most compressed bytes one GeoJSON export reads. */
-const MAX_GEOJSON_READ_BYTES = 1024 ** 3;
-/** Largest zone file saved whole; above it the URL is copied instead. */
-const MAX_PARQUET_SAVE_BYTES = 512 * 1024 ** 2;
+const MAX_GEOJSON_READ_BYTES = 512 * 1024 ** 2;
+/**
+ * Largest zone file saved whole (it is buffered in memory first); above it the
+ * URL is copied instead.
+ */
+const MAX_PARQUET_SAVE_BYTES = 256 * 1024 ** 2;
 /** Most UTM zones one search opens (each costs a footer read of up to ~2.7 MB). */
 const MAX_SEARCH_ZONES = 6;
 /** Zone files whose footers stay cached between searches. */
@@ -1042,6 +1049,8 @@ function datasetInfo(): HTMLElement {
  */
 function binLegend(bins: ReadonlyArray<{ min: number; color: string }>, unit = ""): HTMLElement {
   const legend = element("div", CSS.legend);
+  // A numeric scale: keep the swatches and labels in the same order under RTL.
+  legend.dir = "ltr";
   const ramp = element("div", CSS.legendRamp);
   const width = 100 / bins.length;
   ramp.style.background = `linear-gradient(to right, ${bins
@@ -1121,6 +1130,16 @@ function buildPanel(container: HTMLElement): () => void {
     }
   };
 
+  const clearResults = (): void => {
+    state.results = [];
+    state.selectedIds = [];
+    const map = getControlMap(appRef);
+    if (map) {
+      setFootprints(map, []);
+      setOutline(map, []);
+    }
+  };
+
   const search = (): void => {
     const bbox = state.mode === "view" ? viewBbox() : state.drawnBbox;
     if (!bbox) {
@@ -1134,56 +1153,63 @@ function buildPanel(container: HTMLElement): () => void {
     }
     const year = state.year;
     void runTask(async (signal) => {
-      setStatus(tr("searching", "Searching…"));
-      const index = await untilAborted(loadIndex(), signal);
-      if (disposed) return;
-      const zones = searchFtwZones(index, bbox, year);
-      if (zones.length > MAX_SEARCH_ZONES) {
-        throw new Error(
-          tr(
-            "tooManyZones",
-            "The search area spans {{count}} UTM zones (limit {{limit}}). Zoom in or draw a smaller box.",
-            { count: zones.length, limit: MAX_SEARCH_ZONES },
-          ),
-        );
-      }
-      // Each zone's footer says which of its row groups overlap the area.
-      const results: ZoneResult[] = [];
-      for (const zone of zones) {
-        setStatus(
-          tr("openingZone", "Reading the index of UTM zone {{zone}}…", { zone: zoneLabel(zone) }),
-        );
-        const reader = await untilAborted(zoneReader(zone.url), signal);
+      try {
+        setStatus(tr("searching", "Searching…"));
+        const index = await untilAborted(loadIndex(), signal);
         if (disposed) return;
-        const plan = planFtwRead(reader.metadata, bbox);
-        if (plan.groups.length === 0 || !plan.extent) continue;
-        results.push({
-          id: `utm${zoneLabel(zone)}`,
-          zone,
-          readBytes: plan.bytes,
-          extent: plan.extent,
-        });
+        const zones = searchFtwZones(index, bbox, year);
+        if (zones.length > MAX_SEARCH_ZONES) {
+          throw new Error(
+            tr(
+              "tooManyZones",
+              "The search area spans {{count}} UTM zones (limit {{limit}}). Zoom in or draw a smaller box.",
+              { count: zones.length, limit: MAX_SEARCH_ZONES },
+            ),
+          );
+        }
+        // Each zone's footer says which of its row groups overlap the area.
+        const results: ZoneResult[] = [];
+        for (const zone of zones) {
+          setStatus(
+            tr("openingZone", "Reading the index of UTM zone {{zone}}…", { zone: zoneLabel(zone) }),
+          );
+          const reader = await untilAborted(zoneReader(zone.url), signal);
+          if (disposed) return;
+          const plan = planFtwRead(reader.metadata, bbox);
+          if (plan.groups.length === 0 || !plan.extent) continue;
+          results.push({
+            id: `utm${zoneLabel(zone)}`,
+            zone,
+            readBytes: plan.bytes,
+            extent: plan.extent,
+          });
+        }
+        state.searchBbox = bbox;
+        state.searchYear = year;
+        state.results = results;
+        state.selectedIds = [];
+        const map = getControlMap(appRef);
+        if (map) {
+          setFootprints(map, results);
+          setOutline(map, []);
+        }
+        setStatus(
+          results.length === 0
+            ? tr(
+                "noFields",
+                "No FTW fields for {{year}} in this area. Only croplands were processed, so an empty area may simply not have been mapped.",
+                { year },
+              )
+            : tr("foundZones", "Found fields in UTM zone {{zones}}.", {
+                zones: results.map((result) => zoneLabel(result.zone)).join(", "),
+              }),
+        );
+      } catch (error) {
+        // The old rows and footprints would describe a different area than
+        // the error does.
+        if (!disposed) clearResults();
+        throw error;
       }
-      state.searchBbox = bbox;
-      state.searchYear = year;
-      state.results = results;
-      state.selectedIds = [];
-      const map = getControlMap(appRef);
-      if (map) {
-        setFootprints(map, results);
-        setOutline(map, []);
-      }
-      setStatus(
-        results.length === 0
-          ? tr(
-              "noFields",
-              "No FTW fields for {{year}} in this area. Only croplands were processed, so an empty area may simply not have been mapped.",
-              { year },
-            )
-          : tr("foundZones", "Found fields in UTM zone {{zones}}.", {
-              zones: results.map((result) => zoneLabel(result.zone)).join(", "),
-            }),
-      );
     });
   };
 
