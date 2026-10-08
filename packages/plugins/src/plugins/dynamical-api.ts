@@ -860,7 +860,12 @@ export function niceTicks(min: number, max: number, count = 4): number[] {
     error >= Math.sqrt(50) ? 10 : error >= Math.sqrt(10) ? 5 : error >= Math.SQRT2 ? 2 : 1;
   const step = factor * magnitude;
   const ticks: number[] = [];
-  for (let tick = Math.ceil(min / step) * step; tick <= max + step * 1e-9; tick += step) {
+  // Stepping by index always advances, where `tick += step` can stall on a step far smaller than
+  // the tick; the cap guards a degenerate range all the same.
+  const first = Math.ceil(min / step);
+  for (let n = 0; n < 100; n += 1) {
+    const tick = (first + n) * step;
+    if (tick > max + step * 1e-9) break;
     ticks.push(Number(tick.toPrecision(12)));
   }
   return ticks;

@@ -563,23 +563,31 @@ async function readPointSeries(
 }
 
 /**
- * The map's `styledata` listener that puts the point marker back after a basemap change drops it,
- * while a marker is shown.
+ * The map's `styledata`/`sourcedata` listener that puts the point marker back after a basemap
+ * change drops it, while a marker is shown. `styledata` can fire before the new style has loaded,
+ * so `sourcedata` retries once it has.
  */
 let markerHeal: {
-  map: { off(type: "styledata", listener: () => void): unknown };
+  map: { off(type: "styledata" | "sourcedata", listener: () => void): unknown };
   listener: () => void;
 } | null = null;
+
+function stopMarkerHeal(): void {
+  markerHeal?.map.off("styledata", markerHeal.listener);
+  markerHeal?.map.off("sourcedata", markerHeal.listener);
+  markerHeal = null;
+}
 
 /** Mark the point a series was read at, and keep it marked across style changes. */
 function showPointMarker(app: GeoLibreAppAPI, lng: number, lat: number): void {
   const map = getStyleMap(app);
   if (!map) return;
-  markerHeal?.map.off("styledata", markerHeal.listener);
+  stopMarkerHeal();
   const listener = () => {
     if (map.isStyleLoaded() && !map.getSource(POINT_SOURCE_ID)) addPointMarker(map, lng, lat);
   };
   map.on("styledata", listener);
+  map.on("sourcedata", listener);
   markerHeal = { map, listener };
   addPointMarker(map, lng, lat);
 }
@@ -621,8 +629,7 @@ function addPointMarker(
 }
 
 function removePointMarker(app: GeoLibreAppAPI | null): void {
-  markerHeal?.map.off("styledata", markerHeal.listener);
-  markerHeal = null;
+  stopMarkerHeal();
   const map = getStyleMap(app);
   if (!map) return;
   if (map.getLayer(POINT_LAYER_ID)) map.removeLayer(POINT_LAYER_ID);
