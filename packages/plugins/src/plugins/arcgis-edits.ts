@@ -131,12 +131,19 @@ export function reconcileArcGISRefresh(
  * property whose name differs only in case, or from the GeoJSON feature `id`,
  * which ArcGIS fills from the object ID.
  */
-function recoveredArcGISObjectId(feature: Feature, field: string): number | undefined {
+function recoveredArcGISObjectId(
+  feature: Feature,
+  field: string,
+): { id: number; key?: string } | undefined {
   const properties = feature.properties ?? {};
   const lower = field.toLowerCase();
-  const key = Object.keys(properties).find((name) => name.toLowerCase() === lower);
-  const value = key === undefined ? feature.id : (properties[key] ?? feature.id);
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+  const key = Object.keys(properties).find(
+    (name) => name !== field && name.toLowerCase() === lower && properties[name] != null,
+  );
+  const value = key === undefined ? feature.id : properties[key];
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? { id: value, key }
+    : undefined;
 }
 
 /**
@@ -155,15 +162,19 @@ export function identifyArcGISFeatures(data: FeatureCollection, field?: string):
   for (let feature of data.features) {
     if (feature.properties?.[field] == null) {
       const recovered = recoveredArcGISObjectId(feature, field);
-      if (recovered !== undefined)
-        feature = { ...feature, properties: { ...feature.properties, [field]: recovered } };
+      if (recovered !== undefined) {
+        // Move a case-variant ID rather than copy it, so the table shows one ID column.
+        const properties = { ...feature.properties, [field]: recovered.id };
+        if (recovered.key !== undefined) delete properties[recovered.key];
+        feature = { ...feature, properties };
+      }
     }
     // Loading never fails on an odd ID; saving validates it with a clear error.
     const value = feature.properties?.[field];
     const id =
       typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
     if (id !== undefined) {
-      // Overlapping pages can repeat a record; one copy is the record.
+      // Overlapping pages can repeat a record; the first copy is kept.
       if (seen.has(id)) continue;
       seen.add(id);
     }
@@ -318,7 +329,8 @@ function attributes(
         if (field.type === "esriFieldTypeDate" && typeof normalized === "string")
           normalized = Date.parse(normalized);
         // A value typed into a column that held no numbers can arrive as text.
-        else if (typeof normalized === "string" && normalized.trim() !== "")
+        // Only plain decimals convert; "0x1A" or "1e3" stay text and are rejected.
+        else if (typeof normalized === "string" && DECIMAL_TEXT.test(normalized))
           normalized = Number(normalized);
         if (typeof normalized !== "number" || !Number.isFinite(normalized))
           throw new Error(`Field ${name} requires a number or valid date.`);
@@ -361,6 +373,8 @@ function attributes(
   }
   return result;
 }
+
+const DECIMAL_TEXT = /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/;
 
 const M_AWARE_GEOMETRY_ERROR =
   "This ArcGIS layer stores measure (M) values, which GeoLibre cannot edit. Attribute edits and deletions can be saved; add or reshape features in ArcGIS.";

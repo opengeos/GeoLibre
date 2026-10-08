@@ -354,6 +354,7 @@ describe("ArcGIS typed codes", () => {
       attributes: { OBJECTID: 1, STATUS: 1 },
     });
     assert.throws(() => edit({ STATUS: "one" }), /STATUS requires a number/);
+    assert.throws(() => edit({ STATUS: "0x1" }), /STATUS requires a number/);
   });
 });
 

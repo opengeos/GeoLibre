@@ -122,6 +122,8 @@ describe("ArcGIS edit validation", () => {
         [3, 3, "before"],
       ],
     );
+    // The case-variant ID is moved, not copied.
+    assert.deepEqual(loaded.features[1].properties, { OBJECTID: 2 });
     assert.equal(planArcGISEdits(loaded, loaded, info).updates.length, 0);
   });
   it("tags WGS84 and orients polygon shells clockwise and holes counterclockwise", () => {
