@@ -203,7 +203,7 @@ const MATRIX: Record<string, Row> = {
   zarr:                           { maplibre: "plugin", mapbox: false, arcgis: true,  cesium: true },
   "zarr (Zarr control)":          { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: true },
   "lidar (COPC)":                 { maplibre: "plugin", mapbox: false, arcgis: false, cesium: true },
-  "lidar (LiDAR control)":        { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: false },
+  "lidar (LiDAR control)":        { maplibre: "plugin", mapbox: true,  arcgis: true,  cesium: true },
   "gaussian-splat (.ply)":        { maplibre: "plugin", mapbox: false, arcgis: false, cesium: false },
   "gaussian-splat (tileset)":     { maplibre: "plugin", mapbox: false, arcgis: false, cesium: true },
   "3d-tiles":                     { maplibre: "plugin", mapbox: false, arcgis: false, cesium: true },

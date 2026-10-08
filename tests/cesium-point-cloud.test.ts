@@ -3,8 +3,14 @@ import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/types";
 import { CesiumLayerSync, isCesiumSupportedLayerType } from "../packages/map/src/cesium-layer-sync";
 import {
+  MAX_LAS_FILE_BYTES,
   MAX_POINT_CLOUD_POINTS,
   buildPointCloudCollection,
+  horizontalWkt,
+  proj4LinearUnit,
+  loadLasPointCloud,
+  parseGeoKeyDirectory,
+  wktHeightScale,
   isSplatTilesetUrl,
   loadCopcPointCloud,
   pointCloudColor,
@@ -33,7 +39,8 @@ describe("pointCloudSourceKind", () => {
       "an EPT manifest is JSON but not a tileset",
     );
     assert.equal(pointCloudSourceKind("https://x/EPT.json?token=1"), null);
-    assert.equal(pointCloudSourceKind("https://x/plain.laz"), null);
+    assert.equal(pointCloudSourceKind("https://x/plain.laz"), "las");
+    assert.equal(pointCloudSourceKind("https://x/PLAIN.LAS?sig=1"), "las");
     assert.equal(pointCloudSourceKind(undefined), null);
     assert.equal(isSplatTilesetUrl("https://x/splats/tileset.json"), true);
     assert.equal(isSplatTilesetUrl("https://x/scene.ply"), false);
@@ -444,7 +451,8 @@ describe("CesiumLayerSync native 3D routing", () => {
     );
     assert.equal(
       isCesiumSupportedLayerType(layer({ type: "lidar", source: { url: "https://x/plain.laz" } })),
-      false,
+      true,
+      "a plain LAZ is downloaded and decoded whole",
     );
     assert.equal(
       isCesiumSupportedLayerType(layer({ type: "lidar", source: { url: "https://x/ept.json" } })),
@@ -644,5 +652,195 @@ describe("buildPointCloudCollection", () => {
       Math.abs((collection.get(0) as unknown as { color: { alpha: number } }).color.alpha - 0.1) <
         1e-9,
     );
+  });
+});
+
+// --- Plain LAS / LAZ (issue #2261) -----------------------------------------
+
+/**
+ * A real LAS 1.2 file, point format 2 (RGB), with an optional GeoKey
+ * directory naming a projected EPSG code, so the loader runs the actual
+ * `copc` reader, GeoKey decoding, and proj4.
+ */
+function makeLas(points: number[][], options: { epsg?: number; wkt?: string } = {}): Uint8Array {
+  const vlrs: { recordId: number; body: Uint8Array }[] = [];
+  if (options.epsg) {
+    const keys = new Uint16Array([1, 1, 0, 2, 1024, 0, 1, 1, 3072, 0, 1, options.epsg]);
+    vlrs.push({ recordId: 34735, body: new Uint8Array(keys.buffer) });
+  }
+  if (options.wkt)
+    vlrs.push({ recordId: 2112, body: new TextEncoder().encode(`${options.wkt}\0`) });
+  // `copc` reads a 375-byte header block whatever the version; a real file is
+  // never that small, so pad a tiny one with a record nothing reads.
+  vlrs.push({ recordId: 1, body: new Uint8Array(160) });
+  const headerSize = 227;
+  const vlrBytes = vlrs.reduce((n, v) => n + 54 + v.body.byteLength, 0);
+  const recordLength = 26;
+  const offset = headerSize + vlrBytes;
+  const out = new Uint8Array(offset + points.length * recordLength);
+  const dv = new DataView(out.buffer);
+  out.set(new TextEncoder().encode("LASF"), 0);
+  dv.setUint8(24, 1);
+  dv.setUint8(25, 2);
+  dv.setUint16(94, headerSize, true);
+  dv.setUint32(96, offset, true);
+  dv.setUint32(100, vlrs.length, true);
+  dv.setUint8(104, 2);
+  dv.setUint16(105, recordLength, true);
+  dv.setUint32(107, points.length, true);
+  const scale = 0.01;
+  for (const at of [131, 139, 147]) dv.setFloat64(at, scale, true);
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const zs = points.map((p) => p[2]);
+  dv.setFloat64(179, Math.max(...xs), true);
+  dv.setFloat64(187, Math.min(...xs), true);
+  dv.setFloat64(195, Math.max(...ys), true);
+  dv.setFloat64(203, Math.min(...ys), true);
+  dv.setFloat64(211, Math.max(...zs), true);
+  dv.setFloat64(219, Math.min(...zs), true);
+  let at = headerSize;
+  for (const vlr of vlrs) {
+    out.set(new TextEncoder().encode("LASF_Projection"), at + 2);
+    dv.setUint16(at + 18, vlr.recordId, true);
+    dv.setUint16(at + 20, vlr.body.byteLength, true);
+    out.set(vlr.body, at + 54);
+    at += 54 + vlr.body.byteLength;
+  }
+  points.forEach(([x, y, z, r = 0, g = 0, b = 0], i) => {
+    const p = offset + i * recordLength;
+    dv.setInt32(p, Math.round(x / scale), true);
+    dv.setInt32(p + 4, Math.round(y / scale), true);
+    dv.setInt32(p + 8, Math.round(z / scale), true);
+    dv.setUint16(p + 20, r, true);
+    dv.setUint16(p + 22, g, true);
+    dv.setUint16(p + 24, b, true);
+  });
+  return out;
+}
+
+const bytes = (file: Uint8Array) => async () => file;
+
+describe("loadLasPointCloud", () => {
+  it("decodes a LAS file through its GeoKeys, keeping 16-bit colour", async () => {
+    // UTM 10N, metres: 500 000 E on the central meridian (-123°).
+    const file = makeLas(
+      [
+        [500000, 4877000, 120, 65535, 0, 0],
+        [500100, 4877100, 130, 0, 32768, 0],
+      ],
+      { epsg: 32610 },
+    );
+    const cloud = await loadLasPointCloud("https://x/a.las", { fetchBytes: bytes(file) });
+    assert.equal(cloud.count, 2);
+    assert.equal(cloud.truncated, false);
+    assert.ok(Math.abs(cloud.positions[0] + 123) < 1e-6, `lng ${cloud.positions[0]}`);
+    assert.ok(Math.abs(cloud.positions[1] - 44.04) < 0.01, `lat ${cloud.positions[1]}`);
+    assert.equal(cloud.positions[2], 120);
+    assert.deepEqual(Array.from(cloud.colors ?? []), [255, 0, 0, 0, 128, 0]);
+    assert.deepEqual([cloud.zMin, cloud.zMax], [120, 130]);
+  });
+
+  it("scales heights by the projected unit when no vertical unit is given", async () => {
+    // EPSG:2992 is Oregon Lambert in international feet, like Autzen.
+    const file = makeLas([[1312336, 0, 400]], { epsg: 2992 });
+    const cloud = await loadLasPointCloud("https://x/a.las", { fetchBytes: bytes(file) });
+    assert.ok(Math.abs(cloud.positions[2] - 400 * 0.3048) < 1e-6, `z ${cloud.positions[2]}`);
+  });
+
+  it("thins a cloud over the budget to every n-th point", async () => {
+    const points = Array.from({ length: 10 }, (_, i) => [500000 + i, 4877000, i]);
+    const cloud = await loadLasPointCloud("https://x/a.las", {
+      fetchBytes: bytes(makeLas(points, { epsg: 32610 })),
+      budget: 4,
+    });
+    assert.equal(cloud.truncated, true);
+    assert.equal(cloud.count, 4);
+    assert.deepEqual(
+      [0, 1, 2, 3].map((i) => cloud.positions[i * 3 + 2]),
+      [0, 3, 6, 9],
+    );
+  });
+
+  it("falls back to the WKT the 2D control recorded", async () => {
+    const wkt =
+      'PROJCS["WGS 84 / UTM zone 10N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-123],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]';
+    const cloud = await loadLasPointCloud("https://x/a.las", {
+      fetchBytes: bytes(makeLas([[500000, 4877000, 5]])),
+      fallbackWkt: wkt,
+    });
+    assert.ok(Math.abs(cloud.positions[0] + 123) < 1e-6);
+  });
+
+  it("refuses a file with no CRS rather than reading metres as degrees", async () => {
+    await assert.rejects(
+      loadLasPointCloud("https://x/a.las", { fetchBytes: bytes(makeLas([[1, 2, 3]])) }),
+      /no usable CRS/,
+    );
+  });
+
+  it("refuses a file too large to preview", async () => {
+    const huge = makeLas([[500000, 4877000, 1]], { epsg: 32610 });
+    // Claim more points than fit in the cap; the header alone decides.
+    new DataView(huge.buffer).setUint32(107, Math.ceil(MAX_LAS_FILE_BYTES / 26) + 1, true);
+    await assert.rejects(
+      loadLasPointCloud("https://x/a.las", { fetchBytes: bytes(huge) }),
+      /too large to preview/,
+    );
+  });
+
+  it("stops when aborted", async () => {
+    const abort = new AbortController();
+    abort.abort();
+    await assert.rejects(
+      loadLasPointCloud("https://x/a.las", {
+        fetchBytes: bytes(makeLas([[500000, 4877000, 1]], { epsg: 32610 })),
+        signal: abort.signal,
+      }),
+    );
+  });
+});
+
+describe("point cloud CRS helpers", () => {
+  const AUTZEN =
+    'COMPD_CS["NAD83 / Oregon GIC Lambert (ft) + NAVD88 height (ftUS)",PROJCS["NAD83 / Oregon GIC Lambert (ft)",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Lambert_Conformal_Conic_2SP"],PARAMETER["latitude_of_origin",41.75],PARAMETER["central_meridian",-120.5],PARAMETER["standard_parallel_1",43],PARAMETER["standard_parallel_2",45.5],PARAMETER["false_easting",1312335.958],PARAMETER["false_northing",0],UNIT["foot",0.3048]],VERT_CS["NAVD88 height (ftUS)",VERT_DATUM["North American Vertical Datum 1988",2005],UNIT["US survey foot",0.304800609601219]]]';
+
+  it("extracts the horizontal CRS from a compound WKT", () => {
+    const horizontal = horizontalWkt(AUTZEN);
+    assert.ok(horizontal.startsWith('PROJCS["NAD83 / Oregon GIC Lambert (ft)"'));
+    assert.ok(horizontal.endsWith('UNIT["foot",0.3048]]'));
+    assert.equal(horizontalWkt('PROJCS["x",UNIT["metre",1]]'), 'PROJCS["x",UNIT["metre",1]]');
+  });
+
+  it("reads the height unit from the vertical CRS, else the projected one", () => {
+    assert.equal(wktHeightScale(AUTZEN), 0.304800609601219);
+    assert.equal(wktHeightScale(horizontalWkt(AUTZEN)), 0.3048);
+    assert.equal(wktHeightScale('GEOGCS["WGS 84",UNIT["degree",0.0174532925199433]]'), 1);
+    assert.equal(wktHeightScale(undefined), 1);
+  });
+
+  it("reads a proj4 string's linear unit", () => {
+    assert.equal(proj4LinearUnit("+proj=lcc +to_meter=0.3048 +no_defs"), 0.3048);
+    assert.equal(proj4LinearUnit("+proj=lcc +units=us-ft"), 1200 / 3937);
+    assert.equal(proj4LinearUnit("+proj=tmerc +units=m"), 1);
+    assert.equal(proj4LinearUnit("+proj=tmerc"), 1);
+  });
+
+  it("decodes GeoKeys with short, double, and ASCII values", () => {
+    const directory = new Uint16Array([
+      1, 1, 0, 3, 1024, 0, 1, 1, 3088, 34736, 1, 0, 1026, 34737, 5, 0,
+    ]);
+    const doubles = new Float64Array([41.75]);
+    const keys = parseGeoKeyDirectory(
+      new Uint8Array(directory.buffer),
+      new Uint8Array(doubles.buffer),
+      new TextEncoder().encode("Test|"),
+      { 1024: "GTModelTypeGeoKey", 3088: "ProjNatOriginLatGeoKey", 1026: "GTCitationGeoKey" },
+    );
+    assert.deepEqual(keys, {
+      GTModelTypeGeoKey: 1,
+      ProjNatOriginLatGeoKey: 41.75,
+      GTCitationGeoKey: "Test",
+    });
   });
 });

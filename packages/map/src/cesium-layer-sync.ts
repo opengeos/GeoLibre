@@ -51,9 +51,11 @@ import {
   buildPointCloudCollection,
   isSplatTilesetUrl,
   loadCopcPointCloud,
+  loadLasPointCloud,
   pointCloudSourceKind,
   setPointCloudOpacity,
   type LoadCopcOptions,
+  type LoadLasOptions,
 } from "./cesium-point-cloud";
 import {
   buildPointBatch,
@@ -282,9 +284,14 @@ function isTilesetLayer(layer: GeoLibreLayer): boolean {
   return false;
 }
 
-/** A COPC point cloud the globe decodes itself (issue #2285). */
+/**
+ * A point cloud the globe decodes itself: a COPC archive (issue #2285) or a
+ * plain LAS/LAZ file (issue #2261).
+ */
 function isDecodedPointCloudLayer(layer: GeoLibreLayer): boolean {
-  return layer.type === "lidar" && pointCloudSourceKind(pointCloudUrl(layer)) === "copc";
+  if (layer.type !== "lidar") return false;
+  const kind = pointCloudSourceKind(pointCloudUrl(layer));
+  return kind === "copc" || kind === "las";
 }
 
 interface LayerEntry {
@@ -944,6 +951,8 @@ export interface CesiumLayerSyncDeps {
   renderFillPattern?: typeof renderFillPatternCanvas;
   /** Overrides for the COPC decoder (the module, the projector, the budget). */
   copcOptions?: Omit<LoadCopcOptions, "signal">;
+  /** Overrides for the plain LAS/LAZ decoder (the module, the download, the projector). */
+  lasOptions?: Omit<LoadLasOptions, "signal" | "fallbackWkt">;
   /**
    * Publishes the attribute names read off a tileset's first rendered tile
    * (issue #2290). A 3D Tiles layer has no `layer.geojson` for the Style panel
@@ -2793,10 +2802,19 @@ export class CesiumLayerSync {
     const abort = new AbortController();
     entry.abort = abort;
     try {
-      const cloud = await loadCopcPointCloud(url, {
-        ...this.deps.copcOptions,
-        signal: abort.signal,
-      });
+      const cloud =
+        pointCloudSourceKind(url) === "las"
+          ? await loadLasPointCloud(url, {
+              ...this.deps.lasOptions,
+              // The LiDAR control records the WKT it read, for a file whose
+              // own CRS records are missing or unreadable.
+              fallbackWkt: str(entry.layer.metadata?.wkt),
+              signal: abort.signal,
+            })
+          : await loadCopcPointCloud(url, {
+              ...this.deps.copcOptions,
+              signal: abort.signal,
+            });
       if (entry.cancelled) return;
       const collection = buildPointCloudCollection(
         Cesium,
