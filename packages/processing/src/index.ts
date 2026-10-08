@@ -430,6 +430,7 @@ export {
   classifyByRules,
   classifyRandomForest,
   featureTableCsv,
+  tableForAllObjects,
   type ObiaClassification,
   type ObiaRule,
   type ObiaRuleOp,

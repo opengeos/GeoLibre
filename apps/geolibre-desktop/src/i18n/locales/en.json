@@ -7436,13 +7436,16 @@
     "addLabels": "Also add the label raster to the map",
     "run": "Segment",
     "running": "Segmenting…",
-    "result": "{{count}} objects, about {{area}} pixels each",
+    "result_one": "{{count}} object, {{area}} pixels",
+    "result_other": "{{count}} objects, about {{area}} pixels each",
     "layerName": "{{name}} objects",
     "labelsLayerName": "{{name}} segments",
     "error": {
       "readImage": "Could not read this layer's GeoTIFF data in the browser.",
       "noBands": "Select at least one band.",
-      "imageTooLarge": "This image has {{width}} × {{height}} pixels, more than the {{max}} the in-browser workbench handles. Clip it to a smaller area first.",
+      "imageTooLarge": "This image has {{width}} × {{height}} pixels, over the workbench limit of {{max}} pixels. Clip it to a smaller area first.",
+      "tooManyBands_one": "{{count}} band of this image needs more memory than the in-browser workbench allows. Clip the image to a smaller area.",
+      "tooManyBands_other": "{{count}} bands of this image need more memory than the in-browser workbench allows. Select fewer bands, or clip the image.",
       "noSuchBand": "The image has no band {{index}}.",
       "failed": "Segmentation failed."
     },
@@ -7460,7 +7463,8 @@
       "context": "Neighborhood (neighbor count, shared boundary)",
       "run": "Measure objects",
       "running": "Measuring…",
-      "result": "{{fields}} features measured for {{count}} objects",
+      "result_one": "{{fields}} features measured for {{count}} object",
+      "result_other": "{{fields}} features measured for {{count}} objects",
       "error": {
         "layersMissing": "The source image or the objects layer was removed. Segment again.",
         "resegmented": "The objects were segmented again while measuring, so these values were discarded. Measure the new objects.",
@@ -7519,9 +7523,12 @@
       "defaultClass": "Default class",
       "run": "Classify",
       "running": "Classifying…",
-      "result": "Classified {{count}} objects: {{summary}}",
+      "result_one": "Classified {{count}} object: {{summary}}",
+      "result_other": "Classified {{count}} objects: {{summary}}",
       "imputed": "Objects missing a value used the feature's mean: {{fields}}.",
       "error": {
+        "incompleteRule": "Give every rule a feature and a class, or remove it.",
+        "remeasured": "The objects were measured again while classifying, so these predictions were discarded. Classify again.",
         "failed": "Classification failed."
       }
     },
