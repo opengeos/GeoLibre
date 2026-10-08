@@ -1,72 +1,44 @@
-import { useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { GripVertical, Shapes, X } from "lucide-react";
-import type { ReactElement } from "react";
+import { addRasterToMap } from "@geolibre/plugins";
+import { useCallback, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { useFloatingPanelDrag } from "../../../hooks/useFloatingPanelDrag";
+import { createAppAPI } from "../../../hooks/usePlugins";
+import type { ObiaAddRaster } from "../../../lib/obia/obia-session";
 import { ObiaMeasureStep } from "./ObiaMeasureStep";
 import { ObiaSegmentStep } from "./ObiaSegmentStep";
 
 interface ObiaWorkbenchPanelProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
-  /** Add GeoTIFF bytes to the map as a raster layer. */
-  onAddRaster: (bytes: Uint8Array, name: string, fileName?: string) => Promise<void>;
 }
 
 /**
- * Object-Based Analysis workbench (#3053). A floating panel that runs the OBIA
- * pipeline on the WASM tool runner, one step per section: segment a raster
- * layer into objects (one polygon per object, `id` = `segment_id`), then
- * measure them. Each later step appears once the one before it has run.
+ * Object-Based Analysis workbench (#3053), the content of a dockable right
+ * panel (see `lib/obia/obia-panel.ts`). It runs the OBIA pipeline on the WASM
+ * tool runner, one section per step: segment a raster layer into objects (one
+ * polygon per object, `id` = `segment_id`), then measure them. Each later step
+ * appears once the one before it has run.
  */
-export function ObiaWorkbenchPanel({
-  mapControllerRef,
-  onAddRaster,
-}: ObiaWorkbenchPanelProps): ReactElement | null {
+export function ObiaWorkbenchPanel({ mapControllerRef }: ObiaWorkbenchPanelProps): ReactElement {
   const { t } = useTranslation();
-  const open = useAppStore((s) => s.ui.obiaWorkbenchOpen);
-  const setOpen = useAppStore((s) => s.setObiaWorkbenchOpen);
-  const { panelRef, pos, onDragStart } = useFloatingPanelDrag();
 
-  if (!open) return null;
+  const addRaster = useCallback<ObiaAddRaster>(
+    async (bytes, name, fileName, state) => {
+      const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
+        type: "image/tiff",
+      });
+      await addRasterToMap(createAppAPI(mapControllerRef), file, { name, state });
+    },
+    [mapControllerRef],
+  );
 
   return (
     <div
-      ref={panelRef}
-      className={
-        pos
-          ? "pointer-events-auto absolute z-20 flex max-h-[calc(100%-2rem)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-          : "pointer-events-auto absolute end-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-      }
-      style={pos ? { left: pos.x, top: pos.y } : undefined}
-      role="region"
-      aria-label={t("obia.title")}
+      className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-3"
       data-testid="obia-workbench-panel"
     >
-      <div
-        className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b px-3 py-2"
-        onPointerDown={onDragStart}
-      >
-        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <Shapes className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="truncate">{t("obia.title")}</span>
-        </div>
-        <button
-          type="button"
-          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
-          onClick={() => setOpen(false)}
-          aria-label={t("common.close")}
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-3 overflow-auto p-3">
-        <p className="text-xs text-muted-foreground">{t("obia.description")}</p>
-        <ObiaSegmentStep mapControllerRef={mapControllerRef} onAddRaster={onAddRaster} />
-        <ObiaMeasureStep />
-      </div>
+      <p className="text-xs text-muted-foreground">{t("obia.description")}</p>
+      <ObiaSegmentStep mapControllerRef={mapControllerRef} onAddRaster={addRaster} />
+      <ObiaMeasureStep />
     </div>
   );
 }

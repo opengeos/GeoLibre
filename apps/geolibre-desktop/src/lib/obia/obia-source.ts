@@ -4,7 +4,16 @@ import { fetchLayerBytes } from "../whitebox-layer-inputs";
 
 // The last image read, so listing bands, segmenting and measuring the same
 // layer fetch its bytes once. One entry: the workbench works on one image.
-let cached: { layerId: string; bytes: Uint8Array } | null = null;
+let cached: { key: string; bytes: Uint8Array } | null = null;
+
+/**
+ * Identity of a layer's data: its id plus wherever its bytes come from, so a
+ * layer whose source is replaced (re-added file, new URL) is read afresh.
+ */
+function sourceKey(layer: GeoLibreLayer): string {
+  const src = layer.source as Record<string, unknown>;
+  return [layer.id, layer.metadata.localBytesUrl, src.url, layer.sourcePath].join("|");
+}
 
 /**
  * GeoTIFF bytes of a workbench source layer, cached for the last layer read.
@@ -14,9 +23,10 @@ let cached: { layerId: string; bytes: Uint8Array } | null = null;
  *   browser.
  */
 export async function obiaSourceBytes(layer: GeoLibreLayer): Promise<Uint8Array | null> {
-  if (cached?.layerId === layer.id) return cached.bytes;
+  const key = sourceKey(layer);
+  if (cached?.key === key) return cached.bytes;
   const bytes = await fetchLayerBytes(layer);
-  if (bytes) cached = { layerId: layer.id, bytes };
+  if (bytes) cached = { key, bytes };
   return bytes;
 }
 
