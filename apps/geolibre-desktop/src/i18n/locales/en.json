@@ -7459,6 +7459,7 @@
       "result": "{{fields}} features measured for {{count}} objects",
       "error": {
         "layersMissing": "The source image or the objects layer was removed. Segment again.",
+        "resegmented": "The objects were segmented again while measuring, so these values were discarded. Measure the new objects.",
         "failed": "Measuring the objects failed."
       }
     },
