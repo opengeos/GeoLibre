@@ -419,7 +419,18 @@ export {
   type RunModelGraphOptions,
 } from "./model-graph";
 export {
+  DEFAULT_OBIA_FEATURE_OPTIONS,
   DEFAULT_REGION_GROWING_PARAMS,
+  addSpectralIndices,
+  applyObjectFeatures,
+  computeObjectFeatures,
+  parseObiaCsv,
+  sourceBandColumn,
+  type ObiaCsv,
+  type ObiaFeatureOptions,
+  type ObiaFeatureTable,
+  type ObiaIndexBands,
+  type ObiaToolCall,
   OBIA_MAX_PIXELS,
   OBIA_SEGMENT_ID_FIELD,
   dissolveSegmentPolygons,

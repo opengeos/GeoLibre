@@ -261,3 +261,268 @@ export async function segmentImage(
     args,
   };
 }
+
+// --- Object features --------------------------------------------------------
+
+/** A parsed OBIA tool CSV (the tools write plain, unquoted CSV). */
+export interface ObiaCsv {
+  headers: string[];
+  rows: string[][];
+}
+
+/**
+ * Parse the plain CSV the OBIA tools write (no quoting, comma separated).
+ *
+ * @param text CSV text with a header row.
+ */
+export function parseObiaCsv(text: string): ObiaCsv {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (!lines.length) return { headers: [], rows: [] };
+  const headers = lines[0].split(",").map((h) => h.trim());
+  const rows = lines.slice(1).map((line) => line.split(",").map((cell) => cell.trim()));
+  return { headers, rows };
+}
+
+/**
+ * Per-object feature values keyed by `segment_id`. A value is null when the
+ * tool produced no row for that object (e.g. GLCM texture of a 1-pixel object).
+ */
+export interface ObiaFeatureTable {
+  /** Feature names, in column order. */
+  fields: string[];
+  rows: Map<number, Record<string, number | null>>;
+}
+
+/** Band roles for the spectral indices, as 1-based source band numbers. */
+export interface ObiaIndexBands {
+  red?: number;
+  green?: number;
+  nir?: number;
+}
+
+/** Which feature groups to compute. */
+export interface ObiaFeatureOptions {
+  spectral: boolean;
+  shape: boolean;
+  /** GLCM texture on this 1-based source band; omitted for none. */
+  textureBand?: number;
+  context: boolean;
+  /** Indices derived from the band means; needs `spectral`. */
+  indices?: ObiaIndexBands;
+}
+
+export const DEFAULT_OBIA_FEATURE_OPTIONS: ObiaFeatureOptions = {
+  spectral: true,
+  shape: true,
+  context: false,
+};
+
+/** One tool run behind a feature table, for provenance. */
+export interface ObiaToolCall {
+  tool: string;
+  args: string[];
+}
+
+function csvToTable(
+  csv: ObiaCsv,
+  rename: (field: string) => string | null,
+  table: ObiaFeatureTable,
+): void {
+  const idCol = csv.headers.indexOf(OBIA_SEGMENT_ID_FIELD);
+  if (idCol < 0) throw new Error(`Feature table has no ${OBIA_SEGMENT_ID_FIELD} column.`);
+  const columns: { index: number; name: string }[] = [];
+  csv.headers.forEach((header, index) => {
+    if (index === idCol) return;
+    const name = rename(header);
+    if (!name || table.fields.includes(name)) return;
+    table.fields.push(name);
+    columns.push({ index, name });
+  });
+  for (const row of csv.rows) {
+    const id = Number(row[idCol]);
+    if (!Number.isFinite(id)) continue;
+    let record = table.rows.get(id);
+    if (!record) {
+      record = {};
+      table.rows.set(id, record);
+    }
+    for (const { index, name } of columns) {
+      const raw = row[index];
+      const value =
+        raw === "true"
+          ? 1
+          : raw === "false"
+            ? 0
+            : raw === undefined || raw === ""
+              ? NaN
+              : Number(raw);
+      record[name] = Number.isFinite(value) ? value : null;
+    }
+  }
+}
+
+/**
+ * Rename a spectral column from the tool's input order (`mean_b2` = the second
+ * band passed in) to the source band number, so `mean_b4` always means band 4
+ * of the image whichever bands were selected.
+ */
+export function sourceBandColumn(header: string, bandIndexes: readonly number[]): string {
+  const match = header.match(/^(.+)_b(\d+)$/);
+  if (!match) return header;
+  const source = bandIndexes[Number(match[2]) - 1];
+  return source ? `${match[1]}_b${source}` : header;
+}
+
+const round = (value: number) => Math.round(value * 1e6) / 1e6;
+
+function normalizedDifference(a: number | null, b: number | null): number | null {
+  if (a == null || b == null || a + b === 0) return null;
+  return round((a - b) / (a + b));
+}
+
+/**
+ * Add per-object indices computed from the band means: brightness (mean of
+ * the band means), NDVI from red/NIR, and NDWI (McFeeters) from green/NIR.
+ *
+ * @param table Table holding `mean_b<n>` columns (source band numbers).
+ * @param bandIndexes Source bands the means were computed for.
+ * @param roles Which source bands are red, green and NIR.
+ */
+export function addSpectralIndices(
+  table: ObiaFeatureTable,
+  bandIndexes: readonly number[],
+  roles: ObiaIndexBands = {},
+): void {
+  const meanOf = (record: Record<string, number | null>, band?: number) =>
+    band != null && bandIndexes.includes(band) ? (record[`mean_b${band}`] ?? null) : null;
+  const add = (field: string) => {
+    if (!table.fields.includes(field)) table.fields.push(field);
+  };
+  add("brightness");
+  const hasNdvi = roles.red != null && roles.nir != null;
+  const hasNdwi = roles.green != null && roles.nir != null;
+  if (hasNdvi) add("ndvi");
+  if (hasNdwi) add("ndwi");
+  for (const record of table.rows.values()) {
+    const means = bandIndexes
+      .map((band) => record[`mean_b${band}`])
+      .filter((value): value is number => value != null);
+    record.brightness = means.length
+      ? round(means.reduce((sum, value) => sum + value, 0) / means.length)
+      : null;
+    if (hasNdvi)
+      record.ndvi = normalizedDifference(meanOf(record, roles.nir), meanOf(record, roles.red));
+    if (hasNdwi)
+      record.ndwi = normalizedDifference(meanOf(record, roles.green), meanOf(record, roles.nir));
+  }
+}
+
+/**
+ * Measure each object: spectral statistics per band, shape, optional GLCM
+ * texture and neighborhood context, all from the label raster and the
+ * original (unscaled) bands.
+ *
+ * @param labels Label raster from {@link segmentImage}.
+ * @param image The same bands the objects were segmented from.
+ * @param options Feature groups to compute.
+ */
+export async function computeObjectFeatures(
+  labels: Uint8Array,
+  image: ObiaImage,
+  options: ObiaFeatureOptions,
+): Promise<{ table: ObiaFeatureTable; calls: ObiaToolCall[] }> {
+  const table: ObiaFeatureTable = { fields: [], rows: new Map() };
+  const calls: ObiaToolCall[] = [];
+  const bandIndexes = image.bands.map((band) => band.index);
+  const { paths, input } = stageBands(image.bands);
+  const segments = { "segments.tif": labels };
+  const decode = (bytes: Uint8Array | undefined, tool: string) => {
+    if (!bytes) throw new Error(`${tool} did not write its feature table.`);
+    return parseObiaCsv(new TextDecoder().decode(bytes));
+  };
+  const run = async (
+    tool: string,
+    args: string[],
+    files: Record<string, Uint8Array>,
+    rename: (field: string) => string | null,
+  ) => {
+    const out = await runTool(tool, args, files);
+    calls.push({ tool, args });
+    csvToTable(decode(out["features.csv"], tool), rename, table);
+  };
+
+  if (options.spectral) {
+    await run(
+      "object_features_spectral_basic",
+      [
+        "--segments=/work/segments.tif",
+        `--inputs=${paths.join(",")}`,
+        "--output=/work/features.csv",
+      ],
+      { ...segments, ...input },
+      // `count` duplicates shape's area_px; keep it only without shape.
+      (field) =>
+        field === "count"
+          ? options.shape
+            ? null
+            : "area_px"
+          : sourceBandColumn(field, bandIndexes),
+    );
+    if (options.indices) addSpectralIndices(table, bandIndexes, options.indices);
+  }
+  if (options.shape) {
+    await run(
+      "object_features_shape_basic",
+      ["--segments=/work/segments.tif", "--output=/work/features.csv"],
+      segments,
+      (field) => field,
+    );
+  }
+  if (options.textureBand != null) {
+    const band = image.bands.find((item) => item.index === options.textureBand);
+    if (!band) throw new Error(`Band ${options.textureBand} is not among the segmented bands.`);
+    await run(
+      "object_features_texture_glcm_basic",
+      ["--segments=/work/segments.tif", "--input=/work/texture.tif", "--output=/work/features.csv"],
+      { ...segments, "texture.tif": band.bytes },
+      // pair_count is a sample size, not a texture measure.
+      (field) => (field === "pair_count" ? null : `${field}_b${band.index}`),
+    );
+  }
+  if (options.context) {
+    await run(
+      "object_features_context_neighbors",
+      ["--segments=/work/segments.tif", "--output=/work/features.csv"],
+      segments,
+      (field) => field,
+    );
+  }
+  return { table, calls };
+}
+
+/**
+ * Copy a feature table onto the objects as properties (matched by
+ * `segment_id`), replacing earlier feature values but keeping other
+ * properties such as training labels.
+ *
+ * @param objects Objects from {@link segmentImage}.
+ * @param table Features to write.
+ * @param previousFields Fields an earlier run wrote, removed first.
+ */
+export function applyObjectFeatures(
+  objects: FeatureCollection,
+  table: ObiaFeatureTable,
+  previousFields: readonly string[] = [],
+): FeatureCollection {
+  return {
+    ...objects,
+    features: objects.features.map((feature) => {
+      const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
+      const properties: Record<string, unknown> = { ...(feature.properties ?? {}) };
+      for (const field of previousFields) delete properties[field];
+      const record = table.rows.get(id);
+      for (const field of table.fields) properties[field] = record?.[field] ?? null;
+      return { ...feature, properties };
+    }),
+  };
+}

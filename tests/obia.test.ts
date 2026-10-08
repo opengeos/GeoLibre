@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { before, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
+import { initTools } from "geolibre-wasm/tools";
 import {
+  addSpectralIndices,
+  applyObjectFeatures,
+  computeObjectFeatures,
   dissolveSegmentPolygons,
+  parseObiaCsv,
+  segmentImage,
+  sourceBandColumn,
   readImageSummary,
   regionGrowingArgs,
   splitImageBands,
@@ -120,5 +129,142 @@ describe("dissolveSegmentPolygons", () => {
         [7, 7, "MultiPolygon"],
       ],
     );
+  });
+});
+
+describe("OBIA feature tables", () => {
+  it("parses the tools' plain CSV", () => {
+    assert.deepEqual(parseObiaCsv("segment_id,count\n1,4\n2,9\n"), {
+      headers: ["segment_id", "count"],
+      rows: [
+        ["1", "4"],
+        ["2", "9"],
+      ],
+    });
+  });
+
+  it("renames band columns from tool input order to source band numbers", () => {
+    assert.equal(sourceBandColumn("mean_b1", [2, 4]), "mean_b2");
+    assert.equal(sourceBandColumn("std_b2", [2, 4]), "std_b4");
+    assert.equal(sourceBandColumn("area_px", [2, 4]), "area_px");
+  });
+
+  it("derives brightness, NDVI and NDWI from the band means", () => {
+    const table = {
+      fields: ["mean_b1", "mean_b2", "mean_b4"],
+      rows: new Map([
+        [7, { mean_b1: 20, mean_b2: 40, mean_b4: 60 } as Record<string, number | null>],
+      ]),
+    };
+    addSpectralIndices(table, [1, 2, 4], { red: 1, green: 2, nir: 4 });
+    assert.deepEqual(table.fields.slice(3), ["brightness", "ndvi", "ndwi"]);
+    assert.deepEqual(table.rows.get(7), {
+      mean_b1: 20,
+      mean_b2: 40,
+      mean_b4: 60,
+      brightness: 40,
+      ndvi: 0.5,
+      ndwi: -0.2,
+    });
+  });
+
+  it("writes features onto objects, replacing an earlier run but keeping other properties", () => {
+    const objects: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          id: 1,
+          properties: { segment_id: 1, class: "water", old_feature: 3 },
+          geometry: { type: "Point", coordinates: [0, 0] },
+        },
+        {
+          type: "Feature",
+          id: 2,
+          properties: { segment_id: 2 },
+          geometry: { type: "Point", coordinates: [1, 1] },
+        },
+      ],
+    };
+    const table = { fields: ["area_px"], rows: new Map([[1, { area_px: 12 }]]) };
+    const out = applyObjectFeatures(objects, table, ["old_feature"]);
+    assert.deepEqual(
+      out.features.map((f) => f.properties),
+      [
+        { segment_id: 1, class: "water", area_px: 12 },
+        { segment_id: 2, area_px: null },
+      ],
+    );
+  });
+});
+
+/** A 2-band 40 x 40 image: a dark left half and a bright right half. */
+function twoRegionTiff(): ArrayBuffer {
+  const width = 40;
+  const height = 40;
+  const values = new Float32Array(width * height * 2);
+  for (let row = 0; row < height; row += 1) {
+    for (let col = 0; col < width; col += 1) {
+      const p = row * width + col;
+      const noise = ((row * 7 + col * 3) % 5) * 0.5;
+      values[p * 2] = (col < 20 ? 20 : 200) + noise;
+      values[p * 2 + 1] = (col < 20 ? 60 : 30) + noise;
+    }
+  }
+  return writeArrayBuffer(values, {
+    width,
+    height,
+    ModelPixelScale: [10, 10, 0],
+    ModelTiepoint: [0, 0, 0, 500000, 4000000, 0],
+    ProjectedCSTypeGeoKey: 32617,
+    GTModelTypeGeoKey: 1,
+  } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer;
+}
+
+describe("OBIA on the WASM tool engine", () => {
+  before(async () => {
+    // Under node:test the runner falls back to running tools inline; feed it
+    // the bundled wasm bytes (node's fetch has no file scheme).
+    await initTools(
+      readFileSync(
+        fileURLToPath(new URL("../node_modules/geolibre-wasm/geolibre-cli.wasm", import.meta.url)),
+      ),
+    );
+  });
+
+  it("segments, polygonizes and measures a two-region image", async () => {
+    const image = await splitImageBands(twoRegionTiff());
+    const segmentation = await segmentImage(image, { threshold: 0.5, minArea: 20, steps: 10 });
+    assert.equal(segmentation.objectCount, 2);
+    assert.deepEqual(
+      segmentation.objects.features.map((f) => f.id),
+      [1, 2],
+    );
+    // WGS84 polygons near the UTM 17N origin of the test image.
+    const [lng] = (segmentation.objects.features[0].geometry as { coordinates: number[][][] })
+      .coordinates[0][0];
+    assert.ok(lng > -84 && lng < -78, `longitude ${lng} should be in UTM zone 17`);
+
+    const { table, calls } = await computeObjectFeatures(segmentation.labels, image, {
+      spectral: true,
+      shape: true,
+      context: true,
+      indices: { red: 1, nir: 2 },
+    });
+    assert.deepEqual(
+      calls.map((call) => call.tool),
+      [
+        "object_features_spectral_basic",
+        "object_features_shape_basic",
+        "object_features_context_neighbors",
+      ],
+    );
+    for (const field of ["mean_b1", "mean_b2", "area_px", "brightness", "ndvi", "neighbor_count"]) {
+      assert.ok(table.fields.includes(field), `missing ${field}`);
+    }
+    const areas = [...table.rows.values()].map((row) => row.area_px);
+    assert.deepEqual(areas, [800, 800]);
+    const dark = [...table.rows.values()].find((row) => (row.mean_b1 ?? 0) < 100)!;
+    assert.ok((dark.ndvi ?? 0) > 0.4, "the dark half is vegetation-like (NIR > red)");
   });
 });

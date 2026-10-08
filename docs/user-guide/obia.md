@@ -33,6 +33,25 @@ its feature id) is the object's label, so the attribute table, selection and
 the later workbench steps all refer to the same objects. Tick **Also add the
 label raster to the map** to add the label raster itself.
 
+## 2. Measure
+
+Once objects exist, **Measure** computes per-object features on the original
+bands (not a display rendering) and writes them onto the objects layer. Open
+the layer's attribute table to explore them, or style the layer by any of them.
+Measuring again replaces the earlier values but keeps other properties, such as
+training labels.
+
+| Group | Fields |
+| --- | --- |
+| Spectral statistics | `mean_b<n>`, `std_b<n>`, `min_b<n>`, `max_b<n>` for each segmented band `n` (numbered as in the source image) |
+| Spectral indices | `brightness` (mean of the band means), `ndvi` from the red and near-infrared bands, `ndwi` (McFeeters) from the green and near-infrared bands. Pick which bands play each role; a 4-band image defaults to red = 1, green = 2, near-infrared = 4. |
+| Shape | `area_px`, `perimeter_px`, `compactness`, `bbox_width_px`, `bbox_height_px`, `elongation` |
+| GLCM texture | `glcm_contrast_b<n>`, `glcm_homogeneity_b<n>`, `glcm_energy_b<n>`, `glcm_entropy_b<n>` on the chosen band. Objects too small to form a pixel pair get no value. |
+| Neighborhood | `neighbor_count`, `shared_boundary_total`, `mean_shared_boundary` |
+
+Segmenting again starts a new set of objects, so measure them again before
+training a classifier.
+
 ### About the algorithm
 
 The method is Whitebox's seeded region growing (`image_segmentation`). It is

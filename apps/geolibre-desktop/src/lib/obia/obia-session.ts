@@ -1,4 +1,11 @@
-import { DEFAULT_REGION_GROWING_PARAMS, type RegionGrowingParams } from "@geolibre/processing";
+import {
+  DEFAULT_OBIA_FEATURE_OPTIONS,
+  DEFAULT_REGION_GROWING_PARAMS,
+  type ObiaFeatureOptions,
+  type ObiaFeatureTable,
+  type ObiaToolCall,
+  type RegionGrowingParams,
+} from "@geolibre/processing";
 import { create } from "zustand";
 
 /** A finished segmentation the later workbench steps build on. */
@@ -23,15 +30,31 @@ export interface ObiaSegmentationRun {
   finishedAt: string;
 }
 
+/** Object measurements written onto the objects layer. */
+export interface ObiaFeatureRun {
+  /** The segmentation these features describe (its `finishedAt`). */
+  segmentationAt: string;
+  table: ObiaFeatureTable;
+  options: ObiaFeatureOptions;
+  /** Tool invocations, for provenance. */
+  calls: ObiaToolCall[];
+  finishedAt: string;
+}
+
 interface ObiaSessionState {
   sourceLayerId: string;
   bandIndexes: number[];
   params: RegionGrowingParams;
   segmentation: ObiaSegmentationRun | null;
+  featureOptions: ObiaFeatureOptions;
+  features: ObiaFeatureRun | null;
   setSourceLayerId: (id: string) => void;
   setBandIndexes: (bands: number[]) => void;
   setParams: (patch: Partial<RegionGrowingParams>) => void;
+  /** A new segmentation invalidates the features measured on the old one. */
   setSegmentation: (run: ObiaSegmentationRun | null) => void;
+  setFeatureOptions: (patch: Partial<ObiaFeatureOptions>) => void;
+  setFeatures: (run: ObiaFeatureRun | null) => void;
 }
 
 /**
@@ -44,8 +67,12 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   bandIndexes: [],
   params: { ...DEFAULT_REGION_GROWING_PARAMS },
   segmentation: null,
+  featureOptions: { ...DEFAULT_OBIA_FEATURE_OPTIONS },
+  features: null,
   setSourceLayerId: (sourceLayerId) => set({ sourceLayerId, bandIndexes: [] }),
   setBandIndexes: (bandIndexes) => set({ bandIndexes }),
   setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
-  setSegmentation: (segmentation) => set({ segmentation }),
+  setSegmentation: (segmentation) => set({ segmentation, features: null }),
+  setFeatureOptions: (patch) => set((s) => ({ featureOptions: { ...s.featureOptions, ...patch } })),
+  setFeatures: (features) => set({ features }),
 }));

@@ -7412,7 +7412,8 @@
     "title": "Object-Based Analysis",
     "description": "Segment imagery into objects, measure them, train a classifier and assess its accuracy. Runs in the browser.",
     "steps": {
-      "segment": "Segment"
+      "segment": "Segment",
+      "measure": "Measure"
     },
     "image": "Image",
     "imagePlaceholder": "Choose a raster layer",
@@ -7439,6 +7440,26 @@
       "readImage": "Could not read this layer's GeoTIFF data in the browser.",
       "noBands": "Select at least one band.",
       "failed": "Segmentation failed."
+    },
+    "measure": {
+      "hint": "Measure each object on the original bands. The values are written to the objects layer, where the attribute table, styling and the classifier can use them.",
+      "spectral": "Spectral statistics (mean, std, min, max per band)",
+      "indices": "Spectral indices (brightness, NDVI, NDWI)",
+      "indicesNeedSpectral": "Indices are computed from the band means, so they need spectral statistics.",
+      "red": "Red",
+      "green": "Green",
+      "nir": "Near-infrared",
+      "none": "None",
+      "shape": "Shape (area, perimeter, compactness, elongation)",
+      "texture": "GLCM texture on",
+      "context": "Neighborhood (neighbor count, shared boundary)",
+      "run": "Measure objects",
+      "running": "Measuring…",
+      "result": "{{fields}} features measured for {{count}} objects",
+      "error": {
+        "layersMissing": "The source image or the objects layer was removed. Segment again.",
+        "failed": "Measuring the objects failed."
+      }
     }
   },
   "pluginPanel": {
