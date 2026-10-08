@@ -249,7 +249,17 @@ export function splitKmlFolderLayers(
   return sequenceTimeFrames([...ungroupedLayers.reverse(), ...folderLayers.reverse()]);
 }
 
-function readKmlEntries(entries: Record<string, Uint8Array>): DuckDbVectorFile[] {
+/**
+ * A KML document inside a KMZ: the file handed to the vector loaders, whose
+ * `name` is a display name, plus the entry's full path in the archive, which
+ * relative hrefs (e.g. icons) must resolve against.
+ */
+interface KmzKmlEntry {
+  file: DuckDbVectorFile;
+  archivePath: string;
+}
+
+function readKmlEntries(entries: Record<string, Uint8Array>): KmzKmlEntry[] {
   const kmlEntries = Object.entries(entries)
     .filter(([entryName]) => entryName.toLowerCase().endsWith(".kml"))
     .sort(([leftName], [rightName]) => {
@@ -265,9 +275,12 @@ function readKmlEntries(entries: Record<string, Uint8Array>): DuckDbVectorFile[]
   return kmlEntries.map(([entryName, data], index) => {
     const entryBaseName = browserSafeFileName(entryName) || `document-${index + 1}.kml`;
     return {
-      name: kmlEntries.length === 1 ? entryBaseName : `${index + 1}-${entryBaseName}`,
-      extension: "kml",
-      data: toDuckDbVectorData(data),
+      file: {
+        name: kmlEntries.length === 1 ? entryBaseName : `${index + 1}-${entryBaseName}`,
+        extension: "kml",
+        data: toDuckDbVectorData(data),
+      },
+      archivePath: entryName,
     };
   });
 }
@@ -765,7 +778,7 @@ export async function modelsFromKml(text: string, path: string): Promise<LoadedM
 // (skipping the whole archive) when every entry was declined and nothing else
 // loaded.
 async function kmzVectorFeatures(
-  kmlFiles: DuckDbVectorFile[],
+  kmlFiles: KmzKmlEntry[],
   entries: Record<string, Uint8Array>,
   options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
@@ -774,12 +787,12 @@ async function kmzVectorFeatures(
   // cache and request budget.
   const fetchRemoteIcon = createRemoteIconFetcher();
   const settled = await Promise.all(
-    kmlFiles.map((file) =>
+    kmlFiles.map(({ file, archivePath }) =>
       loadKmlFile(file, options).then(
         async (collection): Promise<FeatureCollection | null> => {
           return resolveKmlFeatureIcons(
             collection,
-            kmzArchiveIconResolver(entries, file.name),
+            kmzArchiveIconResolver(entries, archivePath),
             fetchRemoteIcon,
           );
         },
@@ -1125,12 +1138,12 @@ export async function parseKmz(
   // cache and request budget.
   const fetchRemoteIcon = createRemoteIconFetcher();
   const settled = await Promise.all(
-    kmlFiles.map((file) =>
+    kmlFiles.map(({ file, archivePath }) =>
       loadKmlFile(file, options).then(
         (collection): Promise<FeatureCollection> =>
           resolveKmlFeatureIcons(
             collection,
-            kmzArchiveIconResolver(entries, file.name),
+            kmzArchiveIconResolver(entries, archivePath),
             fetchRemoteIcon,
           ),
         (error): null => {

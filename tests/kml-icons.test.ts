@@ -64,6 +64,20 @@ describe("remoteIconCandidates", () => {
     assert.deepEqual(remoteIconCandidates("//example.com/a.png"), ["https://example.com/a.png"]);
   });
 
+  it("yields no candidates for loopback, private, and link-local hosts", () => {
+    for (const href of [
+      "http://localhost:8080/a.png",
+      "http://127.0.0.1/a.png",
+      "https://192.168.1.10/a.png",
+      "http://10.0.0.5/a.png",
+      "http://169.254.169.254/a.png",
+      "http://[::1]/a.png",
+      "http://nas.local/a.png",
+    ]) {
+      assert.deepEqual(remoteIconCandidates(href), [], href);
+    }
+  });
+
   it("returns null for archive-relative and non-http hrefs", () => {
     assert.equal(remoteIconCandidates("files/icon.png"), null);
     assert.equal(remoteIconCandidates("../icons/icon.png"), null);

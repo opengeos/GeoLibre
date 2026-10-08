@@ -1,5 +1,6 @@
 import type { FeatureCollection } from "geojson";
 import { imageMimeFromName } from "./kml-overlays";
+import { isPrivateHostname } from "./share-readiness";
 
 /**
  * Raw `<IconStyle><Icon><href>` of a placemark, set by `parseKmlText`. Import
@@ -44,8 +45,13 @@ export type KmlLocalIconResolver = (href: string) => Promise<string | null>;
  * HTTPS cannot fetch (mixed content), while the same host serves them over
  * HTTPS. The original `http:` URL stays as the fallback for hosts without TLS.
  *
+ * A KML is untrusted input, so an href naming a loopback, private, or
+ * link-local host yields no candidates: opening a file must not make the app
+ * probe services on the user's machine or network.
+ *
  * @param href - The icon href as written in the KML.
- * @returns The candidate URLs, or null for a relative/archive href.
+ * @returns The candidate URLs (empty for a private host), or null for a
+ *   relative/archive href.
  */
 export function remoteIconCandidates(href: string): string[] | null {
   const trimmed = href.trim();
@@ -56,8 +62,9 @@ export function remoteIconCandidates(href: string): string[] | null {
   } catch {
     return null;
   }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (isPrivateHostname(url.hostname)) return [];
   if (url.protocol === "https:") return [url.href];
-  if (url.protocol !== "http:") return null;
   const secure = new URL(url.href);
   secure.protocol = "https:";
   return [secure.href, url.href];
@@ -144,6 +151,8 @@ export async function fetchRemoteIconDataUrl(
         signal: AbortSignal.timeout(REMOTE_ICON_TIMEOUT_MS),
       });
       if (!response.ok) continue;
+      // A public host may redirect to a private one; refuse to read that body.
+      if (response.redirected && isPrivateHostname(new URL(response.url).hostname)) continue;
       const mime = iconMime(response.headers.get("content-type"), url);
       if (!mime) continue;
       const contentLength = response.headers.get("content-length");
