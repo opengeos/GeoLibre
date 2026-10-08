@@ -371,7 +371,7 @@ See [Model Builder](model-builder.md) for the full guide, including node types, 
 
 ## Object-Based Analysis
 
-**Processing → Object-Based Analysis** opens a floating workbench for object-based image analysis (OBIA). It segments a raster layer into image objects, adds them to the map as one polygon per object, and measures their spectral, shape, texture and neighborhood features, ready to label and classify. It runs entirely in the browser on the WASM engine, so it needs no sidecar. See [Object-Based Analysis](obia.md) for the full guide.
+**Processing → Object-Based Analysis** opens a workbench in the right sidebar for object-based image analysis (OBIA). It segments a raster layer into image objects, adds them to the map as one polygon per object, and measures their spectral, shape, texture and neighborhood features, ready to label and classify. It runs entirely in the browser on the WASM engine, so it needs no sidecar. See [Object-Based Analysis](obia.md) for the full guide.
 
 ## Dashboard
 

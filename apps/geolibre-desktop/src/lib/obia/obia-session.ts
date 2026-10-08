@@ -10,6 +10,17 @@ import {
 } from "@geolibre/processing";
 import { create } from "zustand";
 
+/**
+ * Add GeoTIFF bytes to the map as a raster layer, optionally with an initial
+ * renderer state (e.g. a fixed 0-255 rescale so class colors show unstretched).
+ */
+export type ObiaAddRaster = (
+  bytes: Uint8Array,
+  name: string,
+  fileName?: string,
+  state?: { mode?: "rgb"; bands?: number[]; rescale?: [number, number][] },
+) => Promise<void>;
+
 /** A finished segmentation the later workbench steps build on. */
 export interface ObiaSegmentationRun {
   /** Raster layer the image came from. */

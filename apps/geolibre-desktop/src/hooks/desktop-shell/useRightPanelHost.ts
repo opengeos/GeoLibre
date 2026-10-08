@@ -7,6 +7,7 @@ import {
 } from "../../components/panels/PluginRightPanel";
 import { BROWSER_PANEL_ID } from "../useRegisterBrowserPanel";
 import { COMMENTS_PANEL_ID } from "../useRegisterCommentsPanel";
+import { OBIA_PANEL_ID } from "../../lib/obia/obia-panel";
 import type { LayoutOptions } from "../useLayoutOptions";
 import { useRightPanelState } from "../useRightPanels";
 
@@ -41,6 +42,12 @@ export function useRightPanelHost(layoutOptions: LayoutOptions) {
     el.className = "contents";
     return el;
   });
+  // And one for the Object-Based Analysis workbench's React portal.
+  const [obiaContentEl] = useState(() => {
+    const el = document.createElement("div");
+    el.className = "contents";
+    return el;
+  });
   const rightPanelState = useRightPanelState();
   const activePanelId = rightPanelState.activeId;
   const replaceStylePanelIds = rightPanelState.visibleIds.filter(
@@ -57,7 +64,9 @@ export function useRightPanelHost(layoutOptions: LayoutOptions) {
       ? browserContentEl
       : activePanelId === COMMENTS_PANEL_ID
         ? commentsContentEl
-        : pluginContentEl;
+        : activePanelId === OBIA_PANEL_ID
+          ? obiaContentEl
+          : pluginContentEl;
   // Render the active panel into the shared host once; re-run when its
   // registration is replaced (re-registration refresh) but not on dock/collapse
   // changes. Keyed on the render function identity so that a plugin
@@ -104,6 +113,7 @@ export function useRightPanelHost(layoutOptions: LayoutOptions) {
     browserContentEl,
     commentsContentEl,
     dockContentEl,
+    obiaContentEl,
     pluginPanelWidth,
     replaceLayersPanelIds,
     replaceStylePanelIds,
