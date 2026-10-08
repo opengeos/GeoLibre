@@ -8,8 +8,11 @@ high-resolution imagery where a single land-cover patch spans many pixels.
 
 The workbench runs entirely in the browser on GeoLibre's WASM tool engine
 (`geolibre-wasm`), so it needs no Python sidecar and works on the web build.
-It is a floating panel, so the objects it adds stay in view on the map while
-you work. Closing and reopening it keeps the current session.
+It opens as a panel in the right sidebar, beside the Style panel, so the map
+stays clear while you work. It is not on the sidebar rail until you first open
+it; after that its rail icon switches back to it, and closing it from its
+header removes it from the rail. Closing and reopening it keeps the current
+session.
 
 ## 1. Segment
 

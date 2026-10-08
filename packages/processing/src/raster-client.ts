@@ -108,9 +108,16 @@ function padShortSampleFormat(image: GeoTiffImage): void {
   );
   // geotiff.js reads the tag from several places (getSampleFormat and the
   // per-sample readers), so replace the parsed value itself. 339 = SampleFormat.
-  const fields = (image.fileDirectory as unknown as { actualizedFields?: Map<number, unknown> })
+  const fields = (image.fileDirectory as unknown as { actualizedFields?: unknown })
     .actualizedFields;
-  fields?.set(SAMPLE_FORMAT_TAG, padded);
+  if (!(fields instanceof Map)) {
+    // A geotiff.js upgrade moved this private map (docs/maintenance.md).
+    console.warn(
+      "readRasterData: cannot pad a short SampleFormat tag; band 2+ may fail to decode.",
+    );
+    return;
+  }
+  fields.set(SAMPLE_FORMAT_TAG, padded);
 }
 
 /** Decode GeoTIFF bytes into a {@link RasterData}. */

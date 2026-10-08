@@ -24,6 +24,7 @@ import { isMenuItemVisible } from "../../../lib/ui-profile";
 import { whiteboxMenuSubcategorySlug } from "../../../lib/processing-tool-i18n";
 import { WHITEBOX_MENU_CATALOG } from "../../../lib/whitebox-menu-catalog";
 import { DOWNLOAD_GLOBAL_DEM_TOOL_ID } from "../../../lib/global-dem";
+import { openObiaWorkbench } from "../../../lib/obia/obia-panel";
 import { CapabilityNotice, capabilityNoticeId, useCapabilityReason } from "./CapabilityNotice";
 import type { ToolbarChrome } from "./constants";
 import { useMapCapabilities } from "../../../hooks/useMapCapabilities";
@@ -79,7 +80,6 @@ export function ProcessingMenu({
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSegmentEverythingOpen = useAppStore((s) => s.setSegmentEverythingOpen);
-  const setObiaWorkbenchOpen = useAppStore((s) => s.setObiaWorkbenchOpen);
   // Object detection and segment-everything read pixels off the MapLibre canvas
   // and drive the map directly, so they need a live native map instance — not
   // merely "not Cesium".
@@ -761,7 +761,7 @@ export function ProcessingMenu({
             neither the sidecar nor a 2D map. */}
         {show("processing.obiaWorkbench") && (
           <DropdownMenuItem
-            onSelect={() => setObiaWorkbenchOpen(true)}
+            onSelect={openObiaWorkbench}
             disabled={processingDenied}
             aria-describedby={processingDeniedBy}
           >
