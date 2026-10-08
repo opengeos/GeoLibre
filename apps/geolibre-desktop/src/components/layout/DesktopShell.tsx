@@ -19,11 +19,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { createPortal } from "react-dom";
 import { BROWSER_PANEL_ID, useRegisterBrowserPanel } from "../../hooks/useRegisterBrowserPanel";
 import { COMMENTS_PANEL_ID, useRegisterCommentsPanel } from "../../hooks/useRegisterCommentsPanel";
+import { useRegisterObiaPanel } from "../../hooks/useRegisterObiaPanel";
 import { MountWhenOpened } from "./MountWhenOpened";
-import { CommentsPanel } from "../comments/CommentsPanel";
+import { RightDockPortals } from "./RightDockPortals";
 import { CommentMapOverlay } from "../comments/CommentMapOverlay";
 import { useCommentTool } from "../comments/useCommentTool";
 import { AddCommentDialog } from "../comments/AddCommentDialog";
@@ -99,7 +99,6 @@ import { useCredentialStorageStatus } from "../../lib/credential-store";
 import { SectionErrorBoundary, SilentErrorBoundary } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
 import { RasterAttributeTable } from "../panels/RasterAttributeTable";
-import { BrowserPanel } from "../panels/BrowserPanel";
 import { LayerPanel } from "../panels/LayerPanel";
 import { useLayerRefresh } from "../panels/layer-panel/useLayerRefresh";
 import { ViewerLayerPanel } from "../panels/ViewerLayerPanel";
@@ -132,7 +131,6 @@ import {
   DashboardPanel,
   GeocodeDialog,
   ModelBuilderPanel,
-  ObiaWorkbenchPanel,
   NetworkToolsDialog,
   NotebookPanel,
   ObjectDetectionDialog,
@@ -270,6 +268,7 @@ export function DesktopShell({
   // into a dedicated content host (below) that the dock slots adopt.
   useRegisterBrowserPanel();
   useRegisterCommentsPanel();
+  useRegisterObiaPanel();
   // One shared project-file-actions instance for both the toolbar and the
   // Browser panel, so their "open recent" calls coordinate their aborts (two
   // instances would race). Lifted here for the same reason as `collaboration`.
@@ -306,6 +305,7 @@ export function DesktopShell({
     browserContentEl,
     commentsContentEl,
     dockContentEl,
+    obiaContentEl,
     pluginPanelWidth,
     replaceLayersPanelIds,
     replaceStylePanelIds,
@@ -589,33 +589,24 @@ export function DesktopShell({
         </SectionErrorBoundary>
       ) : null}
       <div data-workspace-row="" className="relative flex min-h-0 flex-1 flex-col md:flex-row">
-        {/* The Browser panel body is portaled into its dedicated content host
-            (which the dock slots relocate between positions), so it shares the
-            app's React context and the shell owns its dock chrome. */}
-        {activePanelId === BROWSER_PANEL_ID && !layoutOptions.panelsHidden && !layoutOptions.viewer
-          ? createPortal(
-              <BrowserPanel
-                mapControllerRef={mapControllerRef}
-                onOpenRecentProject={projectFiles.handleOpenRecent}
-                onAddFilePath={addFilePath}
-              />,
-              browserContentEl,
-            )
-          : null}
-        {activePanelId === COMMENTS_PANEL_ID && !layoutOptions.panelsHidden
-          ? createPortal(
-              <CommentsPanel
-                mapControllerRef={mapControllerRef}
-                collaboration={collaboration}
-                onActivateCommentTool={commentTool.toggleTool}
-                isCommentToolActive={commentTool.isActive}
-                onShowResolvedChange={setShowResolvedComments}
-                selectedCommentId={selectedCommentId}
-                onClearSelectedComment={() => setSelectedCommentId(null)}
-              />,
-              commentsContentEl,
-            )
-          : null}
+        <RightDockPortals
+          activePanelId={activePanelId}
+          layoutOptions={layoutOptions}
+          mapControllerRef={mapControllerRef}
+          hosts={{ browser: browserContentEl, comments: commentsContentEl, obia: obiaContentEl }}
+          browser={{
+            onOpenRecentProject: projectFiles.handleOpenRecent,
+            onAddFilePath: addFilePath,
+          }}
+          comments={{
+            collaboration,
+            onActivateCommentTool: commentTool.toggleTool,
+            isCommentToolActive: commentTool.isActive,
+            onShowResolvedChange: setShowResolvedComments,
+            selectedCommentId,
+            onClearSelectedComment: () => setSelectedCommentId(null),
+          }}
+        />
         {/* Map-only / hidden-panels embeds show nothing but the map: skip the
             whole left side-dock (Layers, plugin panels, and the shared rail that
             hosts the Browser entry), not just the built-in Layers panel. */}
@@ -927,26 +918,6 @@ export function DesktopShell({
                     await addRasterToMap(createAppAPI(mapControllerRef), file, {
                       name,
                     });
-                  }}
-                />
-              </Suspense>
-            </MountWhenOpened>
-          </SectionErrorBoundary>
-          {/* Mounted inside the map area like Model Builder: the workbench
-              floats over the map so the objects it adds stay in view. */}
-          <SectionErrorBoundary
-            label="Object-Based Analysis"
-            displayName={t("shell.section.obiaWorkbench")}
-          >
-            <MountWhenOpened isOpen={(ui) => ui.obiaWorkbenchOpen}>
-              <Suspense fallback={null}>
-                <ObiaWorkbenchPanel
-                  mapControllerRef={mapControllerRef}
-                  onAddRaster={async (bytes, name, fileName) => {
-                    const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
-                      type: "image/tiff",
-                    });
-                    await addRasterToMap(createAppAPI(mapControllerRef), file, { name });
                   }}
                 />
               </Suspense>
