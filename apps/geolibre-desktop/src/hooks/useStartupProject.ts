@@ -102,9 +102,10 @@ function applyDefaultWorkspace(
 
 /**
  * Add the Startup setting's layers to the untitled workspace, if any are set.
- * Loading them as a project, rather than adding each layer, gives them the
- * same restore passes an opened project's layers get (local files re-read from
- * disk, plugin-painted layers replayed) and leaves the workspace clean.
+ * Starting a new project that holds them, rather than adding each layer, gives
+ * them the same restore passes an opened project's layers get (local files
+ * re-read from disk, plugin-painted layers replayed) and leaves the workspace
+ * clean.
  *
  * @returns The ids of the layers added, empty when none are set.
  */
@@ -117,7 +118,13 @@ function seedStartupLayers(): Set<string> {
     }),
   );
   if (project.layers.length === 0) return new Set();
-  state.loadProject(project, null, { rememberRecent: false, presenting: false });
+  state.newProject({
+    name: project.name,
+    basemapStyleUrl: project.basemapStyleUrl,
+    mapView: project.mapView,
+    layers: project.layers,
+    layerGroups: project.layerGroups,
+  });
   return startupLayerIds(project);
 }
 
@@ -224,7 +231,7 @@ export function useStartupProject(): {
     // File > New resets to the same `null` the app started on -- a restore
     // landing after that would clobber the new project and look identical to
     // landing on the untouched startup state.
-    const restoringOver = useAppStore.getState().projectGeneration;
+    let restoringOver = useAppStore.getState().projectGeneration;
 
     let cancelled = false;
     // Bounded gate: mount the shell over the default workspace if the restore
@@ -238,7 +245,12 @@ export function useStartupProject(): {
     // spinner would break it, and this call would need the same guard.
     const gateTimer = window.setTimeout(() => {
       if (cancelled) return;
-      openDefaultWorkspace();
+      openDefaultWorkspace({ seedLayers: true });
+      // Seeding the Startup setting's layers starts a new project. The restore
+      // may still replace this workspace while the user has not touched it, so
+      // move its ownership check onto the seeded workspace instead of making
+      // it stand down.
+      restoringOver = useAppStore.getState().projectGeneration;
     }, RESTORE_GATE_TIMEOUT_MS);
     // `cancelled` alone would leave a discarded run's read and XYZ probes in
     // flight; the signal ends them, matching `useProjectUrlLoader`.

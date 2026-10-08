@@ -70,9 +70,19 @@ describe("interface files", () => {
     const current = settings();
     const next = applyInterfaceSettings(current, imported);
     assert.deepEqual(next.uiProfile.hiddenPlugins, ["x"]);
-    assert.equal(next.layout, current.layout);
-    assert.equal(next.theme, current.theme);
+    assert.deepEqual(next.layout, current.layout);
+    assert.deepEqual(next.theme, current.theme);
     assert.equal(next.shareToken, "secret-token");
+  });
+
+  it("keep the profile fields a partial file leaves out", () => {
+    const imported = parseInterfaceFile(JSON.stringify({ uiProfile: { hiddenPlugins: ["x"] } }));
+    const next = applyInterfaceSettings(settings(), imported);
+    assert.equal(next.uiProfile.enabled, true);
+    assert.deepEqual(next.uiProfile.hiddenDataSources, ["postgres"]);
+    assert.deepEqual(next.uiProfile.hiddenMenus, ["help"]);
+    // The lock is never imported, even onto a locked profile.
+    assert.equal(next.uiProfile.locked, false);
   });
 
   it("refuse a file too large to be one", () => {
@@ -101,6 +111,20 @@ describe("interface files", () => {
     const imported = await fetchInterfaceFile("https://example.com/ui.json", { fetchImpl });
     assert.equal(imported.language, "fr");
     await assert.rejects(fetchInterfaceFile("file:///etc/passwd", { fetchImpl }), /http\(s\)/);
+    // A body past the cap is refused while it streams, length header or not.
+    const huge = (async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            for (let i = 0; i < 40; i += 1) controller.enqueue(new Uint8Array(16 * 1024));
+            controller.close();
+          },
+        }),
+      )) as typeof fetch;
+    await assert.rejects(
+      fetchInterfaceFile("https://example.com/ui.json", { fetchImpl: huge }),
+      /too large/,
+    );
     const notFound = (async () => new Response("", { status: 404 })) as typeof fetch;
     await assert.rejects(
       fetchInterfaceFile("https://example.com/ui.json", { fetchImpl: notFound }),

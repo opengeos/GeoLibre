@@ -256,16 +256,14 @@ export function NewProjectDialog({
       ellipsoidId,
       mapView: basemapId === LIBERTY_3D_ID ? THREE_D_MAP_VIEW : createDefaultMapView(),
     };
-    // The Startup setting's layers join every new project. They are loaded as
-    // a project so the restore passes an opened project gets (local files
-    // re-read from disk, plugin-painted layers replayed) run for them too.
+    // The Startup setting's layers join every new project. Seeding the new
+    // project with them, rather than adding each layer, runs the restore
+    // passes an opened project gets (local files re-read from disk,
+    // plugin-painted layers replayed) for them too.
     const seeded = withStartupLayers(createEmptyProject(name, options));
-    if (seeded.layers.length > 0) {
-      loadProject(seeded, null, { rememberRecent: false, presenting: false });
-      void fetchStartupLayerData(startupLayerIds(seeded));
-    } else {
-      newProject({ name, ...options });
-    }
+    newProject({ name, ...options, layers: seeded.layers, layerGroups: seeded.layerGroups });
+    const seededIds = startupLayerIds(seeded);
+    if (seededIds.size > 0) void fetchStartupLayerData(seededIds);
     void clearProjectSnapshots().catch((error) =>
       console.error("Could not clear project history for the new project.", error),
     );

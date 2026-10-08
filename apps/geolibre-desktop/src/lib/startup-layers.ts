@@ -7,12 +7,12 @@
 
 import {
   addLayersToProject,
-  clearHistory,
   extractLayersFileContent,
   parseLayersFile,
   projectFromStore,
   redactProjectCredentials,
   useAppStore,
+  withoutHistory,
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayersFileContent,
@@ -161,8 +161,8 @@ export function startupLayerIds(project: GeoLibreProject): Set<string> {
 /**
  * Fetch the features of the layers a layers file added without them (GeoJSON
  * layers loaded from a URL). Each result lands only while the same workspace is
- * open, and a workspace that was clean stays clean, with no undo step for the
- * fetch: the user did not edit it.
+ * open, a workspace that was clean stays clean, and the fetch records no undo
+ * step: the user did not edit it.
  *
  * @param needsFetch - Whether a store layer is one to fetch.
  * @param fetchFeatures - Fetches a layer's features.
@@ -182,13 +182,13 @@ export async function fetchStartupLayerFeatures(
         if (state.projectGeneration !== generation) return;
         if (!state.layers.some((entry) => entry.id === layer.id)) return;
         const wasDirty = state.isDirty;
-        state.updateLayer(layer.id, { geojson });
-        if (!wasDirty) {
-          // Nothing in a clean workspace's history is the user's, so dropping
-          // it removes only the fetch, which undo must not take back out.
-          useAppStore.setState({ isDirty: false });
-          clearHistory();
-        }
+        // Not an undo step: undo must not take the fetched features back out.
+        // The dirty flag is put back in the same synchronous turn, before any
+        // render or debounced subscriber (autosave) reads it.
+        withoutHistory(() => {
+          state.updateLayer(layer.id, { geojson });
+          if (!wasDirty) useAppStore.setState({ isDirty: false });
+        });
       } catch (error) {
         console.warn(`[GeoLibre] Could not load startup layer "${layer.name}".`, error);
       }

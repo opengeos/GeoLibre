@@ -51,6 +51,7 @@ export {
   canRedoProjectRestore,
   canUndoProjectRestore,
   clearHistory,
+  withoutHistory,
   redo,
   registerProjectRestoreHistory,
   subscribeProjectRestoreHistory,

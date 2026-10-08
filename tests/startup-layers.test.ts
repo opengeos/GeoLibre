@@ -130,6 +130,8 @@ describe("startup layers", () => {
     const state = useAppStore.getState();
     assert.equal(state.layers[0].geojson?.features.length, 1);
     assert.equal(state.isDirty, false);
+    // The fetch is not an undo step.
+    assert.equal(useAppStore.temporal.getState().pastStates.length, 0);
   });
 
   it("drop a fetch that lands after the workspace changed", async () => {
@@ -143,5 +145,20 @@ describe("startup layers", () => {
       },
     );
     assert.equal(useAppStore.getState().layers.length, 0);
+  });
+});
+
+describe("newProject with seed layers", () => {
+  it("starts a clean project holding them and resets the previous one's state", () => {
+    useAppStore.setState({ attributeFilter: "name = 'x'" });
+    useAppStore.getState().newProject({ name: "Seeded", layers: [tiles] });
+    const state = useAppStore.getState();
+    assert.deepEqual(
+      state.layers.map((entry) => entry.id),
+      ["tiles"],
+    );
+    assert.equal(state.attributeFilter, "");
+    assert.equal(state.selectedLayerId, null);
+    assert.equal(state.isDirty, false);
   });
 });

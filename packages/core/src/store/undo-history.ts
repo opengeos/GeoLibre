@@ -344,6 +344,24 @@ export function redo(): void {
   finishHistoryStep(previousBasemapStyleUrl);
 }
 
+/**
+ * Apply a store change that is not the user's (data loading in behind a
+ * project) without recording an undo step for it. The history stays as it
+ * was, so undo neither takes the change back out nor loses earlier steps.
+ *
+ * @param change - The store updates to apply.
+ */
+export function withoutHistory(change: () => void): void {
+  cancelHistoryCoalesce(); // a burst left open would record this change
+  const temporal = boundStore().temporal.getState();
+  temporal.pause();
+  try {
+    change();
+  } finally {
+    temporal.resume();
+  }
+}
+
 /** Empty both the undo and redo stacks (e.g. on new/loaded project). */
 export function clearHistory(): void {
   cancelHistoryCoalesce(); // reset any in-flight burst so the next edit records

@@ -171,6 +171,13 @@ export function ProjectMenu({
         {t("toolbar.item.shareHostUnavailable")}
       </DropdownMenuLabel>
     ) : null;
+  // The Export submenu's entries, all gated on `export:data`. Each `name` is
+  // both the `project.<name>` menu id and the `toolbar.item.<name>Ellipsis` label.
+  const exportItems = [
+    { name: "exportHtml", onSelect: onExportHtml, Icon: FileCode2 },
+    { name: "exportLayerStyles", onSelect: onExportLayerStyles, Icon: Palette },
+    { name: "exportLayers", onSelect: onExportLayers, Icon: Layers },
+  ] as const;
   // Group-visibility flags so the separators between groups aren't left orphaned
   // when a whole group is hidden by the active profile.
   const showSaveGroup =
@@ -179,9 +186,7 @@ export function ProjectMenu({
     show("project.duplicate") ||
     show("project.saveAsTemplate") ||
     (!shareHidden && show("project.share")) ||
-    show("project.exportHtml") ||
-    show("project.exportLayerStyles") ||
-    show("project.exportLayers") ||
+    exportItems.some((item) => show(`project.${item.name}`)) ||
     (collaborationEnabled && show("project.collaborate"));
   // Narrower than showSaveGroup, which also covers share/export/collaborate: the
   // `project:save` note must not render when only those siblings are on screen.
@@ -192,13 +197,8 @@ export function ProjectMenu({
     (show("project.saveAsTemplate") && Boolean(onSaveAsTemplate));
   // The two `export:data` entries sit in different groups, so their shared note
   // renders at the menu's foot and needs to know whether either is on screen.
-  const showExportDataActions =
-    show("project.exportHtml") ||
-    show("project.exportLayerStyles") ||
-    show("project.exportLayers") ||
-    show("project.offlineRegion");
-  const showExportMenu =
-    show("project.exportHtml") || show("project.exportLayerStyles") || show("project.exportLayers");
+  const showExportMenu = exportItems.some((item) => show(`project.${item.name}`));
+  const showExportDataActions = showExportMenu || show("project.offlineRegion");
   // Same for the two `project:share` entries, which straddle Export HTML.
   const showShareActions =
     (!shareHidden && show("project.share")) ||
@@ -419,35 +419,18 @@ export function ProjectMenu({
               {t("toolbar.menu.export")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              {show("project.exportHtml") && (
-                <DropdownMenuItem
-                  onSelect={onExportHtml}
-                  disabled={!exportDataCapability.granted}
-                  aria-describedby={exportDataDeniedBy}
-                >
-                  <FileCode2 className="me-2 h-3.5 w-3.5" />
-                  {t("toolbar.item.exportHtmlEllipsis")}
-                </DropdownMenuItem>
-              )}
-              {show("project.exportLayerStyles") && (
-                <DropdownMenuItem
-                  onSelect={onExportLayerStyles}
-                  disabled={!exportDataCapability.granted}
-                  aria-describedby={exportDataDeniedBy}
-                >
-                  <Palette className="me-2 h-3.5 w-3.5" />
-                  {t("toolbar.item.exportLayerStylesEllipsis")}
-                </DropdownMenuItem>
-              )}
-              {show("project.exportLayers") && (
-                <DropdownMenuItem
-                  onSelect={onExportLayers}
-                  disabled={!exportDataCapability.granted}
-                  aria-describedby={exportDataDeniedBy}
-                >
-                  <Layers className="me-2 h-3.5 w-3.5" />
-                  {t("toolbar.item.exportLayersEllipsis")}
-                </DropdownMenuItem>
+              {exportItems.map(({ name, onSelect, Icon }) =>
+                show(`project.${name}`) ? (
+                  <DropdownMenuItem
+                    key={name}
+                    onSelect={onSelect}
+                    disabled={!exportDataCapability.granted}
+                    aria-describedby={exportDataDeniedBy}
+                  >
+                    <Icon className="me-2 h-3.5 w-3.5" />
+                    {t(`toolbar.item.${name}Ellipsis`)}
+                  </DropdownMenuItem>
+                ) : null,
               )}
             </DropdownMenuSubContent>
           </DropdownMenuSub>

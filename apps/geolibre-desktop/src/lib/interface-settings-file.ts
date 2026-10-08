@@ -10,6 +10,9 @@
  */
 
 import {
+  DEFAULT_DESKTOP_LAYOUT_SETTINGS,
+  DEFAULT_THEME_SETTINGS,
+  DEFAULT_UI_PROFILE_SETTINGS,
   normalizeDesktopSettings,
   type DesktopLayoutSettings,
   type DesktopSettings,
@@ -31,14 +34,19 @@ const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
  */
 export const MAX_INTERFACE_FILE_CHARS = 256 * 1024;
 
-/** The settings an interface file sets. A file may set only some of them. */
+/**
+ * The settings an interface file sets, down to single fields: a file may set
+ * only some of them, and {@link applyInterfaceSettings} leaves the rest as
+ * they are. Values are as the file wrote them, and are normalized when they
+ * are applied.
+ */
 export interface InterfaceSettings {
   /** UI language code, or "" to follow automatic detection. */
   language?: string;
-  layout?: DesktopLayoutSettings;
-  theme?: ThemeSettings;
-  /** The interface profile. Never locked: only an administrator locks one. */
-  uiProfile?: UiProfileSettings;
+  layout?: Partial<DesktopLayoutSettings>;
+  theme?: Partial<ThemeSettings>;
+  /** Interface profile fields. Never locked: only an administrator locks one. */
+  uiProfile?: Partial<UiProfileSettings>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -49,8 +57,24 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * A profile as a file carries it: unlocked, since a lock belongs to the
  * deployment that set it, and onboarded, since importing one is a choice.
  */
-function portableUiProfile(profile: UiProfileSettings): UiProfileSettings {
+function portableUiProfile<T extends Partial<UiProfileSettings>>(profile: T): T {
   return { ...profile, locked: false, onboarded: true };
+}
+
+/**
+ * The fields of `value` that the settings object `defaults` has, as written.
+ *
+ * @param value - A raw object from a file.
+ * @param defaults - A complete settings object naming the known fields.
+ * @returns The known fields `value` sets, or undefined when it sets none.
+ */
+function knownFields<T extends object>(value: unknown, defaults: T): Partial<T> | undefined {
+  if (!isPlainObject(value)) return undefined;
+  const fields: Partial<T> = {};
+  for (const key of Object.keys(defaults) as (keyof T & string)[]) {
+    if (key in value) fields[key] = value[key] as T[keyof T & string];
+  }
+  return Object.keys(fields).length > 0 ? fields : undefined;
 }
 
 /**
@@ -75,9 +99,9 @@ export function serializeInterfaceFile(settings: DesktopSettings): string {
 }
 
 /**
- * Read the interface settings out of parsed JSON. Only the keys present are
- * returned, each normalized the way stored settings are, so a file that sets
- * just the profile leaves the layout and theme alone.
+ * Read the interface settings out of parsed JSON. Only the fields present are
+ * returned, so a file that sets just the hidden plugins leaves the rest of the
+ * profile, the layout, and the theme alone.
  *
  * A file without a `type` is accepted as long as it sets one of the keys, so a
  * hand-written `?settingsUrl=` file can be imported too.
@@ -95,17 +119,16 @@ export function readInterfaceSettings(value: unknown): InterfaceSettings {
       throw new Error("Unsupported interface file version.");
     }
   }
-  const normalized = normalizeDesktopSettings({
-    language: value.language,
-    layout: value.layout,
-    theme: value.theme,
-    uiProfile: value.uiProfile,
-  });
   const settings: InterfaceSettings = {};
-  if (typeof value.language === "string") settings.language = normalized.language;
-  if (isPlainObject(value.layout)) settings.layout = normalized.layout;
-  if (isPlainObject(value.theme)) settings.theme = normalized.theme;
-  if (isPlainObject(value.uiProfile)) settings.uiProfile = portableUiProfile(normalized.uiProfile);
+  if (typeof value.language === "string") {
+    settings.language = normalizeDesktopSettings({ language: value.language }).language;
+  }
+  const layout = knownFields(value.layout, DEFAULT_DESKTOP_LAYOUT_SETTINGS);
+  if (layout) settings.layout = layout;
+  const theme = knownFields(value.theme, DEFAULT_THEME_SETTINGS);
+  if (theme) settings.theme = theme;
+  const uiProfile = knownFields(value.uiProfile, DEFAULT_UI_PROFILE_SETTINGS);
+  if (uiProfile) settings.uiProfile = portableUiProfile(uiProfile);
   if (Object.keys(settings).length === 0) {
     throw new Error("The interface file sets no interface settings.");
   }
@@ -164,18 +187,49 @@ export async function fetchInterfaceFile(
   if (!response.ok) {
     throw new Error(`Could not load the interface file (HTTP ${response.status}).`);
   }
-  // Refuse a declared oversize body before reading it; the parser's own check
-  // still covers a server that sends no length.
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_INTERFACE_FILE_CHARS * 4) {
-    throw new Error("The interface file is too large to be an interface file.");
-  }
-  return parseInterfaceFile(await response.text());
+  return parseInterfaceFile(await readCappedText(response, MAX_INTERFACE_FILE_CHARS));
 }
 
 /**
- * Apply interface settings on top of the current ones. The language is left
- * out: switching it loads a catalog first, so the caller applies it through
+ * Read a response body as text, refusing it once it passes `maxBytes`, so a
+ * server that sends no length (or a false one) cannot stream an unbounded body
+ * into memory.
+ *
+ * @param response - The response to read.
+ * @param maxBytes - The most bytes to accept.
+ * @returns The body text.
+ * @throws Error when the body is larger than `maxBytes`.
+ */
+async function readCappedText(response: Response, maxBytes: number): Promise<string> {
+  const tooLarge = () => new Error("The interface file is too large to be an interface file.");
+  if (Number(response.headers.get("content-length")) > maxBytes) throw tooLarge();
+  if (!response.body) return response.text();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+/**
+ * Apply interface settings on top of the current ones, field by field, then
+ * normalize the result the way stored settings are. The language is left out:
+ * switching it loads a catalog first, so the caller applies it through
  * `useLanguage`.
  *
  * @param current - The current desktop settings.
@@ -186,10 +240,10 @@ export function applyInterfaceSettings(
   current: DesktopSettings,
   imported: InterfaceSettings,
 ): DesktopSettings {
-  return {
+  return normalizeDesktopSettings({
     ...current,
-    ...(imported.layout ? { layout: imported.layout } : {}),
-    ...(imported.theme ? { theme: imported.theme } : {}),
-    ...(imported.uiProfile ? { uiProfile: imported.uiProfile } : {}),
-  };
+    layout: { ...current.layout, ...imported.layout },
+    theme: { ...current.theme, ...imported.theme },
+    uiProfile: { ...current.uiProfile, ...imported.uiProfile },
+  });
 }

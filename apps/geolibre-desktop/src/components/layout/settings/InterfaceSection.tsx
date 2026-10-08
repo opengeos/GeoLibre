@@ -93,14 +93,34 @@ export function InterfaceSection({ profilePlugins }: InterfaceSectionProps) {
   };
 
   // An import applies at once, like a theme or language change, and the draft
-  // follows so Save does not put the old layout and profile back.
+  // follows so Save does not put the old layout and profile back. The layout
+  // and profile merge onto the draft, which is what the dialog shows.
   const applyImported = (imported: InterfaceSettings) => {
     const store = useDesktopSettingsStore.getState();
-    store.setDesktopSettings(applyInterfaceSettings(store.desktopSettings, imported));
+    // The buttons are disabled under a lock; this also covers a lock that
+    // arrived while a URL was loading.
+    if (store.desktopSettings.uiProfile.locked) {
+      setError(t("settings.interface.lockedNote"));
+      return;
+    }
+    const next = applyInterfaceSettings(
+      {
+        ...store.desktopSettings,
+        layout: draftDesktopSettings.layout,
+        uiProfile: draftDesktopSettings.uiProfile,
+      },
+      imported,
+    );
+    store.setDesktopSettings({
+      ...store.desktopSettings,
+      layout: next.layout,
+      theme: next.theme,
+      uiProfile: next.uiProfile,
+    });
     setDraftDesktopSettings((current) => ({
       ...current,
-      ...(imported.layout ? { layout: imported.layout } : {}),
-      ...(imported.uiProfile ? { uiProfile: imported.uiProfile } : {}),
+      layout: next.layout,
+      uiProfile: next.uiProfile,
     }));
     if (imported.language !== undefined) setLanguage(imported.language);
     setError(null);

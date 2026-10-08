@@ -64,6 +64,7 @@ export {
 } from "./storymap-io";
 export {
   clearHistory,
+  withoutHistory,
   canRedoProjectRestore,
   canUndoProjectRestore,
   DEFAULT_COLLABORATION_STATE,
