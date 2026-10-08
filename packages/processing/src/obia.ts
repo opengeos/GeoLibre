@@ -87,12 +87,14 @@ export async function splitImageBands(
   bytes: ArrayBuffer | Uint8Array,
   bandIndexes?: readonly number[],
 ): Promise<ObiaImage> {
-  const raster = await readRasterData(toArrayBuffer(bytes));
-  if (raster.width * raster.height > OBIA_MAX_PIXELS) {
+  // Check the size from the header before decoding every band.
+  const { width, height } = await readImageSummary(bytes);
+  if (width * height > OBIA_MAX_PIXELS) {
     throw new Error(
-      `This image has ${raster.width} x ${raster.height} pixels, more than the ${OBIA_MAX_PIXELS.toLocaleString("en-US")} the in-browser workbench handles. Clip it to a smaller area first.`,
+      `This image has ${width} x ${height} pixels, more than the ${OBIA_MAX_PIXELS.toLocaleString("en-US")} the in-browser workbench handles. Clip it to a smaller area first.`,
     );
   }
+  const raster = await readRasterData(toArrayBuffer(bytes));
   const wanted = bandIndexes?.length ? bandIndexes : raster.bands.map((_, index) => index + 1);
   const bands = wanted.map((index) => {
     const band = raster.bands[index - 1];
