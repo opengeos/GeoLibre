@@ -2,7 +2,7 @@ import { useAppStore } from "@geolibre/core";
 import { accuracyReportCsv, assessAccuracy, collectSamples } from "@geolibre/processing";
 import { Button } from "@geolibre/ui";
 import { Download, Info } from "lucide-react";
-import { useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { saveTextFileWithFallback } from "../../../lib/file-io/file-dialogs";
 import { useObiaSession } from "../../../lib/obia/obia-session";
@@ -43,6 +43,13 @@ export function ObiaAccuracyStep(): ReactElement | null {
       classes.map((cls) => cls.name),
     );
   }, [objects, classification, features, classes]);
+
+  // A relabel changes the report, so an earlier "saved" or error no longer
+  // describes it.
+  useEffect(() => {
+    setSaved(null);
+    setError(null);
+  }, [report]);
 
   if (!segmentation || !classification || !report) return null;
 

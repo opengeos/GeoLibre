@@ -127,13 +127,14 @@ export function ObiaTrainStep(): ReactElement | null {
     ]);
   };
 
-  const updateClass = (index: number, patch: Partial<ObiaClass>) => {
+  /** Apply a class edit; returns false when a rename is rejected. */
+  const updateClass = (index: number, patch: Partial<ObiaClass>): boolean => {
     const current = classes[index];
     const name = patch.name?.trim();
     if (patch.name !== undefined) {
       if (!name || classes.some((cls, i) => i !== index && cls.name === name)) {
         setError(t("obia.train.error.duplicateName"));
-        return;
+        return false;
       }
     }
     setError(null);
@@ -141,10 +142,11 @@ export function ObiaTrainStep(): ReactElement | null {
       i === index ? { ...cls, ...patch, name: name ?? cls.name } : cls,
     );
     setClasses(next);
-    if (!objects) return;
+    if (!objects) return true;
     const renamed =
       name && name !== current.name ? renameObjectClass(objects, current.name, name) : objects;
     writeObjects(renamed, next);
+    return true;
   };
 
   const removeClass = (index: number) => {
@@ -243,8 +245,11 @@ export function ObiaTrainStep(): ReactElement | null {
                 defaultValue={cls.name}
                 className="h-8"
                 onBlur={(event) => {
-                  if (event.target.value.trim() !== cls.name) {
-                    updateClass(index, { name: event.target.value });
+                  if (event.target.value.trim() === cls.name) return;
+                  // A rejected rename shows the class's real name again, so the
+                  // field never disagrees with the list.
+                  if (!updateClass(index, { name: event.target.value })) {
+                    event.target.value = cls.name;
                   }
                 }}
               />

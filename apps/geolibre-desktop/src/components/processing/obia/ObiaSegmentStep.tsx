@@ -131,13 +131,9 @@ export function ObiaSegmentStep({
         });
         if (shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(added);
       }
-      if (addLabels) {
-        await onAddRaster(
-          result.labels,
-          t("obia.labelsLayerName", { name: sourceLayer.name }),
-          "segments.tif",
-        );
-      }
+      // Record the run as soon as its objects layer exists, so a failure in
+      // the optional label raster below cannot leave a layer the session does
+      // not know about.
       setSegmentation({
         sourceLayerId: sourceLayer.id,
         sourceName: sourceLayer.name,
@@ -153,6 +149,13 @@ export function ObiaSegmentStep({
         params: { ...params },
         finishedAt: new Date().toISOString(),
       });
+      if (addLabels) {
+        await onAddRaster(
+          result.labels,
+          t("obia.labelsLayerName", { name: sourceLayer.name }),
+          "segments.tif",
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("obia.error.failed"));
     } finally {
@@ -171,6 +174,9 @@ export function ObiaSegmentStep({
     setSegmentation,
     t,
   ]);
+
+  // The last run's summary describes its own image, not one picked since.
+  const currentRun = segmentation && segmentation.sourceLayerId === sourceLayer?.id;
 
   return (
     <section className="flex flex-col gap-3">
@@ -301,7 +307,7 @@ export function ObiaSegmentStep({
         error={error}
         testId="obia-segment-result"
         success={
-          segmentation && !running
+          currentRun && !running
             ? t("obia.result", {
                 count: segmentation.objectCount,
                 area: Math.round(segmentation.meanObjectArea),

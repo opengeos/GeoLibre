@@ -696,16 +696,19 @@ export interface ObiaClassification {
 }
 
 /**
- * Write a feature table as the tools' plain CSV. Missing values are replaced
- * by the column mean (the classifiers reject empty cells), and columns with no
- * values at all are dropped.
+ * Write a feature table as the tools' plain CSV. Columns with no values at all
+ * are dropped. Missing values are replaced by the column mean when `impute`
+ * is set (the random forest rejects empty cells), or left empty otherwise (the
+ * rules tool then skips a rule for an object it has no value for).
  *
  * @param table Feature table.
  * @param fields Columns to include, in order.
+ * @param options `impute` (default true) fills missing values with the mean.
  */
 export function featureTableCsv(
   table: ObiaFeatureTable,
   fields: readonly string[],
+  { impute = true }: { impute?: boolean } = {},
 ): { csv: string; fields: string[]; imputed: Record<string, number> } {
   const ids = [...table.rows.keys()].sort((a, b) => a - b);
   const kept: string[] = [];
@@ -724,12 +727,16 @@ export function featureTableCsv(
     if (!n) continue;
     kept.push(field);
     means.set(field, sum / n);
-    if (n < ids.length) imputed[field] = ids.length - n;
+    if (impute && n < ids.length) imputed[field] = ids.length - n;
   }
   const lines = [[OBIA_SEGMENT_ID_FIELD, ...kept].join(",")];
   for (const id of ids) {
     const row = table.rows.get(id)!;
-    lines.push([id, ...kept.map((field) => String(row[field] ?? means.get(field)))].join(","));
+    lines.push(
+      [id, ...kept.map((field) => String(row[field] ?? (impute ? means.get(field) : "")))].join(
+        ",",
+      ),
+    );
   }
   return { csv: `${lines.join("\n")}\n`, fields: kept, imputed };
 }
@@ -767,7 +774,13 @@ function readPredictions(
   const classCol = csv.headers.indexOf("predicted_class");
   if (idCol < 0 || classCol < 0) throw new Error(`${tool} wrote an unexpected table.`);
   const predictions = new Map<number, string>();
-  for (const row of csv.rows) predictions.set(Number(row[idCol]), decodeClass(row[classCol]));
+  for (const row of csv.rows) {
+    const id = Number(row[idCol]);
+    const token = row[classCol];
+    // Skip a malformed row rather than storing a NaN id or an undefined class.
+    if (!Number.isFinite(id) || !token) continue;
+    predictions.set(id, decodeClass(token));
+  }
   return predictions;
 }
 
@@ -833,10 +846,14 @@ export async function classifyByRules(
   defaultClass: string,
 ): Promise<ObiaClassification> {
   if (!rules.length) throw new Error("Add at least one rule.");
-  const fields = [...new Set(rules.map((rule) => rule.field))];
-  const missing = fields.filter((field) => !table.fields.includes(field));
+  const ruleFields = [...new Set(rules.map((rule) => rule.field))];
+  const missing = ruleFields.filter((field) => !table.fields.includes(field));
   if (missing.length) throw new Error(`Not measured: ${missing.join(", ")}.`);
-  const { csv, imputed } = featureTableCsv(table, fields);
+  // No imputation: an object with no value for a rule's feature (e.g. no GLCM
+  // row) must not match that rule on the column mean.
+  const { csv, fields, imputed } = featureTableCsv(table, ruleFields, { impute: false });
+  const empty = ruleFields.filter((field) => !fields.includes(field));
+  if (empty.length) throw new Error(`No object has a value for: ${empty.join(", ")}.`);
   const tokens = classTokens([...rules.map((rule) => rule.className), defaultClass]);
   const rulesCsv = [
     "feature,op,value,class",

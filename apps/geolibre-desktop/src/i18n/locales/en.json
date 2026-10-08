@@ -7410,7 +7410,7 @@
   },
   "obia": {
     "title": "Object-Based Analysis",
-    "description": "Segment imagery into objects, measure them, train a classifier and assess its accuracy. Runs in the browser.",
+    "description": "Object-based image analysis in the browser: segment imagery into image objects and work with the objects instead of single pixels.",
     "steps": {
       "segment": "Segment",
       "measure": "Measure",

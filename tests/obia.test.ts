@@ -572,3 +572,61 @@ describe("classifiedRaster", () => {
     );
   });
 });
+
+describe("classifyByRules with missing values", () => {
+  before(async () => {
+    await initTools(
+      readFileSync(
+        fileURLToPath(new URL("../node_modules/geolibre-wasm/geolibre-cli.wasm", import.meta.url)),
+      ),
+    );
+  });
+
+  it("does not match a rule on an object with no value for its feature", async () => {
+    // Object 1 has no texture value; with mean imputation it would read 0.5 and match.
+    const table = {
+      fields: ["glcm_contrast_b4"],
+      rows: new Map<number, Record<string, number | null>>([
+        [1, { glcm_contrast_b4: null }],
+        [2, { glcm_contrast_b4: 0.5 }],
+        [3, { glcm_contrast_b4: 0.1 }],
+      ]),
+    };
+    const result = await classifyByRules(
+      table,
+      [{ field: "glcm_contrast_b4", op: ">", value: 0.3, className: "rough" }],
+      "smooth",
+    );
+    assert.deepEqual(
+      [...result.predictions].sort((a, b) => a[0] - b[0]),
+      [
+        [1, "smooth"],
+        [2, "rough"],
+        [3, "smooth"],
+      ],
+    );
+    assert.deepEqual(result.imputed, {});
+  });
+
+  it("names a rule feature no object has a value for", async () => {
+    const table = {
+      fields: ["a"],
+      rows: new Map<number, Record<string, number | null>>([[1, { a: null }]]),
+    };
+    await assert.rejects(
+      classifyByRules(table, [{ field: "a", op: ">", value: 0, className: "x" }], "y"),
+      /No object has a value for: a/,
+    );
+  });
+
+  it("leaves missing values empty when not imputing", () => {
+    const table = {
+      fields: ["a"],
+      rows: new Map<number, Record<string, number | null>>([
+        [1, { a: 2 }],
+        [2, { a: null }],
+      ]),
+    };
+    assert.equal(featureTableCsv(table, ["a"], { impute: false }).csv, "segment_id,a\n1,2\n2,\n");
+  });
+});
