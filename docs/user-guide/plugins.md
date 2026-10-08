@@ -64,7 +64,7 @@ GeoLibre registers 69 built-in plugins.
 | **Natural Earth** | Plugins → Web Services | `natural-earth` | The Natural Earth vector and raster themes. See [Natural Earth](web-services.md#natural-earth). |
 | **Hugging Face** | Plugins → Web Services | `huggingface` | Geospatial files in Hugging Face dataset repos, and uploads to them. See [Hugging Face](web-services.md#hugging-face). |
 | **Satellite Embeddings** | Plugins → Web Services | `satellite-embeddings` | Pre-computed foundation-model embeddings such as AlphaEarth, Tessera, and Earth Index. See [Satellite Embeddings](web-services.md#satellite-embeddings). |
-| **Fields of the World** | Plugins → Web Services | `fields-of-the-world` | Global agricultural field boundaries colored by model confidence. See [Fields of the World](web-services.md#fields-of-the-world). |
+| **Fields of the World** | Plugins → Web Services | `fields-of-the-world` | Global agricultural field boundaries for 2017–2025, colored by model score. See [Fields of the World](web-services.md#fields-of-the-world). |
 | **Sentinel-2 Explorer** | Plugins → Web Services | `sentinel2-explorer` | Sentinel-2 imagery search and viewer over static STAC-GeoParquet, with no API. See [Sentinel-2 Explorer](web-services.md#sentinel-2-explorer). |
 | **Ocean Data Platform** | Plugins → Web Services | `ocean-data-platform` | HUB Ocean's public ocean datasets: habitats, protected areas, fisheries, and observations. See [Ocean Data Platform](web-services.md#ocean-data-platform). |
 | **Dynamical** | Plugins → Web Services | `dynamical` | dynamical.org weather forecasts, ensembles and analyses (NOAA GFS, GEFS, HRRR and MRMS, ECMWF AIFS and IFS, DWD ICON-EU, ECCC HRDPS, NASA IMERG) as Zarr layers. See [Dynamical](web-services.md#dynamical). |

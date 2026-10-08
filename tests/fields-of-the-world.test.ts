@@ -2,51 +2,43 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createExpression, featureFilter } from "@maplibre/maplibre-gl-style-spec";
 import type { Polygon } from "geojson";
+import type { FileMetaData } from "hyparquet";
 import {
-  FTW_MAX_CONFIDENCE,
   FTW_YEARS,
-  clipCoversTile,
-  confidenceColorExpression,
-  confidenceFilterExpression,
-  ftwArchive,
+  coverageColorExpression,
+  ftwArchiveUrl,
+  ftwCellsLayer,
+  ftwFieldsLayer,
   ftwRowsToFeatures,
-  ftwTileParquetUrl,
+  ftwZoneParquetUrl,
   geometryBbox,
-  parseFtwDownloadGrid,
-  searchFtwGrid,
+  parseFtwZoneIndex,
+  planFtwRead,
+  scoreColorExpression,
+  scoreFilterExpression,
+  searchFtwZones,
   splitAntimeridian,
   thresholdFromFilter,
-  thresholdToConfidence,
 } from "../packages/plugins/src/plugins/fields-of-the-world-data";
 
 /** Runs a filter through MapLibre's own compiler, as the renderer would. */
-function kept(filter: unknown[] | undefined, confidences: unknown[]): unknown[] {
-  if (!filter) return confidences;
+function kept(filter: unknown[] | undefined, scores: unknown[]): unknown[] {
+  if (!filter) return scores;
   const compiled = featureFilter(filter as never, "layers[0].filter");
-  return confidences.filter((confidence_mean) =>
-    compiled.filter(
-      { zoom: 12 },
-      { type: 3, properties: { confidence_mean } } as never,
-      undefined as never,
-    ),
+  return scores.filter((score) =>
+    compiled.filter({ zoom: 12 }, { type: 3, properties: { score } } as never, undefined as never),
   );
 }
 
-function colorOf(confidence: unknown): string {
-  const compiled = createExpression(
-    confidenceColorExpression() as never,
-    {
-      type: "color",
-    } as never,
-  );
+function colorOf(expression: unknown[], properties: Record<string, unknown>): string {
+  const compiled = createExpression(expression as never, { type: "color" } as never);
   assert.equal(compiled.result, "success");
   if (compiled.result !== "success") throw new Error("unreachable");
-  const color = compiled.value.evaluate(
-    { zoom: 12 } as never,
-    {
-      properties: { confidence_mean: confidence },
-    } as never,
-  ) as { r: number; g: number; b: number };
+  const color = compiled.value.evaluate({ zoom: 12 } as never, { properties } as never) as {
+    r: number;
+    g: number;
+    b: number;
+  };
   const hex = (value: number): string =>
     Math.round(value * 255)
       .toString(16)
@@ -54,184 +46,216 @@ function colorOf(confidence: unknown): string {
   return `#${hex(color.r)}${hex(color.g)}${hex(color.b)}`;
 }
 
-// A trimmed copy of three real cells of ftw-download-grid-v2.geojson.
-const GRID = {
-  type: "FeatureCollection",
-  features: [
-    {
-      type: "Feature",
-      id: "N00E005",
-      geometry: { type: "Polygon", coordinates: [] },
-      properties: {
-        tile_id: "N00E005",
-        lat_min: 0,
-        lon_min: 5,
-        years: [2024, 2025],
-        feature_counts: { "2024": 3, "2025": 1 },
-        size_bytes: { "2024": 2667, "2025": 2706 },
-      },
-    },
-    {
-      type: "Feature",
-      id: "N00E006",
-      geometry: { type: "Polygon", coordinates: [] },
-      properties: {
-        tile_id: "N00E006",
-        lat_min: 0,
-        lon_min: 6,
-        years: [2024, 2025],
-        feature_counts: { "2024": 77, "2025": 267 },
-        size_bytes: { "2024": 12969, "2025": 40541 },
-      },
-    },
-    {
-      type: "Feature",
-      id: "N00E007",
-      geometry: { type: "Polygon", coordinates: [] },
-      properties: {
-        tile_id: "N00E007",
-        lat_min: 0,
-        lon_min: 7,
-        years: [2025],
-        feature_counts: { "2025": 3 },
-        size_bytes: { "2025": 2653 },
-      },
-    },
-    // Malformed: no corner, skipped.
-    { type: "Feature", properties: { tile_id: "BROKEN" } },
-  ],
-};
-
 describe("fields of the world archives", () => {
-  it("points each year at its archive and source layer", () => {
-    assert.deepEqual(FTW_YEARS, [2024, 2025]);
-    const released = ftwArchive(2025);
-    assert.equal(
-      released.url,
-      "https://data.source.coop/ftw/global-field-boundaries/pmtiles/ftw-global-fields-2025.pmtiles",
-    );
-    assert.equal(released.sourceLayer, "fields");
-    assert.equal(released.minZoom, 0);
-    const alpha = ftwArchive(2024);
-    assert.match(alpha.url, /\/alpha\/2024_with_confidence\.pmtiles$/);
-    // The alpha archive names its layer after the year and starts at zoom 10.
-    assert.equal(alpha.sourceLayer, "2024");
-    assert.equal(alpha.minZoom, 10);
+  it("covers the nine 2nd Edition years", () => {
+    assert.deepEqual(FTW_YEARS, [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]);
   });
 
-  it("builds tile GeoParquet URLs the way the FTW app does", () => {
+  it("reads fields and cells from one archive per year", () => {
+    const url = "https://data.source.coop/ftw/global-data-2e/vector/2019/fields-2019.pmtiles";
+    assert.equal(ftwArchiveUrl(2019), url);
+    assert.deepEqual(ftwFieldsLayer(2019), {
+      url,
+      sourceLayer: "fields",
+      minZoom: 9,
+      maxZoom: 13,
+    });
+    assert.deepEqual(ftwCellsLayer(2019), { url, sourceLayer: "cells", minZoom: 0, maxZoom: 8 });
+  });
+
+  it("builds zone GeoParquet URLs with a two-digit zone", () => {
     assert.equal(
-      ftwTileParquetUrl(2025, "N00E006"),
-      "https://data.source.coop/ftw/global-field-boundaries/download-tiles/geoparquet/2025/2025_N00E006.parquet",
+      ftwZoneParquetUrl(2025, 1),
+      "https://data.source.coop/ftw/global-data-2e/vector/2025/zone=01/utm01.parquet",
+    );
+    assert.equal(
+      ftwZoneParquetUrl(2017, 31),
+      "https://data.source.coop/ftw/global-data-2e/vector/2017/zone=31/utm31.parquet",
     );
   });
 });
 
-describe("fields of the world confidence", () => {
-  it("maps the 0–100% threshold onto the model's confidence range", () => {
-    assert.equal(thresholdToConfidence(0), 0);
-    assert.equal(thresholdToConfidence(100), FTW_MAX_CONFIDENCE);
-    assert.equal(thresholdToConfidence(150), FTW_MAX_CONFIDENCE);
-    assert.equal(thresholdToConfidence(-5), 0);
-    assert.ok(Math.abs(thresholdToConfidence(70) - 0.4047246) < 1e-6);
-  });
-
-  it("filters fields below the threshold, coercing string confidences", () => {
-    const cutoff = thresholdToConfidence(70);
-    // The 2025 archive stores confidence as strings; tiles loaded from
-    // GeoParquet carry numbers; a missing value counts as 0.
-    const values = [String(cutoff - 0.01), String(cutoff + 0.01), cutoff + 0.02, null, undefined];
-    assert.deepEqual(kept(confidenceFilterExpression(70), values), [
-      String(cutoff + 0.01),
-      cutoff + 0.02,
-    ]);
-    assert.equal(confidenceFilterExpression(0), undefined);
-    assert.deepEqual(kept(confidenceFilterExpression(0), values), values);
+describe("fields of the world score", () => {
+  it("filters fields below the threshold, coercing non-numbers", () => {
+    const values = [44, 45, "60", null, undefined, 100];
+    assert.deepEqual(kept(scoreFilterExpression(45), values), [45, "60", 100]);
+    assert.equal(scoreFilterExpression(0), undefined);
+    assert.deepEqual(kept(scoreFilterExpression(0), values), values);
+    // Out-of-range and fractional thresholds are clamped and rounded.
+    assert.deepEqual(scoreFilterExpression(150)?.[2], 100);
+    assert.deepEqual(scoreFilterExpression(44.6)?.[2], 45);
   });
 
   it("round-trips a threshold through the filter it wrote", () => {
-    for (const percent of [1, 35, 70, 99, 100]) {
-      assert.equal(thresholdFromFilter(confidenceFilterExpression(percent)), percent);
+    for (const threshold of [1, 35, 70, 99, 100]) {
+      assert.equal(thresholdFromFilter(scoreFilterExpression(threshold)), threshold);
     }
     assert.equal(thresholdFromFilter(undefined), 0);
-    // A hand-edited filter is left alone rather than misread.
-    assert.equal(thresholdFromFilter([">=", ["get", "confidence_mean"], 0.3]), null);
-    assert.equal(thresholdFromFilter(["==", ["get", "label"], "field"]), null);
+    // A hand-edited filter, or a 1st Edition confidence filter, is left alone.
+    assert.equal(thresholdFromFilter([">=", ["get", "score"], 30]), null);
+    assert.equal(
+      thresholdFromFilter([">=", ["to-number", ["get", "confidence_mean"], 0], 0.4]),
+      null,
+    );
   });
 
-  it("colors fields from red (low) to green (high)", () => {
-    assert.equal(colorOf("0"), "#d7191c");
-    assert.equal(colorOf(thresholdToConfidence(70)), "#fec379");
-    assert.equal(colorOf(FTW_MAX_CONFIDENCE), "#33a02c");
-    assert.equal(colorOf(0.9), "#33a02c");
-    assert.equal(colorOf(null), "#d7191c");
+  it("colors fields with the dataset's score bins", () => {
+    const color = (score: unknown): string => colorOf(scoreColorExpression(), { score });
+    assert.equal(color(0), "#d73027");
+    assert.equal(color(44), "#d73027");
+    assert.equal(color(45), "#fdae61");
+    assert.equal(color("60"), "#ffffbf");
+    assert.equal(color(79), "#a6d96a");
+    assert.equal(color(80), "#1a9850");
+    assert.equal(color(null), "#d73027");
+  });
+
+  it("colors cells by the share of their area in fields", () => {
+    const color = (pct_covered: unknown): string =>
+      colorOf(coverageColorExpression(), { pct_covered });
+    assert.equal(color(0), "#ffffd9");
+    assert.equal(color(9.9), "#edf8b1");
+    assert.equal(color(50), "#225ea8");
+    assert.equal(color(100), "#081d58");
   });
 });
 
-describe("fields of the world download grid", () => {
-  const tiles = parseFtwDownloadGrid(GRID);
+describe("fields of the world zone index", () => {
+  // The shape hyparquet returns for index/vector.parquet (ints as bigint).
+  const zones = parseFtwZoneIndex([
+    {
+      year: 2025n,
+      zone: 1n,
+      size_bytes: 3798181n,
+      n_parcels: 6733n,
+      xmin: -175.35,
+      ymin: -21.27,
+      xmax: -175.07,
+      ymax: -21.09,
+    },
+    {
+      year: 2025,
+      zone: 31,
+      size_bytes: 4693301951,
+      n_parcels: 5566113,
+      xmin: -0.06,
+      ymin: 5.42,
+      xmax: 6.73,
+      ymax: 53.76,
+    },
+    {
+      year: 2025,
+      zone: 32,
+      size_bytes: 4863484649,
+      n_parcels: 1,
+      xmin: 5.9,
+      ymin: 0,
+      xmax: 12.1,
+      ymax: 55,
+    },
+    { year: 2024, zone: 31, xmin: -0.06, ymin: 5.42, xmax: 6.73, ymax: 53.76 },
+    { year: 2025, zone: 60, xmin: 174, ymin: -46, xmax: 179.8, ymax: -35 },
+    // Malformed: no extent, skipped.
+    { year: 2025, zone: 33 },
+  ]);
 
-  it("parses cells into 1° boxes with per-year counts", () => {
-    assert.equal(tiles.length, 3);
-    assert.deepEqual(tiles[1], {
-      id: "N00E006",
-      bbox: [6, 0, 7, 1],
-      years: [2024, 2025],
-      featureCounts: { "2024": 77, "2025": 267 },
-      sizeBytes: { "2024": 12969, "2025": 40541 },
+  it("parses rows and rebuilds each file's URL", () => {
+    assert.equal(zones.length, 5);
+    assert.deepEqual(zones[0], {
+      year: 2025,
+      zone: 1,
+      url: "https://data.source.coop/ftw/global-data-2e/vector/2025/zone=01/utm01.parquet",
+      sizeBytes: 3798181,
+      parcels: 6733,
+      bbox: [-175.35, -21.27, -175.07, -21.09],
     });
-    assert.throws(() => parseFtwDownloadGrid({}));
+    assert.equal(zones[3].sizeBytes, 0);
   });
 
-  it("finds cells for a year in a box, most fields first", () => {
-    const all = searchFtwGrid(tiles, [4.5, -0.5, 7.5, 0.5], 2025);
+  it("finds the year's zones overlapping a box, west to east", () => {
     assert.deepEqual(
-      all.tiles.map((tile) => tile.id),
-      ["N00E006", "N00E007", "N00E005"],
+      searchFtwZones(zones, [6, 45, 7, 46], 2025).map((zone) => zone.zone),
+      [31, 32],
     );
-    assert.equal(all.total, 3);
-    // N00E007 has no 2024 file.
     assert.deepEqual(
-      searchFtwGrid(tiles, [4.5, -0.5, 7.5, 0.5], 2024).tiles.map((tile) => tile.id),
-      ["N00E006", "N00E005"],
+      searchFtwZones(zones, [1.5, 48.2, 1.6, 48.3], 2024).map((zone) => zone.zone),
+      [31],
     );
-    // A box touching a cell only along its edge does not select it.
-    assert.deepEqual(
-      searchFtwGrid(tiles, [7, 0.2, 7.5, 0.4], 2025).tiles.map((tile) => tile.id),
-      ["N00E007"],
-    );
-    const capped = searchFtwGrid(tiles, [-180, -90, 180, 90], 2025, 1);
-    assert.equal(capped.tiles.length, 1);
-    assert.equal(capped.total, 3);
+    assert.deepEqual(searchFtwZones(zones, [100, 0, 101, 1], 2025), []);
   });
 
   it("searches a view that crosses the antimeridian", () => {
-    const dateline = parseFtwDownloadGrid({
-      features: [
-        { properties: { tile_id: "S17E179", lat_min: -17, lon_min: 179, years: [2025] } },
-        { properties: { tile_id: "S17W180", lat_min: -17, lon_min: -180, years: [2025] } },
-        { properties: { tile_id: "S17E000", lat_min: -17, lon_min: 0, years: [2025] } },
-      ],
-    });
-    assert.deepEqual(splitAntimeridian([170, -20, -170, -10]), [
-      [170, -20, 180, -10],
-      [-180, -20, -170, -10],
+    assert.deepEqual(splitAntimeridian([170, -50, -170, 0]), [
+      [170, -50, 180, 0],
+      [-180, -50, -170, 0],
     ]);
     assert.deepEqual(
-      searchFtwGrid(dateline, [170, -20, -170, -10], 2025)
-        .tiles.map((tile) => tile.id)
-        .sort(),
-      ["S17E179", "S17W180"],
+      searchFtwZones(zones, [170, -50, -170, 0], 2025).map((zone) => zone.zone),
+      [1, 60],
     );
-    assert.equal(clipCoversTile([170, -20, -170, -10], dateline[0]), true);
-    assert.equal(clipCoversTile([170, -20, -170, -10], dateline[2]), false);
+  });
+});
+
+describe("fields of the world row-group planning", () => {
+  /** A row group whose bbox.* statistics span a box, as hyparquet decodes them. */
+  const group = (rows: number, box: [number, number, number, number] | null, bytes = 100) => ({
+    num_rows: BigInt(rows),
+    columns: [
+      ...(box
+        ? (["xmin", "ymin", "xmax", "ymax"] as const).map((name, index) => ({
+            meta_data: {
+              path_in_schema: ["bbox", name],
+              total_compressed_size: BigInt(bytes),
+              // A field's xmin ranges from the group's west to east, and so on.
+              statistics: {
+                min_value: index < 2 ? box[index] : box[index - 2],
+                max_value: index < 2 ? box[index + 2] : box[index],
+              },
+            },
+          }))
+        : []),
+      {
+        meta_data: {
+          path_in_schema: ["geometry"],
+          total_compressed_size: BigInt(bytes * 10),
+        },
+      },
+      // Not a read column, so not counted.
+      { meta_data: { path_in_schema: ["collection"], total_compressed_size: 99999n } },
+    ],
+  });
+  const metadata = {
+    row_groups: [
+      group(8192, [0, 0, 1, 1]),
+      group(8192, [1, 0, 2, 1]),
+      group(100, [5, 5, 6, 6]),
+      group(50, null),
+    ],
+  } as unknown as FileMetaData;
+
+  it("keeps only the groups overlapping the area", () => {
+    const plan = planFtwRead(metadata, [0.5, 0.5, 0.9, 0.9]);
+    // The first group, and the one without statistics (it may overlap).
+    assert.deepEqual(
+      plan.groups.map((g) => [g.rowStart, g.rowEnd]),
+      [
+        [0, 8192],
+        [16484, 16534],
+      ],
+    );
+    assert.equal(plan.rows, 8242);
+    // bbox ×4 + geometry, then the stats-less group's geometry; `collection`
+    // is never read.
+    assert.equal(plan.bytes, 4 * 100 + 1000 + 1000);
+    assert.deepEqual(plan.extent, [0.5, 0.5, 0.9, 0.9]);
   });
 
-  it("knows when a clip box keeps a whole tile", () => {
-    const tile = tiles[1]; // [6, 0, 7, 1]
-    assert.equal(clipCoversTile([-180, -90, 180, 90], tile), true);
-    assert.equal(clipCoversTile([6, 0, 7, 1], tile), true);
-    assert.equal(clipCoversTile([6.5, 0, 7, 1], tile), false);
+  it("clips the extent to the groups' union inside the area", () => {
+    const only = { row_groups: metadata.row_groups.slice(0, 3) } as unknown as FileMetaData;
+    const plan = planFtwRead(only, [0.5, -1, 1.5, 0.5]);
+    assert.equal(plan.groups.length, 2);
+    assert.deepEqual(plan.extent, [0.5, 0, 1.5, 0.5]);
+    assert.equal(planFtwRead(only, [10, 10, 11, 11]).extent, null);
   });
 });
 
@@ -251,44 +275,39 @@ describe("fields of the world GeoParquet rows", () => {
   // The shape hyparquet returns: WKB already decoded to GeoJSON geometry.
   const rows = [
     {
-      time: new Date("2025-01-01T00:00:00Z"),
-      label: "field",
-      confidence_mean: 0.14,
-      confidence_median: 0.13,
-      confidence_min: 0.1,
+      id: "31UCP_0_0-48077",
+      score: 87,
+      "metrics:area": 162378.125,
+      "metrics:perimeter": 1924.27,
+      bbox: { xmin: 6.5, ymin: 0.1, xmax: 6.51, ymax: 0.11 },
       geometry: square(6.5, 0.1, 0.01),
-      chunk_id: "N00E006",
     },
     {
-      time: new Date("2025-01-01T00:00:00Z"),
-      label: "field",
-      confidence_mean: 0.5,
-      confidence_median: Number.NaN,
-      confidence_min: 0.4,
+      id: "31UCP_0_0-2",
+      score: Number.NaN,
       geometry: square(6.9, 0.9, 0.01),
-      chunk_id: "N00E006",
     },
-    { label: "field", geometry: null },
+    { id: "no-geometry", geometry: null },
   ];
 
   it("turns rows into features and drops rows without geometry", () => {
     const features = ftwRowsToFeatures(rows);
     assert.equal(features.length, 2);
     assert.deepEqual(features[0].properties, {
-      confidence_mean: 0.14,
-      confidence_median: 0.13,
-      confidence_min: 0.1,
-      label: "field",
-      time: "2025-01-01T00:00:00.000Z",
-      tile_id: "N00E006",
+      id: "31UCP_0_0-48077",
+      score: 87,
+      "metrics:area": 162378.125,
+      "metrics:perimeter": 1924.27,
     });
-    assert.equal(features[1].properties.confidence_median, null);
+    assert.equal(features[1].properties.score, null);
   });
 
   it("keeps only fields overlapping a clip box, whole", () => {
     const features = ftwRowsToFeatures(rows, [6.505, 0.105, 6.6, 0.2]);
     assert.equal(features.length, 1);
     assert.deepEqual(features[0].geometry, square(6.5, 0.1, 0.01));
+    // A row without a bbox struct falls back to the geometry's own bounds.
+    assert.equal(ftwRowsToFeatures(rows, [6.905, 0.905, 7, 1]).length, 1);
   });
 
   it("clips with a box crossing the antimeridian", () => {

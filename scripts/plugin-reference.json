@@ -123,7 +123,7 @@
     "docs": "web-services.md#satellite-embeddings"
   },
   "geolibre-fields-of-the-world": {
-    "description": "Global agricultural field boundaries colored by model confidence.",
+    "description": "Global agricultural field boundaries for 2017–2025, colored by model score.",
     "docs": "web-services.md#fields-of-the-world"
   },
   "geolibre-sentinel2-explorer": {

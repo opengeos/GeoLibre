@@ -10,30 +10,30 @@ import type {
 } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
-  FTW_APP_URL,
-  FTW_COG_NODATA,
-  FTW_COG_RANGE,
-  FTW_CONFIDENCE_STOPS,
+  FTW_COVERAGE_BINS,
   FTW_DATA_URL,
   FTW_DEFAULT_THRESHOLD,
   FTW_DEFAULT_YEAR,
-  FTW_DENSITY_COG_URL,
-  FTW_DOWNLOAD_GRID_URL,
   FTW_LICENSE,
+  FTW_MAP_URL,
   FTW_PAPER_URL,
+  FTW_SCORE_BINS,
   FTW_WEBSITE_URL,
   FTW_YEARS,
   FtwTooManyFieldsError,
-  type FtwGridTile,
   type FtwYear,
-  clipCoversTile,
-  confidenceColorExpression,
-  confidenceFilterExpression,
-  ftwArchive,
-  ftwTileParquetUrl,
-  loadFtwTileFeatures,
-  parseFtwDownloadGrid,
-  searchFtwGrid,
+  type FtwZoneFile,
+  type FtwZoneReader,
+  coverageColorExpression,
+  ftwCellsLayer,
+  ftwFieldsLayer,
+  loadFtwAreaFeatures,
+  loadFtwZoneIndex,
+  openFtwZone,
+  planFtwRead,
+  scoreColorExpression,
+  scoreFilterExpression,
+  searchFtwZones,
   thresholdFromFilter,
 } from "./fields-of-the-world-data";
 import { type LonLatBbox, bboxRing, polygonFeature } from "./satellite-embeddings-grids";
@@ -47,25 +47,33 @@ const PANEL_ID = FIELDS_OF_THE_WORLD_PLUGIN_ID;
 const MAX_MAP_FEATURES = 250_000;
 /** Most fields written to one GeoJSON file. */
 const MAX_GEOJSON_FEATURES = 1_000_000;
-/** Zoom above which the field-density raster is hidden. */
-const DENSITY_MAX_ZOOM = 12;
+/** Most compressed bytes one Add to map reads (row groups run ~17 MB each). */
+const MAX_MAP_READ_BYTES = 512 * 1024 ** 2;
+/** Most compressed bytes one GeoJSON export reads. */
+const MAX_GEOJSON_READ_BYTES = 1024 ** 3;
+/** Largest zone file saved whole; above it the URL is copied instead. */
+const MAX_PARQUET_SAVE_BYTES = 512 * 1024 ** 2;
+/** Most UTM zones one search opens (each costs a footer read of up to ~2.7 MB). */
+const MAX_SEARCH_ZONES = 6;
+/** Zone files whose footers stay cached between searches. */
+const READER_CACHE_SIZE = 8;
+/** Zoom at which the density cells hand over to the field polygons. */
+const CELLS_MAX_ZOOM = 9;
 /** Delay before a threshold drag is written to the layers. */
 const THRESHOLD_DEBOUNCE_MS = 150;
 
 /** `metadata.sourceKind` of the layers this plugin adds (PMTiles keep their own). */
-const TILE_FIELDS_SOURCE_KIND = "fields-of-the-world-tile";
-/**
- * Marks the field-density COG. Not `sourceKind`: the raster control owns that
- * (`maplibre-gl-raster`), and the raster sync, Style panel and Mapbox COG path
- * all key on it.
- */
-const DENSITY_METADATA_KEY = "ftwFieldDensity";
+const AREA_FIELDS_SOURCE_KIND = "fields-of-the-world-area";
+/** Marks the field-density (A5 cells) layer. Its value is the year. */
+const CELLS_METADATA_KEY = "ftwCells2eYear";
 const FOOTPRINT_SOURCE_KIND = "fields-of-the-world-footprints";
 /**
- * Marks a field layer (the global archive or a loaded tile) whose threshold
- * filter the panel drives. Its value is the year.
+ * Marks a 2nd Edition field layer (the archive or a loaded area) whose score
+ * filter the panel drives. Its value is the year. 1st Edition layers in older
+ * projects carry `ftwFieldsYear` and a `confidence_mean` filter instead, so
+ * the panel leaves them alone.
  */
-const FTW_FIELDS_METADATA_KEY = "ftwFieldsYear";
+const FTW_FIELDS_METADATA_KEY = "ftwFields2eYear";
 
 // Footprints are a Layers-panel entry (hide/restyle/remove like any layer);
 // the hover outline and the drawn search box are plugin-private chrome.
@@ -138,7 +146,6 @@ const CSS = {
   secondary:
     "padding:6px 10px;border:1px solid hsl(var(--border));border-radius:6px;" +
     "background:hsl(var(--background));color:hsl(var(--foreground));cursor:pointer;",
-  checkbox: "display:flex;align-items:center;gap:6px;font-size:11px;",
   sliderRow: "display:flex;align-items:center;gap:8px;",
   slider: "flex:1 1 auto;accent-color:hsl(var(--primary));",
   sliderValue: "min-width:36px;text-align:end;font-variant-numeric:tabular-nums;",
@@ -171,13 +178,24 @@ const CSS = {
 
 type SearchMode = "view" | "draw";
 
+/** One UTM zone file holding fields in the search area. */
+interface ZoneResult {
+  /** `utmNN`, the footprint and row id. */
+  id: string;
+  zone: FtwZoneFile;
+  /** Compressed bytes the area's row groups take in the file. */
+  readBytes: number;
+  /** The part of the search area the zone has row groups in. */
+  extent: LonLatBbox;
+}
+
 /**
  * Panel state. Kept at module scope so a rebuild (a language change) restores
  * the search instead of wiping it; reset when the plugin deactivates.
  */
 interface PanelState {
   year: FtwYear;
-  /** Confidence threshold in percent, applied to every FTW field layer. */
+  /** Score threshold (0–100), applied to every FTW field layer. */
   threshold: number;
   mode: SearchMode;
   drawnBbox: LonLatBbox | null;
@@ -185,14 +203,11 @@ interface PanelState {
   searchBbox: LonLatBbox | null;
   /** The year the current results were searched for. */
   searchYear: FtwYear;
-  results: FtwGridTile[];
-  total: number;
-  /** Whether tile loads and GeoJSON exports keep only fields in the search box. */
-  clipToSearch: boolean;
+  results: ZoneResult[];
   status: { text: string; error: boolean } | null;
   busy: boolean;
   infoExpanded: boolean;
-  /** Tiles selected by a footprint or row click, outlined on the map. */
+  /** Zones selected by a footprint or row click, outlined on the map. */
   selectedIds: string[];
 }
 
@@ -205,8 +220,6 @@ function initialState(): PanelState {
     searchBbox: null,
     searchYear: FTW_DEFAULT_YEAR,
     results: [],
-    total: 0,
-    clipToSearch: true,
     status: null,
     busy: false,
     infoExpanded: false,
@@ -223,8 +236,10 @@ let disposePanel: (() => void) | null = null;
 let footprintsRegistered = false;
 let footprintHandlersBound = false;
 let onFootprintClick: ((ids: string[]) => void) | null = null;
-/** The parsed download grid, fetched once per session (~5.6 MB). */
-let gridPromise: Promise<FtwGridTile[]> | null = null;
+/** The parsed zone index, fetched once per session (~54 KB). */
+let indexPromise: Promise<FtwZoneFile[]> | null = null;
+/** Opened zone files by URL, most recently used last. */
+const readers = new Map<string, Promise<FtwZoneReader>>();
 
 /** Resolves a plugin-namespaced translation key, falling back to English text. */
 const tr = createPluginTranslator(() => appRef, FIELDS_OF_THE_WORLD_PLUGIN_ID);
@@ -302,18 +317,44 @@ function viewBbox(): LonLatBbox | null {
   return [west, clampLat(bounds.getSouth()), east, clampLat(bounds.getNorth())];
 }
 
-/** Loads (once) and parses the 1° download grid. */
-function loadGrid(): Promise<FtwGridTile[]> {
-  gridPromise ??= fetch(FTW_DOWNLOAD_GRID_URL)
-    .then(async (response) => {
-      if (!response.ok) throw new Error(`HTTP ${response.status} loading the FTW download grid`);
-      return parseFtwDownloadGrid(await response.json());
-    })
-    .catch((error: unknown) => {
-      gridPromise = null;
+/** Loads (once) and parses the zone index. */
+function loadIndex(): Promise<FtwZoneFile[]> {
+  indexPromise ??= loadFtwZoneIndex().catch((error: unknown) => {
+    indexPromise = null;
+    throw error;
+  });
+  return indexPromise;
+}
+
+/**
+ * Opens a zone file (its footer), reusing a recent one. Not tied to a task's
+ * signal: a cached reader outlives the task that opened it.
+ */
+function zoneReader(url: string): Promise<FtwZoneReader> {
+  let reader = readers.get(url);
+  if (reader) {
+    readers.delete(url);
+  } else {
+    reader = openFtwZone(url).catch((error: unknown) => {
+      readers.delete(url);
       throw error;
     });
-  return gridPromise;
+  }
+  readers.set(url, reader);
+  while (readers.size > READER_CACHE_SIZE) {
+    readers.delete(readers.keys().next().value as string);
+  }
+  return reader;
+}
+
+/** Waits for a promise, rejecting early with an AbortError when aborted. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }
 
 /**
@@ -369,16 +410,16 @@ async function fetchBlob(
 // Field layers and the threshold
 // ---------------------------------------------------------------------------
 
-/** Every store layer showing FTW fields (the global archive or a loaded tile). */
+/** Every store layer showing FTW fields (the global archive or a loaded area). */
 function fieldLayers(): GeoLibreLayer[] {
   return useAppStore
     .getState()
     .layers.filter((layer) => typeof layer.metadata?.[FTW_FIELDS_METADATA_KEY] === "number");
 }
 
-/** Applies a threshold to every FTW field layer's filter. */
-function applyThreshold(percent: number): void {
-  const filter = confidenceFilterExpression(percent);
+/** Applies a score threshold to every FTW field layer's filter. */
+function applyThreshold(threshold: number): void {
+  const filter = scoreFilterExpression(threshold);
   const store = useAppStore.getState();
   for (const layer of fieldLayers()) {
     if (JSON.stringify(layer.filterExpression ?? null) === JSON.stringify(filter ?? null)) continue;
@@ -388,21 +429,21 @@ function applyThreshold(percent: number): void {
 
 /**
  * The shared look of an FTW field layer: outlines and a faint fill colored by
- * confidence (the FTW app's ramp), through the Style panel's expression mode
- * so it stays editable there.
+ * score (the dataset's own bins), through the Style panel's expression mode so
+ * it stays editable there.
  */
 function fieldStyle(base: GeoLibreLayer["style"]): GeoLibreLayer["style"] {
   return {
     ...base,
     vectorStyleMode: "expression",
-    vectorStyleExpression: JSON.stringify(confidenceColorExpression()),
+    vectorStyleExpression: JSON.stringify(scoreColorExpression()),
     fillOpacity: 0.2,
     strokeWidth: 1.25,
   };
 }
 
 /**
- * Adds the global field-boundary archive for the selected year, or says so
+ * Adds the selected year's field polygons from the global archive, or says so
  * when that year is already on the map.
  */
 function addFieldBoundaries(setStatus: (text: string, error?: boolean) => void): void {
@@ -414,7 +455,7 @@ function addFieldBoundaries(setStatus: (text: string, error?: boolean) => void):
     setStatus(tr("boundariesExists", "{{name}} is already on the map.", { name: existing.name }));
     return;
   }
-  const archive = ftwArchive(year);
+  const archive = ftwFieldsLayer(year);
   const base = createPMTilesStoreLayer({
     id: crypto.randomUUID(),
     name: tr("boundariesLayerName", "FTW field boundaries {{year}}", { year }),
@@ -423,7 +464,7 @@ function addFieldBoundaries(setStatus: (text: string, error?: boolean) => void):
     sourceLayers: [archive.sourceLayer],
     opacity: 0.9,
   });
-  const filter = confidenceFilterExpression(state.threshold);
+  const filter = scoreFilterExpression(state.threshold);
   const layer: GeoLibreLayer = {
     ...base,
     style: fieldStyle(base.style),
@@ -439,58 +480,55 @@ function addFieldBoundaries(setStatus: (text: string, error?: boolean) => void):
   setStatus(
     zoom < archive.minZoom
       ? tr(
-          "boundariesAddedZoomIn",
-          "Added {{name}}. This year's archive starts at zoom {{zoom}}; zoom in to see fields.",
+          "boundariesZoomIn",
+          "Added {{name}}. Fields are drawn from zoom {{zoom}}; zoom in to see them, or add Field density for the overview.",
           { name: layer.name, zoom: archive.minZoom },
         )
       : tr("boundariesAdded", "Added {{name}}.", { name: layer.name }),
   );
 }
 
-/** Adds the global 500 m field-density COG, for the zoomed-out picture. */
-async function addFieldDensity(
-  setStatus: (text: string, error?: boolean) => void,
-  signal: AbortSignal,
-): Promise<void> {
-  const app = appRef;
-  if (!app?.addCogLayer)
-    throw new Error(tr("cogUnavailable", "COG layers are not available here."));
-  if (
-    useAppStore.getState().layers.some((layer) => layer.metadata?.[DENSITY_METADATA_KEY] === true)
-  ) {
-    setStatus(tr("densityExists", "The field density layer is already on the map."));
+/**
+ * Adds the selected year's A5 cell summaries, colored by the share of each
+ * cell covered by fields, for the zoomed-out picture.
+ */
+function addFieldDensity(setStatus: (text: string, error?: boolean) => void): void {
+  const year = state.year;
+  const existing = useAppStore
+    .getState()
+    .layers.find((layer) => layer.metadata?.[CELLS_METADATA_KEY] === year);
+  if (existing) {
+    setStatus(tr("boundariesExists", "{{name}} is already on the map.", { name: existing.name }));
     return;
   }
-  setStatus(tr("densityAdding", "Adding the field density layer…"));
-  const name = tr("densityLayerName", "FTW field density (500 m)");
-  // addCogLayer takes no signal, so an abort is only honored before it starts.
-  signal.throwIfAborted();
-  const id = await app.addCogLayer(name, FTW_DENSITY_COG_URL, {
-    engine: "auto",
-    bands: "1",
-    // One of the names every COG engine draws (the WASM tiler knows a subset
-    // and falls back to gray for the rest).
-    colormap: "greens",
-    rescaleMin: FTW_COG_RANGE[0],
-    rescaleMax: FTW_COG_RANGE[1],
-    nodata: FTW_COG_NODATA,
+  const archive = ftwCellsLayer(year);
+  const base = createPMTilesStoreLayer({
+    id: crypto.randomUUID(),
+    name: tr("cellsLayerName", "FTW field density {{year}}", { year }),
+    url: archive.url,
+    tileType: "vector",
+    sourceLayers: [archive.sourceLayer],
     opacity: 0.8,
-    // The raster is global; fitting to it would zoom the map out to the world.
-    zoomTo: false,
   });
-  // The layer exists now, so finish configuring it even if the task was
-  // aborted meanwhile; an unmarked layer would escape the duplicate check and
-  // never hide above DENSITY_MAX_ZOOM.
-  const store = useAppStore.getState();
-  const layer = store.layers.find((candidate) => candidate.id === id);
-  if (layer) {
-    store.updateLayer(id, {
-      // Like the FTW app, hand over to the field boundaries once zoomed in.
-      style: { ...layer.style, maxZoom: DENSITY_MAX_ZOOM },
-      metadata: { ...layer.metadata, [DENSITY_METADATA_KEY]: true, attribution: ATTRIBUTION },
-    });
-  }
-  if (!signal.aborted) setStatus(tr("densityAdded", "Added {{name}}.", { name }));
+  const layer: GeoLibreLayer = {
+    ...base,
+    style: {
+      ...base.style,
+      vectorStyleMode: "expression",
+      vectorStyleExpression: JSON.stringify(coverageColorExpression()),
+      fillOpacity: 0.8,
+      strokeWidth: 0,
+      // Like the dataset's own styles, hand over to the field polygons.
+      maxZoom: CELLS_MAX_ZOOM,
+    },
+    metadata: {
+      ...base.metadata,
+      [CELLS_METADATA_KEY]: year,
+      attribution: ATTRIBUTION,
+    },
+  };
+  useAppStore.getState().addLayer(layer);
+  setStatus(tr("boundariesAdded", "Added {{name}}.", { name: layer.name }));
 }
 
 // ---------------------------------------------------------------------------
@@ -529,14 +567,11 @@ function handleFootprintLeave(event: MapLayerMouseEvent): void {
   event.target.getCanvas().style.cursor = "";
 }
 
-/** Shows the result tiles, registered as one Layers-panel entry. */
-function setFootprints(map: MapLibreMap, tiles: FtwGridTile[], year: number): void {
+/** Shows the result zones' parts of the search area, as one Layers-panel entry. */
+function setFootprints(map: MapLibreMap, results: ZoneResult[]): void {
   if (!styleReady(map)) return;
-  const features = tiles.map((tile) =>
-    polygonFeature(bboxRing(tile.bbox), {
-      id: tile.id,
-      fields: tile.featureCounts[String(year)] ?? 0,
-    }),
+  const features = results.map((result) =>
+    polygonFeature(bboxRing(result.extent), { id: result.id, zone: result.zone.zone }),
   );
   if (features.length === 0) {
     removeFootprints(map);
@@ -577,7 +612,7 @@ function setFootprints(map: MapLibreMap, tiles: FtwGridTile[], year: number): vo
   if (!register) return;
   register({
     id: FOOTPRINT_STORE_LAYER_ID,
-    name: tr("footprintsLayer", "FTW download tiles"),
+    name: tr("zoneFootprintsLayer", "FTW search footprints"),
     type: "geojson",
     nativeLayerIds: [FOOTPRINT_FILL_LAYER_ID, FOOTPRINT_LINE_LAYER_ID],
     sourceIds: [FOOTPRINT_SOURCE_ID],
@@ -731,58 +766,55 @@ function startDraw(map: MapLibreMap, onComplete: (bbox: LonLatBbox) => void): ()
 }
 
 // ---------------------------------------------------------------------------
-// Tile actions
+// Zone actions
 // ---------------------------------------------------------------------------
 
-/** The area to keep from a tile, or null for the whole tile. */
-function clipBox(): LonLatBbox | null {
-  return state.clipToSearch ? state.searchBbox : null;
+/** A zone's two-digit number, as in its file name. */
+function zoneLabel(zone: FtwZoneFile): string {
+  return String(zone.zone).padStart(2, "0");
 }
 
 /**
- * Reads a tile's fields. A read that would keep every field (no clip, or a
- * clip covering the tile) is refused up front when the grid's count is over
- * `maxFeatures`; a partial clip streams the file and stops once it passes.
+ * Reads the fields of a zone that overlap the search area. A read whose row
+ * groups pass `maxBytes` is refused up front; otherwise the groups stream in
+ * and reading stops once more than `maxFeatures` fields are kept.
  */
-async function readTile(
-  tile: FtwGridTile,
-  year: number,
+async function readArea(
+  result: ZoneResult,
   maxFeatures: number,
+  maxBytes: number,
   setStatus: (text: string) => void,
   signal: AbortSignal,
 ): Promise<FeatureCollection> {
-  const size = tile.sizeBytes[String(year)] ?? 0;
-  const count = tile.featureCounts[String(year)] ?? 0;
-  const searchClip = clipBox();
-  const clip = searchClip && !clipCoversTile(searchClip, tile) ? searchClip : null;
-  if (!clip && count > maxFeatures) {
+  const area = state.searchBbox;
+  if (!area) throw new Error(tr("drawFirst", "Draw a box on the map first."));
+  const zone = zoneLabel(result.zone);
+  const reader = await untilAborted(zoneReader(result.zone.url), signal);
+  const plan = planFtwRead(reader.metadata, area);
+  if (plan.bytes > maxBytes) {
     throw new Error(
-      searchClip
-        ? tr(
-            "tooManyFieldsInArea",
-            "The search area covers all {{count}} fields of this tile (limit {{limit}}). Draw a smaller box, or download the GeoParquet.",
-            { count: formatCount(count), limit: formatCount(maxFeatures) },
-          )
-        : tr(
-            "tooManyFields",
-            "This tile has {{count}} fields (limit {{limit}}). Turn on “Only fields in the search area” with a smaller box, or download the GeoParquet.",
-            { count: formatCount(count), limit: formatCount(maxFeatures) },
-          ),
+      tr(
+        "tooMuchData",
+        "The search area reads about {{size}} from UTM zone {{zone}} (limit {{limit}}). Draw a smaller box.",
+        { size: formatBytes(plan.bytes), zone, limit: formatBytes(maxBytes) },
+      ),
     );
   }
   setStatus(
-    tr("readingTile", "Reading {{tile}} ({{size}})…", { tile: tile.id, size: formatBytes(size) }),
+    tr("readingZone", "Reading UTM zone {{zone}} (about {{size}})…", {
+      zone,
+      size: formatBytes(plan.bytes),
+    }),
   );
   try {
-    return await loadFtwTileFeatures(ftwTileParquetUrl(year, tile.id), {
-      clip,
+    return await loadFtwAreaFeatures(reader, area, {
       maxFeatures,
       signal,
-      onProgress: (rowsRead, totalRows) =>
+      onProgress: (done, total) =>
         setStatus(
-          tr("readingTileProgress", "Reading {{tile}}… {{percent}}%", {
-            tile: tile.id,
-            percent: Math.round((rowsRead / Math.max(1, totalRows)) * 100),
+          tr("readingZoneProgress", "Reading UTM zone {{zone}}… {{percent}}%", {
+            zone,
+            percent: Math.round((done / Math.max(1, total)) * 100),
           }),
         ),
     });
@@ -790,9 +822,9 @@ async function readTile(
     if (error instanceof FtwTooManyFieldsError) {
       throw new Error(
         tr(
-          "tooManyClipped",
-          "The search area holds more than {{limit}} fields in this tile. Draw a smaller box, or download the GeoParquet.",
-          { limit: formatCount(maxFeatures) },
+          "tooManyInArea",
+          "The search area holds more than {{limit}} fields in UTM zone {{zone}}. Draw a smaller box.",
+          { limit: formatCount(maxFeatures), zone },
         ),
       );
     }
@@ -800,56 +832,92 @@ async function readTile(
   }
 }
 
-/** Adds a tile's fields to the map as a GeoJSON layer styled like the archive. */
-async function addTileToMap(
-  tile: FtwGridTile,
+/** Adds a zone's fields in the search area as a GeoJSON layer styled like the archive. */
+async function addAreaToMap(
+  result: ZoneResult,
   year: number,
   setStatus: (text: string) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const collection = await readTile(tile, year, MAX_MAP_FEATURES, setStatus, signal);
+  const collection = await readArea(
+    result,
+    MAX_MAP_FEATURES,
+    MAX_MAP_READ_BYTES,
+    setStatus,
+    signal,
+  );
   signal.throwIfAborted();
   const app = appRef;
   if (!app) return;
+  const zone = zoneLabel(result.zone);
   if (collection.features.length === 0) {
-    setStatus(tr("noFieldsInArea", "No fields in the search area in {{tile}}.", { tile: tile.id }));
+    setStatus(tr("noFieldsInZone", "No fields in the search area in UTM zone {{zone}}.", { zone }));
     return;
   }
-  const name = tr("tileLayerName", "FTW fields {{tile}} {{year}}", { tile: tile.id, year });
+  const name = tr("zoneLayerName", "FTW fields UTM {{zone}} {{year}}", { zone, year });
   const layerId = app.addGeoJsonLayer(name, collection);
   const store = useAppStore.getState();
   const layer = store.layers.find((candidate) => candidate.id === layerId);
   if (layer) {
-    const filter = confidenceFilterExpression(state.threshold);
+    const filter = scoreFilterExpression(state.threshold);
     store.updateLayer(layerId, {
       style: fieldStyle(layer.style),
       filterExpression: filter,
       metadata: {
         ...layer.metadata,
-        sourceKind: TILE_FIELDS_SOURCE_KIND,
+        sourceKind: AREA_FIELDS_SOURCE_KIND,
         [FTW_FIELDS_METADATA_KEY]: year,
-        tileId: tile.id,
+        utmZone: result.zone.zone,
         attribution: ATTRIBUTION,
       },
     });
   }
   setStatus(
-    tr("tileAdded", "Added {{count}} fields from {{tile}}.", {
+    tr("zoneAdded", "Added {{count}} fields from UTM zone {{zone}}.", {
       count: formatCount(collection.features.length),
-      tile: tile.id,
+      zone,
     }),
   );
 }
 
-/** Saves a tile's source GeoParquet file. */
-async function downloadTileParquet(
-  tile: FtwGridTile,
+/**
+ * Saves a zone's whole GeoParquet file. Most zones run to gigabytes, more than
+ * a tab should hold; for those the URL is copied so DuckDB or GDAL can read
+ * the file in place.
+ */
+async function downloadZoneParquet(
+  result: ZoneResult,
   year: number,
   setStatus: (text: string) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const defaultName = `ftw-fields-${tile.id}-${year}.parquet`;
-  const blob = await fetchBlob(ftwTileParquetUrl(year, tile.id), signal, (loaded, total) =>
+  const zone = zoneLabel(result.zone);
+  const { url, sizeBytes } = result.zone;
+  if (sizeBytes > MAX_PARQUET_SAVE_BYTES) {
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(url);
+      copied = true;
+    } catch {
+      // No clipboard access (an insecure context or a denied permission).
+    }
+    setStatus(
+      copied
+        ? tr(
+            "parquetTooLarge",
+            "UTM zone {{zone}}'s file is {{size}}, too large to save from here. Its URL is copied to the clipboard; DuckDB or GDAL can read it in place.",
+            { zone, size: formatBytes(sizeBytes) },
+          )
+        : tr(
+            "parquetTooLargeUrl",
+            "UTM zone {{zone}}'s file is {{size}}, too large to save from here. DuckDB or GDAL can read it in place: {{url}}",
+            { zone, size: formatBytes(sizeBytes), url },
+          ),
+    );
+    return;
+  }
+  const defaultName = `ftw-fields-${year}-utm${zone}.parquet`;
+  const blob = await fetchBlob(url, signal, (loaded, total) =>
     setStatus(
       tr("downloadingProgress", "Downloading {{name}}… {{loaded}}{{total}}", {
         name: defaultName,
@@ -874,17 +942,22 @@ async function downloadTileParquet(
   );
 }
 
-/** Converts a tile's fields to GeoJSON and saves them. */
-async function downloadTileGeoJson(
-  tile: FtwGridTile,
+/** Converts a zone's fields in the search area to GeoJSON and saves them. */
+async function downloadAreaGeoJson(
+  result: ZoneResult,
   year: number,
   setStatus: (text: string) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const collection = await readTile(tile, year, MAX_GEOJSON_FEATURES, setStatus, signal);
+  const collection = await readArea(
+    result,
+    MAX_GEOJSON_FEATURES,
+    MAX_GEOJSON_READ_BYTES,
+    setStatus,
+    signal,
+  );
   signal.throwIfAborted();
-  const clipped = clipBox() !== null;
-  const defaultName = `ftw-fields-${tile.id}-${year}${clipped ? "-clip" : ""}.geojson`;
+  const defaultName = `ftw-fields-${year}-utm${zoneLabel(result.zone)}-clip.geojson`;
   // One JSON.stringify of up to a million polygons can pass V8's maximum
   // string length; a Blob joins per-feature strings without one big string.
   const parts: string[] = ['{"type":"FeatureCollection","features":['];
@@ -937,8 +1010,8 @@ function datasetInfo(): HTMLElement {
       "p",
       CSS.infoText,
       tr(
-        "infoText",
-        "Agricultural field boundaries predicted worldwide from Sentinel-2 imagery by the FTW PRUE model, with a per-field confidence score.",
+        "infoTextV2",
+        "Agricultural field boundaries predicted from Sentinel-2 quarterly mosaics by the Fields of the World model (2nd Edition): about 1.24 billion fields over nine years, each with a 0–100 score. These are model predictions, not surveyed or legal parcels.",
       ),
     ),
   );
@@ -946,15 +1019,15 @@ function datasetInfo(): HTMLElement {
   const add = (key: string, value: string): void => {
     grid.append(element("span", CSS.infoKey, key), element("span", "", value));
   };
-  add(tr("infoYears", "Years"), FTW_YEARS.join(", "));
+  add(tr("infoYears", "Years"), `${FTW_YEARS[0]}–${FTW_YEARS[FTW_YEARS.length - 1]}`);
   add(tr("infoCoverage", "Coverage"), tr("infoCoverageValue", "Global croplands"));
-  add(tr("infoTiles", "Download tiles"), tr("infoTilesValue", "1° × 1° GeoParquet"));
+  add(tr("infoFiles", "Downloads"), tr("infoFilesValue", "GeoParquet per UTM zone"));
   add(tr("infoLicense", "License"), FTW_LICENSE);
   box.append(grid);
   const links = element("div", CSS.links);
   links.append(
     link(tr("website", "Website"), FTW_WEBSITE_URL),
-    link(tr("inferenceApp", "Inference app"), FTW_APP_URL),
+    link(tr("interactiveMap", "Interactive map"), FTW_MAP_URL),
     link(tr("dataSource", "Data source"), FTW_DATA_URL),
     link(tr("paper", "Paper"), FTW_PAPER_URL),
   );
@@ -963,18 +1036,21 @@ function datasetInfo(): HTMLElement {
   return box;
 }
 
-/** A legend strip for the confidence colors. */
-function confidenceLegend(): HTMLElement {
+/**
+ * A legend strip for stepped color bins: one equal-width swatch per bin,
+ * labeled with the value it starts at.
+ */
+function binLegend(bins: ReadonlyArray<{ min: number; color: string }>, unit = ""): HTMLElement {
   const legend = element("div", CSS.legend);
   const ramp = element("div", CSS.legendRamp);
-  ramp.style.background = `linear-gradient(to right, ${FTW_CONFIDENCE_STOPS.map(
-    (stop) => `${stop.color} ${stop.percent}%`,
-  ).join(", ")})`;
+  const width = 100 / bins.length;
+  ramp.style.background = `linear-gradient(to right, ${bins
+    .map((bin, index) => `${bin.color} ${index * width}% ${(index + 1) * width}%`)
+    .join(", ")})`;
   const labels = element("div", CSS.legendLabels);
-  labels.append(
-    element("span", "", tr("legendLow", "Low confidence")),
-    element("span", "", tr("legendHigh", "High")),
-  );
+  for (const bin of bins) {
+    labels.append(element("span", "flex:1 1 0;text-align:start;", `${bin.min}${unit}`));
+  }
   legend.append(ramp, labels);
   return legend;
 }
@@ -1059,32 +1135,54 @@ function buildPanel(container: HTMLElement): () => void {
     const year = state.year;
     void runTask(async (signal) => {
       setStatus(tr("searching", "Searching…"));
-      const grid = await loadGrid();
-      if (signal.aborted || disposed) return;
-      const { tiles, total } = searchFtwGrid(grid, bbox, year);
+      const index = await untilAborted(loadIndex(), signal);
+      if (disposed) return;
+      const zones = searchFtwZones(index, bbox, year);
+      if (zones.length > MAX_SEARCH_ZONES) {
+        throw new Error(
+          tr(
+            "tooManyZones",
+            "The search area spans {{count}} UTM zones (limit {{limit}}). Zoom in or draw a smaller box.",
+            { count: zones.length, limit: MAX_SEARCH_ZONES },
+          ),
+        );
+      }
+      // Each zone's footer says which of its row groups overlap the area.
+      const results: ZoneResult[] = [];
+      for (const zone of zones) {
+        setStatus(
+          tr("openingZone", "Reading the index of UTM zone {{zone}}…", { zone: zoneLabel(zone) }),
+        );
+        const reader = await untilAborted(zoneReader(zone.url), signal);
+        if (disposed) return;
+        const plan = planFtwRead(reader.metadata, bbox);
+        if (plan.groups.length === 0 || !plan.extent) continue;
+        results.push({
+          id: `utm${zoneLabel(zone)}`,
+          zone,
+          readBytes: plan.bytes,
+          extent: plan.extent,
+        });
+      }
       state.searchBbox = bbox;
       state.searchYear = year;
-      state.results = tiles;
-      state.total = total;
+      state.results = results;
       state.selectedIds = [];
       const map = getControlMap(appRef);
       if (map) {
-        setFootprints(map, tiles, year);
+        setFootprints(map, results);
         setOutline(map, []);
       }
-      const fields = tiles.reduce((sum, tile) => sum + (tile.featureCounts[String(year)] ?? 0), 0);
       setStatus(
-        tiles.length === 0
-          ? tr("noResults", "No FTW tiles for {{year}} in this area.", { year })
-          : total > tiles.length
-            ? tr("showingSome", "Showing the {{shown}} tiles with the most fields, of {{total}}.", {
-                shown: tiles.length,
-                total,
-              })
-            : tr("showing", "Found {{count}} tiles with {{fields}} fields.", {
-                count: tiles.length,
-                fields: formatCount(fields),
-              }),
+        results.length === 0
+          ? tr(
+              "noFields",
+              "No FTW fields for {{year}} in this area. Only croplands were processed, so an empty area may simply not have been mapped.",
+              { year },
+            )
+          : tr("foundZones", "Found fields in UTM zone {{zones}}.", {
+              zones: results.map((result) => zoneLabel(result.zone)).join(", "),
+            }),
       );
     });
   };
@@ -1108,7 +1206,9 @@ function buildPanel(container: HTMLElement): () => void {
     if (!map) return;
     setOutline(
       map,
-      state.results.filter((tile) => state.selectedIds.includes(tile.id)).map((tile) => tile.bbox),
+      state.results
+        .filter((result) => state.selectedIds.includes(result.id))
+        .map((result) => result.extent),
     );
   };
 
@@ -1143,15 +1243,6 @@ function buildPanel(container: HTMLElement): () => void {
     // --- Map layers ---------------------------------------------------------
     const layersSection = element("div", CSS.section);
     layersSection.append(element("div", CSS.sectionTitle, tr("mapLayers", "Map layers")));
-    // Disabled while any task runs, like the row actions: a second click during
-    // addCogLayer would pass the duplicate check before the first layer lands.
-    const densityButton = button(
-      tr("addDensity", "Field density"),
-      CSS.secondary,
-      () => void runTask((signal) => addFieldDensity((text) => setStatus(text), signal)),
-      tr("addDensityTitle", "Add the global 500 m field-density raster, for zoomed-out views"),
-    );
-    densityButton.disabled = state.busy;
     const layerButtons = element("div", CSS.grid2);
     layerButtons.append(
       button(
@@ -1159,13 +1250,25 @@ function buildPanel(container: HTMLElement): () => void {
         CSS.secondary,
         () => addFieldBoundaries((text, error) => setStatus(text, error)),
         tr(
-          "addBoundariesTitle",
-          "Add the global field boundaries for the year, colored by confidence",
+          "addBoundariesHint",
+          "Add the year's field boundaries, colored by score. They are drawn from zoom 9.",
         ),
       ),
-      densityButton,
+      button(
+        tr("addDensity", "Field density"),
+        CSS.secondary,
+        () => addFieldDensity((text, error) => setStatus(text, error)),
+        tr(
+          "addDensityHint",
+          "Add the share of land covered by the year's fields, for views zoomed out past zoom 9",
+        ),
+      ),
     );
-    layersSection.append(layerButtons);
+    layersSection.append(
+      layerButtons,
+      element("div", CSS.label, tr("densityLegend", "Field density (% of area in fields)")),
+      binLegend(FTW_COVERAGE_BINS, "%"),
+    );
 
     const slider = element("input", CSS.slider);
     slider.type = "range";
@@ -1173,20 +1276,20 @@ function buildPanel(container: HTMLElement): () => void {
     slider.max = "100";
     slider.step = "1";
     slider.value = String(state.threshold);
-    const sliderValue = element("span", CSS.sliderValue, `${state.threshold}%`);
+    const sliderValue = element("span", CSS.sliderValue, String(state.threshold));
     slider.addEventListener("input", () => {
       state.threshold = Number(slider.value);
-      sliderValue.textContent = `${state.threshold}%`;
+      sliderValue.textContent = String(state.threshold);
       if (thresholdTimer) clearTimeout(thresholdTimer);
       thresholdTimer = setTimeout(() => {
         thresholdTimer = null;
         applyThreshold(state.threshold);
       }, THRESHOLD_DEBOUNCE_MS);
     });
-    slider.setAttribute("aria-label", tr("threshold", "Confidence threshold"));
+    slider.setAttribute("aria-label", tr("scoreThreshold", "Score threshold"));
     const sliderRow = element("div", CSS.sliderRow);
     sliderRow.append(slider, sliderValue);
-    const thresholdLabel = element("div", CSS.label, tr("threshold", "Confidence threshold"));
+    const thresholdLabel = element("div", CSS.label, tr("scoreThreshold", "Score threshold"));
     thresholdLabel.append(sliderRow);
     layersSection.append(
       thresholdLabel,
@@ -1194,11 +1297,11 @@ function buildPanel(container: HTMLElement): () => void {
         "p",
         CSS.hint,
         tr(
-          "thresholdHint",
-          "Shows only fields the model is at least this confident about, on every FTW field layer. Downloads always include every field.",
+          "scoreThresholdHint",
+          "Hides fields scoring below this on every FTW field layer. The score is the model's mean field probability × 100, a ranking rather than a calibrated probability. Downloads always include every field.",
         ),
       ),
-      confidenceLegend(),
+      binLegend(FTW_SCORE_BINS),
     );
     body.append(layersSection);
 
@@ -1250,21 +1353,18 @@ function buildPanel(container: HTMLElement): () => void {
         );
       }
     }
-    const clip = element("input");
-    clip.type = "checkbox";
-    clip.checked = state.clipToSearch;
-    clip.addEventListener("change", () => {
-      state.clipToSearch = clip.checked;
-    });
-    const clipLabel = element("label", CSS.checkbox);
-    clipLabel.title = tr(
-      "clipTitle",
-      "Add to map and GeoJSON keep only fields overlapping the search area; GeoParquet is always the whole tile",
+    searchSection.append(
+      element(
+        "p",
+        CSS.hint,
+        tr(
+          "searchHint",
+          "Fields are read straight from each UTM zone's GeoParquet file, fetching only the parts that overlap the search area.",
+        ),
+      ),
     );
-    clipLabel.append(clip, tr("clip", "Only fields in the search area"));
-    searchSection.append(clipLabel);
     const searchButton = button(
-      state.busy ? tr("working", "Working…") : tr("search", "Search tiles"),
+      state.busy ? tr("working", "Working…") : tr("searchArea", "Search area"),
       CSS.primary,
       search,
     );
@@ -1278,22 +1378,25 @@ function buildPanel(container: HTMLElement): () => void {
     // --- Results ------------------------------------------------------------
     if (state.results.length > 0) {
       const year = state.searchYear;
-      const key = String(year);
       const statusSetter = (text: string): void => setStatus(text);
       const list = element("div", CSS.list);
-      for (const tile of state.results) {
+      for (const result of state.results) {
         const rowElement = element(
           "div",
-          CSS.row + (state.selectedIds.includes(tile.id) ? CSS.rowSelected : ""),
+          CSS.row + (state.selectedIds.includes(result.id) ? CSS.rowSelected : ""),
         );
         rowElement.append(
-          element("div", CSS.rowTitle, `${tile.id} · ${year}`),
+          element(
+            "div",
+            CSS.rowTitle,
+            tr("rowTitle", "UTM zone {{zone}} · {{year}}", { zone: zoneLabel(result.zone), year }),
+          ),
           element(
             "div",
             CSS.rowSubtitle,
-            tr("rowSubtitle", "{{count}} fields · {{size}}", {
-              count: formatCount(tile.featureCounts[key] ?? 0),
-              size: formatBytes(tile.sizeBytes[key] ?? 0),
+            tr("rowDetail", "Reads about {{read}} · zone file {{file}}", {
+              read: formatBytes(result.readBytes),
+              file: formatBytes(result.zone.sizeBytes),
             }),
           ),
         );
@@ -1301,33 +1404,39 @@ function buildPanel(container: HTMLElement): () => void {
         actions.append(
           taskButton(
             tr("addToMap", "Add to map"),
-            (signal) => addTileToMap(tile, year, statusSetter, signal),
-            tr("addToMapTitle", "Add this tile's fields to the map as an editable vector layer"),
-          ),
-          taskButton(
-            tr("downloadParquet", "GeoParquet"),
-            (signal) => downloadTileParquet(tile, year, statusSetter, signal),
-            tr("downloadParquetTitle", "Save this tile's source GeoParquet file"),
+            (signal) => addAreaToMap(result, year, statusSetter, signal),
+            tr(
+              "addToMapHint",
+              "Add this zone's fields in the search area to the map as an editable vector layer",
+            ),
           ),
           taskButton(
             tr("downloadGeoJson", "GeoJSON"),
-            (signal) => downloadTileGeoJson(tile, year, statusSetter, signal),
-            tr("downloadGeoJsonTitle", "Save this tile's fields as GeoJSON"),
+            (signal) => downloadAreaGeoJson(result, year, statusSetter, signal),
+            tr("downloadGeoJsonHint", "Save this zone's fields in the search area as GeoJSON"),
           ),
-          button(tr("zoom", "Zoom"), CSS.action, () => appRef?.fitBounds?.(tile.bbox)),
+          taskButton(
+            tr("downloadParquet", "GeoParquet"),
+            (signal) => downloadZoneParquet(result, year, statusSetter, signal),
+            tr(
+              "downloadParquetHint",
+              "Save this UTM zone's whole GeoParquet file, or copy its URL when it is too large to save",
+            ),
+          ),
+          button(tr("zoom", "Zoom"), CSS.action, () => appRef?.fitBounds?.(result.extent)),
         );
         rowElement.append(actions);
         rowElement.addEventListener("mouseenter", () => {
           const map = getControlMap(appRef);
-          if (map) setOutline(map, [tile.bbox]);
+          if (map) setOutline(map, [result.extent]);
         });
         rowElement.addEventListener("mouseleave", showSelection);
         // Selecting a row from the list; its buttons act without selecting.
         rowElement.addEventListener("click", (event) => {
           if ((event.target as HTMLElement).closest("button")) return;
-          select([tile.id], false);
+          select([result.id], false);
         });
-        rowElements.set(tile.id, rowElement);
+        rowElements.set(result.id, rowElement);
         list.append(rowElement);
       }
       body.append(list);
@@ -1380,16 +1489,17 @@ function clearOverlays(app: GeoLibreAppAPI): void {
 }
 
 /**
- * Fields of the World plugin: the FTW global agricultural field boundaries
- * (2024 and 2025) on the map, colored and filtered by the model's confidence,
- * plus the global field-density raster; a search of the 1° download grid by
- * map view or drawn box; and per-tile loading onto the map and GeoParquet or
- * GeoJSON downloads.
+ * Fields of the World plugin: the FTW 2nd Edition global agricultural field
+ * boundaries (2017–2025) on the map, colored and filtered by the model's
+ * score, plus per-year field-density cells for zoomed-out views; a search of
+ * the per-UTM-zone GeoParquet files by map view or drawn box; and loading the
+ * area's fields onto the map or into GeoJSON, reading only the row groups that
+ * overlap it.
  */
 export const maplibreFieldsOfTheWorldPlugin: GeoLibrePlugin = {
   id: FIELDS_OF_THE_WORLD_PLUGIN_ID,
   name: "Fields of the World",
-  version: "0.1.0",
+  version: "0.2.0",
   // The field layers are PMTiles and GeoJSON store layers and the footprints
   // are Style Spec sources and layers, so both 2D engines host them, and the
   // host's control map draws them on ArcGIS.
