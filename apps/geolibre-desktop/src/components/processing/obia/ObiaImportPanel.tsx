@@ -1,5 +1,6 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
+  OBIA_SEGMENT_ID_FIELD,
   applyObjectFeatures,
   type ObiaFeatureTable,
   type ObiaSampleRole,
@@ -29,9 +30,17 @@ import { useObiaSession } from "../../../lib/obia/obia-session";
 import { ObiaStatus } from "./ObiaFields";
 import { labelStylePatch } from "./ObiaTrainStep";
 
-/** Geometry types a layer's features have. */
-function geometryKinds(layer: GeoLibreLayer): Set<string> {
-  return new Set((layer.geojson?.features ?? []).map((f) => f.geometry?.type ?? ""));
+/** Whether a layer has a polygon feature (stops at the first). */
+function hasPolygons(layer: GeoLibreLayer): boolean {
+  return (layer.geojson?.features ?? []).some((f) => {
+    const type = f.geometry?.type;
+    return (
+      type === "Polygon" ||
+      type === "MultiPolygon" ||
+      (f.geometry?.type === "GeometryCollection" &&
+        f.geometry.geometries.some((g) => g.type.endsWith("Polygon")))
+    );
+  });
 }
 
 /** Property names of a layer's first features. */
@@ -72,9 +81,7 @@ export function ObiaImportPanel(): ReactElement {
     () => layers.filter((layer) => layer.geojson && layer.metadata.obiaRole !== "objects"),
     [layers],
   );
-  const polygonLayers = vectorLayers.filter((layer) =>
-    [...geometryKinds(layer)].some((kind) => kind.endsWith("Polygon")),
-  );
+  const polygonLayers = useMemo(() => vectorLayers.filter(hasPolygons), [vectorLayers]);
   const [objectsFrom, setObjectsFrom] = useState("");
   const [idField, setIdField] = useState("");
   const [samplesFrom, setSamplesFrom] = useState("");
@@ -174,8 +181,9 @@ export function ObiaImportPanel(): ReactElement {
         source,
         current.area,
       );
-      const classes = withClasses(state.classes, labeled.classNames);
-      state.setClasses(classes);
+      // The classes as they are now: they may have changed during the awaits.
+      const classes = withClasses(useObiaSession.getState().classes, labeled.classNames);
+      useObiaSession.getState().setClasses(classes);
       updateLayer(objects.id, {
         geojson: labeled.objects,
         style: labelStylePatch(objects, classes),
@@ -216,10 +224,20 @@ export function ObiaImportPanel(): ReactElement {
         ...(before?.fields ?? []).filter((field) => !imported.fields.includes(field)),
         ...imported.fields,
       ];
-      const table: ObiaFeatureTable = { fields, rows: new Map() };
-      for (const id of new Set([...(before?.rows.keys() ?? []), ...imported.rows.keys()])) {
-        table.rows.set(id, { ...before?.rows.get(id), ...imported.rows.get(id) });
+      // Only the objects on the layer: rows for other ids would join nothing.
+      const ids = new Set<number>();
+      for (const feature of objects.geojson.features) {
+        const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
+        if (Number.isInteger(id) && id > 0) ids.add(id);
       }
+      const table: ObiaFeatureTable = { fields, rows: new Map() };
+      let matched = 0;
+      for (const id of ids) {
+        const row = imported.rows.get(id);
+        if (row) matched += 1;
+        if (row || before?.rows.has(id)) table.rows.set(id, { ...before?.rows.get(id), ...row });
+      }
+      if (!matched) throw new ObiaImportError("no-match", "No row matches an object.");
       updateLayer(objects.id, {
         geojson: applyObjectFeatures(objects.geojson, table, before?.fields ?? []),
       });
@@ -238,10 +256,14 @@ export function ObiaImportPanel(): ReactElement {
           finishedAt: new Date().toISOString(),
         });
       }
-      return t("obia.import.featuresDone", {
+      const done = t("obia.import.featuresDone", {
         count: imported.fields.length,
-        objects: imported.rows.size,
+        objects: matched,
       });
+      const unmatched = imported.rows.size - matched;
+      return unmatched
+        ? `${done} ${t("obia.import.featuresUnmatched", { count: unmatched })}`
+        : done;
     });
 
   const importMapping = () =>
@@ -326,7 +348,10 @@ export function ObiaImportPanel(): ReactElement {
               <Select
                 id="obia-import-objects-layer"
                 value={objectsFrom}
-                onChange={(event) => setObjectsFrom(event.target.value)}
+                onChange={(event) => {
+                  setObjectsFrom(event.target.value);
+                  setIdField("");
+                }}
               >
                 <option value="">{t("obia.import.chooseLayer")}</option>
                 {polygonLayers.map((layer) => (
@@ -365,7 +390,11 @@ export function ObiaImportPanel(): ReactElement {
               <Select
                 id="obia-import-samples-layer"
                 value={samplesFrom}
-                onChange={(event) => setSamplesFrom(event.target.value)}
+                onChange={(event) => {
+                  setSamplesFrom(event.target.value);
+                  setClassField("");
+                  setRoleField("");
+                }}
               >
                 <option value="">{t("obia.import.chooseLayer")}</option>
                 {vectorLayers.map((layer) => (

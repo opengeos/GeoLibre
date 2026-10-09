@@ -132,6 +132,8 @@ export async function buildCoarserLevel(
     : { fromLevel: level, scale, bands };
   const next: ObiaSegmentationRun = {
     ...segmentation,
+    // A coarser level is built here, even from imported objects.
+    imported: undefined,
     labels: parentLabels,
     objectsLayerId: "",
     objectCount,

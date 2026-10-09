@@ -142,11 +142,13 @@ files to the map first; they then appear in the layer lists.
 - **Feature table**: a CSV with a `segment_id` column and one column per
   feature, such as exported object features. They join the measured features
   (replacing any of the same name), so rules and the classifier can use them.
+  Rows whose `segment_id` matches no object are left out, and the step says
+  how many.
 - **Level mapping**: a CSV of `child_id,parent_id` rows (by those headers, or
   child then parent in the first two columns; a file with no header row works
   too) builds the level above the current one from the mapping instead of by
   merging. Objects the mapping leaves out become their own parent, and the step
-  says how many.
+  says how many; a child given two different parents is rejected.
 
 ## 2. Measure
 

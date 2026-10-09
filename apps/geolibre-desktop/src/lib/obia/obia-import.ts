@@ -33,7 +33,9 @@ export class ObiaImportError extends Error {
     | "bad-file"
     | "no-ids"
     | "dup-ids"
-    | "big-ids";
+    | "big-ids"
+    | "no-match"
+    | "mapping-conflict";
 
   constructor(code: ObiaImportError["code"], message: string) {
     super(message);
@@ -95,7 +97,7 @@ export interface ObiaImportedObjects {
   height: number;
   area: ObiaReadArea;
   pixelSize: number;
-  /** Polygons that covered no pixel center and were left out. */
+  /** Features left out: no polygon, or covering no pixel center. */
   skipped: number;
 }
 
@@ -132,9 +134,13 @@ export async function rasterizeObjects(
   const project = gridTransform(info, plan.area);
 
   const kept: { id: number; feature: Feature }[] = [];
+  let noPolygon = 0;
   const seen = new Set<number>();
   polygons.features.forEach((feature, index) => {
-    if (!polygonsOf(feature.geometry).length) return;
+    if (!polygonsOf(feature.geometry).length) {
+      noPolygon += 1;
+      return;
+    }
     const raw = idField ? feature.properties?.[idField] : index + 1;
     const id = cellNumber(raw);
     if (!Number.isInteger(id) || id < 1) {
@@ -193,7 +199,7 @@ export async function rasterizeObjects(
     height: grid.height,
     area: plan.area,
     pixelSize: plan.pixelSize,
-    skipped: kept.length - burned.size,
+    skipped: noPolygon + kept.length - burned.size,
   };
 }
 
@@ -322,8 +328,9 @@ const PALETTE = [
  * @param source The image the objects belong to.
  * @param area The area the labels were read over.
  * @returns The labeled objects, the classes the samples name, how many
- *   samples matched an object or missed (including a polygon with no area),
- *   and how many objects had samples that disagree.
+ *   objects were labeled (`matched`), how many samples missed every object
+ *   (including a polygon with no area), and how many objects had samples that
+ *   disagree.
  */
 export async function labelFromSamples(
   samples: FeatureCollection,
@@ -345,12 +352,11 @@ export async function labelFromSamples(
   if (!info) throw new ObiaImportError("no-image", "Could not read the image.");
   const grid: ObiaLabelGrid = await decodeLabelGrid(labels);
   const project = gridTransform(info, area ?? { level: 0, window: wholeImageWindow(info) });
-  const groups = new Map<string, Set<number>>();
+
   const classNames = new Set<string>();
   // Each object's first label, so a later disagreeing sample can't override it.
-  const labelOf = new Map<number, string>();
+  const labelOf = new Map<number, { className: string; role: ObiaSampleRole }>();
   const conflicted = new Set<number>();
-  let matched = 0;
   let missed = 0;
   for (const sample of samples.features) {
     const name = String(sample.properties?.[classField] ?? "").trim();
@@ -376,29 +382,34 @@ export async function labelFromSamples(
         missed += 1;
         continue;
       }
-      matched += 1;
-      const key = `${name}\u0000${sampleRole}`;
       const first = labelOf.get(id);
-      if (first !== undefined) {
-        if (first !== key) conflicted.add(id);
+      if (first) {
+        if (first.className !== name || first.role !== sampleRole) conflicted.add(id);
         continue;
       }
-      labelOf.set(id, key);
+      labelOf.set(id, { className: name, role: sampleRole });
       classNames.add(name);
-      let set = groups.get(key);
-      if (!set) groups.set(key, (set = new Set()));
-      set.add(id);
     }
   }
+  // The objects by class, then role, to label each group at once.
+  const groups = new Map<string, Map<ObiaSampleRole, Set<number>>>();
+  for (const [id, { className, role: sampleRole }] of labelOf) {
+    let byRole = groups.get(className);
+    if (!byRole) groups.set(className, (byRole = new Map()));
+    let ids = byRole.get(sampleRole);
+    if (!ids) byRole.set(sampleRole, (ids = new Set()));
+    ids.add(id);
+  }
   let labeled = objects;
-  for (const [key, ids] of groups) {
-    const [className, sampleRole] = key.split("\u0000") as [string, ObiaSampleRole];
-    labeled = labelObjects(labeled, ids, { className, role: sampleRole });
+  for (const [className, byRole] of groups) {
+    for (const [sampleRole, ids] of byRole) {
+      labeled = labelObjects(labeled, ids, { className, role: sampleRole });
+    }
   }
   return {
     objects: labeled,
     classNames: [...classNames],
-    matched,
+    matched: labelOf.size,
     missed,
     conflicts: conflicted.size,
   };
@@ -478,8 +489,8 @@ export function parseFeatureTable(text: string): ObiaFeatureTable {
  * the first two are child then parent; a file whose first row is numbers has
  * no header.
  *
- * @throws ObiaImportError when no row maps a child to a parent, or an id is
- *   over {@link OBIA_MAX_IMPORT_ID}.
+ * @throws ObiaImportError when no row maps a child to a parent, a child has
+ *   two parents, or an id is over {@link OBIA_MAX_IMPORT_ID}.
  */
 export function parseLevelMapping(text: string): Map<number, number> {
   const csv = parseObiaCsv(text.trim());
@@ -498,6 +509,13 @@ export function parseLevelMapping(text: string): Map<number, number> {
     if (!(Number.isInteger(c) && Number.isInteger(p) && c > 0 && p > 0)) continue;
     if (c > OBIA_MAX_IMPORT_ID || p > OBIA_MAX_IMPORT_ID) {
       throw new ObiaImportError("big-ids", `Object ids must be at most ${OBIA_MAX_IMPORT_ID}.`);
+    }
+    const before = mapping.get(c);
+    if (before !== undefined && before !== p) {
+      throw new ObiaImportError(
+        "mapping-conflict",
+        `Object ${c} has two parents (${before} and ${p}).`,
+      );
     }
     mapping.set(c, p);
   }

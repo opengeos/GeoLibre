@@ -7557,16 +7557,18 @@
       "classSchema": "Class list (JSON or CSV)…",
       "featureTable": "Feature table (CSV)…",
       "levelMapping": "Level mapping (CSV)…",
-      "objectsDone_one": "Imported {{count}} object ({{skipped}} too small or outside the image).",
-      "objectsDone_other": "Imported {{count}} objects ({{skipped}} too small or outside the image).",
+      "objectsDone_one": "Imported {{count}} object ({{skipped}} left out: not a polygon, too small or outside the image).",
+      "objectsDone_other": "Imported {{count}} objects ({{skipped}} left out: not a polygon, too small or outside the image).",
       "samplesDone_one": "Labeled {{count}} object from the samples ({{missed}} samples outside the objects).",
-      "samplesDone_other": "Labeled objects from {{count}} samples ({{missed}} samples outside the objects).",
+      "samplesDone_other": "Labeled {{count}} objects from the samples ({{missed}} samples outside the objects).",
       "samplesConflicts_one": "{{count}} object had conflicting samples and kept the first one's label.",
       "samplesConflicts_other": "{{count}} objects had conflicting samples and kept the first one's label.",
       "classesDone_one": "Imported {{count}} class.",
       "classesDone_other": "Imported {{count}} classes.",
       "featuresDone_one": "Imported {{count}} feature for {{objects}} objects.",
       "featuresDone_other": "Imported {{count}} features for {{objects}} objects.",
+      "featuresUnmatched_one": "{{count}} row matched no object.",
+      "featuresUnmatched_other": "{{count}} rows matched no object.",
       "mappingDone_one": "Built level {{level}} from the mapping: {{count}} object.",
       "mappingDone_other": "Built level {{level}} from the mapping: {{count}} objects.",
       "mappingUnmapped_one": "{{count}} object had no parent in the file and became its own.",
@@ -7583,7 +7585,9 @@
         "no-ids": "The id field must hold positive whole numbers.",
         "no-image": "Could not read the image.",
         "dup-ids": "The id field must hold a different number for each object.",
-        "big-ids": "Object ids must be at most 16,777,216: renumber them first."
+        "big-ids": "Object ids must be at most 16,777,216: renumber them first.",
+        "no-match": "No row of the table matches an object's segment_id.",
+        "mapping-conflict": "The mapping gives an object two different parents."
       }
     },
     "context": {

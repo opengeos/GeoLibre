@@ -74,6 +74,12 @@ describe("OBIA import", () => {
       () => parseLevelMapping(`child,parent\n${2 ** 24 + 1},1\n`),
       (err: unknown) => err instanceof ObiaImportError && err.code === "big-ids",
     );
+    assert.throws(
+      () => parseLevelMapping("child,parent\n1,5\n1,6\n"),
+      (err: unknown) => err instanceof ObiaImportError && err.code === "mapping-conflict",
+    );
+    // The same pair twice is fine.
+    assert.deepEqual([...parseLevelMapping("child,parent\n1,5\n1,5\n")], [[1, 5]]);
   });
 
   it("puts a sample point inside a concave or holed polygon", () => {

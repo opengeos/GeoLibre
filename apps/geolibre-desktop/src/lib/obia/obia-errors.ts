@@ -1,6 +1,7 @@
 import { OBIA_RULESET_MAX_STEPS, ObiaError, ObiaRulesetError } from "@geolibre/processing";
 import type { TFunction } from "i18next";
 import { ObiaContextError } from "./obia-context";
+import { ObiaLevelError } from "./obia-levels";
 import { ObiaRestoreError } from "./obia-persistence";
 
 const CONTEXT_ERRORS = {
@@ -8,6 +9,14 @@ const CONTEXT_ERRORS = {
   "no-links": "obia.context.error.noLinks",
   "no-sizes": "obia.context.error.noSizes",
   "no-above": "obia.context.error.noAbove",
+} as const;
+
+const LEVEL_ERRORS = {
+  "no-features": "obia.levels.error.noFeatures",
+  "too-large": "obia.levels.error.tooLarge",
+  "not-top": "obia.levels.error.notTop",
+  "too-deep": "obia.levels.error.tooDeep",
+  "bad-scale": "obia.levels.error.badScale",
 } as const;
 
 /**
@@ -42,6 +51,9 @@ export function obiaErrorMessage(err: unknown, t: TFunction, fallback: string): 
   }
   if (err instanceof ObiaRulesetError) {
     return t("obia.ruleset.tooLong", { max: OBIA_RULESET_MAX_STEPS.toLocaleString() });
+  }
+  if (err instanceof ObiaLevelError) {
+    return t(LEVEL_ERRORS[err.code]);
   }
   if (err instanceof ObiaContextError) {
     return t(CONTEXT_ERRORS[err.code]);
