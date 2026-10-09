@@ -5,7 +5,6 @@ import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
 import { useAppStore } from "@geolibre/core";
 import {
-  classifiedLevelAbove,
   computeContextFeatures,
   inheritClasses,
 } from "../apps/geolibre-desktop/src/lib/obia/obia-context";
@@ -111,8 +110,10 @@ beforeEach(() => {
     features: {
       segmentationAt: `${id}-at`,
       table: {
-        fields: ["mean_b1", "area_px", "parent_old"],
-        rows: new Map([1, 2, 3, 4].map((n) => [n, { mean_b1: n * 10, area_px: 1, parent_old: 0 }])),
+        fields: ["mean_b1", "area_px", "parent_mean_b9"],
+        rows: new Map(
+          [1, 2, 3, 4].map((n) => [n, { mean_b1: n * 10, area_px: 1, parent_mean_b9: 0 }]),
+        ),
       },
       options: { spectral: true, shape: false, context: false },
       calls: [],
@@ -126,7 +127,6 @@ beforeEach(() => {
 
 describe("OBIA context features and class inheritance", () => {
   it("inherits each object's parent class", () => {
-    assert.equal(classifiedLevelAbove(), 2);
     const result = inheritClasses("unclassified");
     assert.deepEqual(
       [...result.predictions],
@@ -142,7 +142,7 @@ describe("OBIA context features and class inheritance", () => {
 
   it("adds neighbor contrast and parent features, replacing earlier context fields", async () => {
     const { table, added } = await computeContextFeatures();
-    assert.ok(!table.fields.includes("parent_old"), "earlier context fields are replaced");
+    assert.ok(!table.fields.includes("parent_mean_b9"), "earlier context fields are replaced");
     assert.deepEqual(added, [
       "nb_contrast_b1",
       "parent_mean_b1",
@@ -155,5 +155,29 @@ describe("OBIA context features and class inheritance", () => {
     assert.equal(table.rows.get(3)?.parent_mean_b1, 85);
     assert.equal(table.rows.get(3)?.parent_is_trees_shrubs, 1);
     assert.equal(table.rows.get(1)?.mean_b1, 10, "measured fields are kept");
+  });
+});
+
+describe("OBIA context features and the classification", () => {
+  it("clears a classification that reads a field the new table drops", () => {
+    const session = useObiaSession.getState();
+    session.setClassification({
+      predictions: new Map([[1, "water"]]),
+      fields: ["parent_is_water"],
+      imputed: {},
+      trainingCount: 1,
+      call: { tool: "x", args: [] },
+      settings: { ...emptyObiaSession().classifier, method: "random-forest" },
+      featuresAt: "level1-features",
+      env,
+      finishedAt: "now",
+    });
+    const call = { tool: "obia/context", args: [] };
+    useObiaSession
+      .getState()
+      .extendFeatures({ fields: ["mean_b1", "parent_is_water"], rows: new Map() }, call);
+    assert.ok(useObiaSession.getState().classification, "kept while its fields remain");
+    useObiaSession.getState().extendFeatures({ fields: ["mean_b1"], rows: new Map() }, call);
+    assert.equal(useObiaSession.getState().classification, null);
   });
 });

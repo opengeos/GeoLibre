@@ -374,9 +374,22 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
       levels: s.levels.filter((record) => record.level < s.level),
     })),
   extendFeatures: (table, call) =>
-    set((s) =>
-      s.features ? { features: { ...s.features, table, calls: [...s.features.calls, call] } } : {},
-    ),
+    set((s) => {
+      if (!s.features) return {};
+      // A classification reading a field the new table no longer has (a
+      // context field of a renamed class, say) is stale.
+      const cls = s.classification;
+      const reads = !cls
+        ? []
+        : cls.settings.method === "rules"
+          ? cls.settings.rules.map((rule) => rule.field)
+          : cls.fields;
+      const stale = reads.some((field) => !table.fields.includes(field));
+      return {
+        features: { ...s.features, table, calls: [...s.features.calls, call] },
+        ...(stale ? { classification: null } : {}),
+      };
+    }),
   setClasses: (classes) => set({ classes }),
   setLabelRole: (labelRole) => set({ labelRole }),
   setClassifier: (patch) => set((s) => ({ classifier: { ...s.classifier, ...patch } })),

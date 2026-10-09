@@ -7579,6 +7579,14 @@
         "no-ids": "The id field must hold distinct positive whole numbers."
       }
     },
+    "context": {
+      "error": {
+        "noFeatures": "Measure the objects first.",
+        "noLinks": "This level's objects have no links to their parents (obia_parent): build the level above again.",
+        "noSizes": "Class shares need the size of the level below's objects: measure it with spectral or shape features.",
+        "noAbove": "Classify the level above first."
+      }
+    },
     "train": {
       "hint": "Add a class for each land cover, select objects on the map (selection tools) or in the attribute table, then click the tag button on a class to label them. Label validation samples separately, or hold out part of the training samples below. Each Split holds out a share of the training samples still left, so splitting again moves more.",
       "role": "Label as",
@@ -7713,7 +7721,8 @@
         "tooLarge": "The image is over the pixel limit even at its coarsest overview. Clip it first."
       },
       "levelOneOnly": "Applying to other images uses level 1: switch to it under Levels.",
-      "inheritUnsupported": "Inherited classes come from a level above, which other images do not have: classify with a random forest or rules to apply the workflow."
+      "inheritUnsupported": "Inherited classes come from a level above, which other images do not have: classify with a random forest or rules to apply the workflow.",
+      "contextUnsupported": "The classifier uses context features (from the object hierarchy), which other images do not have: classify without them to apply the workflow."
     },
     "provenance": {
       "title": "Provenance",
