@@ -23,6 +23,7 @@ To collect supported dataset links from a catalog or other webpage and open seve
 | **Encoded Polyline** | Loads Google (precision 5) or Valhalla/Mapbox (precision 6) encoded polyline strings from pasted text or uploaded text files. |
 | **MBTiles Layer** | Loads a local MBTiles tile archive (desktop app). |
 | **OSM PBF Layer** | Reads an OpenStreetMap `.osm.pbf` extract and adds the features you select from it. |
+| **ICESat-2 / GEDI** | Spaceborne LiDAR footprints from an ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) HDF5 granule, from a local file or the sample granules on Source Cooperative, added as a point layer colored by the product's main field. Plot a field against `distance_km` in the attribute table's Charts for an along-track profile. |
 
 A layer the Add Vector panel loads in GeoJSON mode, with up to 100,000 features, is handed over to GeoLibre once it has loaded, so it gets the same Style panel as a file dropped on the map: joins, virtual fields, the attribute form, popup design, editor tracking, diagrams, and geometry generators included. It then leaves the panel's own layer list and is managed from the Layers panel. The panel keeps the layers it draws as tiles, streamed GeoParquet, larger layers, and KML/KMZ layers with placemark icons; for those, the Style panel shows only the settings the panel can draw. A saved project still reopens a handed-over layer from its URL or file path, and a URL-backed one refreshes the same way.
 
@@ -123,7 +124,6 @@ were rendered before the choice existed and cannot honor it.
 | Item | Notes |
 | --- | --- |
 | **LiDAR Layer** | Point-cloud visualization, rendered with deck.gl. |
-| **ICESat-2 / GEDI** | Spaceborne LiDAR footprints from a local ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) HDF5 granule, added as a point layer colored by the product's main field. Plot a field against `distance_km` in the attribute table's Charts for an along-track profile. |
 | **Gaussian Splatting** | Gaussian splat scenes. |
 | **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. Includes a Google Photorealistic 3D Tiles sample that reads `VITE_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` from the runtime environment. |
 | **Cesium Ion Asset** | Adds a 3D Tiles tileset or imagery from Cesium ion by asset ID, using your Cesium ion token. Cesium engine only; the entry is disabled on the 2D engines. |

@@ -97,6 +97,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   },
   { id: "mbtiles", section: "files", labelKey: "toolbar.layerType.mbtiles", tier: "basic" },
   { id: "osm-pbf", section: "files", labelKey: "toolbar.item.osmPbfLayer", tier: "advanced" },
+  {
+    id: "spaceborne-lidar",
+    section: "files",
+    labelKey: "toolbar.item.spaceborneLidarLayer",
+    tier: "advanced",
+  },
   // Web services
   { id: "xyz", section: "webServices", labelKey: "toolbar.layerType.xyz", tier: "basic" },
   { id: "wcs", section: "webServices", labelKey: "toolbar.layerType.wcs", tier: "basic" },
@@ -155,12 +161,6 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "netcdf", section: "cloud", labelKey: "toolbar.item.netcdfHdf", tier: "advanced" },
   // 3D layers
   { id: "lidar", section: "threeD", labelKey: "toolbar.item.lidarLayer", tier: "advanced" },
-  {
-    id: "spaceborne-lidar",
-    section: "threeD",
-    labelKey: "toolbar.item.spaceborneLidarLayer",
-    tier: "advanced",
-  },
   { id: "splatting", section: "threeD", labelKey: "toolbar.item.splattingLayer", tier: "advanced" },
   {
     id: "3d-tiles",

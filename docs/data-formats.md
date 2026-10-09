@@ -25,6 +25,7 @@ workflow and [Projects](user-guide/projects.md) for saving and reopening data.
 | AutoCAD | `.dxf`, `.dwg` | CAD (DXF/DWG) Layer | Select drawing layers and the source CRS. Coordinate Z values are kept and rendered in 3D unless you turn that off. |
 | Esri File Geodatabase | `.gdb` folder | File Geodatabase (GDB) | Desktop folder access; select a feature class. |
 | OpenStreetMap PBF | `.osm.pbf` | OSM PBF Layer | Reads an extract in the browser and adds the selected features. |
+| ICESat-2 / GEDI footprints | `.h5` granules of ICESat-2 ATL06/ATL08 and GEDI L2A/L2B/L4A | ICESat-2 / GEDI | Read in the browser into a point layer. Choose beams and fields, apply the product's quality filter, limit the read to the current view, and cap the point count; each footprint carries its beam, acquisition time and along-track distance. Download granules from NASA Earthdata, or load a sample granule from Source Cooperative. Large layers are stored inline in the project, which can pause autosave. |
 | Encoded polyline | Encoded strings or text files | Encoded Polyline | Precision 5 and 6, including Google, OSRM, Valhalla, and Mapbox conventions. |
 
 Vector import generally reprojects a known source CRS to EPSG:4326. Multi-file
@@ -74,7 +75,6 @@ are described in [Web Services](user-guide/web-services.md) and
 | Source | How to add it | Notes |
 | --- | --- | --- |
 | LiDAR point clouds | LiDAR Layer | LAS/LAZ and cloud-optimized point-cloud data. The layer menu exports a cloud to LAS, LAZ or COPC, and Whitebox LiDAR tool outputs load as new point cloud layers. LAS, LAZ and COPC files can also be dropped on the map. |
-| ICESat-2 and GEDI footprints | ICESat-2 / GEDI | Local HDF5 granules of ICESat-2 ATL06 and ATL08 and GEDI L2A, L2B and L4A, read in the browser into a point layer. Choose beams and fields, apply the product's quality flag, limit the read to the current view, and cap the point count; each footprint carries its beam, acquisition time and along-track distance. Download granules from NASA Earthdata first. Large layers are stored inline in the project, which can pause autosave. |
 | Gaussian splats | Gaussian Splatting | Point-based scene rendering. |
 | OGC 3D Tiles | 3D Tiles Layer | Streamed 3D tilesets; authenticated tilesets can use request headers. |
 | ArcGIS I3S | 3D Tiles Layer (SceneServer URL) | Integrated Mesh and 3D Object scene layers. |

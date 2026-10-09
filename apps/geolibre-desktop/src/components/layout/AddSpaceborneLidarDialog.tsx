@@ -19,11 +19,63 @@ import {
   Select,
 } from "@geolibre/ui";
 import { FileUp, Satellite } from "lucide-react";
+import { useDialogResize } from "../../hooks/useDialogResize";
 import { buildSymbologyStyle } from "../../lib/assistant/symbology";
 import { pointBounds } from "../../lib/point-bounds";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
+import { SampleDataSelect } from "./add-data/shared";
 
 const LOCAL_EXTENSIONS = ["h5", "hdf5", "he5"];
+
+/** Sample granules on Source Cooperative (CORS-enabled), one per product. */
+const SAMPLE_BASE_URL = "https://data.source.coop/opengeos/geolibre/spaceborne-lidar";
+const SAMPLES = [
+  { labelKey: "sampleAtl06", file: "ATL06_20230629230240_01492006_007_01.h5" },
+  { labelKey: "sampleAtl08", file: "ATL08_20230629230240_01492006_007_01.h5" },
+  { labelKey: "sampleGediL2a", file: "GEDI02_A_2022158224411_O19743_03_T10532_02_004_02_V003.h5" },
+  { labelKey: "sampleGediL2b", file: "GEDI02_B_2022158224411_O19743_03_T10532_02_003_01_V002.h5" },
+  { labelKey: "sampleGediL4a", file: "GEDI04_A_2022158224411_O19743_03_T10532_02_003_01_V002.h5" },
+] as const;
+
+/**
+ * Download a file into memory, reporting progress as a 0-100 percentage when
+ * the server sends a length.
+ *
+ * @param url The file URL.
+ * @param signal Aborts the download.
+ * @param onProgress Called with the percentage received so far.
+ * @returns The file's bytes.
+ * @throws If the request fails or is aborted.
+ */
+async function downloadWithProgress(
+  url: string,
+  signal: AbortSignal,
+  onProgress: (percent: number) => void,
+): Promise<ArrayBuffer> {
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
+  const total = Number(response.headers.get("content-length")) || 0;
+  if (!response.body || total === 0) return response.arrayBuffer();
+  // Preallocate so a multi-gigabyte granule is not held twice while chunks
+  // are concatenated.
+  const bytes = new Uint8Array(total);
+  const reader = response.body.getReader();
+  let received = 0;
+  let lastPercent = -1;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (received + value.length > total) throw new Error("Received more bytes than announced.");
+    bytes.set(value, received);
+    received += value.length;
+    const percent = Math.floor((received / total) * 100);
+    if (percent !== lastPercent) {
+      lastPercent = percent;
+      onProgress(percent);
+    }
+  }
+  return received === total ? bytes.buffer : bytes.slice(0, received).buffer;
+}
 
 /**
  * Default cap on the features one layer receives. A full GEDI orbit holds over
@@ -75,6 +127,11 @@ export function AddSpaceborneLidarDialog({
   const [viewOnly, setViewOnly] = useState(false);
   const [maxPoints, setMaxPoints] = useState(String(DEFAULT_MAX_POINTS));
   const [loading, setLoading] = useState(false);
+  // Percent of a sample granule downloaded, or null when not downloading.
+  const [downloadPercent, setDownloadPercent] = useState<number | null>(null);
+  const downloadAbort = useRef<AbortController | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const { style: dialogStyle, startResize } = useDialogResize(dialogRef);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -88,10 +145,19 @@ export function AddSpaceborneLidarDialog({
     fileRef.current = null;
   };
 
-  useEffect(() => closeFile, []);
+  useEffect(
+    () => () => {
+      downloadAbort.current?.abort();
+      closeFile();
+    },
+    [],
+  );
 
   const reset = () => {
     opGen.current += 1;
+    downloadAbort.current?.abort();
+    downloadAbort.current = null;
+    setDownloadPercent(null);
     closeFile();
     setFile(null);
     setFileName("");
@@ -149,7 +215,50 @@ export function AddSpaceborneLidarDialog({
       return;
     }
     if (!selected?.data) return;
+    await openGranule(selected.data, selected.path);
+  };
 
+  const handleSample = async (file: string) => {
+    setError(null);
+    setStatus(null);
+    downloadAbort.current?.abort();
+    const controller = new AbortController();
+    downloadAbort.current = controller;
+    opGen.current += 1;
+    const gen = opGen.current;
+    closeFile();
+    setAdding(false);
+    setFile(null);
+    setFields([]);
+    setFileName(file);
+    setDownloadPercent(0);
+    let data: ArrayBuffer;
+    try {
+      data = await downloadWithProgress(`${SAMPLE_BASE_URL}/${file}`, controller.signal, (p) => {
+        if (gen === opGen.current) setDownloadPercent(p);
+      });
+    } catch (err) {
+      if (gen !== opGen.current || controller.signal.aborted) return;
+      setDownloadPercent(null);
+      setError(
+        t("addData.spaceborneLidar.sampleDownloadFailed", {
+          detail: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return;
+    } finally {
+      if (downloadAbort.current === controller) downloadAbort.current = null;
+    }
+    if (gen !== opGen.current) return;
+    setDownloadPercent(null);
+    await openGranule(data, file);
+  };
+
+  /** Decode a granule's bytes and show its beams and fields. */
+  const openGranule = async (data: ArrayBuffer, path: string) => {
+    downloadAbort.current?.abort();
+    downloadAbort.current = null;
+    setDownloadPercent(null);
     opGen.current += 1;
     const gen = opGen.current;
     closeFile();
@@ -157,11 +266,11 @@ export function AddSpaceborneLidarDialog({
     setAdding(false);
     setFile(null);
     setFields([]);
-    setFileName(selected.path);
+    setFileName(path);
     setLoading(true);
     let opened: SpaceborneLidarFile | null = null;
     try {
-      opened = await openSpaceborneLidar(selected.data, selected.path);
+      opened = await openSpaceborneLidar(data, path);
       const listed = opened.listFields();
       if (gen !== opGen.current) {
         opened.close();
@@ -275,7 +384,29 @@ export function AddSpaceborneLidarDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-xl">
+      <DialogContent
+        ref={dialogRef}
+        className="max-w-2xl"
+        style={dialogStyle}
+        resizeHandle={
+          <div
+            role="separator"
+            aria-label={t("addData.spaceborneLidar.resizeDialog")}
+            title={t("addData.spaceborneLidar.resizeDialog")}
+            onPointerDown={startResize}
+            className="absolute bottom-0 end-0 z-10 hidden h-5 w-5 cursor-nwse-resize touch-none select-none text-muted-foreground hover:text-foreground md:block rtl:cursor-nesw-resize"
+          >
+            <svg viewBox="0 0 16 16" className="h-full w-full rtl:scale-x-[-1]" aria-hidden="true">
+              <path
+                d="M11 15L15 11M6 15L15 6"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+        }
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Satellite className="h-4 w-4" />
@@ -284,10 +415,17 @@ export function AddSpaceborneLidarDialog({
           <DialogDescription>{t("addData.spaceborneLidar.description")}</DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        {/* min-w-0: the dialog body is a grid, whose column would otherwise
+            grow to the longest unbreakable HDF5 path in the field list. */}
+        <form className="min-w-0 space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-1.5">
             <Label className="block">{t("addData.spaceborneLidar.fileLabel")}</Label>
-            <Button type="button" variant="outline" onClick={handleChooseFile} disabled={loading}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleChooseFile}
+              disabled={loading || downloadPercent !== null}
+            >
               <FileUp className="me-2 h-3.5 w-3.5" />
               {loading
                 ? t("addData.spaceborneLidar.readingFile")
@@ -296,7 +434,19 @@ export function AddSpaceborneLidarDialog({
                   : t("addData.common.chooseFile")}
             </Button>
             {fileName && <p className="text-xs text-muted-foreground break-all">{fileName}</p>}
+            {downloadPercent !== null && (
+              <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
+                {t("addData.spaceborneLidar.downloadingSample", { percent: downloadPercent })}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">{t("addData.spaceborneLidar.fileHelp")}</p>
+            <SampleDataSelect
+              samples={SAMPLES.map((sample) => ({
+                label: t(`addData.spaceborneLidar.${sample.labelKey}`),
+                value: sample.file,
+              }))}
+              onSelect={(sample) => void handleSample(sample)}
+            />
           </div>
 
           {file && (
@@ -347,7 +497,7 @@ export function AddSpaceborneLidarDialog({
                   placeholder={t("addData.spaceborneLidar.fieldFilterPlaceholder")}
                   onChange={(e) => setFieldFilter(e.target.value)}
                 />
-                <div className="max-h-40 space-y-0.5 overflow-y-auto rounded border p-1.5">
+                <div className="max-h-40 space-y-0.5 overflow-y-auto overflow-x-hidden rounded border p-1.5">
                   {visibleFields.map((field) => {
                     const key = fieldKey(field);
                     return (
@@ -364,8 +514,8 @@ export function AddSpaceborneLidarDialog({
                             setSelectedFields((prev) => toggle(prev, key, e.target.checked))
                           }
                         />
-                        <span className="font-mono">{field.name}</span>
-                        <span className="truncate text-muted-foreground">
+                        <span className="shrink-0 font-mono">{field.name}</span>
+                        <span className="min-w-0 truncate text-muted-foreground">
                           {field.name !== field.path ? field.path : ""}
                           {field.column !== undefined ? `[${field.column}]` : ""}
                           {field.units ? ` (${field.units})` : ""}
