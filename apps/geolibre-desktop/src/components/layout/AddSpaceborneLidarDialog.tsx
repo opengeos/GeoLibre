@@ -153,6 +153,8 @@ export function AddSpaceborneLidarDialog({
     opGen.current += 1;
     const gen = opGen.current;
     closeFile();
+    // A submit superseded by this pick returns without clearing its busy state.
+    setAdding(false);
     setFile(null);
     setFields([]);
     setFileName(selected.path);
