@@ -151,11 +151,18 @@ export function ObiaSegmentStep({
   const [nativeStatus, setNativeStatus] = useState<ObiaNativeStatus | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void obiaNativeStatus().then((status) => {
-      if (!cancelled) setNativeStatus(status);
-    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = () =>
+      void obiaNativeStatus().then((status) => {
+        if (cancelled) return;
+        setNativeStatus(status);
+        // The first check starts installing scikit-image: ask again shortly.
+        if (status?.installing) timer = setTimeout(check, 10_000);
+      });
+    check();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, []);
   const localPath = sourceLayer ? obiaLocalPath(sourceLayer) : null;
