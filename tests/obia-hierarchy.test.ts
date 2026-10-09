@@ -175,7 +175,13 @@ describe("OBIA object hierarchy", () => {
         ]),
       },
     });
-    assert.deepEqual(out.fields, ["nb_contrast_b1", "parent_mean_b1", "parent_area_px", "parent_is_veg", "parent_is_roof"]);
+    assert.deepEqual(out.fields, [
+      "nb_contrast_b1",
+      "parent_mean_b1",
+      "parent_area_px",
+      "parent_is_veg",
+      "parent_is_roof",
+    ]);
     // Object 2 borders 1 (mean 10) and 3 (mean 90) equally: contrast 12 - 50.
     assert.equal(out.rows.get(2)?.nb_contrast_b1, -38);
     assert.equal(out.rows.get(1)?.nb_contrast_b1, -2);

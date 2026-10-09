@@ -155,6 +155,23 @@ from the children's, and shape and neighbor features are measured on the
 merged objects (GLCM texture is not carried up). Coarser levels are built in
 the browser, from segmentations of up to 16.8 million pixels.
 
+### Context features
+
+**Add context features** adds features from each object's surroundings to the
+level you work on, so rules and the classifier can use them:
+
+| Field | Meaning |
+| --- | --- |
+| `nb_contrast_b<n>` | The object's band mean minus its neighbors', weighted by the length of the shared border |
+| `parent_<feature>` | The parent's band means, indices, size and `child_count`, from the level above |
+| `parent_is_<class>` | 1 when the parent is classified as the class, 0 otherwise (class inheritance as a feature) |
+| `child_frac_<class>` | The share of the object's area in each class of the level below, once that level is classified |
+
+Class names become part of the field name in lower case, with other characters
+replaced by `_` (`parent_is_trees_shrubs` for "Trees, shrubs"). Adding context
+features again replaces the earlier ones, so run it again after classifying
+another level.
+
 Under **Work on**, choose the level the later steps use: samples, the
 classifier, accuracy and export belong to that level, and each level keeps its
 own. Applying to other images uses level 1. A new segmentation starts a new
@@ -203,6 +220,11 @@ predicted class in the class colors.
   feature with a value, and an object takes the class of the first rule it
   matches, top to bottom. Objects matching no rule get the default class
   (shown in gray). Order the rules from most to least specific.
+- **Inherit from level above** gives each object its parent's class, from the
+  classified level above (see [Levels](#3-levels)). Classify a coarse level
+  first, then inherit its classes down and refine them: with threshold rules on
+  the context features (`parent_is_<class>`), for example "built-up objects
+  inside a parent classified as water are boats".
 
 The Whitebox catalog's "SVM" and "ensemble" object classifiers are the same
 random forest with a different number of trees, so the workbench offers only

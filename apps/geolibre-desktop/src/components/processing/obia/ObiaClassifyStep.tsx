@@ -15,7 +15,7 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { classifiedLevelAbove, inheritClasses } from "../../../lib/obia/obia-context";
+import { inheritClasses } from "../../../lib/obia/obia-context";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { useObiaSession } from "../../../lib/obia/obia-session";
@@ -124,7 +124,8 @@ export function ObiaClassifyStep(): ReactElement | null {
   // Inheritance needs a classified level above this one.
   const level = useObiaSession((s) => s.level);
   const levels = useObiaSession((s) => s.levels);
-  const aboveLevel = useMemo(() => classifiedLevelAbove(), [level, levels]);
+  const aboveLevel =
+    levels.find((record) => record.level === level + 1 && record.classification)?.level ?? null;
 
   const handleClassify = useCallback(async () => {
     if (runningRef.current || !segmentation || !features) return;
@@ -153,13 +154,13 @@ export function ObiaClassifyStep(): ReactElement | null {
         settings.method === "inherit"
           ? inheritClasses(defaultClass)
           : settings.method === "random-forest"
-          ? await classifyRandomForest(
-              table,
-              collectSamples(layer.geojson),
-              { fields: chosen, trees: settings.trees },
-              run,
-            )
-          : await classifyByRules(table, settings.rules, defaultClass, run);
+            ? await classifyRandomForest(
+                table,
+                collectSamples(layer.geojson),
+                { fields: chosen, trees: settings.trees },
+                run,
+              )
+            : await classifyByRules(table, settings.rules, defaultClass, run);
       // A re-measure while the tool ran made these predictions stale (and
       // cleared the classification); do not bring them back.
       if (useObiaSession.getState().features?.finishedAt !== features.finishedAt) {

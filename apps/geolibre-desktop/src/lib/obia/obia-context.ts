@@ -111,7 +111,9 @@ export function inheritClasses(defaultClass: string): ObiaClassification {
     throw new Error("Classify the level above first.");
   }
   const parents = parentLinks(segmentation.objectsLayerId);
-  const layer = useAppStore.getState().layers.find((item) => item.id === segmentation.objectsLayerId);
+  const layer = useAppStore
+    .getState()
+    .layers.find((item) => item.id === segmentation.objectsLayerId);
   const predictions = new Map<number, string>();
   for (const feature of layer?.geojson?.features ?? []) {
     const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
