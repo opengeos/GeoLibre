@@ -11,7 +11,7 @@ import type { FeatureCollection, Geometry, Position } from "geojson";
 import { fromArrayBuffer } from "geotiff";
 import proj4 from "proj4";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { useAppStore } from "@geolibre/core";
+import { useAppStore, withGeoKeysDatumShift } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 export const SAMGEO_PLUGIN_ID = "maplibre-samgeo";
@@ -532,7 +532,8 @@ async function rasterProjection(bytes: ArrayBuffer): Promise<string | null> {
     const image = await (await fromArrayBuffer(bytes)).getImage();
     const keys = image.getGeoKeys() as Record<string, unknown>;
     const mod = await import("geotiff-geokeys-to-proj4");
-    return mod.toProj4(keys as never)?.proj4?.replace(/\+axis=\w+\s*/g, "") ?? null;
+    const definition = mod.toProj4(keys as never)?.proj4?.replace(/\+axis=\w+\s*/g, "");
+    return definition ? withGeoKeysDatumShift(definition, keys) : null;
   } catch {
     return null;
   }

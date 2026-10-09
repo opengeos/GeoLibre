@@ -1,4 +1,5 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { datumShiftEpsgResolver } from "./epsg-datum-resolver";
 import type { RasterControl, RasterLayerState } from "maplibre-gl-raster";
 import type { RasterControlInternals } from "./maplibre-raster";
 
@@ -35,9 +36,13 @@ function structuralFingerprint(raster: SwipeRasterSnapshot): string {
 
 const DEFAULT_DEPS: SwipeRasterMirrorDeps = {
   createControl: async (map) => {
-    const { RasterControl: RasterControlClass } = await import("maplibre-gl-raster");
+    const { RasterControl: RasterControlClass, createResilientEpsgResolver } =
+      await import("maplibre-gl-raster");
     const control = new RasterControlClass({
       collapsed: true,
+      // The same datum-aware resolver as the main raster control, so the
+      // mirrored raster lines up with the original.
+      epsgResolver: datumShiftEpsgResolver(createResilientEpsgResolver()),
       engine: "maplibre-gl-raster",
       interleaved: true,
     });

@@ -596,6 +596,33 @@ imports that way.
 the package export, so a colormap added or renamed upstream fails
 `npm run test:frontend`. Regenerate the copy from the package when it does.
 
+### Datum shifts (`geotiff-geokeys-to-proj4`, `cog-tiler-wasm`, `maplibre-gl-raster`)
+
+The EPSG tables in `geotiff-geokeys-to-proj4` leave the datum shift
+(`+towgs84`) out for many national grids, and epsg.io's PROJJSON (the default
+resolver of the raster control's deck.gl engine) carries none either, so
+without help those rasters land 50 to 300 m off. `packages/core/src/datum-shift.ts`
+holds a small table of shifts and adds them wherever GeoLibre builds a
+projection from an EPSG code or GeoTIFF geokeys:
+
+- `cog-tiler-wasm` (the raster control's default engine) through its
+  `setSourceCrsResolver` hook (0.5.0 and later), installed by
+  `installCogTilerDatumShift` wherever GeoLibre imports the tiler and before
+  the raster control loads;
+- the deck.gl engine through the control's `epsgResolver` option
+  (`packages/plugins/src/plugins/epsg-datum-resolver.ts`);
+- `epsg-proj4.ts`, the OBIA `toPixel`, `polygonizeLabels` (which traces pixels
+  on a stand-in grid and places the vertices through the same definition),
+  the spectral profile, samgeo, point clouds and ArcGIS Zarr.
+
+`withDatumShift` leaves a definition that already names a transformation, so
+a `geotiff-geokeys-to-proj4` bump that adds shifts to its tables needs no
+change here. On a bump of any of the three packages, run
+`tests/datum-shift.test.ts`; it checks the British National Grid against a
+PROJ-computed point. Every entry in the table was checked against PROJ's best
+transformation for that code (within 2 m; 15 m for the NAD27 mean). Re-check
+any entry you add the same way.
+
 ### `tauri-plugin-persisted-scope` — private on-disk format
 
 `PersistedScopeState` (`apps/geolibre-desktop/src-tauri/src/lib.rs`) mirrors the

@@ -1,4 +1,9 @@
-import { DEFAULT_LAYER_STYLE, shouldZoomToNewLayers, useAppStore } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  shouldZoomToNewLayers,
+  useAppStore,
+  installCogTilerDatumShift,
+} from "@geolibre/core";
 import type { GeoLibreAppAPI } from "../types";
 import type { addRasterToMap, LocalRasterFileReader } from "./maplibre-raster";
 import { RASTER_SOURCE_KIND } from "./raster-layer-sync";
@@ -20,7 +25,9 @@ export async function addArcgisRaster(
   source: string | File,
   options: Parameters<typeof addRasterToMap>[2] = {},
 ): Promise<string> {
-  const { openCog } = await import("cog-tiler-wasm");
+  const tiler = await import("cog-tiler-wasm");
+  installCogTilerDatumShift(tiler);
+  const { openCog } = tiler;
   const cog = await openCog(source);
   const bandCount = cog.levels[0]?.bands ?? 1;
   const id = crypto.randomUUID();

@@ -1,4 +1,4 @@
-import { cesiumKmlSource, isCesiumKmlLayer } from "@geolibre/core";
+import { cesiumKmlSource, isCesiumKmlLayer, installCogTilerDatumShift } from "@geolibre/core";
 import { bindDocumentOpacity } from "./cesium-document-opacity";
 import { imageryColorAdjustments } from "./raster-color-adjustments";
 import {
@@ -2237,6 +2237,7 @@ export class CesiumLayerSync {
       this.deps.loadCogTiler ??
       (async () => {
         const module = await import("cog-tiler-wasm");
+        installCogTilerDatumShift(module);
         const { default: wasmUrl } = await import("lerc/lerc-wasm.wasm?url");
         module.configureLercDecoder({ wasmUrl });
         return module;

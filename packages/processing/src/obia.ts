@@ -4,10 +4,12 @@ import {
   MAX_CLIENT_RASTER_BYTES,
   padShortSampleFormat,
   readRasterData,
+  type RasterData,
   writeRasterBands,
   writeUint8Bands,
 } from "./raster-client";
 import { runWasmToolInBackground } from "./wasm-tool-runner";
+import { withGeoKeysDatumShift } from "@geolibre/core";
 
 /**
  * Object-based image analysis (OBIA) engine for the Object-Based Analysis
@@ -532,9 +534,57 @@ export async function segmentLabels(
   return { labels, tool, args };
 }
 
+/** Degrees per pixel of the stand-in grid the polygonizer traces pixels on. */
+const PIXEL_GRID_STEP = 1e-3;
+
+/**
+ * Pixel (column, row) to WGS84 for a raster, through its geokeys' CRS with the
+ * datum shift GeoLibre adds where the EPSG tables leave it out, which is how
+ * the raster is drawn on the map; null when the CRS cannot be resolved.
+ */
+async function pixelToWgs84(
+  raster: RasterData,
+): Promise<((col: number, row: number) => Position) | null> {
+  if (!Object.keys(raster.geoKeys ?? {}).length) return null;
+  try {
+    const [{ toProj4 }, { default: proj4 }] = await Promise.all([
+      import("geotiff-geokeys-to-proj4"),
+      import("proj4"),
+    ]);
+    const resolved = toProj4(raster.geoKeys as never);
+    if (!resolved.proj4 || resolved.errors?.CRSNotSupported) return null;
+    const definition = withGeoKeysDatumShift(
+      resolved.proj4.replace(/\+axis=\w+\s*/g, ""),
+      raster.geoKeys,
+    );
+    const converter = proj4(definition, "EPSG:4326");
+    const { originX, originY, resX, resY, flipX, flipY } = raster;
+    return (col, row) =>
+      converter.forward([
+        originX + (flipX ? -col : col) * resX,
+        flipY ? originY + row * resY : originY - row * resY,
+      ]);
+  } catch {
+    return null;
+  }
+}
+
+/** A geometry's positions mapped through `fn`. */
+function mapPositions(geometry: Polygon | MultiPolygon, fn: (p: Position) => Position) {
+  if (geometry.type === "Polygon") {
+    geometry.coordinates = geometry.coordinates.map((ring) => ring.map(fn));
+  } else {
+    geometry.coordinates = geometry.coordinates.map((poly) => poly.map((ring) => ring.map(fn)));
+  }
+}
+
 /**
  * Polygonize a label raster into one feature per object (WGS84, `id` and
  * `segment_id` set to the label), as the segmentation step does.
+ *
+ * The polygonizer traces the pixels on a stand-in geographic grid, and the
+ * vertices are then placed through the raster's own CRS (with its datum
+ * shift), so the objects line up with the raster as drawn whatever the datum.
  *
  * @param labels Label raster (GeoTIFF).
  * @param run Cancellation and progress.
@@ -543,15 +593,40 @@ export async function polygonizeLabels(
   labels: Uint8Array,
   run: ObiaRunOptions = {},
 ): Promise<FeatureCollection> {
+  const raster = await readRasterData(toArrayBuffer(labels.slice()));
+  const place = await pixelToWgs84(raster);
+  const input = place
+    ? new Uint8Array(
+        writeRasterBands({
+          ...raster,
+          originX: 0,
+          originY: 0,
+          resX: PIXEL_GRID_STEP,
+          resY: PIXEL_GRID_STEP,
+          flipX: false,
+          flipY: false,
+          geoKeys: { GTModelTypeGeoKey: 2, GTRasterTypeGeoKey: 1, GeographicTypeGeoKey: 4326 },
+        }),
+      )
+    : labels;
   const polygonFiles = await runTool(
     "segments_to_polygons",
     ["--segments=/work/segments.tif", "--output=/work/segments.geojson"],
-    { "segments.tif": labels },
+    { "segments.tif": input },
     run,
   );
   const geojson = polygonFiles["segments.geojson"];
   if (!geojson) throw new Error("segments_to_polygons did not write polygons.");
   const pieces = JSON.parse(new TextDecoder().decode(geojson)) as FeatureCollection;
+  if (place) {
+    const toWorld = ([x, y]: Position) => place(x / PIXEL_GRID_STEP, -y / PIXEL_GRID_STEP);
+    for (const feature of pieces.features) {
+      const geometry = feature.geometry;
+      if (geometry?.type === "Polygon" || geometry?.type === "MultiPolygon") {
+        mapPositions(geometry, toWorld);
+      }
+    }
+  }
   return dissolveSegmentPolygons(pieces);
 }
 

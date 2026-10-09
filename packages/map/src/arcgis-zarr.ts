@@ -1,4 +1,4 @@
-import { interpolateRampColors, type GeoLibreLayer } from "@geolibre/core";
+import { interpolateRampColors, withDatumShift, type GeoLibreLayer } from "@geolibre/core";
 import proj4 from "proj4";
 import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
 import { assertSecureRequestHeaders } from "./kerchunk-reference-store";
@@ -16,7 +16,8 @@ async function projectionFromWgs84(crs: string, signal: AbortSignal) {
     const { toProj4 } = await import("geotiff-geokeys-to-proj4");
     signal.throwIfAborted();
     const resolved = toProj4({ ProjectedCSTypeGeoKey: Number(epsg[1]) } as never);
-    const definition = resolved.proj4?.replace(/\+axis=\w+\s*/g, "").trim();
+    const raw = resolved.proj4?.replace(/\+axis=\w+\s*/g, "").trim();
+    const definition = raw ? withDatumShift(raw, Number(epsg[1])) : raw;
     if (!definition || resolved.errors?.CRSNotSupported)
       throw new Error(`Could not resolve ${name} to a proj4 definition`);
     proj4.defs(name, definition);

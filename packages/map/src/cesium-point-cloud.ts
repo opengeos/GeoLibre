@@ -1,4 +1,4 @@
-import { getVectorColorRamp } from "@geolibre/core";
+import { getVectorColorRamp, withGeoKeysDatumShift } from "@geolibre/core";
 import type { PointPrimitiveCollection } from "@cesium/engine";
 
 // Point clouds on the globe (issues #2285, #2261).
@@ -653,7 +653,10 @@ async function lasProjector(crs: LasCrs): Promise<LasProjector | null> {
       if (resolved.proj4 && !resolved.errors?.CRSNotSupported) {
         // LAS X/Y are always easting/northing, so a north-first `+axis` from
         // the EPSG tables must not swap them.
-        const definition = resolved.proj4.replace(/\+axis=\w+\s*/g, "");
+        const definition = withGeoKeysDatumShift(
+          resolved.proj4.replace(/\+axis=\w+\s*/g, ""),
+          crs.geoKeys,
+        );
         const converter = proj4(definition, "EPSG:4326");
         // Without a vertical unit key the heights share the projected CRS's
         // linear unit (the LAS convention). A user-defined CRS carries that

@@ -1,4 +1,4 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { withGeoKeysDatumShift, type GeoLibreLayer } from "@geolibre/core";
 import {
   OBIA_MAX_PIXELS,
   ObiaError,
@@ -156,7 +156,11 @@ async function projectionFor(geoKeys: Record<string, unknown> | undefined): Prom
         const projection = mod.toProj4(keys as never);
         // `+axis=` makes proj4 swap easting and northing on some CRSs, which
         // would transpose the pixel window.
-        return projection?.proj4 ? projection.proj4.replace(/\+axis=\w+\s*/g, "") : null;
+        // The tables leave some datums' shifts out; add them so pixels line
+        // up with the raster as displayed (and with WGS84).
+        return projection?.proj4
+          ? withGeoKeysDatumShift(projection.proj4.replace(/\+axis=\w+\s*/g, ""), keys)
+          : null;
       } catch {
         return null;
       }

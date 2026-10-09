@@ -252,3 +252,9 @@ export {
   type CesiumKmlLayerOptions,
 } from "./cesium-kml";
 export { localFileName, uniqueImportedLayerName } from "./file-name";
+export {
+  datumShiftFor,
+  installCogTilerDatumShift,
+  withDatumShift,
+  withGeoKeysDatumShift,
+} from "./datum-shift";

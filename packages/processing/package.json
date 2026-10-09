@@ -38,7 +38,9 @@
     "fflate": "^0.8.3",
     "geolibre-wasm": "^1.5.9",
     "geotiff": "^3.0.5",
+    "geotiff-geokeys-to-proj4": "^2026.8.16",
     "onnxruntime-web": "1.30.0",
+    "proj4": "^2.22.0",
     "s2js": "^1.44.0"
   },
   "devDependencies": {

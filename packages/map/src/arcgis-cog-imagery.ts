@@ -2,6 +2,7 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import { cogRenderOptions, cogSourceUrl, rasterState, type CogTilerModule } from "./cog-imagery";
 import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
 import type { CogSource } from "cog-tiler-wasm";
+import { installCogTilerDatumShift } from "@geolibre/core";
 
 // A style rebuild reuses the source; weak keys release statistics when its reader is forgotten.
 const sourceStatistics = new WeakMap<CogSource, ReturnType<CogSource["statistics"]>>();
@@ -9,6 +10,7 @@ const sourceStatistics = new WeakMap<CogSource, ReturnType<CogSource["statistics
 /** Open the existing COG tiler lazily, without importing the ArcGIS npm package. */
 export async function loadCogTiler(): Promise<CogTilerModule> {
   const module = await import("cog-tiler-wasm");
+  installCogTilerDatumShift(module);
   const { default: wasmUrl } = await import("lerc/lerc-wasm.wasm?url");
   module.configureLercDecoder({ wasmUrl });
   return module;
