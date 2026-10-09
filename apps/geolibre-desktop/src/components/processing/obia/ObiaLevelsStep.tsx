@@ -95,10 +95,17 @@ export function ObiaLevelsStep(): ReactElement | null {
     setContextResult(null);
     const run = progress.begin();
     try {
+      const before = useObiaSession.getState();
       const { table, added, call } = await computeContextFeatures(run);
+      // A re-segmentation, re-measure or level switch meanwhile makes the
+      // table describe features that are gone.
       const session = useObiaSession.getState();
-      if (session.segmentation?.finishedAt !== segmentation.finishedAt) {
-        setError(t("obia.measure.error.resegmented"));
+      if (
+        session.segmentation?.finishedAt !== segmentation.finishedAt ||
+        session.features?.finishedAt !== before.features?.finishedAt ||
+        session.level !== before.level
+      ) {
+        setError(t("obia.levels.error.changed"));
         return;
       }
       const layer = useAppStore
