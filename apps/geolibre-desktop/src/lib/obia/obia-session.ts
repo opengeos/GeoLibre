@@ -158,7 +158,8 @@ export interface ObiaBatchRun {
   finishedAt: string;
 }
 
-export type ObiaClassifierMethod = "random-forest" | "rules";
+/** Random forest, threshold rules, or each object's parent's class (inheritance). */
+export type ObiaClassifierMethod = "random-forest" | "rules" | "inherit";
 
 /** Classifier settings the Classify step edits. */
 export interface ObiaClassifierSettings {
@@ -244,6 +245,11 @@ interface ObiaSessionState {
   setFeatureOptions: (patch: Partial<ObiaFeatureOptions>) => void;
   /** New features clear the classification built on the previous ones. */
   setFeatures: (run: ObiaFeatureRun | null) => void;
+  /**
+   * Add columns to the current features (context features), recording the
+   * call; the classification is kept, since it is still what it was.
+   */
+  extendFeatures: (table: ObiaFeatureTable, call: ObiaToolCall) => void;
   setClasses: (classes: ObiaClass[]) => void;
   setLabelRole: (role: ObiaSampleRole) => void;
   setClassifier: (patch: Partial<ObiaClassifierSettings>) => void;
@@ -339,6 +345,10 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   setFeatureOptions: (patch) => set((s) => ({ featureOptions: { ...s.featureOptions, ...patch } })),
   // New features make the classification built on the old ones stale.
   setFeatures: (features) => set({ features, classification: null }),
+  extendFeatures: (table, call) =>
+    set((s) =>
+      s.features ? { features: { ...s.features, table, calls: [...s.features.calls, call] } } : {},
+    ),
   setClasses: (classes) => set({ classes }),
   setLabelRole: (labelRole) => set({ labelRole }),
   setClassifier: (patch) => set((s) => ({ classifier: { ...s.classifier, ...patch } })),

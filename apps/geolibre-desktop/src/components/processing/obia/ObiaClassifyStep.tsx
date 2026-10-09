@@ -15,6 +15,7 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { classifiedLevelAbove, inheritClasses } from "../../../lib/obia/obia-context";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { useObiaSession } from "../../../lib/obia/obia-session";
@@ -120,6 +121,11 @@ export function ObiaClassifyStep(): ReactElement | null {
   // the legend so the two always agree.
   const defaultClass = settings.defaultClass.trim() || "unclassified";
 
+  // Inheritance needs a classified level above this one.
+  const level = useObiaSession((s) => s.level);
+  const levels = useObiaSession((s) => s.levels);
+  const aboveLevel = useMemo(() => classifiedLevelAbove(), [level, levels]);
+
   const handleClassify = useCallback(async () => {
     if (runningRef.current || !segmentation || !features) return;
     const layer = useAppStore
@@ -144,7 +150,9 @@ export function ObiaClassifyStep(): ReactElement | null {
       // Every object gets a prediction, including ones a feature tool skipped.
       const table = tableForAllObjects(features.table, layer.geojson);
       const result =
-        settings.method === "random-forest"
+        settings.method === "inherit"
+          ? inheritClasses(defaultClass)
+          : settings.method === "random-forest"
           ? await classifyRandomForest(
               table,
               collectSamples(layer.geojson),
@@ -221,13 +229,14 @@ export function ObiaClassifyStep(): ReactElement | null {
         aria-label={t("obia.classify.method")}
       >
         <span className="text-xs font-medium">{t("obia.classify.method")}</span>
-        {(["random-forest", "rules"] as const).map((method) => (
+        {(["random-forest", "rules", "inherit"] as const).map((method) => (
           <label key={method} className="flex items-center gap-1.5">
             <input
               type="radio"
               name="obia-classifier"
               value={method}
               checked={settings.method === method}
+              disabled={method === "inherit" && aboveLevel == null && settings.method !== method}
               onChange={() => setSettings({ method })}
             />
             {t(`obia.classify.methods.${method}`)}
@@ -235,7 +244,13 @@ export function ObiaClassifyStep(): ReactElement | null {
         ))}
       </div>
 
-      {settings.method === "random-forest" ? (
+      {settings.method === "inherit" ? (
+        <p className="text-xs text-muted-foreground" data-testid="obia-inherit-hint">
+          {aboveLevel == null
+            ? t("obia.classify.inheritNeedsLevel")
+            : t("obia.classify.inheritHint", { level: aboveLevel })}
+        </p>
+      ) : settings.method === "random-forest" ? (
         <>
           <p className="text-xs text-muted-foreground">
             {t("obia.classify.rfHint", { count: trainingCount })}
@@ -377,7 +392,11 @@ export function ObiaClassifyStep(): ReactElement | null {
           onClick={() => void handleClassify()}
           disabled={
             running ||
-            (settings.method === "random-forest" ? !chosen.length : !settings.rules.length)
+            (settings.method === "inherit"
+              ? aboveLevel == null
+              : settings.method === "random-forest"
+                ? !chosen.length
+                : !settings.rules.length)
           }
           className="gap-2"
           data-testid="obia-classify"

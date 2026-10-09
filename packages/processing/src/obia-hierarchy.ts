@@ -485,3 +485,136 @@ export function childrenOf(parentOf: ReadonlyMap<number, number>): Map<number, n
   }
   return children;
 }
+
+/**
+ * A field-name-safe form of a class name for the per-class context fields,
+ * unique among `taken` (which it extends).
+ *
+ * @param name The class name.
+ * @param taken Slugs already used.
+ */
+export function classFieldSlug(name: string, taken: Set<string>): string {
+  const base =
+    name
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "class";
+  let slug = base;
+  for (let n = 2; taken.has(slug); n += 1) slug = `${base}_${n}`;
+  taken.add(slug);
+  return slug;
+}
+
+/** What context features are computed from. */
+export interface ObiaContextInputs {
+  /** This level's features and adjacency. */
+  table: ObiaFeatureTable;
+  adjacency: ObiaAdjacency;
+  /** 1-based bands whose means get a neighbor contrast. */
+  bands: readonly number[];
+  /** Class names, in legend order, for the per-class fields. */
+  classes: readonly string[];
+  /** The level above: each of this level's objects' parent, and its features and classes. */
+  parent?: {
+    parentOf: ReadonlyMap<number, number>;
+    table: ObiaFeatureTable;
+    predictions?: ReadonlyMap<number, string>;
+  };
+  /** The level below: each child's parent here, its size and its class. */
+  children?: {
+    parentOf: ReadonlyMap<number, number>;
+    areas: ReadonlyMap<number, number>;
+    predictions?: ReadonlyMap<number, string>;
+  };
+}
+
+/** Parent fields copied down as `parent_<field>`. */
+const PARENT_FIELD = /^(mean_b\d+|brightness|ndvi|ndwi|area_px|child_count)$/;
+
+/**
+ * Context features of a level's objects, for rules and classifiers:
+ *
+ * - `nb_contrast_b<n>`: the object's band mean minus its neighbors', weighted
+ *   by shared border;
+ * - `parent_<field>` (band means, indices, size) and `parent_is_<class>`
+ *   (1 or 0) from the level above, when there is one (the classes once it is
+ *   classified): class inheritance as features;
+ * - `child_frac_<class>`: the share of the object's area in each class of the
+ *   level below, once that level is classified.
+ *
+ * @param inputs This level and its neighbors in the hierarchy.
+ * @returns A table with only the context fields.
+ */
+export function contextFeatures(inputs: ObiaContextInputs): ObiaFeatureTable {
+  const { table, adjacency } = inputs;
+  const out: ObiaFeatureTable = { fields: [], rows: new Map() };
+  for (const id of table.rows.keys()) out.rows.set(id, {});
+  const set = (id: number, field: string, value: number | null) => {
+    if (!out.fields.includes(field)) out.fields.push(field);
+    const row = out.rows.get(id);
+    if (row) row[field] = value;
+  };
+  const taken = new Set<string>();
+  const slugs = inputs.classes.map((name) => [name, classFieldSlug(name, taken)] as const);
+
+  for (const band of inputs.bands) {
+    const field = `mean_b${band}`;
+    if (!table.fields.includes(field)) continue;
+    for (const [id, row] of table.rows) {
+      const own = row[field];
+      let weight = 0;
+      let sum = 0;
+      for (const [other, edges] of adjacency.get(id) ?? []) {
+        const value = table.rows.get(other)?.[field];
+        if (value == null) continue;
+        weight += edges;
+        sum += edges * value;
+      }
+      set(id, `nb_contrast_b${band}`, own != null && weight > 0 ? own - sum / weight : null);
+    }
+  }
+
+  const parent = inputs.parent;
+  if (parent) {
+    const fields = parent.table.fields.filter((field) => PARENT_FIELD.test(field));
+    for (const id of table.rows.keys()) {
+      const p = parent.parentOf.get(id);
+      const row = p != null ? parent.table.rows.get(p) : undefined;
+      for (const field of fields) set(id, `parent_${field}`, row?.[field] ?? null);
+      if (parent.predictions?.size) {
+        const name = p != null ? parent.predictions.get(p) : undefined;
+        for (const [className, slug] of slugs) {
+          set(id, `parent_is_${slug}`, name == null ? null : name === className ? 1 : 0);
+        }
+      }
+    }
+  }
+
+  const children = inputs.children;
+  if (children?.predictions?.size) {
+    const totals = new Map<number, number>();
+    const byClass = new Map<number, Map<string, number>>();
+    for (const [child, id] of children.parentOf) {
+      const area = children.areas.get(child) ?? 0;
+      totals.set(id, (totals.get(id) ?? 0) + area);
+      const name = children.predictions.get(child);
+      if (name == null) continue;
+      let m = byClass.get(id);
+      if (!m) byClass.set(id, (m = new Map()));
+      m.set(name, (m.get(name) ?? 0) + area);
+    }
+    for (const id of table.rows.keys()) {
+      const total = totals.get(id) ?? 0;
+      for (const [className, slug] of slugs) {
+        const area = byClass.get(id)?.get(className) ?? 0;
+        set(id, `child_frac_${slug}`, total > 0 ? area / total : null);
+      }
+    }
+  }
+  return out;
+}
+
+/** Whether a feature field is a context feature ({@link contextFeatures}). */
+export const isContextField = (field: string): boolean =>
+  /^(nb_contrast_|parent_|child_frac_)/.test(field);

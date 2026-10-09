@@ -256,9 +256,11 @@ export function ObiaBatchStep(): ReactElement | null {
       <ObiaStepHeading index={8} title={t("obia.steps.batch")} />
       <p className="text-xs text-muted-foreground">
         {t(
-          classification.settings.method === "random-forest"
-            ? "obia.batch.hintForest"
-            : "obia.batch.hintRules",
+          classification.settings.method === "inherit"
+            ? "obia.batch.inheritUnsupported"
+            : classification.settings.method === "random-forest"
+              ? "obia.batch.hintForest"
+              : "obia.batch.hintRules",
         )}
       </p>
       {targets.length === 0 ? (
@@ -286,7 +288,12 @@ export function ObiaBatchStep(): ReactElement | null {
       <div className="flex items-center gap-3">
         <Button
           onClick={() => void handleRun()}
-          disabled={running || !selected.length || level !== 1}
+          disabled={
+            running ||
+            !selected.length ||
+            level !== 1 ||
+            classification.settings.method === "inherit"
+          }
           className="gap-2"
           data-testid="obia-batch-run"
         >

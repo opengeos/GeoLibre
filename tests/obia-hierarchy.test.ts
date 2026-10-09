@@ -3,6 +3,9 @@ import { describe, it } from "node:test";
 import { writeArrayBuffer } from "geotiff";
 import {
   childrenOf,
+  classFieldSlug,
+  contextFeatures,
+  isContextField,
   decodeLabelGrid,
   encodeLabelGrid,
   levelFeatures,
@@ -132,5 +135,78 @@ describe("OBIA object hierarchy", () => {
     const decoded = await decodeLabelGrid(encodeLabelGrid(grid, parentIds));
     assert.deepEqual([...decoded.ids], [...parentIds]);
     assert.equal(decoded.raster.originX, 500000);
+  });
+
+  it("names per-class fields safely and uniquely", () => {
+    const taken = new Set<string>();
+    assert.equal(classFieldSlug("Trees, shrubs", taken), "trees_shrubs");
+    assert.equal(classFieldSlug("trees shrubs", taken), "trees_shrubs_2");
+    assert.equal(classFieldSlug("!!!", taken), "class");
+  });
+
+  it("computes neighbor contrast, parent features and class shares", async () => {
+    const grid = await decodeLabelGrid(labels());
+    const adjacency = objectAdjacency(grid);
+    const table = children();
+    const parentOf = new Map([
+      [1, 1],
+      [2, 1],
+      [3, 2],
+      [4, 2],
+    ]);
+    const parentTable = {
+      fields: ["mean_b1", "area_px", "compactness"],
+      rows: new Map([
+        [1, { mean_b1: 11, area_px: 4, compactness: 0.8 }],
+        [2, { mean_b1: 91, area_px: 4, compactness: 0.8 }],
+      ]),
+    };
+    const out = contextFeatures({
+      table,
+      adjacency,
+      bands: [1],
+      classes: ["veg", "roof"],
+      parent: {
+        parentOf,
+        table: parentTable,
+        predictions: new Map([
+          [1, "veg"],
+          [2, "roof"],
+        ]),
+      },
+    });
+    assert.deepEqual(out.fields, ["nb_contrast_b1", "parent_mean_b1", "parent_area_px", "parent_is_veg", "parent_is_roof"]);
+    // Object 2 borders 1 (mean 10) and 3 (mean 90) equally: contrast 12 - 50.
+    assert.equal(out.rows.get(2)?.nb_contrast_b1, -38);
+    assert.equal(out.rows.get(1)?.nb_contrast_b1, -2);
+    assert.equal(out.rows.get(3)?.parent_mean_b1, 91);
+    assert.equal(out.rows.get(3)?.parent_is_roof, 1);
+    assert.equal(out.rows.get(3)?.parent_is_veg, 0);
+    assert.ok(out.fields.every(isContextField));
+
+    // From the parents' side: the share of each class among their children.
+    const parents = contextFeatures({
+      table: parentTable,
+      adjacency: new Map(),
+      bands: [],
+      classes: ["veg", "roof"],
+      children: {
+        parentOf,
+        areas: new Map([
+          [1, 2],
+          [2, 2],
+          [3, 3],
+          [4, 1],
+        ]),
+        predictions: new Map([
+          [1, "veg"],
+          [2, "roof"],
+          [3, "roof"],
+          [4, "roof"],
+        ]),
+      },
+    });
+    assert.equal(parents.rows.get(1)?.child_frac_veg, 0.5);
+    assert.equal(parents.rows.get(2)?.child_frac_roof, 1);
   });
 });

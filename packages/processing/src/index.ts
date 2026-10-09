@@ -303,6 +303,10 @@ export {
 } from "./sidecar-client";
 export {
   childrenOf,
+  classFieldSlug,
+  contextFeatures,
+  isContextField,
+  type ObiaContextInputs,
   decodeLabelGrid,
   encodeLabelGrid,
   levelFeatures,

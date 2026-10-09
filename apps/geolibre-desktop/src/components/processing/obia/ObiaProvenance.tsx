@@ -121,7 +121,9 @@ export function ObiaProvenance(): ReactElement | null {
           entry(t("obia.steps.classify"), [
             when(classification.finishedAt),
             code(commandLine(classification.call.tool, classification.call.args)),
-            classification.settings.method === "random-forest"
+            classification.settings.method === "inherit"
+              ? t("obia.provenance.inherit", { level: session.level + 1 })
+              : classification.settings.method === "random-forest"
               ? t("obia.provenance.forest", {
                   trees: classification.settings.trees,
                   count: classification.trainingCount,

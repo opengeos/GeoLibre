@@ -1,10 +1,11 @@
 import { useAppStore } from "@geolibre/core";
 import { OBIA_SEGMENT_ID_FIELD, applyObjectFeatures } from "@geolibre/processing";
 import { Button } from "@geolibre/ui";
-import { Layers3, Loader2 } from "lucide-react";
+import { Layers3, Loader2, Network } from "lucide-react";
 import { useCallback, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
+import { computeContextFeatures } from "../../../lib/obia/obia-context";
 import { ObiaLevelError, buildCoarserLevel } from "../../../lib/obia/obia-levels";
 import { OBIA_PARENT_FIELD } from "../../../lib/obia/obia-persistence";
 import { useObiaSession } from "../../../lib/obia/obia-session";
@@ -40,6 +41,8 @@ export function ObiaLevelsStep(): ReactElement | null {
   const level = useObiaSession((s) => s.level);
   const levels = useObiaSession((s) => s.levels);
   const addLevel = useObiaSession((s) => s.addLevel);
+  const extendFeatures = useObiaSession((s) => s.extendFeatures);
+  const [contextResult, setContextResult] = useState<string | null>(null);
   const switchLevel = useObiaSession((s) => s.switchLevel);
   const [scale, setScale] = useState(10);
   const [running, setRunning] = useState(false);
@@ -115,6 +118,42 @@ export function ObiaLevelsStep(): ReactElement | null {
     }
   }, [segmentation, scale, addGeoJsonLayer, updateLayer, addLevel, progress, t]);
 
+  const handleContext = useCallback(async () => {
+    if (runningRef.current || !segmentation) return;
+    runningRef.current = true;
+    setRunning(true);
+    setError(null);
+    setContextResult(null);
+    const run = progress.begin();
+    try {
+      const { table, added, call } = await computeContextFeatures(run);
+      const session = useObiaSession.getState();
+      if (session.segmentation?.finishedAt !== segmentation.finishedAt) {
+        setError(t("obia.measure.error.resegmented"));
+        return;
+      }
+      const layer = useAppStore
+        .getState()
+        .layers.find((item) => item.id === segmentation.objectsLayerId);
+      if (!layer?.geojson) throw new Error(t("obia.measure.error.layersMissing"));
+      updateLayer(layer.id, {
+        geojson: applyObjectFeatures(layer.geojson, table, session.features?.table.fields ?? []),
+      });
+      extendFeatures(table, call);
+      setContextResult(t("obia.levels.context.result", { count: added.length }));
+    } catch (err) {
+      setError(
+        isObiaCancel(err)
+          ? t("obia.progress.cancelled")
+          : obiaErrorMessage(err, t, t("obia.levels.context.failed")),
+      );
+    } finally {
+      progress.end();
+      runningRef.current = false;
+      setRunning(false);
+    }
+  }, [segmentation, updateLayer, extendFeatures, progress, t]);
+
   if (!segmentation || !features) return null;
 
   const all = [
@@ -176,12 +215,28 @@ export function ObiaLevelsStep(): ReactElement | null {
       <p className="-mt-1 text-xs text-muted-foreground">
         {level === top ? t("obia.levels.scaleHint") : t("obia.levels.buildFromTop")}
       </p>
+      <div className="grid gap-1.5">
+        <span className="text-xs font-medium">{t("obia.levels.context.title")}</span>
+        <p className="text-xs text-muted-foreground">{t("obia.levels.context.hint")}</p>
+        <div>
+          <Button
+            variant="outline"
+            onClick={() => void handleContext()}
+            disabled={running}
+            className="gap-2"
+            data-testid="obia-context"
+          >
+            <Network className="h-4 w-4" />
+            {t("obia.levels.context.run")}
+          </Button>
+        </div>
+      </div>
       <ObiaRunProgress
         step={progress.step}
         startedAt={progress.startedAt}
         onCancel={progress.cancel}
       />
-      <ObiaStatus error={error} />
+      <ObiaStatus error={error} success={contextResult} testId="obia-context-result" />
     </section>
   );
 }

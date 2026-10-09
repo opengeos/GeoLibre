@@ -7522,6 +7522,14 @@
         "noFeatures": "Measure spectral statistics first: merging compares the objects' band means and spreads.",
         "tooLarge": "The objects are too large to merge in the browser.",
         "notTop": "Build coarser levels from the coarsest one."
+      },
+      "context": {
+        "title": "Context features",
+        "hint": "Add features from each object's surroundings: its contrast with its neighbors (band means), its parent's features and class in the level above, and the share of each class among its children in the level below. Rules and the classifier can then use them, for example parent_is_water = 1. Run again after classifying another level.",
+        "run": "Add context features",
+        "result_one": "{{count}} context feature added.",
+        "result_other": "{{count}} context features added.",
+        "failed": "Could not compute the context features."
       }
     },
     "train": {
@@ -7559,7 +7567,8 @@
       "method": "Classifier",
       "methods": {
         "random-forest": "Random forest",
-        "rules": "Threshold rules"
+        "rules": "Threshold rules",
+        "inherit": "Inherit from level above"
       },
       "rfHint_one": "Trains on {{count}} training sample and predicts a class for every object. The engine fixes the random seed, so the same inputs give the same result.",
       "rfHint_other": "Trains on {{count}} training samples and predicts a class for every object. The engine fixes the random seed, so the same inputs give the same result.",
@@ -7583,7 +7592,9 @@
         "incompleteRule": "Give every rule a feature and a class, or remove it.",
         "remeasured": "The objects were measured again while classifying, so these predictions were discarded. Classify again.",
         "failed": "Classification failed."
-      }
+      },
+      "inheritHint": "Give each object the class of its parent in level {{level}}. To refine within a parent class, classify with rules on the context features instead (for example parent_is_water = 1).",
+      "inheritNeedsLevel": "Build and classify a coarser level first: objects inherit their parent’s class."
     },
     "accuracy": {
       "noValidation": "Label some objects as Validation samples (or Split the training samples) to score the classification against data it never trained on.",
@@ -7635,7 +7646,8 @@
         "changed": "The image was segmented again while applying, so the run stopped.",
         "tooLarge": "The image is over the pixel limit even at its coarsest overview. Clip it first."
       },
-      "levelOneOnly": "Applying to other images uses level 1: switch to it under Levels."
+      "levelOneOnly": "Applying to other images uses level 1: switch to it under Levels.",
+      "inheritUnsupported": "Inherited classes come from a level above, which other images do not have: classify with a random forest or rules to apply the workflow."
     },
     "provenance": {
       "title": "Provenance",
@@ -7656,7 +7668,8 @@
       "copy": "Copy as JSON",
       "copied": "Copied.",
       "copyFailed": "Could not copy to the clipboard.",
-      "batch": "Applied to {{name}}"
+      "batch": "Applied to {{name}}",
+      "inherit": "Inherited from level {{level}}"
     },
     "progress": {
       "starting": "Starting… {{seconds}} s",
