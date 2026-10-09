@@ -233,6 +233,8 @@ function restoreNativeParams(value: unknown): ObiaNativeParams {
   };
 }
 
+const withMerge = (merge: ObiaLevelMerge | undefined) => (merge ? { merge } : {});
+
 /**
  * How a saved coarser level was built: only from a level below it, so a
  * crafted file cannot make the label rebuild loop.
@@ -471,19 +473,22 @@ export function restoreObiaSession(
     (saved.level as number) <= OBIA_MAX_LEVELS
       ? (saved.level as number)
       : 1;
-  const active = restoreLevel(runs, layers, activeLevel);
-  if (!active) return data;
   // The hierarchy: each saved level whose objects layer is still there.
   const levels: ObiaLevelRecord[] = [];
   if (Array.isArray(saved.levels)) {
     for (const item of saved.levels) {
       const json = asObject(item);
       const level = json && Number.isInteger(json.level) ? (json.level as number) : 0;
-      if (level < 1 || level > OBIA_MAX_LEVELS) continue;
+      if (level < 1 || level > OBIA_MAX_LEVELS || level === activeLevel) continue;
       const record = restoreLevel(asObject(json!.runs) ?? {}, layers, level);
       if (record && !levels.some((other) => other.level === level)) levels.push(record);
     }
   }
+  levels.sort((a, b) => a.level - b.level);
+  // When the active level's objects are gone, work on the highest level that
+  // survived rather than losing the others too.
+  const active = restoreLevel(runs, layers, activeLevel) ?? levels.pop() ?? null;
+  if (!active) return data;
   return {
     ...data,
     segmentation: active.segmentation,
@@ -537,7 +542,7 @@ function restoreLevel(
     params: restoreParams(seg.params),
     env: restoreEnv(seg.env),
     finishedAt: asString(seg.finishedAt),
-    ...(restoreMerge(seg.merge, level) ? { merge: restoreMerge(seg.merge, level) } : {}),
+    ...withMerge(restoreMerge(seg.merge, level)),
   };
   const record: ObiaLevelRecord = {
     level,

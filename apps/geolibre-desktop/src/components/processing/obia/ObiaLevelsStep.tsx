@@ -58,6 +58,8 @@ export function ObiaLevelsStep(): ReactElement | null {
     try {
       const before = useObiaSession.getState();
       const built = await buildCoarserLevel(scale, run);
+      // The last steps of the build take no signal: honour a Cancel made then.
+      if (run.signal?.aborted) throw new DOMException("Cancelled.", "AbortError");
       // A re-segmentation, a re-measure or a level switch while it ran makes
       // the new level describe features that are gone.
       const after = useObiaSession.getState();
