@@ -74,7 +74,11 @@ function remoteUrl(layer: GeoLibreLayer): string | null {
   return null;
 }
 
-async function openTiff(layer: GeoLibreLayer, ranges = true): Promise<GeoTIFF | null> {
+/** Open a layer's image, saying whether it is read by range requests. */
+async function openTiff(
+  layer: GeoLibreLayer,
+  ranges = true,
+): Promise<{ tiff: GeoTIFF; ranges: boolean } | null> {
   const url = ranges ? remoteUrl(layer) : null;
   if (url) {
     try {
@@ -82,7 +86,7 @@ async function openTiff(layer: GeoLibreLayer, ranges = true): Promise<GeoTIFF | 
       // Read the header now, so a server that ignores range requests or
       // serves something else falls back to a plain download below.
       await tiff.getImage();
-      return tiff;
+      return { tiff, ranges: true };
     } catch (error) {
       // A server without range requests (or one blocking them) is still read,
       // by downloading the whole file; say so, since that is the slow path.
@@ -102,7 +106,8 @@ async function openTiff(layer: GeoLibreLayer, ranges = true): Promise<GeoTIFF | 
     bytes.buffer instanceof ArrayBuffer &&
     bytes.byteOffset === 0 &&
     bytes.byteLength === bytes.buffer.byteLength;
-  return fromArrayBuffer(whole ? (bytes.buffer as ArrayBuffer) : bytes.slice().buffer);
+  const tiff = await fromArrayBuffer(whole ? (bytes.buffer as ArrayBuffer) : bytes.slice().buffer);
+  return { tiff, ranges: false };
 }
 
 /**
@@ -116,7 +121,7 @@ export async function obiaSourceTiff(layer: GeoLibreLayer, ranges = true): Promi
   const key = obiaSourceKey(layer);
   if (cached?.key === key && (ranges || !cached.ranges)) return cached.tiff;
   const started = generation;
-  const tiff = openTiff(layer, ranges).catch((error: unknown) => {
+  const opening = openTiff(layer, ranges).catch((error: unknown) => {
     console.warn(
       `Object-Based Analysis: could not open "${layer.name}" (${
         error instanceof Error ? error.name : "error"
@@ -124,13 +129,17 @@ export async function obiaSourceTiff(layer: GeoLibreLayer, ranges = true): Promi
     );
     return null;
   });
-  if (started === generation) {
-    cached = { key, tiff, ranges: ranges && remoteUrl(layer) != null };
+  // Range reads are recorded once known: an open by range can fall back to
+  // a whole download, which a later read must not repeat.
+  const entry = { key, tiff: opening.then((opened) => opened?.tiff ?? null), ranges: false };
+  if (started === generation) cached = entry;
+  const opened = await opening;
+  if (cached === entry) {
+    if (opened) entry.ranges = opened.ranges;
+    // Do not keep a failure: the next read retries.
+    else cached = null;
   }
-  const result = await tiff;
-  // Do not keep a failure: the next read retries.
-  if (!result && cached?.tiff === tiff) cached = null;
-  return result;
+  return opened?.tiff ?? null;
 }
 
 let geokeysParser: Promise<((keys: Record<string, unknown>) => string | null) | null> | null = null;
