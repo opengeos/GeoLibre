@@ -1,6 +1,11 @@
 import { shouldZoomToNewLayers, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { readImageSummary, segmentImage, type ObiaImageSummary } from "@geolibre/processing";
+import {
+  fingerprintSegmentLabels,
+  readImageSummary,
+  segmentImage,
+  type ObiaImageSummary,
+} from "@geolibre/processing";
 import { Button, Label, Select } from "@geolibre/ui";
 import { Info, Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
@@ -150,6 +155,7 @@ export function ObiaSegmentStep({
         });
         if (shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(added);
       }
+      const { hash: labelsHash } = await fingerprintSegmentLabels(result.labels);
       // Record the run as soon as its objects layer exists, so a failure in
       // the optional label raster below cannot leave a layer the session does
       // not know about.
@@ -166,6 +172,7 @@ export function ObiaSegmentStep({
         labels: result.labels,
         objectsLayerId,
         objectCount: result.objectCount,
+        labelsHash,
         meanObjectArea: result.meanObjectArea,
         tool: result.tool,
         args: result.args,

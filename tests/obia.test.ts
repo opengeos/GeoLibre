@@ -9,6 +9,7 @@ import { initTools, runTool } from "geolibre-wasm/tools";
 import {
   classifiedRaster,
   csvCell,
+  fingerprintSegmentLabels,
   legendCsv,
   readRasterData,
   accuracyReportCsv,
@@ -586,6 +587,32 @@ describe("assessAccuracy", () => {
     const ours = assessAccuracy(samples, predictions);
     assert.ok(Math.abs(tool.overall_accuracy - ours.overallAccuracy) < 1e-12);
     assert.ok(Math.abs(tool.kappa - ours.kappa) < 1e-12);
+  });
+});
+
+describe("fingerprintSegmentLabels", () => {
+  const raster = (values: number[]) =>
+    new Uint8Array(
+      writeArrayBuffer(new Float32Array(values), {
+        width: 3,
+        height: 2,
+        ModelPixelScale: [1, 1, 0],
+        ModelTiepoint: [0, 0, 0, 500000, 4000000, 0],
+        ProjectedCSTypeGeoKey: 32617,
+        GTModelTypeGeoKey: 1,
+      } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer,
+    );
+
+  it("counts objects and tells apart rasters with the same count", async () => {
+    const a = await fingerprintSegmentLabels(raster([1, 1, 2, 3, 0, 2]));
+    const same = await fingerprintSegmentLabels(raster([1, 1, 2, 3, 0, 2]));
+    // Same three objects, different boundaries.
+    const moved = await fingerprintSegmentLabels(raster([1, 2, 2, 3, 0, 2]));
+    assert.equal(a.objectCount, 3);
+    assert.deepEqual(same, a);
+    assert.equal(moved.objectCount, 3);
+    assert.notEqual(moved.hash, a.hash);
+    assert.match(a.hash, /^[0-9a-f]{8}$/);
   });
 });
 
