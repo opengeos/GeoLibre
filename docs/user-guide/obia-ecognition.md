@@ -65,8 +65,8 @@ differences noted; **No** is not available.
 1. Run the eCognition workflow and export what it produced: the image objects
    of each level (polygons with their ids), the samples, the class hierarchy
    (names and colors), the object features you rely on (a CSV with the object
-   id), and each level's parent ids. Object ids must be whole numbers up to
-   16,777,216; renumber larger ones before importing.
+   id), and each level's parent ids. Object ids must be distinct positive
+   whole numbers up to 16,777,216; renumber larger ones before importing.
 2. In GeoLibre, add the image and the exported layers to the map, then use
    [Import from other software](obia.md#import-from-other-software): objects
    (with the id field), the feature table, the level mapping, the class list
