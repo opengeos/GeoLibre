@@ -287,6 +287,12 @@ export function ObiaBatchStep(): ReactElement | null {
         : classification.fields.some(isContextField)),
   );
 
+  // A ruleset run from the current classification started from classes other
+  // images do not have.
+  const fromCurrent = Boolean(
+    classification?.settings.method === "ruleset" && classification.settings.rulesetFromCurrent,
+  );
+
   if (!segmentation || !features || !classification) return null;
 
   const summarize = (run: ObiaBatchRun) =>
@@ -304,9 +310,11 @@ export function ObiaBatchStep(): ReactElement | null {
             ? "obia.batch.inheritUnsupported"
             : usesContext
               ? "obia.batch.contextUnsupported"
-              : classification.settings.method === "random-forest"
-                ? "obia.batch.hintForest"
-                : "obia.batch.hintRules",
+              : fromCurrent
+                ? "obia.batch.fromCurrentUnsupported"
+                : classification.settings.method === "random-forest"
+                  ? "obia.batch.hintForest"
+                  : "obia.batch.hintRules",
         )}
       </p>
       {targets.length === 0 ? (
@@ -339,7 +347,8 @@ export function ObiaBatchStep(): ReactElement | null {
             !selected.length ||
             level !== 1 ||
             classification.settings.method === "inherit" ||
-            usesContext
+            usesContext ||
+            fromCurrent
           }
           className="gap-2"
           data-testid="obia-batch-run"

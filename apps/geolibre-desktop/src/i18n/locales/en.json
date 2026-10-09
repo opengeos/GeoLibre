@@ -7734,7 +7734,8 @@
       },
       "levelOneOnly": "Applying to other images uses level 1: switch to it under Levels.",
       "inheritUnsupported": "Inherited classes come from a level above, which other images do not have: classify with a random forest or rules to apply the workflow.",
-      "contextUnsupported": "The classifier uses context features (from the object hierarchy), which other images do not have: classify without them to apply the workflow."
+      "contextUnsupported": "The classifier uses context features (from the object hierarchy), which other images do not have: classify without them to apply the workflow.",
+      "fromCurrentUnsupported": "The ruleset started from the current classification, which other images do not have: run it without that option to apply the workflow."
     },
     "provenance": {
       "title": "Provenance",
