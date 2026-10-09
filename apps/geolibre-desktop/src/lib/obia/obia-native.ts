@@ -73,6 +73,9 @@ export function obiaNativeStatus(): Promise<ObiaNativeStatus | null> {
   statusPromise ??= (async () => {
     if (isTauri()) await startGeoLibreSidecar();
     const status = await fetchObiaNativeStatus();
+    // Keep only a success: an unavailable runtime (say, scikit-image failed
+    // to install offline) is asked about again next time.
+    if (!status.available) statusPromise = null;
     return {
       available: status.available,
       maxPixels: {

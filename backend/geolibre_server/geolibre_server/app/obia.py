@@ -493,6 +493,11 @@ def _ensure_obia_runtime() -> str:
 # Job id -> its private output folder. Only jobs started here are listed, so the
 # download endpoint never serves another router's job or a client path.
 _JOB_DIRS: dict[str, str] = {}
+# Segment job id -> the segmentation it ran, so a measure job reuses its labels
+# only for the same segmentation.
+_JOB_SPECS: dict[str, dict] = {}
+# Measure job id -> the segmentation folder whose labels it reads.
+_JOB_USES: dict[str, str] = {}
 _JOB_DIRS_LOCK = threading.Lock()
 _BASE_DIR: str | None = None
 
@@ -505,32 +510,39 @@ def _base_dir() -> Path:
     return Path(_BASE_DIR)
 
 
-def _new_job_dir() -> str:
+def _new_job_dir(protect: str | None = None) -> str:
     """A fresh private folder for one job, pruning old ones.
 
     Keeps the newest ``MAX_JOB_DIRS`` folders and any younger than a day, so a
     measure job can reuse its segmentation's labels without the folders
     growing without bound.
 
+    Args:
+        protect: A folder a job about to start reads from, kept as well.
+
     Returns:
         The folder path.
     """
     base = _base_dir()
-    # A pending or running job's folder is never pruned, however old.
+    # Never prune a pending or running job's folder, however old, nor the
+    # folder whose labels such a job (or the one about to start) reads.
     with _JOB_DIRS_LOCK:
         jobs = list(_JOB_DIRS.items())
-    busy = {
-        Path(folder)
-        for job_id, folder in jobs
-        if (state := _job_state(job_id)) is not None and state.status in {"pending", "running"}
-    }
+        uses = dict(_JOB_USES)
+    busy = {Path(protect)} if protect else set()
+    for job_id, folder in jobs:
+        state = _job_state(job_id)
+        if state is not None and state.status in {"pending", "running"}:
+            busy.add(Path(folder))
+            if job_id in uses:
+                busy.add(Path(uses[job_id]))
     folders = sorted(
         (p for p in base.iterdir() if p.is_dir() and p not in busy),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
     cutoff = time.time() - JOB_DIR_MAX_AGE_SECS
-    keep = MAX_JOB_DIRS - 1 - len(busy)
+    keep = max(0, MAX_JOB_DIRS - 1 - len(busy))
     for index, folder in enumerate(folders):
         if index >= keep or folder.stat().st_mtime < cutoff:
             shutil.rmtree(folder, ignore_errors=True)
@@ -538,6 +550,8 @@ def _new_job_dir() -> str:
         for job_id, folder in list(_JOB_DIRS.items()):
             if not Path(folder).is_dir():
                 del _JOB_DIRS[job_id]
+                _JOB_SPECS.pop(job_id, None)
+                _JOB_USES.pop(job_id, None)
     return tempfile.mkdtemp(prefix="job-", dir=base)
 
 
@@ -586,12 +600,12 @@ def _pixel_limit(segmentation: dict) -> int:
     return limit * 4 // max(4, len(segmentation["bands"]))
 
 
-def _start(tool_id: str, script: str, params: dict):
+def _start(tool_id: str, script: str, params: dict, uses: str | None = None):
     try:
         _ensure_obia_runtime()
     except RuntimeBootstrapError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    out_dir = _new_job_dir()
+    out_dir = _new_job_dir(protect=uses)
     try:
         job = _start_job(
             tool_id,
@@ -608,6 +622,10 @@ def _start(tool_id: str, script: str, params: dict):
         raise
     with _JOB_DIRS_LOCK:
         _JOB_DIRS[job.id] = out_dir
+        if tool_id == "obia-segment":
+            _JOB_SPECS[job.id] = params["segmentation"]
+        if uses:
+            _JOB_USES[job.id] = uses
     return job
 
 
@@ -658,12 +676,15 @@ def obia_measure(request: MeasureRequest):
         "segmentation": _validated_segmentation(request.segmentation),
         "options": request.options.model_dump(),
     }
+    folder = None
     if request.segment_job_id:
         with _JOB_DIRS_LOCK:
-            folder = _JOB_DIRS.get(request.segment_job_id)
+            # Reuse the labels only of a job that ran this very segmentation.
+            if _JOB_SPECS.get(request.segment_job_id) == params["segmentation"]:
+                folder = _JOB_DIRS.get(request.segment_job_id)
         if folder:
             params["labels_path"] = str(Path(folder) / "segments.tif")
-    return _start("obia-measure", _MEASURE_SCRIPT, params)
+    return _start("obia-measure", _MEASURE_SCRIPT, params, uses=folder)
 
 
 @router.get("/jobs/{job_id}/files/{name}")

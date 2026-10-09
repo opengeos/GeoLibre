@@ -316,6 +316,13 @@ def test_endpoints_run_jobs_and_serve_their_files(
     assert state.result["object_count"] == 2
     assert Path(obia.obia_job_file(measure.id, "features.csv").path).is_file()
 
+    assert obia._JOB_USES[measure.id] == obia._JOB_DIRS[job.id]
+    # A different segmentation under that job id does not reuse its labels.
+    other = request.model_copy(update={"bands": [2, 1]})
+    mismatched = obia.obia_measure(obia.MeasureRequest(segmentation=other, segment_job_id=job.id))
+    assert mismatched.id not in obia._JOB_USES
+    _wait(mismatched.id)
+
     with pytest.raises(HTTPException) as excinfo:
         obia.obia_cancel("not-a-job")
     assert excinfo.value.status_code == 404

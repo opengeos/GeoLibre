@@ -207,3 +207,22 @@ describe("native OBIA", () => {
     assert.ok(sidecar.cancelled.includes("obia-segment"));
   });
 });
+
+describe("native OBIA status", () => {
+  it("asks again after an unavailable answer, and keeps an available one", async () => {
+    const { obiaNativeStatus } = await import("../apps/geolibre-desktop/src/lib/obia/obia-native");
+    let available = false;
+    let calls = 0;
+    setSidecarFetch((async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ available, message: "", max_pixels: { slic: 10, felzenszwalb: 5 } }),
+      );
+    }) as typeof fetch);
+    assert.equal((await obiaNativeStatus())?.available, false);
+    available = true;
+    assert.equal((await obiaNativeStatus())?.available, true);
+    assert.deepEqual((await obiaNativeStatus())?.maxPixels, { slic: 10, felzenszwalb: 5 });
+    assert.equal(calls, 2, "a success is cached");
+  });
+});

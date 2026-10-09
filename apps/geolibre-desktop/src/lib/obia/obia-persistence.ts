@@ -242,6 +242,16 @@ function restoreMerge(value: unknown): ObiaLevelMerge | undefined {
   };
 }
 
+/** A saved run's `area` and `pixelSize`, each only when valid. */
+function restoreAreaFields(json: Json): { area?: ObiaReadArea; pixelSize?: number } {
+  const area = restoreArea(json.area);
+  const pixelSize = json.pixelSize;
+  return {
+    ...(area ? { area } : {}),
+    ...(typeof pixelSize === "number" && pixelSize > 0 ? { pixelSize } : {}),
+  };
+}
+
 function restoreParams(value: unknown): RegionGrowingParams {
   const json = asObject(value) ?? {};
   const base = DEFAULT_REGION_GROWING_PARAMS;
@@ -348,10 +358,7 @@ function restoreBatches(value: unknown, layers: readonly GeoLibreLayer[]): ObiaB
           name: asString(source?.name),
           ...(typeof source?.location === "string" ? { location: source.location } : {}),
         },
-        ...(restoreArea(json.area) ? { area: restoreArea(json.area) } : {}),
-        ...(typeof json.pixelSize === "number" && json.pixelSize > 0
-          ? { pixelSize: json.pixelSize }
-          : {}),
+        ...restoreAreaFields(json),
         objectsLayerId: asString(json.objectsLayerId),
         objectCount: asNumber(json.objectCount, 0),
         classCounts,
@@ -500,8 +507,7 @@ function restoreLevel(
     bandIndexes: asBands(seg.bandIndexes),
     width: asNumber(seg.width, 0),
     height: asNumber(seg.height, 0),
-    ...(restoreArea(seg.area) ? { area: restoreArea(seg.area) } : {}),
-    ...(typeof seg.pixelSize === "number" && seg.pixelSize > 0 ? { pixelSize: seg.pixelSize } : {}),
+    ...restoreAreaFields(seg),
     ...(restoreMethod(seg.method) ? { method: restoreMethod(seg.method) } : {}),
     ...(seg.nativeParams ? { nativeParams: restoreNativeParams(seg.nativeParams) } : {}),
     labels: null,

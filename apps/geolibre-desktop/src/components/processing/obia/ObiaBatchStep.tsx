@@ -122,11 +122,13 @@ export function ObiaBatchStep(): ReactElement | null {
           if (!path) throw new Error(t("obia.native.needsLocalFile"));
           const status = await obiaNativeStatus();
           if (!status?.available) throw new Error(t("obia.native.unavailable"));
-          ({ area, pixelSize } = planObiaArea(
+          let fits: boolean;
+          ({ area, pixelSize, fits } = planObiaArea(
             info,
             wholeImageWindow(info),
             nativePixelLimit(status, segmentation.method, segmentation.bandIndexes.length),
           ));
+          if (!fits) throw new Error(t("obia.batch.error.tooLarge"));
           const request = nativeSegmentation(
             path,
             segmentation.bandIndexes,
@@ -141,7 +143,10 @@ export function ObiaBatchStep(): ReactElement | null {
           segmented = native;
           measuredTable = measured.table;
         } else {
-          ({ area, pixelSize } = planObiaArea(info, wholeImageWindow(info)));
+          let fits: boolean;
+          ({ area, pixelSize, fits } = planObiaArea(info, wholeImageWindow(info)));
+          // Refuse before reading anything: even the coarsest overview is too large.
+          if (!fits) throw new Error(t("obia.batch.error.tooLarge"));
           const image = await obiaSourceBands(target, segmentation.bandIndexes, area);
           if (!image) throw new Error(t("obia.batch.error.readImage"));
           // Reading the image takes no signal, so honour a Cancel made meanwhile.
