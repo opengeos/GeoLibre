@@ -324,6 +324,18 @@ describe("eCognition rule set import", () => {
     );
   });
 
+  it("reads names in the encoding the document declares", () => {
+    const text = `<?xml version="1.0" encoding="UTF-8"?><eCog.Proc><ObjectDependencies><ClssHrchy><AllClss><Clss id="1" name="Forêt"/></AllClss></ClssHrchy></ObjectDependencies><ProcessList>${proc(
+      "p",
+      ASSIGN,
+      `<DValue value="1" type="clssId" name="valClass"/>`,
+      "",
+    )}</ProcessList></eCog.Proc>`;
+    // In a binary project, after some bytes that are not UTF-8.
+    const project = new Uint8Array([0xff, 0xfe, 0x80, ...bytes(text), 0xc3]);
+    assert.deepEqual(importEcognitionRuleset(project).classes, ["Forêt"]);
+  });
+
   it("rejects a file without a process tree", () => {
     assert.throws(
       () => importEcognitionRuleset(bytes("<?xml version='1.0'?><Other/>")),

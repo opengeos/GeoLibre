@@ -194,6 +194,8 @@ const param = (params: Element | null, name: string) =>
  * @param bytes The file's contents.
  */
 export function ecognitionDocuments(bytes: Uint8Array): Document[] {
+  // Decoded one character per byte to find the documents by offset; each is
+  // then decoded from its bytes in the encoding it declares.
   const text = new TextDecoder("latin1").decode(bytes);
   const docs: Document[] = [];
   const matches = [...text.matchAll(/<\?xml[^>]*\?>\s*<([A-Za-z_][\w.-]*)/g)];
@@ -206,7 +208,15 @@ export function ecognitionDocuments(bytes: Uint8Array): Document[] {
     const close = `</${match[1]}>`;
     const end = text.lastIndexOf(close, limit - close.length);
     if (end < start) return;
-    const doc = new DOMParser().parseFromString(text.slice(start, end + close.length), "text/xml");
+    const declared = /encoding\s*=\s*["']([\w.-]+)["']/i.exec(match[0])?.[1] ?? "utf-8";
+    let decoder: TextDecoder;
+    try {
+      decoder = new TextDecoder(declared);
+    } catch {
+      decoder = new TextDecoder("utf-8");
+    }
+    const xml = decoder.decode(bytes.subarray(start, end + close.length));
+    const doc = new DOMParser().parseFromString(xml, "text/xml");
     if (!doc.getElementsByTagName("parsererror").length) docs.push(doc);
   });
   return docs;
