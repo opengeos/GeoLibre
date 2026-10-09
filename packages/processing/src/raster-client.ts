@@ -99,7 +99,7 @@ type GeoTiffImage = Awaited<ReturnType<Awaited<ReturnType<typeof fromArrayBuffer
  * a single value; geotiff.js indexes it per sample and throws "Unsupported data
  * format/bitsPerSample" for band 2+. Reusing the last value matches GDAL.
  */
-function padShortSampleFormat(image: GeoTiffImage): void {
+export function padShortSampleFormat(image: GeoTiffImage): void {
   const samples = image.getSamplesPerPixel();
   const formats = image.fileDirectory.getValue("SampleFormat") as ArrayLike<number> | undefined;
   if (!formats || formats.length === 0 || formats.length >= samples) return;

@@ -1,7 +1,8 @@
 import type { Feature, FeatureCollection, MultiPolygon, Polygon, Position } from "geojson";
-import { fromArrayBuffer } from "geotiff";
+import { fromArrayBuffer, type GeoTIFF, type GeoTIFFImage } from "geotiff";
 import {
   MAX_CLIENT_RASTER_BYTES,
+  padShortSampleFormat,
   readRasterData,
   writeRasterBands,
   writeUint8Bands,
@@ -19,7 +20,12 @@ import { runWasmToolInBackground } from "./wasm-tool-runner";
  */
 
 /** Why an OBIA call refused its input, for the UI to translate. */
-export type ObiaErrorCode = "image-too-large" | "too-many-bands" | "no-such-band" | "no-bands";
+export type ObiaErrorCode =
+  | "image-too-large"
+  | "too-many-bands"
+  | "no-such-band"
+  | "no-bands"
+  | "empty-area";
 
 /**
  * An input the workbench rejects, with a stable `code` and `params` the app
@@ -278,6 +284,199 @@ export function dissolveSegmentPolygons(
       };
     });
   return { type: "FeatureCollection", features };
+}
+
+// --- Reading part of a large image -------------------------------------------
+
+/** A pixel window `[x0, y0, x1, y1)` in full-resolution pixel coordinates. */
+export type ObiaPixelWindow = [number, number, number, number];
+
+/**
+ * The part of an image the workbench reads: a full-resolution pixel window
+ * and the resolution level to read it at (0 = full resolution, n = the n-th
+ * overview). Recorded with a segmentation so later steps, and a reloaded
+ * project, read exactly the same pixels.
+ */
+export interface ObiaReadArea {
+  level: number;
+  window: ObiaPixelWindow;
+}
+
+/** Size of one resolution level of a GeoTIFF. */
+export interface ObiaImageLevel {
+  width: number;
+  height: number;
+}
+
+/**
+ * The full-resolution image and its overviews, largest first. Mask IFDs
+ * (internal nodata masks) are left out; they are not image levels.
+ */
+async function levelImages(tiff: GeoTIFF): Promise<GeoTIFFImage[]> {
+  const count = await tiff.getImageCount();
+  const images: GeoTIFFImage[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const image = await tiff.getImage(index);
+    const subfileType = Number(image.fileDirectory.getValue("NewSubfileType") ?? 0);
+    if (index > 0 && subfileType & 4) continue; // a transparency mask
+    images.push(image);
+  }
+  return images.sort((a, b) => b.getWidth() - a.getWidth());
+}
+
+/**
+ * Header facts of a GeoTIFF the workbench plans a read from: its resolution
+ * levels and band count. Reads only the header (and, for a URL, only the
+ * byte ranges holding it).
+ *
+ * @param tiff An opened GeoTIFF.
+ */
+export async function readImageLevels(
+  tiff: GeoTIFF,
+): Promise<{ levels: ObiaImageLevel[]; bandCount: number; dataType: string }> {
+  const images = await levelImages(tiff);
+  const first = images[0];
+  const bits = first.getBitsPerSample();
+  const format = Number(
+    (first.fileDirectory.getValue("SampleFormat") as ArrayLike<number> | undefined)?.[0] ?? 1,
+  );
+  const kind = format === 3 ? "Float" : format === 2 ? "Int" : "UInt";
+  return {
+    levels: images.map((image) => ({ width: image.getWidth(), height: image.getHeight() })),
+    bandCount: first.getSamplesPerPixel(),
+    dataType: `${kind}${bits}`,
+  };
+}
+
+/**
+ * The window at a resolution level: the full-resolution window scaled to the
+ * level's grid, rounded outwards and clamped to it.
+ */
+function levelWindow(
+  levels: readonly ObiaImageLevel[],
+  level: number,
+  window: ObiaPixelWindow,
+): ObiaPixelWindow {
+  const full = levels[0];
+  const { width, height } = levels[level];
+  const sx = full.width / width;
+  const sy = full.height / height;
+  return [
+    Math.max(0, Math.floor(window[0] / sx)),
+    Math.max(0, Math.floor(window[1] / sy)),
+    Math.min(width, Math.ceil(window[2] / sx)),
+    Math.min(height, Math.ceil(window[3] / sy)),
+  ];
+}
+
+/**
+ * Choose the finest resolution level at which a window fits the workbench's
+ * pixel limit.
+ *
+ * @param levels Resolution levels, full resolution first ({@link readImageLevels}).
+ * @param window The full-resolution pixel window to read.
+ * @param maxPixels Pixel limit, {@link OBIA_MAX_PIXELS} by default.
+ * @returns The level and the size read at it, or null when even the coarsest
+ *   level is over the limit (or the window is empty).
+ */
+export function planImageRead(
+  levels: readonly ObiaImageLevel[],
+  window: ObiaPixelWindow,
+  maxPixels = OBIA_MAX_PIXELS,
+): { level: number; width: number; height: number } | null {
+  for (let level = 0; level < levels.length; level += 1) {
+    const [x0, y0, x1, y1] = levelWindow(levels, level, window);
+    const width = x1 - x0;
+    const height = y1 - y0;
+    if (width <= 0 || height <= 0) return null;
+    if (width * height <= maxPixels) return { level, width, height };
+  }
+  return null;
+}
+
+/**
+ * Read a window of a GeoTIFF at one resolution level into the single-band
+ * rasters the OBIA tools read, georeferenced to the window, so a large image
+ * (or a remote COG, read by byte ranges) is never decoded in full.
+ *
+ * @param tiff An opened GeoTIFF (`fromUrl` reads only the tiles it needs).
+ * @param bandIndexes 1-based bands to read, in this order.
+ * @param area The full-resolution window and level to read it at.
+ * @throws ObiaError when the window at that level is over the pixel limit,
+ *   empty, or asks for a band the image lacks.
+ */
+export async function readImageWindow(
+  tiff: GeoTIFF,
+  bandIndexes: readonly number[],
+  area: ObiaReadArea,
+): Promise<ObiaImage> {
+  if (!bandIndexes.length) throw new ObiaError("no-bands", "Choose at least one band to segment.");
+  const images = await levelImages(tiff);
+  const full = images[0];
+  const image = images[Math.min(Math.max(0, Math.round(area.level)), images.length - 1)];
+  const levels = images.map((item) => ({ width: item.getWidth(), height: item.getHeight() }));
+  const window = levelWindow(levels, images.indexOf(image), area.window);
+  const width = window[2] - window[0];
+  const height = window[3] - window[1];
+  if (width <= 0 || height <= 0) {
+    throw new ObiaError("empty-area", "The area to read does not overlap the image.");
+  }
+  if (width * height > OBIA_MAX_PIXELS) {
+    throw new ObiaError(
+      "image-too-large",
+      `This image has ${width} x ${height} pixels, over the workbench's limit of ${OBIA_MAX_PIXELS.toLocaleString("en-US")} pixels. Clip it to a smaller area first.`,
+      { width, height, max: OBIA_MAX_PIXELS },
+    );
+  }
+  const bandCount = image.getSamplesPerPixel();
+  const missing = bandIndexes.find(
+    (index) => !Number.isInteger(index) || index < 1 || index > bandCount,
+  );
+  if (missing !== undefined) {
+    throw new ObiaError("no-such-band", `The image has no band ${missing}.`, { index: missing });
+  }
+  // The decoder holds each chosen band as Float32; refuse up front, with a
+  // translatable error, a selection it would reject for memory.
+  if (
+    width * height * bandIndexes.length * Float32Array.BYTES_PER_ELEMENT >
+    MAX_CLIENT_RASTER_BYTES
+  ) {
+    throw new ObiaError(
+      "too-many-bands",
+      `${bandIndexes.length} bands of this image need more memory than the in-browser workbench allows. Select fewer bands, or clip the image.`,
+      { bands: bandIndexes.length },
+    );
+  }
+  padShortSampleFormat(image);
+  const result = await image.readRasters({
+    window,
+    samples: bandIndexes.map((index) => index - 1),
+  });
+  const rawBands = (Array.isArray(result) ? result : [result]) as ArrayLike<number>[];
+  // Georeference the window: the full-resolution origin, stepped by the
+  // level's pixel size (overviews carry no geotransform of their own).
+  const [originX, originY] = full.getOrigin();
+  const [fullResX, fullResY] = full.getResolution();
+  const resX = fullResX * (full.getWidth() / image.getWidth());
+  const resY = fullResY * (full.getHeight() / image.getHeight());
+  const noData = full.getGDALNoData();
+  const grid = {
+    width,
+    height,
+    originX: originX + window[0] * resX,
+    originY: originY + window[1] * resY,
+    resX: Math.abs(resX),
+    resY: Math.abs(resY),
+    flipX: resX < 0,
+    flipY: resY > 0,
+    nodata: noData != null && Number.isFinite(noData) ? noData : null,
+    geoKeys: (full.getGeoKeys() as Record<string, unknown>) ?? {},
+  };
+  const bands = bandIndexes.map((index, i) => ({
+    index,
+    bytes: new Uint8Array(writeRasterBands({ ...grid, bands: [Float32Array.from(rawBands[i])] })),
+  }));
+  return { width, height, bandCount, nodata: grid.nodata, bands };
 }
 
 /**

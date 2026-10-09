@@ -18,6 +18,12 @@ import {
   snapshotObiaSession,
 } from "../apps/geolibre-desktop/src/lib/obia/obia-persistence";
 import {
+  boundsWindow,
+  planObiaArea,
+  wholeImageWindow,
+  type ObiaSourceInfo,
+} from "../apps/geolibre-desktop/src/lib/obia/obia-source";
+import {
   emptyObiaSession,
   type ObiaSessionData,
 } from "../apps/geolibre-desktop/src/lib/obia/obia-session";
@@ -215,6 +221,59 @@ describe("OBIA workbench persistence", () => {
     );
     assert.deepEqual(restored.params, { threshold: 0.05, minArea: 16_777_216, steps: 3 });
     assert.equal(restored.classifier.trees, 1000);
+  });
+});
+
+describe("OBIA read areas", () => {
+  // A 1000 x 800 image with a 500 x 400 overview, 1 degree = 100 pixels,
+  // its top-left corner at (10 E, 50 N).
+  const info: ObiaSourceInfo = {
+    levels: [
+      { width: 1000, height: 800 },
+      { width: 500, height: 400 },
+    ],
+    bandCount: 4,
+    dataType: "UInt16",
+    pixelSize: 10,
+    unit: "m",
+    toPixel: (lng, lat) => [(lng - 10) * 100, (50 - lat) * 100],
+  };
+
+  it("maps a map view to a clamped pixel window", () => {
+    assert.deepEqual(boundsWindow(info, [11, 47, 12.5, 48]), [100, 200, 250, 300]);
+    // Clamped to the image where the view runs past it.
+    assert.deepEqual(boundsWindow(info, [9, 40, 30, 49]), [0, 100, 1000, 800]);
+    assert.equal(boundsWindow(info, [30, 10, 31, 11]), null);
+    assert.equal(boundsWindow({ ...info, toPixel: null }, [11, 47, 12, 48]), null);
+  });
+
+  it("falls back to an overview when the area is over the limit", () => {
+    const whole = wholeImageWindow(info);
+    assert.deepEqual(planObiaArea(info, whole), {
+      area: { level: 0, window: [0, 0, 1000, 800] },
+      width: 1000,
+      height: 800,
+      fits: true,
+    });
+  });
+
+  it("round-trips a segmentation's area and drops a malformed one", () => {
+    const session = fullSession();
+    session.areaMode = "view";
+    session.segmentation = {
+      ...session.segmentation!,
+      area: { level: 1, window: [10, 20, 610, 520] },
+      pixelSize: 20,
+    };
+    const saved = JSON.parse(JSON.stringify(snapshotObiaSession(session)));
+    const restored = restoreObiaSession(saved, [objectsLayer()]);
+    assert.equal(restored.areaMode, "view");
+    assert.deepEqual(restored.segmentation?.area, { level: 1, window: [10, 20, 610, 520] });
+    assert.equal(restored.segmentation?.pixelSize, 20);
+    saved.runs.segmentation.area = { level: -1, window: [0, 0, 5, 5] };
+    assert.equal(restoreObiaSession(saved, [objectsLayer()]).segmentation?.area, undefined);
+    saved.runs.segmentation.area = { level: 0, window: [5, 0, 5, 5] };
+    assert.equal(restoreObiaSession(saved, [objectsLayer()]).segmentation?.area, undefined);
   });
 });
 

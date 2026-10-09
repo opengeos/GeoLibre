@@ -22,7 +22,10 @@ session.
    first, so a band with a larger value range does not dominate. Keep the
    original multispectral bands (for example red, green, blue and near-infrared)
    rather than a display rendering.
-3. Set the parameters and click **Segment**.
+3. Choose the **Area**: the **Whole image**, or the part in the **Current map
+   view**. The line under it says how many pixels a run reads, and at which
+   resolution (see [Large images](#large-images)).
+4. Set the parameters and click **Segment**.
 
 | Parameter | Meaning |
 | --- | --- |
@@ -46,11 +49,32 @@ Felzenszwalb graph, marker watershed) are wrappers around this same region
 growing with a remapped threshold, which is why the workbench offers it under
 its real name.
 
-### Limits
+### Large images
 
-The workbench processes up to about 16.7 million pixels (4096 × 4096) per
-image. Clip a larger scene to your area of interest first, for example with
-**Processing → GeoLibre Toolbox → Raster → Clip by extent**.
+A run reads at most about 16.8 million pixels (4096 × 4096). A larger image
+still works:
+
+- **Current map view** reads only the part of the image in view. Zoom in until
+  the line under **Area** says *at full resolution*.
+- When the area is over the limit at full resolution, the workbench reads it
+  from the image's overviews instead, at the finest overview that fits (for
+  example 20 m pixels for a 10 m Sentinel-2 scene). The objects are then
+  coarser, and the line under **Area** says so. An image without overviews
+  has to be zoomed into, or clipped first, for example with **Processing →
+  GeoLibre Toolbox → Raster → Clip by extent**.
+
+A COG added by URL is read with HTTP range requests: listing its bands reads
+only its header, and a run fetches only the tiles of the area and overview it
+reads, so a large remote scene is never downloaded in full.
+
+The segmented area and overview are recorded with the run, so measuring,
+exporting and a reloaded project all read exactly the same pixels, and
+**Provenance** lists them. Exports are on the segmented area's grid.
+
+The limit keeps a run within a browser tab's memory and a reasonable time. In
+a benchmark of the engine on a 4-band Sentinel-2 scene, 16.8 million pixels
+took about 2 minutes to segment and 1 minute to measure, while the whole
+47-million-pixel scene took about 10 minutes and over 7 GB of memory.
 
 ## 2. Measure
 
@@ -152,16 +176,18 @@ class). The Export step also burns the classes onto the image's pixel grid:
 
 - **Add classified raster** adds a color rendering in the class colors.
 - **Save class codes (GeoTIFF)** saves a single-band Cloud-Optimized GeoTIFF of
-  class codes on the source image's grid and CRS, with 0 as NoData. Codes follow
-  the class list (the first class is 1), so a class keeps its code from run to
-  run; a rules default class outside the list comes after.
+  class codes on the segmented area's grid, in the source image's CRS, with 0
+  as NoData. Codes follow the class list (the first class is 1), so a class
+  keeps its code from run to run; a rules default class outside the list comes
+  after.
 - **Save legend (CSV)** saves the code, class name and color of each class.
 
 ## 7. Apply to other images
 
 Once an image is classified, **Apply to other images** runs the same workflow
 on other raster layers in the project: tick the images and click **Apply**.
-Each image is segmented with the same bands and parameters, measured with the
+Each image is segmented over its whole extent (from an overview when it is
+over the pixel limit) with the same bands and parameters, measured with the
 same features, and classified with the current classifier:
 
 - **Rules** apply unchanged.

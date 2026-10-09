@@ -7,6 +7,7 @@ import {
   type ObiaFeatureOptions,
   type ObiaSampleRole,
   type ObiaFeatureTable,
+  type ObiaReadArea,
   type ObiaToolCall,
   type RegionGrowingParams,
 } from "@geolibre/processing";
@@ -48,6 +49,14 @@ export interface ObiaSegmentationRun {
   bandIndexes: number[];
   width: number;
   height: number;
+  /**
+   * The part of the image segmented: a full-resolution pixel window and the
+   * resolution level it was read at. Absent in projects saved before areas
+   * were recorded, which segmented the whole image at full resolution.
+   */
+  area?: ObiaReadArea;
+  /** Pixel size of the segmented grid, in the image CRS's units. */
+  pixelSize?: number;
   /**
    * Label raster (GeoTIFF), one `segment_id` per pixel. Not saved with the
    * project: null after a reload until rebuilt (ensureObiaLabels).
@@ -96,6 +105,10 @@ export interface ObiaSplitRecord {
 export interface ObiaBatchRun {
   targetLayerId: string;
   source: ObiaSourceIdentity;
+  /** The part of that image read (its whole extent, at a level that fits). */
+  area?: ObiaReadArea;
+  /** Pixel size of the grid read, in that image CRS's units. */
+  pixelSize?: number;
   /** The objects layer added for that image. */
   objectsLayerId: string;
   objectCount: number;
@@ -133,6 +146,7 @@ export type ObiaSessionData = Pick<
   ObiaSessionState,
   | "sourceLayerId"
   | "bandIndexes"
+  | "areaMode"
   | "params"
   | "segmentation"
   | "featureOptions"
@@ -145,9 +159,14 @@ export type ObiaSessionData = Pick<
   | "batches"
 >;
 
+/** Which part of the image to segment. */
+export type ObiaAreaMode = "image" | "view";
+
 interface ObiaSessionState {
   sourceLayerId: string;
   bandIndexes: number[];
+  /** Segment the whole image, or the part in the current map view. */
+  areaMode: ObiaAreaMode;
   params: RegionGrowingParams;
   segmentation: ObiaSegmentationRun | null;
   featureOptions: ObiaFeatureOptions;
@@ -164,6 +183,7 @@ interface ObiaSessionState {
   batches: ObiaBatchRun[];
   setSourceLayerId: (id: string) => void;
   setBandIndexes: (bands: number[]) => void;
+  setAreaMode: (mode: ObiaAreaMode) => void;
   setParams: (patch: Partial<RegionGrowingParams>) => void;
   /** A new segmentation invalidates the features measured on the old one. */
   setSegmentation: (run: ObiaSegmentationRun | null) => void;
@@ -187,6 +207,7 @@ export function emptyObiaSession(): ObiaSessionData {
   return {
     sourceLayerId: "",
     bandIndexes: [],
+    areaMode: "image",
     params: { ...DEFAULT_REGION_GROWING_PARAMS },
     segmentation: null,
     featureOptions: { ...DEFAULT_OBIA_FEATURE_OPTIONS },
@@ -215,6 +236,7 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   ...emptyObiaSession(),
   setSourceLayerId: (sourceLayerId) => set({ sourceLayerId, bandIndexes: [] }),
   setBandIndexes: (bandIndexes) => set({ bandIndexes }),
+  setAreaMode: (areaMode) => set({ areaMode }),
   setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
   // A new segmentation also starts a new set of samples, so earlier splits go.
   setSegmentation: (segmentation) =>

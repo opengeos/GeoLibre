@@ -2,6 +2,7 @@ import { Button } from "@geolibre/ui";
 import { Copy } from "lucide-react";
 import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { ObiaReadArea } from "@geolibre/processing";
 import { snapshotObiaSession } from "../../../lib/obia/obia-persistence";
 import { useObiaSession, type ObiaRunEnv } from "../../../lib/obia/obia-session";
 
@@ -34,6 +35,15 @@ export function ObiaProvenance(): ReactElement | null {
           date,
         );
   };
+  const areaLine = (area: ObiaReadArea, pixelSize?: number) =>
+    t(area.level ? "obia.provenance.areaOverview" : "obia.provenance.area", {
+      x0: area.window[0],
+      y0: area.window[1],
+      x1: area.window[2],
+      y1: area.window[3],
+      level: area.level,
+      size: pixelSize?.toLocaleString(i18n.language, { maximumFractionDigits: 2 }) ?? "?",
+    });
   const env = (value: ObiaRunEnv) =>
     t("obia.provenance.env", { engine: value.engineVersion, app: value.appVersion });
 
@@ -73,6 +83,7 @@ export function ObiaProvenance(): ReactElement | null {
             height: segmentation.height,
             bands: segmentation.bandIndexes.join(", "),
           }),
+          ...(segmentation.area ? [areaLine(segmentation.area, segmentation.pixelSize)] : []),
         ])}
         {entry(
           t("obia.steps.segment"),
@@ -122,6 +133,7 @@ export function ObiaProvenance(): ReactElement | null {
             [
               when(run.finishedAt),
               run.source.location ?? null,
+              run.area ? areaLine(run.area, run.pixelSize) : null,
               ...run.calls.map((call) => code(commandLine(call.tool, call.args))),
               env(run.env),
             ].filter(Boolean),

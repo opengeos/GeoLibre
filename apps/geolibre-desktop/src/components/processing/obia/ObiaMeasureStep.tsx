@@ -80,7 +80,7 @@ export function ObiaMeasureStep(): ReactElement | null {
     setError(null);
     const run = progress.begin();
     try {
-      const image = await obiaSourceBands(sourceLayer, segmentation.bandIndexes);
+      const image = await obiaSourceBands(sourceLayer, segmentation.bandIndexes, segmentation.area);
       if (!image) throw new Error(t("obia.error.readImage"));
       // A reloaded project rebuilds the label raster it did not save.
       const labels = await ensureObiaLabels(run);

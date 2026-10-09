@@ -12,6 +12,7 @@ import {
   type ObiaFeatureOptions,
   type ObiaFeatureTable,
   type ObiaRule,
+  type ObiaReadArea,
   type ObiaRunOptions,
   type ObiaRuleOp,
   type ObiaToolCall,
@@ -113,6 +114,7 @@ export function snapshotObiaSession(data: ObiaSessionData): Record<string, unkno
       settings: {
         sourceLayerId: data.sourceLayerId,
         bandIndexes: data.bandIndexes,
+        areaMode: data.areaMode,
         params: data.params,
         featureOptions: data.featureOptions,
         classes: data.classes,
@@ -162,6 +164,28 @@ const asBandIndex = (value: unknown) =>
   Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 4096
     ? (value as number)
     : undefined;
+
+/**
+ * A saved read area: a non-negative level and an integer pixel window with
+ * positive size, or undefined (the whole image at full resolution).
+ */
+function restoreArea(value: unknown): ObiaReadArea | undefined {
+  const json = asObject(value);
+  const window = Array.isArray(json?.window) ? json.window : [];
+  if (
+    !json ||
+    !Number.isInteger(json.level) ||
+    (json.level as number) < 0 ||
+    (json.level as number) > 32 ||
+    window.length !== 4 ||
+    !window.every((n) => Number.isInteger(n) && n >= 0)
+  ) {
+    return undefined;
+  }
+  const [x0, y0, x1, y1] = window as number[];
+  if (x1 <= x0 || y1 <= y0) return undefined;
+  return { level: json.level as number, window: [x0, y0, x1, y1] };
+}
 
 function restoreParams(value: unknown): RegionGrowingParams {
   const json = asObject(value) ?? {};
@@ -269,6 +293,10 @@ function restoreBatches(value: unknown, layers: readonly GeoLibreLayer[]): ObiaB
           name: asString(source?.name),
           ...(typeof source?.location === "string" ? { location: source.location } : {}),
         },
+        ...(restoreArea(json.area) ? { area: restoreArea(json.area) } : {}),
+        ...(typeof json.pixelSize === "number" && json.pixelSize > 0
+          ? { pixelSize: json.pixelSize }
+          : {}),
         objectsLayerId: asString(json.objectsLayerId),
         objectCount: asNumber(json.objectCount, 0),
         classCounts,
@@ -353,6 +381,7 @@ export function restoreObiaSession(
     ...empty,
     sourceLayerId: asString(settings.sourceLayerId),
     bandIndexes: asBands(settings.bandIndexes),
+    areaMode: settings.areaMode === "view" ? "view" : "image",
     params: restoreParams(settings.params),
     featureOptions: restoreFeatureOptions(settings.featureOptions),
     classes: restoreClasses(settings.classes),
@@ -376,6 +405,8 @@ export function restoreObiaSession(
     bandIndexes: asBands(seg.bandIndexes),
     width: asNumber(seg.width, 0),
     height: asNumber(seg.height, 0),
+    ...(restoreArea(seg.area) ? { area: restoreArea(seg.area) } : {}),
+    ...(typeof seg.pixelSize === "number" && seg.pixelSize > 0 ? { pixelSize: seg.pixelSize } : {}),
     labels: null,
     objectsLayerId: objectsLayer.id,
     objectCount: asNumber(seg.objectCount, 0),
@@ -458,7 +489,7 @@ async function rebuildLabels(
     .getState()
     .layers.find((layer) => layer.id === segmentation.sourceLayerId);
   if (!source) throw new ObiaRestoreError("source-missing");
-  const image = await obiaSourceBands(source, segmentation.bandIndexes);
+  const image = await obiaSourceBands(source, segmentation.bandIndexes, segmentation.area);
   if (!image) throw new ObiaRestoreError("source-missing");
   const { labels } = await segmentLabels(image, segmentation.params, run);
   const { objectCount, hash } = await fingerprintSegmentLabels(labels);

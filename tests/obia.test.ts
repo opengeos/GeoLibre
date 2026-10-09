@@ -3,13 +3,15 @@ import { readFileSync } from "node:fs";
 import { before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { FeatureCollection } from "geojson";
-import { writeArrayBuffer } from "geotiff";
+import { fromArrayBuffer, writeArrayBuffer } from "geotiff";
 import { featureSelectionId } from "@geolibre/core";
 import { initTools, runTool } from "geolibre-wasm/tools";
 import {
   classifiedRaster,
   csvCell,
   fingerprintSegmentLabels,
+  planImageRead,
+  readImageWindow,
   legendCsv,
   readRasterData,
   accuracyReportCsv,
@@ -587,6 +589,73 @@ describe("assessAccuracy", () => {
     const ours = assessAccuracy(samples, predictions);
     assert.ok(Math.abs(tool.overall_accuracy - ours.overallAccuracy) < 1e-12);
     assert.ok(Math.abs(tool.kappa - ours.kappa) < 1e-12);
+  });
+});
+
+describe("reading part of a large image", () => {
+  const levels = [
+    { width: 9222, height: 5089 },
+    { width: 4611, height: 2545 },
+    { width: 2306, height: 1273 },
+  ];
+
+  it("picks the finest level at which the window fits the limit", () => {
+    assert.deepEqual(planImageRead(levels, [0, 0, 9222, 5089]), {
+      level: 1,
+      width: 4611,
+      height: 2545,
+    });
+    // A small window reads at full resolution.
+    assert.deepEqual(planImageRead(levels, [100, 200, 1100, 1200]), {
+      level: 0,
+      width: 1000,
+      height: 1000,
+    });
+    // Over the limit even at the coarsest level, or empty.
+    assert.equal(planImageRead(levels, [0, 0, 9222, 5089], 1000), null);
+    assert.equal(planImageRead(levels, [10, 10, 10, 20]), null);
+  });
+
+  it("reads a georeferenced window of the chosen bands", async () => {
+    // 4 x 3, 2 bands: band b holds b*100 + pixel index.
+    const width = 4;
+    const height = 3;
+    const values = new Float32Array(width * height * 2);
+    for (let p = 0; p < width * height; p += 1) {
+      values[p * 2] = 100 + p;
+      values[p * 2 + 1] = 200 + p;
+    }
+    const tiff = await fromArrayBuffer(
+      writeArrayBuffer(values, {
+        width,
+        height,
+        SamplesPerPixel: 2,
+        ModelPixelScale: [10, 10, 0],
+        ModelTiepoint: [0, 0, 0, 500000, 4000000, 0],
+        ProjectedCSTypeGeoKey: 32617,
+        GTModelTypeGeoKey: 1,
+      } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer,
+    );
+    const image = await readImageWindow(tiff, [2], { level: 0, window: [1, 1, 3, 3] });
+    assert.equal(image.width, 2);
+    assert.equal(image.height, 2);
+    assert.deepEqual(
+      image.bands.map((band) => band.index),
+      [2],
+    );
+    const band = await readRasterData(image.bands[0].bytes.buffer as ArrayBuffer);
+    assert.deepEqual(Array.from(band.bands[0]), [205, 206, 209, 210]);
+    assert.equal(band.originX, 500010);
+    assert.equal(band.originY, 3999990);
+    assert.equal(band.resX, 10);
+    await assert.rejects(
+      readImageWindow(tiff, [3], { level: 0, window: [0, 0, 4, 3] }),
+      (err: ObiaError) => err.code === "no-such-band",
+    );
+    await assert.rejects(
+      readImageWindow(tiff, [1], { level: 0, window: [4, 0, 4, 3] }),
+      (err: ObiaError) => err.code === "empty-area",
+    );
   });
 });
 

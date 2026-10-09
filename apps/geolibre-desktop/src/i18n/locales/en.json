@@ -7428,6 +7428,17 @@
     "bands": "Bands",
     "bandN": "Band {{index}}",
     "bandsHint": "Segmentation uses the selected bands, each standardized so no band dominates.",
+    "area": {
+      "label": "Area",
+      "image": "Whole image",
+      "view": "Current map view",
+      "full": "Reads {{width}} × {{height}} pixels at full resolution ({{size}} {{unit}}).",
+      "overview": "Reads {{width}} × {{height}} pixels from an overview, at {{size}} {{unit}} per pixel: at full resolution the image is over the {{max}} pixel limit. Segment the current map view for full resolution.",
+      "overviewView": "Reads {{width}} × {{height}} pixels from an overview, at {{size}} {{unit}} per pixel: at full resolution this view is over the {{max}} pixel limit. Zoom in for full resolution.",
+      "tooLarge": "Even the coarsest overview gives {{width}} × {{height}} pixels, over the {{max}} pixel limit. Zoom in and segment the current map view, or clip the image.",
+      "outside": "The current map view does not overlap this image.",
+      "noCrs": "This image's coordinate system is not recognized, so only the whole image can be segmented."
+    },
     "method": "Method",
     "methodRegionGrowing": "Seeded region growing (Whitebox)",
     "methodNote": "Pixels join a region while they stay within the threshold of its seed in standardized band space, then objects below the minimum size merge into their most similar neighbor. This is not eCognition multiresolution segmentation, so its scale values do not transfer.",
@@ -7451,7 +7462,8 @@
       "noSuchBand": "The image has no band {{index}}.",
       "sourceMissing": "The image these objects were segmented from is no longer in the project. Segment again.",
       "sourceChanged": "The image no longer segments into the same objects, so it changed since the objects were made. Segment again.",
-      "failed": "Segmentation failed."
+      "failed": "Segmentation failed.",
+      "emptyArea": "The area to segment does not overlap the image."
     },
     "measure": {
       "hint": "Measure each object on the original bands. The values are written to the objects layer, where the attribute table, styling and the classifier can use them.",
@@ -7589,6 +7601,8 @@
       "title": "Provenance",
       "image": "Image",
       "imageSize": "{{width}} × {{height}} pixels, bands {{bands}}",
+      "area": "Pixels {{x0}} to {{x1}} across and {{y0}} to {{y1}} down, at full resolution ({{size}} per pixel)",
+      "areaOverview": "Pixels {{x0}} to {{x1}} across and {{y0}} to {{y1}} down (full-resolution grid), read from overview {{level}} ({{size}} per pixel)",
       "env": "geolibre-wasm {{engine}}, GeoLibre {{app}}",
       "labelsPending": "Label raster not loaded; it is rebuilt from these settings when a step needs it.",
       "splits": "Hold-out splits",

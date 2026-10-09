@@ -1,11 +1,6 @@
 import { shouldZoomToNewLayers, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import {
-  fingerprintSegmentLabels,
-  readImageSummary,
-  segmentImage,
-  type ObiaImageSummary,
-} from "@geolibre/processing";
+import { OBIA_MAX_PIXELS, fingerprintSegmentLabels, segmentImage } from "@geolibre/processing";
 import { Button, Label, Select } from "@geolibre/ui";
 import { Info, Loader2, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
@@ -13,7 +8,15 @@ import { useTranslation } from "react-i18next";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { obiaLayerLocation, obiaRunEnv } from "../../../lib/obia/obia-persistence";
-import { obiaSourceBands, obiaSourceBytes, obiaSourceKey } from "../../../lib/obia/obia-source";
+import {
+  boundsWindow,
+  obiaSourceBands,
+  obiaSourceInfo,
+  obiaSourceKey,
+  planObiaArea,
+  wholeImageWindow,
+  type ObiaSourceInfo,
+} from "../../../lib/obia/obia-source";
 import {
   ObiaNumberField,
   ObiaRunProgress,
@@ -57,6 +60,9 @@ export function ObiaSegmentStep({
   const setSourceLayerId = useObiaSession((s) => s.setSourceLayerId);
   const bandIndexes = useObiaSession((s) => s.bandIndexes);
   const setBandIndexes = useObiaSession((s) => s.setBandIndexes);
+  const areaMode = useObiaSession((s) => s.areaMode);
+  const setAreaMode = useObiaSession((s) => s.setAreaMode);
+  const viewBounds = useAppStore((s) => s.mapView.bbox);
   const params = useObiaSession((s) => s.params);
   const setParams = useObiaSession((s) => s.setParams);
   const segmentation = useObiaSession((s) => s.segmentation);
@@ -65,7 +71,7 @@ export function ObiaSegmentStep({
   const imageLayers = useMemo(() => layers.filter(isImageLayer), [layers]);
   const sourceLayer = imageLayers.find((layer) => layer.id === sourceLayerId) ?? null;
 
-  const [summary, setSummary] = useState<ObiaImageSummary | null>(null);
+  const [summary, setSummary] = useState<ObiaSourceInfo | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
   const [addLabels, setAddLabels] = useState(false);
   const [running, setRunning] = useState(false);
@@ -96,11 +102,10 @@ export function ObiaSegmentStep({
     setError(null);
     void (async () => {
       try {
-        const bytes = await obiaSourceBytes(layer);
+        // Only the header: a remote COG is read by byte ranges, not downloaded.
+        const info = await obiaSourceInfo(layer);
         if (cancelled) return;
-        if (!bytes) throw new Error(t("obia.error.readImage"));
-        const info = await readImageSummary(bytes);
-        if (cancelled) return;
+        if (!info) throw new Error(t("obia.error.readImage"));
         setSummary(info);
         const current = useObiaSession.getState().bandIndexes;
         if (!current.length || current.some((band) => band > info.bandCount)) {
@@ -131,8 +136,25 @@ export function ObiaSegmentStep({
     [bandIndexes, setBandIndexes],
   );
 
+  // What a run would read: the whole image or the map view's part of it, at
+  // the finest resolution level that fits the workbench's pixel limit.
+  const plan = useMemo(() => {
+    if (!summary) return null;
+    const window =
+      areaMode === "view"
+        ? viewBounds
+          ? boundsWindow(summary, viewBounds)
+          : null
+        : wholeImageWindow(summary);
+    return window ? planObiaArea(summary, window) : null;
+  }, [summary, areaMode, viewBounds]);
+
   const handleSegment = useCallback(async () => {
-    if (runningRef.current || !sourceLayer) return;
+    if (runningRef.current || !sourceLayer || !summary) return;
+    if (!plan) {
+      setError(t("obia.error.emptyArea"));
+      return;
+    }
     if (!bandIndexes.length) {
       setError(t("obia.error.noBands"));
       return;
@@ -142,8 +164,10 @@ export function ObiaSegmentStep({
     setError(null);
     const run = progress.begin();
     try {
-      const image = await obiaSourceBands(sourceLayer, bandIndexes);
+      const { area } = plan;
+      const image = await obiaSourceBands(sourceLayer, bandIndexes, area);
       if (!image) throw new Error(t("obia.error.readImage"));
+      const scale = summary.levels[0].width / summary.levels[area.level].width;
       const result = await segmentImage(image, params, run);
       const name = t("obia.layerName", { name: sourceLayer.name });
       // Fingerprint before adding the layer, so a failure here leaves nothing behind.
@@ -170,6 +194,8 @@ export function ObiaSegmentStep({
         bandIndexes: [...bandIndexes],
         width: image.width,
         height: image.height,
+        area,
+        pixelSize: summary.pixelSize * scale,
         labels: result.labels,
         objectsLayerId,
         objectCount: result.objectCount,
@@ -201,6 +227,8 @@ export function ObiaSegmentStep({
     }
   }, [
     sourceLayer,
+    summary,
+    plan,
     bandIndexes,
     params,
     addLabels,
@@ -251,8 +279,8 @@ export function ObiaSegmentStep({
             ) : summary ? (
               <span className="text-xs text-muted-foreground">
                 {t("obia.imageSummary", {
-                  width: summary.width,
-                  height: summary.height,
+                  width: summary.levels[0].width,
+                  height: summary.levels[0].height,
                   bands: summary.bandCount,
                 })}
               </span>
@@ -276,6 +304,25 @@ export function ObiaSegmentStep({
               </div>
               <p className="text-xs text-muted-foreground">{t("obia.bandsHint")}</p>
             </fieldset>
+          )}
+
+          {summary && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="obia-area" className="text-xs">
+                {t("obia.area.label")}
+              </Label>
+              <Select
+                id="obia-area"
+                value={areaMode}
+                onChange={(event) => setAreaMode(event.target.value === "view" ? "view" : "image")}
+              >
+                <option value="image">{t("obia.area.image")}</option>
+                <option value="view" disabled={!summary.toPixel}>
+                  {t("obia.area.view")}
+                </option>
+              </Select>
+              <ObiaAreaNote info={summary} plan={plan} mode={areaMode} />
+            </div>
           )}
 
           <div className="grid gap-1.5">
@@ -326,7 +373,7 @@ export function ObiaSegmentStep({
           <div className="flex items-center gap-3">
             <Button
               onClick={() => void handleSegment()}
-              disabled={running || loadingImage || !summary || !bandIndexes.length}
+              disabled={running || loadingImage || !summary || !bandIndexes.length || !plan?.fits}
               className="gap-2"
               data-testid="obia-segment"
             >
@@ -359,5 +406,52 @@ export function ObiaSegmentStep({
         }
       />
     </section>
+  );
+}
+
+/** One line saying what a run will read, and at which resolution. */
+function ObiaAreaNote({
+  info,
+  plan,
+  mode,
+}: {
+  info: ObiaSourceInfo;
+  plan: ReturnType<typeof planObiaArea> | null;
+  mode: "image" | "view";
+}): ReactElement {
+  const { t, i18n } = useTranslation();
+  const number = (value: number, digits = 0) =>
+    value.toLocaleString(i18n.language, { maximumFractionDigits: digits });
+  let text: string;
+  let warn = false;
+  if (!plan) {
+    text = t(info.toPixel ? "obia.area.outside" : "obia.area.noCrs");
+    warn = true;
+  } else {
+    const { level } = plan.area;
+    const scale = info.levels[0].width / info.levels[level].width;
+    const values = {
+      width: number(plan.width),
+      height: number(plan.height),
+      size: number(info.pixelSize * scale, 2),
+      unit: info.unit ?? "",
+      max: number(OBIA_MAX_PIXELS),
+    };
+    if (!plan.fits) {
+      text = t("obia.area.tooLarge", values);
+      warn = true;
+    } else if (level === 0) {
+      text = t("obia.area.full", values);
+    } else {
+      text = t(mode === "view" ? "obia.area.overviewView" : "obia.area.overview", values);
+    }
+  }
+  return (
+    <p
+      className={warn ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
+      data-testid="obia-area-note"
+    >
+      {text}
+    </p>
   );
 }
