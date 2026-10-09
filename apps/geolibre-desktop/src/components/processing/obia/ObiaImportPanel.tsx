@@ -180,7 +180,10 @@ export function ObiaImportPanel(): ReactElement {
         geojson: labeled.objects,
         style: labelStylePatch(objects, classes),
       });
-      return t("obia.import.samplesDone", { count: labeled.matched, missed: labeled.missed });
+      const done = t("obia.import.samplesDone", { count: labeled.matched, missed: labeled.missed });
+      return labeled.conflicts
+        ? `${done} ${t("obia.import.samplesConflicts", { count: labeled.conflicts })}`
+        : done;
     });
 
   const importClasses = () =>
@@ -253,10 +256,13 @@ export function ObiaImportPanel(): ReactElement {
         built,
         t("obia.levels.layerName", { name: current.source.name, level: built.record.level }),
       );
-      return t("obia.import.mappingDone", {
+      const done = t("obia.import.mappingDone", {
         level: built.record.level,
         count: built.record.segmentation.objectCount,
       });
+      return built.unmapped
+        ? `${done} ${t("obia.import.mappingUnmapped", { count: built.unmapped })}`
+        : done;
     });
 
   const button = (key: string, label: string, onClick: () => void, disabled = false) => (

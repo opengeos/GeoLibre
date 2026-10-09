@@ -60,6 +60,96 @@ describe("OBIA import", () => {
     assert.throws(() => parseLevelMapping("a,b\n"), ObiaImportError);
   });
 
+  it("keeps a headerless mapping's first row and never reads one column twice", () => {
+    assert.deepEqual(
+      [...parseLevelMapping("1,5\n2,5\n")],
+      [
+        [1, 5],
+        [2, 5],
+      ],
+    );
+    // Only a parent column is named: the child is the other one.
+    assert.deepEqual([...parseLevelMapping("parent_id,id\n7,3\n")], [[3, 7]]);
+    assert.throws(
+      () => parseLevelMapping(`child,parent\n${2 ** 24 + 1},1\n`),
+      (err: unknown) => err instanceof ObiaImportError && err.code === "big-ids",
+    );
+  });
+
+  it("puts a sample point inside a concave or holed polygon", () => {
+    const inside = ([x, y]: number[], rings: number[][][]) => {
+      let hit = false;
+      for (const ring of rings) {
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+          const [xi, yi] = ring[i];
+          const [xj, yj] = ring[j];
+          if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
+        }
+      }
+      return hit;
+    };
+    // A square ring: its centroid is in the hole.
+    const ring = [
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      [
+        [2, 2],
+        [2, 8],
+        [8, 8],
+        [8, 2],
+        [2, 2],
+      ],
+    ];
+    const [point] = samplePoints({ type: "Polygon", coordinates: ring });
+    assert.ok(inside(point, ring), `point ${point} is not inside the ring`);
+    // A thin "L": its centroid falls outside the shape.
+    const ell = [
+      [
+        [0, 0],
+        [10, 0],
+        [10, 1],
+        [1, 1],
+        [1, 10],
+        [0, 10],
+        [0, 0],
+      ],
+    ];
+    const [corner] = samplePoints({ type: "Polygon", coordinates: ell });
+    assert.ok(inside(corner, ell), `point ${corner} is not inside the L`);
+    // Opposite windings in a multipolygon do not cancel out.
+    const square = (x: number) => [
+      [x, 0],
+      [x + 1, 0],
+      [x + 1, 1],
+      [x, 1],
+      [x, 0],
+    ];
+    const [mid] = samplePoints({
+      type: "MultiPolygon",
+      coordinates: [[square(0)], [square(5).reverse()]],
+    });
+    assert.ok(mid, "a multipolygon with mixed windings still has a point");
+    // A zero-area polygon has none.
+    assert.deepEqual(
+      samplePoints({
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      }),
+      [],
+    );
+  });
+
   it("finds a small polygon's centroid precisely in degrees", () => {
     // A 1 x 1 m square near Spokane: raw-degree shoelace sums cancel here.
     const [x0, y0, d] = [-117.5943709, 47.6541957, 0.00001];

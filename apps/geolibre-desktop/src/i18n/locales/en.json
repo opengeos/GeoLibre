@@ -7561,12 +7561,16 @@
       "objectsDone_other": "Imported {{count}} objects ({{skipped}} too small or outside the image).",
       "samplesDone_one": "Labeled {{count}} object from the samples ({{missed}} samples outside the objects).",
       "samplesDone_other": "Labeled objects from {{count}} samples ({{missed}} samples outside the objects).",
+      "samplesConflicts_one": "{{count}} object had conflicting samples and kept the first one's label.",
+      "samplesConflicts_other": "{{count}} objects had conflicting samples and kept the first one's label.",
       "classesDone_one": "Imported {{count}} class.",
       "classesDone_other": "Imported {{count}} classes.",
       "featuresDone_one": "Imported {{count}} feature for {{objects}} objects.",
       "featuresDone_other": "Imported {{count}} features for {{objects}} objects.",
       "mappingDone_one": "Built level {{level}} from the mapping: {{count}} object.",
       "mappingDone_other": "Built level {{level}} from the mapping: {{count}} objects.",
+      "mappingUnmapped_one": "{{count}} object had no parent in the file and became its own.",
+      "mappingUnmapped_other": "{{count}} objects had no parent in the file and became their own.",
       "error": {
         "failed": "Could not import.",
         "noImage": "Choose the image under Segment first.",
@@ -7576,7 +7580,10 @@
         "no-polygons": "The layer has no polygons.",
         "no-objects": "No polygon covers the image.",
         "bad-file": "The file is not in a format the workbench reads: see the user guide.",
-        "no-ids": "The id field must hold distinct positive whole numbers."
+        "no-ids": "The id field must hold positive whole numbers.",
+        "no-image": "Could not read the image.",
+        "dup-ids": "The id field must hold a different number for each object.",
+        "big-ids": "Object ids must be at most 16,777,216: renumber them first."
       }
     },
     "context": {
