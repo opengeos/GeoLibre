@@ -146,6 +146,8 @@ export function ObiaSegmentStep({
       if (!image) throw new Error(t("obia.error.readImage"));
       const result = await segmentImage(image, params, run);
       const name = t("obia.layerName", { name: sourceLayer.name });
+      // Fingerprint before adding the layer, so a failure here leaves nothing behind.
+      const { hash: labelsHash } = await fingerprintSegmentLabels(result.labels);
       const objectsLayerId = addGeoJsonLayer(name, result.objects);
       const added = useAppStore.getState().layers.find((layer) => layer.id === objectsLayerId);
       if (added) {
@@ -155,7 +157,6 @@ export function ObiaSegmentStep({
         });
         if (shouldZoomToNewLayers()) mapControllerRef.current?.fitLayer(added);
       }
-      const { hash: labelsHash } = await fingerprintSegmentLabels(result.labels);
       // Record the run as soon as its objects layer exists, so a failure in
       // the optional label raster below cannot leave a layer the session does
       // not know about.

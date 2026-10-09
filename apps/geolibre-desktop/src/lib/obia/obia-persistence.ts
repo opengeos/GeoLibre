@@ -2,6 +2,7 @@ import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import {
   DEFAULT_OBIA_FEATURE_OPTIONS,
   DEFAULT_REGION_GROWING_PARAMS,
+  OBIA_MAX_PIXELS,
   OBIA_PREDICTED_FIELD,
   OBIA_RULE_OPS,
   OBIA_SEGMENT_ID_FIELD,
@@ -146,13 +147,30 @@ const asBands = (value: unknown): number[] =>
     ? value.filter((item): item is number => Number.isInteger(item) && item >= 1)
     : [];
 
+/**
+ * A saved number within the range the workbench's inputs allow: the file is
+ * untrusted, and these values go straight to the engine's tools.
+ */
+function inRange(value: unknown, fallback: number, min: number, max: number, integer = false) {
+  const n = asNumber(value, fallback);
+  const clamped = Math.min(max, Math.max(min, integer ? Math.round(n) : n));
+  return Number.isFinite(clamped) ? clamped : fallback;
+}
+
+/** A saved 1-based band index, if it is one. */
+const asBandIndex = (value: unknown) =>
+  Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 4096
+    ? (value as number)
+    : undefined;
+
 function restoreParams(value: unknown): RegionGrowingParams {
   const json = asObject(value) ?? {};
   const base = DEFAULT_REGION_GROWING_PARAMS;
+  // The Segment step's input ranges.
   return {
-    threshold: asNumber(json.threshold, base.threshold),
-    minArea: asNumber(json.minArea, base.minArea),
-    steps: asNumber(json.steps, base.steps),
+    threshold: inRange(json.threshold, base.threshold, 0.05, 5),
+    minArea: inRange(json.minArea, base.minArea, 1, OBIA_MAX_PIXELS, true),
+    steps: inRange(json.steps, base.steps, 1, 50, true),
   };
 }
 
@@ -160,13 +178,13 @@ function restoreFeatureOptions(value: unknown): ObiaFeatureOptions {
   const json = asObject(value) ?? {};
   const base = DEFAULT_OBIA_FEATURE_OPTIONS;
   const indices = asObject(json.indices);
-  const band = (key: string) =>
-    indices && Number.isInteger(indices[key]) ? (indices[key] as number) : undefined;
+  const band = (key: string) => (indices ? asBandIndex(indices[key]) : undefined);
+  const textureBand = asBandIndex(json.textureBand);
   return {
     spectral: typeof json.spectral === "boolean" ? json.spectral : base.spectral,
     shape: typeof json.shape === "boolean" ? json.shape : base.shape,
     context: typeof json.context === "boolean" ? json.context : base.context,
-    ...(Number.isInteger(json.textureBand) ? { textureBand: json.textureBand as number } : {}),
+    ...(textureBand ? { textureBand } : {}),
     ...(indices ? { indices: { red: band("red"), green: band("green"), nir: band("nir") } } : {}),
   };
 }
@@ -207,7 +225,8 @@ function restoreClassifier(value: unknown): ObiaClassifierSettings {
   const base = emptyObiaSession().classifier;
   return {
     method: json.method === "rules" ? "rules" : base.method,
-    trees: asNumber(json.trees, base.trees),
+    // The Classify step's input range.
+    trees: inRange(json.trees, base.trees, 10, 1000, true),
     fields: Array.isArray(json.fields) ? asStrings(json.fields) : null,
     rules: restoreRules(json.rules),
     defaultClass: asString(json.defaultClass, base.defaultClass),
