@@ -129,7 +129,9 @@ export async function rasterizeObjects(
   const ids = rasterizePolygons(
     kept.map(({ id, feature }) => ({
       id,
-      rings: polygonsOf(feature.geometry).flatMap((rings) => rings.map((ring) => ring.map(project))),
+      rings: polygonsOf(feature.geometry).flatMap((rings) =>
+        rings.map((ring) => ring.map(project)),
+      ),
     })),
     grid.width,
     grid.height,
@@ -165,7 +167,7 @@ export async function rasterizeObjects(
 }
 
 /** A representative point of a sample: itself, or a polygon's centroid. */
-function samplePoints(geometry: Geometry | null): Position[] {
+export function samplePoints(geometry: Geometry | null): Position[] {
   if (!geometry) return [];
   switch (geometry.type) {
     case "Point":
@@ -204,7 +206,16 @@ function samplePoints(geometry: Geometry | null): Position[] {
 }
 
 /** Default colors for classes an import adds. */
-const PALETTE = ["#16a34a", "#2563eb", "#dc2626", "#ca8a04", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+const PALETTE = [
+  "#16a34a",
+  "#2563eb",
+  "#dc2626",
+  "#ca8a04",
+  "#7c3aed",
+  "#0891b2",
+  "#db2777",
+  "#65a30d",
+];
 
 /**
  * Label objects from imported samples (points, or polygons by their
@@ -304,7 +315,11 @@ export function parseClassSchema(text: string): ObiaClass[] {
     const csv = parseObiaCsv(trimmed);
     const name = csv.headers.findIndex((h) => /^(name|class|class_?name)$/i.test(h));
     const color = csv.headers.findIndex((h) => /^colou?r$/i.test(h));
-    if (name >= 0) items = csv.rows.map((row) => ({ name: row[name], color: color >= 0 ? row[color] : undefined }));
+    if (name >= 0)
+      items = csv.rows.map((row) => ({
+        name: row[name],
+        color: color >= 0 ? row[color] : undefined,
+      }));
   }
   const classes: ObiaClass[] = [];
   for (const item of items) {
@@ -332,7 +347,8 @@ export function parseFeatureTable(text: string): ObiaFeatureTable {
   } catch {
     throw new ObiaImportError("bad-file", "The table needs a segment_id column.");
   }
-  if (!table.fields.length) throw new ObiaImportError("bad-file", "The table has no feature columns.");
+  if (!table.fields.length)
+    throw new ObiaImportError("bad-file", "The table has no feature columns.");
   return table;
 }
 
@@ -344,7 +360,10 @@ export function parseFeatureTable(text: string): ObiaFeatureTable {
  */
 export function parseLevelMapping(text: string): Map<number, number> {
   const csv = parseObiaCsv(text.trim());
-  const child = Math.max(0, csv.headers.findIndex((h) => /child/i.test(h)));
+  const child = Math.max(
+    0,
+    csv.headers.findIndex((h) => /child/i.test(h)),
+  );
   const parentIndex = csv.headers.findIndex((h) => /parent/i.test(h));
   const parent = parentIndex >= 0 ? parentIndex : child === 0 ? 1 : 0;
   const mapping = new Map<number, number>();
@@ -353,6 +372,7 @@ export function parseLevelMapping(text: string): Map<number, number> {
     const p = Number(row[parent]);
     if (Number.isInteger(c) && Number.isInteger(p) && c > 0 && p > 0) mapping.set(c, p);
   }
-  if (!mapping.size) throw new ObiaImportError("bad-file", "The mapping has no child_id,parent_id rows.");
+  if (!mapping.size)
+    throw new ObiaImportError("bad-file", "The mapping has no child_id,parent_id rows.");
   return mapping;
 }

@@ -108,6 +108,8 @@ export interface ObiaLevelMerge {
   scale: number;
   /** Bands whose statistics drove the merge. */
   bands: number[];
+  /** Built from an imported level mapping instead of by merging. */
+  mapped?: boolean;
 }
 
 /**

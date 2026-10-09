@@ -7531,7 +7531,8 @@
         "result_one": "{{count}} context feature added.",
         "result_other": "{{count}} context features added.",
         "failed": "Could not compute the context features."
-      }
+      },
+      "mapped": "Level {{level}}: {{count}} objects (from a level mapping)"
     },
     "import": {
       "title": "Import from other software",

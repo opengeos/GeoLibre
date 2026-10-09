@@ -1,5 +1,9 @@
 import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
-import { applyObjectFeatures, type ObiaFeatureTable, type ObiaSampleRole } from "@geolibre/processing";
+import {
+  applyObjectFeatures,
+  type ObiaFeatureTable,
+  type ObiaSampleRole,
+} from "@geolibre/processing";
 import { Button, Label, Select } from "@geolibre/ui";
 import { FileUp, Import, Loader2 } from "lucide-react";
 import { useMemo, useState, type ReactElement } from "react";
@@ -16,7 +20,11 @@ import {
   withClasses,
 } from "../../../lib/obia/obia-import";
 import { addBuiltLevel, buildCoarserLevel } from "../../../lib/obia/obia-levels";
-import { ensureObiaLabels, obiaLayerLocation, obiaRunEnv } from "../../../lib/obia/obia-persistence";
+import {
+  ensureObiaLabels,
+  obiaLayerLocation,
+  obiaRunEnv,
+} from "../../../lib/obia/obia-persistence";
 import { useObiaSession } from "../../../lib/obia/obia-session";
 import { ObiaStatus } from "./ObiaFields";
 import { labelStylePatch } from "./ObiaTrainStep";
@@ -140,7 +148,10 @@ export function ObiaImportPanel(): ReactElement {
         env: obiaRunEnv(),
         finishedAt: new Date().toISOString(),
       });
-      return t("obia.import.objectsDone", { count: imported.objectCount, skipped: imported.skipped });
+      return t("obia.import.objectsDone", {
+        count: imported.objectCount,
+        skipped: imported.skipped,
+      });
     });
 
   const importSamples = () =>
@@ -149,7 +160,8 @@ export function ObiaImportPanel(): ReactElement {
       const current = state.segmentation;
       const source = layers.find((layer) => layer.id === current?.sourceLayerId);
       const objects = layers.find((layer) => layer.id === current?.objectsLayerId);
-      if (!current || !source || !objects?.geojson) throw new Error(t("obia.import.error.noObjects"));
+      if (!current || !source || !objects?.geojson)
+        throw new Error(t("obia.import.error.noObjects"));
       if (!samplesLayer?.geojson || !classField) throw new Error(t("obia.import.error.noLayer"));
       const labels = await ensureObiaLabels();
       const labeled = await labelFromSamples(
@@ -208,7 +220,10 @@ export function ObiaImportPanel(): ReactElement {
       updateLayer(objects.id, {
         geojson: applyObjectFeatures(objects.geojson, table, before?.fields ?? []),
       });
-      const call = { tool: "obia/import-features", args: [JSON.stringify({ fields: imported.fields })] };
+      const call = {
+        tool: "obia/import-features",
+        args: [JSON.stringify({ fields: imported.fields })],
+      };
       if (state.features) state.extendFeatures(table, call);
       else {
         state.setFeatures({
@@ -220,7 +235,10 @@ export function ObiaImportPanel(): ReactElement {
           finishedAt: new Date().toISOString(),
         });
       }
-      return t("obia.import.featuresDone", { count: imported.fields.length, objects: imported.rows.size });
+      return t("obia.import.featuresDone", {
+        count: imported.fields.length,
+        objects: imported.rows.size,
+      });
     });
 
   const importMapping = () =>
@@ -251,7 +269,13 @@ export function ObiaImportPanel(): ReactElement {
       onClick={onClick}
       data-testid={`obia-import-${key}`}
     >
-      {busy === key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : key === "objects" || key === "samples" ? <Import className="h-3.5 w-3.5" /> : <FileUp className="h-3.5 w-3.5" />}
+      {busy === key ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : key === "objects" || key === "samples" ? (
+        <Import className="h-3.5 w-3.5" />
+      ) : (
+        <FileUp className="h-3.5 w-3.5" />
+      )}
       {label}
     </Button>
   );
@@ -306,9 +330,23 @@ export function ObiaImportPanel(): ReactElement {
                 ))}
               </Select>
             </div>
-            {fieldSelect("obia-import-id-field", t("obia.import.idField"), idField, setIdField, fieldsOf(objectsLayer), t("obia.import.numberInOrder"))}
+            {fieldSelect(
+              "obia-import-id-field",
+              t("obia.import.idField"),
+              idField,
+              setIdField,
+              fieldsOf(objectsLayer),
+              t("obia.import.numberInOrder"),
+            )}
           </div>
-          <div>{button("objects", t("obia.import.importObjects"), () => void importObjects(), !objectsLayer || !sourceLayerId)}</div>
+          <div>
+            {button(
+              "objects",
+              t("obia.import.importObjects"),
+              () => void importObjects(),
+              !objectsLayer || !sourceLayerId,
+            )}
+          </div>
         </div>
 
         <div className="grid gap-1.5">
@@ -331,8 +369,22 @@ export function ObiaImportPanel(): ReactElement {
                 ))}
               </Select>
             </div>
-            {fieldSelect("obia-import-class-field", t("obia.import.classField"), classField, setClassField, fieldsOf(samplesLayer), t("obia.import.chooseField"))}
-            {fieldSelect("obia-import-role-field", t("obia.import.roleField"), roleField, setRoleField, fieldsOf(samplesLayer), t("obia.import.noRoleField"))}
+            {fieldSelect(
+              "obia-import-class-field",
+              t("obia.import.classField"),
+              classField,
+              setClassField,
+              fieldsOf(samplesLayer),
+              t("obia.import.chooseField"),
+            )}
+            {fieldSelect(
+              "obia-import-role-field",
+              t("obia.import.roleField"),
+              roleField,
+              setRoleField,
+              fieldsOf(samplesLayer),
+              t("obia.import.noRoleField"),
+            )}
             <div className="grid gap-1">
               <Label htmlFor="obia-import-role" className="text-xs">
                 {t("obia.import.role")}
@@ -340,20 +392,39 @@ export function ObiaImportPanel(): ReactElement {
               <Select
                 id="obia-import-role"
                 value={role}
-                onChange={(event) => setRole(event.target.value === "validation" ? "validation" : "training")}
+                onChange={(event) =>
+                  setRole(event.target.value === "validation" ? "validation" : "training")
+                }
               >
                 <option value="training">{t("obia.train.roles.training")}</option>
                 <option value="validation">{t("obia.train.roles.validation")}</option>
               </Select>
             </div>
           </div>
-          <div>{button("samples", t("obia.import.importSamples"), () => void importSamples(), !segmentation || !samplesLayer || !classField)}</div>
+          <div>
+            {button(
+              "samples",
+              t("obia.import.importSamples"),
+              () => void importSamples(),
+              !segmentation || !samplesLayer || !classField,
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           {button("classes", t("obia.import.classSchema"), () => void importClasses())}
-          {button("features", t("obia.import.featureTable"), () => void importFeatures(), !segmentation)}
-          {button("mapping", t("obia.import.levelMapping"), () => void importMapping(), !segmentation)}
+          {button(
+            "features",
+            t("obia.import.featureTable"),
+            () => void importFeatures(),
+            !segmentation,
+          )}
+          {button(
+            "mapping",
+            t("obia.import.levelMapping"),
+            () => void importMapping(),
+            !segmentation,
+          )}
         </div>
         <ObiaStatus error={error} success={result || null} testId="obia-import-result" />
       </div>

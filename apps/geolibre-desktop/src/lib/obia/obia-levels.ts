@@ -82,7 +82,9 @@ export async function buildCoarserLevel(
   const labels = await ensureObiaLabels(run);
   const grid = await decodeLabelGrid(labels);
   const parentOf = mapping
-    ? new Map([...mapping].filter(([child, parent]) => features.table.rows.has(child) && parent > 0))
+    ? new Map(
+        [...mapping].filter(([child, parent]) => features.table.rows.has(child) && parent > 0),
+      )
     : mergeObjects(features.table, objectAdjacency(grid), { scale, bands });
   const parentIds = relabelGrid(grid, parentOf);
   const parentLabels = encodeLabelGrid(grid, parentIds);
@@ -104,7 +106,9 @@ export async function buildCoarserLevel(
   const { objectCount, hash } = await fingerprintSegmentLabels(parentLabels);
   const finishedAt = new Date().toISOString();
   const env = obiaRunEnv();
-  const merge = { fromLevel: level, scale: mapping ? 0 : scale, bands };
+  const merge = mapping
+    ? { fromLevel: level, scale: 0, bands, mapped: true }
+    : { fromLevel: level, scale, bands };
   const next: ObiaSegmentationRun = {
     ...segmentation,
     labels: parentLabels,
@@ -182,7 +186,10 @@ export function addBuiltLevel(built: ObiaBuiltLevel, name: string): void {
         const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
         return {
           ...feature,
-          properties: { ...feature.properties, [OBIA_PARENT_FIELD]: built.parentOf.get(id) ?? null },
+          properties: {
+            ...feature.properties,
+            [OBIA_PARENT_FIELD]: built.parentOf.get(id) ?? null,
+          },
         };
       }),
     },

@@ -23,7 +23,6 @@ const LEVEL_ERRORS = {
   "not-top": "obia.levels.error.notTop",
 } as const;
 
-
 /**
  * Step 3: the object hierarchy. Build coarser levels by merging the current
  * level's objects (so each object contains its children), and choose the level
@@ -119,8 +118,14 @@ export function ObiaLevelsStep(): ReactElement | null {
       level: record.level,
       count: record.segmentation.objectCount,
       scale: record.segmentation.merge?.scale,
+      mapped: record.segmentation.merge?.mapped,
     })),
-    { level, count: segmentation.objectCount, scale: segmentation.merge?.scale },
+    {
+      level,
+      count: segmentation.objectCount,
+      scale: segmentation.merge?.scale,
+      mapped: segmentation.merge?.mapped,
+    },
   ].sort((a, b) => a.level - b.level);
   const top = Math.max(...all.map((item) => item.level));
 
@@ -140,13 +145,15 @@ export function ObiaLevelsStep(): ReactElement | null {
               onChange={() => switchLevel(item.level)}
             />
             <span className="truncate">
-              {item.scale == null
-                ? t("obia.levels.base", { level: item.level, count: item.count })
-                : t("obia.levels.merged", {
-                    level: item.level,
-                    count: item.count,
-                    scale: item.scale,
-                  })}
+              {item.mapped
+                ? t("obia.levels.mapped", { level: item.level, count: item.count })
+                : item.scale == null
+                  ? t("obia.levels.base", { level: item.level, count: item.count })
+                  : t("obia.levels.merged", {
+                      level: item.level,
+                      count: item.count,
+                      scale: item.scale,
+                    })}
             </span>
           </label>
         ))}

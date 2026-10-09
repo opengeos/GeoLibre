@@ -116,6 +116,35 @@ a benchmark of the engine on a 4-band Sentinel-2 scene, 16.8 million pixels
 took about 2 minutes to segment and 1 minute to measure, while the whole
 47-million-pixel scene took about 10 minutes and over 7 GB of memory.
 
+### Import from other software
+
+Under **Import from other software** (below the Segment step) the workbench
+takes in what another OBIA tool, such as eCognition, exported. Add the vector
+files to the map first; they then appear in the layer lists.
+
+- **Objects**: a polygon layer becomes the objects, as if segmented. Its
+  polygons are burned onto the image chosen under **Segment** (a pixel belongs
+  to a polygon when its center is inside; the whole image is read, from an
+  overview when it is over the pixel limit). The object ids come from a field
+  holding distinct positive whole numbers (for example the exported object
+  ids), or are numbered in order. Polygons covering no pixel center are left
+  out, and the step says how many. The original attributes stay on the
+  objects. After a reload the labels are rebuilt by burning the objects again.
+- **Samples**: a point (or polygon, by its centroid) layer labels the objects
+  under it, with the class in a field you choose and the role (training or
+  validation) from a field or the role you choose. Classes it names that the
+  workbench does not have yet are added.
+- **Class list**: a JSON list of `{"name": ..., "color": "#rrggbb"}` (or
+  `{"classes": [...]}`), or a CSV with `name` and `color` columns. Classes the
+  workbench has take the file's colors; new ones are added.
+- **Feature table**: a CSV with a `segment_id` column and one column per
+  feature, such as exported object features. They join the measured features
+  (replacing any of the same name), so rules and the classifier can use them.
+- **Level mapping**: a CSV of `child_id,parent_id` rows (by those headers, or
+  the first two columns) builds the level above the current one from the
+  mapping instead of by merging; objects the mapping leaves out have no
+  parent.
+
 ## 2. Measure
 
 Once objects exist, **Measure** computes per-object features on the original

@@ -240,6 +240,7 @@ function restoreMerge(value: unknown): ObiaLevelMerge | undefined {
     fromLevel: json.fromLevel as number,
     scale: inRange(json.scale, 1, 0, 1_000_000),
     bands: asBands(json.bands),
+    ...(json.mapped === true ? { mapped: true } : {}),
   };
 }
 
