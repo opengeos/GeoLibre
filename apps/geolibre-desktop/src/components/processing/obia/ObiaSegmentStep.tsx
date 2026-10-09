@@ -191,7 +191,6 @@ export function ObiaSegmentStep({
     const run = progress.begin();
     try {
       const { area } = plan;
-      const scale = summary.levels[0].width / summary.levels[area.level].width;
       let result: {
         labels: Uint8Array;
         objects: FeatureCollection;
@@ -247,7 +246,7 @@ export function ObiaSegmentStep({
         bandIndexes: [...bandIndexes],
         ...size,
         area,
-        pixelSize: summary.pixelSize * scale,
+        pixelSize: plan.pixelSize,
         labels: result.labels,
         objectsLayerId,
         objectCount: result.objectCount,

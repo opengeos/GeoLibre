@@ -185,12 +185,11 @@ export function ObiaAreaNote({
     warn = true;
   } else {
     const { level } = plan.area;
-    const scale = info.levels[0].width / info.levels[level].width;
     const values = {
       width: number(plan.width),
       height: number(plan.height),
       // Significant digits: a geographic pixel size is a small fraction of a degree.
-      size: (info.pixelSize * scale).toLocaleString(i18n.language, { maximumSignificantDigits: 3 }),
+      size: plan.pixelSize.toLocaleString(i18n.language, { maximumSignificantDigits: 3 }),
       unit: info.unit ?? "",
       max: number(maxPixels),
     };
