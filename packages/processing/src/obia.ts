@@ -1174,9 +1174,11 @@ export async function classifiedRaster(
   classes: readonly ObiaClass[],
 ): Promise<ObiaClassifiedRaster> {
   const grid = await readRasterData(toArrayBuffer(labels));
+  // Codes follow the class list, predicted or not, so a code keeps its
+  // meaning from run to run; other predicted names (a rules default) follow.
   const predicted = new Set(predictions.values());
   const names = [
-    ...classes.map((cls) => cls.name).filter((name) => predicted.has(name)),
+    ...classes.map((cls) => cls.name),
     ...[...predicted].filter((name) => !classes.some((cls) => cls.name === name)).sort(),
   ];
   if (names.length > 255) throw new Error("A classified raster holds at most 255 classes.");
@@ -1216,5 +1218,6 @@ export async function classifiedRaster(
 
 /** The legend as CSV (`code,class,color`). */
 export function legendCsv(legend: readonly ObiaLegendEntry[]): string {
-  return `code,class,color\n${legend.map((e) => `${e.code},${csvCell(e.className)},${e.color}`).join("\n")}\n`;
+  const rows = legend.map((e) => `${e.code},${csvCell(e.className)},${csvCell(e.color)}`);
+  return `${["code,class,color", ...rows].join("\n")}\n`;
 }

@@ -34,7 +34,6 @@ import {
   splitImageBands,
   stageBands,
   ObiaError,
-  readRasterData,
   tableForAllObjects,
 } from "@geolibre/processing";
 
@@ -650,6 +649,33 @@ describe("classifiedRaster", () => {
       rgb.bands.map((band) => band[0]),
       [0xaa, 0x55, 0xcc],
     );
+  });
+
+  it("keeps class codes stable when a class is not predicted", async () => {
+    const labels = new Uint8Array(
+      writeArrayBuffer(new Float32Array([1, 1]), {
+        width: 2,
+        height: 1,
+        ModelPixelScale: [1, 1, 0],
+        ModelTiepoint: [0, 0, 0, 0, 0, 0],
+      } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer,
+    );
+    const result = await classifiedRaster(labels, new Map([[1, "c"]]), [
+      { name: "a", color: "#111111" },
+      { name: "b", color: "#222222" },
+      { name: "c", color: "#333333" },
+    ]);
+    assert.deepEqual(
+      result.legend.map((e) => [e.code, e.className]),
+      [
+        [1, "a"],
+        [2, "b"],
+        [3, "c"],
+      ],
+    );
+    const codes = await readRasterData(result.codes.buffer as ArrayBuffer);
+    assert.deepEqual(Array.from(codes.bands[0]), [3, 3]);
+    assert.equal(legendCsv([]), "code,class,color\n");
   });
 });
 

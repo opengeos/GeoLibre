@@ -152,5 +152,7 @@ class). The Export step also burns the classes onto the image's pixel grid:
 
 - **Add classified raster** adds a color rendering in the class colors.
 - **Save class codes (GeoTIFF)** saves a single-band Cloud-Optimized GeoTIFF of
-  class codes (1, 2, ... with 0 as NoData) on the source image's grid and CRS.
+  class codes on the source image's grid and CRS, with 0 as NoData. Codes follow
+  the class list (the first class is 1), so a class keeps its code from run to
+  run; a rules default class outside the list comes after.
 - **Save legend (CSV)** saves the code, class name and color of each class.

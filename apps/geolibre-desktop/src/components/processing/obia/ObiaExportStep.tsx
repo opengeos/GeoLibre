@@ -6,7 +6,7 @@ import {
 } from "@geolibre/processing";
 import { Button } from "@geolibre/ui";
 import { Download, ImagePlus, Loader2 } from "lucide-react";
-import { useRef, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import {
   saveBinaryFileWithFallback,
@@ -34,6 +34,11 @@ export function ObiaExportStep({ onAddRaster }: ObiaExportStepProps): ReactEleme
   const [message, setMessage] = useState<string | null>(null);
   // The raster for the current classification, built once for every action.
   const cache = useRef<{ key: string; raster: ObiaClassifiedRaster } | null>(null);
+
+  // Release the rasters built for an older segmentation or classification.
+  useEffect(() => {
+    cache.current = null;
+  }, [segmentation, classification]);
 
   if (!segmentation || !classification) return null;
 
