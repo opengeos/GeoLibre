@@ -21,6 +21,7 @@ const LEVEL_ERRORS = {
   "no-features": "obia.levels.error.noFeatures",
   "too-large": "obia.levels.error.tooLarge",
   "not-top": "obia.levels.error.notTop",
+  "too-deep": "obia.levels.error.tooDeep",
 } as const;
 
 /**
@@ -51,8 +52,16 @@ export function ObiaLevelsStep(): ReactElement | null {
     setError(null);
     const run = progress.begin();
     try {
+      const before = useObiaSession.getState();
       const built = await buildCoarserLevel(scale, run);
-      if (useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt) {
+      // A re-segmentation, a re-measure or a level switch while it ran makes
+      // the new level describe features that are gone.
+      const after = useObiaSession.getState();
+      if (
+        after.segmentation?.finishedAt !== segmentation.finishedAt ||
+        after.features?.finishedAt !== before.features?.finishedAt ||
+        after.level !== before.level
+      ) {
         setError(t("obia.measure.error.resegmented"));
         return;
       }
