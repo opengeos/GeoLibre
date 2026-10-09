@@ -233,6 +233,8 @@ function restoreNativeParams(value: unknown): ObiaNativeParams {
   };
 }
 
+const withMerge = (merge: ObiaLevelMerge | undefined) => (merge ? { merge } : {});
+
 /**
  * How a saved coarser level was built: only from a level below it, so a
  * crafted file cannot make the label rebuild loop.
@@ -477,19 +479,39 @@ export function restoreObiaSession(
     (saved.level as number) <= OBIA_MAX_LEVELS
       ? (saved.level as number)
       : 1;
-  const active = restoreLevel(runs, layers, activeLevel);
-  if (!active) return data;
   // The hierarchy: each saved level whose objects layer is still there.
   const levels: ObiaLevelRecord[] = [];
   if (Array.isArray(saved.levels)) {
     for (const item of saved.levels) {
       const json = asObject(item);
       const level = json && Number.isInteger(json.level) ? (json.level as number) : 0;
-      if (level < 1 || level > OBIA_MAX_LEVELS) continue;
+      if (level < 1 || level > OBIA_MAX_LEVELS || level === activeLevel) continue;
       const record = restoreLevel(asObject(json!.runs) ?? {}, layers, level);
       if (record && !levels.some((other) => other.level === level)) levels.push(record);
     }
   }
+  levels.sort((a, b) => a.level - b.level);
+  const restoredActive = restoreLevel(runs, layers, activeLevel);
+  // Keep only levels whose chain down to a segmentation survived (a merged
+  // level is rebuilt from the level it merged), bottom up.
+  const available = new Set<number>();
+  const kept: ObiaLevelRecord[] = [];
+  for (const record of [...levels, ...(restoredActive ? [restoredActive] : [])].sort(
+    (a, b) => a.level - b.level,
+  )) {
+    const merge = record.segmentation.merge;
+    if (merge && !available.has(merge.fromLevel)) continue;
+    available.add(record.level);
+    kept.push(record);
+  }
+  // When the active level is gone (or cut off), work on the highest level
+  // that survived rather than losing the others too.
+  const active =
+    restoredActive && kept.includes(restoredActive)
+      ? restoredActive
+      : (kept.filter((record) => record !== restoredActive).at(-1) ?? null);
+  levels.splice(0, levels.length, ...kept.filter((record) => record !== active));
+  if (!active) return data;
   return {
     ...data,
     segmentation: active.segmentation,
@@ -543,7 +565,7 @@ function restoreLevel(
     params: restoreParams(seg.params),
     env: restoreEnv(seg.env),
     finishedAt: asString(seg.finishedAt),
-    ...(restoreMerge(seg.merge, level) ? { merge: restoreMerge(seg.merge, level) } : {}),
+    ...withMerge(restoreMerge(seg.merge, level)),
   };
   const record: ObiaLevelRecord = {
     level,
@@ -666,9 +688,12 @@ async function mergedLabels(merge: ObiaLevelMerge, run: ObiaRunOptions): Promise
   if (!childLabels) {
     childLabels = await verifiedLabels(child.segmentation, run);
     // Keep them, so the next rebuild above does not redo the chain below.
-    useObiaSession
-      .getState()
-      .setLevelLabels(child.level, child.segmentation.finishedAt, childLabels);
+    const session = useObiaSession.getState();
+    if (child.level === session.level) {
+      session.setSegmentationLabels(child.segmentation.finishedAt, childLabels);
+    } else {
+      session.setLevelLabels(child.level, child.segmentation.finishedAt, childLabels);
+    }
   }
   const parentOf = new Map<number, number>();
   for (const feature of childLayer.geojson.features) {
