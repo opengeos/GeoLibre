@@ -328,9 +328,9 @@ const PALETTE = [
  * @param source The image the objects belong to.
  * @param area The area the labels were read over.
  * @returns The labeled objects, the classes the samples name, how many
- *   objects were labeled (`matched`), how many samples missed every object
- *   (including a polygon with no area), and how many objects had samples that
- *   disagree.
+ *   objects were labeled (`matched`), how many samples labeled nothing (no
+ *   class, outside every object, or a polygon with no area), and how many
+ *   objects had samples that disagree.
  */
 export async function labelFromSamples(
   samples: FeatureCollection,
@@ -360,7 +360,11 @@ export async function labelFromSamples(
   let missed = 0;
   for (const sample of samples.features) {
     const name = String(sample.properties?.[classField] ?? "").trim();
-    if (!name) continue;
+    // A sample without a class labels nothing: it counts as missed.
+    if (!name) {
+      missed += 1;
+      continue;
+    }
     const roleValue = roleField
       ? String(sample.properties?.[roleField] ?? "")
           .trim()

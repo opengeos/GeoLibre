@@ -624,6 +624,16 @@ function manualChunks(id: string): string | undefined {
   // dependencies they pull in (three, deck.gl, luma.gl), into the chunk that
   // holds MapLibre core, which boots eagerly. Split per package, each plugin
   // loads when its control is first used and boot fetches only MapLibre core.
+  //
+  // maplibre-gl-3d-tiles is the exception: Rolldown's default chunking places
+  // it. Since 0.5.11 its dependencies (3d-tiles-renderer, three's loaders) sit
+  // outside its `dist`, and this group does not follow dependencies, so they
+  // stayed in the package's dynamic-entry chunk while the package moved to a
+  // named one. The two chunks then imported each other, the named one ran
+  // first, and its top-level `OBB.prototype` patch read OBB before the other
+  // chunk defined it, so Add Data → 3D Tiles threw (#3074). Unnamed, the
+  // package and its private dependencies share one chunk again.
+  if (id.includes("/node_modules/maplibre-gl-3d-tiles/")) return undefined;
   const mapLibrePlugin = id.match(/\/node_modules\/(maplibre-gl-[^/]+)\//);
   if (mapLibrePlugin) return mapLibrePlugin[1];
   if (id.includes("maplibre-gl")) return "maplibre";

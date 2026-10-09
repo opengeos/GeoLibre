@@ -273,7 +273,17 @@ export function ObiaImportPanel(): ReactElement {
       const mapping = parseLevelMapping(text);
       const current = useObiaSession.getState().segmentation;
       if (!current) throw new Error(t("obia.import.error.noObjects"));
+      const before = useObiaSession.getState();
       const built = await buildCoarserLevel(0, {}, mapping);
+      // The level is built from the session as it was: drop it if that changed.
+      const after = useObiaSession.getState();
+      if (
+        after.segmentation?.finishedAt !== before.segmentation?.finishedAt ||
+        after.features?.finishedAt !== before.features?.finishedAt ||
+        after.level !== before.level
+      ) {
+        throw new Error(t("obia.levels.error.changed"));
+      }
       addBuiltLevel(
         built,
         t("obia.levels.layerName", { name: current.source.name, level: built.record.level }),
