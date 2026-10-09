@@ -1,5 +1,6 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
+  OBIA_MAX_PIXELS,
   planImageRead,
   readImageLevels,
   readImageWindow,
@@ -80,8 +81,13 @@ async function openTiff(layer: GeoLibreLayer): Promise<GeoTIFF | null> {
       // serves something else falls back to a plain download below.
       await tiff.getImage();
       return tiff;
-    } catch {
-      // fall through to fetching the whole file
+    } catch (error) {
+      // A server without range requests (or one blocking them) is still read,
+      // by downloading the whole file; say so, since that is the slow path.
+      console.warn(
+        `Object-Based Analysis: ${url} could not be read by range requests; downloading it whole.`,
+        error,
+      );
     }
   }
   const bytes = await fetchLayerBytes(layer);
@@ -153,7 +159,15 @@ export async function obiaSourceInfo(layer: GeoLibreLayer): Promise<ObiaSourceIn
   const image = await tiff.getImage(0);
   const [originX, originY] = image.getOrigin();
   const [resX, resY] = image.getResolution();
-  const definition = await projectionFor(image.getGeoKeys() as Record<string, unknown>);
+  // A rotated or sheared grid (a ModelTransformation with off-diagonal terms)
+  // has no axis-aligned windows: offer only the whole image for it.
+  const matrix = image.fileDirectory.getValue("ModelTransformation") as
+    | ArrayLike<number>
+    | undefined;
+  const rotated = Boolean(matrix && (matrix[1] !== 0 || matrix[4] !== 0));
+  const definition = rotated
+    ? null
+    : await projectionFor(image.getGeoKeys() as Record<string, unknown>);
   let toPixel: ObiaSourceInfo["toPixel"] = null;
   let unit: string | null = null;
   if (definition) {
@@ -237,9 +251,15 @@ export interface ObiaAreaPlan {
  *
  * @param info The source image's header facts.
  * @param window The full-resolution pixel window.
+ * @param maxPixels Pixel limit: the browser engine's by default, or the
+ *   sidecar's for a native run.
  */
-export function planObiaArea(info: ObiaSourceInfo, window: ObiaPixelWindow): ObiaAreaPlan {
-  const plan = planImageRead(info.levels, window);
+export function planObiaArea(
+  info: ObiaSourceInfo,
+  window: ObiaPixelWindow,
+  maxPixels = OBIA_MAX_PIXELS,
+): ObiaAreaPlan {
+  const plan = planImageRead(info.levels, window, maxPixels);
   if (plan)
     return {
       area: { level: plan.level, window },

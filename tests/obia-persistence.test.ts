@@ -255,6 +255,20 @@ describe("OBIA read areas", () => {
       height: 800,
       fits: true,
     });
+    // Over a 300,000-pixel limit at full resolution: the overview fits.
+    assert.deepEqual(planObiaArea(info, whole, 300_000), {
+      area: { level: 1, window: [0, 0, 1000, 800] },
+      width: 500,
+      height: 400,
+      fits: true,
+    });
+    // Over the limit even there: the coarsest level, flagged as not fitting.
+    assert.deepEqual(planObiaArea(info, whole, 100_000), {
+      area: { level: 1, window: [0, 0, 1000, 800] },
+      width: 500,
+      height: 400,
+      fits: false,
+    });
   });
 
   it("round-trips a segmentation's area and drops a malformed one", () => {

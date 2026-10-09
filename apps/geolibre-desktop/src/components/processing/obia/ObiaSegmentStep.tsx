@@ -420,8 +420,7 @@ function ObiaAreaNote({
   mode: "image" | "view";
 }): ReactElement {
   const { t, i18n } = useTranslation();
-  const number = (value: number, digits = 0) =>
-    value.toLocaleString(i18n.language, { maximumFractionDigits: digits });
+  const number = (value: number) => value.toLocaleString(i18n.language);
   let text: string;
   let warn = false;
   if (!plan) {
@@ -433,7 +432,8 @@ function ObiaAreaNote({
     const values = {
       width: number(plan.width),
       height: number(plan.height),
-      size: number(info.pixelSize * scale, 2),
+      // Significant digits: a geographic pixel size is a small fraction of a degree.
+      size: (info.pixelSize * scale).toLocaleString(i18n.language, { maximumSignificantDigits: 3 }),
       unit: info.unit ?? "",
       max: number(OBIA_MAX_PIXELS),
     };
