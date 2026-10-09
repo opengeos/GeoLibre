@@ -7619,7 +7619,8 @@
         "error": {
           "not-ruleset": "The file holds no eCognition process tree.",
           "encrypted": "The rule set is encrypted, so it cannot be read.",
-          "too-large": "The file is over 128 MB, too large to read in the workbench."
+          "too-large": "The file is over 128 MB, too large to read in the workbench.",
+          "encoding": "The file is not in the text encoding it declares, so its names cannot be read reliably."
         }
       }
     },

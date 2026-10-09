@@ -334,6 +334,14 @@ describe("eCognition rule set import", () => {
     // In a binary project, after some bytes that are not UTF-8.
     const project = new Uint8Array([0xff, 0xfe, 0x80, ...bytes(text), 0xc3]);
     assert.deepEqual(importEcognitionRuleset(project).classes, ["Forêt"]);
+    // Bytes that are not valid in the declared encoding are refused.
+    // "Forêt" with its "ê" (C3 AA) cut to an invalid C3 28.
+    const broken = bytes(text);
+    broken[broken.indexOf(0xaa)] = 0x28;
+    assert.throws(
+      () => importEcognitionRuleset(broken),
+      (err: unknown) => err instanceof EcognitionImportError && err.code === "encoding",
+    );
   });
 
   it("rejects a file without a process tree", () => {

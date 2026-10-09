@@ -83,7 +83,7 @@ export const ECOGNITION_MAX_BYTES = 128 * 1024 * 1024;
 
 /** Why a file could not be read as a rule set. */
 export class EcognitionImportError extends Error {
-  readonly code: "not-ruleset" | "encrypted" | "too-large";
+  readonly code: "not-ruleset" | "encrypted" | "too-large" | "encoding";
 
   constructor(code: EcognitionImportError["code"], message: string) {
     super(message);
@@ -173,6 +173,9 @@ const COMPARE: Record<string, ObiaRuleOp> = {
   "6": "!=",
 };
 
+/** Parameter types that hold a plain number (anything else is a variable). */
+const NUMERIC_TYPES = new Set(["double", "float", "int", "uint", "long", "ulong"]);
+
 /** Loops that repeat "while something changes" run at most this often. */
 const LOOP_WHILE_CHANGES = 1000;
 
@@ -209,13 +212,19 @@ export function ecognitionDocuments(bytes: Uint8Array): Document[] {
     const end = text.lastIndexOf(close, limit - close.length);
     if (end < start) return;
     const declared = /encoding\s*=\s*["']([\w.-]+)["']/i.exec(match[0])?.[1] ?? "utf-8";
-    let decoder: TextDecoder;
+    // Never guess: an encoding the browser lacks, or bytes that are not
+    // valid in it, would silently alter class and feature names.
+    let xml: string;
     try {
-      decoder = new TextDecoder(declared);
+      xml = new TextDecoder(declared, { fatal: true }).decode(
+        bytes.subarray(start, end + close.length),
+      );
     } catch {
-      decoder = new TextDecoder("utf-8");
+      throw new EcognitionImportError(
+        "encoding",
+        `A document is not valid ${declared}, the encoding it declares.`,
+      );
     }
-    const xml = decoder.decode(bytes.subarray(start, end + close.length));
     const doc = new DOMParser().parseFromString(xml, "text/xml");
     if (!doc.getElementsByTagName("parsererror").length) docs.push(doc);
   });
@@ -396,7 +405,7 @@ export function importEcognitionRuleset(
     const number = Number(value?.getAttribute("value"));
     if (!op) return `comparison ${eCmpr}`;
     if (!feature) return "a variable instead of a feature";
-    if (value?.getAttribute("type") !== "double" || !Number.isFinite(number))
+    if (!NUMERIC_TYPES.has(value?.getAttribute("type") ?? "") || !Number.isFinite(number))
       return `${feature} compared with a variable`;
     // "Existence of <class> (0)": whether a neighbor has the class, which is
     // a share of the border above 0.
