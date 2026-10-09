@@ -157,3 +157,27 @@ describe("OBIA context features and class inheritance", () => {
     assert.equal(table.rows.get(1)?.mean_b1, 10, "measured fields are kept");
   });
 });
+
+describe("OBIA context features and the classification", () => {
+  it("clears a classification that reads a field the new table drops", () => {
+    const session = useObiaSession.getState();
+    session.setClassification({
+      predictions: new Map([[1, "water"]]),
+      fields: ["parent_is_water"],
+      imputed: {},
+      trainingCount: 1,
+      call: { tool: "x", args: [] },
+      settings: { ...emptyObiaSession().classifier, method: "random-forest" },
+      featuresAt: "level1-features",
+      env,
+      finishedAt: "now",
+    });
+    const call = { tool: "obia/context", args: [] };
+    useObiaSession
+      .getState()
+      .extendFeatures({ fields: ["mean_b1", "parent_is_water"], rows: new Map() }, call);
+    assert.ok(useObiaSession.getState().classification, "kept while its fields remain");
+    useObiaSession.getState().extendFeatures({ fields: ["mean_b1"], rows: new Map() }, call);
+    assert.equal(useObiaSession.getState().classification, null);
+  });
+});

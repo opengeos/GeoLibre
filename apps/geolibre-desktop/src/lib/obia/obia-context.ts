@@ -13,6 +13,17 @@ import {
 import { OBIA_PARENT_FIELD, ensureObiaLabels } from "./obia-persistence";
 import { useObiaSession } from "./obia-session";
 
+/** Why context features or inheritance cannot run, as a translatable code. */
+export class ObiaContextError extends Error {
+  readonly code: "no-features" | "no-links" | "no-sizes" | "no-above";
+
+  constructor(code: ObiaContextError["code"]) {
+    super(code);
+    this.name = "ObiaContextError";
+    this.code = code;
+  }
+}
+
 /** Each object's parent, as a level's objects layer records it. */
 function parentLinks(layerId: string): Map<number, number> {
   const links = new Map<number, number>();
@@ -39,21 +50,17 @@ export async function computeContextFeatures(
 ): Promise<{ table: ObiaFeatureTable; added: string[]; call: ObiaToolCall }> {
   const state = useObiaSession.getState();
   const { segmentation, features, level, levels, classes } = state;
-  if (!segmentation || !features) throw new Error("Measure the objects first.");
+  if (!segmentation || !features) throw new ObiaContextError("no-features");
   run.onStep?.("context");
   const grid = await decodeLabelGrid(await ensureObiaLabels(run));
   const above = levels.find((record) => record.level === level + 1);
   const below = levels.find((record) => record.level === level - 1);
   const links = parentLinks(segmentation.objectsLayerId);
   if (above?.features && !links.size) {
-    throw new Error(
-      "This level's objects have no parent links (obia_parent): build the level above again.",
-    );
+    throw new ObiaContextError("no-links");
   }
   if (below?.classification && !below.features?.table.fields.includes("area_px")) {
-    throw new Error(
-      "Class shares need the size of the level below's objects: measure it with spectral or shape features.",
-    );
+    throw new ObiaContextError("no-sizes");
   }
   const context = contextFeatures({
     table: features.table,
@@ -112,11 +119,11 @@ export function inheritClasses(defaultClass: string): ObiaClassification {
   const { segmentation, level, levels } = useObiaSession.getState();
   const above = levels.find((record) => record.level === level + 1);
   if (!segmentation || !above?.classification) {
-    throw new Error("Classify the level above first.");
+    throw new ObiaContextError("no-above");
   }
   const parents = parentLinks(segmentation.objectsLayerId);
   // Without links every object would silently get the default class.
-  if (!parents.size) throw new Error("This level's objects have no parent links (obia_parent).");
+  if (!parents.size) throw new ObiaContextError("no-links");
   const layer = useAppStore
     .getState()
     .layers.find((item) => item.id === segmentation.objectsLayerId);

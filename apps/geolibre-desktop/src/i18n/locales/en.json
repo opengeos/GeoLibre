@@ -7537,6 +7537,14 @@
         "failed": "Could not compute the context features."
       }
     },
+    "context": {
+      "error": {
+        "noFeatures": "Measure the objects first.",
+        "noLinks": "This level's objects have no links to their parents (obia_parent): build the level above again.",
+        "noSizes": "Class shares need the size of the level below's objects: measure it with spectral or shape features.",
+        "noAbove": "Classify the level above first."
+      }
+    },
     "train": {
       "hint": "Add a class for each land cover, select objects on the map (selection tools) or in the attribute table, then click the tag button on a class to label them. Label validation samples separately, or hold out part of the training samples below. Each Split holds out a share of the training samples still left, so splitting again moves more.",
       "role": "Label as",
