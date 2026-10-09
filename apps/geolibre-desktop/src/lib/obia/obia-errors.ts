@@ -3,6 +3,13 @@ import type { TFunction } from "i18next";
 import { ObiaContextError } from "./obia-context";
 import { ObiaRestoreError } from "./obia-persistence";
 
+const CONTEXT_ERRORS = {
+  "no-features": "obia.context.error.noFeatures",
+  "no-links": "obia.context.error.noLinks",
+  "no-sizes": "obia.context.error.noSizes",
+  "no-above": "obia.context.error.noAbove",
+} as const;
+
 /**
  * The message to show for a workbench failure: a translated message for the
  * input errors the OBIA engine raises as {@link ObiaError}, the error's own
@@ -12,13 +19,6 @@ import { ObiaRestoreError } from "./obia-persistence";
  * @param t The translator.
  * @param fallback Message when `err` carries none.
  */
-const CONTEXT_ERRORS = {
-  "no-features": "obia.context.error.noFeatures",
-  "no-links": "obia.context.error.noLinks",
-  "no-sizes": "obia.context.error.noSizes",
-  "no-above": "obia.context.error.noAbove",
-} as const;
-
 export function obiaErrorMessage(err: unknown, t: TFunction, fallback: string): string {
   if (err instanceof ObiaError) {
     switch (err.code) {
