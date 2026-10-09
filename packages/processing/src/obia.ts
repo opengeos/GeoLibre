@@ -1229,6 +1229,36 @@ export async function classifyRandomForestTransfer(
   const fields = [...options.fields];
   const training = samples.filter((sample) => sample.role === "training");
   const trainingIds = new Set(training.map((sample) => sample.segmentId));
+  // Fill missing values with the training rows' means, here rather than in
+  // classifyRandomForest, whose means would also cover the target's rows: the
+  // forest must not learn from values that depend on the other image.
+  const means: Record<string, number> = {};
+  for (const field of fields) {
+    let sum = 0;
+    let count = 0;
+    for (const [id, row] of sourceTable.rows) {
+      const value = row[field];
+      if (trainingIds.has(id) && value != null && Number.isFinite(value)) {
+        sum += value;
+        count += 1;
+      }
+    }
+    means[field] = count ? sum / count : 0;
+  }
+  const imputed: Record<string, number> = {};
+  const filled = (row: Record<string, number | null>) => {
+    const out: Record<string, number | null> = {};
+    for (const field of fields) {
+      const value = row[field];
+      if (value == null || !Number.isFinite(value)) {
+        out[field] = means[field];
+        imputed[field] = (imputed[field] ?? 0) + 1;
+      } else {
+        out[field] = value;
+      }
+    }
+    return out;
+  };
   // A loop, not Math.max(...ids): a large segmentation has more ids than a
   // call can take as arguments.
   let maxId = 0;
@@ -1236,8 +1266,8 @@ export async function classifyRandomForestTransfer(
   const offset = maxId + 1;
   const rows = new Map<number, Record<string, number | null>>();
   // Only the labeled source objects are needed to train.
-  for (const [id, row] of sourceTable.rows) if (trainingIds.has(id)) rows.set(id, row);
-  for (const [id, row] of targetTable.rows) rows.set(id + offset, row);
+  for (const [id, row] of sourceTable.rows) if (trainingIds.has(id)) rows.set(id, filled(row));
+  for (const [id, row] of targetTable.rows) rows.set(id + offset, filled(row));
   const result = await classifyRandomForest(
     { fields, rows },
     training,
@@ -1248,7 +1278,7 @@ export async function classifyRandomForestTransfer(
   for (const [id, name] of result.predictions) {
     if (id >= offset) predictions.set(id - offset, name);
   }
-  return { ...result, predictions };
+  return { ...result, predictions, imputed };
 }
 
 /**
