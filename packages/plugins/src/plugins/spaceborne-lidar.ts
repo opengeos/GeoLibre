@@ -509,7 +509,7 @@ class SpaceborneLidarGranule implements SpaceborneLidarFile {
     const matched = selections.reduce((sum, s) => sum + s.indices.length, 0);
     const maxPoints =
       options.maxPoints !== undefined && options.maxPoints > 0
-        ? Math.floor(options.maxPoints)
+        ? Math.max(1, Math.floor(options.maxPoints))
         : Infinity;
     const stride = matched > maxPoints ? Math.ceil(matched / maxPoints) : 1;
 
@@ -789,15 +789,18 @@ function walkDatasets(
   }
 }
 
-/** Make property names unique by falling back to the full path. */
-function dedupeNames<T extends { path: string; name: string; column?: number }>(fields: T[]): T[] {
-  const counts = new Map<string, number>();
-  for (const field of fields) counts.set(field.name, (counts.get(field.name) ?? 0) + 1);
-  return fields.map((field) =>
-    (counts.get(field.name) ?? 0) > 1 && field.column === undefined
-      ? { ...field, name: field.path.replaceAll("/", "_") }
-      : field,
-  );
+/**
+ * Make property names unique: the first field with a name keeps it, and later
+ * ones fall back to their full path. Defaults are listed first, so a product's
+ * default names (and its primary field) stay stable.
+ */
+function dedupeNames<T extends { path: string; name: string }>(fields: T[]): T[] {
+  const used = new Set<string>();
+  return fields.map((field) => {
+    const name = used.has(field.name) ? field.path.replaceAll("/", "_") : field.name;
+    used.add(name);
+    return name === field.name ? field : { ...field, name };
+  });
 }
 
 /** Identity of a field: its path plus the column for 2-D datasets. */

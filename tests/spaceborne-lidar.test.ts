@@ -259,6 +259,28 @@ describe("openSpaceborneLidar 64-bit fills", () => {
   });
 });
 
+describe("openSpaceborneLidar field names", () => {
+  it("keeps a default field's name when another dataset shares it", async () => {
+    const bytes = await buildHdf5((file) => {
+      file.create_attribute("short_name", "GEDI_L4A");
+      const beam = file.create_group("BEAM0000");
+      beam.create_dataset({ name: "lat_lowestmode", data: new Float64Array([0]) });
+      beam.create_dataset({ name: "lon_lowestmode", data: new Float64Array([1]) });
+      beam.create_dataset({ name: "delta_time", data: new Float64Array([0]) });
+      beam.create_dataset({ name: "agbd", data: new Float32Array([10]) });
+      beam.create_group("extra").create_dataset({ name: "agbd", data: new Float32Array([20]) });
+    });
+    const file = await openSpaceborneLidar(bytes);
+    try {
+      const names = Object.fromEntries(file.listFields().map((f) => [f.path, f.name]));
+      assert.equal(names.agbd, "agbd");
+      assert.equal(names["extra/agbd"], "extra_agbd");
+    } finally {
+      file.close();
+    }
+  });
+});
+
 describe("openSpaceborneLidar thinning", () => {
   it("caps the total across beams, not per beam", async () => {
     const bytes = await buildHdf5((file) => {
@@ -284,6 +306,8 @@ describe("openSpaceborneLidar thinning", () => {
         { beam: "BEAM0000", kept: 1 },
         { beam: "BEAM0101", kept: 0 },
       ]);
+      // A fractional cap below one still keeps a single footprint, not none.
+      assert.equal(file.readFootprints({ maxPoints: 0.5 }).stride, 2);
     } finally {
       file.close();
     }
