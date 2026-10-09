@@ -216,6 +216,9 @@ export type ObiaSessionData = Pick<
   | "levels"
 >;
 
+/** The deepest object hierarchy the workbench builds and restores. */
+export const OBIA_MAX_LEVELS = 32;
+
 /** Which part of the image to segment. */
 export type ObiaAreaMode = "image" | "view";
 
@@ -268,6 +271,8 @@ interface ObiaSessionState {
   setLabelRole: (role: ObiaSampleRole) => void;
   setClassifier: (patch: Partial<ObiaClassifierSettings>) => void;
   setClassification: (run: ObiaClassificationRun | null) => void;
+  /** Attach rebuilt label bytes to a stashed level, keeping its runs. */
+  setLevelLabels: (level: number, finishedAt: string, labels: Uint8Array) => void;
   /** Attach rebuilt label bytes to the current segmentation, keeping its runs. */
   setSegmentationLabels: (finishedAt: string, labels: Uint8Array) => void;
   addSplit: (split: ObiaSplitRecord) => void;
@@ -359,8 +364,15 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
       levels: [],
     }),
   setFeatureOptions: (patch) => set((s) => ({ featureOptions: { ...s.featureOptions, ...patch } })),
-  // New features make the classification built on the old ones stale.
-  setFeatures: (features) => set({ features, classification: null }),
+  // New features make the classification built on the old ones stale, and
+  // the levels built from them (their features came from these): those are
+  // dropped from the hierarchy.
+  setFeatures: (features) =>
+    set((s) => ({
+      features,
+      classification: null,
+      levels: s.levels.filter((record) => record.level < s.level),
+    })),
   extendFeatures: (table, call) =>
     set((s) =>
       s.features ? { features: { ...s.features, table, calls: [...s.features.calls, call] } } : {},
@@ -369,6 +381,14 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   setLabelRole: (labelRole) => set({ labelRole }),
   setClassifier: (patch) => set((s) => ({ classifier: { ...s.classifier, ...patch } })),
   setClassification: (classification) => set({ classification }),
+  setLevelLabels: (level, finishedAt, labels) =>
+    set((s) => ({
+      levels: s.levels.map((record) =>
+        record.level === level && record.segmentation.finishedAt === finishedAt
+          ? { ...record, segmentation: { ...record.segmentation, labels } }
+          : record,
+      ),
+    })),
   setSegmentationLabels: (finishedAt, labels) =>
     set((s) =>
       s.segmentation?.finishedAt === finishedAt
