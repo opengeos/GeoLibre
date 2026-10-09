@@ -120,6 +120,9 @@ export function ObiaBatchStep(): ReactElement | null {
                 run,
               );
         calls.push(result.call);
+        // Checked before adding anything: past here nothing awaits, so the
+        // layer and its batch record are added together or not at all.
+        if (stale()) throw new Error(t("obia.batch.error.changed"));
         const objectsLayerId = addGeoJsonLayer(
           t("obia.layerName", { name: target.name }),
           applyPredictions(segmented.objects, result.predictions),
@@ -135,7 +138,6 @@ export function ObiaBatchStep(): ReactElement | null {
         for (const name of result.predictions.values()) {
           classCounts[name] = (classCounts[name] ?? 0) + 1;
         }
-        if (stale()) throw new Error(t("obia.batch.error.changed"));
         const location = obiaLayerLocation(target);
         addBatch({
           targetLayerId: target.id,

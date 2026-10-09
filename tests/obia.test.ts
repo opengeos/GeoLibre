@@ -863,6 +863,35 @@ describe("classifyRandomForestTransfer", () => {
     );
   });
 
+  it("fills missing values from the training rows only", async () => {
+    const source = {
+      fields: ["b1"],
+      rows: new Map<number, Record<string, number | null>>([
+        [1, { b1: 10 }],
+        [2, { b1: 90 }],
+        [3, { b1: 1000 }], // not a training row: must not move the fill value
+      ]),
+    };
+    const target = {
+      fields: ["b1"],
+      rows: new Map<number, Record<string, number | null>>([
+        [1, { b1: null }],
+        [2, { b1: 12 }],
+      ]),
+    };
+    const result = await classifyRandomForestTransfer(
+      source,
+      [
+        { segmentId: 1, className: "veg", role: "training" },
+        { segmentId: 2, className: "roof", role: "training" },
+      ],
+      target,
+      { fields: ["b1"], trees: 10 },
+    );
+    assert.deepEqual(result.imputed, { b1: 1 });
+    assert.equal(result.predictions.get(2), "veg");
+  });
+
   it("refuses a target that lacks a feature the forest uses", async () => {
     const source = { fields: ["b1", "b2"], rows: new Map([[1, { b1: 1, b2: 2 }]]) };
     const target = { fields: ["b1"], rows: new Map([[1, { b1: 1 }]]) };
