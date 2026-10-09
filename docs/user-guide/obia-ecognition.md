@@ -133,3 +133,94 @@ any of its children does):
 | [NSW estuarine habitats](https://figshare.com/articles/software/27297483) | 240 | 35 | manual classification, variables, levels |
 | [Yalova land cover](https://github.com/peterhofmann1/Yalova-S-2-LULC) | 2,813 | 191 | supervised classification, samples, maps |
 | [Field boundaries](https://github.com/fkroeber/field_boundary_delineation) | 292 | 11 | variables, layer arithmetic, levels |
+
+## Validation pilot
+
+To see how far a translated eCognition workflow gets, the workbench was run
+against an eCognition result.
+
+- **Data:** a Landsat 7 ETM+ scene (September 1999) of upland North Wales,
+  1001 × 1001 pixels at 15 m: the panchromatic band plus the six
+  multispectral bands resampled to it, the layers and resolution the
+  eCognition project used. The reference is that project's 18-class
+  eCognition land-cover classification of the same area (24,807 objects on
+  the grid).
+- **Ruleset:** a six-class threshold ruleset from an eCognition training
+  course (water and non-vegetation by NDVI, forest, improved grassland and
+  bog/heath by band means and NDVI, then a catch-all class), translated by
+  hand. The 18 reference classes are grouped into its six for comparison.
+
+### Classification
+
+Agreement with the eCognition classification, by area:
+
+| Run | Agreement | Kappa |
+| --- | --- | --- |
+| Translated ruleset, whole scene | 64.8% | 0.52 |
+| Translated ruleset, held-out blocks | 64.3% | 0.52 |
+| Random forest, 6 classes, held-out blocks | 47% to 51% | 0.24 to 0.35 |
+| Random forest, 18 classes, held-out blocks | 15% to 17% | 0.07 to 0.10 |
+
+Per class, the translated ruleset reached a producer's/user's accuracy of
+0.90/0.95 for water, 0.76/0.81 for forest, 0.66/0.87 for bog/heath and
+0.85/0.49 for improved grassland. The catch-all class was the weakest
+(0.20/0.24), which the course itself expects of this ruleset.
+
+The random forest was trained in 2.5 km checkerboard blocks and checked in
+the others, with eCognition's classes moved onto the workbench's objects at
+one point per eCognition object. That transfer, not the classifier, limits it.
+scikit-learn's random forest, trained on the same features and labels,
+reached an out-of-bag accuracy of only 0.61 (6 classes) and 0.24 (18
+classes), and agreed with the workbench's forest on 76% of the objects.
+
+### Segmentation
+
+Each method's objects, compared with eCognition's objects (multiresolution
+segmentation with a shape weight of 0.1):
+
+- **Class purity:** the area-weighted share of an object in its main
+  eCognition class.
+- **Object purity:** the same share for the main eCognition object.
+- **Kept whole:** the share of an eCognition object in its largest
+  workbench object.
+
+A chessboard of square objects of a similar size is the baseline.
+
+| Method | Objects | Class purity | Object purity | Kept whole | Time |
+| --- | --- | --- | --- | --- | --- |
+| Region growing (browser), threshold 0.8, minimum 10 px | 20,057 | 0.719 | 0.678 | 0.384 | 19 s |
+| Region growing (browser), threshold 0.5, minimum 10 px | 35,176 | 0.759 | 0.742 | 0.214 | 26 s |
+| Region growing at threshold 0.8, then a coarser level at scale 3 | 22,566 | 0.722 | 0.682 | 0.379 | 39 s, plus measuring |
+| SLIC (native), size 40 | 27,495 | 0.788 | 0.777 | 0.190 | 1.1 s |
+| Felzenszwalb (native), scale 30 | 28,330 | 0.790 | 0.776 | 0.210 | 1.2 s |
+| Felzenszwalb (native), scale 100 | 26,270 | 0.785 | 0.769 | 0.229 | 1.3 s |
+| Chessboard 6 × 6 (baseline) | 27,889 | 0.753 | 0.745 | 0.174 | |
+| Chessboard 7 × 7 (baseline) | 20,449 | 0.733 | 0.723 | 0.193 | |
+
+Every method gave the same objects when run again. Native runs peaked at
+about 580 MB, including the Python process.
+
+Boundary agreement within one pixel (F1) was 0.64 to 0.71 for the methods,
+against 0.59 to 0.62 for the chessboard. At this resolution the eCognition
+objects are so small that boundary agreement tells the methods apart only a
+little.
+
+The native methods produce purer objects than the baseline. The browser's
+region growing, at its default threshold, does not: it keeps eCognition's
+objects whole best but mixes classes in its larger objects. Merging its
+objects into a coarser level does not change that.
+
+### Conclusions
+
+- **Recommended workflow:**
+  1. Segment with SLIC or Felzenszwalb on the desktop, or with region growing
+     at a lower threshold in the browser.
+  2. Measure the objects.
+  3. Import or translate the eCognition classification rules, check what did
+     not convert, and assess the result against the eCognition output.
+- **What carries over:** the classification logic (thresholds, membership
+  functions, class order and domains) translates directly and gives similar
+  results.
+- **What does not:** eCognition's segmentation, whose objects no method here
+  reproduces, and processes that work across levels. These are the main
+  differences to expect.
