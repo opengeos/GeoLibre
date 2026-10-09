@@ -98,7 +98,9 @@ export function ObiaBatchStep(): ReactElement | null {
         // The whole image, at the finest level that fits the pixel limit.
         const info = await obiaSourceInfo(target);
         if (!info) throw new Error(t("obia.batch.error.readImage"));
-        const { area, pixelSize } = planObiaArea(info, wholeImageWindow(info));
+        const { area, pixelSize, fits } = planObiaArea(info, wholeImageWindow(info));
+        // Refuse before reading anything: even the coarsest overview is too large.
+        if (!fits) throw new Error(t("obia.batch.error.tooLarge"));
         const image = await obiaSourceBands(target, segmentation.bandIndexes, area);
         if (!image) throw new Error(t("obia.batch.error.readImage"));
         // Reading the image takes no signal, so honour a Cancel made meanwhile.
