@@ -4,6 +4,7 @@ import {
   classMembership,
   membershipValue,
   runRuleset,
+  rulesetClassNames,
   validateRuleset,
   ObiaRulesetError,
   type ObiaAdjacency,
@@ -244,5 +245,13 @@ describe("OBIA ruleset editor helpers", () => {
     assert.match(example, /nb_border_trees_shrubs/);
     const broken = parseRuleset("{ not json", fields);
     assert.ok("error" in broken);
+  });
+
+  it("bounds nesting and needs a class name to assign", () => {
+    let processes: unknown[] = [{ kind: "assign", className: "water" }];
+    for (let i = 0; i < 20_000; i += 1) processes = [{ kind: "loop", processes }];
+    assert.deepEqual(rulesetClassNames({ processes }), []);
+    assert.ok("error" in validateRuleset({ processes }, []));
+    assert.ok("error" in validateRuleset({ processes: [{ kind: "assign", className: " " }] }, []));
   });
 });

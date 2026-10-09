@@ -83,6 +83,12 @@ const OPS = new Set([">", ">=", "<", "<=", "==", "!="]);
  */
 export const OBIA_RULESET_MAX_STEPS = 10_000;
 
+/** How deeply loops may nest. */
+export const OBIA_RULESET_MAX_DEPTH = 8;
+
+/** The longest ruleset text the workbench reads or saves. */
+export const OBIA_RULESET_MAX_CHARS = 200_000;
+
 /** Why a ruleset run stopped, as a translatable code. */
 export class ObiaRulesetError extends Error {
   readonly code: "too-long";
@@ -102,8 +108,9 @@ export function rulesetClassNames(value: unknown): string[] {
   const add = (name: unknown) => {
     if (typeof name === "string" && name && !names.includes(name)) names.push(name);
   };
-  const walk = (list: unknown) => {
-    if (!Array.isArray(list)) return;
+  // Bounded like validation, so deeply nested input can't overflow the stack.
+  const walk = (list: unknown, depth: number) => {
+    if (!Array.isArray(list) || depth > OBIA_RULESET_MAX_DEPTH) return;
     for (const item of list) {
       const p = item as Record<string, unknown> | null;
       if (!p || typeof p !== "object") continue;
@@ -111,11 +118,19 @@ export function rulesetClassNames(value: unknown): string[] {
       if (Array.isArray(p.classes)) {
         for (const c of p.classes) add((c as Record<string, unknown> | null)?.className);
       }
-      walk(p.processes);
+      walk(p.processes, depth + 1);
     }
   };
-  walk((value as Record<string, unknown> | null)?.processes);
+  walk((value as Record<string, unknown> | null)?.processes, 0);
   return names;
+}
+
+/**
+ * The classes a ruleset's `nb_border_<slug>` fields can name, in slug order:
+ * the given classes, then ones only the ruleset assigns.
+ */
+function rulesetClassOrder(classes: readonly string[], ruleset: unknown): string[] {
+  return [...classes, ...rulesetClassNames(ruleset).filter((name) => !classes.includes(name))];
 }
 
 /**
@@ -141,10 +156,7 @@ export function validateRuleset(
   classes: readonly string[] = [],
 ): { ruleset: ObiaRuleset } | { error: string } {
   const known = new Set(fields);
-  const borders = classSlugs([
-    ...classes,
-    ...rulesetClassNames(value).filter((name) => !classes.includes(name)),
-  ]);
+  const borders = classSlugs(rulesetClassOrder(classes, value));
   const isField = (field: unknown) =>
     typeof field === "string" &&
     (known.has(field) ||
@@ -176,14 +188,15 @@ export function validateRuleset(
   const checkProcesses = (list: unknown, prefix: string, depth: number): string | null => {
     if (!Array.isArray(list) || !list.length)
       return `${prefix || "ruleset"}: needs at least one process`;
-    if (depth > 8) return `${prefix}: loops are nested too deeply`;
+    if (depth > OBIA_RULESET_MAX_DEPTH) return `${prefix}: loops are nested too deeply`;
     for (const [i, item] of list.entries()) {
       const at = prefix ? `${prefix}.${i + 1}` : `process ${i + 1}`;
       const p = item as Record<string, unknown>;
       if (!p || typeof p !== "object") return `${at}: must be an object`;
       if (p.name != null && typeof p.name !== "string") return `${at}: name must be text`;
       if (p.kind === "assign") {
-        if (typeof p.className !== "string") return `${at}: assign needs a className`;
+        if (typeof p.className !== "string" || !p.className.trim())
+          return `${at}: assign needs a className`;
         const err = checkDomain(p.domain, at);
         if (err) return err;
       } else if (p.kind === "fuzzy") {
@@ -203,7 +216,7 @@ export function validateRuleset(
           return `${at}: fuzzy needs class descriptions`;
         for (const [j, c] of p.classes.entries()) {
           const cls = c as Record<string, unknown>;
-          if (!cls || typeof cls.className !== "string")
+          if (!cls || typeof cls.className !== "string" || !cls.className.trim())
             return `${at}: class ${j + 1} needs a className`;
           if (cls.combine != null && !["and", "or", "mean"].includes(String(cls.combine))) {
             return `${at}: class ${j + 1} combine must be and, or or mean`;
@@ -322,10 +335,7 @@ export function runRuleset(
     const name = initial.get(id);
     if (name) current.set(id, name);
   }
-  const nameOfSlug = classSlugs([
-    ...classes,
-    ...rulesetClassNames(ruleset).filter((name) => !classes.includes(name)),
-  ]);
+  const nameOfSlug = classSlugs(rulesetClassOrder(classes, ruleset));
   // Border shares by class, recomputed before each process from `current`.
   let border = new Map<number, Map<string, number>>();
   const refreshBorder = () => {

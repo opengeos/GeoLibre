@@ -17,7 +17,7 @@ import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { inheritClasses } from "../../../lib/obia/obia-context";
-import { parseRuleset, runObiaRuleset } from "../../../lib/obia/obia-ruleset-run";
+import { parseRuleset, rulesetClasses, runObiaRuleset } from "../../../lib/obia/obia-ruleset-run";
 import { ObiaRulesetEditor } from "./ObiaRulesetEditor";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { obiaRunEnv } from "../../../lib/obia/obia-persistence";
@@ -141,17 +141,23 @@ export function ObiaClassifyStep(): ReactElement | null {
     lastRun && lastRun.text === settings.ruleset && lastRun.featuresAt === features?.finishedAt
       ? lastRun.log
       : null;
+  // The classes a ruleset's border fields may name.
+  const rulesetClassList = useMemo(
+    () =>
+      rulesetClasses(
+        classes.map((item) => item.name),
+        settings.rulesetFromCurrent ? (classification?.predictions ?? null) : null,
+        defaultClass,
+      ),
+    [classes, settings.rulesetFromCurrent, classification, defaultClass],
+  );
   const rulesetValid = useMemo(
     () =>
       settings.method === "ruleset" &&
       Boolean(features) &&
       "ruleset" in
-        parseRuleset(
-          settings.ruleset,
-          features?.table.fields ?? [],
-          classes.map((item) => item.name),
-        ),
-    [settings.method, settings.ruleset, features, classes],
+        parseRuleset(settings.ruleset, features?.table.fields ?? [], rulesetClassList),
+    [settings.method, settings.ruleset, features, rulesetClassList],
   );
 
   const handleClassify = useCallback(async () => {
@@ -179,11 +185,7 @@ export function ObiaClassifyStep(): ReactElement | null {
       const table = tableForAllObjects(features.table, layer.geojson);
       let result;
       if (settings.method === "ruleset") {
-        const parsed = parseRuleset(
-          settings.ruleset,
-          features.table.fields,
-          classes.map((item) => item.name),
-        );
+        const parsed = parseRuleset(settings.ruleset, features.table.fields, rulesetClassList);
         if ("error" in parsed) throw new Error(t("obia.ruleset.invalid", { error: parsed.error }));
         const ran = await runObiaRuleset(
           table,
@@ -243,6 +245,7 @@ export function ObiaClassifyStep(): ReactElement | null {
     settings,
     chosen,
     classes,
+    rulesetClassList,
     defaultClass,
     updateLayer,
     setClassification,
@@ -294,7 +297,7 @@ export function ObiaClassifyStep(): ReactElement | null {
           settings={settings}
           setSettings={setSettings}
           fields={measured}
-          classes={classes.map((item) => item.name)}
+          classes={rulesetClassList}
           log={rulesetLog}
         />
       ) : settings.method === "inherit" ? (

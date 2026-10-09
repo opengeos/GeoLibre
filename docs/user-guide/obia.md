@@ -254,8 +254,10 @@ a value). There are three kinds of process:
 
 Besides the measured and context features, conditions and memberships can read
 `nb_border_<class>`: the share of an object's border shared with neighbors
-currently of that class, recomputed before each process. With it a loop can grow
-a class outwards, ring by ring. For example, starting from unclassified
+currently of that class, recomputed before each process. The class must be one
+in the legend, one the ruleset assigns, or (when starting from the current
+classification) one that classification holds; a misspelled one is rejected.
+With it a loop can grow a class outwards, ring by ring. For example, starting from unclassified
 objects:
 
 ```json

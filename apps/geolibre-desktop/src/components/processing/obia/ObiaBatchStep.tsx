@@ -105,8 +105,6 @@ export function ObiaBatchStep(): ReactElement | null {
     const samples = collectSamples(sourceObjects);
     const settings = classification.settings;
     let failedOn: string | null = null;
-    // Re-segmenting while the batch runs clears the batch records and makes
-    // this workflow stale, so stop rather than record runs against it.
     // A ruleset reads only features and the object graph, so it applies as is.
     const rulesetOn = async (
       table: ObiaFeatureTable,
@@ -136,6 +134,8 @@ export function ObiaBatchStep(): ReactElement | null {
         call: { tool: "obia/ruleset", args: [JSON.stringify(parsed.ruleset)] },
       };
     };
+    // Re-segmenting while the batch runs clears the batch records and makes
+    // this workflow stale, so stop rather than record runs against it.
     const stale = () =>
       useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt;
     try {
