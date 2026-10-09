@@ -5,9 +5,13 @@ import {
   classifyRandomForestTransfer,
   collectSamples,
   computeObjectFeatures,
+<<<<<<< HEAD
   decodeLabelGrid,
   objectAdjacency,
   runRuleset,
+=======
+  isContextField,
+>>>>>>> feat/obia-context
   segmentImage,
   tableForAllObjects,
   type ObiaClassification,
@@ -271,6 +275,15 @@ export function ObiaBatchStep(): ReactElement | null {
     t,
   ]);
 
+  // Context features come from the hierarchy, which other images do not
+  // have: a classifier reading them cannot be applied there.
+  const usesContext = Boolean(
+    classification &&
+    (classification.settings.method === "rules"
+      ? classification.settings.rules.some((rule) => isContextField(rule.field))
+      : classification.fields.some(isContextField)),
+  );
+
   if (!segmentation || !features || !classification) return null;
 
   const summarize = (run: ObiaBatchRun) =>
@@ -286,9 +299,11 @@ export function ObiaBatchStep(): ReactElement | null {
         {t(
           classification.settings.method === "inherit"
             ? "obia.batch.inheritUnsupported"
-            : classification.settings.method === "random-forest"
-              ? "obia.batch.hintForest"
-              : "obia.batch.hintRules",
+            : usesContext
+              ? "obia.batch.contextUnsupported"
+              : classification.settings.method === "random-forest"
+                ? "obia.batch.hintForest"
+                : "obia.batch.hintRules",
         )}
       </p>
       {targets.length === 0 ? (
@@ -320,7 +335,8 @@ export function ObiaBatchStep(): ReactElement | null {
             running ||
             !selected.length ||
             level !== 1 ||
-            classification.settings.method === "inherit"
+            classification.settings.method === "inherit" ||
+            usesContext
           }
           className="gap-2"
           data-testid="obia-batch-run"

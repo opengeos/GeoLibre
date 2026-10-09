@@ -1,6 +1,14 @@
 import { ObiaError } from "@geolibre/processing";
 import type { TFunction } from "i18next";
+import { ObiaContextError } from "./obia-context";
 import { ObiaRestoreError } from "./obia-persistence";
+
+const CONTEXT_ERRORS = {
+  "no-features": "obia.context.error.noFeatures",
+  "no-links": "obia.context.error.noLinks",
+  "no-sizes": "obia.context.error.noSizes",
+  "no-above": "obia.context.error.noAbove",
+} as const;
 
 /**
  * The message to show for a workbench failure: a translated message for the
@@ -31,6 +39,9 @@ export function obiaErrorMessage(err: unknown, t: TFunction, fallback: string): 
       case "missing-fields":
         return t("obia.error.missingFields", { count: err.params.count });
     }
+  }
+  if (err instanceof ObiaContextError) {
+    return t(CONTEXT_ERRORS[err.code]);
   }
   if (err instanceof ObiaRestoreError) {
     return t(
