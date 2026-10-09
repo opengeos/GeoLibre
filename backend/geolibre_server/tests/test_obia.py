@@ -395,3 +395,41 @@ def test_nodata_without_an_exact_float32_form_is_left_out(tmp_path: Path) -> Non
         labels = src.read(1)
     assert (labels[:, :2] == 0).all(), "NoData pixels get no object"
     assert (labels[:, 2:] > 0).all()
+
+
+def test_status_installs_in_the_background(monkeypatch: pytest.MonkeyPatch) -> None:
+    from geolibre_server.app import obia
+
+    installed = {"done": False}
+    monkeypatch.setattr(obia, "_runtime_python", lambda: sys.executable)
+    monkeypatch.setattr(obia, "_check_obia_import", lambda python: installed["done"])
+
+    def install() -> str:
+        installed["done"] = True
+        return sys.executable
+
+    monkeypatch.setattr(obia, "_ensure_obia_runtime", install)
+    status = obia.obia_status()
+    assert status["available"] is False and status["installing"] is True
+    obia._INSTALL_THREAD.join(timeout=5)
+    assert obia.obia_status()["available"] is True
+
+
+def test_cancelled_jobs_are_evicted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(conversion, "MAX_RETAINED_JOBS", 1)
+    with conversion._JOBS_LOCK:
+        saved = dict(conversion._JOBS)
+        conversion._JOBS.clear()
+        for n, status in enumerate(["cancelled", "succeeded"]):
+            conversion._JOBS[f"job-{n}"] = conversion.JobState(
+                id=f"job-{n}",
+                status=status,
+                tool_id="t",
+                created_at=f"2026-01-0{n + 1}",
+                updated_at="",
+            )
+        conversion._evict_finished_jobs_locked()
+        remaining = list(conversion._JOBS)
+        conversion._JOBS.clear()
+        conversion._JOBS.update(saved)
+    assert remaining == ["job-1"]

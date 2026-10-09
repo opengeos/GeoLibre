@@ -54,6 +54,8 @@ export function obiaLocalPath(layer: GeoLibreLayer): string | null {
 /** Native availability and each native method's pixel limit. */
 export interface ObiaNativeStatus {
   available: boolean;
+  /** The runtime is installing scikit-image; ask again later. */
+  installing?: boolean;
   maxPixels: Record<"slic" | "felzenszwalb", number>;
 }
 
@@ -78,6 +80,7 @@ export function obiaNativeStatus(): Promise<ObiaNativeStatus | null> {
     if (!status.available) statusPromise = null;
     return {
       available: status.available,
+      ...(status.installing ? { installing: true } : {}),
       maxPixels: {
         slic: status.max_pixels?.slic ?? 0,
         felzenszwalb: status.max_pixels?.felzenszwalb ?? 0,
@@ -138,7 +141,7 @@ function callOf(tool: string, body: object): ObiaToolCall {
 }
 
 /**
- * Wait for a sidecar job to finish, reporting its progress lines as steps and
+ * Wait for a sidecar job to finish, reporting it as the run's step and
  * cancelling it when the run is cancelled.
  */
 async function waitForJob(job: ConversionJob, run: ObiaRunOptions): Promise<ConversionJob> {
@@ -152,7 +155,18 @@ async function waitForJob(job: ConversionJob, run: ObiaRunOptions): Promise<Conv
         cancel();
         throw new DOMException(`${job.tool_id} was cancelled.`, "AbortError");
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Wake early on Cancel instead of finishing the second.
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 1000);
+        run.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      });
       current = await fetchConversionJob(job.id);
     }
   } finally {
@@ -226,12 +240,13 @@ export async function runNativeMeasure(
   options: ObiaFeatureOptions,
   segmentJobId: string | null,
   run: ObiaRunOptions = {},
-): Promise<{ table: ObiaFeatureTable; call: ObiaToolCall }> {
+): Promise<{ table: ObiaFeatureTable; call: ObiaToolCall; objectCount: number }> {
   throwIfAborted(run, "obia-measure");
   const native = { spectral: options.spectral, shape: options.shape, context: options.context };
   const job = await waitForJob(await startObiaNativeMeasure(request, native, segmentJobId), run);
   const csv = new TextDecoder().decode(await fetchObiaNativeFile(job.id, "features.csv"));
   return {
+    objectCount: Number((job.result as { object_count?: number } | null)?.object_count ?? 0),
     table: nativeFeatureTable(csv, request.bands, options.spectral ? options.indices : undefined),
     call: callOf("obia/measure", { options: native }),
   };
