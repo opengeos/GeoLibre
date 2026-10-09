@@ -22,6 +22,7 @@ const LEVEL_ERRORS = {
   "too-large": "obia.levels.error.tooLarge",
   "not-top": "obia.levels.error.notTop",
   "too-deep": "obia.levels.error.tooDeep",
+  "bad-scale": "obia.levels.error.badScale",
 } as const;
 
 /**
@@ -54,6 +55,8 @@ export function ObiaLevelsStep(): ReactElement | null {
     try {
       const before = useObiaSession.getState();
       const built = await buildCoarserLevel(scale, run);
+      // The last steps of the build take no signal: honour a Cancel made then.
+      if (run.signal?.aborted) throw new DOMException("Cancelled.", "AbortError");
       // A re-segmentation, a re-measure or a level switch while it ran makes
       // the new level describe features that are gone.
       const after = useObiaSession.getState();
@@ -62,7 +65,7 @@ export function ObiaLevelsStep(): ReactElement | null {
         after.features?.finishedAt !== before.features?.finishedAt ||
         after.level !== before.level
       ) {
-        setError(t("obia.measure.error.resegmented"));
+        setError(t("obia.levels.error.changed"));
         return;
       }
       addBuiltLevel(
@@ -178,7 +181,7 @@ export function ObiaLevelsStep(): ReactElement | null {
         />
         <Button
           onClick={() => void handleBuild()}
-          disabled={running || level !== top}
+          disabled={running || level !== top || !(Number.isFinite(scale) && scale > 0)}
           className="gap-2"
           data-testid="obia-level-build"
         >

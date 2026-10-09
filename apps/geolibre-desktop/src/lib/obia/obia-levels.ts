@@ -34,7 +34,7 @@ export interface ObiaBuiltLevel {
 
 /** Why a coarser level cannot be built. */
 export class ObiaLevelError extends Error {
-  readonly code: "no-features" | "too-large" | "not-top" | "too-deep";
+  readonly code: "no-features" | "too-large" | "not-top" | "too-deep" | "bad-scale";
 
   constructor(code: ObiaLevelError["code"], message: string) {
     super(message);
@@ -66,6 +66,9 @@ export async function buildCoarserLevel(
   }
   if (levels.some((record) => record.level > level)) {
     throw new ObiaLevelError("not-top", "Build coarser levels from the coarsest one.");
+  }
+  if (!(Number.isFinite(scale) && scale > 0)) {
+    throw new ObiaLevelError("bad-scale", "The scale must be a positive number.");
   }
   if (level >= OBIA_MAX_LEVELS) {
     throw new ObiaLevelError("too-deep", `The hierarchy has at most ${OBIA_MAX_LEVELS} levels.`);
@@ -178,20 +181,9 @@ export function addBuiltLevel(built: ObiaBuiltLevel, name: string): void {
     .getState()
     .layers.find((layer) => layer.id === segmentation?.objectsLayerId);
   if (!segmentation || !childLayer?.geojson) throw new Error("The objects layer was removed.");
-  const next = built.record.level;
-  const objectsLayerId = addGeoJsonLayer(name, applyObjectFeatures(built.objects, built.table));
-  const added = useAppStore.getState().layers.find((layer) => layer.id === objectsLayerId);
-  if (added) {
-    updateLayer(objectsLayerId, {
-      style: {
-        ...added.style,
-        fillOpacity: 0,
-        strokeColor: LEVEL_COLORS[(next - 1) % LEVEL_COLORS.length],
-        strokeWidth: 2,
-      },
-      metadata: { ...added.metadata, obiaRole: "objects", obiaLevel: next },
-    });
-  }
+  // Link each child to its parent before adding the new layer, so a failure
+  // cannot leave a layer the session does not know about; the links also
+  // rebuild this level after a reload.
   updateLayer(childLayer.id, {
     geojson: {
       ...childLayer.geojson,
@@ -207,6 +199,20 @@ export function addBuiltLevel(built: ObiaBuiltLevel, name: string): void {
       }),
     },
   });
+  const next = built.record.level;
+  const objectsLayerId = addGeoJsonLayer(name, applyObjectFeatures(built.objects, built.table));
+  const added = useAppStore.getState().layers.find((layer) => layer.id === objectsLayerId);
+  if (added) {
+    updateLayer(objectsLayerId, {
+      style: {
+        ...added.style,
+        fillOpacity: 0,
+        strokeColor: LEVEL_COLORS[(next - 1) % LEVEL_COLORS.length],
+        strokeWidth: 2,
+      },
+      metadata: { ...added.metadata, obiaRole: "objects", obiaLevel: next },
+    });
+  }
   useObiaSession.getState().addLevel({
     ...built.record,
     segmentation: { ...built.record.segmentation, objectsLayerId },
