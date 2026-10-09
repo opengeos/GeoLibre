@@ -79,7 +79,7 @@ function gridTransform(info: ObiaSourceInfo, area: ObiaReadArea) {
 }
 
 /** The polygons of a geometry, each as its rings. */
-function polygonsOf(geometry: Geometry | null): Position[][][] {
+export function polygonsOf(geometry: Geometry | null): Position[][][] {
   if (!geometry) return [];
   if (geometry.type === "Polygon") return [geometry.coordinates];
   if (geometry.type === "MultiPolygon") return geometry.coordinates;
