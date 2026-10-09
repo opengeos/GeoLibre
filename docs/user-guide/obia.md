@@ -129,24 +129,29 @@ files to the map first; they then appear in the layer lists.
   polygons are burned onto the image chosen under **Segment** (a pixel belongs
   to a polygon when its center is inside; the whole image is read, from an
   overview when it is over the pixel limit). The object ids come from a field
-  holding distinct positive whole numbers (for example the exported object
-  ids), or are numbered in order. Polygons covering no pixel center are left
+  holding distinct positive whole numbers up to 16,777,216 (for example the
+  exported object ids; renumber larger ones first), or are numbered in order. Polygons covering no pixel center are left
   out, and the step says how many. The original attributes stay on the
   objects. After a reload the labels are rebuilt by burning the objects again.
-- **Samples**: a point (or polygon, by its centroid) layer labels the objects
-  under it, with the class in a field you choose and the role (training or
-  validation) from a field or the role you choose. Classes it names that the
-  workbench does not have yet are added.
+- **Samples**: a point (or polygon, by a point inside it) layer labels the
+  objects under it, with the class in a field you choose and the role
+  (training or validation) from a field or the role you choose. When samples
+  disagree on an object, the first one wins and the step says how many
+  objects that affected. Classes it names that the workbench does not have yet
+  are added; a numeric class field gives classes named `1`, `2` and so on.
 - **Class list**: a JSON list of `{"name": ..., "color": "#rrggbb"}` (or
   `{"classes": [...]}`), or a CSV with `name` and `color` columns. Classes the
   workbench has take the file's colors; new ones are added.
 - **Feature table**: a CSV with a `segment_id` column and one column per
   feature, such as exported object features. They join the measured features
   (replacing any of the same name), so rules and the classifier can use them.
+  Rows whose `segment_id` matches no object are left out, and the step says
+  how many.
 - **Level mapping**: a CSV of `child_id,parent_id` rows (by those headers, or
-  the first two columns) builds the level above the current one from the
-  mapping instead of by merging; objects the mapping leaves out have no
-  parent.
+  child then parent in the first two columns; a file with no header row works
+  too) builds the level above the current one from the mapping instead of by
+  merging. Objects the mapping leaves out become their own parent, and the step
+  says how many; a child given two different parents is rejected.
 
 ## 2. Measure
 
@@ -286,8 +291,14 @@ a value). There are three kinds of process:
 
 Besides the measured and context features, conditions and memberships can read
 `nb_border_<class>`: the share of an object's border shared with neighbors
-currently of that class, recomputed before each process. With it a loop can grow
-a class outwards, ring by ring. For example, starting from unclassified
+currently of that class, recomputed before each process. The class must be one
+in the legend, one the ruleset assigns, or (when starting from the current
+classification) one that classification holds; a misspelled one is rejected.
+The suffix is the class name in lower case with accents dropped and each run of
+spaces or punctuation turned into `_` (so `Bare soil` is `nb_border_bare_soil`),
+plus `_2`, `_3` and so on when two names give the same suffix; **Insert
+example** writes one for your first class.
+With it a loop can grow a class outwards, ring by ring. For example, starting from unclassified
 objects:
 
 ```json

@@ -7557,16 +7557,22 @@
       "classSchema": "Class list (JSON or CSV)…",
       "featureTable": "Feature table (CSV)…",
       "levelMapping": "Level mapping (CSV)…",
-      "objectsDone_one": "Imported {{count}} object ({{skipped}} too small or outside the image).",
-      "objectsDone_other": "Imported {{count}} objects ({{skipped}} too small or outside the image).",
+      "objectsDone_one": "Imported {{count}} object ({{skipped}} left out: not a polygon, too small or outside the image).",
+      "objectsDone_other": "Imported {{count}} objects ({{skipped}} left out: not a polygon, too small or outside the image).",
       "samplesDone_one": "Labeled {{count}} object from the samples ({{missed}} samples outside the objects).",
-      "samplesDone_other": "Labeled objects from {{count}} samples ({{missed}} samples outside the objects).",
+      "samplesDone_other": "Labeled {{count}} objects from the samples ({{missed}} samples outside the objects).",
+      "samplesConflicts_one": "{{count}} object had conflicting samples and kept the first one's label.",
+      "samplesConflicts_other": "{{count}} objects had conflicting samples and kept the first one's label.",
       "classesDone_one": "Imported {{count}} class.",
       "classesDone_other": "Imported {{count}} classes.",
       "featuresDone_one": "Imported {{count}} feature for {{objects}} objects.",
       "featuresDone_other": "Imported {{count}} features for {{objects}} objects.",
+      "featuresUnmatched_one": "{{count}} row matched no object.",
+      "featuresUnmatched_other": "{{count}} rows matched no object.",
       "mappingDone_one": "Built level {{level}} from the mapping: {{count}} object.",
       "mappingDone_other": "Built level {{level}} from the mapping: {{count}} objects.",
+      "mappingUnmapped_one": "{{count}} object had no parent in the file and became its own.",
+      "mappingUnmapped_other": "{{count}} objects had no parent in the file and became their own.",
       "error": {
         "failed": "Could not import.",
         "noImage": "Choose the image under Segment first.",
@@ -7576,7 +7582,12 @@
         "no-polygons": "The layer has no polygons.",
         "no-objects": "No polygon covers the image.",
         "bad-file": "The file is not in a format the workbench reads: see the user guide.",
-        "no-ids": "The id field must hold distinct positive whole numbers."
+        "no-ids": "The id field must hold positive whole numbers.",
+        "no-image": "Could not read the image.",
+        "dup-ids": "The id field must hold a different number for each object.",
+        "big-ids": "Object ids must be at most 16,777,216: renumber them first.",
+        "no-match": "No row of the table matches an object's segment_id.",
+        "mapping-conflict": "The mapping gives an object two different parents."
       }
     },
     "context": {
@@ -7665,10 +7676,11 @@
       "fromCurrent": "Start from the current classification (otherwise every object starts unclassified)",
       "log_one": "{{count}} object changed",
       "log_other": "{{count}} objects changed",
-      "logLoop_one": "{{count}} object changed in {{iterations}} passes",
-      "logLoop_other": "{{count}} objects changed in {{iterations}} passes",
+      "logLoop_one": "{{count}} object changed (passes: {{iterations}})",
+      "logLoop_other": "{{count}} objects changed (passes: {{iterations}})",
       "loadFailed": "Could not open the ruleset.",
-      "saveFailed": "Could not save the ruleset."
+      "saveFailed": "Could not save the ruleset.",
+      "tooLong": "The ruleset ran more than {{max}} processes without settling: check that its loops can stop changing classes."
     },
     "accuracy": {
       "noValidation": "Label some objects as Validation samples (or Split the training samples) to score the classification against data it never trained on.",
@@ -7722,7 +7734,8 @@
       },
       "levelOneOnly": "Applying to other images uses level 1: switch to it under Levels.",
       "inheritUnsupported": "Inherited classes come from a level above, which other images do not have: classify with a random forest or rules to apply the workflow.",
-      "contextUnsupported": "The classifier uses context features (from the object hierarchy), which other images do not have: classify without them to apply the workflow."
+      "contextUnsupported": "The classifier uses context features (from the object hierarchy), which other images do not have: classify without them to apply the workflow.",
+      "fromCurrentUnsupported": "The ruleset started from the current classification, which other images do not have: run it without that option to apply the workflow."
     },
     "provenance": {
       "title": "Provenance",

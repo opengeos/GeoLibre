@@ -30,6 +30,8 @@ export interface ObiaBuiltLevel {
   parentOf: Map<number, number>;
   /** The record to add once its objects layer exists (`objectsLayerId` empty). */
   record: ObiaLevelRecord;
+  /** Objects a mapping gave no parent, each now its own parent. */
+  unmapped: number;
 }
 
 /** Why a coarser level cannot be built. */
@@ -47,10 +49,10 @@ export class ObiaLevelError extends Error {
  * Build the level above the current one by merging its objects, best-first by
  * color heterogeneity until the cheapest merge exceeds scale².
  *
- * @param scale The merge scale.
+ * @param scale The merge scale (ignored with a mapping).
  * @param run Cancellation and progress.
  * @param mapping Instead of merging, each object's parent as given (an
- *   imported level mapping); objects without one are left out.
+ *   imported level mapping); objects without one become their own parent.
  * @throws ObiaLevelError when the current level is not the top one, has no
  *   spectral statistics, or is too large to polygonize in the browser.
  */
@@ -67,7 +69,8 @@ export async function buildCoarserLevel(
   if (levels.some((record) => record.level > level)) {
     throw new ObiaLevelError("not-top", "Build coarser levels from the coarsest one.");
   }
-  if (!(Number.isFinite(scale) && scale > 0)) {
+  // A mapping gives the parents, so it has no scale.
+  if (!mapping && !(Number.isFinite(scale) && scale > 0)) {
     throw new ObiaLevelError("bad-scale", "The scale must be a positive number.");
   }
   if (level >= OBIA_MAX_LEVELS) {
@@ -87,19 +90,21 @@ export async function buildCoarserLevel(
   run.onStep?.("merge");
   const labels = await ensureObiaLabels(run);
   const grid = await decodeLabelGrid(labels);
-  let parentOf: Map<number, number>;
-  if (mapping) {
-    parentOf = new Map(
-      [...mapping].filter(([child, parent]) => features.table.rows.has(child) && parent > 0),
-    );
-  } else {
-    parentOf = mergeObjects(features.table, objectAdjacency(grid), { scale, bands });
-    // Objects the merge could not weigh (no size, or no feature row) still get
-    // a parent of their own, so the coarser grid has no holes.
-    let nextParent = 1;
-    for (const parent of parentOf.values()) if (parent >= nextParent) nextParent = parent + 1;
-    for (const id of grid.ids) {
-      if (id && !parentOf.has(id)) parentOf.set(id, nextParent++);
+  // The mapping's parents, or the merge's; objects the merge could not weigh
+  // (no size, or no feature row) or the mapping left out still get a parent
+  // of their own, so the coarser grid has no holes.
+  const given = mapping ?? mergeObjects(features.table, objectAdjacency(grid), { scale, bands });
+  const parentOf = new Map<number, number>();
+  let nextParent = 1;
+  for (const parent of given.values()) if (parent >= nextParent) nextParent = parent + 1;
+  let unmapped = 0;
+  for (const id of grid.ids) {
+    if (!id || parentOf.has(id)) continue;
+    const parent = given.get(id);
+    if (parent && parent > 0) parentOf.set(id, parent);
+    else {
+      parentOf.set(id, nextParent++);
+      unmapped += 1;
     }
   }
   const parentIds = relabelGrid(grid, parentOf);
@@ -127,6 +132,8 @@ export async function buildCoarserLevel(
     : { fromLevel: level, scale, bands };
   const next: ObiaSegmentationRun = {
     ...segmentation,
+    // A coarser level is built here, even from imported objects.
+    imported: undefined,
     labels: parentLabels,
     objectsLayerId: "",
     objectCount,
@@ -152,6 +159,7 @@ export async function buildCoarserLevel(
     objects,
     table,
     parentOf,
+    unmapped: mapping ? unmapped : 0,
     record: {
       level: level + 1,
       segmentation: next,

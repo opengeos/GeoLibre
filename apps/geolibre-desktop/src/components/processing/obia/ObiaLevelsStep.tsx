@@ -6,7 +6,7 @@ import { useCallback, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { computeContextFeatures } from "../../../lib/obia/obia-context";
-import { ObiaLevelError, addBuiltLevel, buildCoarserLevel } from "../../../lib/obia/obia-levels";
+import { addBuiltLevel, buildCoarserLevel } from "../../../lib/obia/obia-levels";
 import { useObiaSession } from "../../../lib/obia/obia-session";
 import {
   ObiaNumberField,
@@ -16,14 +16,6 @@ import {
   isObiaCancel,
   useObiaRun,
 } from "./ObiaFields";
-
-const LEVEL_ERRORS = {
-  "no-features": "obia.levels.error.noFeatures",
-  "too-large": "obia.levels.error.tooLarge",
-  "not-top": "obia.levels.error.notTop",
-  "too-deep": "obia.levels.error.tooDeep",
-  "bad-scale": "obia.levels.error.badScale",
-} as const;
 
 /**
  * Step 3: the object hierarchy. Build coarser levels by merging the current
@@ -76,9 +68,7 @@ export function ObiaLevelsStep(): ReactElement | null {
       setError(
         isObiaCancel(err)
           ? t("obia.progress.cancelled")
-          : err instanceof ObiaLevelError
-            ? t(LEVEL_ERRORS[err.code])
-            : obiaErrorMessage(err, t, t("obia.levels.error.failed")),
+          : obiaErrorMessage(err, t, t("obia.levels.error.failed")),
       );
     } finally {
       progress.end();

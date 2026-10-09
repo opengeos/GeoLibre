@@ -125,9 +125,10 @@ export function ObiaProvenance(): ReactElement | null {
               ? t("obia.provenance.ruleset", {
                   count: (() => {
                     try {
-                      return (
-                        JSON.parse(classification.settings.ruleset) as { processes: unknown[] }
-                      ).processes.length;
+                      const processes = (
+                        JSON.parse(classification.settings.ruleset) as { processes?: unknown }
+                      ).processes;
+                      return Array.isArray(processes) ? processes.length : 0;
                     } catch {
                       return 0;
                     }
