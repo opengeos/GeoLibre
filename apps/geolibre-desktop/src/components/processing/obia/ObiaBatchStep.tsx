@@ -5,13 +5,10 @@ import {
   classifyRandomForestTransfer,
   collectSamples,
   computeObjectFeatures,
-<<<<<<< HEAD
   decodeLabelGrid,
   objectAdjacency,
   runRuleset,
-=======
   isContextField,
->>>>>>> feat/obia-context
   segmentImage,
   tableForAllObjects,
   type ObiaClassification,
@@ -281,7 +278,11 @@ export function ObiaBatchStep(): ReactElement | null {
     classification &&
     (classification.settings.method === "rules"
       ? classification.settings.rules.some((rule) => isContextField(rule.field))
-      : classification.fields.some(isContextField)),
+      : classification.settings.method === "ruleset"
+        ? [...classification.settings.ruleset.matchAll(/"field"\s*:\s*"([^"]+)"/g)].some(
+            ([, field]) => isContextField(field),
+          )
+        : classification.fields.some(isContextField)),
   );
 
   if (!segmentation || !features || !classification) return null;
