@@ -94,14 +94,17 @@ export async function felzenszwalbSegmentLabels(
   );
   const first = rasters[0];
   const { width, height } = first;
-  // Pixels are compared by index, so every band must be on one grid.
+  // Pixels are compared by index, so every band must be on one grid (size,
+  // origin, resolution and axis directions).
   const sameGrid = (raster: (typeof rasters)[number]) =>
     raster.width === width &&
     raster.height === height &&
     raster.originX === first.originX &&
     raster.originY === first.originY &&
     raster.resX === first.resX &&
-    raster.resY === first.resY;
+    raster.resY === first.resY &&
+    Boolean(raster.flipX) === Boolean(first.flipX) &&
+    Boolean(raster.flipY) === Boolean(first.flipY);
   if (!rasters.every(sameGrid)) {
     throw new Error("The bands to segment are not on the same grid.");
   }
