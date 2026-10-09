@@ -470,7 +470,7 @@ export {
   regionGrowingArgs,
   segmentImage,
   segmentLabels,
-  countSegmentLabels,
+  fingerprintSegmentLabels,
   splitImageBands,
   stageBands,
   type ObiaBand,

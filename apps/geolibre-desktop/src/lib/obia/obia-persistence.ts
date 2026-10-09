@@ -5,7 +5,7 @@ import {
   OBIA_PREDICTED_FIELD,
   OBIA_RULE_OPS,
   OBIA_SEGMENT_ID_FIELD,
-  countSegmentLabels,
+  fingerprintSegmentLabels,
   segmentLabels,
   type ObiaClass,
   type ObiaFeatureOptions,
@@ -328,6 +328,7 @@ export function restoreObiaSession(
     labels: null,
     objectsLayerId: objectsLayer.id,
     objectCount: asNumber(seg.objectCount, 0),
+    ...(typeof seg.labelsHash === "string" ? { labelsHash: seg.labelsHash } : {}),
     meanObjectArea: asNumber(seg.meanObjectArea, 0),
     tool: asString(seg.tool),
     args: asStrings(seg.args),
@@ -383,6 +384,20 @@ export async function ensureObiaLabels(): Promise<Uint8Array> {
   const segmentation = useObiaSession.getState().segmentation;
   if (!segmentation) throw new Error("Segment an image first.");
   if (segmentation.labels) return segmentation.labels;
+  // Steps that need the labels at the same time share one rebuild.
+  if (rebuilding?.finishedAt === segmentation.finishedAt) return rebuilding.promise;
+  const promise = rebuildLabels(segmentation);
+  rebuilding = { finishedAt: segmentation.finishedAt, promise };
+  try {
+    return await promise;
+  } finally {
+    if (rebuilding?.promise === promise) rebuilding = null;
+  }
+}
+
+let rebuilding: { finishedAt: string; promise: Promise<Uint8Array> } | null = null;
+
+async function rebuildLabels(segmentation: ObiaSegmentationRun): Promise<Uint8Array> {
   const source = useAppStore
     .getState()
     .layers.find((layer) => layer.id === segmentation.sourceLayerId);
@@ -390,7 +405,11 @@ export async function ensureObiaLabels(): Promise<Uint8Array> {
   const image = await obiaSourceBands(source, segmentation.bandIndexes);
   if (!image) throw new ObiaRestoreError("source-missing");
   const { labels } = await segmentLabels(image, segmentation.params);
-  if ((await countSegmentLabels(labels)) !== segmentation.objectCount) {
+  const { objectCount, hash } = await fingerprintSegmentLabels(labels);
+  if (
+    objectCount !== segmentation.objectCount ||
+    (segmentation.labelsHash !== undefined && hash !== segmentation.labelsHash)
+  ) {
     throw new ObiaRestoreError("source-changed");
   }
   useObiaSession.getState().setSegmentationLabels(segmentation.finishedAt, labels);

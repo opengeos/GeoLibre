@@ -1,6 +1,6 @@
 import { Button } from "@geolibre/ui";
 import { Copy } from "lucide-react";
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { snapshotObiaSession } from "../../../lib/obia/obia-persistence";
 import { useObiaSession, type ObiaRunEnv } from "../../../lib/obia/obia-session";
@@ -17,7 +17,12 @@ const commandLine = (tool: string, args: readonly string[]) => [tool, ...args].j
 export function ObiaProvenance(): ReactElement | null {
   const { t, i18n } = useTranslation();
   const session = useObiaSession();
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  useEffect(() => {
+    if (copyStatus === "idle") return;
+    const timer = setTimeout(() => setCopyStatus("idle"), 3000);
+    return () => clearTimeout(timer);
+  }, [copyStatus]);
   const { segmentation, features, classification, splits } = session;
   if (!segmentation) return null;
 
@@ -35,9 +40,9 @@ export function ObiaProvenance(): ReactElement | null {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(snapshotObiaSession(session), null, 2));
-      setCopied(true);
+      setCopyStatus("copied");
     } catch {
-      setCopied(false);
+      setCopyStatus("failed");
     }
   };
 
@@ -123,8 +128,15 @@ export function ObiaProvenance(): ReactElement | null {
           <Copy className="h-3.5 w-3.5" />
           {t("obia.provenance.copy")}
         </Button>
-        {copied && (
-          <span className="text-xs text-muted-foreground">{t("obia.provenance.copied")}</span>
+        {copyStatus !== "idle" && (
+          <span
+            role="status"
+            className={
+              copyStatus === "failed" ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+            }
+          >
+            {t(copyStatus === "failed" ? "obia.provenance.copyFailed" : "obia.provenance.copied")}
+          </span>
         )}
       </div>
     </details>

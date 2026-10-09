@@ -269,17 +269,30 @@ export function dissolveSegmentPolygons(
 }
 
 /**
- * Count the distinct objects (positive labels) in a label raster.
+ * Fingerprint a label raster: the number of distinct objects (positive
+ * labels) and a hash of every pixel's label. Two label rasters with the same
+ * fingerprint describe the same objects, which is how a reloaded project
+ * checks that a rebuilt segmentation still matches its saved objects.
  *
  * @param labels Label raster (GeoTIFF).
+ * @returns The object count and a 32-bit FNV-1a hash of the labels, as hex.
  */
-export async function countSegmentLabels(labels: Uint8Array): Promise<number> {
+export async function fingerprintSegmentLabels(
+  labels: Uint8Array,
+): Promise<{ objectCount: number; hash: string }> {
   const raster = await readRasterData(toArrayBuffer(labels));
   const ids = new Set<number>();
+  let hash = 0x811c9dc5;
   for (const value of raster.bands[0]) {
-    if (value > 0 && value !== raster.nodata) ids.add(value);
+    const label = value > 0 && value !== raster.nodata ? value : 0;
+    if (label) ids.add(label);
+    // Hash the label's four bytes, so ids above 255 hash distinctly.
+    for (let shift = 0; shift < 32; shift += 8) {
+      hash ^= (label >>> shift) & 0xff;
+      hash = Math.imul(hash, 0x01000193);
+    }
   }
-  return ids.size;
+  return { objectCount: ids.size, hash: (hash >>> 0).toString(16).padStart(8, "0") };
 }
 
 /**

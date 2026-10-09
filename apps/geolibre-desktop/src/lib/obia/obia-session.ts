@@ -56,6 +56,12 @@ export interface ObiaSegmentationRun {
   /** The objects layer added to the map. */
   objectsLayerId: string;
   objectCount: number;
+  /**
+   * Fingerprint of the label raster (fingerprintSegmentLabels), so a rebuilt
+   * label raster can be checked against the saved objects. Absent in
+   * projects saved before it was recorded.
+   */
+  labelsHash?: string;
   meanObjectArea: number;
   /** Tool invocation, for provenance. */
   tool: string;

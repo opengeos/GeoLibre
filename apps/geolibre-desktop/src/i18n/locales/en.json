@@ -7581,7 +7581,8 @@
       "rules_one": "{{count}} rule, default class {{defaultClass}}",
       "rules_other": "{{count}} rules, default class {{defaultClass}}",
       "copy": "Copy as JSON",
-      "copied": "Copied."
+      "copied": "Copied.",
+      "copyFailed": "Could not copy to the clipboard."
     }
   },
   "pluginPanel": {
