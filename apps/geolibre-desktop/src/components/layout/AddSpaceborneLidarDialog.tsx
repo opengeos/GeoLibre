@@ -20,6 +20,7 @@ import {
 } from "@geolibre/ui";
 import { FileUp, Satellite } from "lucide-react";
 import { buildSymbologyStyle } from "../../lib/assistant/symbology";
+import { pointBounds } from "../../lib/point-bounds";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 
 const LOCAL_EXTENSIONS = ["h5", "hdf5", "he5"];
@@ -43,25 +44,6 @@ function fieldKey(field: Pick<SpaceborneLidarField, "path" | "column">): string 
 function baseName(path: string): string {
   const name = path.split(/[\\/]/).pop() ?? path;
   return name.replace(/\.(h5|hdf5|he5)$/i, "");
-}
-
-/** The `[west, south, east, north]` extent of point features, or null if empty. */
-function pointBounds(
-  features: Array<{ geometry: { coordinates: number[] } }>,
-): [number, number, number, number] | null {
-  if (features.length === 0) return null;
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  for (const { geometry } of features) {
-    const [x, y] = geometry.coordinates;
-    if (x < west) west = x;
-    if (x > east) east = x;
-    if (y < south) south = y;
-    if (y > north) north = y;
-  }
-  return [west, south, east, north];
 }
 
 interface AddSpaceborneLidarDialogProps {

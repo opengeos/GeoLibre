@@ -517,8 +517,13 @@ class SpaceborneLidarGranule implements SpaceborneLidarFile {
     // track crosses an extent once, so the span is usually a small slice.
     const features: FeatureCollection<Point>["features"] = [];
     const perBeam: SpaceborneLidarFootprints["perBeam"] = [];
+    // The stride runs over all beams' matches as one sequence, so restarting it
+    // per beam cannot keep an extra footprint from each beam past the cap.
+    let matchedOffset = 0;
     for (const { beam, group, lat, lon, distance, indices } of selections) {
-      const kept = stride === 1 ? indices : indices.filter((_, k) => k % stride === 0);
+      const offset = matchedOffset;
+      matchedOffset += indices.length;
+      const kept = stride === 1 ? indices : indices.filter((_, k) => (offset + k) % stride === 0);
       perBeam.push({ beam: beam.name, kept: kept.length });
       if (kept.length === 0) continue;
       const lo = kept[0];
@@ -685,7 +690,13 @@ function readFieldSpan(
         ])
       : ds.slice([[lo, hi]]);
   if (raw instanceof BigInt64Array || raw instanceof BigUint64Array) {
-    return Array.from(raw, (v) => v.toString());
+    // Compare against the raw attribute: a 64-bit fill loses precision as a number.
+    const fill = scalar(ds.attrs["_FillValue"]?.value);
+    return Array.from(raw, (v) =>
+      (typeof fill === "bigint" && v === fill) || (typeof fill === "number" && Number(v) === fill)
+        ? null
+        : v.toString(),
+    );
   }
   const values = toNumbers(raw);
   const fill = fillValue(ds);

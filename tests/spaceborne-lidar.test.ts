@@ -92,10 +92,13 @@ function gediL2a(file: WritableGroup): void {
   const rh = new Float32Array(3 * 101);
   for (let i = 0; i < 3; i++) for (let p = 0; p <= 100; p++) rh[i * 101 + p] = i * 100 + p;
   beam.create_dataset({ name: "rh", data: rh, shape: [3, 101] });
-  beam.create_dataset({
-    name: "shot_number",
-    data: new BigUint64Array([190000000000000001n, 190000000000000002n, 190000000000000003n]),
-  });
+  beam
+    .create_dataset({
+      name: "shot_number",
+      data: new BigUint64Array([190000000000000001n, 190000000000000002n, 190000000000000003n]),
+    })
+    // A 64-bit fill that a float64 cannot tell apart from its neighbors.
+    .create_attribute("_FillValue", new BigUint64Array([190000000000000002n]));
 }
 
 describe("detectSpaceborneLidarProduct", () => {
@@ -209,6 +212,7 @@ describe("openSpaceborneLidar (GEDI L2A)", () => {
       assert.equal(a.elev_lowestmode, 5);
       assert.equal(b.elev_lowestmode, null);
       assert.equal(a.shot_number, "190000000000000001");
+      assert.equal(b.shot_number, null);
     } finally {
       file.close();
     }
@@ -224,6 +228,37 @@ describe("openSpaceborneLidar (GEDI L2A)", () => {
       assert.equal(unwrapped.matched, 2);
       const world = file.readFootprints({ bbox: [-200, -90, 200, 90], qualityFilter: false });
       assert.equal(world.matched, 3);
+    } finally {
+      file.close();
+    }
+  });
+});
+
+describe("openSpaceborneLidar thinning", () => {
+  it("caps the total across beams, not per beam", async () => {
+    const bytes = await buildHdf5((file) => {
+      file.create_attribute("short_name", "GEDI_L4A");
+      for (const [name, lon] of [
+        ["BEAM0000", 1],
+        ["BEAM0101", 2],
+      ] as const) {
+        const beam = file.create_group(name);
+        beam.create_dataset({ name: "lat_lowestmode", data: new Float64Array([0]) });
+        beam.create_dataset({ name: "lon_lowestmode", data: new Float64Array([lon]) });
+        beam.create_dataset({ name: "delta_time", data: new Float64Array([0]) });
+        beam.create_dataset({ name: "agbd", data: new Float32Array([10]) });
+      }
+    });
+    const file = await openSpaceborneLidar(bytes);
+    try {
+      const result = file.readFootprints({ maxPoints: 1 });
+      assert.equal(result.matched, 2);
+      assert.equal(result.stride, 2);
+      assert.equal(result.kept, 1);
+      assert.deepEqual(result.perBeam, [
+        { beam: "BEAM0000", kept: 1 },
+        { beam: "BEAM0101", kept: 0 },
+      ]);
     } finally {
       file.close();
     }
