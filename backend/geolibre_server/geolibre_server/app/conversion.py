@@ -1154,6 +1154,9 @@ def _run_conversion_job(
     # Set from a marker line when the script rejects the user's input; see
     # _SCRIPT_DRIVER. Anything else stays a generic failure.
     validation_error: str | None = None
+    # A cancelled job removes only an output it created, not a file that was
+    # already there when it started.
+    output_existed = bool(params.get("output_path")) and Path(params["output_path"]).exists()
     try:
         _job_update(job_id, status="running")
         python = _runtime_python()
@@ -1208,7 +1211,8 @@ def _run_conversion_job(
             raise RuntimeError(f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds")
         if job_id in _CANCELLED:
             _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
-            _remove_partial_output(params)
+            if not output_existed:
+                _remove_partial_output(params)
             return
         if returncode != 0:
             if validation_error:
@@ -1227,7 +1231,8 @@ def _run_conversion_job(
     except Exception as exc:
         if job_id in _CANCELLED:
             _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
-            _remove_partial_output(params)
+            if not output_existed:
+                _remove_partial_output(params)
             return
         # Mirror Whitebox: log the raw failure server-side and surface only a
         # generic message. DuckDB/GDAL stderr often embeds absolute paths that
