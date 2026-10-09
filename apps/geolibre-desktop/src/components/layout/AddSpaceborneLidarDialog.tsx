@@ -198,9 +198,13 @@ export function AddSpaceborneLidarDialog({
       return;
     }
     const parsedMax = Number(maxPoints);
+    const gen = opGen.current;
     setAdding(true);
     // Let the busy state paint before the synchronous decode blocks the thread.
     await new Promise((resolve) => setTimeout(resolve, 0));
+    // Closing the dialog or picking another file during the yield closes this
+    // granule; reading it now would report an empty result for the wrong file.
+    if (gen !== opGen.current || fileRef.current !== file) return;
     try {
       const result = file.readFootprints({
         beams: file.beams.filter((beam) => selectedBeams.has(beam.name)).map((b) => b.name),
@@ -257,7 +261,7 @@ export function AddSpaceborneLidarDialog({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setAdding(false);
+      if (gen === opGen.current) setAdding(false);
     }
   };
 
