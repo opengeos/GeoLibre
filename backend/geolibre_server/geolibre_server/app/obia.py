@@ -351,9 +351,13 @@ band_names = seg["bands"]
 
 if options.get("spectral"):
     for b, band in zip(band_names, data):
+        # One band at a time, freeing its temporaries: at the pixel limit each
+        # float64 copy is about a gigabyte.
         values = band.ravel().astype("float64")
         total = np.bincount(flat, weights=values, minlength=n + 1)
-        squares = np.bincount(flat, weights=values * values, minlength=n + 1)
+        np.multiply(values, values, out=values)
+        squares = np.bincount(flat, weights=values, minlength=n + 1)
+        del values
         with np.errstate(invalid="ignore", divide="ignore"):
             mean = total / count
             std = np.sqrt(np.maximum(squares / count - mean * mean, 0))
@@ -361,6 +365,7 @@ if options.get("spectral"):
         columns[f"std_b{b}"] = std[1:]
         columns[f"min_b{b}"] = np.asarray(ndimage.minimum(band, labels, ids))
         columns[f"max_b{b}"] = np.asarray(ndimage.maximum(band, labels, ids))
+        del total, squares, mean, std
     if not options.get("shape"):
         columns["area_px"] = count[1:]
 
@@ -658,6 +663,8 @@ def _start(tool_id: str, script: str, params: dict, uses: str | None = None):
 _INSTALL_LOCK = threading.Lock()
 _INSTALL_THREAD: threading.Thread | None = None
 _INSTALL_ERROR: str | None = None
+_INSTALL_FAILED_AT = 0.0
+INSTALL_RETRY_SECS = 300
 
 
 def _start_install() -> None:
@@ -665,13 +672,14 @@ def _start_install() -> None:
     global _INSTALL_THREAD, _INSTALL_ERROR
 
     def install() -> None:
-        global _INSTALL_ERROR
+        global _INSTALL_ERROR, _INSTALL_FAILED_AT
         try:
             _ensure_obia_runtime()
             _INSTALL_ERROR = None
         except Exception as exc:  # noqa: BLE001 - reported through /status
             logger.warning("OBIA runtime install failed: %s", exc)
             _INSTALL_ERROR = "Native OBIA runtime is unavailable. Check the sidecar logs."
+            _INSTALL_FAILED_AT = time.time()
 
     with _INSTALL_LOCK:
         if _INSTALL_THREAD is not None and _INSTALL_THREAD.is_alive():
@@ -705,10 +713,12 @@ def obia_status():
     except Exception:
         logger.exception("Unexpected error while checking the OBIA runtime")
         return {"available": False, "message": "Native OBIA runtime status check failed."}
-    if _INSTALL_ERROR and not (_INSTALL_THREAD and _INSTALL_THREAD.is_alive()):
-        error = _INSTALL_ERROR
-        _start_install()  # try again next time round
-        return {"available": False, "message": error}
+    # After a failed install, say so for a while rather than retrying on
+    # every check; then try again (reported as installing, so the client
+    # keeps asking).
+    running = _INSTALL_THREAD is not None and _INSTALL_THREAD.is_alive()
+    if _INSTALL_ERROR and not running and time.time() - _INSTALL_FAILED_AT < INSTALL_RETRY_SECS:
+        return {"available": False, "message": _INSTALL_ERROR}
     _start_install()
     return {
         "available": False,
