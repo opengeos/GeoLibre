@@ -7613,7 +7613,8 @@
         "failed": "Could not apply the workflow.",
         "readImage": "Could not read the image.",
         "onImage": "{{name}}: {{message}}",
-        "changed": "The image was segmented again while applying, so the run stopped."
+        "changed": "The image was segmented again while applying, so the run stopped.",
+        "tooLarge": "The image is over the pixel limit even at its coarsest overview. Clip it first."
       }
     },
     "provenance": {

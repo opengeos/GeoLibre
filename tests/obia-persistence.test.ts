@@ -245,6 +245,7 @@ describe("OBIA read areas", () => {
     assert.deepEqual(boundsWindow(info, [9, 40, 30, 49]), [0, 100, 1000, 800]);
     assert.equal(boundsWindow(info, [30, 10, 31, 11]), null);
     assert.equal(boundsWindow({ ...info, toPixel: null }, [11, 47, 12, 48]), null);
+    assert.equal(boundsWindow(info, [12, 47, 11, 48]), null, "reversed bounds are not a box");
   });
 
   it("falls back to an overview when the area is over the limit", () => {

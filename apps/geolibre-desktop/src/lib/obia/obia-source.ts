@@ -1,6 +1,7 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
   OBIA_MAX_PIXELS,
+  ObiaError,
   planImageRead,
   readImageLevels,
   readImageWindow,
@@ -33,7 +34,8 @@ export interface ObiaSourceInfo {
 
 // The last image opened, so listing bands, segmenting and measuring the same
 // layer open it once. One entry: the workbench works on one image at a time.
-let cached: { key: string; tiff: Promise<GeoTIFF | null> } | null = null;
+// `ranges`: opened by HTTP range requests rather than from downloaded bytes.
+let cached: { key: string; tiff: Promise<GeoTIFF | null>; ranges: boolean } | null = null;
 // Bumped by clearObiaSourceCache, so an open that was in flight when the
 // cache was cleared does not store its result afterwards.
 let generation = 0;
@@ -72,8 +74,8 @@ function remoteUrl(layer: GeoLibreLayer): string | null {
   return null;
 }
 
-async function openTiff(layer: GeoLibreLayer): Promise<GeoTIFF | null> {
-  const url = remoteUrl(layer);
+async function openTiff(layer: GeoLibreLayer, ranges = true): Promise<GeoTIFF | null> {
+  const url = ranges ? remoteUrl(layer) : null;
   if (url) {
     try {
       const tiff = await fromUrl(url);
@@ -95,11 +97,12 @@ async function openTiff(layer: GeoLibreLayer): Promise<GeoTIFF | null> {
   }
   const bytes = await fetchLayerBytes(layer);
   if (!bytes) return null;
-  return fromArrayBuffer(
-    bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
-      ? (bytes.buffer as ArrayBuffer)
-      : (bytes.slice().buffer as ArrayBuffer),
-  );
+  // The bytes' own buffer when it is a whole ArrayBuffer, else a copy.
+  const whole =
+    bytes.buffer instanceof ArrayBuffer &&
+    bytes.byteOffset === 0 &&
+    bytes.byteLength === bytes.buffer.byteLength;
+  return fromArrayBuffer(whole ? (bytes.buffer as ArrayBuffer) : bytes.slice().buffer);
 }
 
 /**
@@ -109,11 +112,11 @@ async function openTiff(layer: GeoLibreLayer): Promise<GeoTIFF | null> {
  * @returns The GeoTIFF, or null when the layer's data is not readable in the
  *   browser.
  */
-export async function obiaSourceTiff(layer: GeoLibreLayer): Promise<GeoTIFF | null> {
+export async function obiaSourceTiff(layer: GeoLibreLayer, ranges = true): Promise<GeoTIFF | null> {
   const key = obiaSourceKey(layer);
-  if (cached?.key === key) return cached.tiff;
+  if (cached?.key === key && (ranges || !cached.ranges)) return cached.tiff;
   const started = generation;
-  const tiff = openTiff(layer).catch((error: unknown) => {
+  const tiff = openTiff(layer, ranges).catch((error: unknown) => {
     console.warn(
       `Object-Based Analysis: could not open "${layer.name}" (${
         error instanceof Error ? error.name : "error"
@@ -121,7 +124,9 @@ export async function obiaSourceTiff(layer: GeoLibreLayer): Promise<GeoTIFF | nu
     );
     return null;
   });
-  if (started === generation) cached = { key, tiff };
+  if (started === generation) {
+    cached = { key, tiff, ranges: ranges && remoteUrl(layer) != null };
+  }
   const result = await tiff;
   // Do not keep a failure: the next read retries.
   if (!result && cached?.tiff === tiff) cached = null;
@@ -214,6 +219,9 @@ export function boundsWindow(
 ): ObiaPixelWindow | null {
   if (!info.toPixel) return null;
   const [west, south, east, north] = bounds;
+  // MapLibre's bounds keep west < east (unwrapping past 180); anything else
+  // is not a box to sample.
+  if (!(east > west) || !(north > south)) return null;
   // Sample the box's edges, not only its corners: a projected grid bends
   // the box, and its extremes can fall between the corners.
   const xs: number[] = [];
@@ -308,12 +316,28 @@ export async function obiaSourceBands(
   bandIndexes: readonly number[],
   area?: ObiaReadArea,
 ): Promise<ObiaImage | null> {
+  const read = async (tiff: GeoTIFF) => {
+    const target: ObiaReadArea =
+      area ??
+      (await readImageLevels(tiff).then(({ levels }) => ({
+        level: 0,
+        window: [0, 0, levels[0].width, levels[0].height] as ObiaPixelWindow,
+      })));
+    return readImageWindow(tiff, bandIndexes, target);
+  };
   const tiff = await obiaSourceTiff(layer);
   if (!tiff) return null;
-  if (area) return readImageWindow(tiff, bandIndexes, area);
-  const { levels } = await readImageLevels(tiff);
-  return readImageWindow(tiff, bandIndexes, {
-    level: 0,
-    window: [0, 0, levels[0].width, levels[0].height],
-  });
+  try {
+    return await read(tiff);
+  } catch (error) {
+    // Some servers, or a browser cache in front of them, return range
+    // responses whose bytes do not decode: read such a source whole instead.
+    if (error instanceof ObiaError || !cached?.ranges) throw error;
+    console.warn(
+      `Object-Based Analysis: range reads of "${layer.name}" did not decode; downloading it whole.`,
+    );
+    const whole = await obiaSourceTiff(layer, false);
+    if (!whole) return null;
+    return read(whole);
+  }
 }
