@@ -14,68 +14,24 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  Input,
   Label,
-  Select,
 } from "@geolibre/ui";
 import { FileUp, Satellite } from "lucide-react";
 import { useDialogResize } from "../../hooks/useDialogResize";
 import { buildSymbologyStyle } from "../../lib/assistant/symbology";
 import { pointBounds } from "../../lib/point-bounds";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
+import {
+  baseName,
+  downloadWithProgress,
+  fieldKey,
+  SAMPLE_BASE_URL,
+  SAMPLES,
+} from "../../lib/spaceborne-lidar-samples";
 import { SampleDataSelect } from "./add-data/shared";
+import { SpaceborneLidarOptions } from "./SpaceborneLidarOptions";
 
 const LOCAL_EXTENSIONS = ["h5", "hdf5", "he5"];
-
-/** Sample granules on Source Cooperative (CORS-enabled), one per product. */
-const SAMPLE_BASE_URL = "https://data.source.coop/opengeos/geolibre/spaceborne-lidar";
-const SAMPLES = [
-  { labelKey: "sampleAtl06", file: "ATL06_20230629230240_01492006_007_01.h5" },
-  { labelKey: "sampleAtl08", file: "ATL08_20230629230240_01492006_007_01.h5" },
-  { labelKey: "sampleGediL2a", file: "GEDI02_A_2022158224411_O19743_03_T10532_02_004_02_V003.h5" },
-  { labelKey: "sampleGediL2b", file: "GEDI02_B_2022158224411_O19743_03_T10532_02_003_01_V002.h5" },
-  { labelKey: "sampleGediL4a", file: "GEDI04_A_2022158224411_O19743_03_T10532_02_003_01_V002.h5" },
-] as const;
-
-/**
- * Download a file into memory, reporting progress as a 0-100 percentage when
- * the server sends a length.
- *
- * @param url The file URL.
- * @param signal Aborts the download.
- * @param onProgress Called with the percentage received so far.
- * @returns The file's bytes.
- * @throws If the request fails or is aborted.
- */
-async function downloadWithProgress(
-  url: string,
-  signal: AbortSignal,
-  onProgress: (percent: number) => void,
-): Promise<ArrayBuffer> {
-  const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
-  const total = Number(response.headers.get("content-length")) || 0;
-  if (!response.body || total === 0) return response.arrayBuffer();
-  // Preallocate so a multi-gigabyte granule is not held twice while chunks
-  // are concatenated.
-  const bytes = new Uint8Array(total);
-  const reader = response.body.getReader();
-  let received = 0;
-  let lastPercent = -1;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (received + value.length > total) throw new Error("Received more bytes than announced.");
-    bytes.set(value, received);
-    received += value.length;
-    const percent = Math.floor((received / total) * 100);
-    if (percent !== lastPercent) {
-      lastPercent = percent;
-      onProgress(percent);
-    }
-  }
-  return received === total ? bytes.buffer : bytes.slice(0, received).buffer;
-}
 
 /**
  * Default cap on the features one layer receives. A full GEDI orbit holds over
@@ -86,17 +42,6 @@ const DEFAULT_MAX_POINTS = 100_000;
 
 /** Point radius for footprint layers: dense tracks read better small. */
 const FOOTPRINT_RADIUS = 3;
-
-/** Distinct key for a field, since GEDI `rh` yields several columns of one path. */
-function fieldKey(field: Pick<SpaceborneLidarField, "path" | "column">): string {
-  return field.column === undefined ? field.path : `${field.path}[${field.column}]`;
-}
-
-/** The base file name without its directory or extension. */
-function baseName(path: string): string {
-  const name = path.split(/[\\/]/).pop() ?? path;
-  return name.replace(/\.(h5|hdf5|he5)$/i, "");
-}
 
 interface AddSpaceborneLidarDialogProps {
   open: boolean;
@@ -179,17 +124,6 @@ export function AddSpaceborneLidarDialog({
     () => fields.filter((field) => selectedFields.has(fieldKey(field))),
     [fields, selectedFields],
   );
-
-  const visibleFields = useMemo(() => {
-    const query = fieldFilter.trim().toLowerCase();
-    if (!query) return fields;
-    return fields.filter(
-      (field) =>
-        field.path.toLowerCase().includes(query) ||
-        field.name.toLowerCase().includes(query) ||
-        field.description?.toLowerCase().includes(query),
-    );
-  }, [fields, fieldFilter]);
 
   // Keep the color-by choice valid as fields are toggled.
   useEffect(() => {
@@ -289,13 +223,6 @@ export function AddSpaceborneLidarDialog({
     } finally {
       if (gen === opGen.current) setLoading(false);
     }
-  };
-
-  const toggle = (set: Set<string>, key: string, on: boolean): Set<string> => {
-    const next = new Set(set);
-    if (on) next.add(key);
-    else next.delete(key);
-    return next;
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -455,134 +382,25 @@ export function AddSpaceborneLidarDialog({
                 {file.product.label}
               </p>
 
-              <div className="space-y-1.5">
-                <Label>{t("addData.spaceborneLidar.beamsLabel")}</Label>
-                <div className="grid grid-cols-2 gap-1">
-                  {file.beams.map((beam) => (
-                    <label
-                      key={beam.name}
-                      className="flex cursor-pointer items-center gap-2 text-xs"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-3.5 w-3.5 rounded border"
-                        checked={selectedBeams.has(beam.name)}
-                        onChange={(e) =>
-                          setSelectedBeams((prev) => toggle(prev, beam.name, e.target.checked))
-                        }
-                      />
-                      <span>
-                        {beam.name}
-                        {beam.type ? ` (${beam.type})` : ""}
-                        <span className="text-muted-foreground">
-                          {" "}
-                          · {beam.count.toLocaleString()}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="spaceborne-lidar-field-filter">
-                  {t("addData.spaceborneLidar.fieldsLabel", {
-                    selected: chosenFields.length,
-                    total: fields.length,
-                  })}
-                </Label>
-                <Input
-                  id="spaceborne-lidar-field-filter"
-                  value={fieldFilter}
-                  placeholder={t("addData.spaceborneLidar.fieldFilterPlaceholder")}
-                  onChange={(e) => setFieldFilter(e.target.value)}
-                />
-                <div className="max-h-40 space-y-0.5 overflow-y-auto overflow-x-hidden rounded border p-1.5">
-                  {visibleFields.map((field) => {
-                    const key = fieldKey(field);
-                    return (
-                      <label
-                        key={key}
-                        className="flex cursor-pointer items-center gap-2 text-xs"
-                        title={field.description}
-                      >
-                        <input
-                          type="checkbox"
-                          className="h-3.5 w-3.5 rounded border"
-                          checked={selectedFields.has(key)}
-                          onChange={(e) =>
-                            setSelectedFields((prev) => toggle(prev, key, e.target.checked))
-                          }
-                        />
-                        <span className="shrink-0 font-mono">{field.name}</span>
-                        <span className="min-w-0 truncate text-muted-foreground">
-                          {field.name !== field.path ? field.path : ""}
-                          {field.column !== undefined ? `[${field.column}]` : ""}
-                          {field.units ? ` (${field.units})` : ""}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="spaceborne-lidar-color-by">
-                  {t("addData.spaceborneLidar.colorByLabel")}
-                </Label>
-                <Select
-                  id="spaceborne-lidar-color-by"
-                  value={colorBy}
-                  onChange={(e) => setColorBy(e.target.value)}
-                  disabled={chosenFields.length === 0}
-                >
-                  {chosenFields.map((field) => (
-                    <option key={fieldKey(field)} value={field.name}>
-                      {field.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="flex cursor-pointer items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 rounded border"
-                    checked={qualityFilter}
-                    onChange={(e) => setQualityFilter(e.target.checked)}
-                  />
-                  {t("addData.spaceborneLidar.qualityFilter")}
-                </label>
-                <p className="ps-5 text-xs text-muted-foreground">
-                  {t(`addData.spaceborneLidar.qualityHelp.${file.product.id}`)}
-                </p>
-                <label className="flex cursor-pointer items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 rounded border"
-                    checked={viewOnly}
-                    onChange={(e) => setViewOnly(e.target.checked)}
-                  />
-                  {t("addData.spaceborneLidar.viewOnly")}
-                </label>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="spaceborne-lidar-max-points">
-                  {t("addData.spaceborneLidar.maxPointsLabel")}
-                </Label>
-                <Input
-                  id="spaceborne-lidar-max-points"
-                  type="number"
-                  min={1}
-                  value={maxPoints}
-                  onChange={(e) => setMaxPoints(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("addData.spaceborneLidar.maxPointsHelp")}
-                </p>
-              </div>
+              <SpaceborneLidarOptions
+                file={file}
+                fields={fields}
+                chosenFields={chosenFields}
+                selectedBeams={selectedBeams}
+                setSelectedBeams={setSelectedBeams}
+                selectedFields={selectedFields}
+                setSelectedFields={setSelectedFields}
+                fieldFilter={fieldFilter}
+                setFieldFilter={setFieldFilter}
+                colorBy={colorBy}
+                setColorBy={setColorBy}
+                qualityFilter={qualityFilter}
+                setQualityFilter={setQualityFilter}
+                viewOnly={viewOnly}
+                setViewOnly={setViewOnly}
+                maxPoints={maxPoints}
+                setMaxPoints={setMaxPoints}
+              />
             </>
           )}
 
