@@ -312,6 +312,17 @@ export function planObiaArea(
 }
 
 /**
+ * Whether a read failed on the bytes rather than on getting them: pako throws
+ * plain strings ("buffer error"), and truncated tiles overrun a DataView.
+ */
+function isDecodeFailure(error: unknown): boolean {
+  if (typeof error === "string") return true;
+  if (!(error instanceof Error)) return false;
+  if (error.name === "AbortError" || error instanceof TypeError) return false;
+  return error instanceof RangeError || /decod|inflat|buffer|header|compress/i.test(error.message);
+}
+
+/**
  * The source layer's bands over an area, as single-band GeoTIFFs in the
  * given order. Only that area, at that level, is read.
  *
@@ -341,7 +352,9 @@ export async function obiaSourceBands(
   } catch (error) {
     // Some servers, or a browser cache in front of them, return range
     // responses whose bytes do not decode: read such a source whole instead.
-    if (error instanceof ObiaError || !cached?.ranges) throw error;
+    // Not for other failures (network, HTTP status, cancel), where a whole
+    // download would fail the same way, only slower.
+    if (error instanceof ObiaError || !cached?.ranges || !isDecodeFailure(error)) throw error;
     console.warn(
       `Object-Based Analysis: range reads of "${layer.name}" did not decode; downloading it whole.`,
     );
