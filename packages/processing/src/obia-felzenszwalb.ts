@@ -169,9 +169,14 @@ export function felzenszwalbLabels(
   for (let k = 0; k < 65536; k += 1) {
     const start = counts[k];
     const end = counts[k + 1];
-    if (end - start > 1) {
-      order.subarray(start, end).sort((a, b) => weights[a] - weights[b] || a - b);
+    if (end - start < 2) continue;
+    // Edges went in by index, so a bucket of equal weights (a flat area's
+    // zeros, say) is already in order: skip sorting it.
+    let sorted = true;
+    for (let i = start + 1; i < end && sorted; i += 1) {
+      sorted = weights[order[i - 1]] <= weights[order[i]];
     }
+    if (!sorted) order.subarray(start, end).sort((a, b) => weights[a] - weights[b] || a - b);
   }
 
   const parent = new Int32Array(n);
