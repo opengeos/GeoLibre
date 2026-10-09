@@ -49,7 +49,7 @@ export class ObiaLevelError extends Error {
  * Build the level above the current one by merging its objects, best-first by
  * color heterogeneity until the cheapest merge exceeds scale².
  *
- * @param scale The merge scale.
+ * @param scale The merge scale (ignored with a mapping).
  * @param run Cancellation and progress.
  * @param mapping Instead of merging, each object's parent as given (an
  *   imported level mapping); objects without one become their own parent.
@@ -69,7 +69,8 @@ export async function buildCoarserLevel(
   if (levels.some((record) => record.level > level)) {
     throw new ObiaLevelError("not-top", "Build coarser levels from the coarsest one.");
   }
-  if (!(Number.isFinite(scale) && scale > 0)) {
+  // A mapping gives the parents, so it has no scale.
+  if (!mapping && !(Number.isFinite(scale) && scale > 0)) {
     throw new ObiaLevelError("bad-scale", "The scale must be a positive number.");
   }
   if (level >= OBIA_MAX_LEVELS) {
