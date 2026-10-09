@@ -44,6 +44,8 @@ export async function decodeLabelGrid(labels: Uint8Array): Promise<ObiaLabelGrid
 
 /** Encode a grid of object ids as a label raster with the grid's georeferencing. */
 export function encodeLabelGrid(grid: ObiaLabelGrid, ids: Int32Array): Uint8Array {
+  // Float32 holds ids exactly up to 2^24: well above the object count of any
+  // grid the browser handles (OBIA_MAX_PIXELS is 4096 x 4096).
   const values = Float32Array.from(ids);
   return new Uint8Array(writeRasterBands({ ...grid.raster, nodata: 0, bands: [values] }));
 }
@@ -393,44 +395,92 @@ export function levelFeatures(
   }
 
   // One scan of the parent grid: area, perimeter (edges to another object or
-  // the border), bounding box, and shared edges between objects.
+  // the border), bounding box, and shared edges between objects. Typed
+  // accumulators indexed by a dense slot per id keep it fast on big grids.
   const { width, height } = grid;
-  const area = new Map<number, number>();
-  const perimeter = new Map<number, number>();
-  const box = new Map<number, [number, number, number, number]>();
+  let maxId = 0;
+  for (let i = 0; i < parentIds.length; i += 1) if (parentIds[i] > maxId) maxId = parentIds[i];
+  const slotById = maxId <= 4 * parentIds.length ? new Int32Array(maxId + 1).fill(-1) : null;
+  const slotMap = slotById ? null : new Map<number, number>();
+  const idOfSlot: number[] = [];
+  const slotOf = (id: number): number => {
+    let slot = slotById ? slotById[id] : (slotMap!.get(id) ?? -1);
+    if (slot < 0) {
+      slot = idOfSlot.length;
+      idOfSlot.push(id);
+      if (slotById) slotById[id] = slot;
+      else slotMap!.set(id, slot);
+    }
+    return slot;
+  };
+  const capacity = () => idOfSlot.length;
+  let areaAcc = new Float64Array(1024);
+  let perimeterAcc = new Float64Array(1024);
+  let x0Acc = new Int32Array(1024);
+  let y0Acc = new Int32Array(1024);
+  let x1Acc = new Int32Array(1024);
+  let y1Acc = new Int32Array(1024);
+  const grow = () => {
+    const size = areaAcc.length * 2;
+    const f = (a: Float64Array) => {
+      const b = new Float64Array(size);
+      b.set(a);
+      return b;
+    };
+    const g = (a: Int32Array) => {
+      const b = new Int32Array(size);
+      b.set(a);
+      return b;
+    };
+    areaAcc = f(areaAcc);
+    perimeterAcc = f(perimeterAcc);
+    x0Acc = g(x0Acc);
+    y0Acc = g(y0Acc);
+    x1Acc = g(x1Acc);
+    y1Acc = g(y1Acc);
+  };
   const shared = new Map<number, Map<number, number>>();
-  const bump = (map: Map<number, number>, id: number, by = 1) =>
-    map.set(id, (map.get(id) ?? 0) + by);
   const share = (a: number, b: number) => {
     let m = shared.get(a);
     if (!m) shared.set(a, (m = new Map()));
-    bump(m, b);
+    m.set(b, (m.get(b) ?? 0) + 1);
+  };
+  const edge = (id: number, slot: number, other: number) => {
+    if (other === id) return;
+    perimeterAcc[slot] += 1;
+    if (other > 0) share(id, other);
   };
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const i = y * width + x;
       const id = parentIds[i];
       if (!id) continue;
-      bump(area, id);
-      const b = box.get(id);
-      if (!b) box.set(id, [x, y, x, y]);
-      else {
-        if (x < b[0]) b[0] = x;
-        if (y < b[1]) b[1] = y;
-        if (x > b[2]) b[2] = x;
-        if (y > b[3]) b[3] = y;
+      const before = capacity();
+      const slot = slotOf(id);
+      if (slot >= areaAcc.length) grow();
+      if (slot === before) {
+        x0Acc[slot] = x1Acc[slot] = x;
+        y0Acc[slot] = y1Acc[slot] = y;
+      } else {
+        if (x < x0Acc[slot]) x0Acc[slot] = x;
+        if (x > x1Acc[slot]) x1Acc[slot] = x;
+        if (y > y1Acc[slot]) y1Acc[slot] = y;
       }
-      const left = x > 0 ? parentIds[i - 1] : -1;
-      const right = x + 1 < width ? parentIds[i + 1] : -1;
-      const up = y > 0 ? parentIds[i - width] : -1;
-      const down = y + 1 < height ? parentIds[i + width] : -1;
-      for (const other of [left, right, up, down]) {
-        if (other === id) continue;
-        bump(perimeter, id);
-        if (other > 0) share(id, other);
-      }
+      areaAcc[slot] += 1;
+      edge(id, slot, x > 0 ? parentIds[i - 1] : -1);
+      edge(id, slot, x + 1 < width ? parentIds[i + 1] : -1);
+      edge(id, slot, y > 0 ? parentIds[i - width] : -1);
+      edge(id, slot, y + 1 < height ? parentIds[i + width] : -1);
     }
   }
+  const area = new Map<number, number>();
+  const perimeter = new Map<number, number>();
+  const box = new Map<number, [number, number, number, number]>();
+  idOfSlot.forEach((id, slot) => {
+    area.set(id, areaAcc[slot]);
+    perimeter.set(id, perimeterAcc[slot]);
+    box.set(id, [x0Acc[slot], y0Acc[slot], x1Acc[slot], y1Acc[slot]]);
+  });
   if (options.shape || options.spectral) field("area_px");
   for (const [id, n] of area) row(id).area_px = n;
   if (options.shape) {

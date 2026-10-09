@@ -7506,7 +7506,7 @@
         "failed": "Measuring the objects failed."
       },
       "textureBrowserOnly": "GLCM texture is measured only for objects segmented in the browser.",
-      "mergedLevel": "This level's features come from the level below: switch to level 1 to measure again."
+      "mergedLevel": "This level's features come from the level below: switch to level 1 to measure again (that discards the levels built on it)."
     },
     "levels": {
       "hint": "Merge this level's objects into coarser ones: neighbors merge, most alike first, until the next merge would make an object too varied. Each object of a coarser level contains whole objects of the level below, so the levels nest.",
@@ -7522,7 +7522,8 @@
         "failed": "Could not build the level.",
         "noFeatures": "Measure spectral statistics first: merging compares the objects' band means and spreads.",
         "tooLarge": "The objects are too large to merge in the browser.",
-        "notTop": "Build coarser levels from the coarsest one."
+        "notTop": "Build coarser levels from the coarsest one.",
+        "tooDeep": "The hierarchy has at most 32 levels."
       },
       "context": {
         "title": "Context features",
