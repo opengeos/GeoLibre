@@ -7414,6 +7414,7 @@
     "steps": {
       "segment": "Segment",
       "measure": "Measure",
+      "levels": "Levels",
       "train": "Label samples",
       "classify": "Classify",
       "accuracy": "Assess accuracy",
@@ -7503,7 +7504,25 @@
         "resegmented": "The objects were segmented again while measuring, so these values were discarded. Measure the new objects.",
         "failed": "Measuring the objects failed."
       },
-      "textureBrowserOnly": "GLCM texture is measured only for objects segmented in the browser."
+      "textureBrowserOnly": "GLCM texture is measured only for objects segmented in the browser.",
+      "mergedLevel": "This level's features come from the level below: switch to level 1 to measure again."
+    },
+    "levels": {
+      "hint": "Merge this level's objects into coarser ones: neighbors merge, most alike first, until the next merge would make an object too varied. Each object of a coarser level contains whole objects of the level below, so the levels nest.",
+      "workOn": "Work on",
+      "base": "Level {{level}}: {{count}} objects (segmentation)",
+      "merged": "Level {{level}}: {{count}} objects (merged at scale {{scale}})",
+      "scale": "Scale",
+      "scaleHint": "Larger scale gives larger, more varied objects.",
+      "buildFromTop": "Build coarser levels from the coarsest one.",
+      "build": "Build coarser level",
+      "layerName": "{{name}} level {{level}}",
+      "error": {
+        "failed": "Could not build the level.",
+        "noFeatures": "Measure spectral statistics first: merging compares the objects' band means and spreads.",
+        "tooLarge": "The objects are too large to merge in the browser.",
+        "notTop": "Build coarser levels from the coarsest one."
+      }
     },
     "train": {
       "hint": "Add a class for each land cover, select objects on the map (selection tools) or in the attribute table, then click the tag button on a class to label them. Label validation samples separately, or hold out part of the training samples below. Each Split holds out a share of the training samples still left, so splitting again moves more.",
@@ -7614,7 +7633,8 @@
         "readImage": "Could not read the image.",
         "onImage": "{{name}}: {{message}}",
         "changed": "The image was segmented again while applying, so the run stopped."
-      }
+      },
+      "levelOneOnly": "Applying to other images uses level 1: switch to it under Levels."
     },
     "provenance": {
       "title": "Provenance",

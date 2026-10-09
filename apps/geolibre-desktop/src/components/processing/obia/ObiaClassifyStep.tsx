@@ -57,7 +57,7 @@ export function predictionStylePatch(
 }
 
 /**
- * Step 4: classify every object, either with a random forest trained on the
+ * Step 5: classify every object, either with a random forest trained on the
  * training samples or with ordered threshold rules, and write the predicted
  * class onto the objects layer.
  */
@@ -213,7 +213,7 @@ export function ObiaClassifyStep(): ReactElement | null {
 
   return (
     <section className="flex flex-col gap-3 border-t pt-3">
-      <ObiaStepHeading index={4} title={t("obia.steps.classify")} />
+      <ObiaStepHeading index={5} title={t("obia.steps.classify")} />
 
       <div
         className="flex items-center gap-4 text-sm"

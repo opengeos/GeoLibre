@@ -22,7 +22,7 @@ interface ObiaExportStepProps {
 }
 
 /**
- * Step 6: burn the classification onto the segmentation grid and add it to
+ * Step 7: burn the classification onto the segmentation grid and add it to
  * the map in the class colors, or save the class-code GeoTIFF and its legend.
  * The objects layer itself is the vector result (`obia_predicted`).
  */
@@ -136,7 +136,7 @@ export function ObiaExportStep({ onAddRaster }: ObiaExportStepProps): ReactEleme
 
   return (
     <section className="flex flex-col gap-3 border-t pt-3">
-      <ObiaStepHeading index={6} title={t("obia.steps.export")} />
+      <ObiaStepHeading index={7} title={t("obia.steps.export")} />
       <p className="text-xs text-muted-foreground">{t("obia.export.hint")}</p>
       <div className="flex flex-wrap gap-2">
         <Button

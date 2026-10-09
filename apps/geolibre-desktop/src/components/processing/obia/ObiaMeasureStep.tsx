@@ -168,6 +168,8 @@ export function ObiaMeasureStep(): ReactElement | null {
 
   if (!segmentation) return null;
   const native = isNativeMethod(segmentation.method);
+  // A coarser level's features come from the level below; it is not re-measured.
+  const merged = Boolean(segmentation.merge);
 
   const roles = options.indices;
   const roleSelect = (role: keyof ObiaIndexBands, label: string) => (
@@ -290,6 +292,7 @@ export function ObiaMeasureStep(): ReactElement | null {
           onClick={() => void handleMeasure()}
           disabled={
             running ||
+            merged ||
             (!options.spectral &&
               !options.shape &&
               (native || options.textureBand == null) &&
@@ -302,6 +305,9 @@ export function ObiaMeasureStep(): ReactElement | null {
           {running ? t("obia.measure.running") : t("obia.measure.run")}
         </Button>
       </div>
+      {merged && (
+        <p className="text-xs text-muted-foreground">{t("obia.measure.mergedLevel")}</p>
+      )}
       <ObiaRunProgress
         step={progress.step}
         startedAt={progress.startedAt}

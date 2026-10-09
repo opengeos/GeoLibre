@@ -50,7 +50,7 @@ function isImageLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
- * Step 7: apply the current workflow to other images. Each chosen image is
+ * Step 8: apply the current workflow to other images. Each chosen image is
  * segmented with the same bands and parameters, measured the same way, and
  * classified with the current classifier: the same rules, or a random forest
  * trained on this image's training samples. Each image gets its own objects
@@ -62,6 +62,7 @@ export function ObiaBatchStep(): ReactElement | null {
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const segmentation = useObiaSession((s) => s.segmentation);
+  const level = useObiaSession((s) => s.level);
   const features = useObiaSession((s) => s.features);
   const classification = useObiaSession((s) => s.classification);
   const classes = useObiaSession((s) => s.classes);
@@ -247,7 +248,7 @@ export function ObiaBatchStep(): ReactElement | null {
 
   return (
     <section className="flex flex-col gap-3 border-t pt-3" data-testid="obia-batch">
-      <ObiaStepHeading index={7} title={t("obia.steps.batch")} />
+      <ObiaStepHeading index={8} title={t("obia.steps.batch")} />
       <p className="text-xs text-muted-foreground">
         {t(
           classification.settings.method === "random-forest"
@@ -280,7 +281,7 @@ export function ObiaBatchStep(): ReactElement | null {
       <div className="flex items-center gap-3">
         <Button
           onClick={() => void handleRun()}
-          disabled={running || !selected.length}
+          disabled={running || !selected.length || level !== 1}
           className="gap-2"
           data-testid="obia-batch-run"
         >
@@ -292,6 +293,9 @@ export function ObiaBatchStep(): ReactElement | null {
               : t("obia.batch.runNone")}
         </Button>
       </div>
+      {level !== 1 && (
+        <p className="text-xs text-muted-foreground">{t("obia.batch.levelOneOnly")}</p>
+      )}
       <ObiaRunProgress
         step={progress.step}
         startedAt={progress.startedAt}

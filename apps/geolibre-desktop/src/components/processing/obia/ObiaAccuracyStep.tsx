@@ -21,7 +21,7 @@ const formatKappa = (value: number, language: string) =>
   );
 
 /**
- * Step 5: score the classification against the validation samples, which the
+ * Step 6: score the classification against the validation samples, which the
  * random forest never trained on. Updates live as samples are relabeled.
  */
 export function ObiaAccuracyStep(): ReactElement | null {
@@ -76,7 +76,7 @@ export function ObiaAccuracyStep(): ReactElement | null {
 
   return (
     <section className="flex flex-col gap-3 border-t pt-3" data-testid="obia-accuracy">
-      <ObiaStepHeading index={5} title={t("obia.steps.accuracy")} />
+      <ObiaStepHeading index={6} title={t("obia.steps.accuracy")} />
 
       {report.sampleCount === 0 ? (
         <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
