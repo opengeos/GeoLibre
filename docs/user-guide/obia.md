@@ -158,7 +158,8 @@ the browser, from segmentations of up to 16.8 million pixels.
 Under **Work on**, choose the level the later steps use: samples, the
 classifier, accuracy and export belong to that level, and each level keeps its
 own. Applying to other images uses level 1. A new segmentation starts a new
-hierarchy.
+hierarchy, and measuring a level again drops the levels built on it; their
+objects layers stay on the map, so remove them if you no longer need them.
 
 ## 4. Label samples
 

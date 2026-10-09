@@ -485,9 +485,26 @@ export function restoreObiaSession(
     }
   }
   levels.sort((a, b) => a.level - b.level);
-  // When the active level's objects are gone, work on the highest level that
-  // survived rather than losing the others too.
-  const active = restoreLevel(runs, layers, activeLevel) ?? levels.pop() ?? null;
+  const restoredActive = restoreLevel(runs, layers, activeLevel);
+  // Keep only levels whose chain down to a segmentation survived (a merged
+  // level is rebuilt from the level it merged), bottom up.
+  const available = new Set<number>();
+  const kept: ObiaLevelRecord[] = [];
+  for (const record of [...levels, ...(restoredActive ? [restoredActive] : [])].sort(
+    (a, b) => a.level - b.level,
+  )) {
+    const merge = record.segmentation.merge;
+    if (merge && !available.has(merge.fromLevel)) continue;
+    available.add(record.level);
+    kept.push(record);
+  }
+  // When the active level is gone (or cut off), work on the highest level
+  // that survived rather than losing the others too.
+  const active =
+    restoredActive && kept.includes(restoredActive)
+      ? restoredActive
+      : (kept.filter((record) => record !== restoredActive).at(-1) ?? null);
+  levels.splice(0, levels.length, ...kept.filter((record) => record !== active));
   if (!active) return data;
   return {
     ...data,
