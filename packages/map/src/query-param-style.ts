@@ -1,6 +1,7 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { buildMapboxStyle, type MapboxStyleExportResult } from "./mapbox-style-export";
+import { GEO_LIBRE_FILL_PATTERN_METADATA } from "./query-style-fill-pattern";
 
 function safeDecode(value: string): string {
   try {
@@ -41,7 +42,13 @@ export function buildGeoLibreQueryStyle(
   layer: GeoLibreLayer,
   geojson: FeatureCollection,
 ): MapboxStyleExportResult {
-  const result = buildMapboxStyle(layer, geojson, { largeFeatureCount: Number.POSITIVE_INFINITY });
+  // The generic exporter cannot carry generated sprites. This format restores
+  // the pattern from metadata instead, so only suppress that specific downgrade.
+  const result = buildMapboxStyle(
+    { ...layer, style: { ...layer.style, fillPattern: "none" } },
+    geojson,
+    { largeFeatureCount: Number.POSITIVE_INFINITY },
+  );
   const sourceName = geoLibreStyleSourceName(layer);
   const oldSource = Object.keys(result.style.sources)[0];
   return {
@@ -55,11 +62,25 @@ export function buildGeoLibreQueryStyle(
           data: { type: "FeatureCollection", features: [] },
         },
       },
-      layers: result.style.layers.map((styleLayer) =>
-        "source" in styleLayer && styleLayer.source === oldSource
-          ? { ...styleLayer, source: sourceName }
-          : styleLayer,
-      ),
+      layers: result.style.layers.map((styleLayer) => ({
+        ...styleLayer,
+        ...("source" in styleLayer && styleLayer.source === oldSource
+          ? { source: sourceName }
+          : {}),
+        ...(styleLayer.type === "fill"
+          ? {
+              metadata: {
+                [GEO_LIBRE_FILL_PATTERN_METADATA]: {
+                  version: 1,
+                  fillPattern: layer.style.fillPattern ?? DEFAULT_LAYER_STYLE.fillPattern,
+                  fillPatternColor:
+                    layer.style.fillPatternColor ?? DEFAULT_LAYER_STYLE.fillPatternColor,
+                  fillPatternSvg: layer.style.fillPatternSvg ?? DEFAULT_LAYER_STYLE.fillPatternSvg,
+                },
+              },
+            }
+          : {}),
+      })),
     },
   };
 }

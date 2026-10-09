@@ -90,7 +90,7 @@
           }
         ],
         ["getSource", "source-poly"],
-        ["on", "styleimagemissing", "[function]"],
+        ["setMissingStyleImageResolver", "[function]"],
         ["getLayer", "layer-poly-extrusion"],
         ["getLayer", "layer-poly-inverted-fill"],
         ["getSource", "source-poly-inverted"],
@@ -3331,7 +3331,7 @@
           }
         ],
         ["getSource", "source-line"],
-        ["on", "styleimagemissing", "[function]"],
+        ["setMissingStyleImageResolver", "[function]"],
         ["getLayer", "layer-line-fill"],
         ["getLayer", "layer-line-extrusion"],
         ["getLayer", "layer-line-inverted-fill"],
@@ -4011,7 +4011,7 @@
           }
         ],
         ["getSource", "source-pts"],
-        ["on", "styleimagemissing", "[function]"],
+        ["setMissingStyleImageResolver", "[function]"],
         ["getLayer", "layer-pts-fill"],
         ["getLayer", "layer-pts-extrusion"],
         ["getLayer", "layer-pts-inverted-fill"],
@@ -5810,7 +5810,7 @@
           }
         ],
         ["getSource", "source-kml"],
-        ["on", "styleimagemissing", "[function]"],
+        ["setMissingStyleImageResolver", "[function]"],
         ["hasImage", "geolibre-kml-icon-02cb55dd7ef4a14c"],
         ["getLayer", "layer-kml-fill"],
         ["getLayer", "layer-kml-extrusion"],
@@ -6128,7 +6128,7 @@
           }
         ],
         ["getSource", "source-mix"],
-        ["on", "styleimagemissing", "[function]"],
+        ["setMissingStyleImageResolver", "[function]"],
         ["getLayer", "layer-mix-extrusion"],
         ["getLayer", "layer-mix-inverted-fill"],
         ["getSource", "source-mix-inverted"],
@@ -7191,7 +7191,7 @@
             "maxzoom": 16
           }
         ],
-        ["on", "styleimagemissing", "[function]"],
+        ["setMissingStyleImageResolver", "[function]"],
         ["getLayer", "layer-vt-fill"],
         ["getLayer", "layer-vt-extrusion"],
         ["getLayer", "layer-vt-inverted-fill"],

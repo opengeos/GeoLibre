@@ -7,6 +7,7 @@ import {
   type VectorStyleStop,
 } from "@geolibre/core";
 import { heatmapColorRampExpression } from "./style-mapper";
+import { readQueryStyleFillPattern } from "./query-style-fill-pattern";
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
@@ -89,6 +90,7 @@ export interface MapboxStyleImportResult {
 
 /** A minimal structural view of a Mapbox GL layer, so tests need no full spec. */
 interface RawStyleLayer {
+  metadata?: unknown;
   id?: unknown;
   type?: unknown;
   paint?: Record<string, unknown> | null;
@@ -910,6 +912,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (base !== null) patch.extrusionBase = base;
     applyZoomRange(extrusion, patch);
   } else if (fill) {
+    Object.assign(patch, readQueryStyleFillPattern(fill.metadata, warnings));
     matchedLayerCount += builtRules(stackedFill) ? byType("fill").length : 1;
     if (builtRules(stackedFill)) appliedStackTypes.add("fill");
     patch.extrusionEnabled = false;

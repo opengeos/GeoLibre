@@ -888,6 +888,7 @@ export function LayerActionsMenuItems({
             {canExportLayer && (
               <>
                 <DropdownMenuItem
+                  title={t("layers.exportGeoLibreStyleHint")}
                   onSelect={() => {
                     void handleExportGeoLibreStyle(layer);
                   }}

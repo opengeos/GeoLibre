@@ -6,12 +6,11 @@ import type * as maplibregl from "maplibre-gl";
  * GeoLibre has no static sprite sheet, so recolorable pattern/marker images are
  * drawn on a canvas on demand. A layer references an image by a deterministic id
  * (which encodes everything needed to regenerate it: shape/pattern + color +
- * size). When MapLibre cannot find that id it fires `styleimagemissing`; the
- * handler installed here looks up the registered factory, generates the image,
- * and calls `map.addImage`. This is the idiomatic MapLibre lazy-image pattern
- * and, because the handler lives on the map (not the style), it survives basemap
- * `setStyle` swaps that clear all images: the next render re-requests the id and
- * the image is regenerated.
+ * size). The missing-image resolver looks up the registered factory, generates
+ * the image, and calls `map.addImage` before MapLibre collects the images for a
+ * tile. Older GL engines use `styleimagemissing` instead. Both hooks live on the
+ * map (not the style), surviving basemap `setStyle` swaps that clear all images:
+ * the next render re-requests the id and the image is regenerated.
  */
 
 /**
@@ -162,7 +161,7 @@ export function registerGeneratedImage(id: string, factory: GeneratedImageFactor
         } catch {
           // Ignore
         }
-        addGeneratedImage(map, id);
+        void addGeneratedImage(map, id);
       }
     }
   }
@@ -170,7 +169,7 @@ export function registerGeneratedImage(id: string, factory: GeneratedImageFactor
 
 const TRANSPARENT_1X1 = new Uint8Array([0, 0, 0, 0]);
 
-function addGeneratedImage(map: maplibregl.Map, id: string): void {
+function addGeneratedImage(map: maplibregl.Map, id: string): void | Promise<void> {
   if (map.hasImage(id)) return;
   const factory = factories.get(id);
   if (!factory) {
@@ -189,7 +188,7 @@ function addGeneratedImage(map: maplibregl.Map, id: string): void {
     return;
   }
   if (result instanceof Promise) {
-    result
+    return result
       .then((resolved) => {
         if (resolved && !map.hasImage(id)) {
           map.addImage(id, resolved.image, { pixelRatio: resolved.pixelRatio });
@@ -202,13 +201,12 @@ function addGeneratedImage(map: maplibregl.Map, id: string): void {
           map.addImage(id, { width: 1, height: 1, data: TRANSPARENT_1X1 });
         }
       });
-    return;
   }
   map.addImage(id, result.image, { pixelRatio: result.pixelRatio });
 }
 
 /**
- * Install the one-time `styleimagemissing` handler that materializes generated
+ * Install the one-time missing-image hook that materializes generated
  * images for this map. Safe to call on every sync; it wires the map only once.
  */
 export function ensureGeneratedImageHandler(map: maplibregl.Map): void {
@@ -217,7 +215,16 @@ export function ensureGeneratedImageHandler(map: maplibregl.Map): void {
   if (typeof map.on !== "function") return;
   wiredMaps.add(map);
   activeMaps.add(new WeakRef(map));
-  map.on("styleimagemissing", (event) => {
-    addGeneratedImage(map, event.id);
-  });
+  if (typeof map.setMissingStyleImageResolver === "function") {
+    // MapLibre 6 fires styleimagemissing after collecting a tile's images.
+    // Resolve beforehand, awaiting SVG rasterization as well as built-in tiles.
+    map.setMissingStyleImageResolver((id) =>
+      factories.has(id) ? addGeneratedImage(map, id) : undefined,
+    );
+  } else {
+    // Mapbox GL and older MapLibre versions still request images by event.
+    map.on("styleimagemissing", (event) => {
+      void addGeneratedImage(map, event.id);
+    });
+  }
 }
