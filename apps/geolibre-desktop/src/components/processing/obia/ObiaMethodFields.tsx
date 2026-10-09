@@ -1,7 +1,11 @@
 import { Label, Select } from "@geolibre/ui";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { isNativeMethod, type ObiaMethod } from "../../../lib/obia/obia-native";
+import {
+  isNativeMethod,
+  type ObiaMethod,
+  type ObiaNativeStatus,
+} from "../../../lib/obia/obia-native";
 import { useObiaSession } from "../../../lib/obia/obia-session";
 import type { ObiaSourceInfo, planObiaArea } from "../../../lib/obia/obia-source";
 import { ObiaNumberField } from "./ObiaFields";
@@ -15,7 +19,7 @@ export function ObiaMethodFields({
   nativeUsable,
 }: {
   /** Native availability, or null when there is no sidecar to ask. */
-  nativeStatus: { available: boolean; maxPixels: number } | null;
+  nativeStatus: ObiaNativeStatus | null;
   /** Whether a native run can start: available, on a local file. */
   nativeUsable: boolean;
 }): ReactElement {
@@ -51,7 +55,7 @@ export function ObiaMethodFields({
           {native
             ? nativeUsable
               ? t("obia.native.note", {
-                  max: (nativeStatus?.maxPixels ?? 0).toLocaleString(i18n.language),
+                  max: (nativeStatus?.maxPixels[method] ?? 0).toLocaleString(i18n.language),
                 })
               : t(
                   nativeStatus === null
@@ -119,9 +123,7 @@ export function ObiaMethodFields({
             max={1000}
             step={0.01}
           />
-          <p className="col-span-2 text-xs text-muted-foreground">
-            {t("obia.native.slicHint")}
-          </p>
+          <p className="col-span-2 text-xs text-muted-foreground">{t("obia.native.slicHint")}</p>
         </div>
       )}
       {method === "felzenszwalb" && (
@@ -158,7 +160,6 @@ export function ObiaMethodFields({
           </p>
         </div>
       )}
-
     </>
   );
 }
@@ -176,8 +177,7 @@ export function ObiaAreaNote({
   maxPixels: number;
 }): ReactElement {
   const { t, i18n } = useTranslation();
-  const number = (value: number, digits = 0) =>
-    value.toLocaleString(i18n.language, { maximumFractionDigits: digits });
+  const number = (value: number) => value.toLocaleString(i18n.language);
   let text: string;
   let warn = false;
   if (!plan) {
@@ -189,7 +189,8 @@ export function ObiaAreaNote({
     const values = {
       width: number(plan.width),
       height: number(plan.height),
-      size: number(info.pixelSize * scale, 2),
+      // Significant digits: a geographic pixel size is a small fraction of a degree.
+      size: (info.pixelSize * scale).toLocaleString(i18n.language, { maximumSignificantDigits: 3 }),
       unit: info.unit ?? "",
       max: number(maxPixels),
     };

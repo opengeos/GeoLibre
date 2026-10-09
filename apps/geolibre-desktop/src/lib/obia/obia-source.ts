@@ -81,8 +81,13 @@ async function openTiff(layer: GeoLibreLayer): Promise<GeoTIFF | null> {
       // serves something else falls back to a plain download below.
       await tiff.getImage();
       return tiff;
-    } catch {
-      // fall through to fetching the whole file
+    } catch (error) {
+      // A server without range requests (or one blocking them) is still read,
+      // by downloading the whole file; say so, since that is the slow path.
+      console.warn(
+        `Object-Based Analysis: ${url} could not be read by range requests; downloading it whole.`,
+        error,
+      );
     }
   }
   const bytes = await fetchLayerBytes(layer);
@@ -154,7 +159,15 @@ export async function obiaSourceInfo(layer: GeoLibreLayer): Promise<ObiaSourceIn
   const image = await tiff.getImage(0);
   const [originX, originY] = image.getOrigin();
   const [resX, resY] = image.getResolution();
-  const definition = await projectionFor(image.getGeoKeys() as Record<string, unknown>);
+  // A rotated or sheared grid (a ModelTransformation with off-diagonal terms)
+  // has no axis-aligned windows: offer only the whole image for it.
+  const matrix = image.fileDirectory.getValue("ModelTransformation") as
+    | ArrayLike<number>
+    | undefined;
+  const rotated = Boolean(matrix && (matrix[1] !== 0 || matrix[4] !== 0));
+  const definition = rotated
+    ? null
+    : await projectionFor(image.getGeoKeys() as Record<string, unknown>);
   let toPixel: ObiaSourceInfo["toPixel"] = null;
   let unit: string | null = null;
   if (definition) {

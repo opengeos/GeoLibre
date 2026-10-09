@@ -42,7 +42,7 @@ export function ObiaProvenance(): ReactElement | null {
       x1: area.window[2],
       y1: area.window[3],
       level: area.level,
-      size: pixelSize?.toLocaleString(i18n.language, { maximumFractionDigits: 2 }) ?? "?",
+      size: pixelSize?.toLocaleString(i18n.language, { maximumSignificantDigits: 3 }) ?? "?",
     });
   const env = (value: ObiaRunEnv) =>
     t("obia.provenance.env", { engine: value.engineVersion, app: value.appVersion });

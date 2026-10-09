@@ -62,7 +62,9 @@ _GEOTIFF_EXTENSIONS = {".tif", ".tiff"}
 # desktop's memory (SLIC holds the bands as float64 alongside its distance
 # grids, about 60 bytes per pixel for four bands), and small enough for the
 # browser to decode the label raster (as Float32, under 512 MB) to export it.
-NATIVE_MAX_PIXELS = 120_000_000
+# Felzenszwalb builds a graph of every pixel's edges, about 360 bytes per pixel
+# (a 47-million-pixel scene peaked at 17 GB), so it gets a lower limit.
+NATIVE_MAX_PIXELS = {"slic": 120_000_000, "felzenszwalb": 25_000_000}
 # The files a job may write, and so the only names the download serves.
 _JOB_FILES = {"segments.tif", "objects.geojson", "features.csv"}
 JOB_DIR_MAX_AGE_SECS = 24 * 3600
@@ -565,7 +567,11 @@ def _start(tool_id: str, script: str, params: dict):
         job = _start_job(
             tool_id,
             script,
-            {**params, "out_dir": out_dir, "max_pixels": NATIVE_MAX_PIXELS},
+            {
+                **params,
+                "out_dir": out_dir,
+                "max_pixels": NATIVE_MAX_PIXELS[params["segmentation"]["method"]],
+            },
             "objects",
         )
     except BaseException:

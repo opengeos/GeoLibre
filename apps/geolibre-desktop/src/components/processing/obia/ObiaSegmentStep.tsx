@@ -13,6 +13,7 @@ import {
   obiaLocalPath,
   obiaNativeStatus,
   runNativeSegmentation,
+  type ObiaNativeStatus,
 } from "../../../lib/obia/obia-native";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { obiaLayerLocation, obiaRunEnv } from "../../../lib/obia/obia-persistence";
@@ -148,10 +149,7 @@ export function ObiaSegmentStep({
   // What a run would read: the whole image or the map view's part of it, at
   // the finest resolution level that fits the workbench's pixel limit.
   // Native segmentation: the desktop sidecar, on an image from a local file.
-  const [nativeStatus, setNativeStatus] = useState<{
-    available: boolean;
-    maxPixels: number;
-  } | null>(null);
+  const [nativeStatus, setNativeStatus] = useState<ObiaNativeStatus | null>(null);
   useEffect(() => {
     let cancelled = false;
     void obiaNativeStatus().then((status) => {
@@ -164,7 +162,7 @@ export function ObiaSegmentStep({
   const localPath = sourceLayer ? obiaLocalPath(sourceLayer) : null;
   const nativeUsable = Boolean(nativeStatus?.available && localPath);
   const native = isNativeMethod(method);
-  const maxPixels = native && nativeStatus?.maxPixels ? nativeStatus.maxPixels : OBIA_MAX_PIXELS;
+  const maxPixels = native && nativeStatus ? nativeStatus.maxPixels[method] : OBIA_MAX_PIXELS;
 
   const plan = useMemo(() => {
     if (!summary) return null;

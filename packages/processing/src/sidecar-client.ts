@@ -1431,8 +1431,8 @@ async function responseErrorMessage(response: Response, fallback: string): Promi
 export interface ObiaNativeStatus {
   available: boolean;
   message: string;
-  /** Pixels a native run may read. */
-  max_pixels?: number;
+  /** Pixels a native run may read, per method. */
+  max_pixels?: Partial<Record<"slic" | "felzenszwalb", number>>;
 }
 
 /** A native segmentation: the image, its bands and area, and the method. */

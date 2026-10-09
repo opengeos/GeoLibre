@@ -62,7 +62,8 @@ scikit-image instead of the in-browser engine. Pick a native method under
 
 A native run reads the image from its file, so the image must have been added
 from a local GeoTIFF (an image added by URL uses the browser engine). It reads
-up to 120 million pixels, the same way as the browser engine reads its area
+up to 120 million pixels with SLIC and 25 million with Felzenszwalb (whose
+graph needs far more memory), the same way as the browser engine reads its area
 (whole image or map view, from an overview when needed), and the Measure step
 then measures in the processing server too, with the same feature names, so
 labels, rules, classifiers, accuracy and export work the same. GLCM texture is
@@ -70,7 +71,23 @@ measured only in the browser. The first native run installs scikit-image into
 the processing server, which takes a minute.
 
 Native runs are repeatable: both methods are deterministic, so a reopened
-project rebuilds the same objects. NATIVE_BENCHMARK
+project rebuilds the same objects.
+
+On the 4-band, 9222 × 5089-pixel (47-million-pixel) Sentinel-2 sample, with
+the default parameters (segmentation, then spectral, shape and neighbor
+features):
+
+| Engine | Objects | Segment | Measure | Peak memory |
+| --- | --- | --- | --- | --- |
+| Browser, region growing | 63,942 | 369 s | 208 s | 7.6 GB |
+| Native, SLIC | 94,887 | 46 s | 33 s | 3.9 GB |
+| Native, Felzenszwalb | 234,343 | 131 s | 36 s | 16.9 GB |
+
+The browser figures are the engine run outside a browser on the whole scene,
+which the workbench itself would read from an overview. These numbers compare
+speed and memory only: comparing segmentation quality needs independent
+reference objects and validation data (the eCognition pilot workflows of
+[#3053](https://github.com/opengeos/GeoLibre/issues/3053)).
 
 ### Large images
 

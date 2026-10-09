@@ -270,3 +270,52 @@ def test_a_running_job_can_be_cancelled(monkeypatch: pytest.MonkeyPatch) -> None
     assert state.status == "cancelled"
     assert state.error == "Cancelled."
     assert job.id not in conversion._PROCESSES
+
+
+def _wait(job_id: str):
+    for _ in range(400):
+        state = conversion._job_state(job_id)
+        if state.status not in {"pending", "running"}:
+            return state
+        time.sleep(0.05)
+    raise AssertionError("job did not finish")
+
+
+@requires_obia
+def test_endpoints_run_jobs_and_serve_their_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from geolibre_server.app import obia
+
+    monkeypatch.setattr(conversion, "_runtime_python", lambda: sys.executable)
+    monkeypatch.setattr(obia, "_ensure_obia_runtime", lambda: sys.executable)
+    image = _two_region_tif(tmp_path / "image.tif")
+    request = Segmentation(
+        input_path=str(image),
+        bands=[1, 2],
+        method="felzenszwalb",
+        felzenszwalb=FelzenszwalbParams(scale=1, sigma=0, min_size=2),
+    )
+    job = obia.obia_segment(request)
+    state = _wait(job.id)
+    assert state.status == "succeeded", state.error
+    assert state.result["object_count"] == 2
+    objects = obia.obia_job_file(job.id, "objects.geojson")
+    assert Path(objects.path).name == "objects.geojson"
+    with pytest.raises(HTTPException) as excinfo:
+        obia.obia_job_file(job.id, "../image.tif")
+    assert excinfo.value.status_code == 404
+    with pytest.raises(HTTPException):
+        obia.obia_job_file("not-a-job", "segments.tif")
+
+    # Measuring reuses the segmentation job's labels.
+    measure = obia.obia_measure(obia.MeasureRequest(segmentation=request, segment_job_id=job.id))
+    state = _wait(measure.id)
+    assert state.status == "succeeded", state.error
+    assert state.result["object_count"] == 2
+    assert Path(obia.obia_job_file(measure.id, "features.csv").path).is_file()
+
+    with pytest.raises(HTTPException) as excinfo:
+        obia.obia_cancel("not-a-job")
+    assert excinfo.value.status_code == 404
+    assert obia.obia_cancel(job.id).status == "succeeded"

@@ -119,7 +119,11 @@ export function ObiaBatchStep(): ReactElement | null {
           if (!path) throw new Error(t("obia.native.needsLocalFile"));
           const status = await obiaNativeStatus();
           if (!status?.available) throw new Error(t("obia.native.unavailable"));
-          ({ area } = planObiaArea(info, wholeImageWindow(info), status.maxPixels));
+          ({ area } = planObiaArea(
+            info,
+            wholeImageWindow(info),
+            status.maxPixels[segmentation.method],
+          ));
           const request = nativeSegmentation(
             path,
             segmentation.bandIndexes,

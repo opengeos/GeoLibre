@@ -658,6 +658,25 @@ describe("reading part of a large image", () => {
       (err: ObiaError) => err.code === "empty-area",
     );
   });
+
+  it("reads a window from an overview, georeferenced at its pixel size", async () => {
+    // 8 x 4 with values 0..7 by column, 10 m pixels; a 2x averaged overview.
+    const bytes = readFileSync(
+      fileURLToPath(new URL("./fixtures/obia-overview.tif", import.meta.url)),
+    );
+    const tiff = await fromArrayBuffer(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    );
+    // Full-resolution columns 2-7 at level 1: overview columns 1-3.
+    const image = await readImageWindow(tiff, [1], { level: 1, window: [2, 0, 8, 4] });
+    assert.equal(image.width, 3);
+    assert.equal(image.height, 2);
+    const band = await readRasterData(image.bands[0].bytes.buffer as ArrayBuffer);
+    assert.deepEqual(Array.from(band.bands[0]), [2.5, 4.5, 6.5, 2.5, 4.5, 6.5]);
+    assert.equal(band.resX, 20);
+    assert.equal(band.originX, 500020);
+    assert.equal(band.originY, 4000000);
+  });
 });
 
 describe("nativeFeatureTable", () => {

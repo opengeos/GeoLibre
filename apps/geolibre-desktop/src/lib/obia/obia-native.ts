@@ -51,7 +51,13 @@ export function obiaLocalPath(layer: GeoLibreLayer): string | null {
   return /\.tiff?$/i.test(path) ? path : null;
 }
 
-let statusPromise: Promise<{ available: boolean; maxPixels: number } | null> | null = null;
+/** Native availability and each native method's pixel limit. */
+export interface ObiaNativeStatus {
+  available: boolean;
+  maxPixels: Record<"slic" | "felzenszwalb", number>;
+}
+
+let statusPromise: Promise<ObiaNativeStatus | null> | null = null;
 
 /**
  * Whether native segmentation is available: a reachable sidecar (the desktop
@@ -62,12 +68,18 @@ let statusPromise: Promise<{ available: boolean; maxPixels: number } | null> | n
  * @returns The availability and native pixel limit, or null when there is no
  *   sidecar to ask.
  */
-export function obiaNativeStatus(): Promise<{ available: boolean; maxPixels: number } | null> {
+export function obiaNativeStatus(): Promise<ObiaNativeStatus | null> {
   if (IS_MAS_BUILD) return Promise.resolve(null);
   statusPromise ??= (async () => {
     if (isTauri()) await startGeoLibreSidecar();
     const status = await fetchObiaNativeStatus();
-    return { available: status.available, maxPixels: status.max_pixels ?? 0 };
+    return {
+      available: status.available,
+      maxPixels: {
+        slic: status.max_pixels?.slic ?? 0,
+        felzenszwalb: status.max_pixels?.felzenszwalb ?? 0,
+      },
+    };
   })().catch(() => {
     // No sidecar (a plain web build): ask again next time, it may start later.
     statusPromise = null;
