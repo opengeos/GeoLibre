@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from "rea
 import { useTranslation } from "react-i18next";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { useObiaSession } from "../../../lib/obia/obia-session";
-import { ensureObiaLabels, obiaRunEnv } from "../../../lib/obia/obia-persistence";
+import { ObiaRestoreError, ensureObiaLabels, obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import {
   DEFAULT_OBIA_NATIVE_PARAMS,
   isNativeMethod,
@@ -98,7 +98,7 @@ export function ObiaMeasureStep(): ReactElement | null {
       if (isNativeMethod(segmentation.method)) {
         // Natively segmented: measure in the sidecar too, on its labels.
         const path = obiaLocalPath(sourceLayer);
-        if (!path) throw new Error(t("obia.measure.error.layersMissing"));
+        if (!path) throw new Error(t("obia.native.needsLocalFile"));
         const request = nativeSegmentation(
           path,
           segmentation.bandIndexes,
@@ -112,6 +112,11 @@ export function ObiaMeasureStep(): ReactElement | null {
           segmentation.nativeJobId ?? null,
           run,
         );
+        // The sidecar segments again when it no longer has the labels; if the
+        // image changed since, the objects differ from the saved ones.
+        if (measured.objectCount !== segmentation.objectCount) {
+          throw new ObiaRestoreError("source-changed");
+        }
         table = measured.table;
         calls = [measured.call];
       } else {
