@@ -8,19 +8,25 @@ import { saveTextFileWithFallback } from "../../../lib/file-io/file-dialogs";
 import { useObiaSession } from "../../../lib/obia/obia-session";
 import { ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
-const formatPct = (value: number | null) =>
+/** Percent in the app's UI language (not the browser locale). */
+const formatPct = (value: number | null, language: string) =>
   value == null
     ? "–"
-    : new Intl.NumberFormat(undefined, { style: "percent", maximumFractionDigits: 1 }).format(
-        value,
-      );
+    : new Intl.NumberFormat(language, { style: "percent", maximumFractionDigits: 1 }).format(value);
+
+/** Kappa to three decimals in the app's UI language. */
+const formatKappa = (value: number, language: string) =>
+  new Intl.NumberFormat(language, { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(
+    value,
+  );
 
 /**
  * Step 5: score the classification against the validation samples, which the
  * random forest never trained on. Updates live as samples are relabeled.
  */
 export function ObiaAccuracyStep(): ReactElement | null {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const language = i18n.language;
   const layers = useAppStore((s) => s.layers);
   const segmentation = useObiaSession((s) => s.segmentation);
   const features = useObiaSession((s) => s.features);
@@ -84,9 +90,9 @@ export function ObiaAccuracyStep(): ReactElement | null {
           )}
           <dl className="grid grid-cols-3 gap-2 text-center" data-testid="obia-accuracy-summary">
             {[
-              [t("obia.accuracy.overall"), formatPct(report.overallAccuracy)],
-              [t("obia.accuracy.kappa"), report.kappa.toFixed(3)],
-              [t("obia.accuracy.areaWeighted"), formatPct(report.areaWeightedAccuracy)],
+              [t("obia.accuracy.overall"), formatPct(report.overallAccuracy, language)],
+              [t("obia.accuracy.kappa"), formatKappa(report.kappa, language)],
+              [t("obia.accuracy.areaWeighted"), formatPct(report.areaWeightedAccuracy, language)],
             ].map(([label, value]) => (
               <div key={label} className="rounded-md border p-2">
                 <dt className="text-xs text-muted-foreground">{label}</dt>
@@ -142,7 +148,7 @@ export function ObiaAccuracyStep(): ReactElement | null {
                       </td>
                     ))}
                     <td className="border p-1 text-center">
-                      {formatPct(report.perClass[i].producers)}
+                      {formatPct(report.perClass[i].producers, language)}
                     </td>
                   </tr>
                 ))}
@@ -152,7 +158,7 @@ export function ObiaAccuracyStep(): ReactElement | null {
                   </th>
                   {report.perClass.map((cls) => (
                     <td key={cls.className} className="border p-1 text-center">
-                      {formatPct(cls.users)}
+                      {formatPct(cls.users, language)}
                     </td>
                   ))}
                   <td className="border p-1 text-center text-muted-foreground">–</td>
