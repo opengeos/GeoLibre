@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import {
   isNativeMethod,
+  nativePixelLimit,
   type ObiaMethod,
   type ObiaNativeStatus,
 } from "../../../lib/obia/obia-native";
@@ -31,6 +32,7 @@ export function ObiaMethodFields({
   const nativeParams = useObiaSession((s) => s.nativeParams);
   const setNativeParams = useObiaSession((s) => s.setNativeParams);
   const native = isNativeMethod(method);
+  const bandCount = useObiaSession((s) => s.bandIndexes.length);
 
   return (
     <>
@@ -55,7 +57,10 @@ export function ObiaMethodFields({
           {native
             ? nativeUsable
               ? t("obia.native.note", {
-                  max: (nativeStatus?.maxPixels[method] ?? 0).toLocaleString(i18n.language),
+                  max: (nativeStatus && isNativeMethod(method)
+                    ? nativePixelLimit(nativeStatus, method, bandCount)
+                    : 0
+                  ).toLocaleString(i18n.language),
                 })
               : t(
                   nativeStatus === null

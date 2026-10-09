@@ -22,6 +22,7 @@ import {
   isNativeMethod,
   nativeSegmentation,
   obiaLocalPath,
+  nativePixelLimit,
   obiaNativeStatus,
   runNativeMeasure,
   runNativeSegmentation,
@@ -123,7 +124,7 @@ export function ObiaBatchStep(): ReactElement | null {
           ({ area, pixelSize } = planObiaArea(
             info,
             wholeImageWindow(info),
-            status.maxPixels[segmentation.method],
+            nativePixelLimit(status, segmentation.method, segmentation.bandIndexes.length),
           ));
           const request = nativeSegmentation(
             path,

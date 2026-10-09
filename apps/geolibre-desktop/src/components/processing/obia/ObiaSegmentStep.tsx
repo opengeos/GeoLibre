@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
 import {
   isNativeMethod,
+  nativePixelLimit,
   nativeSegmentation,
   obiaLocalPath,
   obiaNativeStatus,
@@ -162,7 +163,10 @@ export function ObiaSegmentStep({
   const localPath = sourceLayer ? obiaLocalPath(sourceLayer) : null;
   const nativeUsable = Boolean(nativeStatus?.available && localPath);
   const native = isNativeMethod(method);
-  const maxPixels = native && nativeStatus ? nativeStatus.maxPixels[method] : OBIA_MAX_PIXELS;
+  const maxPixels =
+    native && nativeStatus
+      ? nativePixelLimit(nativeStatus, method, bandIndexes.length)
+      : OBIA_MAX_PIXELS;
 
   const plan = useMemo(() => {
     if (!summary) return null;
