@@ -693,7 +693,9 @@ function readFieldSpan(
     // Compare against the raw attribute: a 64-bit fill loses precision as a number.
     const fill = scalar(ds.attrs["_FillValue"]?.value);
     return Array.from(raw, (v) =>
-      (typeof fill === "bigint" && v === fill) || (typeof fill === "number" && Number(v) === fill)
+      (typeof fill === "bigint" && v === fill) ||
+      // A number past 2^53 already lost its exact value; it cannot name one id.
+      (typeof fill === "number" && Number.isSafeInteger(fill) && v === BigInt(fill))
         ? null
         : v.toString(),
     );

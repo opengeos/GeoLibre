@@ -207,7 +207,9 @@ export function AddSpaceborneLidarDialog({
         fields: chosenFields,
         qualityFilter,
         ...(bbox ? { bbox } : {}),
-        ...(Number.isFinite(parsedMax) && parsedMax > 0 ? { maxPoints: parsedMax } : {}),
+        // An empty or invalid cap falls back to the default rather than lifting
+        // it: a full GEDI orbit has over a million shots.
+        maxPoints: Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : DEFAULT_MAX_POINTS,
       });
       if (result.kept === 0) {
         setError(t("addData.spaceborneLidar.errorNoFootprints"));

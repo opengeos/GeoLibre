@@ -234,6 +234,31 @@ describe("openSpaceborneLidar (GEDI L2A)", () => {
   });
 });
 
+describe("openSpaceborneLidar 64-bit fills", () => {
+  it("ignores a numeric fill past the safe-integer range", async () => {
+    const bytes = await buildHdf5((file) => {
+      file.create_attribute("short_name", "GEDI_L4A");
+      const beam = file.create_group("BEAM0000");
+      beam.create_dataset({ name: "lat_lowestmode", data: new Float64Array([0]) });
+      beam.create_dataset({ name: "lon_lowestmode", data: new Float64Array([1]) });
+      beam.create_dataset({ name: "delta_time", data: new Float64Array([0]) });
+      beam
+        .create_dataset({ name: "shot_number", data: new BigUint64Array([190000000000000001n]) })
+        // Stored as a float64, this rounds to the same double as the shot above.
+        .create_attribute("_FillValue", new Float64Array([190000000000000002]));
+    });
+    const file = await openSpaceborneLidar(bytes);
+    try {
+      const result = file.readFootprints({
+        fields: [{ path: "shot_number", name: "shot_number" }],
+      });
+      assert.equal(result.geojson.features[0].properties?.shot_number, "190000000000000001");
+    } finally {
+      file.close();
+    }
+  });
+});
+
 describe("openSpaceborneLidar thinning", () => {
   it("caps the total across beams, not per beam", async () => {
     const bytes = await buildHdf5((file) => {
