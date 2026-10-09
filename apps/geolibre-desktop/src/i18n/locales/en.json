@@ -7587,7 +7587,8 @@
         "dup-ids": "The id field must hold a different number for each object.",
         "big-ids": "Object ids must be at most 16,777,216: renumber them first.",
         "no-match": "No row of the table matches an object's segment_id.",
-        "mapping-conflict": "The mapping gives an object two different parents."
+        "mapping-conflict": "The mapping gives an object two different parents.",
+        "changed": "The objects changed during the import, so it was discarded. Import again."
       }
     },
     "context": {

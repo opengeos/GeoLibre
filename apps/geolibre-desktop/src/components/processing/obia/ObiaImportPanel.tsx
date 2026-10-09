@@ -17,6 +17,7 @@ import {
   parseClassSchema,
   parseFeatureTable,
   parseLevelMapping,
+  polygonsOf,
   rasterizeObjects,
   withClasses,
 } from "../../../lib/obia/obia-import";
@@ -32,15 +33,7 @@ import { labelStylePatch } from "./ObiaTrainStep";
 
 /** Whether a layer has a polygon feature (stops at the first). */
 function hasPolygons(layer: GeoLibreLayer): boolean {
-  return (layer.geojson?.features ?? []).some((f) => {
-    const type = f.geometry?.type;
-    return (
-      type === "Polygon" ||
-      type === "MultiPolygon" ||
-      (f.geometry?.type === "GeometryCollection" &&
-        f.geometry.geometries.some((g) => g.type.endsWith("Polygon")))
-    );
-  });
+  return (layer.geojson?.features ?? []).some((f) => polygonsOf(f.geometry).length > 0);
 }
 
 /** Property names of a layer's first features. */
@@ -73,6 +66,7 @@ export function ObiaImportPanel(): ReactElement {
   const sourceLayerId = useObiaSession((s) => s.sourceLayerId);
   const bandIndexes = useObiaSession((s) => s.bandIndexes);
   const segmentation = useObiaSession((s) => s.segmentation);
+  const features = useObiaSession((s) => s.features);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -119,6 +113,14 @@ export function ObiaImportPanel(): ReactElement {
         bandIndexes,
         idField || null,
       );
+      // The image or bands chosen under Segment may have changed meanwhile.
+      const session = useObiaSession.getState();
+      if (
+        session.sourceLayerId !== source.id ||
+        session.bandIndexes.join() !== bandIndexes.join()
+      ) {
+        throw new Error(t("obia.import.error.changed"));
+      }
       const store = useAppStore.getState();
       const id = store.addGeoJsonLayer(
         t("obia.layerName", { name: source.name }),
@@ -181,6 +183,17 @@ export function ObiaImportPanel(): ReactElement {
         source,
         current.area,
       );
+      // The objects must be as they were read: label nothing if they changed
+      // during the awaits.
+      const now = useAppStore.getState().layers.find((layer) => layer.id === objects.id);
+      const session = useObiaSession.getState().segmentation;
+      if (
+        now?.geojson !== objects.geojson ||
+        session?.finishedAt !== current.finishedAt ||
+        session.objectsLayerId !== objects.id
+      ) {
+        throw new Error(t("obia.import.error.changed"));
+      }
       // The classes as they are now: they may have changed during the awaits.
       const classes = withClasses(useObiaSession.getState().classes, labeled.classNames);
       useObiaSession.getState().setClasses(classes);
@@ -216,7 +229,10 @@ export function ObiaImportPanel(): ReactElement {
       const imported = parseFeatureTable(text);
       const state = useObiaSession.getState();
       const current = state.segmentation;
-      const objects = layers.find((layer) => layer.id === current?.objectsLayerId);
+      // Read after the file dialog: the layer may have changed meanwhile.
+      const objects = useAppStore
+        .getState()
+        .layers.find((layer) => layer.id === current?.objectsLayerId);
       if (!current || !objects?.geojson) throw new Error(t("obia.import.error.noObjects"));
       const before = state.features?.table;
       // Imported columns join the measured ones (and replace any of the same name).
@@ -279,7 +295,9 @@ export function ObiaImportPanel(): ReactElement {
       const after = useObiaSession.getState();
       if (
         after.segmentation?.finishedAt !== before.segmentation?.finishedAt ||
-        after.features?.finishedAt !== before.features?.finishedAt ||
+        // By identity: adding context features replaces the run but keeps
+        // its finishedAt.
+        after.features !== before.features ||
         after.level !== before.level
       ) {
         throw new Error(t("obia.levels.error.changed"));
@@ -468,7 +486,8 @@ export function ObiaImportPanel(): ReactElement {
             "mapping",
             t("obia.import.levelMapping"),
             () => void importMapping(),
-            !segmentation,
+            // The level above pools the features of this one.
+            !segmentation || !features,
           )}
         </div>
         <ObiaStatus error={error} success={result || null} testId="obia-import-result" />
