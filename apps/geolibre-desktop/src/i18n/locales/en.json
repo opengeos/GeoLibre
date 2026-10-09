@@ -7618,7 +7618,8 @@
         "nothing": "No process converted.",
         "error": {
           "not-ruleset": "The file holds no eCognition process tree.",
-          "encrypted": "The rule set is encrypted, so it cannot be read."
+          "encrypted": "The rule set is encrypted, so it cannot be read.",
+          "too-large": "The file is over 256 MB, too large to read in the workbench."
         }
       }
     },

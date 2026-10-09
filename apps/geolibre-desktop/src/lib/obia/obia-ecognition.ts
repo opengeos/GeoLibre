@@ -67,14 +67,21 @@ export interface EcognitionImport {
   /** Image object level names the converted processes act on. */
   levels: string[];
   skipped: EcognitionSkipped[];
-  /** Processes in the tree, and how many converted. */
+  /** Processes in the tree, and how many converted (a container counts when any child does). */
   processCount: number;
   converted: number;
 }
 
+/**
+ * The largest file the importer reads: parsing runs in the page and holds
+ * the file as text, so a much larger one would stall it (a 100 MB rule set
+ * takes about 10 seconds).
+ */
+export const ECOGNITION_MAX_BYTES = 256 * 1024 * 1024;
+
 /** Why a file could not be read as a rule set. */
 export class EcognitionImportError extends Error {
-  readonly code: "not-ruleset" | "encrypted";
+  readonly code: "not-ruleset" | "encrypted" | "too-large";
 
   constructor(code: EcognitionImportError["code"], message: string) {
     super(message);
@@ -187,14 +194,19 @@ const param = (params: Element | null, name: string) =>
 export function ecognitionDocuments(bytes: Uint8Array): Document[] {
   const text = new TextDecoder("latin1").decode(bytes);
   const docs: Document[] = [];
-  for (const match of text.matchAll(/<\?xml[^>]*\?>\s*<([A-Za-z_][\w.-]*)/g)) {
+  const matches = [...text.matchAll(/<\?xml[^>]*\?>\s*<([A-Za-z_][\w.-]*)/g)];
+  matches.forEach((match, i) => {
     const start = match.index + match[0].length - match[1].length - 1;
+    // A document ends at its root's last closing tag before the next one
+    // starts (binary data may follow it), so a nested element with the
+    // root's name does not cut it short.
+    const limit = matches[i + 1]?.index ?? text.length;
     const close = `</${match[1]}>`;
-    const end = text.indexOf(close, start);
-    if (end < 0) continue;
+    const end = text.lastIndexOf(close, limit - close.length);
+    if (end < start) return;
     const doc = new DOMParser().parseFromString(text.slice(start, end + close.length), "text/xml");
     if (!doc.getElementsByTagName("parsererror").length) docs.push(doc);
-  }
+  });
   return docs;
 }
 
@@ -202,7 +214,7 @@ export function ecognitionDocuments(bytes: Uint8Array): Document[] {
  * Convert an eCognition rule set (`.dcp`) or project (`.dpr`) to a workbench
  * ruleset, reporting what it leaves out.
  *
- * @param bytes The file's contents.
+ * @param bytes The file's contents (at most {@link ECOGNITION_MAX_BYTES}).
  * @param layerBands Image layer alias to 1-based band; layers not given are
  *   read from the bands in the rule set's layer order.
  * @throws EcognitionImportError when the file holds no process tree, or an
@@ -212,6 +224,9 @@ export function importEcognitionRuleset(
   bytes: Uint8Array,
   layerBands: Readonly<Record<string, number>> = {},
 ): EcognitionImport {
+  if (bytes.byteLength > ECOGNITION_MAX_BYTES) {
+    throw new EcognitionImportError("too-large", "The file is too large to read.");
+  }
   const docs = ecognitionDocuments(bytes);
   const roots = docs.flatMap((doc) =>
     all(doc.documentElement, "ProcBase").filter((proc) =>
@@ -501,15 +516,17 @@ export function importEcognitionRuleset(
     const [from, to] = ys.slice(xs.length);
     if (!(from < to)) return `membership function on ${feature}`;
     const points = ys.slice(0, xs.length);
+    if (xs.some((x, i) => i > 0 && x < xs[i - 1])) return `membership function on ${feature}`;
     const even = xs.every((x, i) => Math.abs(x - i / (xs.length - 1)) < 1e-6);
-    const values = even
-      ? points
-      : Array.from({ length: 33 }, (_, i) => {
-          const t = i / 32;
-          const j = Math.max(0, xs.findIndex((x) => x >= t) - 1);
-          const span = xs[j + 1] - xs[j] || 1;
-          return points[j] + ((points[j + 1] - points[j]) * (t - xs[j])) / span;
-        });
+    // Uneven points: resample evenly, holding the end values beyond them.
+    const at = (t: number) => {
+      if (t <= xs[0]) return points[0];
+      if (t >= xs[xs.length - 1]) return points[points.length - 1];
+      const j = xs.findIndex((x, i) => t >= x && t < xs[i + 1]);
+      const span = xs[j + 1] - xs[j];
+      return span ? points[j] + ((points[j + 1] - points[j]) * (t - xs[j])) / span : points[j + 1];
+    };
+    const values = even ? points : Array.from({ length: 33 }, (_, i) => at(i / 32));
     return {
       field: fieldFor(feature, null),
       type: "curve",
@@ -606,8 +623,11 @@ export function importEcognitionRuleset(
     if (guid === EXECUTE) {
       // A container: its own domain must not narrow what its children see.
       if (domain.classes || domain.conditions) return skip("domain", "a filtered parent");
-      const converted = children.flatMap((child, i) => convert(child, `${path}.${i + 1}`));
-      return wrap(converted);
+      const inner = children.flatMap((child, i) => convert(child, `${path}.${i + 1}`));
+      // The container converts to its children (or a loop around them),
+      // when any of them converted.
+      if (inner.length) converted += 1;
+      return wrap(inner);
     }
     if (children.length) return skip("children");
     const scoped = domain.classes || domain.conditions ? { domain } : {};

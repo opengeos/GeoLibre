@@ -4,7 +4,7 @@ import { DOMParser } from "linkedom";
 import { runRuleset, validateRuleset, type ObiaFeatureTable } from "@geolibre/processing";
 
 Object.assign(globalThis, { DOMParser });
-const { importEcognitionRuleset, EcognitionImportError } =
+const { importEcognitionRuleset, EcognitionImportError, ECOGNITION_MAX_BYTES } =
   await import("../apps/geolibre-desktop/src/lib/obia/obia-ecognition");
 
 const EXECUTE = "A8BA5775-CC39-4194-9A6A-A64872EE1F81";
@@ -127,7 +127,7 @@ describe("eCognition rule set import", () => {
     assert.deepEqual(result.layers, ["Red", "Green", "NIR"]);
     assert.deepEqual(result.levels, ["Level 1"]);
     assert.equal(result.processCount, 10);
-    assert.equal(result.converted, 5);
+    assert.equal(result.converted, 7);
     assert.deepEqual(
       result.skipped.map((s) => [s.path, s.reason]),
       [
@@ -244,7 +244,7 @@ describe("eCognition rule set import", () => {
     ]);
     const result = importEcognitionRuleset(project, { NIR: 4, Green: 1 });
     assert.deepEqual(result.layerBands, { Red: 1, Green: 1, NIR: 4 });
-    assert.equal(result.converted, 5);
+    assert.equal(result.converted, 7);
     assert.ok(result.fields.some((f) => f.field === "mean_b4"));
   });
 
@@ -282,6 +282,37 @@ describe("eCognition rule set import", () => {
     const unread = importEcognitionRuleset(bytes(text(v8("<Something/>", ""))));
     assert.equal(unread.ruleset, null);
     assert.equal(unread.skipped[0].reason, "domain");
+  });
+
+  it("resamples uneven membership points, holding the end values", () => {
+    const hist = (xs: number[], ys: number[]) =>
+      `<PropHist>${xs.map((x) => `<X Val="${x}"/>`).join("")}${ys.map((y) => `<Y Val="${y}"/>`).join("")}</PropHist>`;
+    const text = (h: string) =>
+      `<?xml version="1.0"?><eCog.Proc><ObjectDependencies><ClssHrchy><AllClss><Clss id="1" name="A"/></AllClss><AllTerm><Term TermEvalType="0"><TermClause><PropDscrId InstID="Brightness"/>${h}</TermClause><TermBase ClssId="1"/></Term></AllTerm></ClssHrchy></ObjectDependencies><ProcessList>${proc(
+        "c",
+        CLASSIFY,
+        `<DValue name="lActvClss" type="vector"><Values><DValue value="1" type="clssId"/></Values></DValue>`,
+        "",
+      )}</ProcessList></eCog.Proc>`;
+    // Points stop at 0.5: the curve holds 1 from there to the end.
+    const result = importEcognitionRuleset(bytes(text(hist([0, 0.25, 0.5], [0, 1, 1, 0, 100]))));
+    const process = result.ruleset?.processes[0];
+    assert.equal(process?.kind, "fuzzy");
+    const membership = process?.kind === "fuzzy" ? process.classes[0].memberships[0] : null;
+    assert.ok(membership?.type === "curve");
+    assert.equal(membership.values.length, 33);
+    assert.equal(membership.values[4], 0.5);
+    assert.ok(membership.values.slice(8).every((v) => v === 1));
+    // Points out of order are not read.
+    const unordered = importEcognitionRuleset(bytes(text(hist([0, 0.5, 0.25], [0, 1, 1, 0, 100]))));
+    assert.equal(unordered.skipped[0].reason, "description");
+  });
+
+  it("refuses a file over the size limit", () => {
+    assert.throws(
+      () => importEcognitionRuleset(new Uint8Array(ECOGNITION_MAX_BYTES + 1)),
+      (err: unknown) => err instanceof EcognitionImportError && err.code === "too-large",
+    );
   });
 
   it("rejects a file without a process tree", () => {

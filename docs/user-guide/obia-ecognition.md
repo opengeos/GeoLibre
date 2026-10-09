@@ -120,15 +120,16 @@ processes all run on the level you work on, whatever level the rule set
 named.
 
 How much of a rule set converts depends on how much of it is classification
-logic. Over public rule sets:
+logic. Over public rule sets (a container process counts as converted when
+any of its children does):
 
 | Rule set | Processes | Converted | Mostly not converted |
 | --- | --- | --- | --- |
-| [Buildings and water, Hamden NY](https://github.com/khdelphine/eCognition_rulesets) | 54 | 29 | merge region |
-| [Laughing gull nests](https://figshare.com/articles/dataset/14214182) | 64 | 25 | merge region, level management |
-| [Water, seed growing](https://sees-rsrc.science.uq.edu.au/CRSSIS_old/OOIA/process_tree_library.htm) | 27 | 5 | segmentation, merge region |
-| [Historical imagery, NAIP](https://github.com/mveitzel/historical-imagery) | 20 | 4 | segmentation, merge region |
-| [Seafloor geomorphology](https://github.com/GeologicalMethodical/eCognition_Developer_Ruleset) | 22 | 6 | segmentation, object resizing |
-| [NSW estuarine habitats](https://figshare.com/articles/software/27297483) | 240 | 13 | manual classification, variables, levels |
-| [Yalova land cover](https://github.com/peterhofmann1/Yalova-S-2-LULC) | 2,813 | 91 | supervised classification, samples, maps |
-| [Field boundaries](https://github.com/fkroeber/field_boundary_delineation) | 292 | 4 | variables, layer arithmetic, levels |
+| [Buildings and water, Hamden NY](https://github.com/khdelphine/eCognition_rulesets) | 54 | 39 | merge region |
+| [Laughing gull nests](https://figshare.com/articles/dataset/14214182) | 64 | 45 | merge region, level management |
+| [Water, seed growing](https://sees-rsrc.science.uq.edu.au/CRSSIS_old/OOIA/process_tree_library.htm) | 27 | 14 | segmentation, merge region |
+| [Historical imagery, NAIP](https://github.com/mveitzel/historical-imagery) | 20 | 7 | segmentation, merge region |
+| [Seafloor geomorphology](https://github.com/GeologicalMethodical/eCognition_Developer_Ruleset) | 22 | 9 | segmentation, object resizing |
+| [NSW estuarine habitats](https://figshare.com/articles/software/27297483) | 240 | 35 | manual classification, variables, levels |
+| [Yalova land cover](https://github.com/peterhofmann1/Yalova-S-2-LULC) | 2,813 | 191 | supervised classification, samples, maps |
+| [Field boundaries](https://github.com/fkroeber/field_boundary_delineation) | 292 | 11 | variables, layer arithmetic, levels |
