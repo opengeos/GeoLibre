@@ -99,6 +99,10 @@ describe("datum shifts", () => {
     assert.deepEqual(asked, []);
     assert.equal(((await resolver(32631)) as unknown as { projName: string }).projName, "fallback");
     assert.deepEqual(asked, [32631]);
+    // Geographic codes resolve too (the tables take them as projected keys).
+    const geographic = (await resolver(4314)) as unknown as Record<string, unknown>;
+    assert.equal(geographic.projName, "longlat");
+    assert.deepEqual((geographic.datum_params as number[]).slice(0, 3), [598.1, 73.7, 418.2]);
   });
 
   it("places polygonized objects through the raster's datum-shifted CRS", async () => {

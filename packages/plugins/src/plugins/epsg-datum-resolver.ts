@@ -38,7 +38,12 @@ export function datumShiftEpsgResolver(fallback: EpsgResolver): EpsgResolver {
         const name = `GEOLIBRE:${epsg}`;
         proj4.defs(name, definition);
         return proj4.defs(name) as unknown as Awaited<ReturnType<EpsgResolver>>;
-      })().catch(() => fallback(epsg));
+      })().catch(() => {
+        // Not cached: a transient failure of the fallback (an epsg.io fetch)
+        // must not stick to this code.
+        resolved.delete(epsg);
+        return fallback(epsg);
+      });
       resolved.set(epsg, projection);
     }
     return projection;
