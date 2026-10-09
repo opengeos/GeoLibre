@@ -1,5 +1,5 @@
 import {
-  classFieldSlug,
+  classSlugs,
   decodeLabelGrid,
   objectAdjacency,
   runRuleset,
@@ -22,6 +22,7 @@ import { useObiaSession } from "./obia-session";
 export function parseRuleset(
   text: string,
   fields: readonly string[],
+  classes: readonly string[] = [],
 ): { ruleset: ObiaRuleset } | { error: string } {
   let value: unknown;
   try {
@@ -29,7 +30,7 @@ export function parseRuleset(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Not valid JSON" };
   }
-  return validateRuleset(value, fields);
+  return validateRuleset(value, fields, classes);
 }
 
 /**
@@ -42,7 +43,10 @@ export function exampleRuleset(classes: readonly string[], fields: readonly stri
   const feature = fields.includes("ndvi")
     ? "ndvi"
     : (fields.find((f) => f.startsWith("mean_b")) ?? "ndvi");
-  const slug = classFieldSlug(first, new Set());
+  // The same slugs the engine makes for these classes.
+  const slug = [...classSlugs(classes.length ? classes : [first, second])].find(
+    ([, name]) => name === first,
+  )?.[0];
   const ruleset: ObiaRuleset = {
     processes: [
       {
@@ -84,6 +88,42 @@ export function exampleRuleset(classes: readonly string[], fields: readonly stri
 }
 
 /**
+ * The fields a ruleset reads (conditions and memberships, in loops too), or
+ * none when the text is not a ruleset.
+ */
+export function rulesetFields(text: string): string[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  const fields: string[] = [];
+  const walk = (list: unknown) => {
+    if (!Array.isArray(list)) return;
+    for (const item of list) {
+      const p = item as Record<string, unknown> | null;
+      if (!p || typeof p !== "object") continue;
+      const conditions = (p.domain as Record<string, unknown> | undefined)?.conditions;
+      if (Array.isArray(conditions)) {
+        for (const c of conditions) fields.push(String((c as Record<string, unknown>)?.field));
+      }
+      if (Array.isArray(p.classes)) {
+        for (const c of p.classes) {
+          const memberships = (c as Record<string, unknown> | null)?.memberships;
+          if (Array.isArray(memberships)) {
+            for (const m of memberships) fields.push(String((m as Record<string, unknown>)?.field));
+          }
+        }
+      }
+      walk(p.processes);
+    }
+  };
+  walk((value as Record<string, unknown> | null)?.processes);
+  return fields;
+}
+
+/**
  * Run the ruleset method on the current level: the processes in order, with
  * objects left unclassified given the default class.
  *
@@ -107,7 +147,13 @@ export async function runObiaRuleset(
     objectAdjacency(grid),
     classes.map((item) => item.name),
     ruleset,
-    options.fromCurrent && classification ? classification.predictions : new Map(),
+    // Objects holding the default class start unclassified, so a domain of
+    // unclassified objects ("") still finds them.
+    options.fromCurrent && classification
+      ? new Map(
+          [...classification.predictions].filter(([, name]) => name !== options.defaultClass),
+        )
+      : new Map(),
   );
   for (const id of table.rows.keys()) {
     if (!predictions.has(id)) predictions.set(id, options.defaultClass);

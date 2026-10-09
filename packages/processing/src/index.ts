@@ -320,7 +320,11 @@ export {
 } from "./obia-hierarchy";
 export {
   classMembership,
+  classSlugs,
   membershipValue,
+  OBIA_RULESET_MAX_STEPS,
+  ObiaRulesetError,
+  rulesetClassNames,
   runRuleset,
   validateRuleset,
   type ObiaCondition,

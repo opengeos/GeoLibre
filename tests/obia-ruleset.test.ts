@@ -5,6 +5,7 @@ import {
   membershipValue,
   runRuleset,
   validateRuleset,
+  ObiaRulesetError,
   type ObiaAdjacency,
   type ObiaFeatureTable,
 } from "@geolibre/processing";
@@ -176,10 +177,61 @@ describe("OBIA rulesets", () => {
             ],
           },
           fields,
+          ["water"],
         ),
     );
+    // A class the ruleset assigns counts too; a misspelled one does not.
+    const border = (field: string) =>
+      validateRuleset(
+        {
+          processes: [
+            { kind: "assign", className: "veg" },
+            { kind: "assign", className: "x", domain: { conditions: [{ field, op: ">", value: 0 }] } },
+          ],
+        },
+        fields,
+        ["water"],
+      );
+    assert.ok("ruleset" in border("nb_border_veg"));
+    assert.match(error2(border("nb_border_vegitation")), /unknown field "nb_border_vegitation"/);
+  });
+
+  it("stops a ruleset that never settles", () => {
+    const { table, adjacency } = row([0.1, 0.2]);
+    const flip = (from: string, to: string) => ({
+      kind: "assign" as const,
+      domain: { classes: [from] },
+      className: to,
+    });
+    assert.throws(
+      () =>
+        runRuleset(table, adjacency, ["a", "b"], {
+          processes: [
+            { kind: "assign", className: "a" },
+            {
+              kind: "loop",
+              maxIterations: 1000,
+              processes: [{ kind: "loop", maxIterations: 1000, processes: [flip("a", "b"), flip("b", "a")] }],
+            },
+          ],
+        }),
+      (err: ObiaRulesetError) => err.code === "too-long",
+    );
+  });
+
+  it("counts a missing feature as no membership", () => {
+    const value = (field: string) => ({ a: 1 })[field];
+    const memberships = [
+      { field: "a", type: "larger" as const, from: 0, to: 1 },
+      { field: "b", type: "larger" as const, from: 0, to: 1 },
+    ];
+    assert.equal(classMembership({ className: "c", memberships }, value), 0);
+    assert.equal(classMembership({ className: "c", combine: "or", memberships }, value), 1);
   });
 });
+
+const error2 = (result: { error: string } | { ruleset: unknown }) =>
+  "error" in result ? result.error : "";
 
 describe("OBIA ruleset editor helpers", () => {
   it("offers a valid example and reports JSON errors", async () => {

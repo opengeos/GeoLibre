@@ -130,13 +130,28 @@ export function ObiaClassifyStep(): ReactElement | null {
   const aboveLevel =
     levels.find((record) => record.level === level + 1 && record.classification)?.level ?? null;
 
-  const [rulesetLog, setRulesetLog] = useState<ObiaProcessLog[] | null>(null);
+  // The last run's log, shown only while it still describes the ruleset text
+  // and features on screen.
+  const [lastRun, setLastRun] = useState<{
+    text: string;
+    featuresAt: string;
+    log: ObiaProcessLog[];
+  } | null>(null);
+  const rulesetLog =
+    lastRun && lastRun.text === settings.ruleset && lastRun.featuresAt === features?.finishedAt
+      ? lastRun.log
+      : null;
   const rulesetValid = useMemo(
     () =>
       settings.method === "ruleset" &&
       Boolean(features) &&
-      "ruleset" in parseRuleset(settings.ruleset, features?.table.fields ?? []),
-    [settings.method, settings.ruleset, features],
+      "ruleset" in
+        parseRuleset(
+          settings.ruleset,
+          features?.table.fields ?? [],
+          classes.map((item) => item.name),
+        ),
+    [settings.method, settings.ruleset, features, classes],
   );
 
   const handleClassify = useCallback(async () => {
@@ -164,7 +179,11 @@ export function ObiaClassifyStep(): ReactElement | null {
       const table = tableForAllObjects(features.table, layer.geojson);
       let result;
       if (settings.method === "ruleset") {
-        const parsed = parseRuleset(settings.ruleset, features.table.fields);
+        const parsed = parseRuleset(
+          settings.ruleset,
+          features.table.fields,
+          classes.map((item) => item.name),
+        );
         if ("error" in parsed) throw new Error(t("obia.ruleset.invalid", { error: parsed.error }));
         const ran = await runObiaRuleset(
           table,
@@ -173,7 +192,7 @@ export function ObiaClassifyStep(): ReactElement | null {
           run,
         );
         result = ran.result;
-        setRulesetLog(ran.log);
+        setLastRun({ text: settings.ruleset, featuresAt: features.finishedAt, log: ran.log });
       } else
         result =
           settings.method === "inherit"
