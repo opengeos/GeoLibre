@@ -78,22 +78,36 @@ export async function felzenszwalbSegmentLabels(
   if (!image.bands.length) {
     throw new ObiaError("no-bands", "Choose at least one band to segment.");
   }
-  run.onStep?.(OBIA_FELZENSZWALB_TOOL);
-  const rasters = await Promise.all(
-    image.bands.map((band) => readRasterData(band.bytes.slice().buffer as ArrayBuffer)),
-  );
-  const { width, height } = rasters[0];
-  if (rasters.some((raster) => raster.width !== width || raster.height !== height)) {
-    throw new Error("The bands to segment differ in size.");
-  }
-  const n = width * height;
-  if (n > OBIA_FELZENSZWALB_MAX_PIXELS) {
-    throw new ObiaError(
+  // Refuse an oversized image before decoding any band.
+  const tooLarge = (width: number, height: number) =>
+    new ObiaError(
       "image-too-large",
       `This image has ${width} x ${height} pixels, over the limit of ${OBIA_FELZENSZWALB_MAX_PIXELS.toLocaleString("en-US")} pixels for Felzenszwalb in the browser.`,
       { width, height, max: OBIA_FELZENSZWALB_MAX_PIXELS },
     );
+  if (image.width * image.height > OBIA_FELZENSZWALB_MAX_PIXELS) {
+    throw tooLarge(image.width, image.height);
   }
+  run.onStep?.(OBIA_FELZENSZWALB_TOOL);
+  const rasters = await Promise.all(
+    image.bands.map((band) => readRasterData(band.bytes.slice().buffer as ArrayBuffer)),
+  );
+  const first = rasters[0];
+  const { width, height } = first;
+  // Pixels are compared by index, so every band must be on one grid.
+  const sameGrid = (raster: (typeof rasters)[number]) =>
+    raster.width === width &&
+    raster.height === height &&
+    raster.originX === first.originX &&
+    raster.originY === first.originY &&
+    raster.resX === first.resX &&
+    raster.resY === first.resY;
+  if (!rasters.every(sameGrid)) {
+    throw new Error("The bands to segment are not on the same grid.");
+  }
+  const n = width * height;
+  if (n > OBIA_FELZENSZWALB_MAX_PIXELS) throw tooLarge(width, height);
+
   // A pixel is valid when every band has a finite, non-NoData value.
   const valid = new Uint8Array(n).fill(1);
   const bands = rasters.map((raster) => {

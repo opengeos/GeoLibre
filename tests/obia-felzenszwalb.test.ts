@@ -126,7 +126,7 @@ describe("Felzenszwalb segmentation", () => {
     assert.deepEqual(again.labels, first.labels);
   });
 
-  it("refuses bands of different sizes", async () => {
+  it("refuses bands on different grids, and images over the limit", async () => {
     const tiff = (w: number, h: number) =>
       writeArrayBuffer(new Float32Array(w * h), {
         width: w,
@@ -141,7 +141,32 @@ describe("Felzenszwalb segmentation", () => {
     const image = { ...a, bandCount: 2, bands: [a.bands[0], { ...b.bands[0], index: 2 }] };
     await assert.rejects(
       felzenszwalbSegmentLabels(image, { scale: 100, sigma: 0, minSize: 1 }),
-      /differ in size/,
+      /not on the same grid/,
+    );
+    // Same size, shifted origin: also refused.
+    const shifted = writeArrayBuffer(new Float32Array(48), {
+      width: 8,
+      height: 6,
+      ModelPixelScale: [10, 10, 0],
+      ModelTiepoint: [0, 0, 0, 500010, 4000000, 0],
+      ProjectedCSTypeGeoKey: 32617,
+      GTModelTypeGeoKey: 1,
+    } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer;
+    const c = await splitImageBands(shifted);
+    await assert.rejects(
+      felzenszwalbSegmentLabels(
+        { ...a, bandCount: 2, bands: [a.bands[0], { ...c.bands[0], index: 2 }] },
+        { scale: 100, sigma: 0, minSize: 1 },
+      ),
+      /not on the same grid/,
+    );
+    // An image over the limit is refused before its bands are decoded.
+    await assert.rejects(
+      felzenszwalbSegmentLabels(
+        { ...a, width: 4096, height: 1025 },
+        { scale: 100, sigma: 0, minSize: 1 },
+      ),
+      (err: unknown) => (err as { code?: string }).code === "image-too-large",
     );
   });
 });
