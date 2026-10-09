@@ -181,6 +181,10 @@ export function ObiaImportPanel(): ReactElement {
         source,
         current.area,
       );
+      // The objects must be as they were read: label nothing if they changed
+      // during the awaits.
+      const now = useAppStore.getState().layers.find((layer) => layer.id === objects.id);
+      if (now?.geojson !== objects.geojson) throw new Error(t("obia.import.error.changed"));
       // The classes as they are now: they may have changed during the awaits.
       const classes = withClasses(useObiaSession.getState().classes, labeled.classNames);
       useObiaSession.getState().setClasses(classes);
@@ -216,7 +220,10 @@ export function ObiaImportPanel(): ReactElement {
       const imported = parseFeatureTable(text);
       const state = useObiaSession.getState();
       const current = state.segmentation;
-      const objects = layers.find((layer) => layer.id === current?.objectsLayerId);
+      // Read after the file dialog: the layer may have changed meanwhile.
+      const objects = useAppStore
+        .getState()
+        .layers.find((layer) => layer.id === current?.objectsLayerId);
       if (!current || !objects?.geojson) throw new Error(t("obia.import.error.noObjects"));
       const before = state.features?.table;
       // Imported columns join the measured ones (and replace any of the same name).
@@ -279,7 +286,9 @@ export function ObiaImportPanel(): ReactElement {
       const after = useObiaSession.getState();
       if (
         after.segmentation?.finishedAt !== before.segmentation?.finishedAt ||
-        after.features?.finishedAt !== before.features?.finishedAt ||
+        // By identity: adding context features replaces the run but keeps
+        // its finishedAt.
+        after.features !== before.features ||
         after.level !== before.level
       ) {
         throw new Error(t("obia.levels.error.changed"));
