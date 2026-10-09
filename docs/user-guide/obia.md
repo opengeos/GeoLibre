@@ -135,7 +135,32 @@ training labels.
 Segmenting again starts a new set of objects, so measure them again before
 training a classifier.
 
-## 3. Label samples
+## 3. Levels
+
+Objects can be grouped into coarser levels, as in an eCognition object
+hierarchy: buildings, then blocks, then neighborhoods. **Build coarser level**
+merges the current level's objects into a new level: neighbors merge, the most
+alike first, until the next merge would raise an object's spread of band values
+(its size-weighted standard deviation, in standardized band units, summed over
+the bands) by more than scale². Larger scales give larger, more varied objects.
+This is the color criterion of multiresolution segmentation, applied to whole
+objects.
+
+Each object of a coarser level is made of whole objects of the level below, so
+the levels nest exactly. Each object of the level below records its parent in
+`obia_parent`, and each object of the coarser level has a `child_count`. A
+coarser level needs spectral statistics measured on the level it merges, and
+its features are computed from that level: band statistics are pooled exactly
+from the children's, and shape and neighbor features are measured on the
+merged objects (GLCM texture is not carried up). Coarser levels are built in
+the browser, from segmentations of up to 16.8 million pixels.
+
+Under **Work on**, choose the level the later steps use: samples, the
+classifier, accuracy and export belong to that level, and each level keeps its
+own. Applying to other images uses level 1. A new segmentation starts a new
+hierarchy.
+
+## 4. Label samples
 
 Classification needs examples. Add a class for each land cover with **Add
 class**, then name it and pick its color. To label objects:
@@ -162,7 +187,7 @@ Labels are stored on the objects themselves, in the `obia_class` and
 `obia_sample` (`training` or `validation`) properties, so they are saved with
 the project and visible in the attribute table.
 
-## 4. Classify
+## 5. Classify
 
 Once objects are measured, **Classify** predicts a class for every object and
 writes it to the `obia_predicted` property; the layer is then filled by
@@ -183,7 +208,7 @@ The Whitebox catalog's "SVM" and "ensemble" object classifiers are the same
 random forest with a different number of trees, so the workbench offers only
 the random forest.
 
-## 5. Assess accuracy
+## 6. Assess accuracy
 
 After classifying, the workbench scores the predictions against the
 validation samples, which the random forest never trained on. The score
@@ -206,7 +231,7 @@ For an honest score, label validation samples spread across the scene rather
 than next to training samples, and do not tune the classifier on them
 repeatedly; otherwise they stop being independent.
 
-## 6. Export
+## 7. Export
 
 The objects layer is already the vector result: each object's
 `obia_predicted` property holds its class, so its layer menu exports the
@@ -222,7 +247,7 @@ class). The Export step also burns the classes onto the image's pixel grid:
   after.
 - **Save legend (CSV)** saves the code, class name and color of each class.
 
-## 7. Apply to other images
+## 8. Apply to other images
 
 Once an image is classified, **Apply to other images** runs the same workflow
 on other raster layers in the project: tick the images and click **Apply**.
@@ -256,7 +281,10 @@ The workbench is saved with the project. Reopening a project restores the
 image and band choices, the parameters, the classes and the classifier
 settings, and the results of each step: the objects layer keeps its measured
 features, labels and predicted classes, so the attribute table, the accuracy
-assessment and the export pick up where you left off.
+assessment and the export pick up where you left off. The object hierarchy is saved too:
+each level, with its own samples and classification, and the level you were
+working on. A coarser level's label raster is rebuilt from the level below and
+its objects' `obia_parent` links.
 
 Expand **Provenance** at the bottom of the workbench to see how the current
 results were made:
@@ -264,7 +292,8 @@ results were made:
 - the image (layer name, and its file path or URL when it has one), its size
   and the bands used;
 - for each step, when it ran, the exact tool calls with their arguments, and
-  the `geolibre-wasm` engine and GeoLibre versions;
+  the `geolibre-wasm` engine and GeoLibre versions (for a coarser level, which
+  level it merged and at what scale);
 - each hold-out split's share, seed and the number of samples it moved;
 - for the random forest, the number of trees, features and training samples
   (the engine fixes the forest's random seed);

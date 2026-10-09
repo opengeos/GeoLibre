@@ -7646,6 +7646,7 @@
       "env": "geolibre-wasm {{engine}}, GeoLibre {{app}}",
       "labelsPending": "Label raster not loaded; it is rebuilt from these settings when a step needs it.",
       "splits": "Hold-out splits",
+      "level": "Level {{level}}: level {{from}} merged at scale {{scale}}",
       "split_one": "{{percent}}% held out with seed {{seed}}: {{count}} sample moved",
       "split_other": "{{percent}}% held out with seed {{seed}}: {{count}} samples moved",
       "forest_one": "Random forest, {{trees}} trees, {{fields}} features, {{count}} training sample; the engine fixes the seed",

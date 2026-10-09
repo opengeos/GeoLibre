@@ -86,7 +86,13 @@ export function ObiaProvenance(): ReactElement | null {
           ...(segmentation.area ? [areaLine(segmentation.area, segmentation.pixelSize)] : []),
         ])}
         {entry(
-          t("obia.steps.segment"),
+          segmentation.merge
+            ? t("obia.provenance.level", {
+                level: session.level,
+                from: segmentation.merge.fromLevel,
+                scale: segmentation.merge.scale,
+              })
+            : t("obia.steps.segment"),
           [
             when(segmentation.finishedAt),
             code(commandLine(segmentation.tool, segmentation.args)),

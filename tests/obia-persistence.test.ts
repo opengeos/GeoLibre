@@ -333,6 +333,56 @@ describe("OBIA native segmentation settings", () => {
   });
 });
 
+describe("OBIA object hierarchy levels", () => {
+  it("switches levels, keeping each level's results, and saves them", async () => {
+    const { useObiaSession } = await import("../apps/geolibre-desktop/src/lib/obia/obia-session");
+    const base = fullSession();
+    const store = useObiaSession.getState();
+    store.restore(base);
+    const level2 = {
+      level: 2,
+      segmentation: {
+        ...base.segmentation!,
+        objectsLayerId: "level2",
+        objectCount: 1,
+        merge: { fromLevel: 1, scale: 20, bands: [1, 4] },
+        finishedAt: "2026-10-09T11:00:00.000Z",
+      },
+      features: null,
+      classification: null,
+      splits: [],
+    };
+    useObiaSession.getState().addLevel(level2);
+    let state = useObiaSession.getState();
+    assert.equal(state.level, 2);
+    assert.equal(state.segmentation?.objectsLayerId, "level2");
+    assert.equal(state.classification, null);
+    assert.deepEqual(
+      state.levels.map((record) => [record.level, record.segmentation.objectsLayerId]),
+      [[1, "objects"]],
+    );
+    // The project saves the hierarchy, and a reload restores it.
+    const saved = JSON.parse(JSON.stringify(snapshotObiaSession(state)));
+    assert.equal(saved.level, 2);
+    const level2Layer = { ...objectsLayer(), id: "level2" } as GeoLibreLayer;
+    const restored = restoreObiaSession(saved, [objectsLayer(), level2Layer]);
+    assert.equal(restored.level, 2);
+    assert.deepEqual(restored.segmentation?.merge, { fromLevel: 1, scale: 20, bands: [1, 4] });
+    assert.equal(restored.levels[0].level, 1);
+    assert.ok(restored.levels[0].classification, "level 1 keeps its classification");
+    // Back to level 1: its classification comes back with it.
+    useObiaSession.getState().switchLevel(1);
+    state = useObiaSession.getState();
+    assert.equal(state.level, 1);
+    assert.ok(state.classification);
+    assert.deepEqual(state.levels.map((record) => record.level), [2]);
+    // A new segmentation drops the hierarchy built on the old one.
+    useObiaSession.getState().setSegmentation(base.segmentation);
+    assert.deepEqual(useObiaSession.getState().levels, []);
+    assert.equal(useObiaSession.getState().level, 1);
+  });
+});
+
 describe("project obia field", () => {
   it("round-trips through save and load, and is omitted when unused", () => {
     const empty = createEmptyProject("plain");
