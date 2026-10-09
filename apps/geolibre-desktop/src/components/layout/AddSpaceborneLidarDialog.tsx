@@ -402,6 +402,9 @@ export function AddSpaceborneLidarDialog({
                   />
                   {t("addData.spaceborneLidar.qualityFilter")}
                 </label>
+                <p className="ps-5 text-xs text-muted-foreground">
+                  {t(`addData.spaceborneLidar.qualityHelp.${file.product.id}`)}
+                </p>
                 <label className="flex cursor-pointer items-center gap-2 text-xs">
                   <input
                     type="checkbox"

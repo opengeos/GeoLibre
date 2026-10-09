@@ -1186,7 +1186,14 @@
       "fieldsLabel": "Fields ({{selected}} of {{total}} selected)",
       "fieldFilterPlaceholder": "Filter fields",
       "colorByLabel": "Color by",
-      "qualityFilter": "Keep only footprints that pass the product's quality flag",
+      "qualityFilter": "Apply the product's quality filter",
+      "qualityHelp": {
+        "ATL06": "Keeps segments with atl06_quality_summary = 0.",
+        "ATL08": "ATL08 has no quality flag; keeps segments with a valid terrain height (h_te_best_fit).",
+        "GEDI_L2A": "Keeps shots with quality_flag = 1 (l2a_quality_flag_rel3 in version 3).",
+        "GEDI_L2B": "Keeps shots with l2b_quality_flag = 1.",
+        "GEDI_L4A": "Keeps shots with l4_quality_flag = 1."
+      },
       "viewOnly": "Only footprints in the current map view",
       "maxPointsLabel": "Maximum footprints",
       "maxPointsHelp": "When more footprints match, every beam is thinned evenly to stay under this limit.",

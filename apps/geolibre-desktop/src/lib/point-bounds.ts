@@ -24,9 +24,8 @@ export function pointBounds(
     south = Math.min(south, y);
     north = Math.max(north, y);
   }
-  if (east360 - west360 < east - west) {
-    const shift = west360 > 180 ? -360 : 0;
-    return [west360 + shift, south, east360 + shift, north];
-  }
+  // The shifted range is only narrower when the points straddle 180°, which
+  // leaves west360 in [0, 180], so no further shift is needed.
+  if (east360 - west360 < east - west) return [west360, south, east360, north];
   return [west, south, east, north];
 }
