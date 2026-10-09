@@ -377,6 +377,13 @@ describe("OBIA object hierarchy levels", () => {
       restoreObiaSession(looped, [objectsLayer(), level2Layer]).segmentation?.merge,
       undefined,
     );
+    // With the active level's objects gone, the highest surviving level is restored.
+    const fallback = restoreObiaSession(saved, [objectsLayer()]);
+    assert.equal(fallback.level, 1);
+    assert.equal(fallback.segmentation?.objectsLayerId, "objects");
+    assert.deepEqual(fallback.levels, []);
+    // A level whose source level is gone cannot be rebuilt, so it is not restored.
+    assert.equal(restoreObiaSession(saved, [level2Layer]).segmentation, null);
     // Back to level 1: its classification comes back with it.
     useObiaSession.getState().switchLevel(1);
     state = useObiaSession.getState();

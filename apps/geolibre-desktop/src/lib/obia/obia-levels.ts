@@ -31,7 +31,7 @@ export interface ObiaBuiltLevel {
 
 /** Why a coarser level cannot be built. */
 export class ObiaLevelError extends Error {
-  readonly code: "no-features" | "too-large" | "not-top" | "too-deep";
+  readonly code: "no-features" | "too-large" | "not-top" | "too-deep" | "bad-scale";
 
   constructor(code: ObiaLevelError["code"], message: string) {
     super(message);
@@ -60,6 +60,9 @@ export async function buildCoarserLevel(
   }
   if (levels.some((record) => record.level > level)) {
     throw new ObiaLevelError("not-top", "Build coarser levels from the coarsest one.");
+  }
+  if (!(Number.isFinite(scale) && scale > 0)) {
+    throw new ObiaLevelError("bad-scale", "The scale must be a positive number.");
   }
   if (level >= OBIA_MAX_LEVELS) {
     throw new ObiaLevelError("too-deep", `The hierarchy has at most ${OBIA_MAX_LEVELS} levels.`);
