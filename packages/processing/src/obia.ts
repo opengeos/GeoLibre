@@ -19,7 +19,12 @@ import { runWasmToolInBackground } from "./wasm-tool-runner";
  */
 
 /** Why an OBIA call refused its input, for the UI to translate. */
-export type ObiaErrorCode = "image-too-large" | "too-many-bands" | "no-such-band" | "no-bands";
+export type ObiaErrorCode =
+  | "image-too-large"
+  | "too-many-bands"
+  | "no-such-band"
+  | "no-bands"
+  | "missing-fields";
 
 /**
  * An input the workbench rejects, with a stable `code` and `params` the app
@@ -992,12 +997,26 @@ export async function classifyRandomForestTransfer(
   options: { fields: readonly string[]; trees: number },
   run: ObiaRunOptions = {},
 ): Promise<ObiaClassification> {
-  const fields = options.fields.filter(
-    (field) => sourceTable.fields.includes(field) && targetTable.fields.includes(field),
+  // The forest must see the same features on both images; a feature missing
+  // from either would silently change what it was trained on.
+  const missing = options.fields.filter(
+    (field) => !sourceTable.fields.includes(field) || !targetTable.fields.includes(field),
   );
+  if (missing.length || !options.fields.length) {
+    throw new ObiaError(
+      "missing-fields",
+      `The image lacks ${missing.length} of the classifier's features (${missing.join(", ")}). Measure it with the same feature options.`,
+      { count: missing.length },
+    );
+  }
+  const fields = [...options.fields];
   const training = samples.filter((sample) => sample.role === "training");
   const trainingIds = new Set(training.map((sample) => sample.segmentId));
-  const offset = Math.max(0, ...sourceTable.rows.keys()) + 1;
+  // A loop, not Math.max(...ids): a large segmentation has more ids than a
+  // call can take as arguments.
+  let maxId = 0;
+  for (const id of sourceTable.rows.keys()) if (id > maxId) maxId = id;
+  const offset = maxId + 1;
   const rows = new Map<number, Record<string, number | null>>();
   // Only the labeled source objects are needed to train.
   for (const [id, row] of sourceTable.rows) if (trainingIds.has(id)) rows.set(id, row);
