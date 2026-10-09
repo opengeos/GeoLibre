@@ -257,6 +257,10 @@ Besides the measured and context features, conditions and memberships can read
 currently of that class, recomputed before each process. The class must be one
 in the legend, one the ruleset assigns, or (when starting from the current
 classification) one that classification holds; a misspelled one is rejected.
+The suffix is the class name in lower case with accents dropped and each run of
+spaces or punctuation turned into `_` (so `Bare soil` is `nb_border_bare_soil`),
+plus `_2`, `_3` and so on when two names give the same suffix; **Insert
+example** writes one for your first class.
 With it a loop can grow a class outwards, ring by ring. For example, starting from unclassified
 objects:
 

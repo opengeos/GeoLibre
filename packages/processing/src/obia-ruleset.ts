@@ -336,10 +336,11 @@ export function runRuleset(
     if (name) current.set(id, name);
   }
   const nameOfSlug = classSlugs(rulesetClassOrder(classes, ruleset));
-  // Border shares by class, recomputed before each process from `current`.
-  let border = new Map<number, Map<string, number>>();
-  const refreshBorder = () => {
-    border = new Map();
+  // Border shares by class from `current` as each process starts, computed
+  // only when a process reads an nb_border_ field.
+  let border: Map<number, Map<string, number>> | null = null;
+  const borderShares = () => {
+    const border = new Map<number, Map<string, number>>();
     for (const [id, neighbors] of adjacency) {
       let total = 0;
       const byClass = new Map<string, number>();
@@ -352,13 +353,16 @@ export function runRuleset(
       for (const [name, edges] of byClass) shares.set(name, total ? edges / total : 0);
       border.set(id, shares);
     }
+    return border;
   };
   const valueOf =
     (id: number) =>
     (field: string): number | null | undefined => {
       if (field.startsWith("nb_border_")) {
         const name = nameOfSlug.get(field.slice("nb_border_".length));
-        return name == null ? 0 : (border.get(id)?.get(name) ?? 0);
+        if (name == null) return 0;
+        border ??= borderShares();
+        return border.get(id)?.get(name) ?? 0;
       }
       return table.rows.get(id)?.[field];
     };
@@ -412,7 +416,7 @@ export function runRuleset(
       }
       steps += 1;
       if (steps > OBIA_RULESET_MAX_STEPS) throw new ObiaRulesetError("too-long");
-      refreshBorder();
+      border = null;
       // Decide for every object first, then apply, so a process sees the
       // classes as they were when it started.
       const updates: [number, string][] = [];
