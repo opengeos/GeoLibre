@@ -14,6 +14,9 @@ it; after that its rail icon switches back to it, and closing it from its
 header removes it from the rail. Closing and reopening it keeps the current
 session.
 
+Coming from eCognition? [Coming from eCognition](obia-ecognition.md) maps its
+concepts and algorithms to the workbench.
+
 ## 1. Segment
 
 1. Add a GeoTIFF or COG raster layer to the map, then open the workbench. It
