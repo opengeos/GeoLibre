@@ -548,7 +548,9 @@ export function classFieldSlug(name: string, taken: Set<string>): string {
     name
       .toLowerCase()
       .normalize("NFKD")
-      .replace(/[^a-z0-9]+/g, "_")
+      // Drop accents (combining marks), keep letters of any script.
+      .replace(/\p{M}+/gu, "")
+      .replace(/[^\p{L}\p{N}]+/gu, "_")
       .replace(/^_+|_+$/g, "") || "class";
   let slug = base;
   for (let n = 2; taken.has(slug); n += 1) slug = `${base}_${n}`;
@@ -667,4 +669,6 @@ export function contextFeatures(inputs: ObiaContextInputs): ObiaFeatureTable {
 
 /** Whether a feature field is a context feature ({@link contextFeatures}). */
 export const isContextField = (field: string): boolean =>
-  /^(nb_contrast_|parent_|child_frac_)/.test(field);
+  /^nb_contrast_b\d+$/.test(field) ||
+  /^parent_(mean_b\d+|brightness|ndvi|ndwi|area_px|child_count)$/.test(field) ||
+  /^(parent_is_|child_frac_).+$/.test(field);

@@ -142,6 +142,8 @@ describe("OBIA object hierarchy", () => {
     assert.equal(classFieldSlug("Trees, shrubs", taken), "trees_shrubs");
     assert.equal(classFieldSlug("trees shrubs", taken), "trees_shrubs_2");
     assert.equal(classFieldSlug("!!!", taken), "class");
+    assert.equal(classFieldSlug("Forêt", taken), "foret");
+    assert.equal(classFieldSlug("水体", taken), "水体");
   });
 
   it("computes neighbor contrast, parent features and class shares", async () => {

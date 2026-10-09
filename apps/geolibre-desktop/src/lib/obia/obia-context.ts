@@ -44,6 +44,17 @@ export async function computeContextFeatures(
   const grid = await decodeLabelGrid(await ensureObiaLabels(run));
   const above = levels.find((record) => record.level === level + 1);
   const below = levels.find((record) => record.level === level - 1);
+  const links = parentLinks(segmentation.objectsLayerId);
+  if (above?.features && !links.size) {
+    throw new Error(
+      "This level's objects have no parent links (obia_parent): build the level above again.",
+    );
+  }
+  if (below?.classification && !below.features?.table.fields.includes("area_px")) {
+    throw new Error(
+      "Class shares need the size of the level below's objects: measure it with spectral or shape features.",
+    );
+  }
   const context = contextFeatures({
     table: features.table,
     adjacency: objectAdjacency(grid),
@@ -52,7 +63,7 @@ export async function computeContextFeatures(
     ...(above?.features
       ? {
           parent: {
-            parentOf: parentLinks(segmentation.objectsLayerId),
+            parentOf: links,
             table: above.features.table,
             predictions: above.classification?.predictions,
           },
@@ -89,13 +100,6 @@ export async function computeContextFeatures(
   };
 }
 
-/** The classified level above the current one, if there is one. */
-export function classifiedLevelAbove(): number | null {
-  const { level, levels } = useObiaSession.getState();
-  const above = levels.find((record) => record.level === level + 1);
-  return above?.classification ? above.level : null;
-}
-
 /**
  * Class inheritance: give each object of the current level its parent's class
  * from the classified level above (objects without a classified parent get
@@ -111,6 +115,8 @@ export function inheritClasses(defaultClass: string): ObiaClassification {
     throw new Error("Classify the level above first.");
   }
   const parents = parentLinks(segmentation.objectsLayerId);
+  // Without links every object would silently get the default class.
+  if (!parents.size) throw new Error("This level's objects have no parent links (obia_parent).");
   const layer = useAppStore
     .getState()
     .layers.find((item) => item.id === segmentation.objectsLayerId);

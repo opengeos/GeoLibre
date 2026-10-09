@@ -5,7 +5,6 @@ import type { FeatureCollection } from "geojson";
 import { writeArrayBuffer } from "geotiff";
 import { useAppStore } from "@geolibre/core";
 import {
-  classifiedLevelAbove,
   computeContextFeatures,
   inheritClasses,
 } from "../apps/geolibre-desktop/src/lib/obia/obia-context";
@@ -111,8 +110,10 @@ beforeEach(() => {
     features: {
       segmentationAt: `${id}-at`,
       table: {
-        fields: ["mean_b1", "area_px", "parent_old"],
-        rows: new Map([1, 2, 3, 4].map((n) => [n, { mean_b1: n * 10, area_px: 1, parent_old: 0 }])),
+        fields: ["mean_b1", "area_px", "parent_mean_b9"],
+        rows: new Map(
+          [1, 2, 3, 4].map((n) => [n, { mean_b1: n * 10, area_px: 1, parent_mean_b9: 0 }]),
+        ),
       },
       options: { spectral: true, shape: false, context: false },
       calls: [],
@@ -126,7 +127,6 @@ beforeEach(() => {
 
 describe("OBIA context features and class inheritance", () => {
   it("inherits each object's parent class", () => {
-    assert.equal(classifiedLevelAbove(), 2);
     const result = inheritClasses("unclassified");
     assert.deepEqual(
       [...result.predictions],
@@ -142,7 +142,7 @@ describe("OBIA context features and class inheritance", () => {
 
   it("adds neighbor contrast and parent features, replacing earlier context fields", async () => {
     const { table, added } = await computeContextFeatures();
-    assert.ok(!table.fields.includes("parent_old"), "earlier context fields are replaced");
+    assert.ok(!table.fields.includes("parent_mean_b9"), "earlier context fields are replaced");
     assert.deepEqual(added, [
       "nb_contrast_b1",
       "parent_mean_b1",
