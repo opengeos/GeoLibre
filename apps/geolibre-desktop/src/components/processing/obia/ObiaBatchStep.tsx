@@ -9,7 +9,6 @@ import {
   objectAdjacency,
   runRuleset,
   isContextField,
-  segmentImage,
   tableForAllObjects,
   type ObiaClassification,
   type ObiaFeatureTable,
@@ -25,7 +24,9 @@ import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { parseRuleset, rulesetFields } from "../../../lib/obia/obia-ruleset-run";
 import {
   DEFAULT_OBIA_NATIVE_PARAMS,
+  browserPixelLimit,
   isNativeMethod,
+  segmentInBrowser,
   nativeSegmentation,
   obiaLocalPath,
   nativePixelLimit,
@@ -179,14 +180,24 @@ export function ObiaBatchStep(): ReactElement | null {
           measuredTable = measured.table;
         } else {
           let fits: boolean;
-          ({ area, pixelSize, fits } = planObiaArea(info, wholeImageWindow(info)));
+          ({ area, pixelSize, fits } = planObiaArea(
+            info,
+            wholeImageWindow(info),
+            browserPixelLimit(segmentation.method),
+          ));
           // Refuse before reading anything: even the coarsest overview is too large.
           if (!fits) throw new Error(t("obia.batch.error.tooLarge"));
           const image = await obiaSourceBands(target, segmentation.bandIndexes, area);
           if (!image) throw new Error(t("obia.batch.error.readImage"));
           // Reading the image takes no signal, so honour a Cancel made meanwhile.
           if (run.signal?.aborted) throw new DOMException("Cancelled.", "AbortError");
-          const browser = await segmentImage(image, segmentation.params, run);
+          const browser = await segmentInBrowser(
+            image,
+            segmentation.method ?? "region-growing",
+            segmentation.params,
+            segmentation.nativeParams ?? DEFAULT_OBIA_NATIVE_PARAMS,
+            run,
+          );
           calls.push({ tool: browser.tool, args: browser.args });
           const measured = await computeObjectFeatures(
             browser.labels,

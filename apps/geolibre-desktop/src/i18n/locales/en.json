@@ -7442,7 +7442,9 @@
     },
     "method": "Method",
     "methodRegionGrowing": "Seeded region growing (Whitebox)",
+    "methodFelzenszwalb": "Felzenszwalb graph method (browser)",
     "methodNote": "Pixels join a region while they stay within the threshold of its seed in standardized band space, then objects below the minimum size merge into their most similar neighbor. This is not eCognition multiresolution segmentation, so its scale values do not transfer.",
+    "methodNoteFelzenszwalb": "Neighboring pixels join while their difference stays below the objects' internal variation, scaled by Scale; objects under the minimum size merge into a neighbor. The same method as the desktop's native Felzenszwalb, run in the browser on up to {{max}} pixels.",
     "native": {
       "slic": "SLIC superpixels (desktop, native)",
       "felzenszwalb": "Felzenszwalb graph (desktop, native)",

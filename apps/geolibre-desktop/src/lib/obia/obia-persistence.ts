@@ -10,7 +10,6 @@ import {
   encodeLabelGrid,
   fingerprintSegmentLabels,
   relabelGrid,
-  segmentLabels,
   type ObiaClass,
   type ObiaFeatureOptions,
   type ObiaFeatureTable,
@@ -41,6 +40,7 @@ import {
 import { obiaSourceBands } from "./obia-source";
 import {
   DEFAULT_OBIA_NATIVE_PARAMS,
+  browserSegmentLabels,
   isNativeMethod,
   nativeSegmentation,
   obiaLocalPath,
@@ -213,7 +213,12 @@ function restoreArea(value: unknown): ObiaReadArea | undefined {
 }
 
 const restoreMethod = (value: unknown): ObiaMethod | undefined =>
-  value === "region-growing" || value === "slic" || value === "felzenszwalb" ? value : undefined;
+  value === "region-growing" ||
+  value === "felzenszwalb-browser" ||
+  value === "slic" ||
+  value === "felzenszwalb"
+    ? value
+    : undefined;
 
 function restoreNativeParams(value: unknown): ObiaNativeParams {
   const json = asObject(value) ?? {};
@@ -753,7 +758,13 @@ async function segmentedLabels(
   } else {
     const image = await obiaSourceBands(source, segmentation.bandIndexes, segmentation.area);
     if (!image) throw new ObiaRestoreError("source-missing");
-    ({ labels } = await segmentLabels(image, segmentation.params, run));
+    labels = await browserSegmentLabels(
+      image,
+      segmentation.method,
+      segmentation.params,
+      segmentation.nativeParams ?? DEFAULT_OBIA_NATIVE_PARAMS,
+      run,
+    );
   }
   return labels;
 }

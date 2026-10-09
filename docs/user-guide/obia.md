@@ -52,6 +52,12 @@ Felzenszwalb graph, marker watershed) are wrappers around this same region
 growing with a remapped threshold, which is why the workbench offers it under
 its real name.
 
+**Felzenszwalb graph method (browser)** is a second browser method: Felzenszwalb
+and Huttenlocher's graph-based segmentation, implemented the way scikit-image
+implements it, so it finds the same objects as the native Felzenszwalb below
+and takes the same parameters (**Scale**, **Smoothing (sigma)** and **Minimum
+object size**). It reads up to 8,388,608 pixels (4096 × 2048).
+
 ### Native segmentation in the desktop app
 
 The desktop app can also segment natively, in its processing server, with
@@ -88,9 +94,9 @@ features):
 
 The browser figures are the engine run outside a browser on the whole scene,
 which the workbench itself would read from an overview. These numbers compare
-speed and memory only: comparing segmentation quality needs independent
-reference objects and validation data (the eCognition pilot workflows of
-[#3053](https://github.com/opengeos/GeoLibre/issues/3053)).
+speed and memory only; the segmentation quality of each method, against
+eCognition's objects, is in the
+[validation pilot](obia-ecognition.md#segmentation).
 
 ### Large images
 

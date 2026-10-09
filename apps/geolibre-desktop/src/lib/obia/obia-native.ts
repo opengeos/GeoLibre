@@ -1,5 +1,14 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
+  OBIA_FELZENSZWALB_MAX_PIXELS,
+  OBIA_MAX_PIXELS,
+  felzenszwalbSegmentLabels,
+  segmentImage,
+  segmentImageFelzenszwalb,
+  segmentLabels,
+  type ObiaImage,
+  type ObiaSegmentation,
+  type RegionGrowingParams,
   cancelObiaNativeJob,
   fetchConversionJob,
   fetchObiaNativeFile,
@@ -21,10 +30,12 @@ import { IS_MAS_BUILD } from "../build-flags";
 import { startGeoLibreSidecar } from "../sidecar";
 
 /**
- * How the workbench segments: seeded region growing in the browser, or a
- * scikit-image method run natively by the desktop app's sidecar.
+ * How the workbench segments: seeded region growing or Felzenszwalb's graph
+ * method in the browser, or a scikit-image method run natively by the
+ * desktop app's sidecar. The browser Felzenszwalb follows scikit-image's and
+ * shares its parameters.
  */
-export type ObiaMethod = "region-growing" | "slic" | "felzenszwalb";
+export type ObiaMethod = "region-growing" | "felzenszwalb-browser" | "slic" | "felzenszwalb";
 
 /** Parameters of the native methods. */
 export interface ObiaNativeParams {
@@ -36,6 +47,51 @@ export const DEFAULT_OBIA_NATIVE_PARAMS: ObiaNativeParams = {
   slic: { size: 400, compactness: 0.1 },
   felzenszwalb: { scale: 100, sigma: 0.5, minSize: 50 },
 };
+
+/** Whether a method reads the Felzenszwalb parameters (`nativeParams.felzenszwalb`). */
+export const usesMethodParams = (method: ObiaMethod | undefined): boolean =>
+  isNativeMethod(method) || method === "felzenszwalb-browser";
+
+/** The most pixels a browser run of a method reads. */
+export const browserPixelLimit = (method: ObiaMethod | undefined): number =>
+  method === "felzenszwalb-browser" ? OBIA_FELZENSZWALB_MAX_PIXELS : OBIA_MAX_PIXELS;
+
+/**
+ * Segment an image in the browser by the method: Felzenszwalb, or seeded
+ * region growing.
+ *
+ * @param image The bands to segment.
+ * @param method A browser method.
+ * @param params Region-growing parameters.
+ * @param nativeParams Felzenszwalb parameters (with the native methods').
+ * @param run Cancellation and progress.
+ */
+export function segmentInBrowser(
+  image: ObiaImage,
+  method: ObiaMethod,
+  params: RegionGrowingParams,
+  nativeParams: ObiaNativeParams,
+  run: ObiaRunOptions = {},
+): Promise<ObiaSegmentation> {
+  return method === "felzenszwalb-browser"
+    ? segmentImageFelzenszwalb(image, nativeParams.felzenszwalb, run)
+    : segmentImage(image, params, run);
+}
+
+/** The label raster of a browser segmentation, rebuilt the same way. */
+export async function browserSegmentLabels(
+  image: ObiaImage,
+  method: ObiaMethod | undefined,
+  params: RegionGrowingParams,
+  nativeParams: ObiaNativeParams,
+  run: ObiaRunOptions = {},
+): Promise<Uint8Array> {
+  const { labels } =
+    method === "felzenszwalb-browser"
+      ? await felzenszwalbSegmentLabels(image, nativeParams.felzenszwalb, run)
+      : await segmentLabels(image, params, run);
+  return labels;
+}
 
 /** Whether a method runs natively in the sidecar. */
 export const isNativeMethod = (method: ObiaMethod | undefined): method is "slic" | "felzenszwalb" =>

@@ -320,6 +320,16 @@ export {
   type ObiaMergeOptions,
 } from "./obia-hierarchy";
 export {
+  OBIA_FELZENSZWALB_MAX_PIXELS,
+  felzenszwalbLabels,
+  type ObiaFelzenszwalbParams,
+} from "./obia-felzenszwalb";
+export {
+  OBIA_FELZENSZWALB_TOOL,
+  felzenszwalbSegmentLabels,
+  segmentImageFelzenszwalb,
+} from "./obia-felzenszwalb-run";
+export {
   classMembership,
   classSlugs,
   membershipValue,

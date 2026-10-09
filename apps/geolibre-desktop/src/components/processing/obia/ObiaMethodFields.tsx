@@ -1,3 +1,4 @@
+import { OBIA_FELZENSZWALB_MAX_PIXELS } from "@geolibre/processing";
 import { Label, Select } from "@geolibre/ui";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
@@ -46,6 +47,7 @@ export function ObiaMethodFields({
           onChange={(event) => setMethod(event.target.value as ObiaMethod)}
         >
           <option value="region-growing">{t("obia.methodRegionGrowing")}</option>
+          <option value="felzenszwalb-browser">{t("obia.methodFelzenszwalb")}</option>
           <option value="slic" disabled={!nativeUsable && method !== "slic"}>
             {t("obia.native.slic")}
           </option>
@@ -71,7 +73,11 @@ export function ObiaMethodFields({
                         ? "obia.native.unavailable"
                         : "obia.native.needsLocalFile",
                 )
-            : t("obia.methodNote")}
+            : method === "felzenszwalb-browser"
+              ? t("obia.methodNoteFelzenszwalb", {
+                  max: OBIA_FELZENSZWALB_MAX_PIXELS.toLocaleString(i18n.language),
+                })
+              : t("obia.methodNote")}
         </p>
         {!native && nativeUsable && (
           <p className="text-xs text-muted-foreground">{t("obia.native.offer")}</p>
@@ -133,7 +139,7 @@ export function ObiaMethodFields({
           <p className="col-span-2 text-xs text-muted-foreground">{t("obia.native.slicHint")}</p>
         </div>
       )}
-      {method === "felzenszwalb" && (
+      {(method === "felzenszwalb" || method === "felzenszwalb-browser") && (
         <div className="grid grid-cols-3 items-end gap-2">
           <ObiaNumberField
             id="obia-felz-scale"

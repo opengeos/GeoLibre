@@ -157,22 +157,25 @@ Agreement with the eCognition classification, by area:
 
 | Run | Agreement | Kappa |
 | --- | --- | --- |
-| Translated ruleset, whole scene | 64.8% | 0.52 |
-| Translated ruleset, held-out blocks | 64.3% | 0.52 |
-| Random forest, 6 classes, held-out blocks | 47% to 51% | 0.24 to 0.35 |
-| Random forest, 18 classes, held-out blocks | 15% to 17% | 0.07 to 0.10 |
+| Translated ruleset, whole scene | 67.2% | 0.55 |
+| Translated ruleset, held-out blocks | 66.9% | 0.55 |
+| Random forest, 6 classes, held-out blocks | 55% to 62% | 0.38 to 0.49 |
+| Random forest, 18 classes, held-out blocks | 30% to 37% | 0.24 to 0.31 |
 
 Per class, the translated ruleset reached a producer's/user's accuracy of
-0.90/0.95 for water, 0.76/0.81 for forest, 0.66/0.87 for bog/heath and
-0.85/0.49 for improved grassland. The catch-all class was the weakest
-(0.20/0.24), which the course itself expects of this ruleset.
+0.91/0.95 for water, 0.82/0.87 for forest, 0.69/0.90 for bog/heath,
+0.78/0.70 for non-vegetation and 0.86/0.50 for improved grassland. The
+catch-all class was the weakest (0.20/0.24), which the course itself expects
+of this ruleset.
 
 The random forest was trained in 2.5 km checkerboard blocks and checked in
 the others, with eCognition's classes moved onto the workbench's objects at
-one point per eCognition object. That transfer, not the classifier, limits it.
-scikit-learn's random forest, trained on the same features and labels,
-reached an out-of-bag accuracy of only 0.61 (6 classes) and 0.24 (18
-classes), and agreed with the workbench's forest on 76% of the objects.
+one point per eCognition object (up to 400 per class, or all of them).
+scikit-learn's random forest, trained on the same features and labels (all
+samples), reached an out-of-bag accuracy of 0.74 (6 classes) and 0.44 (18
+classes), and agreed with the workbench's forest on 85% of the objects. The
+fine 18 classes, and labels moved onto objects drawn differently from
+eCognition's, limit it more than the classifier does.
 
 ### Segmentation
 
@@ -185,37 +188,47 @@ segmentation with a shape weight of 0.1):
 - **Kept whole:** the share of an eCognition object in its largest
   workbench object.
 
-A chessboard of square objects of a similar size is the baseline.
+A chessboard of square objects of a similar size is the baseline. Times are
+for the segmentation alone; turning the objects into polygons adds 15 to 25
+seconds in the browser at these object counts.
 
 | Method | Objects | Class purity | Object purity | Kept whole | Time |
 | --- | --- | --- | --- | --- | --- |
-| Region growing (browser), threshold 0.8, minimum 10 px | 20,057 | 0.719 | 0.678 | 0.384 | 19 s |
-| Region growing (browser), threshold 0.5, minimum 10 px | 35,176 | 0.759 | 0.742 | 0.214 | 26 s |
-| Region growing at threshold 0.8, then a coarser level at scale 3 | 22,566 | 0.722 | 0.682 | 0.379 | 39 s, plus measuring |
+| Region growing (browser), threshold 1.0 | 13,379 | 0.743 | 0.670 | 0.487 | 1.0 s |
+| Region growing (browser), threshold 0.8 (default) | 20,058 | 0.776 | 0.725 | 0.414 | 1.4 s |
+| Region growing (browser), threshold 0.6 | 29,469 | 0.808 | 0.778 | 0.306 | 1.2 s |
+| Region growing (browser), threshold 0.5 | 35,179 | 0.817 | 0.794 | 0.237 | 1.5 s |
+| Felzenszwalb (browser), scale 200 | 18,424 | 0.756 | 0.733 | 0.294 | 2.7 s |
+| Felzenszwalb (browser or native), scale 30 | 28,312 | 0.790 | 0.776 | 0.210 | 0.9 s |
 | SLIC (native), size 40 | 27,495 | 0.788 | 0.777 | 0.190 | 1.1 s |
-| Felzenszwalb (native), scale 30 | 28,330 | 0.790 | 0.776 | 0.210 | 1.2 s |
-| Felzenszwalb (native), scale 100 | 26,270 | 0.785 | 0.769 | 0.229 | 1.3 s |
-| Chessboard 6 × 6 (baseline) | 27,889 | 0.753 | 0.745 | 0.174 | |
+| Chessboard 9 × 9 (baseline) | 12,544 | 0.702 | 0.689 | 0.227 | |
 | Chessboard 7 × 7 (baseline) | 20,449 | 0.733 | 0.723 | 0.193 | |
+| Chessboard 6 × 6 (baseline) | 27,889 | 0.753 | 0.745 | 0.174 | |
 
-Every method gave the same objects when run again. Native runs peaked at
-about 580 MB, including the Python process.
+The region-growing runs used a minimum object size of 10 pixels, and the
+Felzenszwalb runs a smoothing of 0.5 and a minimum size of 10. Every method
+gave the same objects when run again. Native runs peaked at about 580 MB,
+including the Python process. The browser and native Felzenszwalb found the
+same objects (an adjusted Rand index of 0.98 between them at scale 30).
 
-Boundary agreement within one pixel (F1) was 0.64 to 0.71 for the methods,
-against 0.59 to 0.62 for the chessboard. At this resolution the eCognition
-objects are so small that boundary agreement tells the methods apart only a
-little.
+Every method produces purer objects than a chessboard with as many objects.
+At a given object count, region growing produces the purest objects, and it
+keeps eCognition's objects whole best. Boundary agreement within one pixel
+(F1) was 0.70 to 0.74 for the methods, against 0.59 to 0.62 for the
+chessboard.
 
-The native methods produce purer objects than the baseline. The browser's
-region growing, at its default threshold, does not: it keeps eCognition's
-objects whole best but mixes classes in its larger objects. Merging its
-objects into a coarser level does not change that.
+These figures compare label rasters on the image grid. On the map, objects
+of an image in a CRS with a datum shift, such as this one, are currently
+placed off their image (see
+[#3080](https://github.com/opengeos/GeoLibre/issues/3080)); comparing their
+polygons rather than their labels understated every browser result in an
+earlier version of this section.
 
 ### Conclusions
 
 - **Recommended workflow:**
-  1. Segment with SLIC or Felzenszwalb on the desktop, or with region growing
-     at a lower threshold in the browser.
+  1. Segment with region growing (in the browser), or with Felzenszwalb or
+     SLIC.
   2. Measure the objects.
   3. Import or translate the eCognition classification rules, check what did
      not convert, and assess the result against the eCognition output.

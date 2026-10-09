@@ -315,6 +315,21 @@ describe("OBIA native segmentation settings", () => {
     assert.equal(restored.segmentation?.nativeJobId, undefined);
   });
 
+  it("restores the browser Felzenszwalb method with its parameters", () => {
+    const restored = restoreObiaSession(
+      {
+        version: OBIA_STATE_VERSION,
+        settings: {
+          method: "felzenszwalb-browser",
+          nativeParams: { felzenszwalb: { scale: 30, sigma: 0.5, minSize: 10 } },
+        },
+      },
+      [],
+    );
+    assert.equal(restored.method, "felzenszwalb-browser");
+    assert.deepEqual(restored.nativeParams.felzenszwalb, { scale: 30, sigma: 0.5, minSize: 10 });
+  });
+
   it("clamps native parameters and drops an unknown method", () => {
     const restored = restoreObiaSession(
       {

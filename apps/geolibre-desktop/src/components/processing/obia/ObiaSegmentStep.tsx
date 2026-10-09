@@ -1,6 +1,6 @@
 import { shouldZoomToNewLayers, useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
-import { OBIA_MAX_PIXELS, fingerprintSegmentLabels, segmentImage } from "@geolibre/processing";
+import { fingerprintSegmentLabels } from "@geolibre/processing";
 import { Button, Label, Select } from "@geolibre/ui";
 import type { FeatureCollection } from "geojson";
 import { Info, Loader2, Play } from "lucide-react";
@@ -8,7 +8,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { useTranslation } from "react-i18next";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
 import {
+  browserPixelLimit,
   isNativeMethod,
+  segmentInBrowser,
+  usesMethodParams,
   nativePixelLimit,
   nativeSegmentation,
   obiaLocalPath,
@@ -171,7 +174,7 @@ export function ObiaSegmentStep({
   const maxPixels =
     native && nativeStatus
       ? nativePixelLimit(nativeStatus, method, bandIndexes.length)
-      : OBIA_MAX_PIXELS;
+      : browserPixelLimit(method);
 
   // What a run would read: the whole image or the map view's part of it, at
   // the finest resolution level that fits the pixel limit.
@@ -229,7 +232,7 @@ export function ObiaSegmentStep({
       } else {
         const image = await obiaSourceBands(sourceLayer, bandIndexes, area);
         if (!image) throw new Error(t("obia.error.readImage"));
-        result = await segmentImage(image, params, run);
+        result = await segmentInBrowser(image, method, params, nativeParams, run);
         size = { width: image.width, height: image.height };
       }
       const name = t("obia.layerName", { name: sourceLayer.name });
@@ -267,13 +270,13 @@ export function ObiaSegmentStep({
         args: result.args,
         params: { ...params },
         method,
-        ...(isNativeMethod(method)
+        ...(usesMethodParams(method)
           ? {
               nativeParams: {
                 slic: { ...nativeParams.slic },
                 felzenszwalb: { ...nativeParams.felzenszwalb },
               },
-              nativeJobId,
+              ...(nativeJobId ? { nativeJobId } : {}),
             }
           : {}),
         env: obiaRunEnv(),
