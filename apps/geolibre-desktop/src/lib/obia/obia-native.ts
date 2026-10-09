@@ -88,6 +88,22 @@ export function obiaNativeStatus(): Promise<ObiaNativeStatus | null> {
   return statusPromise;
 }
 
+/**
+ * The pixels a native run may read: the method's limit, lowered in proportion
+ * for more than 4 bands, as the sidecar does.
+ *
+ * @param status Native availability and limits.
+ * @param method The native method.
+ * @param bandCount Bands to segment.
+ */
+export function nativePixelLimit(
+  status: ObiaNativeStatus,
+  method: "slic" | "felzenszwalb",
+  bandCount: number,
+): number {
+  return Math.floor((status.maxPixels[method] * 4) / Math.max(4, bandCount));
+}
+
 /** The native request for a segmentation. */
 export function nativeSegmentation(
   path: string,

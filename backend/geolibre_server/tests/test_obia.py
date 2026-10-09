@@ -19,6 +19,7 @@ from geolibre_server.app.obia import (
     ReadArea,
     Segmentation,
     SlicParams,
+    _pixel_limit,
     _validated_segmentation,
 )
 
@@ -319,3 +320,37 @@ def test_endpoints_run_jobs_and_serve_their_files(
         obia.obia_cancel("not-a-job")
     assert excinfo.value.status_code == 404
     assert obia.obia_cancel(job.id).status == "succeeded"
+
+
+def test_the_pixel_limit_shrinks_with_more_bands() -> None:
+    assert _pixel_limit({"method": "slic", "bands": [1, 2, 3, 4]}) == 120_000_000
+    assert _pixel_limit({"method": "slic", "bands": [1]}) == 120_000_000
+    assert _pixel_limit({"method": "felzenszwalb", "bands": list(range(1, 9))}) == 12_500_000
+
+
+@requires_obia
+def test_refuses_an_image_without_a_crs(tmp_path: Path) -> None:
+    path = tmp_path / "nocrs.tif"
+    with rasterio.open(
+        path, "w", driver="GTiff", width=4, height=4, count=1, dtype="float32"
+    ) as dst:
+        dst.write(np.ones((1, 4, 4), dtype="float32"))
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            conversion._SCRIPT_DRIVER.replace("{source}", repr(_SEGMENT_SCRIPT)),
+            json.dumps(
+                {
+                    "segmentation": {**_felzenszwalb(path), "bands": [1]},
+                    "out_dir": str(tmp_path),
+                    "max_pixels": 10**6,
+                }
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 1
+    assert "no coordinate reference system" in completed.stdout

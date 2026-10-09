@@ -253,6 +253,7 @@ describe("OBIA read areas", () => {
       area: { level: 0, window: [0, 0, 1000, 800] },
       width: 1000,
       height: 800,
+      pixelSize: 10,
       fits: true,
     });
     // Over a 300,000-pixel limit at full resolution: the overview fits.
@@ -260,6 +261,7 @@ describe("OBIA read areas", () => {
       area: { level: 1, window: [0, 0, 1000, 800] },
       width: 500,
       height: 400,
+      pixelSize: 20,
       fits: true,
     });
     // Over the limit even there: the coarsest level, flagged as not fitting.
@@ -267,6 +269,7 @@ describe("OBIA read areas", () => {
       area: { level: 1, window: [0, 0, 1000, 800] },
       width: 500,
       height: 400,
+      pixelSize: 20,
       fits: false,
     });
   });

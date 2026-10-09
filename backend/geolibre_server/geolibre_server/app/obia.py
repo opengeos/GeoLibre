@@ -179,6 +179,9 @@ def read_area():
         data = src.read(bands, window=window, out_dtype="float32")
         transform = src.window_transform(window)
         crs = src.crs
+    if crs is None:
+        # Objects are written in WGS84: without a CRS they cannot be placed.
+        raise SystemExit("The image has no coordinate reference system.")
     valid = np.all(np.isfinite(data), axis=0)
     if nodata is not None:
         valid &= np.all(data != nodata, axis=0)
@@ -513,12 +516,23 @@ def _new_job_dir() -> str:
         The folder path.
     """
     base = _base_dir()
+    # A pending or running job's folder is never pruned, however old.
+    with _JOB_DIRS_LOCK:
+        jobs = list(_JOB_DIRS.items())
+    busy = {
+        Path(folder)
+        for job_id, folder in jobs
+        if (state := _job_state(job_id)) is not None and state.status in {"pending", "running"}
+    }
     folders = sorted(
-        (p for p in base.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True
+        (p for p in base.iterdir() if p.is_dir() and p not in busy),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
     )
     cutoff = time.time() - JOB_DIR_MAX_AGE_SECS
+    keep = MAX_JOB_DIRS - 1 - len(busy)
     for index, folder in enumerate(folders):
-        if index >= MAX_JOB_DIRS - 1 or folder.stat().st_mtime < cutoff:
+        if index >= keep or folder.stat().st_mtime < cutoff:
             shutil.rmtree(folder, ignore_errors=True)
     with _JOB_DIRS_LOCK:
         for job_id, folder in list(_JOB_DIRS.items()):
@@ -557,6 +571,21 @@ def _validated_segmentation(seg: Segmentation) -> dict:
     return data
 
 
+def _pixel_limit(segmentation: dict) -> int:
+    """The pixel limit of a run: its method's, lowered for more than 4 bands.
+
+    The limits are sized for 4 bands; memory grows with the band count.
+
+    Args:
+        segmentation: The validated segmentation parameters.
+
+    Returns:
+        The number of pixels the run may read.
+    """
+    limit = NATIVE_MAX_PIXELS[segmentation["method"]]
+    return limit * 4 // max(4, len(segmentation["bands"]))
+
+
 def _start(tool_id: str, script: str, params: dict):
     try:
         _ensure_obia_runtime()
@@ -570,7 +599,7 @@ def _start(tool_id: str, script: str, params: dict):
             {
                 **params,
                 "out_dir": out_dir,
-                "max_pixels": NATIVE_MAX_PIXELS[params["segmentation"]["method"]],
+                "max_pixels": _pixel_limit(params["segmentation"]),
             },
             "objects",
         )

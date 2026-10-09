@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
 import {
   isNativeMethod,
+  nativePixelLimit,
   nativeSegmentation,
   obiaLocalPath,
   obiaNativeStatus,
@@ -162,7 +163,10 @@ export function ObiaSegmentStep({
   const localPath = sourceLayer ? obiaLocalPath(sourceLayer) : null;
   const nativeUsable = Boolean(nativeStatus?.available && localPath);
   const native = isNativeMethod(method);
-  const maxPixels = native && nativeStatus ? nativeStatus.maxPixels[method] : OBIA_MAX_PIXELS;
+  const maxPixels =
+    native && nativeStatus
+      ? nativePixelLimit(nativeStatus, method, bandIndexes.length)
+      : OBIA_MAX_PIXELS;
 
   const plan = useMemo(() => {
     if (!summary) return null;
@@ -191,7 +195,6 @@ export function ObiaSegmentStep({
     const run = progress.begin();
     try {
       const { area } = plan;
-      const scale = summary.levels[0].width / summary.levels[area.level].width;
       let result: {
         labels: Uint8Array;
         objects: FeatureCollection;
@@ -247,7 +250,7 @@ export function ObiaSegmentStep({
         bandIndexes: [...bandIndexes],
         ...size,
         area,
-        pixelSize: summary.pixelSize * scale,
+        pixelSize: plan.pixelSize,
         labels: result.labels,
         objectsLayerId,
         objectCount: result.objectCount,

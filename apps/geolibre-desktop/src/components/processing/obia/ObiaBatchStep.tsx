@@ -22,6 +22,7 @@ import {
   isNativeMethod,
   nativeSegmentation,
   obiaLocalPath,
+  nativePixelLimit,
   obiaNativeStatus,
   runNativeMeasure,
   runNativeSegmentation,
@@ -113,16 +114,17 @@ export function ObiaBatchStep(): ReactElement | null {
         let segmented: { objects: FeatureCollection; objectCount: number };
         let measuredTable: ObiaFeatureTable;
         let area: ObiaReadArea;
+        let pixelSize: number;
         if (isNativeMethod(segmentation.method)) {
           // Segmented natively: the other images are too, in the sidecar.
           const path = obiaLocalPath(target);
           if (!path) throw new Error(t("obia.native.needsLocalFile"));
           const status = await obiaNativeStatus();
           if (!status?.available) throw new Error(t("obia.native.unavailable"));
-          ({ area } = planObiaArea(
+          ({ area, pixelSize } = planObiaArea(
             info,
             wholeImageWindow(info),
-            status.maxPixels[segmentation.method],
+            nativePixelLimit(status, segmentation.method, segmentation.bandIndexes.length),
           ));
           const request = nativeSegmentation(
             path,
@@ -138,7 +140,7 @@ export function ObiaBatchStep(): ReactElement | null {
           segmented = native;
           measuredTable = measured.table;
         } else {
-          ({ area } = planObiaArea(info, wholeImageWindow(info)));
+          ({ area, pixelSize } = planObiaArea(info, wholeImageWindow(info)));
           const image = await obiaSourceBands(target, segmentation.bandIndexes, area);
           if (!image) throw new Error(t("obia.batch.error.readImage"));
           // Reading the image takes no signal, so honour a Cancel made meanwhile.
@@ -195,7 +197,7 @@ export function ObiaBatchStep(): ReactElement | null {
           targetLayerId: target.id,
           source: { name: target.name, ...(location ? { location } : {}) },
           area,
-          pixelSize: info.pixelSize * (info.levels[0].width / info.levels[area.level].width),
+          pixelSize,
           objectsLayerId,
           objectCount: segmented.objectCount,
           classCounts,
