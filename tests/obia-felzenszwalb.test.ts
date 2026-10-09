@@ -125,4 +125,23 @@ describe("Felzenszwalb segmentation", () => {
     const again = await felzenszwalbSegmentLabels(image, params);
     assert.deepEqual(again.labels, first.labels);
   });
+
+  it("refuses bands of different sizes", async () => {
+    const tiff = (w: number, h: number) =>
+      writeArrayBuffer(new Float32Array(w * h), {
+        width: w,
+        height: h,
+        ModelPixelScale: [10, 10, 0],
+        ModelTiepoint: [0, 0, 0, 500000, 4000000, 0],
+        ProjectedCSTypeGeoKey: 32617,
+        GTModelTypeGeoKey: 1,
+      } as Parameters<typeof writeArrayBuffer>[1]) as ArrayBuffer;
+    const a = await splitImageBands(tiff(8, 6));
+    const b = await splitImageBands(tiff(6, 6));
+    const image = { ...a, bandCount: 2, bands: [a.bands[0], { ...b.bands[0], index: 2 }] };
+    await assert.rejects(
+      felzenszwalbSegmentLabels(image, { scale: 100, sigma: 0, minSize: 1 }),
+      /differ in size/,
+    );
+  });
 });

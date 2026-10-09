@@ -198,8 +198,8 @@ seconds in the browser at these object counts.
 | Region growing (browser), threshold 0.8 (default) | 20,058 | 0.776 | 0.725 | 0.414 | 1.4 s |
 | Region growing (browser), threshold 0.6 | 29,469 | 0.808 | 0.778 | 0.306 | 1.2 s |
 | Region growing (browser), threshold 0.5 | 35,179 | 0.817 | 0.794 | 0.237 | 1.5 s |
-| Felzenszwalb (browser), scale 200 | 18,424 | 0.756 | 0.733 | 0.294 | 2.7 s |
-| Felzenszwalb (browser or native), scale 30 | 28,312 | 0.790 | 0.776 | 0.210 | 0.9 s |
+| Felzenszwalb (browser), scale 200 | 18,305 | 0.755 | 0.732 | 0.300 | 1.9 s |
+| Felzenszwalb (browser or native), scale 30 | 28,330 | 0.790 | 0.776 | 0.210 | 1.9 s |
 | SLIC (native), size 40 | 27,495 | 0.788 | 0.777 | 0.190 | 1.1 s |
 | Chessboard 9 × 9 (baseline) | 12,544 | 0.702 | 0.689 | 0.227 | |
 | Chessboard 7 × 7 (baseline) | 20,449 | 0.733 | 0.723 | 0.193 | |
@@ -209,7 +209,8 @@ The region-growing runs used a minimum object size of 10 pixels, and the
 Felzenszwalb runs a smoothing of 0.5 and a minimum size of 10. Every method
 gave the same objects when run again. Native runs peaked at about 580 MB,
 including the Python process. The browser and native Felzenszwalb found the
-same objects (an adjusted Rand index of 0.98 between them at scale 30).
+same objects (an adjusted Rand index of 1.00 between them at scales 30 and
+100).
 
 Every method produces purer objects than a chessboard with as many objects.
 At a given object count, region growing produces the purest objects, and it

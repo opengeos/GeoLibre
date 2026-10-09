@@ -55,8 +55,9 @@ its real name.
 **Felzenszwalb graph method (browser)** is a second browser method: Felzenszwalb
 and Huttenlocher's graph-based segmentation, implemented the way scikit-image
 implements it, so it finds the same objects as the native Felzenszwalb below
-and takes the same parameters (**Scale**, **Smoothing (sigma)** and **Minimum
-object size**). It reads up to 8,388,608 pixels (4096 × 2048).
+(on the validation pilot's scene, identical up to how exactly equal pixel
+differences are ordered) and takes the same parameters (**Scale**, **Smoothing (sigma)** and **Minimum
+object size**). It reads up to 4,194,304 pixels (4096 × 1024).
 
 ### Native segmentation in the desktop app
 

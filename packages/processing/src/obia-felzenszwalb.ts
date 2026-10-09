@@ -8,9 +8,11 @@
  * than either one's internal difference plus `scale / size`, then merging
  * components smaller than `minSize` into a neighbor.
  *
- * Edges are ordered by a counting sort on the top 16 bits of their weight
- * (about three significant digits), which keeps memory near 24 bytes per
- * pixel. Results are deterministic, but not identical to scikit-image's.
+ * Edges are bucketed by the top 16 bits of their weight, then each bucket is
+ * sorted exactly (ties by edge index), so merges follow the exact weight
+ * order, in about 32 bytes per pixel. On real imagery this finds the same
+ * objects as scikit-image (it differs only in how exactly equal weights are
+ * ordered). Results are deterministic.
  */
 
 /** Felzenszwalb parameters, as the native method takes them. */
@@ -23,8 +25,8 @@ export interface ObiaFelzenszwalbParams {
   minSize: number;
 }
 
-/** The most pixels a browser Felzenszwalb run reads (4096 × 2048). */
-export const OBIA_FELZENSZWALB_MAX_PIXELS = 4096 * 2048;
+/** The most pixels a browser Felzenszwalb run reads (4096 × 1024): with the band copies, a run takes up to about 100 bytes per pixel. */
+export const OBIA_FELZENSZWALB_MAX_PIXELS = 4096 * 1024;
 
 /**
  * Standardize each band over the valid pixels (invalid pixels become 0), so
@@ -112,11 +114,6 @@ function sortKey(weight: number): number {
   keyView.setFloat32(0, weight);
   return keyView.getUint32(0) >>> 16;
 }
-/** The weight a sort key stands for: the middle of its range. */
-function keyWeight(key: number): number {
-  keyView.setUint32(0, ((key << 16) | 0x8000) >>> 0);
-  return keyView.getFloat32(0);
-}
 
 /**
  * Segment bands with Felzenszwalb's method.
@@ -139,9 +136,8 @@ export function felzenszwalbLabels(
   const ok = valid ?? new Uint8Array(n).fill(1);
   const image = standardize(bands, ok).map((band) => gaussian(band, width, height, params.sigma));
 
-  // Edge e = pixel * 4 + direction, between valid pixels only.
-  const keys = new Uint16Array(n * 4);
-  const present = new Uint8Array(n * 4);
+  // Edge e = pixel * 4 + direction, between valid pixels only (-1: none).
+  const weights = new Float32Array(n * 4).fill(-1);
   const counts = new Uint32Array(65537);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -155,11 +151,9 @@ export function felzenszwalbLabels(
         if (!ok[q]) continue;
         let sq = 0;
         for (const band of image) sq += (band[p] - band[q]) ** 2;
-        const key = sortKey(Math.sqrt(sq));
-        const e = p * 4 + d;
-        keys[e] = key;
-        present[e] = 1;
-        counts[key + 1] += 1;
+        const weight = Math.fround(Math.sqrt(sq));
+        weights[p * 4 + d] = weight;
+        counts[sortKey(weight) + 1] += 1;
       }
     }
   }
@@ -168,7 +162,16 @@ export function felzenszwalbLabels(
   const order = new Uint32Array(edgeCount);
   const next = counts.slice(0, 65536);
   for (let e = 0; e < n * 4; e += 1) {
-    if (present[e]) order[next[keys[e]]++] = e;
+    if (weights[e] >= 0) order[next[sortKey(weights[e])]++] = e;
+  }
+  // Exact order within each bucket (ties by edge index), so merges happen in
+  // weight order exactly.
+  for (let k = 0; k < 65536; k += 1) {
+    const start = counts[k];
+    const end = counts[k + 1];
+    if (end - start > 1) {
+      order.subarray(start, end).sort((a, b) => weights[a] - weights[b] || a - b);
+    }
   }
 
   const parent = new Int32Array(n);
@@ -207,7 +210,7 @@ export function felzenszwalbLabels(
     const a = find(Math.floor(e / 4));
     const b = find(other(e));
     if (a === b) continue;
-    const weight = keyWeight(keys[e]);
+    const weight = weights[e];
     if (weight <= Math.min(internal[a] + scale / size[a], internal[b] + scale / size[b])) {
       join(a, b, weight);
     }

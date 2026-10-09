@@ -5,7 +5,11 @@ import {
   type ObiaRunOptions,
   type ObiaSegmentation,
 } from "./obia";
-import { felzenszwalbLabels, type ObiaFelzenszwalbParams } from "./obia-felzenszwalb";
+import {
+  OBIA_FELZENSZWALB_MAX_PIXELS,
+  felzenszwalbLabels,
+  type ObiaFelzenszwalbParams,
+} from "./obia-felzenszwalb";
 import type {
   FelzenszwalbWorkerRequest,
   FelzenszwalbWorkerResponse,
@@ -79,7 +83,17 @@ export async function felzenszwalbSegmentLabels(
     image.bands.map((band) => readRasterData(band.bytes.slice().buffer as ArrayBuffer)),
   );
   const { width, height } = rasters[0];
+  if (rasters.some((raster) => raster.width !== width || raster.height !== height)) {
+    throw new Error("The bands to segment differ in size.");
+  }
   const n = width * height;
+  if (n > OBIA_FELZENSZWALB_MAX_PIXELS) {
+    throw new ObiaError(
+      "image-too-large",
+      `This image has ${width} x ${height} pixels, over the limit of ${OBIA_FELZENSZWALB_MAX_PIXELS.toLocaleString("en-US")} pixels for Felzenszwalb in the browser.`,
+      { width, height, max: OBIA_FELZENSZWALB_MAX_PIXELS },
+    );
+  }
   // A pixel is valid when every band has a finite, non-NoData value.
   const valid = new Uint8Array(n).fill(1);
   const bands = rasters.map((raster) => {
