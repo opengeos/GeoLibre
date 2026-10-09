@@ -35,6 +35,7 @@ import {
   stageBands,
   ObiaError,
   tableForAllObjects,
+  classifyRandomForestTransfer,
 } from "@geolibre/processing";
 
 /** A 3 x 2, 3-band Float32 GeoTIFF with band b holding values b*10 + pixel. */
@@ -787,5 +788,51 @@ describe("tableForAllObjects", () => {
     assert.deepEqual([...all.rows.keys()].sort(), [1, 2]);
     assert.deepEqual(all.rows.get(2), {});
     assert.equal(table.rows.size, 1, "the input table is not modified");
+  });
+});
+
+describe("classifyRandomForestTransfer", () => {
+  before(async () => {
+    await initTools(
+      readFileSync(
+        fileURLToPath(new URL("../node_modules/geolibre-wasm/geolibre-cli.wasm", import.meta.url)),
+      ),
+    );
+  });
+
+  it("trains on one image's samples and predicts another image's objects", async () => {
+    // Source: ids 1-6, dark (low b1) objects are "veg". Target: ids 1-4, same ids.
+    const row = (b1: number) => ({ b1, b2: 100 - b1 }) as Record<string, number | null>;
+    const source = {
+      fields: ["b1", "b2"],
+      rows: new Map([1, 2, 3, 4, 5, 6].map((id) => [id, row(id <= 3 ? 10 + id : 90 + id)])),
+    };
+    const target = {
+      fields: ["b1", "b2"],
+      rows: new Map([
+        [1, row(95)],
+        [2, row(12)],
+        [3, row(91)],
+        [4, row(11)],
+      ]),
+    };
+    const samples = [1, 2, 3, 4, 5, 6].map((id) => ({
+      segmentId: id,
+      className: id <= 3 ? "veg" : "roof",
+      role: "training" as const,
+    }));
+    const result = await classifyRandomForestTransfer(source, samples, target, {
+      fields: ["b1", "b2"],
+      trees: 50,
+    });
+    assert.deepEqual(
+      [...result.predictions].sort((a, b) => a[0] - b[0]),
+      [
+        [1, "roof"],
+        [2, "veg"],
+        [3, "roof"],
+        [4, "veg"],
+      ],
+    );
   });
 });

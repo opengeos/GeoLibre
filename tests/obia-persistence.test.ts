@@ -159,6 +159,27 @@ describe("OBIA workbench persistence", () => {
     assert.equal(restored.classes.length, 2);
   });
 
+  it("keeps batch runs while their objects layer exists", () => {
+    const batch = {
+      targetLayerId: "image-2",
+      source: { name: "naip-2.tif", location: "/data/naip-2.tif" },
+      objectsLayerId: "objects",
+      objectCount: 2,
+      classCounts: { tree: 1, roof: 1 },
+      calls: [{ tool: "image_segmentation", args: ["--threshold=0.6"] }],
+      env,
+      finishedAt: "2026-10-09T10:05:00.000Z",
+    };
+    const saved = JSON.parse(JSON.stringify(snapshotObiaSession({ ...fullSession(), batches: [batch] })));
+    assert.deepEqual(restoreObiaSession(saved, [objectsLayer()]).batches, [batch]);
+    const gone = { ...objectsLayer(), id: "other" } as GeoLibreLayer;
+    const withoutBatch = restoreObiaSession(
+      { ...saved, runs: { ...saved.runs, batches: [{ ...batch, objectsLayerId: "missing" }] } },
+      [objectsLayer(), gone],
+    );
+    assert.deepEqual(withoutBatch.batches, []);
+  });
+
   it("falls back to defaults for malformed or unknown saved state", () => {
     assert.deepEqual(restoreObiaSession({ version: 99 }, []), emptyObiaSession());
     const restored = restoreObiaSession(

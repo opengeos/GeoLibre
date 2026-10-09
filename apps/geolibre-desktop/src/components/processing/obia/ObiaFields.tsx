@@ -1,6 +1,8 @@
-import { Input, Label } from "@geolibre/ui";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
-import { useEffect, useState, type ReactElement, type ReactNode } from "react";
+import type { ObiaRunOptions } from "@geolibre/processing";
+import { Button, Input, Label } from "@geolibre/ui";
+import { AlertCircle, CheckCircle2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 interface ObiaNumberFieldProps {
   id: string;
@@ -121,5 +123,69 @@ export function ObiaStatus({
       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
       {success}
     </p>
+  );
+}
+
+/** Whether a caught error is a user cancellation (an aborted run). */
+export function isObiaCancel(err: unknown): boolean {
+  return (err as { name?: unknown } | null)?.name === "AbortError";
+}
+
+/**
+ * Progress and cancellation for one workbench step: `begin()` returns the run
+ * options to pass to the OBIA calls (a fresh AbortSignal and a step reporter),
+ * `cancel()` aborts the run, and `step`/`startedAt` drive the progress line.
+ */
+export function useObiaRun() {
+  const controllerRef = useRef<AbortController | null>(null);
+  const [step, setStep] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  useEffect(() => () => controllerRef.current?.abort(), []);
+  const begin = useCallback((): ObiaRunOptions => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setStep(null);
+    setStartedAt(Date.now());
+    return { signal: controller.signal, onStep: setStep };
+  }, []);
+  const end = useCallback(() => {
+    controllerRef.current = null;
+    setStep(null);
+    setStartedAt(null);
+  }, []);
+  const cancel = useCallback(() => controllerRef.current?.abort(), []);
+  return { step, startedAt, begin, end, cancel };
+}
+
+/** "Running <tool>… 12 s" with a Cancel button, while a step runs. */
+export function ObiaRunProgress({
+  step,
+  startedAt,
+  onCancel,
+}: {
+  step: string | null;
+  startedAt: number | null;
+  onCancel: () => void;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (startedAt == null) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+  if (startedAt == null) return null;
+  const seconds = Math.max(0, Math.round((now - startedAt) / 1000));
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="obia-progress">
+      <span className="min-w-0 flex-1 truncate">
+        {step ? t("obia.progress.step", { tool: step, seconds }) : t("obia.progress.starting", { seconds })}
+      </span>
+      <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2" onClick={onCancel}>
+        <X className="h-3.5 w-3.5" />
+        {t("obia.progress.cancel")}
+      </Button>
+    </div>
   );
 }

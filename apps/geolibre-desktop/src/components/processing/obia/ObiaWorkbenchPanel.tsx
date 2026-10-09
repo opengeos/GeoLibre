@@ -7,6 +7,7 @@ import type { ObiaAddRaster } from "../../../lib/obia/obia-session";
 import { installObiaPersistence } from "../../../lib/obia/obia-persistence";
 import { clearObiaSourceCache } from "../../../lib/obia/obia-source";
 import { ObiaAccuracyStep } from "./ObiaAccuracyStep";
+import { ObiaBatchStep } from "./ObiaBatchStep";
 import { ObiaClassifyStep } from "./ObiaClassifyStep";
 import { ObiaExportStep } from "./ObiaExportStep";
 import { ObiaMeasureStep } from "./ObiaMeasureStep";
@@ -59,6 +60,7 @@ export function ObiaWorkbenchPanel({ mapControllerRef }: ObiaWorkbenchPanelProps
       <ObiaClassifyStep />
       <ObiaAccuracyStep />
       <ObiaExportStep onAddRaster={addRaster} />
+      <ObiaBatchStep />
       <ObiaProvenance />
     </div>
   );

@@ -11,6 +11,7 @@ import {
   type ObiaFeatureOptions,
   type ObiaFeatureTable,
   type ObiaRule,
+  type ObiaRunOptions,
   type ObiaRuleOp,
   type ObiaToolCall,
   type RegionGrowingParams,
@@ -19,6 +20,7 @@ import type { FeatureCollection } from "geojson";
 import {
   emptyObiaSession,
   useObiaSession,
+  type ObiaBatchRun,
   type ObiaClassificationRun,
   type ObiaClassifierSettings,
   type ObiaFeatureRun,
@@ -121,6 +123,7 @@ export function snapshotObiaSession(data: ObiaSessionData): Record<string, unkno
         features,
         classification,
         splits: data.splits,
+        batches: data.batches,
       },
     }),
   ) as Record<string, unknown>;
@@ -227,6 +230,35 @@ function restoreEnv(value: unknown): ObiaRunEnv {
     engineVersion: asString(json.engineVersion, "unknown"),
     appVersion: asString(json.appVersion, "unknown"),
   };
+}
+
+function restoreBatches(value: unknown, layers: readonly GeoLibreLayer[]): ObiaBatchRun[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const json = asObject(item);
+    // Keep a batch run only while its objects layer is still in the project.
+    if (!json || !layers.some((layer) => layer.id === json.objectsLayerId)) return [];
+    const source = asObject(json.source);
+    const classCounts: Record<string, number> = {};
+    for (const [name, count] of Object.entries(asObject(json.classCounts) ?? {})) {
+      if (typeof count === "number") classCounts[name] = count;
+    }
+    return [
+      {
+        targetLayerId: asString(json.targetLayerId),
+        source: {
+          name: asString(source?.name),
+          ...(typeof source?.location === "string" ? { location: source.location } : {}),
+        },
+        objectsLayerId: asString(json.objectsLayerId),
+        objectCount: asNumber(json.objectCount, 0),
+        classCounts,
+        calls: restoreCalls(json.calls),
+        env: restoreEnv(json.env),
+        finishedAt: asString(json.finishedAt),
+      },
+    ];
+  });
 }
 
 function restoreSplits(value: unknown): ObiaSplitRecord[] {
@@ -337,6 +369,7 @@ export function restoreObiaSession(
   };
   data.segmentation = segmentation;
   data.splits = restoreSplits(runs.splits);
+  data.batches = restoreBatches(runs.batches, layers);
 
   const feat = asObject(runs.features);
   if (!feat || feat.segmentationAt !== segmentation.finishedAt) return data;
@@ -379,7 +412,7 @@ export function restoreObiaSession(
  *
  * @throws When the source image is gone or no longer gives the same objects.
  */
-export async function ensureObiaLabels(): Promise<Uint8Array> {
+export async function ensureObiaLabels(run: ObiaRunOptions = {}): Promise<Uint8Array> {
   const segmentation = useObiaSession.getState().segmentation;
   if (!segmentation) throw new Error("Segment an image first.");
   if (segmentation.labels) return segmentation.labels;
@@ -389,7 +422,7 @@ export async function ensureObiaLabels(): Promise<Uint8Array> {
   if (!source) throw new ObiaRestoreError("source-missing");
   const image = await obiaSourceBands(source, segmentation.bandIndexes);
   if (!image) throw new ObiaRestoreError("source-missing");
-  const { labels } = await segmentLabels(image, segmentation.params);
+  const { labels } = await segmentLabels(image, segmentation.params, run);
   if ((await countSegmentLabels(labels)) !== segmentation.objectCount) {
     throw new ObiaRestoreError("source-changed");
   }

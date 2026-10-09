@@ -12,7 +12,13 @@ import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { useObiaSession } from "../../../lib/obia/obia-session";
 import { ensureObiaLabels, obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { obiaSourceBands } from "../../../lib/obia/obia-source";
-import { ObiaStatus, ObiaStepHeading } from "./ObiaFields";
+import {
+  ObiaRunProgress,
+  ObiaStatus,
+  ObiaStepHeading,
+  isObiaCancel,
+  useObiaRun,
+} from "./ObiaFields";
 
 /**
  * Default band roles for the spectral indices: a 4-band image whose bands were
@@ -44,6 +50,7 @@ export function ObiaMeasureStep(): ReactElement | null {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const runningRef = useRef(false);
+  const progress = useObiaRun();
 
   const bands = segmentation?.bandIndexes ?? [];
   const bandKey = bands.join(",");
@@ -71,12 +78,13 @@ export function ObiaMeasureStep(): ReactElement | null {
     runningRef.current = true;
     setRunning(true);
     setError(null);
+    const run = progress.begin();
     try {
       const image = await obiaSourceBands(sourceLayer, segmentation.bandIndexes);
       if (!image) throw new Error(t("obia.error.readImage"));
       // A reloaded project rebuilds the label raster it did not save.
-      const labels = await ensureObiaLabels();
-      const { table, calls } = await computeObjectFeatures(labels, image, options);
+      const labels = await ensureObiaLabels(run);
+      const { table, calls } = await computeObjectFeatures(labels, image, options, run);
       // A re-segmentation while the tools ran makes this table describe
       // objects that are gone; drop it rather than write it anywhere.
       if (useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt) {
@@ -106,12 +114,17 @@ export function ObiaMeasureStep(): ReactElement | null {
         finishedAt: new Date().toISOString(),
       });
     } catch (err) {
-      setError(obiaErrorMessage(err, t, t("obia.measure.error.failed")));
+      setError(
+        isObiaCancel(err)
+          ? t("obia.progress.cancelled")
+          : obiaErrorMessage(err, t, t("obia.measure.error.failed")),
+      );
     } finally {
+      progress.end();
       runningRef.current = false;
       setRunning(false);
     }
-  }, [segmentation, layers, options, updateLayer, setFeatures, t]);
+  }, [segmentation, layers, options, updateLayer, setFeatures, progress, t]);
 
   if (!segmentation) return null;
 
@@ -239,6 +252,7 @@ export function ObiaMeasureStep(): ReactElement | null {
           {running ? t("obia.measure.running") : t("obia.measure.run")}
         </Button>
       </div>
+      <ObiaRunProgress step={progress.step} startedAt={progress.startedAt} onCancel={progress.cancel} />
 
       <ObiaStatus
         error={error}

@@ -18,7 +18,15 @@ import { useTranslation } from "react-i18next";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { useObiaSession } from "../../../lib/obia/obia-session";
-import { ObiaNumberField, ObiaNumberInput, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
+import {
+  ObiaNumberField,
+  ObiaNumberInput,
+  ObiaRunProgress,
+  ObiaStatus,
+  ObiaStepHeading,
+  isObiaCancel,
+  useObiaRun,
+} from "./ObiaFields";
 
 /** Color of predicted classes outside the class list (a rules default class). */
 const UNCLASSIFIED_COLOR = "#9ca3af";
@@ -68,6 +76,7 @@ export function ObiaClassifyStep(): ReactElement | null {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const runningRef = useRef(false);
+  const progress = useObiaRun();
 
   const measured = features?.table.fields ?? [];
   // A re-measure can drop columns a saved selection still names.
@@ -130,16 +139,19 @@ export function ObiaClassifyStep(): ReactElement | null {
     runningRef.current = true;
     setRunning(true);
     setError(null);
+    const run = progress.begin();
     try {
       // Every object gets a prediction, including ones a feature tool skipped.
       const table = tableForAllObjects(features.table, layer.geojson);
       const result =
         settings.method === "random-forest"
-          ? await classifyRandomForest(table, collectSamples(layer.geojson), {
-              fields: chosen,
-              trees: settings.trees,
-            })
-          : await classifyByRules(table, settings.rules, defaultClass);
+          ? await classifyRandomForest(
+              table,
+              collectSamples(layer.geojson),
+              { fields: chosen, trees: settings.trees },
+              run,
+            )
+          : await classifyByRules(table, settings.rules, defaultClass, run);
       // A re-measure while the tool ran made these predictions stale (and
       // cleared the classification); do not bring them back.
       if (useObiaSession.getState().features?.finishedAt !== features.finishedAt) {
@@ -162,8 +174,13 @@ export function ObiaClassifyStep(): ReactElement | null {
         finishedAt: new Date().toISOString(),
       });
     } catch (err) {
-      setError(obiaErrorMessage(err, t, t("obia.classify.error.failed")));
+      setError(
+        isObiaCancel(err)
+          ? t("obia.progress.cancelled")
+          : obiaErrorMessage(err, t, t("obia.classify.error.failed")),
+      );
     } finally {
+      progress.end();
       runningRef.current = false;
       setRunning(false);
     }
@@ -176,6 +193,7 @@ export function ObiaClassifyStep(): ReactElement | null {
     defaultClass,
     updateLayer,
     setClassification,
+    progress,
     t,
   ]);
 
@@ -372,6 +390,7 @@ export function ObiaClassifyStep(): ReactElement | null {
           {running ? t("obia.classify.running") : t("obia.classify.run")}
         </Button>
       </div>
+      <ObiaRunProgress step={progress.step} startedAt={progress.startedAt} onCancel={progress.cancel} />
 
       <ObiaStatus
         error={error}

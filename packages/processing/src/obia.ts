@@ -214,12 +214,24 @@ function toolFailure(tool: string, stdout: readonly string[]): Error {
   return new Error(`${tool} failed${detail ? `: ${detail}` : ""}`);
 }
 
+/**
+ * How a long OBIA call reports and stops: `signal` cancels it (the running
+ * WASM tool is terminated and the call rejects with an `AbortError`), and
+ * `onStep` is told the id of each tool as it starts.
+ */
+export interface ObiaRunOptions {
+  signal?: AbortSignal;
+  onStep?: (tool: string) => void;
+}
+
 async function runTool(
   tool: string,
   args: string[],
   input: Record<string, Uint8Array>,
+  run: ObiaRunOptions = {},
 ): Promise<Record<string, Uint8Array>> {
-  const result = await runWasmToolInBackground({ tool, args, input });
+  run.onStep?.(tool);
+  const result = await runWasmToolInBackground({ tool, args, input }, { signal: run.signal });
   if (result.exitCode !== 0) throw toolFailure(tool, result.stdout);
   return result.files;
 }
@@ -293,6 +305,7 @@ export async function countSegmentLabels(labels: Uint8Array): Promise<number> {
 export async function segmentLabels(
   image: ObiaImage,
   params: RegionGrowingParams,
+  run: ObiaRunOptions = {},
 ): Promise<{ labels: Uint8Array; tool: string; args: string[] }> {
   if (!image.bands.length) {
     throw new ObiaError("no-bands", "Choose at least one band to segment.");
@@ -300,7 +313,7 @@ export async function segmentLabels(
   const { paths, input } = stageBands(image.bands);
   const tool = "image_segmentation";
   const args = regionGrowingArgs(paths, params);
-  const files = await runTool(tool, args, input);
+  const files = await runTool(tool, args, input, run);
   const labels = files["segments.tif"];
   if (!labels) throw new Error(`${tool} did not write a segment raster.`);
   return { labels, tool, args };
@@ -316,13 +329,15 @@ export async function segmentLabels(
 export async function segmentImage(
   image: ObiaImage,
   params: RegionGrowingParams,
+  run: ObiaRunOptions = {},
 ): Promise<ObiaSegmentation> {
-  const { labels, tool, args } = await segmentLabels(image, params);
+  const { labels, tool, args } = await segmentLabels(image, params, run);
 
   const polygonFiles = await runTool(
     "segments_to_polygons",
     ["--segments=/work/segments.tif", "--output=/work/segments.geojson"],
     { "segments.tif": labels },
+    run,
   );
   const geojson = polygonFiles["segments.geojson"];
   if (!geojson) throw new Error("segments_to_polygons did not write polygons.");
@@ -509,6 +524,7 @@ export async function computeObjectFeatures(
   labels: Uint8Array,
   image: ObiaImage,
   options: ObiaFeatureOptions,
+  runOptions: ObiaRunOptions = {},
 ): Promise<{ table: ObiaFeatureTable; calls: ObiaToolCall[] }> {
   const table: ObiaFeatureTable = { fields: [], rows: new Map() };
   const calls: ObiaToolCall[] = [];
@@ -525,7 +541,7 @@ export async function computeObjectFeatures(
     files: Record<string, Uint8Array>,
     rename: (field: string) => string | null,
   ) => {
-    const out = await runTool(tool, args, files);
+    const out = await runTool(tool, args, files, runOptions);
     calls.push({ tool, args });
     csvToTable(decode(out["features.csv"], tool), rename, table);
   };
@@ -902,6 +918,7 @@ export async function classifyRandomForest(
   table: ObiaFeatureTable,
   samples: readonly ObiaSample[],
   options: { fields: readonly string[]; trees: number },
+  run: ObiaRunOptions = {},
 ): Promise<ObiaClassification> {
   const training = samples.filter(
     (sample) => sample.role === "training" && table.rows.has(sample.segmentId),
@@ -928,7 +945,7 @@ export async function classifyRandomForest(
   const files = await runTool(tool, args, {
     "features.csv": encoder.encode(csv),
     "training.csv": encoder.encode(`${trainingCsv}\n`),
-  });
+  }, run);
   return {
     predictions: readPredictions(files["predictions.csv"], tool, tokens.name),
     fields,
@@ -936,6 +953,48 @@ export async function classifyRandomForest(
     trainingCount: training.length,
     call: { tool, args },
   };
+}
+
+/**
+ * Train a random forest on one image's training samples and predict another
+ * image's objects (batch processing). Both images' objects go into one table,
+ * the target's ids shifted past the source's so they cannot collide; only the
+ * source's training samples train the forest, and only target predictions are
+ * returned (with their own ids).
+ *
+ * @param sourceTable Features of the image the samples were labeled on.
+ * @param samples Labeled source objects; only training samples are used.
+ * @param targetTable Features of the image to classify, measured the same way.
+ * @param options Feature columns and number of trees.
+ */
+export async function classifyRandomForestTransfer(
+  sourceTable: ObiaFeatureTable,
+  samples: readonly ObiaSample[],
+  targetTable: ObiaFeatureTable,
+  options: { fields: readonly string[]; trees: number },
+  run: ObiaRunOptions = {},
+): Promise<ObiaClassification> {
+  const fields = options.fields.filter(
+    (field) => sourceTable.fields.includes(field) && targetTable.fields.includes(field),
+  );
+  const training = samples.filter((sample) => sample.role === "training");
+  const trainingIds = new Set(training.map((sample) => sample.segmentId));
+  const offset = Math.max(0, ...sourceTable.rows.keys()) + 1;
+  const rows = new Map<number, Record<string, number | null>>();
+  // Only the labeled source objects are needed to train.
+  for (const [id, row] of sourceTable.rows) if (trainingIds.has(id)) rows.set(id, row);
+  for (const [id, row] of targetTable.rows) rows.set(id + offset, row);
+  const result = await classifyRandomForest(
+    { fields, rows },
+    training,
+    { fields, trees: options.trees },
+    run,
+  );
+  const predictions = new Map<number, string>();
+  for (const [id, name] of result.predictions) {
+    if (id >= offset) predictions.set(id - offset, name);
+  }
+  return { ...result, predictions };
 }
 
 /**
@@ -950,6 +1009,7 @@ export async function classifyByRules(
   table: ObiaFeatureTable,
   rules: readonly ObiaRule[],
   defaultClass: string,
+  run: ObiaRunOptions = {},
 ): Promise<ObiaClassification> {
   if (!rules.length) throw new Error("Add at least one rule.");
   if (rules.some((rule) => !Number.isFinite(rule.value))) {
@@ -981,7 +1041,7 @@ export async function classifyByRules(
   const files = await runTool(tool, args, {
     "features.csv": encoder.encode(csv),
     "rules.csv": encoder.encode(`${rulesCsv}\n`),
-  });
+  }, run);
   return {
     predictions: readPredictions(files["predictions.csv"], tool, tokens.name),
     fields,

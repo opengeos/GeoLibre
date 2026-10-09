@@ -7417,7 +7417,8 @@
       "train": "Label samples",
       "classify": "Classify",
       "accuracy": "Assess accuracy",
-      "export": "Export"
+      "export": "Export",
+      "batch": "Apply to other images"
     },
     "image": "Image",
     "imagePlaceholder": "Choose a raster layer",
@@ -7567,6 +7568,22 @@
         "failed": "Export failed."
       }
     },
+    "batch": {
+      "hintForest": "Segment, measure and classify other images with the same bands and settings. The random forest is trained on this image's training samples, so the other images must have the same bands in the same order.",
+      "hintRules": "Segment, measure and classify other images with the same bands, settings and rules.",
+      "noTargets": "Add another raster layer to apply this workflow to it.",
+      "images": "Images",
+      "run_one": "Apply to {{count}} image",
+      "run_other": "Apply to {{count}} images",
+      "running": "Image {{index}} of {{total}}…",
+      "result_one": "{{count}} object ({{summary}})",
+      "result_other": "{{count}} objects ({{summary}})",
+      "error": {
+        "failed": "Could not apply the workflow.",
+        "readImage": "Could not read the image.",
+        "onImage": "{{name}}: {{message}}"
+      }
+    },
     "provenance": {
       "title": "Provenance",
       "image": "Image",
@@ -7581,7 +7598,14 @@
       "rules_one": "{{count}} rule, default class {{defaultClass}}",
       "rules_other": "{{count}} rules, default class {{defaultClass}}",
       "copy": "Copy as JSON",
-      "copied": "Copied."
+      "copied": "Copied.",
+      "batch": "Applied to {{name}}"
+    },
+    "progress": {
+      "starting": "Starting… {{seconds}} s",
+      "step": "Running {{tool}}… {{seconds}} s",
+      "cancel": "Cancel",
+      "cancelled": "Cancelled."
     }
   },
   "pluginPanel": {

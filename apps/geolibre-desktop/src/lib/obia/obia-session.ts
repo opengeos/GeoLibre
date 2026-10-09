@@ -86,6 +86,21 @@ export interface ObiaSplitRecord {
   at: string;
 }
 
+/** The current workflow applied to another image (batch), for provenance. */
+export interface ObiaBatchRun {
+  targetLayerId: string;
+  source: ObiaSourceIdentity;
+  /** The objects layer added for that image. */
+  objectsLayerId: string;
+  objectCount: number;
+  /** Objects per predicted class. */
+  classCounts: Record<string, number>;
+  /** Tool invocations, for provenance. */
+  calls: ObiaToolCall[];
+  env: ObiaRunEnv;
+  finishedAt: string;
+}
+
 export type ObiaClassifierMethod = "random-forest" | "rules";
 
 /** Classifier settings the Classify step edits. */
@@ -121,6 +136,7 @@ export type ObiaSessionData = Pick<
   | "classifier"
   | "classification"
   | "splits"
+  | "batches"
 >;
 
 interface ObiaSessionState {
@@ -138,6 +154,8 @@ interface ObiaSessionState {
   classification: ObiaClassificationRun | null;
   /** Hold-out splits applied to the current samples, oldest first. */
   splits: ObiaSplitRecord[];
+  /** The workflow applied to other images, oldest first. */
+  batches: ObiaBatchRun[];
   setSourceLayerId: (id: string) => void;
   setBandIndexes: (bands: number[]) => void;
   setParams: (patch: Partial<RegionGrowingParams>) => void;
@@ -153,6 +171,7 @@ interface ObiaSessionState {
   /** Attach rebuilt label bytes to the current segmentation, keeping its runs. */
   setSegmentationLabels: (finishedAt: string, labels: Uint8Array) => void;
   addSplit: (split: ObiaSplitRecord) => void;
+  addBatch: (run: ObiaBatchRun) => void;
   /** Replace the whole session, e.g. with state restored from a project. */
   restore: (data: ObiaSessionData) => void;
 }
@@ -177,6 +196,7 @@ export function emptyObiaSession(): ObiaSessionData {
     },
     classification: null,
     splits: [],
+    batches: [],
   };
 }
 
@@ -192,7 +212,7 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
   // A new segmentation also starts a new set of samples, so earlier splits go.
   setSegmentation: (segmentation) =>
-    set({ segmentation, features: null, classification: null, splits: [] }),
+    set({ segmentation, features: null, classification: null, splits: [], batches: [] }),
   setFeatureOptions: (patch) => set((s) => ({ featureOptions: { ...s.featureOptions, ...patch } })),
   // New features make the classification built on the old ones stale.
   setFeatures: (features) => set({ features, classification: null }),
@@ -207,5 +227,6 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
         : {},
     ),
   addSplit: (split) => set((s) => ({ splits: [...s.splits, split] })),
+  addBatch: (run) => set((s) => ({ batches: [...s.batches, run] })),
   restore: (data) => set({ ...data }),
 }));

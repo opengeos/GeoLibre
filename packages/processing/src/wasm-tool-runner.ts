@@ -85,8 +85,16 @@ function releaseWorker(worker: Worker): void {
  * caller. Listeners are removed on the way out so a reused worker does not
  * accumulate them.
  */
-function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
+function abortError(tool: string): DOMException {
+  return new DOMException(`${tool} was cancelled.`, "AbortError");
+}
+
+function runToolOnWorker(request: WasmToolRequest, signal?: AbortSignal): Promise<ToolResult> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError(request.tool));
+      return;
+    }
     let { worker, reused } = acquireWorker();
     // Only a reused worker is watched: a freshly spawned one has not had time to
     // die, and a broken one reports itself through `error`. Its startup also
@@ -135,10 +143,19 @@ function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
       worker.terminate();
       reject(new Error(`The ${request.tool} worker posted an undeserializable message.`));
     };
+    // A WASI run is one synchronous call inside its worker, so the only way to
+    // stop it is to terminate the worker; it is never parked afterwards.
+    const onAbort = () => {
+      disarmAck();
+      cleanup();
+      worker.terminate();
+      reject(abortError(request.tool));
+    };
     const cleanup = () => {
       worker.removeEventListener("message", onMessage);
       worker.removeEventListener("error", onError);
       worker.removeEventListener("messageerror", onMessageError);
+      signal?.removeEventListener("abort", onAbort);
     };
     const attach = () => {
       worker.addEventListener("message", onMessage);
@@ -162,6 +179,7 @@ function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
       }
     };
     attach();
+    signal?.addEventListener("abort", onAbort, { once: true });
     post();
   });
 }
@@ -173,12 +191,21 @@ function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
  * instead, in its own module scope.
  *
  * @param request - The tool id, CLI args, and files to place under `/work`.
+ * @param options - `signal` cancels the run: the worker running it is
+ *   terminated and the promise rejects with an `AbortError` DOMException. The
+ *   inline (no-Worker) path can only honour a signal between runs.
  * @returns The tool's exit code, captured output, and the files it wrote.
  */
-export async function runWasmToolInBackground(request: WasmToolRequest): Promise<ToolResult> {
+export async function runWasmToolInBackground(
+  request: WasmToolRequest,
+  options: { signal?: AbortSignal } = {},
+): Promise<ToolResult> {
+  if (options.signal?.aborted) throw abortError(request.tool);
   if (typeof Worker === "undefined") {
     const { runTool } = await import("geolibre-wasm/tools");
-    return runTool(request.tool, { args: request.args, input: request.input });
+    const result = await runTool(request.tool, { args: request.args, input: request.input });
+    if (options.signal?.aborted) throw abortError(request.tool);
+    return result;
   }
-  return runToolOnWorker(request);
+  return runToolOnWorker(request, options.signal);
 }
