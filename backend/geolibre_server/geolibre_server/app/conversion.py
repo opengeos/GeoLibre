@@ -1063,6 +1063,41 @@ def _append_job_message(job_id: str, message: str) -> None:
         )
 
 
+# Running job subprocesses, so a job can be cancelled; and jobs cancelled
+# before their subprocess started.
+_PROCESSES: dict[str, subprocess.Popen[str]] = {}
+_CANCELLED: set[str] = set()
+
+
+def _job_state(job_id: str) -> JobState | None:
+    """Return a job's current state, or None when it is unknown.
+
+    Args:
+        job_id: The job id.
+
+    Returns:
+        The job state, or None.
+    """
+    with _JOBS_LOCK:
+        return _JOBS.get(job_id)
+
+
+def _cancel_job(job_id: str) -> None:
+    """Stop a pending or running job; it then reports ``cancelled``.
+
+    Args:
+        job_id: The job id. A finished or unknown job is left as it is.
+    """
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None or job.status not in {"pending", "running"}:
+            return
+        _CANCELLED.add(job_id)
+        process = _PROCESSES.get(job_id)
+    if process is not None and process.poll() is None:
+        process.kill()
+
+
 def _count_in_flight_jobs_locked() -> int:
     """Return how many jobs are pending or running. Caller must hold ``_JOBS_LOCK``."""
     return sum(1 for job in _JOBS.values() if job.status in {"pending", "running"})
@@ -1116,6 +1151,11 @@ def _run_conversion_job(
             bufsize=1,
             **_subprocess_startup_kwargs(),
         )
+        with _JOBS_LOCK:
+            _PROCESSES[job_id] = process
+            cancelled_early = job_id in _CANCELLED
+        if cancelled_early:
+            process.kill()
         # A watchdog kills the subprocess if it exceeds the deadline. Reading
         # process.stdout blocks until the pipe closes, so without this a hung
         # DuckDB or cog_translate call (one that emits no further output) would
@@ -1149,6 +1189,9 @@ def _run_conversion_job(
             watchdog.cancel()
         if timed_out.is_set():
             raise RuntimeError(f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds")
+        if job_id in _CANCELLED:
+            _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
+            return
         if returncode != 0:
             if validation_error:
                 raise RuntimeError(validation_error)
@@ -1164,6 +1207,9 @@ def _run_conversion_job(
             outputs={output_name: {"path": output_path}} if output_path else {},
         )
     except Exception as exc:
+        if job_id in _CANCELLED:
+            _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
+            return
         # Mirror Whitebox: log the raw failure server-side and surface only a
         # generic message. DuckDB/GDAL stderr often embeds absolute paths that
         # must not reach the browser-proxied /jobs/{id} response — including
@@ -1201,6 +1247,9 @@ def _run_conversion_job(
         # raised before it exits (e.g. during streaming or a job-state update).
         if process is not None and process.poll() is None:
             process.kill()
+        with _JOBS_LOCK:
+            _PROCESSES.pop(job_id, None)
+            _CANCELLED.discard(job_id)
 
 
 def _start_job(

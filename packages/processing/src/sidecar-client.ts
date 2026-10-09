@@ -1425,6 +1425,127 @@ async function responseErrorMessage(response: Response, fallback: string): Promi
   return detailMessage(await responseErrorData(response), response.status, fallback);
 }
 
+// --- Native object-based image analysis (OBIA) --------------------------------
+
+/** Native OBIA availability (scikit-image in the sidecar's runtime). */
+export interface ObiaNativeStatus {
+  available: boolean;
+  message: string;
+  /** Pixels a native run may read. */
+  max_pixels?: number;
+}
+
+/** A native segmentation: the image, its bands and area, and the method. */
+export interface ObiaNativeSegmentation {
+  /** Local GeoTIFF path, within the sidecar's allowed roots. */
+  input_path: string;
+  bands: number[];
+  /** Full-resolution pixel window and level; the whole image when null. */
+  area: { level: number; window: [number, number, number, number] } | null;
+  method: "slic" | "felzenszwalb";
+  slic: { size: number; compactness: number } | null;
+  felzenszwalb: { scale: number; sigma: number; min_size: number } | null;
+}
+
+/** Which native object features to compute. */
+export interface ObiaNativeMeasureOptions {
+  spectral: boolean;
+  shape: boolean;
+  context: boolean;
+}
+
+/** The result files a native OBIA job writes. */
+export type ObiaNativeFile = "segments.tif" | "objects.geojson" | "features.csv";
+
+/**
+ * Whether the sidecar can segment natively. The first call installs
+ * scikit-image into the sidecar's runtime, which can take a minute.
+ */
+export async function fetchObiaNativeStatus(
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ObiaNativeStatus> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}/obia/status`);
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) throw new Error(`OBIA status failed: HTTP ${res.status}`);
+  return (await res.json()) as ObiaNativeStatus;
+}
+
+async function postObiaJob(path: string, body: unknown, baseUrl: string): Promise<ConversionJob> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Could not start the OBIA job"));
+  return (await res.json()) as ConversionJob;
+}
+
+/** Start a native segmentation job; poll it with {@link fetchConversionJob}. */
+export function startObiaNativeSegment(
+  segmentation: ObiaNativeSegmentation,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return postObiaJob("/obia/segment", segmentation, baseUrl);
+}
+
+/**
+ * Start a native measurement job. It reuses the label raster of
+ * `segmentJobId` while the sidecar keeps it, and segments again otherwise.
+ */
+export function startObiaNativeMeasure(
+  segmentation: ObiaNativeSegmentation,
+  options: ObiaNativeMeasureOptions,
+  segmentJobId: string | null,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return postObiaJob(
+    "/obia/measure",
+    { segmentation, options, segment_job_id: segmentJobId },
+    baseUrl,
+  );
+}
+
+/** Stop a native OBIA job. */
+export async function cancelObiaNativeJob(
+  jobId: string,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<void> {
+  try {
+    await sidecarFetch(`${baseUrl}/obia/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+    });
+  } catch {
+    // The job may already be gone; nothing to stop.
+  }
+}
+
+/** Download one result file of a finished native OBIA job. */
+export async function fetchObiaNativeFile(
+  jobId: string,
+  name: ObiaNativeFile,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<Uint8Array> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(
+      `${baseUrl}/obia/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(name)}`,
+    );
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Could not download ${name}`));
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 function sidecarConnectionError(baseUrl: string, error: unknown): Error {
   console.debug("GeoLibre sidecar unreachable:", error);
   return new Error(

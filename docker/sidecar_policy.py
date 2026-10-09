@@ -12,6 +12,7 @@ ROUTE_CAPABILITIES = {
     "raster": frozenset({"processing:run"}),
     "vector": frozenset({"processing:run"}),
     "pointcloud": frozenset({"processing:run"}),
+    "obia": frozenset({"processing:run"}),
     "ml": frozenset({"processing:run"}),
     "sql": frozenset({"processing:run"}),
     "postgis": frozenset({"data:add"}),

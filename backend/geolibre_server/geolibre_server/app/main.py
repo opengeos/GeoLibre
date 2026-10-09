@@ -28,6 +28,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .conversion import router as conversion_router
 from .ml import router as ml_router
 from .ml import stop_child_server
+from .obia import router as obia_router
 from .mssql import (
     MssqlWriteRolledBack,
     mssql_write_rolled_back_handler,
@@ -126,6 +127,7 @@ app.include_router(mssql_router)
 app.include_router(sql_router)
 app.include_router(pointcloud_router)
 app.include_router(ml_router)
+app.include_router(obia_router)
 
 
 class RunRequest(BaseModel):

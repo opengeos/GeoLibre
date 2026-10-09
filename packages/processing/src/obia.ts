@@ -688,6 +688,28 @@ function normalizedDifference(a: number | null, b: number | null): number | null
 }
 
 /**
+ * The feature table of the sidecar's native measurement (`features.csv`),
+ * whose columns already match the browser engine's, with the band-mean
+ * indices added the same way {@link computeObjectFeatures} adds them.
+ *
+ * @param csvText The `features.csv` text.
+ * @param bandIndexes 1-based source bands that were measured.
+ * @param indices Bands for the derived indices, when wanted.
+ */
+export function nativeFeatureTable(
+  csvText: string,
+  bandIndexes: readonly number[],
+  indices?: ObiaIndexBands,
+): ObiaFeatureTable {
+  const table: ObiaFeatureTable = { fields: [], rows: new Map() };
+  csvToTable(parseObiaCsv(csvText), (field) => field, table);
+  if (indices && table.fields.some((field) => field.startsWith("mean_b"))) {
+    addSpectralIndices(table, bandIndexes, indices);
+  }
+  return table;
+}
+
+/**
  * Add per-object indices computed from the band means: brightness (mean of
  * the band means), NDVI from red/NIR, and NDWI (McFeeters) from green/NIR.
  *
