@@ -54,24 +54,24 @@ export function obiaLocalPath(layer: GeoLibreLayer): string | null {
 let statusPromise: Promise<{ available: boolean; maxPixels: number } | null> | null = null;
 
 /**
- * Whether native segmentation is available: the desktop app (not its Mac App
- * Store build, which has no sidecar) with scikit-image in the sidecar's
- * runtime. The first check starts the sidecar and installs scikit-image,
- * which can take a minute.
+ * Whether native segmentation is available: a reachable sidecar (the desktop
+ * app's, which this starts, or a deployment's server-side one) with
+ * scikit-image in its runtime. The first check installs scikit-image, which
+ * can take a minute. The Mac App Store build has no sidecar.
  *
- * @returns The availability and native pixel limit, or null outside the
- *   desktop app.
+ * @returns The availability and native pixel limit, or null when there is no
+ *   sidecar to ask.
  */
 export function obiaNativeStatus(): Promise<{ available: boolean; maxPixels: number } | null> {
-  if (!isTauri() || IS_MAS_BUILD) return Promise.resolve(null);
+  if (IS_MAS_BUILD) return Promise.resolve(null);
   statusPromise ??= (async () => {
-    await startGeoLibreSidecar();
+    if (isTauri()) await startGeoLibreSidecar();
     const status = await fetchObiaNativeStatus();
     return { available: status.available, maxPixels: status.max_pixels ?? 0 };
   })().catch(() => {
-    // Retry on the next check: the sidecar may start later.
+    // No sidecar (a plain web build): ask again next time, it may start later.
     statusPromise = null;
-    return { available: false, maxPixels: 0 };
+    return null;
   });
   return statusPromise;
 }
@@ -113,13 +113,16 @@ function callOf(tool: string, body: object): ObiaToolCall {
 async function waitForJob(job: ConversionJob, run: ObiaRunOptions): Promise<ConversionJob> {
   let current = job;
   const cancel = () => void cancelObiaNativeJob(job.id);
+  run.onStep?.(job.tool_id);
   run.signal?.addEventListener("abort", cancel, { once: true });
   try {
     while (current.status === "pending" || current.status === "running") {
-      if (run.signal?.aborted) throw new DOMException(`${job.tool_id} was cancelled.`, "AbortError");
+      if (run.signal?.aborted) {
+        cancel();
+        throw new DOMException(`${job.tool_id} was cancelled.`, "AbortError");
+      }
       await new Promise((resolve) => setTimeout(resolve, 1000));
       current = await fetchConversionJob(job.id);
-      run.onStep?.(current.messages.at(-1) ?? job.tool_id);
     }
   } finally {
     run.signal?.removeEventListener("abort", cancel);
@@ -129,6 +132,11 @@ async function waitForJob(job: ConversionJob, run: ObiaRunOptions): Promise<Conv
   }
   if (current.status !== "succeeded") throw new Error(current.error || `${job.tool_id} failed.`);
   return current;
+}
+
+/** Refuse to start a job for a run that is already cancelled. */
+function throwIfAborted(run: ObiaRunOptions, tool: string): void {
+  if (run.signal?.aborted) throw new DOMException(`${tool} was cancelled.`, "AbortError");
 }
 
 /** A finished native segmentation. */
@@ -154,7 +162,7 @@ export async function runNativeSegmentation(
   request: ObiaNativeSegmentation,
   run: ObiaRunOptions = {},
 ): Promise<ObiaNativeSegmentResult> {
-  run.onStep?.("obia-segment");
+  throwIfAborted(run, "obia-segment");
   const job = await waitForJob(await startObiaNativeSegment(request), run);
   const result = (job.result ?? {}) as Record<string, number>;
   const [labels, objects] = await Promise.all([
@@ -188,8 +196,8 @@ export async function runNativeMeasure(
   segmentJobId: string | null,
   run: ObiaRunOptions = {},
 ): Promise<{ table: ObiaFeatureTable; call: ObiaToolCall }> {
+  throwIfAborted(run, "obia-measure");
   const native = { spectral: options.spectral, shape: options.shape, context: options.context };
-  run.onStep?.("obia-measure");
   const job = await waitForJob(
     await startObiaNativeMeasure(request, native, segmentJobId),
     run,

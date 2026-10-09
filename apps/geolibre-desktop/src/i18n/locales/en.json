@@ -7442,6 +7442,21 @@
     "method": "Method",
     "methodRegionGrowing": "Seeded region growing (Whitebox)",
     "methodNote": "Pixels join a region while they stay within the threshold of its seed in standardized band space, then objects below the minimum size merge into their most similar neighbor. This is not eCognition multiresolution segmentation, so its scale values do not transfer.",
+    "native": {
+      "slic": "SLIC superpixels (desktop, native)",
+      "felzenszwalb": "Felzenszwalb graph (desktop, native)",
+      "note": "Runs natively in the desktop app's processing server with scikit-image, on up to {{max}} pixels, and measures objects there too.",
+      "offer": "For images too large for the browser, the desktop app can also segment natively with scikit-image (SLIC or Felzenszwalb).",
+      "needsDesktop": "Native methods need GeoLibre's processing server: use the desktop app.",
+      "unavailable": "The desktop app's native OBIA runtime (scikit-image) is unavailable. Check the processing server.",
+      "needsLocalFile": "Native methods read the image from its file: add it from a local GeoTIFF.",
+      "slicSize": "Object size (pixels)",
+      "compactness": "Compactness",
+      "slicHint": "Superpixels of about this many pixels. Larger compactness gives more regular, square objects; smaller follows the image more closely.",
+      "scale": "Scale",
+      "sigma": "Smoothing (sigma)",
+      "felzenszwalbHint": "Larger scale gives larger objects. Sigma smooths the image first; the minimum size merges smaller objects into a neighbor."
+    },
     "threshold": "Similarity threshold",
     "thresholdHint": "Larger values give fewer, larger objects.",
     "minArea": "Minimum object size (pixels)",
@@ -7487,7 +7502,8 @@
         "layersMissing": "The source image or the objects layer was removed. Segment again.",
         "resegmented": "The objects were segmented again while measuring, so these values were discarded. Measure the new objects.",
         "failed": "Measuring the objects failed."
-      }
+      },
+      "textureBrowserOnly": "GLCM texture is measured only for objects segmented in the browser."
     },
     "train": {
       "hint": "Add a class for each land cover, select objects on the map (selection tools) or in the attribute table, then click the tag button on a class to label them. Label validation samples separately, or hold out part of the training samples below. Each Split holds out a share of the training samples still left, so splitting again moves more.",

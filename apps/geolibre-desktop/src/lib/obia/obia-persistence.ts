@@ -32,6 +32,15 @@ import {
   type ObiaSplitRecord,
 } from "./obia-session";
 import { obiaSourceBands } from "./obia-source";
+import {
+  DEFAULT_OBIA_NATIVE_PARAMS,
+  isNativeMethod,
+  nativeSegmentation,
+  obiaLocalPath,
+  runNativeSegmentation,
+  type ObiaMethod,
+  type ObiaNativeParams,
+} from "./obia-native";
 
 /**
  * Saving the Object-Based Analysis workbench with the project (#3053).
@@ -82,7 +91,7 @@ export function snapshotObiaSession(data: ObiaSessionData): Record<string, unkno
   if (!hasContent(data)) return null;
   const segmentation = data.segmentation
     ? (() => {
-        const { labels: _labels, ...rest } = data.segmentation;
+        const { labels: _labels, nativeJobId: _job, ...rest } = data.segmentation;
         return rest;
       })()
     : null;
@@ -115,7 +124,9 @@ export function snapshotObiaSession(data: ObiaSessionData): Record<string, unkno
         sourceLayerId: data.sourceLayerId,
         bandIndexes: data.bandIndexes,
         areaMode: data.areaMode,
+        method: data.method,
         params: data.params,
+        nativeParams: data.nativeParams,
         featureOptions: data.featureOptions,
         classes: data.classes,
         labelRole: data.labelRole,
@@ -185,6 +196,28 @@ function restoreArea(value: unknown): ObiaReadArea | undefined {
   const [x0, y0, x1, y1] = window as number[];
   if (x1 <= x0 || y1 <= y0) return undefined;
   return { level: json.level as number, window: [x0, y0, x1, y1] };
+}
+
+const restoreMethod = (value: unknown): ObiaMethod | undefined =>
+  value === "region-growing" || value === "slic" || value === "felzenszwalb" ? value : undefined;
+
+function restoreNativeParams(value: unknown): ObiaNativeParams {
+  const json = asObject(value) ?? {};
+  const slic = asObject(json.slic) ?? {};
+  const felz = asObject(json.felzenszwalb) ?? {};
+  const base = DEFAULT_OBIA_NATIVE_PARAMS;
+  // The sidecar's accepted ranges.
+  return {
+    slic: {
+      size: inRange(slic.size, base.slic.size, 4, 1_000_000, true),
+      compactness: inRange(slic.compactness, base.slic.compactness, 0.001, 1000),
+    },
+    felzenszwalb: {
+      scale: inRange(felz.scale, base.felzenszwalb.scale, 0.001, 100_000),
+      sigma: inRange(felz.sigma, base.felzenszwalb.sigma, 0, 20),
+      minSize: inRange(felz.minSize, base.felzenszwalb.minSize, 1, 1_000_000, true),
+    },
+  };
 }
 
 function restoreParams(value: unknown): RegionGrowingParams {
@@ -382,7 +415,9 @@ export function restoreObiaSession(
     sourceLayerId: asString(settings.sourceLayerId),
     bandIndexes: asBands(settings.bandIndexes),
     areaMode: settings.areaMode === "view" ? "view" : "image",
+    method: restoreMethod(settings.method) ?? "region-growing",
     params: restoreParams(settings.params),
+    nativeParams: restoreNativeParams(settings.nativeParams),
     featureOptions: restoreFeatureOptions(settings.featureOptions),
     classes: restoreClasses(settings.classes),
     labelRole: settings.labelRole === "validation" ? "validation" : "training",
@@ -407,6 +442,8 @@ export function restoreObiaSession(
     height: asNumber(seg.height, 0),
     ...(restoreArea(seg.area) ? { area: restoreArea(seg.area) } : {}),
     ...(typeof seg.pixelSize === "number" && seg.pixelSize > 0 ? { pixelSize: seg.pixelSize } : {}),
+    ...(restoreMethod(seg.method) ? { method: restoreMethod(seg.method) } : {}),
+    ...(seg.nativeParams ? { nativeParams: restoreNativeParams(seg.nativeParams) } : {}),
     labels: null,
     objectsLayerId: objectsLayer.id,
     objectCount: asNumber(seg.objectCount, 0),
@@ -490,9 +527,24 @@ async function rebuildLabels(
     .getState()
     .layers.find((layer) => layer.id === segmentation.sourceLayerId);
   if (!source) throw new ObiaRestoreError("source-missing");
-  const image = await obiaSourceBands(source, segmentation.bandIndexes, segmentation.area);
-  if (!image) throw new ObiaRestoreError("source-missing");
-  const { labels } = await segmentLabels(image, segmentation.params, run);
+  let labels: Uint8Array;
+  if (isNativeMethod(segmentation.method)) {
+    // Natively segmented: the sidecar runs the same deterministic method.
+    const path = obiaLocalPath(source);
+    if (!path) throw new ObiaRestoreError("source-missing");
+    const request = nativeSegmentation(
+      path,
+      segmentation.bandIndexes,
+      segmentation.area,
+      segmentation.method,
+      segmentation.nativeParams ?? DEFAULT_OBIA_NATIVE_PARAMS,
+    );
+    ({ labels } = await runNativeSegmentation(request, run));
+  } else {
+    const image = await obiaSourceBands(source, segmentation.bandIndexes, segmentation.area);
+    if (!image) throw new ObiaRestoreError("source-missing");
+    ({ labels } = await segmentLabels(image, segmentation.params, run));
+  }
   const { objectCount, hash } = await fingerprintSegmentLabels(labels);
   if (
     objectCount !== segmentation.objectCount ||

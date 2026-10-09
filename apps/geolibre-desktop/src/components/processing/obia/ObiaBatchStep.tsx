@@ -7,13 +7,25 @@ import {
   computeObjectFeatures,
   segmentImage,
   tableForAllObjects,
+  type ObiaFeatureTable,
+  type ObiaReadArea,
   type ObiaToolCall,
 } from "@geolibre/processing";
 import { Button } from "@geolibre/ui";
 import { Layers, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import type { FeatureCollection } from "geojson";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
+import {
+  DEFAULT_OBIA_NATIVE_PARAMS,
+  isNativeMethod,
+  nativeSegmentation,
+  obiaLocalPath,
+  obiaNativeStatus,
+  runNativeMeasure,
+  runNativeSegmentation,
+} from "../../../lib/obia/obia-native";
 import { obiaLayerLocation, obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { useObiaSession, type ObiaBatchRun } from "../../../lib/obia/obia-session";
 import {
@@ -98,21 +110,48 @@ export function ObiaBatchStep(): ReactElement | null {
         // The whole image, at the finest level that fits the pixel limit.
         const info = await obiaSourceInfo(target);
         if (!info) throw new Error(t("obia.batch.error.readImage"));
-        const { area } = planObiaArea(info, wholeImageWindow(info));
-        const image = await obiaSourceBands(target, segmentation.bandIndexes, area);
-        if (!image) throw new Error(t("obia.batch.error.readImage"));
-        // Reading the image takes no signal, so honour a Cancel made meanwhile.
-        if (run.signal?.aborted) throw new DOMException("Cancelled.", "AbortError");
-        const segmented = await segmentImage(image, segmentation.params, run);
-        calls.push({ tool: segmented.tool, args: segmented.args });
-        const measured = await computeObjectFeatures(
-          segmented.labels,
-          image,
-          features.options,
-          run,
-        );
-        calls.push(...measured.calls);
-        const table = tableForAllObjects(measured.table, segmented.objects);
+        let segmented: { objects: FeatureCollection; objectCount: number };
+        let measuredTable: ObiaFeatureTable;
+        let area: ObiaReadArea;
+        if (isNativeMethod(segmentation.method)) {
+          // Segmented natively: the other images are too, in the sidecar.
+          const path = obiaLocalPath(target);
+          if (!path) throw new Error(t("obia.native.needsLocalFile"));
+          const status = await obiaNativeStatus();
+          if (!status?.available) throw new Error(t("obia.native.unavailable"));
+          ({ area } = planObiaArea(info, wholeImageWindow(info), status.maxPixels));
+          const request = nativeSegmentation(
+            path,
+            segmentation.bandIndexes,
+            area,
+            segmentation.method,
+            segmentation.nativeParams ?? DEFAULT_OBIA_NATIVE_PARAMS,
+          );
+          const native = await runNativeSegmentation(request, run);
+          calls.push(native.call);
+          const measured = await runNativeMeasure(request, features.options, native.jobId, run);
+          calls.push(measured.call);
+          segmented = native;
+          measuredTable = measured.table;
+        } else {
+          ({ area } = planObiaArea(info, wholeImageWindow(info)));
+          const image = await obiaSourceBands(target, segmentation.bandIndexes, area);
+          if (!image) throw new Error(t("obia.batch.error.readImage"));
+          // Reading the image takes no signal, so honour a Cancel made meanwhile.
+          if (run.signal?.aborted) throw new DOMException("Cancelled.", "AbortError");
+          const browser = await segmentImage(image, segmentation.params, run);
+          calls.push({ tool: browser.tool, args: browser.args });
+          const measured = await computeObjectFeatures(
+            browser.labels,
+            image,
+            features.options,
+            run,
+          );
+          calls.push(...measured.calls);
+          segmented = browser;
+          measuredTable = measured.table;
+        }
+        const table = tableForAllObjects(measuredTable, segmented.objects);
         const result =
           settings.method === "random-forest"
             ? await classifyRandomForestTransfer(

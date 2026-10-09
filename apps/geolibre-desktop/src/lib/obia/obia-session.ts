@@ -12,6 +12,11 @@ import {
   type RegionGrowingParams,
 } from "@geolibre/processing";
 import { create } from "zustand";
+import {
+  DEFAULT_OBIA_NATIVE_PARAMS,
+  type ObiaMethod,
+  type ObiaNativeParams,
+} from "./obia-native";
 
 /**
  * Add GeoTIFF bytes to the map as a raster layer, optionally with an initial
@@ -57,6 +62,16 @@ export interface ObiaSegmentationRun {
   area?: ObiaReadArea;
   /** Pixel size of the segmented grid, in the image CRS's units. */
   pixelSize?: number;
+  /** How it was segmented; absent in older projects (region growing). */
+  method?: ObiaMethod;
+  /** A native method's parameters (`params` holds region growing's). */
+  nativeParams?: ObiaNativeParams;
+  /**
+   * The sidecar job that segmented natively, whose labels the sidecar reuses
+   * to measure while it keeps them. Not saved: it does not outlive the
+   * sidecar.
+   */
+  nativeJobId?: string;
   /**
    * Label raster (GeoTIFF), one `segment_id` per pixel. Not saved with the
    * project: null after a reload until rebuilt (ensureObiaLabels).
@@ -147,7 +162,9 @@ export type ObiaSessionData = Pick<
   | "sourceLayerId"
   | "bandIndexes"
   | "areaMode"
+  | "method"
   | "params"
+  | "nativeParams"
   | "segmentation"
   | "featureOptions"
   | "features"
@@ -167,7 +184,10 @@ interface ObiaSessionState {
   bandIndexes: number[];
   /** Segment the whole image, or the part in the current map view. */
   areaMode: ObiaAreaMode;
+  /** Segmentation method: in the browser, or native in the sidecar. */
+  method: ObiaMethod;
   params: RegionGrowingParams;
+  nativeParams: ObiaNativeParams;
   segmentation: ObiaSegmentationRun | null;
   featureOptions: ObiaFeatureOptions;
   features: ObiaFeatureRun | null;
@@ -184,6 +204,11 @@ interface ObiaSessionState {
   setSourceLayerId: (id: string) => void;
   setBandIndexes: (bands: number[]) => void;
   setAreaMode: (mode: ObiaAreaMode) => void;
+  setMethod: (method: ObiaMethod) => void;
+  setNativeParams: (patch: {
+    slic?: Partial<ObiaNativeParams["slic"]>;
+    felzenszwalb?: Partial<ObiaNativeParams["felzenszwalb"]>;
+  }) => void;
   setParams: (patch: Partial<RegionGrowingParams>) => void;
   /** A new segmentation invalidates the features measured on the old one. */
   setSegmentation: (run: ObiaSegmentationRun | null) => void;
@@ -208,7 +233,12 @@ export function emptyObiaSession(): ObiaSessionData {
     sourceLayerId: "",
     bandIndexes: [],
     areaMode: "image",
+    method: "region-growing",
     params: { ...DEFAULT_REGION_GROWING_PARAMS },
+    nativeParams: {
+      slic: { ...DEFAULT_OBIA_NATIVE_PARAMS.slic },
+      felzenszwalb: { ...DEFAULT_OBIA_NATIVE_PARAMS.felzenszwalb },
+    },
     segmentation: null,
     featureOptions: { ...DEFAULT_OBIA_FEATURE_OPTIONS },
     features: null,
@@ -237,6 +267,14 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   setSourceLayerId: (sourceLayerId) => set({ sourceLayerId, bandIndexes: [] }),
   setBandIndexes: (bandIndexes) => set({ bandIndexes }),
   setAreaMode: (areaMode) => set({ areaMode }),
+  setMethod: (method) => set({ method }),
+  setNativeParams: (patch) =>
+    set((s) => ({
+      nativeParams: {
+        slic: { ...s.nativeParams.slic, ...patch.slic },
+        felzenszwalb: { ...s.nativeParams.felzenszwalb, ...patch.felzenszwalb },
+      },
+    })),
   setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
   // A new segmentation also starts a new set of samples, so earlier splits go.
   setSegmentation: (segmentation) =>

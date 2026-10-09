@@ -1,5 +1,6 @@
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
+  OBIA_MAX_PIXELS,
   planImageRead,
   readImageLevels,
   readImageWindow,
@@ -237,9 +238,15 @@ export interface ObiaAreaPlan {
  *
  * @param info The source image's header facts.
  * @param window The full-resolution pixel window.
+ * @param maxPixels Pixel limit: the browser engine's by default, or the
+ *   sidecar's for a native run.
  */
-export function planObiaArea(info: ObiaSourceInfo, window: ObiaPixelWindow): ObiaAreaPlan {
-  const plan = planImageRead(info.levels, window);
+export function planObiaArea(
+  info: ObiaSourceInfo,
+  window: ObiaPixelWindow,
+  maxPixels = OBIA_MAX_PIXELS,
+): ObiaAreaPlan {
+  const plan = planImageRead(info.levels, window, maxPixels);
   if (plan)
     return {
       area: { level: plan.level, window },

@@ -58,10 +58,11 @@ OBIA_PACKAGES = os.environ.get(
     "GEOLIBRE_OBIA_PACKAGES", "scikit-image>=0.22 scipy>=1.10 numpy>=1.24"
 ).split()
 _GEOTIFF_EXTENSIONS = {".tif", ".tiff"}
-# Pixels a native run may read. Well past the browser engine's limit, and
-# within a desktop's memory: SLIC holds the bands as float64 alongside its
-# distance grids, about 60 bytes per pixel for four bands.
-NATIVE_MAX_PIXELS = 150_000_000
+# Pixels a native run may read: well past the browser engine's limit, within a
+# desktop's memory (SLIC holds the bands as float64 alongside its distance
+# grids, about 60 bytes per pixel for four bands), and small enough for the
+# browser to decode the label raster (as Float32, under 512 MB) to export it.
+NATIVE_MAX_PIXELS = 120_000_000
 # The files a job may write, and so the only names the download serves.
 _JOB_FILES = {"segments.tif", "objects.geojson", "features.csv"}
 JOB_DIR_MAX_AGE_SECS = 24 * 3600
