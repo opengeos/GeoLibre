@@ -5,9 +5,10 @@
  */
 
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readFile, readTextFile, stat, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { readFile, readTextFile, writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { nativeFileDialogFilters, type FileDialogFilter } from "../file-dialog-filters";
 import { isTauri } from "../is-tauri";
+import { localFileSizeBytes } from "./local-fs";
 import { browserSafeFileName } from "./paths";
 import { isAbortError, toArrayBuffer } from "./shared";
 
@@ -220,12 +221,17 @@ export async function openLocalDataFileWithFallback(options: LocalDataFileOption
     });
     if (!selected || typeof selected !== "string") return null;
     if (options.maxBytes != null) {
-      const { size } = await stat(selected);
-      if (size > options.maxBytes) throw new FileTooLargeError(size);
+      // Checked before reading where the size is known; a failed stat falls
+      // back to checking the bytes read.
+      const size = await localFileSizeBytes(selected);
+      if (size != null && size > options.maxBytes) throw new FileTooLargeError(size);
     }
     const binaryByExtension = shouldReadBinaryByExtension(selected);
     const data =
       options.readBinary || binaryByExtension ? toArrayBuffer(await readFile(selected)) : undefined;
+    if (options.maxBytes != null && data && data.byteLength > options.maxBytes) {
+      throw new FileTooLargeError(data.byteLength);
+    }
     const text = options.readText && !binaryByExtension ? await readTextFile(selected) : undefined;
     return { data, path: selected, text };
   }

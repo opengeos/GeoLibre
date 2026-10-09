@@ -4,6 +4,7 @@ import {
   type ObiaCondition,
   type ObiaDomain,
   type ObiaFuzzyClass,
+  type ObiaIndexBands,
   type ObiaMembership,
   type ObiaProcess,
   type ObiaRuleOp,
@@ -78,7 +79,7 @@ export interface EcognitionImport {
  * the file as text, so a much larger one would stall it (a 100 MB rule set
  * takes about 10 seconds).
  */
-export const ECOGNITION_MAX_BYTES = 256 * 1024 * 1024;
+export const ECOGNITION_MAX_BYTES = 128 * 1024 * 1024;
 
 /** Why a file could not be read as a rule set. */
 export class EcognitionImportError extends Error {
@@ -233,12 +234,15 @@ export function parseEcognitionFile(bytes: Uint8Array): Document[] {
  *   {@link parseEcognitionFile}.
  * @param layerBands Image layer alias to 1-based band; layers not given are
  *   read from the bands in the rule set's layer order.
+ * @param indexBands The bands Measure computes NDVI and NDWI from; a
+ *   customized index over the same bands becomes `ndvi` or `ndwi`.
  * @throws EcognitionImportError for a file over the size limit, or one that
  *   holds no process tree, or an encrypted one.
  */
 export function importEcognitionRuleset(
   source: Uint8Array | Document[],
   layerBands: Readonly<Record<string, number>> = {},
+  indexBands?: ObiaIndexBands,
 ): EcognitionImport {
   const docs = Array.isArray(source) ? source : parseEcognitionFile(source);
   const roots = docs.flatMap((doc) =>
@@ -307,9 +311,6 @@ export function importEcognitionRuleset(
 
   const fields = new Map<string, EcognitionField>();
   const bandOf = (alias: string) => (alias in bands ? bands[alias] : null);
-  const isNir = (alias: string) => /(^|[^a-z])(nir|ir|near.?infra.?red)$/i.test(alias);
-  const isRed = (alias: string) => /^(r|red|rot)$/i.test(alias);
-  const isGreen = (alias: string) => /^(g|green)$/i.test(alias);
   /** The workbench field for an eCognition feature (its own name if none). */
   const fieldFor = (feature: string, unit: string | null): string => {
     const key = `${feature}\u0000${unit ?? ""}`;
@@ -337,10 +338,14 @@ export function importEcognitionRuleset(
     const arithmetic = custom.get(feature);
     if (arithmetic) {
       const expr = arithmetic.expr.replace(/[\s;]/g, "");
-      const [a, b] = arithmetic.inputs.map((input) => input.replace(/^Mean /, ""));
-      if (expr === "(d00-d01)/(d00+d01)" && a && b) {
-        if (isNir(a) && isRed(b)) field = "ndvi";
-        else if (isGreen(a) && isNir(b)) field = "ndwi";
+      // A normalized difference of two layer means is the workbench's NDVI
+      // or NDWI when its layers are read from the bands Measure uses for them.
+      const [a, b] = arithmetic.inputs.map((input) =>
+        input.startsWith("Mean ") ? bandOf(input.slice("Mean ".length)) : null,
+      );
+      if (expr === "(d00-d01)/(d00+d01)" && a != null && b != null && indexBands) {
+        if (a === indexBands.nir && b === indexBands.red) field = "ndvi";
+        else if (a === indexBands.green && b === indexBands.nir) field = "ndwi";
       }
     }
     const entry = { feature, field: field ?? feature, computed: field != null };

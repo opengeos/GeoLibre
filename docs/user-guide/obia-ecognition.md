@@ -89,7 +89,7 @@ differences noted; **No** is not available.
 Under [Import from other software](obia.md#import-from-other-software),
 **eCognition rule set** reads a `.dcp` rule set or a `.dpr` project (from
 eCognition / Definiens Developer 7 onwards; encrypted rule sets cannot be
-read) and converts its process tree:
+read; files up to 128 MB) and converts its process tree:
 
 | eCognition | Converted to |
 | --- | --- |
@@ -105,8 +105,9 @@ Features become the workbench's fields where it computes the same thing:
 pixels), `Number of pixels`, `Border length` (in pixels), `Rel. border to
 <class>` (`nb_border_<class>`), `Existence of <class> (0)` (a neighbor of the
 class: `nb_border_<class>` above 0), `Existence of super objects <class> (1)`
-(`parent_is_<class>`, after context features) and a customized NDVI or NDWI
-(as `ndvi` or `ndwi`, by the band roles set under Measure). Any other feature
+(`parent_is_<class>`, after context features) and a customized normalized
+difference of two layer means (as `ndvi` or `ndwi` when its layers are read
+from the bands Measure uses for them). Any other feature
 keeps its eCognition name: import a feature table exported from eCognition
 with that column and the ruleset can use it.
 

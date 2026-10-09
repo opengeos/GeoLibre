@@ -124,7 +124,7 @@ const bytes = (text: string) => new TextEncoder().encode(text);
 
 describe("eCognition rule set import", () => {
   it("converts the supported processes and reports the rest", () => {
-    const result = importEcognitionRuleset(bytes(RULESET));
+    const result = importEcognitionRuleset(bytes(RULESET), {}, { red: 1, nir: 3 });
     assert.deepEqual(result.layers, ["Red", "Green", "NIR"]);
     assert.deepEqual(result.levels, ["Level 1"]);
     assert.equal(result.processCount, 10);
@@ -205,7 +205,7 @@ describe("eCognition rule set import", () => {
   });
 
   it("runs the converted ruleset on measured features", () => {
-    const { ruleset } = importEcognitionRuleset(bytes(RULESET));
+    const { ruleset } = importEcognitionRuleset(bytes(RULESET), {}, { red: 1, nir: 3 });
     assert.ok(ruleset);
     const fields = ["ndvi", "area_px", "mean_b2", "mean_b3", "brightness", "Mean Slope"];
     assert.ok("ruleset" in validateRuleset(ruleset, fields, ["Water", "Forest", "Grass"]));
@@ -247,6 +247,8 @@ describe("eCognition rule set import", () => {
     assert.deepEqual(result.layerBands, { Red: 1, Green: 1, NIR: 4 });
     assert.equal(result.converted, 7);
     assert.ok(result.fields.some((f) => f.field === "mean_b4"));
+    // NIR is now read from band 4, which Measure does not use for NDVI here.
+    assert.ok(result.fields.some((f) => f.feature === "NDVI" && !f.computed));
   });
 
   it("reads version 8 conditions and never drops one it cannot read", () => {

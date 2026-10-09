@@ -26,6 +26,9 @@ export function ObiaEcognitionImport(): ReactElement {
   const { t } = useTranslation();
   const bandIndexes = useObiaSession((s) => s.bandIndexes);
   const features = useObiaSession((s) => s.features);
+  // The bands NDVI and NDWI are (or will be) measured from.
+  const featureOptions = useObiaSession((s) => s.featureOptions);
+  const indexBands = features?.options.indices ?? featureOptions.indices;
   // The file's parsed documents: parsed once, then converted again whenever a
   // layer's band changes.
   const [file, setFile] = useState<{ name: string; docs: Document[] } | null>(null);
@@ -46,11 +49,11 @@ export function ObiaEcognitionImport(): ReactElement {
   const result = useMemo((): EcognitionImport | string | null => {
     if (!file) return null;
     try {
-      return importEcognitionRuleset(file.docs, layerBands);
+      return importEcognitionRuleset(file.docs, layerBands, indexBands);
     } catch (err) {
       return errorMessage(err);
     }
-  }, [file, layerBands, errorMessage]);
+  }, [file, layerBands, indexBands, errorMessage]);
   const report = typeof result === "string" ? null : result;
 
   const open = async () => {
@@ -139,12 +142,13 @@ export function ObiaEcognitionImport(): ReactElement {
                       id={`obia-ecognition-layer-${alias}`}
                       className="h-7 w-24 shrink-0"
                       value={String(report.layerBands[alias])}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setDone(null);
                         setLayerBands((current) => ({
                           ...current,
                           [alias]: Number(event.target.value),
-                        }))
-                      }
+                        }));
+                      }}
                     >
                       {[...new Set([...bands, report.layerBands[alias]])].map((band) => (
                         <option key={band} value={band}>
