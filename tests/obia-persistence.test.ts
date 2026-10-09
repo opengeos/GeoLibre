@@ -179,6 +179,20 @@ describe("OBIA workbench persistence", () => {
     assert.deepEqual(restored.classifier.rules, []);
     assert.deepEqual(restored.bandIndexes, [2]);
   });
+  it("clamps saved numbers to the ranges the workbench allows", () => {
+    const restored = restoreObiaSession(
+      {
+        version: OBIA_STATE_VERSION,
+        settings: {
+          params: { threshold: -3, minArea: 1e12, steps: 2.6 },
+          classifier: { method: "random-forest", trees: 1e9 },
+        },
+      },
+      [],
+    );
+    assert.deepEqual(restored.params, { threshold: 0.05, minArea: 16_777_216, steps: 3 });
+    assert.equal(restored.classifier.trees, 1000);
+  });
 });
 
 describe("project obia field", () => {
