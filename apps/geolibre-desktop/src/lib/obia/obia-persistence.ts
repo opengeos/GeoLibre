@@ -660,9 +660,12 @@ async function mergedLabels(merge: ObiaLevelMerge, run: ObiaRunOptions): Promise
   if (!childLabels) {
     childLabels = await verifiedLabels(child.segmentation, run);
     // Keep them, so the next rebuild above does not redo the chain below.
-    useObiaSession
-      .getState()
-      .setLevelLabels(child.level, child.segmentation.finishedAt, childLabels);
+    const session = useObiaSession.getState();
+    if (child.level === session.level) {
+      session.setSegmentationLabels(child.segmentation.finishedAt, childLabels);
+    } else {
+      session.setLevelLabels(child.level, child.segmentation.finishedAt, childLabels);
+    }
   }
   const parentOf = new Map<number, number>();
   for (const feature of childLayer.geojson.features) {

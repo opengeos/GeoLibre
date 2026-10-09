@@ -174,7 +174,7 @@ export function ObiaLevelsStep(): ReactElement | null {
         />
         <Button
           onClick={() => void handleBuild()}
-          disabled={running || level !== top}
+          disabled={running || level !== top || !(Number.isFinite(scale) && scale > 0)}
           className="gap-2"
           data-testid="obia-level-build"
         >

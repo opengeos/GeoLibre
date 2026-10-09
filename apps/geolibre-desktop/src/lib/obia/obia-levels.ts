@@ -61,6 +61,9 @@ export async function buildCoarserLevel(
   if (levels.some((record) => record.level > level)) {
     throw new ObiaLevelError("not-top", "Build coarser levels from the coarsest one.");
   }
+  if (!(Number.isFinite(scale) && scale > 0)) {
+    throw new ObiaLevelError("no-features", "The scale must be a positive number.");
+  }
   if (level >= OBIA_MAX_LEVELS) {
     throw new ObiaLevelError("too-deep", `The hierarchy has at most ${OBIA_MAX_LEVELS} levels.`);
   }
