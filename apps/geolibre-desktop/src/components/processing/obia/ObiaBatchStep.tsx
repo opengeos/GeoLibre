@@ -85,8 +85,13 @@ export function ObiaBatchStep(): ReactElement | null {
     const samples = collectSamples(sourceObjects);
     const settings = classification.settings;
     let failedOn: string | null = null;
+    // Re-segmenting while the batch runs clears the batch records and makes
+    // this workflow stale, so stop rather than record runs against it.
+    const stale = () =>
+      useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt;
     try {
       for (const [index, target] of chosen.entries()) {
+        if (stale()) throw new Error(t("obia.batch.error.changed"));
         failedOn = target.name;
         setCurrent({ index: index + 1, total: chosen.length });
         const calls: ObiaToolCall[] = [];
@@ -139,6 +144,7 @@ export function ObiaBatchStep(): ReactElement | null {
         for (const name of result.predictions.values()) {
           classCounts[name] = (classCounts[name] ?? 0) + 1;
         }
+        if (stale()) throw new Error(t("obia.batch.error.changed"));
         const location = obiaLayerLocation(target);
         addBatch({
           targetLayerId: target.id,

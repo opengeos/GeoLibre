@@ -931,4 +931,18 @@ describe("classifyRandomForestTransfer", () => {
       ],
     );
   });
+
+  it("refuses a target that lacks a feature the forest uses", async () => {
+    const source = { fields: ["b1", "b2"], rows: new Map([[1, { b1: 1, b2: 2 }]]) };
+    const target = { fields: ["b1"], rows: new Map([[1, { b1: 1 }]]) };
+    await assert.rejects(
+      classifyRandomForestTransfer(
+        source,
+        [{ segmentId: 1, className: "veg", role: "training" }],
+        target,
+        { fields: ["b1", "b2"], trees: 10 },
+      ),
+      (err: ObiaError) => err.code === "missing-fields" && err.params.count === 1,
+    );
+  });
 });

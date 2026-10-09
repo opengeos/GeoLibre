@@ -467,8 +467,9 @@ export async function ensureObiaLabels(run: ObiaRunOptions = {}): Promise<Uint8A
   const segmentation = useObiaSession.getState().segmentation;
   if (!segmentation) throw new Error("Segment an image first.");
   if (segmentation.labels) return segmentation.labels;
-  // Steps that need the labels at the same time share one rebuild. The first
-  // caller's run options (and so its Cancel) drive it.
+  // A cancellable rebuild runs on its own, so one step's Cancel cannot stop
+  // another's; rebuilds without a signal share one.
+  if (run.signal) return rebuildLabels(segmentation, run);
   if (rebuilding?.finishedAt === segmentation.finishedAt) return rebuilding.promise;
   const promise = rebuildLabels(segmentation, run);
   rebuilding = { finishedAt: segmentation.finishedAt, promise };

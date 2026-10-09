@@ -195,6 +195,9 @@ same features, and classified with the current classifier:
   the other image's objects, so the other images must have the same bands in
   the same order (the same sensor and processing level), or the forest sees
   different values than it learned from.
+  It uses the training samples as they are when you click **Apply** and the
+  features the last Classify run used, so classify again after changing
+  samples if you want the batch to match the displayed classification.
 
 Each image gets its own objects layer, colored by class, and a line under the
 step lists its object and class counts. Labels, accuracy and export stay with

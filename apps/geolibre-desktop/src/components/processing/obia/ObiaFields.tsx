@@ -1,7 +1,15 @@
 import type { ObiaRunOptions } from "@geolibre/processing";
 import { Button, Input, Label } from "@geolibre/ui";
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 interface ObiaNumberFieldProps {
@@ -155,7 +163,10 @@ export function useObiaRun() {
     setStartedAt(null);
   }, []);
   const cancel = useCallback(() => controllerRef.current?.abort(), []);
-  return { step, startedAt, begin, end, cancel };
+  return useMemo(
+    () => ({ step, startedAt, begin, end, cancel }),
+    [step, startedAt, begin, end, cancel],
+  );
 }
 
 /** "Running <tool>… 12 s" with a Cancel button, while a step runs. */

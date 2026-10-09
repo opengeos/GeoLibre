@@ -28,6 +28,8 @@ export function obiaErrorMessage(err: unknown, t: TFunction, fallback: string): 
         return t("obia.error.noBands");
       case "empty-area":
         return t("obia.error.emptyArea");
+      case "missing-fields":
+        return t("obia.error.missingFields", { count: err.params.count });
     }
   }
   if (err instanceof ObiaRestoreError) {

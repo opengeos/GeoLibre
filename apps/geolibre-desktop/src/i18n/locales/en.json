@@ -7460,6 +7460,8 @@
       "tooManyBands_one": "{{count}} band of this image needs more memory than the in-browser workbench allows. Clip the image to a smaller area.",
       "tooManyBands_other": "{{count}} bands of this image need more memory than the in-browser workbench allows. Select fewer bands, or clip the image.",
       "noSuchBand": "The image has no band {{index}}.",
+      "missingFields_one": "This image lacks {{count}} of the features the classifier uses. Measure it with the same feature options.",
+      "missingFields_other": "This image lacks {{count}} of the features the classifier uses. Measure it with the same feature options.",
       "sourceMissing": "The image these objects were segmented from is no longer in the project. Segment again.",
       "sourceChanged": "The image no longer segments into the same objects, so it changed since the objects were made. Segment again.",
       "failed": "Segmentation failed.",
@@ -7594,7 +7596,8 @@
       "error": {
         "failed": "Could not apply the workflow.",
         "readImage": "Could not read the image.",
-        "onImage": "{{name}}: {{message}}"
+        "onImage": "{{name}}: {{message}}",
+        "changed": "The image was segmented again while applying, so the run stopped."
       }
     },
     "provenance": {
