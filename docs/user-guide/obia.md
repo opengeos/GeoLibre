@@ -157,6 +157,30 @@ class). The Export step also burns the classes onto the image's pixel grid:
   run; a rules default class outside the list comes after.
 - **Save legend (CSV)** saves the code, class name and color of each class.
 
+## 7. Apply to other images
+
+Once an image is classified, **Apply to other images** runs the same workflow
+on other raster layers in the project: tick the images and click **Apply**.
+Each image is segmented with the same bands and parameters, measured with the
+same features, and classified with the current classifier:
+
+- **Rules** apply unchanged.
+- **Random forest** is trained on this image's training samples and predicts
+  the other image's objects, so the other images must have the same bands in
+  the same order (the same sensor and processing level), or the forest sees
+  different values than it learned from.
+
+Each image gets its own objects layer, colored by class, and a line under the
+step lists its object and class counts. Labels, accuracy and export stay with
+the first image.
+
+## Progress and cancelling
+
+While a step runs, the line under its button shows the tool running and the
+elapsed time. **Cancel** stops it: the running tool is stopped at once and the
+step leaves its earlier results as they were. Cancelling a batch keeps the
+images it already finished.
+
 ## Saving and provenance
 
 The workbench is saved with the project. Reopening a project restores the
@@ -174,7 +198,8 @@ results were made:
   the `geolibre-wasm` engine and GeoLibre versions;
 - each hold-out split's share, seed and the number of samples it moved;
 - for the random forest, the number of trees, features and training samples
-  (the engine fixes the forest's random seed).
+  (the engine fixes the forest's random seed);
+- for each image the workflow was applied to, its tool calls and versions.
 
 **Copy as JSON** copies this record, the same one the project stores in its
 `obia` field (see the [project format](../project-format.md)).
@@ -182,8 +207,9 @@ results were made:
 The project does not store the label raster, which can be large. When a step
 needs it after a reload (measuring again, or exporting), the workbench re-runs
 the recorded segmentation on the source image; segmentation is deterministic,
-and the workbench checks the object count matches before using the rebuilt
-labels. If the image was removed from the project or no longer gives the same
+and the workbench checks the rebuilt labels against a fingerprint saved with
+the segmentation (the object count and a hash of every pixel's label) before
+using them. If the image was removed from the project or no longer gives the same
 objects, the step says so: segment again. An image added from a local file in
 the web app is not saved with the project, so add imagery by URL (or use the
 desktop app) when you want to rerun steps after reopening.

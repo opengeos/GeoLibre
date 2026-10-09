@@ -170,7 +170,9 @@ describe("OBIA workbench persistence", () => {
       env,
       finishedAt: "2026-10-09T10:05:00.000Z",
     };
-    const saved = JSON.parse(JSON.stringify(snapshotObiaSession({ ...fullSession(), batches: [batch] })));
+    const saved = JSON.parse(
+      JSON.stringify(snapshotObiaSession({ ...fullSession(), batches: [batch] })),
+    );
     assert.deepEqual(restoreObiaSession(saved, [objectsLayer()]).batches, [batch]);
     const gone = { ...objectsLayer(), id: "other" } as GeoLibreLayer;
     const withoutBatch = restoreObiaSession(

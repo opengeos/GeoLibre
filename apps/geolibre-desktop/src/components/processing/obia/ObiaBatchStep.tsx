@@ -58,10 +58,7 @@ export function ObiaBatchStep(): ReactElement | null {
   const progress = useObiaRun();
 
   const targets = useMemo(
-    () =>
-      layers.filter(
-        (layer) => isImageLayer(layer) && layer.id !== segmentation?.sourceLayerId,
-      ),
+    () => layers.filter((layer) => isImageLayer(layer) && layer.id !== segmentation?.sourceLayerId),
     [layers, segmentation?.sourceLayerId],
   );
 
@@ -204,9 +201,7 @@ export function ObiaBatchStep(): ReactElement | null {
                 disabled={running}
                 onChange={(event) =>
                   setSelected((ids) =>
-                    event.target.checked
-                      ? [...ids, layer.id]
-                      : ids.filter((id) => id !== layer.id),
+                    event.target.checked ? [...ids, layer.id] : ids.filter((id) => id !== layer.id),
                   )
                 }
               />
@@ -225,10 +220,16 @@ export function ObiaBatchStep(): ReactElement | null {
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Layers className="h-4 w-4" />}
           {running && current
             ? t("obia.batch.running", { index: current.index, total: current.total })
-            : t("obia.batch.run", { count: selected.length })}
+            : selected.length
+              ? t("obia.batch.run", { count: selected.length })
+              : t("obia.batch.runNone")}
         </Button>
       </div>
-      <ObiaRunProgress step={progress.step} startedAt={progress.startedAt} onCancel={progress.cancel} />
+      <ObiaRunProgress
+        step={progress.step}
+        startedAt={progress.startedAt}
+        onCancel={progress.cancel}
+      />
       <ObiaStatus error={error} />
       {batches.length > 0 && (
         <ul className="grid gap-1 text-xs" data-testid="obia-batch-results">

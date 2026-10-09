@@ -955,10 +955,15 @@ export async function classifyRandomForest(
     "--output=/work/predictions.csv",
   ];
   const encoder = new TextEncoder();
-  const files = await runTool(tool, args, {
-    "features.csv": encoder.encode(csv),
-    "training.csv": encoder.encode(`${trainingCsv}\n`),
-  }, run);
+  const files = await runTool(
+    tool,
+    args,
+    {
+      "features.csv": encoder.encode(csv),
+      "training.csv": encoder.encode(`${trainingCsv}\n`),
+    },
+    run,
+  );
   return {
     predictions: readPredictions(files["predictions.csv"], tool, tokens.name),
     fields,
@@ -1051,10 +1056,15 @@ export async function classifyByRules(
     "--output=/work/predictions.csv",
   ];
   const encoder = new TextEncoder();
-  const files = await runTool(tool, args, {
-    "features.csv": encoder.encode(csv),
-    "rules.csv": encoder.encode(`${rulesCsv}\n`),
-  }, run);
+  const files = await runTool(
+    tool,
+    args,
+    {
+      "features.csv": encoder.encode(csv),
+      "rules.csv": encoder.encode(`${rulesCsv}\n`),
+    },
+    run,
+  );
   return {
     predictions: readPredictions(files["predictions.csv"], tool, tokens.name),
     fields,

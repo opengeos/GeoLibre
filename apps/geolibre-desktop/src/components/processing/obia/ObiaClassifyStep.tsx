@@ -390,7 +390,11 @@ export function ObiaClassifyStep(): ReactElement | null {
           {running ? t("obia.classify.running") : t("obia.classify.run")}
         </Button>
       </div>
-      <ObiaRunProgress step={progress.step} startedAt={progress.startedAt} onCancel={progress.cancel} />
+      <ObiaRunProgress
+        step={progress.step}
+        startedAt={progress.startedAt}
+        onCancel={progress.cancel}
+      />
 
       <ObiaStatus
         error={error}

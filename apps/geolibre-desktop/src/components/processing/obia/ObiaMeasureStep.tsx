@@ -252,7 +252,11 @@ export function ObiaMeasureStep(): ReactElement | null {
           {running ? t("obia.measure.running") : t("obia.measure.run")}
         </Button>
       </div>
-      <ObiaRunProgress step={progress.step} startedAt={progress.startedAt} onCancel={progress.cancel} />
+      <ObiaRunProgress
+        step={progress.step}
+        startedAt={progress.startedAt}
+        onCancel={progress.cancel}
+      />
 
       <ObiaStatus
         error={error}

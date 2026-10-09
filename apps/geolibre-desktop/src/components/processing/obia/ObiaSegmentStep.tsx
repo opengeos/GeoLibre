@@ -188,7 +188,11 @@ export function ObiaSegmentStep({
         );
       }
     } catch (err) {
-      setError(isObiaCancel(err) ? t("obia.progress.cancelled") : obiaErrorMessage(err, t, t("obia.error.failed")));
+      setError(
+        isObiaCancel(err)
+          ? t("obia.progress.cancelled")
+          : obiaErrorMessage(err, t, t("obia.error.failed")),
+      );
     } finally {
       progress.end();
       runningRef.current = false;

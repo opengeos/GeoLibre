@@ -7573,6 +7573,7 @@
       "hintRules": "Segment, measure and classify other images with the same bands, settings and rules.",
       "noTargets": "Add another raster layer to apply this workflow to it.",
       "images": "Images",
+      "runNone": "Apply",
       "run_one": "Apply to {{count}} image",
       "run_other": "Apply to {{count}} images",
       "running": "Image {{index}} of {{total}}…",

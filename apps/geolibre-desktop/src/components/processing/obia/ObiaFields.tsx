@@ -178,11 +178,22 @@ export function ObiaRunProgress({
   if (startedAt == null) return null;
   const seconds = Math.max(0, Math.round((now - startedAt) / 1000));
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="obia-progress">
+    <div
+      className="flex items-center gap-2 text-xs text-muted-foreground"
+      data-testid="obia-progress"
+    >
       <span className="min-w-0 flex-1 truncate">
-        {step ? t("obia.progress.step", { tool: step, seconds }) : t("obia.progress.starting", { seconds })}
+        {step
+          ? t("obia.progress.step", { tool: step, seconds })
+          : t("obia.progress.starting", { seconds })}
       </span>
-      <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2" onClick={onCancel}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 gap-1 px-2"
+        onClick={onCancel}
+      >
         <X className="h-3.5 w-3.5" />
         {t("obia.progress.cancel")}
       </Button>
