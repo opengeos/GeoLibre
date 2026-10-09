@@ -147,8 +147,6 @@ export function ObiaSegmentStep({
     [bandIndexes, setBandIndexes],
   );
 
-  // What a run would read: the whole image or the map view's part of it, at
-  // the finest resolution level that fits the workbench's pixel limit.
   // Native segmentation: the desktop sidecar, on an image from a local file.
   const [nativeStatus, setNativeStatus] = useState<ObiaNativeStatus | null>(null);
   useEffect(() => {
@@ -168,6 +166,8 @@ export function ObiaSegmentStep({
       ? nativePixelLimit(nativeStatus, method, bandIndexes.length)
       : OBIA_MAX_PIXELS;
 
+  // What a run would read: the whole image or the map view's part of it, at
+  // the finest resolution level that fits the pixel limit.
   const plan = useMemo(() => {
     if (!summary) return null;
     const window =
