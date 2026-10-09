@@ -533,6 +533,29 @@ export async function segmentLabels(
 }
 
 /**
+ * Polygonize a label raster into one feature per object (WGS84, `id` and
+ * `segment_id` set to the label), as the segmentation step does.
+ *
+ * @param labels Label raster (GeoTIFF).
+ * @param run Cancellation and progress.
+ */
+export async function polygonizeLabels(
+  labels: Uint8Array,
+  run: ObiaRunOptions = {},
+): Promise<FeatureCollection> {
+  const polygonFiles = await runTool(
+    "segments_to_polygons",
+    ["--segments=/work/segments.tif", "--output=/work/segments.geojson"],
+    { "segments.tif": labels },
+    run,
+  );
+  const geojson = polygonFiles["segments.geojson"];
+  if (!geojson) throw new Error("segments_to_polygons did not write polygons.");
+  const pieces = JSON.parse(new TextDecoder().decode(geojson)) as FeatureCollection;
+  return dissolveSegmentPolygons(pieces);
+}
+
+/**
  * Segment an image into objects with seeded region growing and polygonize the
  * labels. Runs entirely in the browser.
  *
@@ -545,17 +568,7 @@ export async function segmentImage(
   run: ObiaRunOptions = {},
 ): Promise<ObiaSegmentation> {
   const { labels, tool, args } = await segmentLabels(image, params, run);
-
-  const polygonFiles = await runTool(
-    "segments_to_polygons",
-    ["--segments=/work/segments.tif", "--output=/work/segments.geojson"],
-    { "segments.tif": labels },
-    run,
-  );
-  const geojson = polygonFiles["segments.geojson"];
-  if (!geojson) throw new Error("segments_to_polygons did not write polygons.");
-  const pieces = JSON.parse(new TextDecoder().decode(geojson)) as FeatureCollection;
-  const objects = dissolveSegmentPolygons(pieces);
+  const objects = await polygonizeLabels(labels, run);
   const objectCount = objects.features.length;
   return {
     labels,

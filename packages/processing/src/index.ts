@@ -302,6 +302,19 @@ export {
   type WhiteboxToolParameter,
 } from "./sidecar-client";
 export {
+  childrenOf,
+  decodeLabelGrid,
+  encodeLabelGrid,
+  levelFeatures,
+  mergeObjects,
+  objectAdjacency,
+  relabelGrid,
+  type ObiaAdjacency,
+  type ObiaLabelGrid,
+  type ObiaLevelFeatureOptions,
+  type ObiaMergeOptions,
+} from "./obia-hierarchy";
+export {
   runWhiteboxToolWasm,
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
@@ -481,6 +494,7 @@ export {
   regionGrowingArgs,
   segmentImage,
   segmentLabels,
+  polygonizeLabels,
   planImageRead,
   readImageLevels,
   readImageWindow,
