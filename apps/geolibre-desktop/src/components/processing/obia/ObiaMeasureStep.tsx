@@ -305,9 +305,7 @@ export function ObiaMeasureStep(): ReactElement | null {
           {running ? t("obia.measure.running") : t("obia.measure.run")}
         </Button>
       </div>
-      {merged && (
-        <p className="text-xs text-muted-foreground">{t("obia.measure.mergedLevel")}</p>
-      )}
+      {merged && <p className="text-xs text-muted-foreground">{t("obia.measure.mergedLevel")}</p>}
       <ObiaRunProgress
         step={progress.step}
         startedAt={progress.startedAt}

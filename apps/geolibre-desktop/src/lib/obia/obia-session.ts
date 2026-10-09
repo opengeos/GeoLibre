@@ -371,9 +371,10 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
       if (!target || level === s.level) return {};
       const current = activeRecord(s);
       return {
-        levels: [...s.levels.filter((item) => item.level !== level), ...(current ? [current] : [])].sort(
-          (a, b) => a.level - b.level,
-        ),
+        levels: [
+          ...s.levels.filter((item) => item.level !== level),
+          ...(current ? [current] : []),
+        ].sort((a, b) => a.level - b.level),
         level,
         segmentation: target.segmentation,
         features: target.features,

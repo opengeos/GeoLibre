@@ -88,7 +88,10 @@ export function ObiaLevelsStep(): ReactElement | null {
             const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
             return {
               ...feature,
-              properties: { ...feature.properties, [OBIA_PARENT_FIELD]: built.parentOf.get(id) ?? null },
+              properties: {
+                ...feature.properties,
+                [OBIA_PARENT_FIELD]: built.parentOf.get(id) ?? null,
+              },
             };
           }),
         },
@@ -142,7 +145,11 @@ export function ObiaLevelsStep(): ReactElement | null {
             <span className="truncate">
               {item.scale == null
                 ? t("obia.levels.base", { level: item.level, count: item.count })
-                : t("obia.levels.merged", { level: item.level, count: item.count, scale: item.scale })}
+                : t("obia.levels.merged", {
+                    level: item.level,
+                    count: item.count,
+                    scale: item.scale,
+                  })}
             </span>
           </label>
         ))}
@@ -169,7 +176,11 @@ export function ObiaLevelsStep(): ReactElement | null {
       <p className="-mt-1 text-xs text-muted-foreground">
         {level === top ? t("obia.levels.scaleHint") : t("obia.levels.buildFromTop")}
       </p>
-      <ObiaRunProgress step={progress.step} startedAt={progress.startedAt} onCancel={progress.cancel} />
+      <ObiaRunProgress
+        step={progress.step}
+        startedAt={progress.startedAt}
+        onCancel={progress.cancel}
+      />
       <ObiaStatus error={error} />
     </section>
   );

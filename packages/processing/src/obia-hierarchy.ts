@@ -297,7 +297,10 @@ export function mergeObjects(
  * @param grid The child grid.
  * @param parentOf Each child's parent; a child without one becomes NoData.
  */
-export function relabelGrid(grid: ObiaLabelGrid, parentOf: ReadonlyMap<number, number>): Int32Array {
+export function relabelGrid(
+  grid: ObiaLabelGrid,
+  parentOf: ReadonlyMap<number, number>,
+): Int32Array {
   const out = new Int32Array(grid.ids.length);
   for (let i = 0; i < grid.ids.length; i += 1) {
     const id = grid.ids[i];
@@ -396,7 +399,8 @@ export function levelFeatures(
   const perimeter = new Map<number, number>();
   const box = new Map<number, [number, number, number, number]>();
   const shared = new Map<number, Map<number, number>>();
-  const bump = (map: Map<number, number>, id: number, by = 1) => map.set(id, (map.get(id) ?? 0) + by);
+  const bump = (map: Map<number, number>, id: number, by = 1) =>
+    map.set(id, (map.get(id) ?? 0) + by);
   const share = (a: number, b: number) => {
     let m = shared.get(a);
     if (!m) shared.set(a, (m = new Map()));
@@ -454,7 +458,8 @@ export function levelFeatures(
     }
   }
   if (options.context) {
-    for (const name of ["neighbor_count", "shared_boundary_total", "mean_shared_boundary"]) field(name);
+    for (const name of ["neighbor_count", "shared_boundary_total", "mean_shared_boundary"])
+      field(name);
     for (const id of area.keys()) {
       const m = shared.get(id);
       const count = m?.size ?? 0;
@@ -480,4 +485,3 @@ export function childrenOf(parentOf: ReadonlyMap<number, number>): Map<number, n
   }
   return children;
 }
-

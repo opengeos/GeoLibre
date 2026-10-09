@@ -375,7 +375,10 @@ describe("OBIA object hierarchy levels", () => {
     state = useObiaSession.getState();
     assert.equal(state.level, 1);
     assert.ok(state.classification);
-    assert.deepEqual(state.levels.map((record) => record.level), [2]);
+    assert.deepEqual(
+      state.levels.map((record) => record.level),
+      [2],
+    );
     // A new segmentation drops the hierarchy built on the old one.
     useObiaSession.getState().setSegmentation(base.segmentation);
     assert.deepEqual(useObiaSession.getState().levels, []);

@@ -234,7 +234,8 @@ function restoreNativeParams(value: unknown): ObiaNativeParams {
 
 function restoreMerge(value: unknown): ObiaLevelMerge | undefined {
   const json = asObject(value);
-  if (!json || !Number.isInteger(json.fromLevel) || (json.fromLevel as number) < 1) return undefined;
+  if (!json || !Number.isInteger(json.fromLevel) || (json.fromLevel as number) < 1)
+    return undefined;
   return {
     fromLevel: json.fromLevel as number,
     scale: inRange(json.scale, 1, 0, 1_000_000),
@@ -477,7 +478,9 @@ export function restoreObiaSession(
     splits: active.splits,
     batches: restoreBatches(runs.batches, layers),
     level: active.level,
-    levels: levels.filter((record) => record.level !== active.level).sort((a, b) => a.level - b.level),
+    levels: levels
+      .filter((record) => record.level !== active.level)
+      .sort((a, b) => a.level - b.level),
   };
 }
 
@@ -612,16 +615,14 @@ async function rebuildLabels(
  * A coarser level's labels: the level below's, relabeled with each object's
  * parent, which the level below's objects layer records in `obia_parent`.
  */
-async function mergedLabels(
-  merge: ObiaLevelMerge,
-  run: ObiaRunOptions,
-): Promise<Uint8Array> {
+async function mergedLabels(merge: ObiaLevelMerge, run: ObiaRunOptions): Promise<Uint8Array> {
   const child = useObiaSession.getState().levels.find((record) => record.level === merge.fromLevel);
   const childLayer = child
     ? useAppStore.getState().layers.find((layer) => layer.id === child.segmentation.objectsLayerId)
     : undefined;
   if (!child || !childLayer?.geojson) throw new ObiaRestoreError("source-missing");
-  const childLabels = child.segmentation.labels ?? (await rebuildChildLabels(child.segmentation, run));
+  const childLabels =
+    child.segmentation.labels ?? (await rebuildChildLabels(child.segmentation, run));
   const parentOf = new Map<number, number>();
   for (const feature of childLayer.geojson.features) {
     const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);

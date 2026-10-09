@@ -51,10 +51,13 @@ describe("OBIA object hierarchy", () => {
     const grid = await decodeLabelGrid(labels());
     assert.deepEqual([...grid.ids], [1, 2, 3, 4, 1, 2, 3, 4]);
     const graph = objectAdjacency(grid);
-    assert.deepEqual([...graph.get(2)!], [
-      [1, 2],
-      [3, 2],
-    ]);
+    assert.deepEqual(
+      [...graph.get(2)!],
+      [
+        [1, 2],
+        [3, 2],
+      ],
+    );
     assert.deepEqual([...graph.get(1)!], [[2, 2]]);
   });
 
@@ -63,19 +66,31 @@ describe("OBIA object hierarchy", () => {
     const graph = objectAdjacency(grid);
     // A small scale merges the two alike pairs, not the dark and bright ones.
     const parentOf = mergeObjects(children(), graph, { scale: 1.2, bands: [1] });
-    assert.deepEqual([...parentOf], [
-      [1, 1],
-      [2, 1],
-      [3, 2],
-      [4, 2],
-    ]);
-    assert.deepEqual([...childrenOf(parentOf)], [
-      [1, [1, 2]],
-      [2, [3, 4]],
-    ]);
+    assert.deepEqual(
+      [...parentOf],
+      [
+        [1, 1],
+        [2, 1],
+        [3, 2],
+        [4, 2],
+      ],
+    );
+    assert.deepEqual(
+      [...childrenOf(parentOf)],
+      [
+        [1, [1, 2]],
+        [2, [3, 4]],
+      ],
+    );
     // A large one merges everything; zero merges nothing.
-    assert.equal(new Set(mergeObjects(children(), graph, { scale: 100, bands: [1] }).values()).size, 1);
-    assert.equal(new Set(mergeObjects(children(), graph, { scale: 0, bands: [1] }).values()).size, 4);
+    assert.equal(
+      new Set(mergeObjects(children(), graph, { scale: 100, bands: [1] }).values()).size,
+      1,
+    );
+    assert.equal(
+      new Set(mergeObjects(children(), graph, { scale: 0, bands: [1] }).values()).size,
+      4,
+    );
   });
 
   it("refuses to merge without spectral statistics", async () => {
