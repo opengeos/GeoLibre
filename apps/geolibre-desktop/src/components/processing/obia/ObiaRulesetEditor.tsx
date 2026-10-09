@@ -33,8 +33,8 @@ export function ObiaRulesetEditor({
   const { t } = useTranslation();
   const [fileError, setFileError] = useState<string | null>(null);
   const check = useMemo(
-    () => (settings.ruleset.trim() ? parseRuleset(settings.ruleset, fields) : null),
-    [settings.ruleset, fields],
+    () => (settings.ruleset.trim() ? parseRuleset(settings.ruleset, fields, classes) : null),
+    [settings.ruleset, fields, classes],
   );
 
   const load = async () => {

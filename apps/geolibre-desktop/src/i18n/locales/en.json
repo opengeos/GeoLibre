@@ -7672,10 +7672,11 @@
       "fromCurrent": "Start from the current classification (otherwise every object starts unclassified)",
       "log_one": "{{count}} object changed",
       "log_other": "{{count}} objects changed",
-      "logLoop_one": "{{count}} object changed in {{iterations}} passes",
-      "logLoop_other": "{{count}} objects changed in {{iterations}} passes",
+      "logLoop_one": "{{count}} object changed (passes: {{iterations}})",
+      "logLoop_other": "{{count}} objects changed (passes: {{iterations}})",
       "loadFailed": "Could not open the ruleset.",
-      "saveFailed": "Could not save the ruleset."
+      "saveFailed": "Could not save the ruleset.",
+      "tooLong": "The ruleset ran more than {{max}} processes without settling: check that its loops can stop changing classes."
     },
     "accuracy": {
       "noValidation": "Label some objects as Validation samples (or Split the training samples) to score the classification against data it never trained on.",

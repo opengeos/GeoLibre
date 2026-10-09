@@ -1,4 +1,4 @@
-import { ObiaError } from "@geolibre/processing";
+import { OBIA_RULESET_MAX_STEPS, ObiaError, ObiaRulesetError } from "@geolibre/processing";
 import type { TFunction } from "i18next";
 import { ObiaContextError } from "./obia-context";
 import { ObiaRestoreError } from "./obia-persistence";
@@ -39,6 +39,9 @@ export function obiaErrorMessage(err: unknown, t: TFunction, fallback: string): 
       case "missing-fields":
         return t("obia.error.missingFields", { count: err.params.count });
     }
+  }
+  if (err instanceof ObiaRulesetError) {
+    return t("obia.ruleset.tooLong", { max: OBIA_RULESET_MAX_STEPS.toLocaleString() });
   }
   if (err instanceof ObiaContextError) {
     return t(CONTEXT_ERRORS[err.code]);

@@ -50,7 +50,11 @@ export type ObiaProcess =
       name?: string;
       domain?: ObiaDomain;
       classes: ObiaFuzzyClass[];
-      /** Below this best membership an object is left as it is. */
+      /**
+       * Below this best membership an object is left as it is (0.1 when
+       * omitted); an object whose best membership is 0 is always left.
+       * Ties go to the class listed first.
+       */
       minMembership?: number;
     }
   | { kind: "loop"; name?: string; processes: ObiaProcess[]; maxIterations?: number };
@@ -74,19 +78,89 @@ export interface ObiaProcessLog {
 const OPS = new Set([">", ">=", "<", "<=", "==", "!="]);
 
 /**
+ * Process runs a ruleset may make in all: nested loops multiply, and a ruleset
+ * that never settles must not freeze the app.
+ */
+export const OBIA_RULESET_MAX_STEPS = 10_000;
+
+/** How deeply loops may nest. */
+export const OBIA_RULESET_MAX_DEPTH = 8;
+
+/** The longest ruleset text the workbench reads or saves. */
+export const OBIA_RULESET_MAX_CHARS = 200_000;
+
+/** Why a ruleset run stopped, as a translatable code. */
+export class ObiaRulesetError extends Error {
+  readonly code: "too-long";
+
+  constructor(code: "too-long") {
+    super(
+      `The ruleset ran more than ${OBIA_RULESET_MAX_STEPS.toLocaleString("en-US")} processes without settling.`,
+    );
+    this.name = "ObiaRulesetError";
+    this.code = code;
+  }
+}
+
+/** The class names a ruleset assigns (assign and fuzzy classes, in loops too). */
+export function rulesetClassNames(value: unknown): string[] {
+  const names: string[] = [];
+  const add = (name: unknown) => {
+    if (typeof name === "string" && name && !names.includes(name)) names.push(name);
+  };
+  // Bounded like validation, so deeply nested input can't overflow the stack.
+  const walk = (list: unknown, depth: number) => {
+    if (!Array.isArray(list) || depth > OBIA_RULESET_MAX_DEPTH) return;
+    for (const item of list) {
+      const p = item as Record<string, unknown> | null;
+      if (!p || typeof p !== "object") continue;
+      add(p.className);
+      if (Array.isArray(p.classes)) {
+        for (const c of p.classes) add((c as Record<string, unknown> | null)?.className);
+      }
+      walk(p.processes, depth + 1);
+    }
+  };
+  walk((value as Record<string, unknown> | null)?.processes, 0);
+  return names;
+}
+
+/**
+ * The classes a ruleset's `nb_border_<slug>` fields can name, in slug order:
+ * the given classes, then ones only the ruleset assigns.
+ */
+function rulesetClassOrder(classes: readonly string[], ruleset: unknown): string[] {
+  return [...classes, ...rulesetClassNames(ruleset).filter((name) => !classes.includes(name))];
+}
+
+/**
+ * The `nb_border_<slug>` slugs of class names, slug to name, made the same
+ * way everywhere (in order, so colliding names get the same suffixes).
+ */
+export function classSlugs(names: readonly string[]): Map<string, string> {
+  const taken = new Set<string>();
+  return new Map(names.map((name) => [classFieldSlug(name, taken), name] as const));
+}
+
+/**
  * Check a parsed ruleset and return it typed, or the first problem found.
  *
  * @param value Parsed JSON.
- * @param fields The feature fields conditions and memberships may read
- *   (`nb_border_<class>` is always allowed).
+ * @param fields The feature fields conditions and memberships may read.
+ * @param classes The workbench's class names; with the classes the ruleset
+ *   assigns, they make the `nb_border_<class>` fields it may read.
  */
 export function validateRuleset(
   value: unknown,
   fields: readonly string[],
+  classes: readonly string[] = [],
 ): { ruleset: ObiaRuleset } | { error: string } {
   const known = new Set(fields);
+  const borders = classSlugs(rulesetClassOrder(classes, value));
   const isField = (field: unknown) =>
-    typeof field === "string" && (known.has(field) || field.startsWith("nb_border_"));
+    typeof field === "string" &&
+    (known.has(field) ||
+      (field.startsWith("nb_border_") && borders.has(field.slice("nb_border_".length))));
   const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
   const checkDomain = (domain: unknown, at: string): string | null => {
     if (domain == null) return null;
@@ -114,14 +188,15 @@ export function validateRuleset(
   const checkProcesses = (list: unknown, prefix: string, depth: number): string | null => {
     if (!Array.isArray(list) || !list.length)
       return `${prefix || "ruleset"}: needs at least one process`;
-    if (depth > 8) return `${prefix}: loops are nested too deeply`;
+    if (depth > OBIA_RULESET_MAX_DEPTH) return `${prefix}: loops are nested too deeply`;
     for (const [i, item] of list.entries()) {
       const at = prefix ? `${prefix}.${i + 1}` : `process ${i + 1}`;
       const p = item as Record<string, unknown>;
       if (!p || typeof p !== "object") return `${at}: must be an object`;
       if (p.name != null && typeof p.name !== "string") return `${at}: name must be text`;
       if (p.kind === "assign") {
-        if (typeof p.className !== "string") return `${at}: assign needs a className`;
+        if (typeof p.className !== "string" || !p.className.trim())
+          return `${at}: assign needs a className`;
         const err = checkDomain(p.domain, at);
         if (err) return err;
       } else if (p.kind === "fuzzy") {
@@ -141,7 +216,7 @@ export function validateRuleset(
           return `${at}: fuzzy needs class descriptions`;
         for (const [j, c] of p.classes.entries()) {
           const cls = c as Record<string, unknown>;
-          if (!cls || typeof cls.className !== "string")
+          if (!cls || typeof cls.className !== "string" || !cls.className.trim())
             return `${at}: class ${j + 1} needs a className`;
           if (cls.combine != null && !["and", "or", "mean"].includes(String(cls.combine))) {
             return `${at}: class ${j + 1} combine must be and, or or mean`;
@@ -207,14 +282,12 @@ export function membershipValue(m: ObiaMembership, x: number | null | undefined)
   }
 }
 
-/** A fuzzy class's membership for one object (missing features are skipped). */
+/** A fuzzy class's membership for one object (a missing feature counts as 0). */
 export function classMembership(
   cls: ObiaFuzzyClass,
   value: (field: string) => number | null | undefined,
 ): number {
-  const values = cls.memberships
-    .map((m) => membershipValue(m, value(m.field)))
-    .filter((v): v is number => v != null);
+  const values = cls.memberships.map((m) => membershipValue(m, value(m.field)) ?? 0);
   if (!values.length) return 0;
   switch (cls.combine ?? "and") {
     case "and":
@@ -262,8 +335,7 @@ export function runRuleset(
     const name = initial.get(id);
     if (name) current.set(id, name);
   }
-  const taken = new Set<string>();
-  const slugOf = new Map(classes.map((name) => [name, classFieldSlug(name, taken)] as const));
+  const nameOfSlug = classSlugs(rulesetClassOrder(classes, ruleset));
   // Border shares by class, recomputed before each process from `current`.
   let border = new Map<number, Map<string, number>>();
   const refreshBorder = () => {
@@ -285,11 +357,8 @@ export function runRuleset(
     (id: number) =>
     (field: string): number | null | undefined => {
       if (field.startsWith("nb_border_")) {
-        const slug = field.slice("nb_border_".length);
-        for (const [name, s] of slugOf) {
-          if (s === slug) return border.get(id)?.get(name) ?? 0;
-        }
-        return 0;
+        const name = nameOfSlug.get(field.slice("nb_border_".length));
+        return name == null ? 0 : (border.get(id)?.get(name) ?? 0);
       }
       return table.rows.get(id)?.[field];
     };
@@ -319,6 +388,7 @@ export function runRuleset(
     }
     return entry;
   };
+  let steps = 0;
   const runList = (processes: ObiaProcess[], prefix: string): number => {
     let changedTotal = 0;
     processes.forEach((process, index) => {
@@ -340,6 +410,8 @@ export function runRuleset(
         changedTotal += changed;
         return;
       }
+      steps += 1;
+      if (steps > OBIA_RULESET_MAX_STEPS) throw new ObiaRulesetError("too-long");
       refreshBorder();
       // Decide for every object first, then apply, so a process sees the
       // classes as they were when it started.

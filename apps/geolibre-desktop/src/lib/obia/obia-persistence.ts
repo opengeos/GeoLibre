@@ -20,6 +20,7 @@ import {
   type ObiaRuleOp,
   type ObiaToolCall,
   type RegionGrowingParams,
+  OBIA_RULESET_MAX_CHARS,
 } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
 import {
@@ -337,7 +338,11 @@ function restoreClassifier(value: unknown): ObiaClassifierSettings {
     fields: Array.isArray(json.fields) ? asStrings(json.fields) : null,
     rules: restoreRules(json.rules),
     // Kept as text: it is validated against the features when run.
-    ruleset: typeof json.ruleset === "string" ? json.ruleset.slice(0, 200_000) : base.ruleset,
+    // A ruleset too long to be one is dropped rather than cut mid-text.
+    ruleset:
+      typeof json.ruleset === "string" && json.ruleset.length <= OBIA_RULESET_MAX_CHARS
+        ? json.ruleset
+        : base.ruleset,
     rulesetFromCurrent: json.rulesetFromCurrent === true,
     defaultClass: asString(json.defaultClass, base.defaultClass),
   };

@@ -22,7 +22,7 @@ import { useCallback, useMemo, useRef, useState, type ReactElement } from "react
 import { useTranslation } from "react-i18next";
 import type { FeatureCollection } from "geojson";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
-import { parseRuleset } from "../../../lib/obia/obia-ruleset-run";
+import { parseRuleset, rulesetFields } from "../../../lib/obia/obia-ruleset-run";
 import {
   DEFAULT_OBIA_NATIVE_PARAMS,
   isNativeMethod,
@@ -105,15 +105,17 @@ export function ObiaBatchStep(): ReactElement | null {
     const samples = collectSamples(sourceObjects);
     const settings = classification.settings;
     let failedOn: string | null = null;
-    // Re-segmenting while the batch runs clears the batch records and makes
-    // this workflow stale, so stop rather than record runs against it.
     // A ruleset reads only features and the object graph, so it applies as is.
     const rulesetOn = async (
       table: ObiaFeatureTable,
       labels: Uint8Array,
       defaultClass: string,
     ): Promise<ObiaClassification> => {
-      const parsed = parseRuleset(settings.ruleset, table.fields);
+      const parsed = parseRuleset(
+        settings.ruleset,
+        table.fields,
+        classes.map((item) => item.name),
+      );
       if ("error" in parsed) throw new Error(t("obia.ruleset.invalid", { error: parsed.error }));
       const grid = await decodeLabelGrid(labels);
       const { predictions } = runRuleset(
@@ -132,6 +134,8 @@ export function ObiaBatchStep(): ReactElement | null {
         call: { tool: "obia/ruleset", args: [JSON.stringify(parsed.ruleset)] },
       };
     };
+    // Re-segmenting while the batch runs clears the batch records and makes
+    // this workflow stale, so stop rather than record runs against it.
     const stale = () =>
       useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt;
     try {
@@ -279,9 +283,7 @@ export function ObiaBatchStep(): ReactElement | null {
     (classification.settings.method === "rules"
       ? classification.settings.rules.some((rule) => isContextField(rule.field))
       : classification.settings.method === "ruleset"
-        ? [...classification.settings.ruleset.matchAll(/"field"\s*:\s*"([^"]+)"/g)].some(
-            ([, field]) => isContextField(field),
-          )
+        ? rulesetFields(classification.settings.ruleset).some(isContextField)
         : classification.fields.some(isContextField)),
   );
 
