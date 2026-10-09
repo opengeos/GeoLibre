@@ -277,6 +277,44 @@ describe("OBIA read areas", () => {
   });
 });
 
+describe("OBIA native segmentation settings", () => {
+  it("saves the method and its parameters, but not the sidecar job", () => {
+    const session = fullSession();
+    session.method = "slic";
+    session.nativeParams = { ...session.nativeParams, slic: { size: 250, compactness: 0.5 } };
+    session.segmentation = {
+      ...session.segmentation!,
+      method: "slic",
+      nativeParams: session.nativeParams,
+      nativeJobId: "job-1",
+    };
+    const saved = JSON.parse(JSON.stringify(snapshotObiaSession(session)));
+    assert.ok(!JSON.stringify(saved).includes("job-1"), "a sidecar job does not outlive it");
+    const restored = restoreObiaSession(saved, [objectsLayer()]);
+    assert.equal(restored.method, "slic");
+    assert.deepEqual(restored.nativeParams.slic, { size: 250, compactness: 0.5 });
+    assert.equal(restored.segmentation?.method, "slic");
+    assert.equal(restored.segmentation?.nativeJobId, undefined);
+  });
+
+  it("clamps native parameters and drops an unknown method", () => {
+    const restored = restoreObiaSession(
+      {
+        version: OBIA_STATE_VERSION,
+        settings: {
+          method: "watershed",
+          nativeParams: { slic: { size: 1 }, felzenszwalb: { sigma: 99, minSize: 2.4 } },
+        },
+      },
+      [],
+    );
+    assert.equal(restored.method, "region-growing");
+    assert.equal(restored.nativeParams.slic.size, 4);
+    assert.equal(restored.nativeParams.felzenszwalb.sigma, 20);
+    assert.equal(restored.nativeParams.felzenszwalb.minSize, 2);
+  });
+});
+
 describe("project obia field", () => {
   it("round-trips through save and load, and is omitted when unused", () => {
     const empty = createEmptyProject("plain");

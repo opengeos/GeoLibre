@@ -187,7 +187,9 @@ def test_reads_a_window_from_an_overview(tmp_path: Path) -> None:
         # The left half at overview 1 (half resolution): 12 x 16 pixels.
         "area": {"level": 1, "window": [0, 0, 24, 32]},
     }
-    result = _run(_SEGMENT_SCRIPT, {"segmentation": seg, "out_dir": str(tmp_path), "max_pixels": 10**6})
+    result = _run(
+        _SEGMENT_SCRIPT, {"segmentation": seg, "out_dir": str(tmp_path), "max_pixels": 10**6}
+    )
     assert (result["width"], result["height"]) == (12, 16)
     assert result["pixel_size"] == 20
     with rasterio.open(tmp_path / "segments.tif") as src:
@@ -219,7 +221,12 @@ def test_validation_rejects_bad_requests(tmp_path: Path) -> None:
     text.write_text("x")
     with pytest.raises(HTTPException) as excinfo:
         _validated_segmentation(
-            Segmentation(input_path=str(text), bands=[1], method="slic", slic=SlicParams(size=10, compactness=1))
+            Segmentation(
+                input_path=str(text),
+                bands=[1],
+                method="slic",
+                slic=SlicParams(size=10, compactness=1),
+            )
         )
     assert excinfo.value.status_code == 400
     tif = tmp_path / "image.tif"
@@ -237,7 +244,12 @@ def test_validation_rejects_bad_requests(tmp_path: Path) -> None:
             )
         )
     ok = _validated_segmentation(
-        Segmentation(input_path=str(tif), bands=[2, 1], method="slic", slic=SlicParams(size=10, compactness=1))
+        Segmentation(
+            input_path=str(tif),
+            bands=[2, 1],
+            method="slic",
+            slic=SlicParams(size=10, compactness=1),
+        )
     )
     assert ok["input_path"] == str(tif.resolve()) and ok["bands"] == [2, 1]
 

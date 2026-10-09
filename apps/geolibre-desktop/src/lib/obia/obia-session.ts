@@ -12,11 +12,7 @@ import {
   type RegionGrowingParams,
 } from "@geolibre/processing";
 import { create } from "zustand";
-import {
-  DEFAULT_OBIA_NATIVE_PARAMS,
-  type ObiaMethod,
-  type ObiaNativeParams,
-} from "./obia-native";
+import { DEFAULT_OBIA_NATIVE_PARAMS, type ObiaMethod, type ObiaNativeParams } from "./obia-native";
 
 /**
  * Add GeoTIFF bytes to the map as a raster layer, optionally with an initial

@@ -49,6 +49,29 @@ Felzenszwalb graph, marker watershed) are wrappers around this same region
 growing with a remapped threshold, which is why the workbench offers it under
 its real name.
 
+### Native segmentation in the desktop app
+
+The desktop app can also segment natively, in its processing server, with
+scikit-image instead of the in-browser engine. Pick a native method under
+**Method**:
+
+| Method | Parameters |
+| --- | --- |
+| SLIC superpixels | **Object size (pixels)**: about how many pixels each object gets. **Compactness**: larger gives more regular, square objects; smaller follows the image more closely. |
+| Felzenszwalb graph | **Scale**: larger gives larger objects. **Smoothing (sigma)**: Gaussian smoothing first. **Minimum object size (pixels)**: smaller objects merge into a neighbor. |
+
+A native run reads the image from its file, so the image must have been added
+from a local GeoTIFF (an image added by URL uses the browser engine). It reads
+up to 120 million pixels, the same way as the browser engine reads its area
+(whole image or map view, from an overview when needed), and the Measure step
+then measures in the processing server too, with the same feature names, so
+labels, rules, classifiers, accuracy and export work the same. GLCM texture is
+measured only in the browser. The first native run installs scikit-image into
+the processing server, which takes a minute.
+
+Native runs are repeatable: both methods are deterministic, so a reopened
+project rebuilds the same objects. NATIVE_BENCHMARK
+
 ### Large images
 
 A run reads at most about 16.8 million pixels (4096 × 4096). A larger image

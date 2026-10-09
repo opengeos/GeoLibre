@@ -197,13 +197,15 @@ def segment(data, valid):
     if seg["method"] == "slic":
         p = seg["slic"]
         n = max(1, int(valid.sum() / p["size"]))
+        # No mask: with one, SLIC seeds by k-means over every masked pixel,
+        # which takes hours at this size even for a handful of NoData pixels.
+        # NoData is zero after standardizing, and its labels are cleared below.
         labels = slic(
             image,
             n_segments=n,
             compactness=p["compactness"],
             channel_axis=-1,
             start_label=1,
-            mask=valid if not valid.all() else None,
             convert2lab=False,
             enforce_connectivity=True,
         )
@@ -241,7 +243,7 @@ _SEGMENT_SCRIPT = (
     _COMMON
     + r"""
 from rasterio.features import shapes
-from rasterio.warp import transform_geom
+from rasterio.warp import transform as warp_transform
 
 started = time.time()
 data, valid, transform, crs = read_area()
@@ -256,6 +258,27 @@ write_labels(labels, transform, crs, os.path.join(out_dir, "segments.tif"))
 pieces = {}
 for geometry, value in shapes(labels, mask=labels > 0, connectivity=4, transform=transform):
     pieces.setdefault(int(value), []).append(geometry["coordinates"])
+print(f"Polygonized {len(pieces)} objects", flush=True)
+
+# Reproject every vertex in one call: per-geometry reprojection rebuilds the
+# transformation each time and dominates the run for tens of thousands of
+# objects.
+if crs is not None and crs.to_epsg() != 4326:
+    xs, ys = [], []
+    for polygons in pieces.values():
+        for polygon in polygons:
+            for ring in polygon:
+                for x, y in ring:
+                    xs.append(x)
+                    ys.append(y)
+    lons, lats = warp_transform(crs, "EPSG:4326", xs, ys)
+    position = 0
+    for polygons in pieces.values():
+        for polygon in polygons:
+            for r, ring in enumerate(polygon):
+                n = len(ring)
+                polygon[r] = list(zip(lons[position : position + n], lats[position : position + n]))
+                position += n
 
 
 def rounded(coords):
@@ -268,16 +291,10 @@ with open(os.path.join(out_dir, "objects.geojson"), "w", encoding="utf-8") as ou
     for label in sorted(pieces):
         polygons = pieces[label]
         geometry = (
-            {"type": "Polygon", "coordinates": polygons[0]}
+            {"type": "Polygon", "coordinates": rounded(polygons[0])}
             if len(polygons) == 1
-            else {"type": "MultiPolygon", "coordinates": polygons}
+            else {"type": "MultiPolygon", "coordinates": [rounded(p) for p in polygons]}
         )
-        if crs is not None and crs.to_epsg() != 4326:
-            geometry = transform_geom(crs, "EPSG:4326", geometry)
-        if geometry["type"] == "Polygon":
-            geometry["coordinates"] = rounded(geometry["coordinates"])
-        else:
-            geometry["coordinates"] = [rounded(p) for p in geometry["coordinates"]]
         feature = {
             "type": "Feature",
             "id": label,

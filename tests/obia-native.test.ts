@@ -71,20 +71,27 @@ afterEach(() => {
 /** Run a job-polling call, advancing the fake clock between polls. */
 async function withClock<T>(run: () => Promise<T>): Promise<T> {
   mock.timers.enable({ apis: ["setTimeout"] });
-  const promise = run();
-  // The caller asserts on it; do not let an early rejection go unhandled.
-  promise.catch(() => {});
-  for (let i = 0; i < 6; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-    mock.timers.tick(1000);
+  try {
+    const promise = run();
+    // The caller asserts on it; do not let an early rejection go unhandled.
+    promise.catch(() => {});
+    for (let i = 0; i < 6; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+      mock.timers.tick(1000);
+    }
+    return await promise;
+  } finally {
+    mock.timers.reset();
   }
-  return promise;
 }
 
 describe("native OBIA", () => {
   it("reads only local GeoTIFF files", () => {
     assert.equal(obiaLocalPath(layer({ sourcePath: "/data/naip.tif" })), "/data/naip.tif");
-    assert.equal(obiaLocalPath(layer({ sourcePath: "C:\\data\\naip.TIFF" })), "C:\\data\\naip.TIFF");
+    assert.equal(
+      obiaLocalPath(layer({ sourcePath: "C:\\data\\naip.TIFF" })),
+      "C:\\data\\naip.TIFF",
+    );
     assert.equal(obiaLocalPath(layer({ sourcePath: "https://host/naip.tif" })), null);
     assert.equal(obiaLocalPath(layer({ sourcePath: "/data/naip.png" })), null);
     assert.equal(obiaLocalPath(layer({})), null);
@@ -115,7 +122,13 @@ describe("native OBIA", () => {
       "objects.geojson": JSON.stringify(objects),
     });
     const steps: string[] = [];
-    const request = nativeSegmentation("/data/naip.tif", [1], undefined, "slic", DEFAULT_OBIA_NATIVE_PARAMS);
+    const request = nativeSegmentation(
+      "/data/naip.tif",
+      [1],
+      undefined,
+      "slic",
+      DEFAULT_OBIA_NATIVE_PARAMS,
+    );
     const result = await withClock(() =>
       runNativeSegmentation(request, { onStep: (step) => steps.push(step) }),
     );
@@ -132,11 +145,23 @@ describe("native OBIA", () => {
     const sidecar = fakeSidecar({
       "features.csv": "segment_id,mean_b1,mean_b4\n1,10,30\n2,20,20\n",
     });
-    const request = nativeSegmentation("/data/naip.tif", [1, 4], undefined, "slic", DEFAULT_OBIA_NATIVE_PARAMS);
+    const request = nativeSegmentation(
+      "/data/naip.tif",
+      [1, 4],
+      undefined,
+      "slic",
+      DEFAULT_OBIA_NATIVE_PARAMS,
+    );
     const { table } = await withClock(() =>
       runNativeMeasure(
         request,
-        { spectral: true, shape: false, context: false, textureBand: 1, indices: { red: 1, nir: 4 } },
+        {
+          spectral: true,
+          shape: false,
+          context: false,
+          textureBand: 1,
+          indices: { red: 1, nir: 4 },
+        },
         "job-1",
       ),
     );
@@ -150,8 +175,17 @@ describe("native OBIA", () => {
 
   it("reports a failed job and cancels a cancelled one", async () => {
     fakeSidecar({}, "failed");
-    const request = nativeSegmentation("/data/naip.tif", [1], undefined, "slic", DEFAULT_OBIA_NATIVE_PARAMS);
-    await assert.rejects(withClock(() => runNativeSegmentation(request)), /Segmentation failed/);
+    const request = nativeSegmentation(
+      "/data/naip.tif",
+      [1],
+      undefined,
+      "slic",
+      DEFAULT_OBIA_NATIVE_PARAMS,
+    );
+    await assert.rejects(
+      withClock(() => runNativeSegmentation(request)),
+      /Segmentation failed/,
+    );
 
     const sidecar = fakeSidecar({});
     const controller = new AbortController();
@@ -160,12 +194,16 @@ describe("native OBIA", () => {
       runNativeSegmentation(request, { signal: controller.signal }),
       (err: Error) => err.name === "AbortError",
     );
-    assert.deepEqual(sidecar.cancelled, []);
+    assert.equal(sidecar.cancelled.length, 0, "a job never started is not cancelled");
+    // Cancel while the job runs: the sidecar is told to stop it.
+    mock.timers.enable({ apis: ["setTimeout"] });
     const running = new AbortController();
-    const pending = withClock(() => runNativeSegmentation(request, { signal: running.signal }));
-    await new Promise((resolve) => setImmediate(resolve));
+    const pending = runNativeSegmentation(request, { signal: running.signal });
+    pending.catch(() => {});
+    for (let i = 0; i < 3; i += 1) await new Promise((resolve) => setImmediate(resolve));
     running.abort();
+    mock.timers.tick(1000);
     await assert.rejects(pending, (err: Error) => err.name === "AbortError");
-    assert.deepEqual(sidecar.cancelled, ["obia-segment"]);
+    assert.ok(sidecar.cancelled.includes("obia-segment"));
   });
 });

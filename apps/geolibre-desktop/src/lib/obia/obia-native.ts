@@ -198,10 +198,7 @@ export async function runNativeMeasure(
 ): Promise<{ table: ObiaFeatureTable; call: ObiaToolCall }> {
   throwIfAborted(run, "obia-measure");
   const native = { spectral: options.spectral, shape: options.shape, context: options.context };
-  const job = await waitForJob(
-    await startObiaNativeMeasure(request, native, segmentJobId),
-    run,
-  );
+  const job = await waitForJob(await startObiaNativeMeasure(request, native, segmentJobId), run);
   const csv = new TextDecoder().decode(await fetchObiaNativeFile(job.id, "features.csv"));
   return {
     table: nativeFeatureTable(csv, request.bands, options.spectral ? options.indices : undefined),
