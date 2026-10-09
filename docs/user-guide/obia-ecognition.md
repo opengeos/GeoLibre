@@ -37,7 +37,7 @@ differences noted; **No** is not available.
 | GLCM homogeneity, contrast, entropy | `glcm_contrast_b<n>`, `glcm_homogeneity_b<n>`, `glcm_energy_b<n>`, `glcm_entropy_b<n>` | **Partly**: one symmetric GLCM per object on one band, distance 1, horizontal and vertical pairs pooled (browser engine only) |
 | Number of neighbors, border to neighbors | `neighbor_count`, `shared_boundary_total`, `mean_shared_boundary` | **Yes** |
 | Mean difference to neighbors | `nb_contrast_b<n>` (border-weighted) | **Yes** |
-| Relative border to class | `nb_border_<class>` (in rulesets) | **Yes** |
+| Relative border to class | `nb_border_<class>` (in rulesets; the class name as a field-safe suffix) | **Yes** |
 | Super-object features | `parent_<feature>` | **Yes** for band means, indices and size |
 | Existence of super-object of class | `parent_is_<class>` | **Yes** |
 | Sub-object features (number, relative area of class) | `child_count`, `child_frac_<class>` | **Yes** |
@@ -65,7 +65,8 @@ differences noted; **No** is not available.
 1. Run the eCognition workflow and export what it produced: the image objects
    of each level (polygons with their ids), the samples, the class hierarchy
    (names and colors), the object features you rely on (a CSV with the object
-   id), and each level's parent ids.
+   id), and each level's parent ids. Object ids must be whole numbers up to
+   16,777,216; renumber larger ones before importing.
 2. In GeoLibre, add the image and the exported layers to the map, then use
    [Import from other software](obia.md#import-from-other-software): objects
    (with the id field), the feature table, the level mapping, the class list
