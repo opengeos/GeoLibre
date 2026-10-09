@@ -23,6 +23,7 @@ import {
 } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
 import {
+  OBIA_MAX_LEVELS,
   emptyObiaSession,
   useObiaSession,
   type ObiaBatchRun,
@@ -232,10 +233,20 @@ function restoreNativeParams(value: unknown): ObiaNativeParams {
   };
 }
 
-function restoreMerge(value: unknown): ObiaLevelMerge | undefined {
+/**
+ * How a saved coarser level was built: only from a level below it, so a
+ * crafted file cannot make the label rebuild loop.
+ */
+function restoreMerge(value: unknown, level: number): ObiaLevelMerge | undefined {
   const json = asObject(value);
-  if (!json || !Number.isInteger(json.fromLevel) || (json.fromLevel as number) < 1)
+  if (
+    !json ||
+    !Number.isInteger(json.fromLevel) ||
+    (json.fromLevel as number) < 1 ||
+    (json.fromLevel as number) >= level
+  ) {
     return undefined;
+  }
   return {
     fromLevel: json.fromLevel as number,
     scale: inRange(json.scale, 1, 0, 1_000_000),
@@ -454,7 +465,13 @@ export function restoreObiaSession(
     classifier: restoreClassifier(settings.classifier),
   };
 
-  const active = restoreLevel(runs, layers, 1);
+  const activeLevel =
+    Number.isInteger(saved.level) &&
+    (saved.level as number) >= 1 &&
+    (saved.level as number) <= OBIA_MAX_LEVELS
+      ? (saved.level as number)
+      : 1;
+  const active = restoreLevel(runs, layers, activeLevel);
   if (!active) return data;
   // The hierarchy: each saved level whose objects layer is still there.
   const levels: ObiaLevelRecord[] = [];
@@ -462,14 +479,11 @@ export function restoreObiaSession(
     for (const item of saved.levels) {
       const json = asObject(item);
       const level = json && Number.isInteger(json.level) ? (json.level as number) : 0;
-      if (level < 1 || level > 32) continue;
+      if (level < 1 || level > OBIA_MAX_LEVELS) continue;
       const record = restoreLevel(asObject(json!.runs) ?? {}, layers, level);
       if (record && !levels.some((other) => other.level === level)) levels.push(record);
     }
   }
-  const activeLevel =
-    Number.isInteger(saved.level) && (saved.level as number) >= 1 ? (saved.level as number) : 1;
-  active.level = activeLevel;
   return {
     ...data,
     segmentation: active.segmentation,
@@ -523,7 +537,7 @@ function restoreLevel(
     params: restoreParams(seg.params),
     env: restoreEnv(seg.env),
     finishedAt: asString(seg.finishedAt),
-    ...(restoreMerge(seg.merge) ? { merge: restoreMerge(seg.merge) } : {}),
+    ...(restoreMerge(seg.merge, level) ? { merge: restoreMerge(seg.merge, level) } : {}),
   };
   const record: ObiaLevelRecord = {
     level,
@@ -597,44 +611,18 @@ async function rebuildLabels(
   segmentation: ObiaSegmentationRun,
   run: ObiaRunOptions,
 ): Promise<Uint8Array> {
-  const labels = segmentation.merge
-    ? await mergedLabels(segmentation.merge, run)
-    : await segmentedLabels(segmentation, run);
-  const { objectCount, hash } = await fingerprintSegmentLabels(labels);
-  if (
-    objectCount !== segmentation.objectCount ||
-    (segmentation.labelsHash !== undefined && hash !== segmentation.labelsHash)
-  ) {
-    throw new ObiaRestoreError("source-changed");
-  }
+  const labels = await verifiedLabels(segmentation, run);
   useObiaSession.getState().setSegmentationLabels(segmentation.finishedAt, labels);
   return labels;
 }
 
 /**
- * A coarser level's labels: the level below's, relabeled with each object's
- * parent, which the level below's objects layer records in `obia_parent`.
+ * A level's labels rebuilt (segmented again, or merged from the level below)
+ * and checked against the fingerprint saved with it.
+ *
+ * @throws ObiaRestoreError("source-changed") when they no longer match.
  */
-async function mergedLabels(merge: ObiaLevelMerge, run: ObiaRunOptions): Promise<Uint8Array> {
-  const child = useObiaSession.getState().levels.find((record) => record.level === merge.fromLevel);
-  const childLayer = child
-    ? useAppStore.getState().layers.find((layer) => layer.id === child.segmentation.objectsLayerId)
-    : undefined;
-  if (!child || !childLayer?.geojson) throw new ObiaRestoreError("source-missing");
-  const childLabels =
-    child.segmentation.labels ?? (await rebuildChildLabels(child.segmentation, run));
-  const parentOf = new Map<number, number>();
-  for (const feature of childLayer.geojson.features) {
-    const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
-    const parent = Number(feature.properties?.[OBIA_PARENT_FIELD]);
-    if (Number.isFinite(id) && parent > 0) parentOf.set(id, parent);
-  }
-  const grid = await decodeLabelGrid(childLabels);
-  return encodeLabelGrid(grid, relabelGrid(grid, parentOf));
-}
-
-/** A stashed level's labels, rebuilt and checked without touching the active level. */
-async function rebuildChildLabels(
+async function verifiedLabels(
   segmentation: ObiaSegmentationRun,
   run: ObiaRunOptions,
 ): Promise<Uint8Array> {
@@ -649,6 +637,41 @@ async function rebuildChildLabels(
     throw new ObiaRestoreError("source-changed");
   }
   return labels;
+}
+
+/**
+ * A coarser level's labels: the level below's, relabeled with each object's
+ * parent, which the level below's objects layer records in `obia_parent`.
+ */
+async function mergedLabels(merge: ObiaLevelMerge, run: ObiaRunOptions): Promise<Uint8Array> {
+  const state = useObiaSession.getState();
+  // The level below is stashed while a coarser one is active, and active
+  // when this rebuilds a stashed coarser level.
+  const child =
+    state.levels.find((record) => record.level === merge.fromLevel) ??
+    (state.level === merge.fromLevel && state.segmentation
+      ? { level: state.level, segmentation: state.segmentation }
+      : undefined);
+  const childLayer = child
+    ? useAppStore.getState().layers.find((layer) => layer.id === child.segmentation.objectsLayerId)
+    : undefined;
+  if (!child || !childLayer?.geojson) throw new ObiaRestoreError("source-missing");
+  let childLabels = child.segmentation.labels;
+  if (!childLabels) {
+    childLabels = await verifiedLabels(child.segmentation, run);
+    // Keep them, so the next rebuild above does not redo the chain below.
+    useObiaSession
+      .getState()
+      .setLevelLabels(child.level, child.segmentation.finishedAt, childLabels);
+  }
+  const parentOf = new Map<number, number>();
+  for (const feature of childLayer.geojson.features) {
+    const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
+    const parent = Number(feature.properties?.[OBIA_PARENT_FIELD]);
+    if (Number.isFinite(id) && parent > 0) parentOf.set(id, parent);
+  }
+  const grid = await decodeLabelGrid(childLabels);
+  return encodeLabelGrid(grid, relabelGrid(grid, parentOf));
 }
 
 /** Level 1's labels: the recorded segmentation run again on the source image. */
