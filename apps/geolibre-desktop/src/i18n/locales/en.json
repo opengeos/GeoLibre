@@ -7523,7 +7523,10 @@
         "noFeatures": "Measure spectral statistics first: merging compares the objects' band means and spreads.",
         "tooLarge": "The objects are too large to merge in the browser.",
         "notTop": "Build coarser levels from the coarsest one.",
-        "tooDeep": "The hierarchy has at most 32 levels."
+        "tooDeep": "The hierarchy has at most 32 levels.",
+        "badScale": "The scale must be a positive number.",
+        "changed": "The objects, their features or the level changed while the level was being built, so it was discarded. Build it again.",
+        "objectsMissing": "This level's objects layer was removed."
       },
       "context": {
         "title": "Context features",
