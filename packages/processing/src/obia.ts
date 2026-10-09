@@ -1,6 +1,11 @@
 import type { Feature, FeatureCollection, MultiPolygon, Polygon, Position } from "geojson";
 import { fromArrayBuffer } from "geotiff";
-import { readRasterData, writeRasterBands, writeUint8Bands } from "./raster-client";
+import {
+  MAX_CLIENT_RASTER_BYTES,
+  readRasterData,
+  writeRasterBands,
+  writeUint8Bands,
+} from "./raster-client";
 import { runWasmToolInBackground } from "./wasm-tool-runner";
 
 /**
@@ -14,7 +19,7 @@ import { runWasmToolInBackground } from "./wasm-tool-runner";
  */
 
 /** Why an OBIA call refused its input, for the UI to translate. */
-export type ObiaErrorCode = "image-too-large" | "no-such-band" | "no-bands";
+export type ObiaErrorCode = "image-too-large" | "too-many-bands" | "no-such-band" | "no-bands";
 
 /**
  * An input the workbench rejects, with a stable `code` and `params` the app
@@ -112,7 +117,7 @@ export async function splitImageBands(
   if (width * height > OBIA_MAX_PIXELS) {
     throw new ObiaError(
       "image-too-large",
-      `This image has ${width} x ${height} pixels, more than the ${OBIA_MAX_PIXELS.toLocaleString("en-US")} the in-browser workbench handles. Clip it to a smaller area first.`,
+      `This image has ${width} x ${height} pixels, over the workbench's limit of ${OBIA_MAX_PIXELS.toLocaleString("en-US")} pixels. Clip it to a smaller area first.`,
       { width, height, max: OBIA_MAX_PIXELS },
     );
   }
@@ -124,6 +129,15 @@ export async function splitImageBands(
   );
   if (missing !== undefined) {
     throw new ObiaError("no-such-band", `The image has no band ${missing}.`, { index: missing });
+  }
+  // The decoder holds each chosen band as Float32; refuse up front, with a
+  // translatable error, a selection it would reject for memory.
+  if (width * height * wanted.length * Float32Array.BYTES_PER_ELEMENT > MAX_CLIENT_RASTER_BYTES) {
+    throw new ObiaError(
+      "too-many-bands",
+      `${wanted.length} bands of this image need more memory than the in-browser workbench allows. Select fewer bands, or clip the image.`,
+      { bands: wanted.length },
+    );
   }
   // Decode only the chosen bands, in the order asked for.
   const raster = await readRasterData(buffer, { samples: wanted.map((index) => index - 1) });
@@ -781,6 +795,27 @@ export function featureTableCsv(
 }
 
 /**
+ * The feature table with an empty row for every object a feature tool skipped
+ * (e.g. GLCM texture of a 1-pixel object), so every object is classified: the
+ * random forest fills the gaps with column means, and rules give it the
+ * default class.
+ *
+ * @param table Feature table.
+ * @param objects The objects layer's features.
+ */
+export function tableForAllObjects(
+  table: ObiaFeatureTable,
+  objects: FeatureCollection,
+): ObiaFeatureTable {
+  const rows = new Map(table.rows);
+  for (const feature of objects.features) {
+    const id = objectSegmentId(feature);
+    if (Number.isFinite(id) && !rows.has(id)) rows.set(id, {});
+  }
+  return { fields: table.fields, rows };
+}
+
+/**
  * CSV-safe stand-ins for class names: the tools' CSV has no quoting, so a
  * class named "trees, shrubs" would split a row.
  */
@@ -887,6 +922,9 @@ export async function classifyByRules(
   defaultClass: string,
 ): Promise<ObiaClassification> {
   if (!rules.length) throw new Error("Add at least one rule.");
+  if (rules.some((rule) => !Number.isFinite(rule.value))) {
+    throw new Error("Every rule needs a numeric value.");
+  }
   const ruleFields = [...new Set(rules.map((rule) => rule.field))];
   const missing = ruleFields.filter((field) => !table.fields.includes(field));
   if (missing.length) throw new Error(`Not measured: ${missing.join(", ")}.`);

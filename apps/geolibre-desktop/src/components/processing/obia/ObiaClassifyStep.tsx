@@ -3,6 +3,7 @@ import {
   OBIA_PREDICTED_FIELD,
   OBIA_RULE_OPS,
   applyPredictions,
+  tableForAllObjects,
   classifyByRules,
   classifyRandomForest,
   collectSamples,
@@ -117,21 +118,32 @@ export function ObiaClassifyStep(): ReactElement | null {
       setError(t("obia.measure.error.layersMissing"));
       return;
     }
+    if (
+      settings.method === "rules" &&
+      settings.rules.some((rule) => !rule.field || !rule.className)
+    ) {
+      setError(t("obia.classify.error.incompleteRule"));
+      return;
+    }
     runningRef.current = true;
     setRunning(true);
     setError(null);
     try {
+      // Every object gets a prediction, including ones a feature tool skipped.
+      const table = tableForAllObjects(features.table, layer.geojson);
       const result =
         settings.method === "random-forest"
-          ? await classifyRandomForest(features.table, collectSamples(layer.geojson), {
+          ? await classifyRandomForest(table, collectSamples(layer.geojson), {
               fields: chosen,
               trees: settings.trees,
             })
-          : await classifyByRules(
-              features.table,
-              settings.rules.filter((rule) => rule.field && rule.className),
-              defaultClass,
-            );
+          : await classifyByRules(table, settings.rules, defaultClass);
+      // A re-measure while the tool ran made these predictions stale (and
+      // cleared the classification); do not bring them back.
+      if (useObiaSession.getState().features?.finishedAt !== features.finishedAt) {
+        setError(t("obia.classify.error.remeasured"));
+        return;
+      }
       const latest = useAppStore
         .getState()
         .layers.find((item) => item.id === segmentation.objectsLayerId);
