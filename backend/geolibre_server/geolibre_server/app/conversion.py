@@ -1107,7 +1107,8 @@ def _evict_finished_jobs_locked() -> None:
     """Drop the oldest finished jobs once the retention cap is exceeded.
 
     The caller must hold ``_JOBS_LOCK``. Running and pending jobs are never
-    evicted; only ``succeeded``/``failed`` jobs are removed, oldest first.
+    evicted; only ``succeeded``/``failed``/``cancelled`` jobs are removed,
+    oldest first.
     """
     excess = len(_JOBS) - MAX_RETAINED_JOBS
     if excess <= 0:
@@ -1118,11 +1119,27 @@ def _evict_finished_jobs_locked() -> None:
         (
             (job.created_at, job_id)
             for job_id, job in _JOBS.items()
-            if job.status in {"succeeded", "failed"}
+            if job.status in {"succeeded", "failed", "cancelled"}
         ),
     )
     for _created_at, job_id in finished[:excess]:
         _JOBS.pop(job_id, None)
+
+
+def _remove_partial_output(params: dict[str, Any]) -> None:
+    """Remove a failed or cancelled job's partial output.
+
+    So a retry starts clean and stale bytes do not confuse downstream tools.
+
+    Args:
+        params: The job's parameters (``output_path``, when it writes one).
+    """
+    output_path = params.get("output_path")
+    if output_path:
+        try:
+            Path(output_path).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _run_conversion_job(
@@ -1191,6 +1208,7 @@ def _run_conversion_job(
             raise RuntimeError(f"Conversion timed out after {CONVERSION_RUN_TIMEOUT_SECS} seconds")
         if job_id in _CANCELLED:
             _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
+            _remove_partial_output(params)
             return
         if returncode != 0:
             if validation_error:
@@ -1209,6 +1227,7 @@ def _run_conversion_job(
     except Exception as exc:
         if job_id in _CANCELLED:
             _job_update(job_id, status="cancelled", error="Cancelled.", messages=[])
+            _remove_partial_output(params)
             return
         # Mirror Whitebox: log the raw failure server-side and surface only a
         # generic message. DuckDB/GDAL stderr often embeds absolute paths that
@@ -1234,14 +1253,7 @@ def _run_conversion_job(
             error=validation_error or "Conversion failed. See the sidecar logs for details.",
             messages=[],
         )
-        # Remove a partial output so a retry starts clean and stale bytes do not
-        # confuse downstream tools.
-        output_path = params.get("output_path")
-        if output_path:
-            try:
-                Path(output_path).unlink(missing_ok=True)
-            except OSError:
-                pass
+        _remove_partial_output(params)
     finally:
         # Guard against leaking a still-running subprocess if an exception is
         # raised before it exits (e.g. during streaming or a job-state update).

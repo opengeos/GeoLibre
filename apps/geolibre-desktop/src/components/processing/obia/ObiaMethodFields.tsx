@@ -65,9 +65,11 @@ export function ObiaMethodFields({
               : t(
                   nativeStatus === null
                     ? "obia.native.needsDesktop"
-                    : !nativeStatus.available
-                      ? "obia.native.unavailable"
-                      : "obia.native.needsLocalFile",
+                    : nativeStatus.installing
+                      ? "obia.native.installing"
+                      : !nativeStatus.available
+                        ? "obia.native.unavailable"
+                        : "obia.native.needsLocalFile",
                 )
             : t("obia.methodNote")}
         </p>

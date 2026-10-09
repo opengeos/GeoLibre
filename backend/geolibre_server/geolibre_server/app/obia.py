@@ -543,15 +543,25 @@ def _new_job_dir(protect: str | None = None) -> str:
             busy.add(Path(folder))
             if job_id in uses:
                 busy.add(Path(uses[job_id]))
+
+    # Another request may prune at the same time: a folder that vanished
+    # meanwhile is simply skipped.
+    def mtime(folder: Path) -> float | None:
+        try:
+            return folder.stat().st_mtime
+        except OSError:
+            return None
+
+    candidates = [(mtime(p), p) for p in base.iterdir() if p.is_dir() and p not in busy]
     folders = sorted(
-        (p for p in base.iterdir() if p.is_dir() and p not in busy),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
+        ((t, p) for t, p in candidates if t is not None), key=lambda item: item[0], reverse=True
     )
     cutoff = time.time() - JOB_DIR_MAX_AGE_SECS
-    keep = max(0, MAX_JOB_DIRS - 1 - len(busy))
-    for index, folder in enumerate(folders):
-        if index >= keep or folder.stat().st_mtime < cutoff:
+    # Always keep the newest finished folder: a measure job usually follows
+    # its segmentation, and re-segmenting a large scene is slow.
+    keep = max(1, MAX_JOB_DIRS - 1 - len(busy))
+    for index, (modified, folder) in enumerate(folders):
+        if index >= keep or modified < cutoff:
             shutil.rmtree(folder, ignore_errors=True)
     with _JOB_DIRS_LOCK:
         for job_id, folder in list(_JOB_DIRS.items()):
@@ -645,16 +655,47 @@ def _start(tool_id: str, script: str, params: dict, uses: str | None = None):
 # --- Endpoints ---------------------------------------------------------------
 
 
+_INSTALL_LOCK = threading.Lock()
+_INSTALL_THREAD: threading.Thread | None = None
+_INSTALL_ERROR: str | None = None
+
+
+def _start_install() -> None:
+    """Install scikit-image into the runtime in the background, once at a time."""
+    global _INSTALL_THREAD, _INSTALL_ERROR
+
+    def install() -> None:
+        global _INSTALL_ERROR
+        try:
+            _ensure_obia_runtime()
+            _INSTALL_ERROR = None
+        except Exception as exc:  # noqa: BLE001 - reported through /status
+            logger.warning("OBIA runtime install failed: %s", exc)
+            _INSTALL_ERROR = "Native OBIA runtime is unavailable. Check the sidecar logs."
+
+    with _INSTALL_LOCK:
+        if _INSTALL_THREAD is not None and _INSTALL_THREAD.is_alive():
+            return
+        _INSTALL_THREAD = threading.Thread(target=install, daemon=True)
+        _INSTALL_THREAD.start()
+
+
 @router.get("/status")
 def obia_status():
-    """Report whether native segmentation is available (installing it if not)."""
+    """Report whether native segmentation is available.
+
+    Checks only that the runtime imports scikit-image, which is quick. When it
+    does not, the install starts in the background and the status reports
+    ``installing``; ask again later.
+    """
     try:
-        _ensure_obia_runtime()
-        return {
-            "available": True,
-            "message": "Native OBIA runtime (scikit-image) is available.",
-            "max_pixels": NATIVE_MAX_PIXELS,
-        }
+        python = _runtime_python()
+        if _check_obia_import(python):
+            return {
+                "available": True,
+                "message": "Native OBIA runtime (scikit-image) is available.",
+                "max_pixels": NATIVE_MAX_PIXELS,
+            }
     except RuntimeBootstrapError as exc:
         logger.warning("OBIA runtime unavailable: %s", exc)
         return {
@@ -664,6 +705,16 @@ def obia_status():
     except Exception:
         logger.exception("Unexpected error while checking the OBIA runtime")
         return {"available": False, "message": "Native OBIA runtime status check failed."}
+    if _INSTALL_ERROR and not (_INSTALL_THREAD and _INSTALL_THREAD.is_alive()):
+        error = _INSTALL_ERROR
+        _start_install()  # try again next time round
+        return {"available": False, "message": error}
+    _start_install()
+    return {
+        "available": False,
+        "installing": True,
+        "message": "Installing the native OBIA runtime (scikit-image); this takes a minute.",
+    }
 
 
 @router.post("/segment")

@@ -7455,7 +7455,8 @@
       "slicHint": "Superpixels of about this many pixels. Larger compactness gives more regular, square objects; smaller follows the image more closely.",
       "scale": "Scale",
       "sigma": "Smoothing (sigma)",
-      "felzenszwalbHint": "Larger scale gives larger objects. Sigma smooths the image first; the minimum size merges smaller objects into a neighbor."
+      "felzenszwalbHint": "Larger scale gives larger objects. Sigma smooths the image first; the minimum size merges smaller objects into a neighbor.",
+      "installing": "Installing scikit-image into the processing server for the native methods; this takes a minute."
     },
     "threshold": "Similarity threshold",
     "thresholdHint": "Larger values give fewer, larger objects.",

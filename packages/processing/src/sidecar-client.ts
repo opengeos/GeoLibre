@@ -1433,6 +1433,8 @@ export interface ObiaNativeStatus {
   message: string;
   /** Pixels a native run may read, per method. */
   max_pixels?: Partial<Record<"slic" | "felzenszwalb", number>>;
+  /** scikit-image is being installed into the runtime; ask again later. */
+  installing?: boolean;
 }
 
 /** A native segmentation: the image, its bands and area, and the method. */
