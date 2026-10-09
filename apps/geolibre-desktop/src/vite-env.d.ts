@@ -2,6 +2,8 @@
 /// <reference types="vite-plugin-pwa/client" />
 
 declare const __GEOLIBRE_VERSION__: string;
+/** Version of the installed `geolibre-wasm` tool engine (OBIA provenance). */
+declare const __GEOLIBRE_WASM_VERSION__: string;
 
 // True only in the Microsoft Store MSIX build (GEOLIBRE_STORE_BUILD=1), where the
 // in-app update checker is removed so the app updates solely through the Store

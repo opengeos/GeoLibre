@@ -10,6 +10,11 @@ export interface ProcessingSlice {
   models: ProcessingModel[];
   /** Recorded processing tool runs, oldest first (Processing History; #1292). */
   processingHistory: ProcessingRun[];
+  /**
+   * Object-Based Analysis workbench state saved with the project (#3053), an
+   * app-owned JSON object; null until the workbench is used.
+   */
+  obiaWorkbench: Record<string, unknown> | null;
 
   /** Insert a new model or replace an existing one matching by `id`. */
   saveModel: (model: ProcessingModel) => void;
@@ -22,11 +27,17 @@ export interface ProcessingSlice {
   updateProcessingRun: (id: string, patch: Partial<Omit<ProcessingRun, "id">>) => void;
   /** Drop all recorded processing runs. */
   clearProcessingHistory: () => void;
+  /**
+   * Replace the saved workbench state. `markDirty` is false when the app is
+   * only mirroring state it just restored, so opening a project stays clean.
+   */
+  setObiaWorkbench: (value: Record<string, unknown> | null, markDirty?: boolean) => void;
 }
 
 export const createProcessingSlice: SliceCreator<ProcessingSlice> = (set) => ({
   models: [],
   processingHistory: [],
+  obiaWorkbench: null,
 
   saveModel: (model) =>
     set((s) => {
@@ -61,4 +72,6 @@ export const createProcessingSlice: SliceCreator<ProcessingSlice> = (set) => ({
     }),
   clearProcessingHistory: () =>
     set((s) => (s.processingHistory.length === 0 ? s : { processingHistory: [], isDirty: true })),
+  setObiaWorkbench: (obiaWorkbench, markDirty = true) =>
+    set(markDirty ? { obiaWorkbench, isDirty: true } : { obiaWorkbench }),
 });

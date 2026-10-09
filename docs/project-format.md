@@ -44,6 +44,7 @@ file contents do not change.
 | `storymap`        | object  | Optional scroll-driven story map (chapters and presentation settings); omitted when there are no chapters    |
 | `models`          | array   | Optional saved processing models (Model Builder pipelines)                                                   |
 | `processingHistory` | array | Optional record of processing tool runs (Processing History)                                                 |
+| `obia`            | object  | Optional Object-Based Analysis workbench state: settings, classes, and run provenance (see [Object-Based Analysis](user-guide/obia.md#saving-and-provenance)); omitted until the workbench is used |
 | `widgets`         | array   | Optional Dashboard panel chart widgets (see below); omitted when there are none                              |
 | `dashboardColumns`| number  | Optional Dashboard widget-grid column count (1-6, default 2); omitted when default                          |
 | `mapLayout`       | object  | Optional multi-map grid (`rows`, `cols`, `syncView`); omitted for a single map                               |

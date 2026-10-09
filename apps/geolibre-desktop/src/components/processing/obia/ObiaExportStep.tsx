@@ -12,6 +12,8 @@ import {
   saveBinaryFileWithFallback,
   saveTextFileWithFallback,
 } from "../../../lib/file-io/file-dialogs";
+import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
+import { ensureObiaLabels } from "../../../lib/obia/obia-persistence";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
 import { ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
@@ -53,7 +55,7 @@ export function ObiaExportStep({ onAddRaster }: ObiaExportStepProps): ReactEleme
     ]);
     if (cache.current?.key !== key) {
       const raster = await classifiedRaster(
-        segmentation.labels,
+        await ensureObiaLabels(),
         classification.predictions,
         classes,
       );
@@ -81,7 +83,7 @@ export function ObiaExportStep({ onAddRaster }: ObiaExportStepProps): ReactEleme
     try {
       setMessage(await action());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("obia.export.error.failed"));
+      setError(obiaErrorMessage(err, t, t("obia.export.error.failed")));
     } finally {
       setBusy(false);
     }

@@ -269,6 +269,44 @@ export function dissolveSegmentPolygons(
 }
 
 /**
+ * Count the distinct objects (positive labels) in a label raster.
+ *
+ * @param labels Label raster (GeoTIFF).
+ */
+export async function countSegmentLabels(labels: Uint8Array): Promise<number> {
+  const raster = await readRasterData(toArrayBuffer(labels));
+  const ids = new Set<number>();
+  for (const value of raster.bands[0]) {
+    if (value > 0 && value !== raster.nodata) ids.add(value);
+  }
+  return ids.size;
+}
+
+/**
+ * Run the region-growing segmentation alone, returning the label raster. The
+ * tool is deterministic, so the same image and parameters give the same
+ * labels, which is how a reloaded project rebuilds labels it did not save.
+ *
+ * @param image Bands from {@link splitImageBands}.
+ * @param params Region-growing parameters.
+ */
+export async function segmentLabels(
+  image: ObiaImage,
+  params: RegionGrowingParams,
+): Promise<{ labels: Uint8Array; tool: string; args: string[] }> {
+  if (!image.bands.length) {
+    throw new ObiaError("no-bands", "Choose at least one band to segment.");
+  }
+  const { paths, input } = stageBands(image.bands);
+  const tool = "image_segmentation";
+  const args = regionGrowingArgs(paths, params);
+  const files = await runTool(tool, args, input);
+  const labels = files["segments.tif"];
+  if (!labels) throw new Error(`${tool} did not write a segment raster.`);
+  return { labels, tool, args };
+}
+
+/**
  * Segment an image into objects with seeded region growing and polygonize the
  * labels. Runs entirely in the browser.
  *
@@ -279,15 +317,7 @@ export async function segmentImage(
   image: ObiaImage,
   params: RegionGrowingParams,
 ): Promise<ObiaSegmentation> {
-  if (!image.bands.length) {
-    throw new ObiaError("no-bands", "Choose at least one band to segment.");
-  }
-  const { paths, input } = stageBands(image.bands);
-  const tool = "image_segmentation";
-  const args = regionGrowingArgs(paths, params);
-  const files = await runTool(tool, args, input);
-  const labels = files["segments.tif"];
-  if (!labels) throw new Error(`${tool} did not write a segment raster.`);
+  const { labels, tool, args } = await segmentLabels(image, params);
 
   const polygonFiles = await runTool(
     "segments_to_polygons",

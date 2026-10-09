@@ -1,0 +1,199 @@
+import "./helpers/dom";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { FeatureCollection } from "geojson";
+import {
+  applyProjectToStore,
+  createEmptyProject,
+  normalizeObiaWorkbench,
+  parseProject,
+  serializeProject,
+  type GeoLibreLayer,
+} from "@geolibre/core";
+import {
+  OBIA_STATE_VERSION,
+  featureTableFromObjects,
+  predictionsFromObjects,
+  restoreObiaSession,
+  snapshotObiaSession,
+} from "../apps/geolibre-desktop/src/lib/obia/obia-persistence";
+import {
+  emptyObiaSession,
+  type ObiaSessionData,
+} from "../apps/geolibre-desktop/src/lib/obia/obia-session";
+
+const env = { engineVersion: "1.5.9", appVersion: "3.3.0" };
+
+/** An objects layer as the workbench leaves it: features and predictions on it. */
+function objectsLayer(): GeoLibreLayer {
+  const geojson: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [1, 2].map((id) => ({
+      type: "Feature" as const,
+      id,
+      properties: {
+        segment_id: id,
+        mean_b1: id * 10,
+        ndvi: id === 1 ? 0.5 : null,
+        obia_class: id === 1 ? "tree" : undefined,
+        obia_sample: id === 1 ? "training" : undefined,
+        obia_predicted: id === 1 ? "tree" : "roof",
+      },
+      geometry: { type: "Point" as const, coordinates: [id, 0] },
+    })),
+  };
+  return {
+    id: "objects",
+    name: "image objects",
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: {} as GeoLibreLayer["style"],
+    metadata: {},
+    geojson,
+  } as GeoLibreLayer;
+}
+
+/** A session that has segmented, measured, split and classified. */
+function fullSession(): ObiaSessionData {
+  const layer = objectsLayer();
+  return {
+    ...emptyObiaSession(),
+    sourceLayerId: "image",
+    bandIndexes: [1, 4],
+    params: { threshold: 0.6, minArea: 40, steps: 10 },
+    classes: [
+      { name: "tree", color: "#16a34a" },
+      { name: "roof", color: "#dc2626" },
+    ],
+    segmentation: {
+      sourceLayerId: "image",
+      sourceName: "naip.tif",
+      source: { name: "naip.tif", location: "/data/naip.tif" },
+      bandIndexes: [1, 4],
+      width: 600,
+      height: 500,
+      labels: new Uint8Array([1, 2, 3]),
+      objectsLayerId: layer.id,
+      objectCount: 2,
+      meanObjectArea: 150000,
+      tool: "image_segmentation",
+      args: ["--inputs=/work/band_1.tif,/work/band_4.tif", "--threshold=0.6"],
+      params: { threshold: 0.6, minArea: 40, steps: 10 },
+      env,
+      finishedAt: "2026-10-09T10:00:00.000Z",
+    },
+    features: {
+      segmentationAt: "2026-10-09T10:00:00.000Z",
+      table: featureTableFromObjects(layer.geojson!, ["mean_b1", "ndvi"]),
+      options: { spectral: true, shape: false, context: false, indices: { red: 1, nir: 4 } },
+      calls: [{ tool: "object_features_spectral_basic", args: ["--segments=/work/segments.tif"] }],
+      env,
+      finishedAt: "2026-10-09T10:01:00.000Z",
+    },
+    splits: [{ fraction: 0.3, seed: 42, moved: 1, at: "2026-10-09T10:02:00.000Z" }],
+    classification: {
+      predictions: predictionsFromObjects(layer.geojson!),
+      fields: ["mean_b1", "ndvi"],
+      imputed: { ndvi: 1 },
+      trainingCount: 1,
+      call: { tool: "classify_objects_random_forest", args: ["--n_trees=100"] },
+      settings: { ...emptyObiaSession().classifier, trees: 100 },
+      featuresAt: "2026-10-09T10:01:00.000Z",
+      env,
+      finishedAt: "2026-10-09T10:03:00.000Z",
+    },
+  };
+}
+
+describe("OBIA workbench persistence", () => {
+  it("saves nothing until the workbench has been used", () => {
+    assert.equal(snapshotObiaSession(emptyObiaSession()), null);
+  });
+
+  it("saves settings and provenance, but not labels, tables or predictions", () => {
+    const saved = snapshotObiaSession(fullSession())!;
+    assert.equal(saved.version, OBIA_STATE_VERSION);
+    const json = JSON.stringify(saved);
+    assert.ok(!json.includes('"labels"'), "the label raster is rebuilt, not saved");
+    assert.ok(!json.includes('"predictions"'), "predictions live on the objects layer");
+    assert.ok(!json.includes('"rows"'), "feature values live on the objects layer");
+    const runs = saved.runs as Record<string, Record<string, unknown>>;
+    assert.equal(runs.segmentation.tool, "image_segmentation");
+    assert.deepEqual(runs.segmentation.env, env);
+    assert.deepEqual(runs.features.fields, ["mean_b1", "ndvi"]);
+    assert.deepEqual(runs.splits, [
+      { fraction: 0.3, seed: 42, moved: 1, at: "2026-10-09T10:02:00.000Z" },
+    ]);
+  });
+
+  it("restores the session, rebuilding features and predictions from the layer", () => {
+    const original = fullSession();
+    const saved = JSON.parse(JSON.stringify(snapshotObiaSession(original)));
+    const restored = restoreObiaSession(saved, [objectsLayer()]);
+    assert.equal(restored.segmentation?.labels, null);
+    assert.equal(restored.segmentation?.objectCount, 2);
+    assert.deepEqual(restored.segmentation?.source, original.segmentation!.source);
+    assert.deepEqual([...restored.features!.table.rows], [...original.features!.table.rows]);
+    assert.deepEqual(
+      [...restored.classification!.predictions],
+      [
+        [1, "tree"],
+        [2, "roof"],
+      ],
+    );
+    assert.deepEqual(restored.classes, original.classes);
+    assert.deepEqual(restored.params, original.params);
+    // Restoring and saving again gives the same project content.
+    assert.deepEqual(snapshotObiaSession(restored), saved);
+  });
+
+  it("drops runs whose objects layer is gone, keeping the settings", () => {
+    const saved = snapshotObiaSession(fullSession());
+    const restored = restoreObiaSession(saved, []);
+    assert.equal(restored.segmentation, null);
+    assert.equal(restored.features, null);
+    assert.equal(restored.classification, null);
+    assert.deepEqual(restored.bandIndexes, [1, 4]);
+    assert.equal(restored.classes.length, 2);
+  });
+
+  it("falls back to defaults for malformed or unknown saved state", () => {
+    assert.deepEqual(restoreObiaSession({ version: 99 }, []), emptyObiaSession());
+    const restored = restoreObiaSession(
+      {
+        version: OBIA_STATE_VERSION,
+        settings: {
+          params: { threshold: "high", minArea: 12 },
+          classes: [{ name: "a" }, { name: "a" }, { color: "#000" }, 7],
+          classifier: { method: "svm", rules: [{ field: "x", op: "=~", value: 1 }] },
+          bandIndexes: [0, 2, "3"],
+        },
+      },
+      [],
+    );
+    assert.deepEqual(restored.params, { threshold: 0.8, minArea: 12, steps: 10 });
+    assert.deepEqual(restored.classes, [{ name: "a", color: "#64748b" }]);
+    assert.equal(restored.classifier.method, "random-forest");
+    assert.deepEqual(restored.classifier.rules, []);
+    assert.deepEqual(restored.bandIndexes, [2]);
+  });
+});
+
+describe("project obia field", () => {
+  it("round-trips through save and load, and is omitted when unused", () => {
+    const empty = createEmptyProject("plain");
+    assert.ok(!("obia" in JSON.parse(serializeProject(empty))));
+    const saved = snapshotObiaSession(fullSession())!;
+    const project = parseProject(serializeProject({ ...empty, obia: saved }));
+    assert.deepEqual(project.obia, saved);
+    assert.deepEqual(applyProjectToStore(project).obiaWorkbench, saved);
+  });
+
+  it("drops a malformed obia value", () => {
+    assert.equal(normalizeObiaWorkbench([1, 2]), null);
+    assert.equal(normalizeObiaWorkbench({ settings: {} }), null);
+    assert.equal(normalizeObiaWorkbench("x"), null);
+  });
+});

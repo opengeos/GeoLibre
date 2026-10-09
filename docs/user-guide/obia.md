@@ -156,3 +156,34 @@ class). The Export step also burns the classes onto the image's pixel grid:
   the class list (the first class is 1), so a class keeps its code from run to
   run; a rules default class outside the list comes after.
 - **Save legend (CSV)** saves the code, class name and color of each class.
+
+## Saving and provenance
+
+The workbench is saved with the project. Reopening a project restores the
+image and band choices, the parameters, the classes and the classifier
+settings, and the results of each step: the objects layer keeps its measured
+features, labels and predicted classes, so the attribute table, the accuracy
+assessment and the export pick up where you left off.
+
+Expand **Provenance** at the bottom of the workbench to see how the current
+results were made:
+
+- the image (layer name, and its file path or URL when it has one), its size
+  and the bands used;
+- for each step, when it ran, the exact tool calls with their arguments, and
+  the `geolibre-wasm` engine and GeoLibre versions;
+- each hold-out split's share, seed and the number of samples it moved;
+- for the random forest, the number of trees, features and training samples
+  (the engine fixes the forest's random seed).
+
+**Copy as JSON** copies this record, the same one the project stores in its
+`obia` field (see the [project format](../project-format.md)).
+
+The project does not store the label raster, which can be large. When a step
+needs it after a reload (measuring again, or exporting), the workbench re-runs
+the recorded segmentation on the source image; segmentation is deterministic,
+and the workbench checks the object count matches before using the rebuilt
+labels. If the image was removed from the project or no longer gives the same
+objects, the step says so: segment again. An image added from a local file in
+the web app is not saved with the project, so add imagery by URL (or use the
+desktop app) when you want to rerun steps after reopening.

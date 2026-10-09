@@ -1,5 +1,6 @@
 import { ObiaError } from "@geolibre/processing";
 import type { TFunction } from "i18next";
+import { ObiaRestoreError } from "./obia-persistence";
 
 /**
  * The message to show for a workbench failure: a translated message for the
@@ -26,6 +27,11 @@ export function obiaErrorMessage(err: unknown, t: TFunction, fallback: string): 
       case "no-bands":
         return t("obia.error.noBands");
     }
+  }
+  if (err instanceof ObiaRestoreError) {
+    return t(
+      err.code === "source-missing" ? "obia.error.sourceMissing" : "obia.error.sourceChanged",
+    );
   }
   return err instanceof Error && err.message ? err.message : fallback;
 }

@@ -4,13 +4,19 @@ import { useCallback, useEffect, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../../hooks/usePlugins";
 import type { ObiaAddRaster } from "../../../lib/obia/obia-session";
+import { installObiaPersistence } from "../../../lib/obia/obia-persistence";
 import { clearObiaSourceCache } from "../../../lib/obia/obia-source";
 import { ObiaAccuracyStep } from "./ObiaAccuracyStep";
 import { ObiaClassifyStep } from "./ObiaClassifyStep";
 import { ObiaExportStep } from "./ObiaExportStep";
 import { ObiaMeasureStep } from "./ObiaMeasureStep";
+import { ObiaProvenance } from "./ObiaProvenance";
 import { ObiaSegmentStep } from "./ObiaSegmentStep";
 import { ObiaTrainStep } from "./ObiaTrainStep";
+
+// Restore the workbench from the project, and save it back with the project,
+// from the first time the workbench loads.
+installObiaPersistence();
 
 interface ObiaWorkbenchPanelProps {
   mapControllerRef: React.RefObject<MapEngine | null>;
@@ -53,6 +59,7 @@ export function ObiaWorkbenchPanel({ mapControllerRef }: ObiaWorkbenchPanelProps
       <ObiaClassifyStep />
       <ObiaAccuracyStep />
       <ObiaExportStep onAddRaster={addRaster} />
+      <ObiaProvenance />
     </div>
   );
 }

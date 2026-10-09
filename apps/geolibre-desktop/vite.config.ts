@@ -40,6 +40,12 @@ const GIS_CHUNK_WARNING_LIMIT_KB = 14000;
 const APP_BASE = process.env.GEOLIBRE_APP_BASE;
 const APP_VERSION = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"))
   .version as string;
+// The installed WASM tool engine's version, recorded in Object-Based Analysis
+// provenance (#3053). Its package does not export package.json, so read the
+// file from the hoisted workspace node_modules.
+const GEOLIBRE_WASM_VERSION = JSON.parse(
+  readFileSync(new URL("../../node_modules/geolibre-wasm/package.json", import.meta.url), "utf8"),
+).version as string;
 
 // Vite resolves `mode` from the `--mode` CLI flag (defaulting to `development`
 // for `vite`/`vite dev` and `production` for `vite build`). This shim runs at
@@ -1507,6 +1513,7 @@ export default defineConfig({
   clearScreen: false,
   define: {
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
+    __GEOLIBRE_WASM_VERSION__: JSON.stringify(GEOLIBRE_WASM_VERSION),
     __GEOLIBRE_STORE_BUILD__: JSON.stringify(IS_STORE_BUILD),
     __GEOLIBRE_MAS_BUILD__: JSON.stringify(IS_MAS_BUILD),
     __GEOLIBRE_EMBED_BUILD__: JSON.stringify(IS_EMBED),

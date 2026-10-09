@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { useTranslation } from "react-i18next";
 import { useObiaSession, type ObiaAddRaster } from "../../../lib/obia/obia-session";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
+import { obiaLayerLocation, obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { obiaSourceBands, obiaSourceBytes, obiaSourceKey } from "../../../lib/obia/obia-source";
 import { ObiaNumberField, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
@@ -146,6 +147,10 @@ export function ObiaSegmentStep({
       setSegmentation({
         sourceLayerId: sourceLayer.id,
         sourceName: sourceLayer.name,
+        source: {
+          name: sourceLayer.name,
+          ...(obiaLayerLocation(sourceLayer) ? { location: obiaLayerLocation(sourceLayer) } : {}),
+        },
         bandIndexes: [...bandIndexes],
         width: image.width,
         height: image.height,
@@ -156,6 +161,7 @@ export function ObiaSegmentStep({
         tool: result.tool,
         args: result.args,
         params: { ...params },
+        env: obiaRunEnv(),
         finishedAt: new Date().toISOString(),
       });
       if (addLabels) {

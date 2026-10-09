@@ -54,6 +54,7 @@ export function buildProjectSnapshot(
     storymap: state.storymap,
     models: state.models,
     processingHistory: state.processingHistory,
+    obia: state.obiaWorkbench ?? undefined,
     widgets: state.widgets,
     bookmarks: state.bookmarks,
     bookmarkGroups: state.bookmarkGroups,

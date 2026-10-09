@@ -2472,6 +2472,14 @@ export interface GeoLibreProject {
   models?: ProcessingModel[];
   /** Recorded processing tool runs (Processing History; issue #1292). */
   processingHistory?: ProcessingRun[];
+  /**
+   * Object-Based Analysis workbench state and run provenance (issue #3053):
+   * settings, classes, and the tool calls, parameters, seeds and engine
+   * versions behind the last segmentation, measurement and classification.
+   * A versioned JSON object owned by the desktop app; omitted until the
+   * workbench is used.
+   */
+  obia?: Record<string, unknown>;
   /** Saved Dashboard panel chart widgets (issue #401). */
   widgets?: DashboardWidget[];
   /**

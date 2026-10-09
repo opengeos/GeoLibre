@@ -15,6 +15,8 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
+import { obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { useObiaSession } from "../../../lib/obia/obia-session";
 import { ObiaNumberField, ObiaNumberInput, ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
@@ -156,10 +158,11 @@ export function ObiaClassifyStep(): ReactElement | null {
         ...result,
         settings: { ...settings, fields: settings.fields ? [...settings.fields] : null },
         featuresAt: features.finishedAt,
+        env: obiaRunEnv(),
         finishedAt: new Date().toISOString(),
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("obia.classify.error.failed"));
+      setError(obiaErrorMessage(err, t, t("obia.classify.error.failed")));
     } finally {
       runningRef.current = false;
       setRunning(false);

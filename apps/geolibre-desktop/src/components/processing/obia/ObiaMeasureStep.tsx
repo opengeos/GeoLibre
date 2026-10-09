@@ -8,7 +8,9 @@ import { Button, Label, Select } from "@geolibre/ui";
 import { Loader2, Ruler } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { useObiaSession } from "../../../lib/obia/obia-session";
+import { ensureObiaLabels, obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { obiaSourceBands } from "../../../lib/obia/obia-source";
 import { ObiaStatus, ObiaStepHeading } from "./ObiaFields";
 
@@ -72,7 +74,9 @@ export function ObiaMeasureStep(): ReactElement | null {
     try {
       const image = await obiaSourceBands(sourceLayer, segmentation.bandIndexes);
       if (!image) throw new Error(t("obia.error.readImage"));
-      const { table, calls } = await computeObjectFeatures(segmentation.labels, image, options);
+      // A reloaded project rebuilds the label raster it did not save.
+      const labels = await ensureObiaLabels();
+      const { table, calls } = await computeObjectFeatures(labels, image, options);
       // A re-segmentation while the tools ran makes this table describe
       // objects that are gone; drop it rather than write it anywhere.
       if (useObiaSession.getState().segmentation?.finishedAt !== segmentation.finishedAt) {
@@ -98,10 +102,11 @@ export function ObiaMeasureStep(): ReactElement | null {
         table,
         options: { ...options },
         calls,
+        env: obiaRunEnv(),
         finishedAt: new Date().toISOString(),
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("obia.measure.error.failed"));
+      setError(obiaErrorMessage(err, t, t("obia.measure.error.failed")));
     } finally {
       runningRef.current = false;
       setRunning(false);

@@ -23,17 +23,36 @@ export type ObiaAddRaster = (
   state?: { mode?: "rgb"; bands?: number[]; rescale?: [number, number][] },
 ) => Promise<void>;
 
+/** Software that produced a run, for provenance. */
+export interface ObiaRunEnv {
+  /** `geolibre-wasm` tool engine version. */
+  engineVersion: string;
+  /** GeoLibre app version. */
+  appVersion: string;
+}
+
+/** Where a segmentation's image came from, for provenance. */
+export interface ObiaSourceIdentity {
+  name: string;
+  /** Local file path or URL of the image, when the layer has one. */
+  location?: string;
+}
+
 /** A finished segmentation the later workbench steps build on. */
 export interface ObiaSegmentationRun {
   /** Raster layer the image came from. */
   sourceLayerId: string;
   sourceName: string;
+  source: ObiaSourceIdentity;
   /** 1-based source bands, in the order the tools received them. */
   bandIndexes: number[];
   width: number;
   height: number;
-  /** Label raster (GeoTIFF), one `segment_id` per pixel. */
-  labels: Uint8Array;
+  /**
+   * Label raster (GeoTIFF), one `segment_id` per pixel. Not saved with the
+   * project: null after a reload until rebuilt (ensureObiaLabels).
+   */
+  labels: Uint8Array | null;
   /** The objects layer added to the map. */
   objectsLayerId: string;
   objectCount: number;
@@ -42,6 +61,7 @@ export interface ObiaSegmentationRun {
   tool: string;
   args: string[];
   params: RegionGrowingParams;
+  env: ObiaRunEnv;
   finishedAt: string;
 }
 
@@ -53,7 +73,17 @@ export interface ObiaFeatureRun {
   options: ObiaFeatureOptions;
   /** Tool invocations, for provenance. */
   calls: ObiaToolCall[];
+  env: ObiaRunEnv;
   finishedAt: string;
+}
+
+/** A hold-out split of training samples into validation, for provenance. */
+export interface ObiaSplitRecord {
+  /** Share of each class held out, 0 to 1. */
+  fraction: number;
+  seed: number;
+  moved: number;
+  at: string;
 }
 
 export type ObiaClassifierMethod = "random-forest" | "rules";
@@ -73,8 +103,25 @@ export interface ObiaClassificationRun extends ObiaClassification {
   settings: ObiaClassifierSettings;
   /** The feature run it used (its `finishedAt`). */
   featuresAt: string;
+  env: ObiaRunEnv;
   finishedAt: string;
 }
+
+/** The data part of the session, as saved, restored and reset. */
+export type ObiaSessionData = Pick<
+  ObiaSessionState,
+  | "sourceLayerId"
+  | "bandIndexes"
+  | "params"
+  | "segmentation"
+  | "featureOptions"
+  | "features"
+  | "classes"
+  | "labelRole"
+  | "classifier"
+  | "classification"
+  | "splits"
+>;
 
 interface ObiaSessionState {
   sourceLayerId: string;
@@ -89,6 +136,8 @@ interface ObiaSessionState {
   labelRole: ObiaSampleRole;
   classifier: ObiaClassifierSettings;
   classification: ObiaClassificationRun | null;
+  /** Hold-out splits applied to the current samples, oldest first. */
+  splits: ObiaSplitRecord[];
   setSourceLayerId: (id: string) => void;
   setBandIndexes: (bands: number[]) => void;
   setParams: (patch: Partial<RegionGrowingParams>) => void;
@@ -101,6 +150,34 @@ interface ObiaSessionState {
   setLabelRole: (role: ObiaSampleRole) => void;
   setClassifier: (patch: Partial<ObiaClassifierSettings>) => void;
   setClassification: (run: ObiaClassificationRun | null) => void;
+  /** Attach rebuilt label bytes to the current segmentation, keeping its runs. */
+  setSegmentationLabels: (finishedAt: string, labels: Uint8Array) => void;
+  addSplit: (split: ObiaSplitRecord) => void;
+  /** Replace the whole session, e.g. with state restored from a project. */
+  restore: (data: ObiaSessionData) => void;
+}
+
+/** A fresh, empty session. */
+export function emptyObiaSession(): ObiaSessionData {
+  return {
+    sourceLayerId: "",
+    bandIndexes: [],
+    params: { ...DEFAULT_REGION_GROWING_PARAMS },
+    segmentation: null,
+    featureOptions: { ...DEFAULT_OBIA_FEATURE_OPTIONS },
+    features: null,
+    classes: [],
+    labelRole: "training",
+    classifier: {
+      method: "random-forest",
+      trees: 200,
+      fields: null,
+      rules: [],
+      defaultClass: "unclassified",
+    },
+    classification: null,
+    splits: [],
+  };
 }
 
 /**
@@ -109,26 +186,13 @@ interface ObiaSessionState {
  * training, classification) build on.
  */
 export const useObiaSession = create<ObiaSessionState>((set) => ({
-  sourceLayerId: "",
-  bandIndexes: [],
-  params: { ...DEFAULT_REGION_GROWING_PARAMS },
-  segmentation: null,
-  featureOptions: { ...DEFAULT_OBIA_FEATURE_OPTIONS },
-  features: null,
-  classes: [],
-  labelRole: "training",
-  classifier: {
-    method: "random-forest",
-    trees: 200,
-    fields: null,
-    rules: [],
-    defaultClass: "unclassified",
-  },
-  classification: null,
+  ...emptyObiaSession(),
   setSourceLayerId: (sourceLayerId) => set({ sourceLayerId, bandIndexes: [] }),
   setBandIndexes: (bandIndexes) => set({ bandIndexes }),
   setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
-  setSegmentation: (segmentation) => set({ segmentation, features: null, classification: null }),
+  // A new segmentation also starts a new set of samples, so earlier splits go.
+  setSegmentation: (segmentation) =>
+    set({ segmentation, features: null, classification: null, splits: [] }),
   setFeatureOptions: (patch) => set((s) => ({ featureOptions: { ...s.featureOptions, ...patch } })),
   // New features make the classification built on the old ones stale.
   setFeatures: (features) => set({ features, classification: null }),
@@ -136,4 +200,12 @@ export const useObiaSession = create<ObiaSessionState>((set) => ({
   setLabelRole: (labelRole) => set({ labelRole }),
   setClassifier: (patch) => set((s) => ({ classifier: { ...s.classifier, ...patch } })),
   setClassification: (classification) => set({ classification }),
+  setSegmentationLabels: (finishedAt, labels) =>
+    set((s) =>
+      s.segmentation?.finishedAt === finishedAt
+        ? { segmentation: { ...s.segmentation, labels } }
+        : {},
+    ),
+  addSplit: (split) => set((s) => ({ splits: [...s.splits, split] })),
+  restore: (data) => set({ ...data }),
 }));

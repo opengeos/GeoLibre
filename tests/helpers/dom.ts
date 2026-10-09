@@ -54,6 +54,7 @@ registerHooks(viteHooks);
  */
 Object.assign(globalThis, {
   __GEOLIBRE_VERSION__: "0.0.0-test",
+  __GEOLIBRE_WASM_VERSION__: "0.0.0-test",
   __GEOLIBRE_STORE_BUILD__: false,
   __GEOLIBRE_MAS_BUILD__: false,
   __GEOLIBRE_EMBED_BUILD__: false,

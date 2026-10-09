@@ -198,6 +198,9 @@ export function ObiaTrainStep(): ReactElement | null {
       next = labelObjects(next, ids, { className, role: "validation" });
     }
     writeObjects(next);
+    useObiaSession
+      .getState()
+      .addSplit({ fraction: holdout / 100, seed, moved: held.size, at: new Date().toISOString() });
     setMessage(t("obia.train.split", { count: held.size }));
   };
 

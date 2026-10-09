@@ -469,6 +469,8 @@ export {
   readImageSummary,
   regionGrowingArgs,
   segmentImage,
+  segmentLabels,
+  countSegmentLabels,
   splitImageBands,
   stageBands,
   type ObiaBand,
