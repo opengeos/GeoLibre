@@ -184,7 +184,9 @@ def read_area():
         raise SystemExit("The image has no coordinate reference system.")
     valid = np.all(np.isfinite(data), axis=0)
     if nodata is not None:
-        valid &= np.all(data != nodata, axis=0)
+        # Compare in the data's precision: a NoData value such as 0.1 has no
+        # exact float32 form, and a float64 comparison would match nothing.
+        valid &= np.all(data != np.float32(nodata), axis=0)
     return data, valid, transform, crs
 
 
@@ -499,6 +501,8 @@ _JOB_SPECS: dict[str, dict] = {}
 # Measure job id -> the segmentation folder whose labels it reads.
 _JOB_USES: dict[str, str] = {}
 _JOB_DIRS_LOCK = threading.Lock()
+# Folders created for jobs that are still starting (not yet in _JOB_DIRS).
+_RESERVED: set[str] = set()
 _BASE_DIR: str | None = None
 
 
@@ -529,7 +533,9 @@ def _new_job_dir(protect: str | None = None) -> str:
     with _JOB_DIRS_LOCK:
         jobs = list(_JOB_DIRS.items())
         uses = dict(_JOB_USES)
+        reserved = set(_RESERVED)
     busy = {Path(protect)} if protect else set()
+    busy |= {Path(folder) for folder in reserved}
     for job_id, folder in jobs:
         state = _job_state(job_id)
         if state is not None and state.status in {"pending", "running"}:
@@ -552,7 +558,10 @@ def _new_job_dir(protect: str | None = None) -> str:
                 del _JOB_DIRS[job_id]
                 _JOB_SPECS.pop(job_id, None)
                 _JOB_USES.pop(job_id, None)
-    return tempfile.mkdtemp(prefix="job-", dir=base)
+        folder = tempfile.mkdtemp(prefix="job-", dir=base)
+        # Reserved until its job is registered, so a concurrent prune spares it.
+        _RESERVED.add(folder)
+    return folder
 
 
 def _validated_segmentation(seg: Segmentation) -> dict:
@@ -618,9 +627,12 @@ def _start(tool_id: str, script: str, params: dict, uses: str | None = None):
             "objects",
         )
     except BaseException:
+        with _JOB_DIRS_LOCK:
+            _RESERVED.discard(out_dir)
         shutil.rmtree(out_dir, ignore_errors=True)
         raise
     with _JOB_DIRS_LOCK:
+        _RESERVED.discard(out_dir)
         _JOB_DIRS[job.id] = out_dir
         if tool_id == "obia-segment":
             _JOB_SPECS[job.id] = params["segmentation"]

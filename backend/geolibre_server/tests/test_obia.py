@@ -361,3 +361,37 @@ def test_refuses_an_image_without_a_crs(tmp_path: Path) -> None:
     )
     assert completed.returncode == 1
     assert "no coordinate reference system" in completed.stdout
+
+
+@requires_obia
+def test_nodata_without_an_exact_float32_form_is_left_out(tmp_path: Path) -> None:
+    from rasterio.transform import from_origin
+
+    path = tmp_path / "nodata.tif"
+    data = np.full((1, 4, 6), 50, dtype="float32")
+    data[0, :, :2] = np.float32(0.1)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        width=6,
+        height=4,
+        count=1,
+        dtype="float32",
+        nodata=0.1,
+        crs="EPSG:32617",
+        transform=from_origin(500000, 4000000, 10, 10),
+    ) as dst:
+        dst.write(data)
+    _run(
+        _SEGMENT_SCRIPT,
+        {
+            "segmentation": {**_felzenszwalb(path), "bands": [1]},
+            "out_dir": str(tmp_path),
+            "max_pixels": 10**6,
+        },
+    )
+    with rasterio.open(tmp_path / "segments.tif") as src:
+        labels = src.read(1)
+    assert (labels[:, :2] == 0).all(), "NoData pixels get no object"
+    assert (labels[:, 2:] > 0).all()
