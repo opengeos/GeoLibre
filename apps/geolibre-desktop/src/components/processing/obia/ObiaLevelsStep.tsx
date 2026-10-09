@@ -22,6 +22,7 @@ const LEVEL_ERRORS = {
   "too-large": "obia.levels.error.tooLarge",
   "not-top": "obia.levels.error.notTop",
   "too-deep": "obia.levels.error.tooDeep",
+  "bad-scale": "obia.levels.error.badScale",
 } as const;
 
 /** Outline colors by level, so nested levels read apart on the map. */
@@ -65,13 +66,31 @@ export function ObiaLevelsStep(): ReactElement | null {
         after.features?.finishedAt !== before.features?.finishedAt ||
         after.level !== before.level
       ) {
-        setError(t("obia.measure.error.resegmented"));
+        setError(t("obia.levels.error.changed"));
         return;
       }
       const childLayer = useAppStore
         .getState()
         .layers.find((layer) => layer.id === segmentation.objectsLayerId);
-      if (!childLayer?.geojson) throw new Error(t("obia.measure.error.layersMissing"));
+      if (!childLayer?.geojson) throw new Error(t("obia.levels.error.objectsMissing"));
+      // Link each child to its parent before adding the new layer, so a
+      // failure cannot leave a layer the session does not know about; the
+      // links also rebuild this level after a reload.
+      updateLayer(childLayer.id, {
+        geojson: {
+          ...childLayer.geojson,
+          features: childLayer.geojson.features.map((feature) => {
+            const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
+            return {
+              ...feature,
+              properties: {
+                ...feature.properties,
+                [OBIA_PARENT_FIELD]: built.parentOf.get(id) ?? null,
+              },
+            };
+          }),
+        },
+      });
       const next = built.record.level;
       const objectsLayerId = addGeoJsonLayer(
         t("obia.levels.layerName", { name: segmentation.source.name, level: next }),
@@ -89,22 +108,6 @@ export function ObiaLevelsStep(): ReactElement | null {
           metadata: { ...added.metadata, obiaRole: "objects", obiaLevel: next },
         });
       }
-      // Link each child to its parent on the level below's objects.
-      updateLayer(childLayer.id, {
-        geojson: {
-          ...childLayer.geojson,
-          features: childLayer.geojson.features.map((feature) => {
-            const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
-            return {
-              ...feature,
-              properties: {
-                ...feature.properties,
-                [OBIA_PARENT_FIELD]: built.parentOf.get(id) ?? null,
-              },
-            };
-          }),
-        },
-      });
       addLevel({
         ...built.record,
         segmentation: { ...built.record.segmentation, objectsLayerId },
