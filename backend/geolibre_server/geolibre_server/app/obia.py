@@ -149,6 +149,10 @@ def read_area():
     with rasterio.open(path) as full:
         width, height, count = full.width, full.height, full.count
         nodata = full.nodata
+        if full.crs is None:
+            # Objects are written in WGS84: without a CRS they cannot be placed.
+            # Checked before any pixels are read.
+            raise SystemExit("The image has no coordinate reference system.")
     missing = [b for b in bands if b < 1 or b > count]
     if missing:
         raise SystemExit(f"The image has no band {missing[0]}.")
@@ -179,9 +183,6 @@ def read_area():
         data = src.read(bands, window=window, out_dtype="float32")
         transform = src.window_transform(window)
         crs = src.crs
-    if crs is None:
-        # Objects are written in WGS84: without a CRS they cannot be placed.
-        raise SystemExit("The image has no coordinate reference system.")
     valid = np.all(np.isfinite(data), axis=0)
     if nodata is not None:
         # Compare in the data's precision: a NoData value such as 0.1 has no
