@@ -7568,7 +7568,8 @@
       "methods": {
         "random-forest": "Random forest",
         "rules": "Threshold rules",
-        "inherit": "Inherit from level above"
+        "inherit": "Inherit from level above",
+        "ruleset": "Ruleset"
       },
       "rfHint_one": "Trains on {{count}} training sample and predicts a class for every object. The engine fixes the random seed, so the same inputs give the same result.",
       "rfHint_other": "Trains on {{count}} training samples and predicts a class for every object. The engine fixes the random seed, so the same inputs give the same result.",
@@ -7595,6 +7596,24 @@
       },
       "inheritHint": "Give each object the class of its parent in level {{level}}. To refine within a parent class, classify with rules on the context features instead (for example parent_is_water = 1).",
       "inheritNeedsLevel": "Build and classify a coarser level first: objects inherit their parent’s class."
+    },
+    "ruleset": {
+      "hint": "A ruleset runs processes in order, as in eCognition: \"assign\" gives a class to the objects of a domain, \"fuzzy\" classifies them by fuzzy class descriptions (membership functions combined with and, or or mean), and \"loop\" repeats its processes until nothing changes. A domain selects objects by current class (\"\" for unclassified) and feature conditions; conditions can also read nb_border_<class>, the share of an object's border with neighbors of that class, recomputed between processes. See the user guide for the format.",
+      "label": "Ruleset (JSON)",
+      "example": "Insert example",
+      "load": "Open…",
+      "save": "Save…",
+      "empty": "Write a ruleset, or insert the example.",
+      "valid_one": "Valid: {{count}} process.",
+      "valid_other": "Valid: {{count}} processes.",
+      "invalid": "The ruleset is not valid: {{error}}",
+      "fromCurrent": "Start from the current classification (otherwise every object starts unclassified)",
+      "log_one": "{{count}} object changed",
+      "log_other": "{{count}} objects changed",
+      "logLoop_one": "{{count}} object changed in {{iterations}} passes",
+      "logLoop_other": "{{count}} objects changed in {{iterations}} passes",
+      "loadFailed": "Could not open the ruleset.",
+      "saveFailed": "Could not save the ruleset."
     },
     "accuracy": {
       "noValidation": "Label some objects as Validation samples (or Split the training samples) to score the classification against data it never trained on.",
@@ -7669,7 +7688,9 @@
       "copied": "Copied.",
       "copyFailed": "Could not copy to the clipboard.",
       "batch": "Applied to {{name}}",
-      "inherit": "Inherited from level {{level}}"
+      "inherit": "Inherited from level {{level}}",
+      "ruleset_one": "Ruleset of {{count}} process",
+      "ruleset_other": "Ruleset of {{count}} processes"
     },
     "progress": {
       "starting": "Starting… {{seconds}} s",

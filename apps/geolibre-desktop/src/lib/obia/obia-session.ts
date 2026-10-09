@@ -158,8 +158,11 @@ export interface ObiaBatchRun {
   finishedAt: string;
 }
 
-/** Random forest, threshold rules, or each object's parent's class (inheritance). */
-export type ObiaClassifierMethod = "random-forest" | "rules" | "inherit";
+/**
+ * Random forest, threshold rules, each object's parent's class (inheritance),
+ * or a ruleset (fuzzy classes and a process tree).
+ */
+export type ObiaClassifierMethod = "random-forest" | "rules" | "inherit" | "ruleset";
 
 /** Classifier settings the Classify step edits. */
 export interface ObiaClassifierSettings {
@@ -169,6 +172,10 @@ export interface ObiaClassifierSettings {
   fields: string[] | null;
   rules: ObiaRule[];
   defaultClass: string;
+  /** The ruleset method's ruleset, as JSON text (validated when run). */
+  ruleset: string;
+  /** Whether the ruleset starts from the current classification. */
+  rulesetFromCurrent: boolean;
 }
 
 /** A finished classification. */
@@ -289,6 +296,8 @@ export function emptyObiaSession(): ObiaSessionData {
       fields: null,
       rules: [],
       defaultClass: "unclassified",
+      ruleset: "",
+      rulesetFromCurrent: false,
     },
     classification: null,
     splits: [],

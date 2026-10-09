@@ -220,6 +220,8 @@ predicted class in the class colors.
   feature with a value, and an object takes the class of the first rule it
   matches, top to bottom. Objects matching no rule get the default class
   (shown in gray). Order the rules from most to least specific.
+- **Ruleset** runs a ruleset, as in eCognition: fuzzy class descriptions and a
+  process tree, written as JSON (see [Rulesets](#rulesets)).
 - **Inherit from level above** gives each object its parent's class, from the
   classified level above (see [Levels](#3-levels)). Classify a coarse level
   first, then inherit its classes down and refine them: with threshold rules on
@@ -229,6 +231,73 @@ predicted class in the class colors.
 The Whitebox catalog's "SVM" and "ensemble" object classifiers are the same
 random forest with a different number of trees, so the workbench offers only
 the random forest.
+
+### Rulesets
+
+A ruleset is a list of processes run in order. Each process acts on a
+**domain**: the objects whose current class is one of `classes` (`""` is
+unclassified; leave `classes` out for any class) and that meet every condition
+in `conditions` (a feature, an operator `>`, `>=`, `<`, `<=`, `==` or `!=`, and
+a value). There are three kinds of process:
+
+- `assign` gives the domain's objects `className`.
+- `fuzzy` classifies the domain's objects by fuzzy class descriptions. Each
+  class combines membership functions with `and` (the minimum, the default),
+  `or` (the maximum) or `mean`; an object takes the class with the highest
+  membership if it reaches `minMembership` (0.1 by default), and is left as it
+  is otherwise. A membership function reads one feature: `larger` rises from 0
+  at `from` to 1 at `to`, `smaller` falls from 1 at `from` to 0 at `to`, and
+  `about` peaks at 1 at `center` and falls to 0 at `width` away.
+- `loop` repeats its own processes until a pass changes nothing (or
+  `maxIterations`, 100 by default).
+
+Besides the measured and context features, conditions and memberships can read
+`nb_border_<class>`: the share of an object's border shared with neighbors
+currently of that class, recomputed before each process. With it a loop can grow
+a class outwards, ring by ring. For example, starting from unclassified
+objects:
+
+```json
+{
+  "processes": [
+    {
+      "kind": "fuzzy",
+      "name": "spectral classes",
+      "minMembership": 0.5,
+      "classes": [
+        { "className": "vegetation", "memberships": [{ "field": "ndvi", "type": "larger", "from": 0.1, "to": 0.4 }] },
+        { "className": "built", "memberships": [{ "field": "ndvi", "type": "smaller", "from": -0.1, "to": 0.1 }] }
+      ]
+    },
+    {
+      "kind": "loop",
+      "name": "grow vegetation",
+      "processes": [
+        {
+          "kind": "assign",
+          "domain": {
+            "classes": [""],
+            "conditions": [
+              { "field": "nb_border_vegetation", "op": ">=", "value": 0.5 },
+              { "field": "ndvi", "op": ">", "value": 0 }
+            ]
+          },
+          "className": "vegetation"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Insert example** writes this ruleset for your classes and features; **Open**
+and **Save** read and write it as a file. The ruleset is checked as you type,
+and the message names the first problem. Tick **Start from the current
+classification** to refine an existing classification instead of starting from
+unclassified objects. Objects still unclassified at the end get the default
+class. After a run, a line per process says how many objects it changed (and,
+for a loop, in how many passes). A ruleset reads only features and the object
+graph, so **Apply to other images** runs it on them as it is.
 
 ## 6. Assess accuracy
 

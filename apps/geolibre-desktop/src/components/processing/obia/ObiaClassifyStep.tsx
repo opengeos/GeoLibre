@@ -8,6 +8,7 @@ import {
   classifyRandomForest,
   collectSamples,
   type ObiaClass,
+  type ObiaProcessLog,
   type ObiaRule,
   type ObiaRuleOp,
 } from "@geolibre/processing";
@@ -16,6 +17,8 @@ import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { inheritClasses } from "../../../lib/obia/obia-context";
+import { parseRuleset, runObiaRuleset } from "../../../lib/obia/obia-ruleset-run";
+import { ObiaRulesetEditor } from "./ObiaRulesetEditor";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { obiaRunEnv } from "../../../lib/obia/obia-persistence";
 import { useObiaSession } from "../../../lib/obia/obia-session";
@@ -127,6 +130,15 @@ export function ObiaClassifyStep(): ReactElement | null {
   const aboveLevel =
     levels.find((record) => record.level === level + 1 && record.classification)?.level ?? null;
 
+  const [rulesetLog, setRulesetLog] = useState<ObiaProcessLog[] | null>(null);
+  const rulesetValid = useMemo(
+    () =>
+      settings.method === "ruleset" &&
+      Boolean(features) &&
+      "ruleset" in parseRuleset(settings.ruleset, features?.table.fields ?? []),
+    [settings.method, settings.ruleset, features],
+  );
+
   const handleClassify = useCallback(async () => {
     if (runningRef.current || !segmentation || !features) return;
     const layer = useAppStore
@@ -150,17 +162,30 @@ export function ObiaClassifyStep(): ReactElement | null {
     try {
       // Every object gets a prediction, including ones a feature tool skipped.
       const table = tableForAllObjects(features.table, layer.geojson);
-      const result =
-        settings.method === "inherit"
-          ? inheritClasses(defaultClass)
-          : settings.method === "random-forest"
-            ? await classifyRandomForest(
-                table,
-                collectSamples(layer.geojson),
-                { fields: chosen, trees: settings.trees },
-                run,
-              )
-            : await classifyByRules(table, settings.rules, defaultClass, run);
+      let result;
+      if (settings.method === "ruleset") {
+        const parsed = parseRuleset(settings.ruleset, features.table.fields);
+        if ("error" in parsed) throw new Error(t("obia.ruleset.invalid", { error: parsed.error }));
+        const ran = await runObiaRuleset(
+          table,
+          parsed.ruleset,
+          { defaultClass, fromCurrent: settings.rulesetFromCurrent },
+          run,
+        );
+        result = ran.result;
+        setRulesetLog(ran.log);
+      } else
+        result =
+          settings.method === "inherit"
+            ? inheritClasses(defaultClass)
+            : settings.method === "random-forest"
+              ? await classifyRandomForest(
+                  table,
+                  collectSamples(layer.geojson),
+                  { fields: chosen, trees: settings.trees },
+                  run,
+                )
+              : await classifyByRules(table, settings.rules, defaultClass, run);
       // A re-measure while the tool ran made these predictions stale (and
       // cleared the classification); do not bring them back.
       if (useObiaSession.getState().features?.finishedAt !== features.finishedAt) {
@@ -225,13 +250,13 @@ export function ObiaClassifyStep(): ReactElement | null {
       <ObiaStepHeading index={5} title={t("obia.steps.classify")} />
 
       <div
-        className="flex items-center gap-4 text-sm"
+        className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
         role="radiogroup"
         aria-label={t("obia.classify.method")}
       >
-        <span className="text-xs font-medium">{t("obia.classify.method")}</span>
-        {(["random-forest", "rules", "inherit"] as const).map((method) => (
-          <label key={method} className="flex items-center gap-1.5">
+        <span className="w-full text-xs font-medium">{t("obia.classify.method")}</span>
+        {(["random-forest", "rules", "ruleset", "inherit"] as const).map((method) => (
+          <label key={method} className="flex items-center gap-1.5 whitespace-nowrap">
             <input
               type="radio"
               name="obia-classifier"
@@ -245,7 +270,15 @@ export function ObiaClassifyStep(): ReactElement | null {
         ))}
       </div>
 
-      {settings.method === "inherit" ? (
+      {settings.method === "ruleset" ? (
+        <ObiaRulesetEditor
+          settings={settings}
+          setSettings={setSettings}
+          fields={measured}
+          classes={classes.map((item) => item.name)}
+          log={rulesetLog}
+        />
+      ) : settings.method === "inherit" ? (
         <p className="text-xs text-muted-foreground" data-testid="obia-inherit-hint">
           {aboveLevel == null
             ? t("obia.classify.inheritNeedsLevel")
@@ -393,11 +426,13 @@ export function ObiaClassifyStep(): ReactElement | null {
           onClick={() => void handleClassify()}
           disabled={
             running ||
-            (settings.method === "inherit"
-              ? aboveLevel == null
-              : settings.method === "random-forest"
-                ? !chosen.length
-                : !settings.rules.length)
+            (settings.method === "ruleset"
+              ? !rulesetValid
+              : settings.method === "inherit"
+                ? aboveLevel == null
+                : settings.method === "random-forest"
+                  ? !chosen.length
+                  : !settings.rules.length)
           }
           className="gap-2"
           data-testid="obia-classify"

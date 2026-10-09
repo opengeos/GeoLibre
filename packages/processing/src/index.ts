@@ -319,6 +319,19 @@ export {
   type ObiaMergeOptions,
 } from "./obia-hierarchy";
 export {
+  classMembership,
+  membershipValue,
+  runRuleset,
+  validateRuleset,
+  type ObiaCondition,
+  type ObiaDomain,
+  type ObiaFuzzyClass,
+  type ObiaMembership,
+  type ObiaProcess,
+  type ObiaProcessLog,
+  type ObiaRuleset,
+} from "./obia-ruleset";
+export {
   runWhiteboxToolWasm,
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
