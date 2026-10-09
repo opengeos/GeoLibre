@@ -150,9 +150,7 @@ export async function runObiaRuleset(
     // Objects holding the default class start unclassified, so a domain of
     // unclassified objects ("") still finds them.
     options.fromCurrent && classification
-      ? new Map(
-          [...classification.predictions].filter(([, name]) => name !== options.defaultClass),
-        )
+      ? new Map([...classification.predictions].filter(([, name]) => name !== options.defaultClass))
       : new Map(),
   );
   for (const id of table.rows.keys()) {

@@ -186,7 +186,11 @@ describe("OBIA rulesets", () => {
         {
           processes: [
             { kind: "assign", className: "veg" },
-            { kind: "assign", className: "x", domain: { conditions: [{ field, op: ">", value: 0 }] } },
+            {
+              kind: "assign",
+              className: "x",
+              domain: { conditions: [{ field, op: ">", value: 0 }] },
+            },
           ],
         },
         fields,
@@ -211,7 +215,9 @@ describe("OBIA rulesets", () => {
             {
               kind: "loop",
               maxIterations: 1000,
-              processes: [{ kind: "loop", maxIterations: 1000, processes: [flip("a", "b"), flip("b", "a")] }],
+              processes: [
+                { kind: "loop", maxIterations: 1000, processes: [flip("a", "b"), flip("b", "a")] },
+              ],
             },
           ],
         }),
