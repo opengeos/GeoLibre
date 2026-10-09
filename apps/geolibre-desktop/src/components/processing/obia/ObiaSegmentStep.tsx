@@ -167,7 +167,6 @@ export function ObiaSegmentStep({
       const { area } = plan;
       const image = await obiaSourceBands(sourceLayer, bandIndexes, area);
       if (!image) throw new Error(t("obia.error.readImage"));
-      const scale = summary.levels[0].width / summary.levels[area.level].width;
       const result = await segmentImage(image, params, run);
       const name = t("obia.layerName", { name: sourceLayer.name });
       // Fingerprint before adding the layer, so a failure here leaves nothing behind.
@@ -195,7 +194,7 @@ export function ObiaSegmentStep({
         width: image.width,
         height: image.height,
         area,
-        pixelSize: summary.pixelSize * scale,
+        pixelSize: plan.pixelSize,
         labels: result.labels,
         objectsLayerId,
         objectCount: result.objectCount,
@@ -428,12 +427,11 @@ function ObiaAreaNote({
     warn = true;
   } else {
     const { level } = plan.area;
-    const scale = info.levels[0].width / info.levels[level].width;
     const values = {
       width: number(plan.width),
       height: number(plan.height),
       // Significant digits: a geographic pixel size is a small fraction of a degree.
-      size: (info.pixelSize * scale).toLocaleString(i18n.language, { maximumSignificantDigits: 3 }),
+      size: plan.pixelSize.toLocaleString(i18n.language, { maximumSignificantDigits: 3 }),
       unit: info.unit ?? "",
       max: number(OBIA_MAX_PIXELS),
     };

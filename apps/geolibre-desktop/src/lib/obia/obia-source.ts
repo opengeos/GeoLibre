@@ -84,9 +84,12 @@ async function openTiff(layer: GeoLibreLayer): Promise<GeoTIFF | null> {
     } catch (error) {
       // A server without range requests (or one blocking them) is still read,
       // by downloading the whole file; say so, since that is the slow path.
+      // The layer name, not the URL or the error (which can carry it): a signed
+      // URL's query string is a credential.
       console.warn(
-        `Object-Based Analysis: ${url} could not be read by range requests; downloading it whole.`,
-        error,
+        `Object-Based Analysis: "${layer.name}" could not be read by range requests (${
+          error instanceof Error ? error.name : "error"
+        }); downloading it whole.`,
       );
     }
   }
@@ -110,7 +113,14 @@ export async function obiaSourceTiff(layer: GeoLibreLayer): Promise<GeoTIFF | nu
   const key = obiaSourceKey(layer);
   if (cached?.key === key) return cached.tiff;
   const started = generation;
-  const tiff = openTiff(layer).catch(() => null);
+  const tiff = openTiff(layer).catch((error: unknown) => {
+    console.warn(
+      `Object-Based Analysis: could not open "${layer.name}" (${
+        error instanceof Error ? error.name : "error"
+      }).`,
+    );
+    return null;
+  });
   if (started === generation) cached = { key, tiff };
   const result = await tiff;
   // Do not keep a failure: the next read retries.
@@ -240,6 +250,8 @@ export interface ObiaAreaPlan {
   area: ObiaReadArea;
   width: number;
   height: number;
+  /** Pixel size at the chosen level, in CRS units (square pixels assumed). */
+  pixelSize: number;
   /** False when even the coarsest level is over the workbench's pixel limit. */
   fits: boolean;
 }
@@ -259,21 +271,25 @@ export function planObiaArea(
   window: ObiaPixelWindow,
   maxPixels = OBIA_MAX_PIXELS,
 ): ObiaAreaPlan {
+  const full = info.levels[0];
+  const sizeAt = (level: number) => info.pixelSize * (full.width / info.levels[level].width);
   const plan = planImageRead(info.levels, window, maxPixels);
-  if (plan)
+  if (plan) {
     return {
       area: { level: plan.level, window },
       width: plan.width,
       height: plan.height,
+      pixelSize: sizeAt(plan.level),
       fits: true,
     };
+  }
   const level = info.levels.length - 1;
-  const full = info.levels[0];
   const coarse = info.levels[level];
   return {
     area: { level, window },
     width: Math.ceil(((window[2] - window[0]) * coarse.width) / full.width),
     height: Math.ceil(((window[3] - window[1]) * coarse.height) / full.height),
+    pixelSize: sizeAt(level),
     fits: false,
   };
 }

@@ -98,7 +98,7 @@ export function ObiaBatchStep(): ReactElement | null {
         // The whole image, at the finest level that fits the pixel limit.
         const info = await obiaSourceInfo(target);
         if (!info) throw new Error(t("obia.batch.error.readImage"));
-        const { area } = planObiaArea(info, wholeImageWindow(info));
+        const { area, pixelSize } = planObiaArea(info, wholeImageWindow(info));
         const image = await obiaSourceBands(target, segmentation.bandIndexes, area);
         if (!image) throw new Error(t("obia.batch.error.readImage"));
         // Reading the image takes no signal, so honour a Cancel made meanwhile.
@@ -152,7 +152,7 @@ export function ObiaBatchStep(): ReactElement | null {
           targetLayerId: target.id,
           source: { name: target.name, ...(location ? { location } : {}) },
           area,
-          pixelSize: info.pixelSize * (info.levels[0].width / info.levels[area.level].width),
+          pixelSize,
           objectsLayerId,
           objectCount: segmented.objectCount,
           classCounts,
