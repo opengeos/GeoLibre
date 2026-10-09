@@ -1,11 +1,16 @@
 import { Button, Label, Select } from "@geolibre/ui";
 import { FileUp, Loader2 } from "lucide-react";
-import { useMemo, useState, type ReactElement } from "react";
+import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { openLocalDataFileWithFallback } from "../../../lib/file-io/file-dialogs";
 import {
+  FileTooLargeError,
+  openLocalDataFileWithFallback,
+} from "../../../lib/file-io/file-dialogs";
+import {
+  ECOGNITION_MAX_BYTES,
   EcognitionImportError,
   importEcognitionRuleset,
+  parseEcognitionFile,
   type EcognitionImport,
 } from "../../../lib/obia/obia-ecognition";
 import { withClasses } from "../../../lib/obia/obia-import";
@@ -21,44 +26,54 @@ export function ObiaEcognitionImport(): ReactElement {
   const { t } = useTranslation();
   const bandIndexes = useObiaSession((s) => s.bandIndexes);
   const features = useObiaSession((s) => s.features);
-  const [file, setFile] = useState<{ name: string; bytes: Uint8Array } | null>(null);
+  // The file's parsed documents: parsed once, then converted again whenever a
+  // layer's band changes.
+  const [file, setFile] = useState<{ name: string; docs: Document[] } | null>(null);
   const [layerBands, setLayerBands] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  // Re-read with the chosen bands; parsing is quick for real rule sets.
+  const errorMessage = useCallback(
+    (err: unknown) =>
+      err instanceof EcognitionImportError
+        ? t(`obia.import.ecognition.error.${err.code}`)
+        : err instanceof FileTooLargeError
+          ? t("obia.import.ecognition.error.too-large")
+          : t("obia.import.error.failed"),
+    [t],
+  );
   const result = useMemo((): EcognitionImport | string | null => {
     if (!file) return null;
     try {
-      return importEcognitionRuleset(file.bytes, layerBands);
+      return importEcognitionRuleset(file.docs, layerBands);
     } catch (err) {
-      return err instanceof EcognitionImportError
-        ? t(`obia.import.ecognition.error.${err.code}`)
-        : t("obia.import.error.failed");
+      return errorMessage(err);
     }
-  }, [file, layerBands, t]);
+  }, [file, layerBands, errorMessage]);
   const report = typeof result === "string" ? null : result;
 
   const open = async () => {
     setBusy(true);
     setError(null);
     setDone(null);
+    setFile(null);
     try {
       const picked = await openLocalDataFileWithFallback({
         accept: ".dcp,.dpr",
         filters: [{ name: "eCognition", extensions: ["dcp", "dpr"] }],
         readBinary: true,
+        maxBytes: ECOGNITION_MAX_BYTES,
       });
       if (picked?.data) {
         setLayerBands({});
         setFile({
           name: picked.path.split(/[\\/]/).pop() ?? picked.path,
-          bytes: new Uint8Array(picked.data),
+          docs: parseEcognitionFile(new Uint8Array(picked.data)),
         });
       }
-    } catch {
-      setError(t("obia.import.error.failed"));
+    } catch (err) {
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }

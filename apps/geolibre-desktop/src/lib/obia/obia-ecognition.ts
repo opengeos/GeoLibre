@@ -1,4 +1,5 @@
 import {
+  OBIA_CURVE_MAX_POINTS,
   classFieldSlug,
   type ObiaCondition,
   type ObiaDomain,
@@ -211,23 +212,35 @@ export function ecognitionDocuments(bytes: Uint8Array): Document[] {
 }
 
 /**
- * Convert an eCognition rule set (`.dcp`) or project (`.dpr`) to a workbench
- * ruleset, reporting what it leaves out.
+ * Parse a rule set or project file once, so it can be converted again with
+ * other layer bands without re-reading it.
  *
  * @param bytes The file's contents (at most {@link ECOGNITION_MAX_BYTES}).
- * @param layerBands Image layer alias to 1-based band; layers not given are
- *   read from the bands in the rule set's layer order.
- * @throws EcognitionImportError when the file holds no process tree, or an
- *   encrypted one.
+ * @throws EcognitionImportError for a file over the limit.
  */
-export function importEcognitionRuleset(
-  bytes: Uint8Array,
-  layerBands: Readonly<Record<string, number>> = {},
-): EcognitionImport {
+export function parseEcognitionFile(bytes: Uint8Array): Document[] {
   if (bytes.byteLength > ECOGNITION_MAX_BYTES) {
     throw new EcognitionImportError("too-large", "The file is too large to read.");
   }
-  const docs = ecognitionDocuments(bytes);
+  return ecognitionDocuments(bytes);
+}
+
+/**
+ * Convert an eCognition rule set (`.dcp`) or project (`.dpr`) to a workbench
+ * ruleset, reporting what it leaves out.
+ *
+ * @param source The file's contents, or its documents from
+ *   {@link parseEcognitionFile}.
+ * @param layerBands Image layer alias to 1-based band; layers not given are
+ *   read from the bands in the rule set's layer order.
+ * @throws EcognitionImportError for a file over the size limit, or one that
+ *   holds no process tree, or an encrypted one.
+ */
+export function importEcognitionRuleset(
+  source: Uint8Array | Document[],
+  layerBands: Readonly<Record<string, number>> = {},
+): EcognitionImport {
+  const docs = Array.isArray(source) ? source : parseEcognitionFile(source);
   const roots = docs.flatMap((doc) =>
     all(doc.documentElement, "ProcBase").filter((proc) =>
       ["ProcessList", "ProcList"].includes((proc.parentElement as Element | null)?.tagName ?? ""),
@@ -526,7 +539,11 @@ export function importEcognitionRuleset(
       const span = xs[j + 1] - xs[j];
       return span ? points[j] + ((points[j + 1] - points[j]) * (t - xs[j])) / span : points[j + 1];
     };
-    const values = even ? points : Array.from({ length: 33 }, (_, i) => at(i / 32));
+    const values = even
+      ? points
+      : Array.from({ length: OBIA_CURVE_MAX_POINTS }, (_, i) =>
+          at(i / (OBIA_CURVE_MAX_POINTS - 1)),
+        );
     return {
       field: fieldFor(feature, null),
       type: "curve",
@@ -538,7 +555,9 @@ export function importEcognitionRuleset(
 
   /** A fuzzy class from a class description. */
   const fuzzyClass = (name: string, term: Element | undefined): ObiaFuzzyClass | string => {
-    if (!term) return { className: name, memberships: [] };
+    // No description at all is not the same as an empty one (membership 1):
+    // it was stored somewhere the importer does not read.
+    if (!term) return `no class description found for ${name}`;
     const evalType = term.getAttribute("TermEvalType") ?? "0";
     // 0 is and(min) and 1 or(max); others (products, means) are not mapped.
     const combine = evalType === "0" ? "and" : evalType === "1" ? "or" : null;

@@ -62,6 +62,7 @@ const RULESET = `<?xml version="1.0" encoding="UTF-8"?>
           </PropHist></TermClause>
           <TermBase ClssId="2"/>
         </Term>
+        <Term TermEvalType="0"><TermBase ClssId="3"/></Term>
       </AllTerm>
     </ClssHrchy>
     <PropDscr group_id="cust.object.prop"><PropDscrId InstID="NDVI"/><Params>
@@ -157,7 +158,7 @@ describe("eCognition rule set import", () => {
               ],
             },
             // No description: membership 1.
-            { className: "Grass", memberships: [] },
+            { className: "Grass", combine: "and", memberships: [] },
           ],
           minMembership: 0.2,
         },
@@ -300,9 +301,15 @@ describe("eCognition rule set import", () => {
     assert.equal(process?.kind, "fuzzy");
     const membership = process?.kind === "fuzzy" ? process.classes[0].memberships[0] : null;
     assert.ok(membership?.type === "curve");
-    assert.equal(membership.values.length, 33);
-    assert.equal(membership.values[4], 0.5);
-    assert.ok(membership.values.slice(8).every((v) => v === 1));
+    assert.equal(membership.values.length, 64);
+    assert.ok(Math.abs(membership.values[8] - 0.5079) < 1e-3);
+    assert.ok(membership.values.slice(16).every((v) => v === 1));
+    // A class with no description stored is skipped, not taken as empty.
+    const missing = importEcognitionRuleset(
+      bytes(text(hist([0, 1], [0, 1, 0, 1])).replace(/<AllTerm>[\s\S]*<\/AllTerm>/, "")),
+    );
+    assert.equal(missing.ruleset, null);
+    assert.match(missing.skipped[0].detail ?? "", /no class description/);
     // Points out of order are not read.
     const unordered = importEcognitionRuleset(bytes(text(hist([0, 0.5, 0.25], [0, 1, 1, 0, 100]))));
     assert.equal(unordered.skipped[0].reason, "description");
