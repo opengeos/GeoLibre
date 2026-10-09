@@ -15,7 +15,7 @@ import {
 import type { FeatureCollection } from "geojson";
 import { ensureObiaLabels, obiaRunEnv } from "./obia-persistence";
 import type { ObiaFeatureRun, ObiaLevelRecord, ObiaSegmentationRun } from "./obia-session";
-import { useObiaSession } from "./obia-session";
+import { OBIA_MAX_LEVELS, useObiaSession } from "./obia-session";
 
 /** A coarser level, built but not yet on the map. */
 export interface ObiaBuiltLevel {
@@ -31,9 +31,9 @@ export interface ObiaBuiltLevel {
 
 /** Why a coarser level cannot be built. */
 export class ObiaLevelError extends Error {
-  readonly code: "no-features" | "too-large" | "not-top";
+  readonly code: "no-features" | "too-large" | "not-top" | "too-deep";
 
-  constructor(code: "no-features" | "too-large" | "not-top", message: string) {
+  constructor(code: ObiaLevelError["code"], message: string) {
     super(message);
     this.name = "ObiaLevelError";
     this.code = code;
@@ -61,6 +61,9 @@ export async function buildCoarserLevel(
   if (levels.some((record) => record.level > level)) {
     throw new ObiaLevelError("not-top", "Build coarser levels from the coarsest one.");
   }
+  if (level >= OBIA_MAX_LEVELS) {
+    throw new ObiaLevelError("too-deep", `The hierarchy has at most ${OBIA_MAX_LEVELS} levels.`);
+  }
   const bands = segmentation.bandIndexes.filter(
     (band) =>
       features.table.fields.includes(`mean_b${band}`) &&
@@ -76,12 +79,20 @@ export async function buildCoarserLevel(
   const labels = await ensureObiaLabels(run);
   const grid = await decodeLabelGrid(labels);
   const parentOf = mergeObjects(features.table, objectAdjacency(grid), { scale, bands });
+  // Objects the merge could not weigh (no size, or no feature row) still get
+  // a parent of their own, so the coarser grid has no holes.
+  let nextParent = 1;
+  for (const parent of parentOf.values()) if (parent >= nextParent) nextParent = parent + 1;
+  for (const id of grid.ids) {
+    if (id && !parentOf.has(id)) parentOf.set(id, nextParent++);
+  }
   const parentIds = relabelGrid(grid, parentOf);
   const parentLabels = encodeLabelGrid(grid, parentIds);
   const objects = await polygonizeLabels(parentLabels, run);
   const options = features.options;
-  const table = levelFeatures(features.table, parentOf, parentIds, grid, segmentation.bandIndexes, {
-    spectral: options.spectral,
+  // Only the bands with statistics: a band without them would pool to zeros.
+  const table = levelFeatures(features.table, parentOf, parentIds, grid, bands, {
+    spectral: options.spectral && bands.length > 0,
     shape: options.shape,
     context: options.context,
     indices: options.spectral ? options.indices : undefined,

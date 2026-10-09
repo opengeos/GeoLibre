@@ -370,6 +370,13 @@ describe("OBIA object hierarchy levels", () => {
     assert.deepEqual(restored.segmentation?.merge, { fromLevel: 1, scale: 20, bands: [1, 4] });
     assert.equal(restored.levels[0].level, 1);
     assert.ok(restored.levels[0].classification, "level 1 keeps its classification");
+    // A crafted file cannot make a level merge from itself or a later level.
+    const looped = JSON.parse(JSON.stringify(saved));
+    looped.runs.segmentation.merge.fromLevel = 2;
+    assert.equal(
+      restoreObiaSession(looped, [objectsLayer(), level2Layer]).segmentation?.merge,
+      undefined,
+    );
     // Back to level 1: its classification comes back with it.
     useObiaSession.getState().switchLevel(1);
     state = useObiaSession.getState();
