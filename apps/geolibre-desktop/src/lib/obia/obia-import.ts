@@ -138,10 +138,16 @@ export async function rasterizeObjects(
     const raw = idField ? feature.properties?.[idField] : index + 1;
     const id = cellNumber(raw);
     if (!Number.isInteger(id) || id < 1) {
-      throw new ObiaImportError("no-ids", `Object ids must be positive whole numbers (found ${String(raw)}).`);
+      throw new ObiaImportError(
+        "no-ids",
+        `Object ids must be positive whole numbers (found ${String(raw)}).`,
+      );
     }
     if (id > OBIA_MAX_IMPORT_ID) {
-      throw new ObiaImportError("big-ids", `Object ids must be at most ${OBIA_MAX_IMPORT_ID} (found ${id}).`);
+      throw new ObiaImportError(
+        "big-ids",
+        `Object ids must be at most ${OBIA_MAX_IMPORT_ID} (found ${id}).`,
+      );
     }
     if (seen.has(id)) {
       throw new ObiaImportError("dup-ids", `Object ids must be distinct (${id} repeats).`);
@@ -349,9 +355,11 @@ export async function labelFromSamples(
   for (const sample of samples.features) {
     const name = String(sample.properties?.[classField] ?? "").trim();
     if (!name) continue;
-    const roleValue = roleField ? String(sample.properties?.[roleField] ?? "")
+    const roleValue = roleField
+      ? String(sample.properties?.[roleField] ?? "")
           .trim()
-          .toLowerCase() : "";
+          .toLowerCase()
+      : "";
     const sampleRole: ObiaSampleRole =
       roleValue === "training" || roleValue === "validation" ? roleValue : role;
     const points = samplePoints(sample.geometry);
