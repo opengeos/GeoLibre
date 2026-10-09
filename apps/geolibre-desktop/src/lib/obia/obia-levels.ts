@@ -36,7 +36,13 @@ export interface ObiaBuiltLevel {
 
 /** Why a coarser level cannot be built. */
 export class ObiaLevelError extends Error {
-  readonly code: "no-features" | "too-large" | "not-top" | "too-deep" | "bad-scale";
+  readonly code:
+    | "no-features"
+    | "too-large"
+    | "not-top"
+    | "too-deep"
+    | "bad-scale"
+    | "objects-missing";
 
   constructor(code: ObiaLevelError["code"], message: string) {
     super(message);
@@ -188,7 +194,8 @@ export function addBuiltLevel(built: ObiaBuiltLevel, name: string): void {
   const childLayer = useAppStore
     .getState()
     .layers.find((layer) => layer.id === segmentation?.objectsLayerId);
-  if (!segmentation || !childLayer?.geojson) throw new Error("The objects layer was removed.");
+  if (!segmentation || !childLayer?.geojson)
+    throw new ObiaLevelError("objects-missing", "The objects layer was removed.");
   // Link each child to its parent before adding the new layer, so a failure
   // cannot leave a layer the session does not know about; the links also
   // rebuild this level after a reload.

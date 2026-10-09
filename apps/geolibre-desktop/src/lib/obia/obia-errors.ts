@@ -17,6 +17,7 @@ const LEVEL_ERRORS = {
   "not-top": "obia.levels.error.notTop",
   "too-deep": "obia.levels.error.tooDeep",
   "bad-scale": "obia.levels.error.badScale",
+  "objects-missing": "obia.levels.error.objectsMissing",
 } as const;
 
 /**
