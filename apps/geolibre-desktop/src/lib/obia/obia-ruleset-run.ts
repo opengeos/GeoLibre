@@ -185,9 +185,7 @@ export async function runObiaRuleset(
     // Objects holding the default class start unclassified, so a domain of
     // unclassified objects ("") still finds them. A legend class named like
     // the default class is treated as the default too.
-    current
-      ? new Map([...current].filter(([, name]) => name !== options.defaultClass))
-      : new Map(),
+    current ? new Map([...current].filter(([, name]) => name !== options.defaultClass)) : new Map(),
   );
   for (const id of table.rows.keys()) {
     if (!predictions.has(id)) predictions.set(id, options.defaultClass);

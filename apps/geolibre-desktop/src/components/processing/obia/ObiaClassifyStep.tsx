@@ -155,8 +155,7 @@ export function ObiaClassifyStep(): ReactElement | null {
     () =>
       settings.method === "ruleset" &&
       Boolean(features) &&
-      "ruleset" in
-        parseRuleset(settings.ruleset, features?.table.fields ?? [], rulesetClassList),
+      "ruleset" in parseRuleset(settings.ruleset, features?.table.fields ?? [], rulesetClassList),
     [settings.method, settings.ruleset, features, rulesetClassList],
   );
 
