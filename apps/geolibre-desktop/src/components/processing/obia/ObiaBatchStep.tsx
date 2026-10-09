@@ -87,6 +87,8 @@ export function ObiaBatchStep(): ReactElement | null {
         const calls: ObiaToolCall[] = [];
         const image = await obiaSourceBands(target, segmentation.bandIndexes);
         if (!image) throw new Error(t("obia.batch.error.readImage"));
+        // Reading the image takes no signal, so honour a Cancel made meanwhile.
+        if (run.signal?.aborted) throw new DOMException("Cancelled.", "AbortError");
         const segmented = await segmentImage(image, segmentation.params, run);
         calls.push({ tool: segmented.tool, args: segmented.args });
         const measured = await computeObjectFeatures(
@@ -140,6 +142,7 @@ export function ObiaBatchStep(): ReactElement | null {
           finishedAt: new Date().toISOString(),
         });
       }
+      failedOn = null;
       setSelected([]);
     } catch (err) {
       const message = obiaErrorMessage(err, t, t("obia.batch.error.failed"));

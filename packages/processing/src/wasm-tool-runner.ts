@@ -72,6 +72,11 @@ function releaseWorker(worker: Worker): void {
   else worker.terminate();
 }
 
+/** The rejection a cancelled run settles with. */
+function abortError(tool: string): DOMException {
+  return new DOMException(`${tool} was cancelled.`, "AbortError");
+}
+
 /**
  * Run a tool on a Web Worker and resolve with its result.
  *
@@ -85,10 +90,6 @@ function releaseWorker(worker: Worker): void {
  * caller. Listeners are removed on the way out so a reused worker does not
  * accumulate them.
  */
-function abortError(tool: string): DOMException {
-  return new DOMException(`${tool} was cancelled.`, "AbortError");
-}
-
 function runToolOnWorker(request: WasmToolRequest, signal?: AbortSignal): Promise<ToolResult> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -161,6 +162,9 @@ function runToolOnWorker(request: WasmToolRequest, signal?: AbortSignal): Promis
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onError);
       worker.addEventListener("messageerror", onMessageError);
+      // Re-added on every attach: a respawned worker (the ack retry) must
+      // still be cancellable after cleanup() removed the first listener.
+      signal?.addEventListener("abort", onAbort, { once: true });
     };
     // The input files are structured-cloned rather than transferred: these
     // wrappers do not otherwise take ownership of the caller's bytes, and a
@@ -179,7 +183,6 @@ function runToolOnWorker(request: WasmToolRequest, signal?: AbortSignal): Promis
       }
     };
     attach();
-    signal?.addEventListener("abort", onAbort, { once: true });
     post();
   });
 }

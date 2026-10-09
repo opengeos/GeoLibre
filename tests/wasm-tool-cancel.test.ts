@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, describe, it, mock } from "node:test";
 import {
   releaseIdleWasmToolWorkers,
   runWasmToolInBackground,
@@ -50,5 +50,50 @@ describe("runWasmToolInBackground cancellation", () => {
       (err: Error) => err.name === "AbortError",
     );
     assert.equal(terminated, 0);
+  });
+
+  it("still cancels after a dead parked worker is replaced", async () => {
+    // The first worker answers once (and is parked), then never acknowledges;
+    // the second hangs. Cancel must reach the replacement.
+    let spawned = 0;
+    class AnsweringOnceWorker {
+      private listeners = new Set<(event: MessageEvent) => void>();
+      private answered = false;
+      readonly n = ++spawned;
+      addEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === "message") this.listeners.add(listener);
+      }
+      removeEventListener(type: string, listener: (event: MessageEvent) => void) {
+        if (type === "message") this.listeners.delete(listener);
+      }
+      postMessage() {
+        if (this.n !== 1 || this.answered) return;
+        this.answered = true;
+        const data = { ok: true, result: { exitCode: 0, stdout: [], files: {} } };
+        queueMicrotask(() => {
+          for (const listener of this.listeners) listener({ data } as MessageEvent);
+        });
+      }
+      terminate() {
+        terminated += 1;
+      }
+    }
+    globalThis.Worker = AnsweringOnceWorker as unknown as typeof Worker;
+    await runWasmToolInBackground({ tool: "first", args: [], input: {} });
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const controller = new AbortController();
+      const run = runWasmToolInBackground(
+        { tool: "image_segmentation", args: [], input: {} },
+        { signal: controller.signal },
+      );
+      mock.timers.tick(10_000);
+      assert.equal(spawned, 2, "the silent parked worker was replaced");
+      controller.abort();
+      await assert.rejects(run, (err: Error) => err.name === "AbortError");
+      assert.equal(terminated, 2);
+    } finally {
+      mock.timers.reset();
+    }
   });
 });
