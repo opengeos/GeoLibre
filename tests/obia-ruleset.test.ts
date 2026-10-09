@@ -8,8 +8,15 @@ import {
   validateRuleset,
   ObiaRulesetError,
   type ObiaAdjacency,
+  type ObiaMembership,
   type ObiaFeatureTable,
 } from "@geolibre/processing";
+
+/** A one-class fuzzy process around a membership. */
+const fuzzyOf = (membership: unknown) => ({
+  kind: "fuzzy",
+  classes: [{ className: "c", memberships: [membership] }],
+});
 
 /** Five objects in a row, 1-2-3-4-5, each bordering the next by 2 edges. */
 function row(ndvi: number[]): { table: ObiaFeatureTable; adjacency: ObiaAdjacency } {
@@ -259,5 +266,53 @@ describe("OBIA ruleset editor helpers", () => {
     assert.deepEqual(rulesetClassNames({ processes }), []);
     assert.ok("error" in validateRuleset({ processes }, []));
     assert.ok("error" in validateRuleset({ processes: [{ kind: "assign", className: " " }] }, []));
+  });
+
+  it("evaluates curve and threshold memberships", () => {
+    // An eCognition-style sigmoid stored as values at evenly spaced points.
+    const curve: ObiaMembership & { type: "curve" } = {
+      field: "x",
+      type: "curve",
+      from: 10,
+      to: 20,
+      values: [0, 0.25, 1],
+    };
+    assert.equal(membershipValue(curve, 5), 0);
+    assert.equal(membershipValue(curve, 12.5), 0.125);
+    assert.equal(membershipValue(curve, 17.5), 0.625);
+    assert.equal(membershipValue(curve, 30), 1);
+    const threshold = { field: "x", type: "threshold", op: ">", value: 3 } as const;
+    assert.equal(membershipValue(threshold, 3), 0);
+    assert.equal(membershipValue(threshold, 4), 1);
+    assert.ok("ruleset" in validateRuleset({ processes: [fuzzyOf(curve)] }, ["x"]));
+    assert.ok(
+      "error" in validateRuleset({ processes: [fuzzyOf({ ...curve, values: [0, 2] })] }, ["x"]),
+    );
+    assert.ok(
+      "error" in validateRuleset({ processes: [fuzzyOf({ ...curve, values: [1] })] }, ["x"]),
+    );
+    assert.ok(
+      "error" in validateRuleset({ processes: [fuzzyOf({ ...threshold, op: "~" })] }, ["x"]),
+    );
+    // An empty description has membership 1, as in eCognition.
+    assert.equal(
+      classMembership({ className: "rest", memberships: [] }, () => 0),
+      1,
+    );
+  });
+
+  it("removes classes with unassign", () => {
+    const { table, adjacency } = row([0.8, 0.5, 0.05, -0.3, 0.02]);
+    const { predictions, log } = runRuleset(table, adjacency, ["veg"], {
+      processes: [
+        { kind: "assign", className: "veg" },
+        { kind: "unassign", domain: { conditions: [{ field: "ndvi", op: "<", value: 0.1 }] } },
+      ],
+    });
+    assert.deepEqual([...predictions].sort(), [
+      [1, "veg"],
+      [2, "veg"],
+    ]);
+    assert.equal(log[1].changed, 3);
   });
 });

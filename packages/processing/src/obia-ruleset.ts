@@ -3,8 +3,9 @@
  * and a domain-scoped, iterative process tree, as in eCognition rulesets.
  *
  * A process acts on a domain (the objects of some current classes that meet
- * some conditions) and either assigns a class, classifies the domain by fuzzy
- * class descriptions, or repeats child processes until nothing changes.
+ * some conditions) and either assigns a class, removes the class, classifies
+ * the domain by fuzzy class descriptions, or repeats child processes until
+ * nothing changes.
  * Conditions read the objects' features and, recomputed before each process,
  * `nb_border_<class>`: the share of an object's border shared with neighbors
  * currently of that class. That is what lets a loop grow a class outwards.
@@ -29,13 +30,28 @@ export interface ObiaDomain {
   conditions?: ObiaCondition[];
 }
 
-/** A fuzzy membership function over one feature, from 0 to 1. */
+/**
+ * A fuzzy membership function over one feature, from 0 to 1. A `curve` is
+ * piecewise linear through `values` at evenly spaced points from `from` to
+ * `to` (its end values beyond them), the form eCognition stores its
+ * membership functions in; a `threshold` is crisp: 1 when the condition
+ * holds, else 0.
+ */
 export type ObiaMembership =
   | { field: string; type: "larger"; from: number; to: number }
   | { field: string; type: "smaller"; from: number; to: number }
-  | { field: string; type: "about"; center: number; width: number };
+  | { field: string; type: "about"; center: number; width: number }
+  | { field: string; type: "curve"; from: number; to: number; values: number[] }
+  | { field: string; type: "threshold"; op: ObiaRuleOp; value: number };
 
-/** A fuzzy class description: membership functions combined by an operator. */
+/** The most points a `curve` membership may have. */
+export const OBIA_CURVE_MAX_POINTS = 64;
+
+/**
+ * A fuzzy class description: membership functions combined by an operator.
+ * A description without memberships has membership 1, as in eCognition, so
+ * the class takes whatever no other class claims more strongly.
+ */
 export interface ObiaFuzzyClass {
   className: string;
   combine?: "and" | "or" | "mean";
@@ -45,6 +61,8 @@ export interface ObiaFuzzyClass {
 /** One process of a ruleset. */
 export type ObiaProcess =
   | { kind: "assign"; name?: string; domain?: ObiaDomain; className: string }
+  /** Leave the domain's objects unclassified. */
+  | { kind: "unassign"; name?: string; domain?: ObiaDomain }
   | {
       kind: "fuzzy";
       name?: string;
@@ -199,6 +217,9 @@ export function validateRuleset(
           return `${at}: assign needs a className`;
         const err = checkDomain(p.domain, at);
         if (err) return err;
+      } else if (p.kind === "unassign") {
+        const err = checkDomain(p.domain, at);
+        if (err) return err;
       } else if (p.kind === "fuzzy") {
         const err = checkDomain(p.domain, at);
         if (err) return err;
@@ -221,8 +242,8 @@ export function validateRuleset(
           if (cls.combine != null && !["and", "or", "mean"].includes(String(cls.combine))) {
             return `${at}: class ${j + 1} combine must be and, or or mean`;
           }
-          if (!Array.isArray(cls.memberships) || !cls.memberships.length) {
-            return `${at}: class ${j + 1} needs memberships`;
+          if (!Array.isArray(cls.memberships)) {
+            return `${at}: class ${j + 1} needs a list of memberships`;
           }
           for (const [k, m] of cls.memberships.entries()) {
             const mem = m as Record<string, unknown>;
@@ -237,6 +258,23 @@ export function validateRuleset(
               if (!num(mem.center) || !num(mem.width) || (mem.width as number) <= 0) {
                 return `${where} needs a center and a positive width`;
               }
+            } else if (mem.type === "curve") {
+              if (!num(mem.from) || !num(mem.to) || (mem.from as number) >= (mem.to as number)) {
+                return `${where} needs numbers from < to`;
+              }
+              const values = mem.values;
+              if (
+                !Array.isArray(values) ||
+                values.length < 2 ||
+                values.length > OBIA_CURVE_MAX_POINTS ||
+                !values.every((v) => num(v) && v >= 0 && v <= 1)
+              ) {
+                return `${where} needs 2 to ${OBIA_CURVE_MAX_POINTS} values between 0 and 1`;
+              }
+            } else if (mem.type === "threshold") {
+              if (!OPS.has(String(mem.op)))
+                return `${where} has an unknown operator "${String(mem.op)}"`;
+              if (!num(mem.value)) return `${where} needs a numeric value`;
             } else {
               return `${where} has an unknown type "${String(mem.type)}"`;
             }
@@ -256,7 +294,7 @@ export function validateRuleset(
         const err = checkProcesses(p.processes, at, depth + 1);
         if (err) return err;
       } else {
-        return `${at}: unknown kind "${String(p.kind)}" (assign, fuzzy or loop)`;
+        return `${at}: unknown kind "${String(p.kind)}" (assign, unassign, fuzzy or loop)`;
       }
     }
     return null;
@@ -279,6 +317,16 @@ export function membershipValue(m: ObiaMembership, x: number | null | undefined)
       const d = Math.abs(x - m.center);
       return d >= m.width ? 0 : 1 - d / m.width;
     }
+    case "curve": {
+      const last = m.values.length - 1;
+      const t = ((x - m.from) / (m.to - m.from)) * last;
+      if (t <= 0) return m.values[0];
+      if (t >= last) return m.values[last];
+      const i = Math.floor(t);
+      return m.values[i] + (m.values[i + 1] - m.values[i]) * (t - i);
+    }
+    case "threshold":
+      return compare(x, m.op, m.value) ? 1 : 0;
   }
 }
 
@@ -288,7 +336,7 @@ export function classMembership(
   value: (field: string) => number | null | undefined,
 ): number {
   const values = cls.memberships.map((m) => membershipValue(m, value(m.field)) ?? 0);
-  if (!values.length) return 0;
+  if (!values.length) return 1;
   switch (cls.combine ?? "and") {
     case "and":
       return Math.min(...values);
@@ -419,11 +467,14 @@ export function runRuleset(
       border = null;
       // Decide for every object first, then apply, so a process sees the
       // classes as they were when it started.
-      const updates: [number, string][] = [];
+      // A null class leaves the object unclassified.
+      const updates: [number, string | null][] = [];
       for (const id of table.rows.keys()) {
         if (!inDomain(id, process.domain)) continue;
         if (process.kind === "assign") {
           updates.push([id, process.className]);
+        } else if (process.kind === "unassign") {
+          updates.push([id, null]);
         } else {
           const value = valueOf(id);
           let best: string | null = null;
@@ -442,7 +493,9 @@ export function runRuleset(
       }
       let changed = 0;
       for (const [id, name] of updates) {
-        if (current.get(id) !== name) {
+        if (name == null) {
+          if (current.delete(id)) changed += 1;
+        } else if (current.get(id) !== name) {
           current.set(id, name);
           changed += 1;
         }

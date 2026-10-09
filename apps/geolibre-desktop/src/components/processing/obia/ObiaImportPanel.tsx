@@ -28,6 +28,7 @@ import {
   obiaRunEnv,
 } from "../../../lib/obia/obia-persistence";
 import { useObiaSession } from "../../../lib/obia/obia-session";
+import { ObiaEcognitionImport } from "./ObiaEcognitionImport";
 import { ObiaStatus } from "./ObiaFields";
 import { labelStylePatch } from "./ObiaTrainStep";
 
@@ -491,6 +492,7 @@ export function ObiaImportPanel(): ReactElement {
           )}
         </div>
         <ObiaStatus error={error} success={result || null} testId="obia-import-result" />
+        <ObiaEcognitionImport />
       </div>
     </details>
   );

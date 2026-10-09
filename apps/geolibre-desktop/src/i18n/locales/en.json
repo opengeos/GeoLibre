@@ -7589,6 +7589,37 @@
         "no-match": "No row of the table matches an object's segment_id.",
         "mapping-conflict": "The mapping gives an object two different parents.",
         "changed": "The objects changed during the import, so it was discarded. Import again."
+      },
+      "ecognition": {
+        "title": "eCognition rule set",
+        "hint": "Convert an eCognition rule set (.dcp) or project (.dpr) to a ruleset: its class assignments, class descriptions and loops convert, other processes are listed. Segmentation is not converted: segment under Segment instead. See Coming from eCognition in the user guide.",
+        "open": "eCognition rule set (.dcp, .dpr)…",
+        "summary_one": "{{name}}: converted processes: {{converted}} of {{count}}.",
+        "summary_other": "{{name}}: converted processes: {{converted}} of {{count}}.",
+        "layers": "Image layers",
+        "band": "Band {{band}}",
+        "segmentation": "Segmentation to redo under Segment: {{names}}",
+        "levels": "The rule set works on several levels ({{levels}}); the converted processes run on the level you work on.",
+        "notComputed": "Features the workbench does not compute, kept by their eCognition name (import them in a feature table; ✓ marks ones the objects have): {{features}}",
+        "skipped_one": "Not converted: {{count}} process",
+        "skipped_other": "Not converted: {{count}} processes",
+        "reason": {
+          "inactive": "inactive in the rule set",
+          "segmentation": "segmentation",
+          "output": "export or display",
+          "algorithm": "algorithm not supported",
+          "domain": "domain not supported",
+          "condition": "condition not supported",
+          "description": "class description not supported",
+          "children": "child processes of a process that is not a container"
+        },
+        "use": "Use as ruleset",
+        "used": "The ruleset is in the Classify step, with its classes added.",
+        "nothing": "No process converted.",
+        "error": {
+          "not-ruleset": "The file holds no eCognition process tree.",
+          "encrypted": "The rule set is encrypted, so it cannot be read."
+        }
       }
     },
     "context": {
@@ -7665,7 +7696,7 @@
       "inheritNeedsLevel": "Build and classify a coarser level first: objects inherit their parent’s class."
     },
     "ruleset": {
-      "hint": "A ruleset runs processes in order, as in eCognition: \"assign\" gives a class to the objects of a domain, \"fuzzy\" classifies them by fuzzy class descriptions (membership functions combined with and, or or mean), and \"loop\" repeats its processes until nothing changes. A domain selects objects by current class (\"\" for unclassified) and feature conditions; conditions can also read nb_border_<class>, the share of an object's border with neighbors of that class, recomputed between processes. See the user guide for the format.",
+      "hint": "A ruleset runs processes in order, as in eCognition: \"assign\" gives a class to the objects of a domain, \"unassign\" leaves them unclassified, \"fuzzy\" classifies them by fuzzy class descriptions (membership functions combined with and, or or mean), and \"loop\" repeats its processes until nothing changes. A domain selects objects by current class (\"\" for unclassified) and feature conditions; conditions can also read nb_border_<class>, the share of an object's border with neighbors of that class, recomputed between processes. See the user guide for the format.",
       "label": "Ruleset (JSON)",
       "example": "Insert example",
       "load": "Open…",

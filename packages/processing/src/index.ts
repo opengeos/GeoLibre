@@ -325,6 +325,7 @@ export {
   membershipValue,
   OBIA_RULESET_MAX_CHARS,
   OBIA_RULESET_MAX_DEPTH,
+  OBIA_CURVE_MAX_POINTS,
   OBIA_RULESET_MAX_STEPS,
   ObiaRulesetError,
   rulesetClassNames,

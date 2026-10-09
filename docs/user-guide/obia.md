@@ -152,6 +152,14 @@ files to the map first; they then appear in the layer lists.
   too) builds the level above the current one from the mapping instead of by
   merging. Objects the mapping leaves out become their own parent, and the step
   says how many; a child given two different parents is rejected.
+- **eCognition rule set**: a `.dcp` rule set or a `.dpr` project converts to a
+  ruleset for the Classify step. The step lists the rule set's image layers
+  with the band each is read from (change them to match your image), the
+  segmentation to redo under Segment, the features the workbench does not
+  compute, and every process it did not convert, with the reason. **Use as
+  ruleset** puts the converted ruleset in the Classify step and adds its
+  classes. See [Coming from eCognition](obia-ecognition.md#importing-a-rule-set)
+  for what converts.
 
 ## 2. Measure
 
@@ -276,16 +284,23 @@ A ruleset is a list of processes run in order. Each process acts on a
 **domain**: the objects whose current class is one of `classes` (`""` is
 unclassified; leave `classes` out for any class) and that meet every condition
 in `conditions` (a feature, an operator `>`, `>=`, `<`, `<=`, `==` or `!=`, and
-a value). There are three kinds of process:
+a value). There are four kinds of process:
 
 - `assign` gives the domain's objects `className`.
+- `unassign` leaves the domain's objects unclassified.
 - `fuzzy` classifies the domain's objects by fuzzy class descriptions. Each
   class combines membership functions with `and` (the minimum, the default),
   `or` (the maximum) or `mean`; an object takes the class with the highest
   membership if it reaches `minMembership` (0.1 by default), and is left as it
   is otherwise. A membership function reads one feature: `larger` rises from 0
   at `from` to 1 at `to`, `smaller` falls from 1 at `from` to 0 at `to`, and
-  `about` peaks at 1 at `center` and falls to 0 at `width` away.
+  `about` peaks at 1 at `center` and falls to 0 at `width` away. A `curve`
+  runs through `values` (2 to 64 numbers from 0 to 1) at evenly spaced points
+  from `from` to `to`, keeping its end values beyond them, which is how
+  eCognition stores its membership functions (sigmoids included); a
+  `threshold` is 1 when its condition (`op` and `value`) holds and 0
+  otherwise. A class with no membership functions has membership 1, as an
+  empty class description does in eCognition.
 - `loop` repeats its own processes until a pass changes nothing (or
   `maxIterations`, 100 by default).
 

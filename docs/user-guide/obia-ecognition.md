@@ -3,9 +3,11 @@
 This page maps eCognition concepts and algorithms to the
 [Object-Based Analysis](obia.md) workbench, so you can tell which parts of an
 eCognition land-cover workflow carry over, which need rework, and which are not
-available. It is a manual translation guide: the workbench does not read
-eCognition rulesets (`.dcp`) or projects (`.dpr`). Bring results over with
-[Import from other software](obia.md#import-from-other-software) instead.
+available. The workbench reads the classification part of eCognition rule
+sets (`.dcp`) and projects (`.dpr`), see
+[Importing a rule set](#importing-a-rule-set); the rest is translated by hand
+with the tables below, and results come over with
+[Import from other software](obia.md#import-from-other-software).
 
 Legend: **Yes** works the same way; **Partly** is available with the
 differences noted; **No** is not available.
@@ -50,8 +52,10 @@ differences noted; **No** is not available.
 | Nearest neighbor / standard NN | Random forest | **Partly**: a different classifier on the same samples |
 | Random trees, SVM, decision tree (classifier algorithm) | Random forest | **Partly** |
 | Assign class (threshold) | Threshold rules, or a ruleset `assign` with conditions | **Yes** |
-| Membership functions (larger than, smaller than, about range) | Ruleset `fuzzy` with `larger`, `smaller`, `about` | **Partly**: linear ramps only, no sigmoid or custom curves |
-| Logical terms and, or, mean | `combine`: `and` (min), `or` (max), `mean` | **Yes** |
+| Membership functions (larger than, smaller than, about range, sigmoids, custom) | Ruleset `fuzzy` with `larger`, `smaller`, `about`, or `curve` (eCognition's own points) | **Yes** |
+| Thresholds in class descriptions | `threshold` memberships | **Yes** |
+| Remove classification | Ruleset `unassign` | **Yes** |
+| Logical terms and, or, mean | `combine`: `and` (min), `or` (max), `mean` | **Yes** (the importer reads and and or) |
 | Minimum membership value | `minMembership` | **Yes** |
 | Class hierarchy inheritance | Inherit from level above; `parent_is_<class>` in rules | **Partly**: class-to-level inheritance, not inheritance of class descriptions |
 | Process tree, domains (level, class filter, conditions) | Ruleset processes with a `domain` (classes and conditions) on the level you work on | **Partly**: a domain cannot name another level |
@@ -71,14 +75,60 @@ differences noted; **No** is not available.
    [Import from other software](obia.md#import-from-other-software): objects
    (with the id field), the feature table, the level mapping, the class list
    and the samples.
-3. Rebuild the rules: threshold rules or a ruleset over the imported and
-   measured features, using the tables above to find the equivalents. Where
-   an algorithm is marked **No**, keep that part's result from eCognition
-   (import its objects or classes) rather than recreating it.
+3. Import the rule set (see below), then rebuild what did not convert: a
+   ruleset or threshold rules over the imported and measured features, using
+   the tables above to find the equivalents. Where an algorithm is marked
+   **No**, keep that part's result from eCognition (import its objects or
+   classes) rather than recreating it.
 4. Check the result against eCognition's with
    [Assess accuracy](obia.md#6-assess-accuracy), using validation samples
    from the eCognition classification.
 
-Validating whole rulesets automatically against eCognition reference outputs
-needs real exported rulesets and their results; that work is tracked in
-[#3053](https://github.com/opengeos/GeoLibre/issues/3053).
+## Importing a rule set
+
+Under [Import from other software](obia.md#import-from-other-software),
+**eCognition rule set** reads a `.dcp` rule set or a `.dpr` project (from
+eCognition / Definiens Developer 7 onwards; encrypted rule sets cannot be
+read) and converts its process tree:
+
+| eCognition | Converted to |
+| --- | --- |
+| Execute child processes | Its children, in order; a loop when it repeats (a count, or "while something changes", up to 1000 passes) |
+| Assign class | `assign` (`unassign` for unclassified) |
+| Remove classification | `unassign` |
+| Classification (class descriptions) | `fuzzy`: each active class's description, membership functions as `curve`, thresholds as `threshold`, combined by and(min) or or(max); the class hierarchy's minimum membership |
+| Image object domain: class filter, conditions joined by "and" | The process's `domain` |
+
+Features become the workbench's fields where it computes the same thing:
+`Mean <layer>`, `Standard deviation <layer>`, `Max. pixel value <layer>` and
+`Min. pixel value <layer>` (by the layer's band), `Brightness`, `Area` (in
+pixels), `Number of pixels`, `Border length` (in pixels), `Rel. border to
+<class>` (`nb_border_<class>`), `Existence of <class> (0)` (a neighbor of the
+class: `nb_border_<class>` above 0), `Existence of super objects <class> (1)`
+(`parent_is_<class>`, after context features) and a customized NDVI or NDWI
+(as `ndvi` or `ndwi`, by the band roles set under Measure). Any other feature
+keeps its eCognition name: import a feature table exported from eCognition
+with that column and the ruleset can use it.
+
+Not converted, and listed with the reason: segmentation (redo it under
+Segment), export and display processes, conditions joined by "or" or compared
+with a variable, other domains (pixel level, linked objects, maps), nearest
+neighbor and other operators in class descriptions, variables and arrays,
+merging, growing and shrinking objects, level management, samples and
+supervised classification, and any algorithm not in the table. The converted
+processes all run on the level you work on, whatever level the rule set
+named.
+
+How much of a rule set converts depends on how much of it is classification
+logic. Over public rule sets:
+
+| Rule set | Processes | Converted | Mostly not converted |
+| --- | --- | --- | --- |
+| [Buildings and water, Hamden NY](https://github.com/khdelphine/eCognition_rulesets) | 54 | 29 | merge region |
+| [Laughing gull nests](https://figshare.com/articles/dataset/14214182) | 64 | 25 | merge region, level management |
+| [Water, seed growing](https://sees-rsrc.science.uq.edu.au/CRSSIS_old/OOIA/process_tree_library.htm) | 27 | 5 | segmentation, merge region |
+| [Historical imagery, NAIP](https://github.com/mveitzel/historical-imagery) | 20 | 4 | segmentation, merge region |
+| [Seafloor geomorphology](https://github.com/GeologicalMethodical/eCognition_Developer_Ruleset) | 22 | 6 | segmentation, object resizing |
+| [NSW estuarine habitats](https://figshare.com/articles/software/27297483) | 240 | 13 | manual classification, variables, levels |
+| [Yalova land cover](https://github.com/peterhofmann1/Yalova-S-2-LULC) | 2,813 | 91 | supervised classification, samples, maps |
+| [Field boundaries](https://github.com/fkroeber/field_boundary_delineation) | 292 | 4 | variables, layer arithmetic, levels |
