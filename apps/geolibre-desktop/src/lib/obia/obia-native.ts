@@ -157,15 +157,15 @@ async function waitForJob(job: ConversionJob, run: ObiaRunOptions): Promise<Conv
       }
       // Wake early on Cancel instead of finishing the second.
       await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, 1000);
-        run.signal?.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
+        const onAbort = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          run.signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, 1000);
+        run.signal?.addEventListener("abort", onAbort, { once: true });
       });
       current = await fetchConversionJob(job.id);
     }
