@@ -26,6 +26,7 @@ export interface AddLayerHandlers {
   pmtiles: () => void;
   zarr: () => void;
   netcdf: () => void;
+  spaceborneLidar: () => void;
   lidar: () => void;
   splatting: () => void;
   threeDTiles: () => void;

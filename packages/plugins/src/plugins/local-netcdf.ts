@@ -21,13 +21,13 @@ import type { KerchunkRefs } from "./kerchunk-reference-store";
 // h5wasm's structural types, kept minimal so this module does not need the
 // package at type-check time in consumers. The real shapes come from the
 // dynamic import in {@link loadH5wasm}.
-interface H5Metadata {
+export interface H5Metadata {
   type: number; // HDF5 type class: 0 = integer, 1 = float
   size: number; // bytes per element
   signed: boolean;
   shape: number[] | null;
 }
-interface H5Dataset {
+export interface H5Dataset {
   metadata: H5Metadata;
   shape: number[] | null;
   attrs: Record<string, { value: unknown }>;
@@ -35,19 +35,19 @@ interface H5Dataset {
   slice(ranges: Array<[] | [number] | [number, number]>): unknown;
   get_dimension_labels(): Array<string | null>;
 }
-interface H5Group {
+export interface H5Group {
   keys(): string[];
   get(path: string): unknown;
 }
-interface H5File extends H5Group {
+export interface H5File extends H5Group {
   close(): void;
 }
-interface H5FS {
-  writeFile(path: string, data: Uint8Array): void;
+export interface H5FS {
+  writeFile(path: string, data: Uint8Array, opts?: { canOwn?: boolean }): void;
   unlink(path: string): void;
 }
 /** The h5wasm surface we use: the File constructor plus the ready filesystem. */
-interface H5wasmModule {
+export interface H5wasmModule {
   FS: H5FS;
   File: new (name: string, mode: string) => H5File;
 }
@@ -369,7 +369,7 @@ let fileCounter = 0;
  *
  * @returns The initialized h5wasm module namespace.
  */
-async function loadH5wasm(): Promise<H5wasmModule> {
+export async function loadH5wasm(): Promise<H5wasmModule> {
   modulePromise ??= (async () => {
     const ns = (await import("h5wasm")) as unknown as H5wasmNamespace;
     const api = ns.default ?? ns;

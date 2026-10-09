@@ -113,6 +113,7 @@ export function AddDataMenu({
     // On an ArcGIS view without the deck.gl overlay, LiDAR and 3D Tiles are
     // disabled by `supportsAddDataRenderer` below (`requiresArcgisDeckOverlay`).
     lidar: { onSelect: addLayer.lidar },
+    "spaceborne-lidar": { onSelect: addLayer.spaceborneLidar },
     splatting: { onSelect: addLayer.splatting },
     "3d-tiles": { onSelect: addLayer.threeDTiles },
     // Ion assets load through Cesium only (issue #2290); on the 2D map the

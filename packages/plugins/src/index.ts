@@ -276,6 +276,20 @@ export {
   type InlineZarrGrid,
 } from "./plugins/local-netcdf";
 export {
+  alongTrackKm,
+  detectSpaceborneLidarProduct,
+  openSpaceborneLidar,
+  SPACEBORNE_LIDAR_PRODUCTS,
+  type SpaceborneLidarBeam,
+  type SpaceborneLidarField,
+  type SpaceborneLidarFieldSpec,
+  type SpaceborneLidarFile,
+  type SpaceborneLidarFootprints,
+  type SpaceborneLidarProductId,
+  type SpaceborneLidarProductSpec,
+  type SpaceborneLidarReadOptions,
+} from "./plugins/spaceborne-lidar";
+export {
   closeDuckDBLayerPanel,
   getDuckDBFeatureBounds,
   getDuckDBLayerRows,

@@ -390,6 +390,12 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       run: addLayer.netcdf,
     },
     {
+      id: "add.spaceborne-lidar",
+      title: t("toolbar.command.addSpaceborneLidarLayer"),
+      group: t("toolbar.commandGroup.addData"),
+      run: addLayer.spaceborneLidar,
+    },
+    {
       id: "add.lidar",
       title: t("toolbar.command.addLidarLayer"),
       group: t("toolbar.commandGroup.addData"),

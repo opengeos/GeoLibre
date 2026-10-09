@@ -89,6 +89,7 @@ const FULL_REGISTRY_IDS = [
   "add.pmtiles",
   "add.zarr",
   "add.netcdf",
+  "add.spaceborne-lidar",
   "add.lidar",
   "add.splatting",
   "add.3d-tiles",

@@ -15,6 +15,9 @@ export const AddDataDialog = lazy(() =>
 export const AddNetcdfDialog = lazy(() =>
   import("../AddNetcdfDialog").then((m) => ({ default: m.AddNetcdfDialog })),
 );
+export const AddSpaceborneLidarDialog = lazy(() =>
+  import("../AddSpaceborneLidarDialog").then((m) => ({ default: m.AddSpaceborneLidarDialog })),
+);
 export const CommandPalette = lazy(() =>
   import("../../command/CommandPalette").then((m) => ({ default: m.CommandPalette })),
 );

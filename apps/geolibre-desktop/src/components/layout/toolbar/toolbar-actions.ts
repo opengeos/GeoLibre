@@ -40,6 +40,7 @@ interface AddLayerHandlerDeps {
   isActive: (id: string) => boolean;
   toggle: (id: string, appApi: AppApi) => void;
   setNetcdfDialogOpen: (open: boolean) => void;
+  setSpaceborneLidarDialogOpen: (open: boolean) => void;
 }
 
 /**
@@ -47,7 +48,7 @@ interface AddLayerHandlerDeps {
  * and the command palette, so each panel opens identically from both.
  *
  * @param deps - The app API, the Add Data dialog opener, the plugin registry
- *   accessors, and the NetCDF dialog setter.
+ *   accessors, and the NetCDF and ICESat-2/GEDI dialog setters.
  * @returns One handler per layer source.
  */
 export function createAddLayerHandlers({
@@ -56,6 +57,7 @@ export function createAddLayerHandlers({
   isActive,
   toggle,
   setNetcdfDialogOpen,
+  setSpaceborneLidarDialogOpen,
 }: AddLayerHandlerDeps): AddLayerHandlers {
   return {
     vector: () => openVectorLayerPanel(appApi),
@@ -79,6 +81,7 @@ export function createAddLayerHandlers({
         ? openAddDataKind("zarr")
         : openZarrLayerPanel(appApi),
     netcdf: () => setNetcdfDialogOpen(true),
+    spaceborneLidar: () => setSpaceborneLidarDialogOpen(true),
     lidar: () => openLidarLayerPanel(appApi),
     splatting: () => openSplattingLayerPanel(appApi),
     threeDTiles: () => openThreeDTilesLayerPanel(appApi),

@@ -123,6 +123,7 @@ were rendered before the choice existed and cannot honor it.
 | Item | Notes |
 | --- | --- |
 | **LiDAR Layer** | Point-cloud visualization, rendered with deck.gl. |
+| **ICESat-2 / GEDI** | Spaceborne LiDAR footprints from a local ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) HDF5 granule, added as a point layer colored by the product's main field. Plot a field against `distance_km` in the attribute table's Charts for an along-track profile. |
 | **Gaussian Splatting** | Gaussian splat scenes. |
 | **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. Includes a Google Photorealistic 3D Tiles sample that reads `VITE_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` from the runtime environment. |
 | **Cesium Ion Asset** | Adds a 3D Tiles tileset or imagery from Cesium ion by asset ID, using your Cesium ion token. Cesium engine only; the entry is disabled on the 2D engines. |

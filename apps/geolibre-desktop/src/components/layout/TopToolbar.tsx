@@ -57,6 +57,7 @@ import {
   AboutDialog,
   AddDataDialog,
   AddNetcdfDialog,
+  AddSpaceborneLidarDialog,
   CommandPalette,
   GeoreferencerDialog,
   GpsTrackingDialog,
@@ -235,6 +236,7 @@ export function TopToolbar({
     isActive,
     toggle,
     setNetcdfDialogOpen: dialogs.setNetcdfDialogOpen,
+    setSpaceborneLidarDialogOpen: dialogs.setSpaceborneLidarDialogOpen,
   });
   const handleOpenPlanetaryComputer = () => openPlanetaryComputerPanel(appApi);
 
@@ -651,6 +653,13 @@ export function TopToolbar({
           open={dialogs.netcdfDialogOpen}
           appApi={appApi}
           onOpenChange={dialogs.setNetcdfDialogOpen}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={dialogs.spaceborneLidarDialogOpen}>
+        <AddSpaceborneLidarDialog
+          open={dialogs.spaceborneLidarDialogOpen}
+          appApi={appApi}
+          onOpenChange={dialogs.setSpaceborneLidarDialogOpen}
         />
       </MountWhenOpened>
       <ProjectFileDialogs projectFiles={projectFiles} />

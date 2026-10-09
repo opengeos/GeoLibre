@@ -155,6 +155,12 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "netcdf", section: "cloud", labelKey: "toolbar.item.netcdfHdf", tier: "advanced" },
   // 3D layers
   { id: "lidar", section: "threeD", labelKey: "toolbar.item.lidarLayer", tier: "advanced" },
+  {
+    id: "spaceborne-lidar",
+    section: "threeD",
+    labelKey: "toolbar.item.spaceborneLidarLayer",
+    tier: "advanced",
+  },
   { id: "splatting", section: "threeD", labelKey: "toolbar.item.splattingLayer", tier: "advanced" },
   {
     id: "3d-tiles",

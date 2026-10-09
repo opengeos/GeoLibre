@@ -1175,6 +1175,30 @@
       "adding": "Adding...",
       "addLayer": "Add layer"
     },
+    "spaceborneLidar": {
+      "title": "Add ICESat-2 / GEDI",
+      "description": "Add spaceborne LiDAR footprints from an ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) HDF5 granule as a point layer. The file is read in your browser.",
+      "fileLabel": "Granule file",
+      "fileHelp": "Download granules from NASA Earthdata (NSIDC for ICESat-2, LP DAAC or ORNL DAAC for GEDI). Large GEDI L2A files can take a while to read.",
+      "readingFile": "Reading file...",
+      "chooseDifferentFile": "Choose a different file",
+      "beamsLabel": "Beams",
+      "fieldsLabel": "Fields ({{selected}} of {{total}} selected)",
+      "fieldFilterPlaceholder": "Filter fields",
+      "colorByLabel": "Color by",
+      "qualityFilter": "Keep only footprints that pass the product's quality flag",
+      "viewOnly": "Only footprints in the current map view",
+      "maxPointsLabel": "Maximum footprints",
+      "maxPointsHelp": "When more footprints match, every beam is thinned evenly to stay under this limit.",
+      "add": "Add layer",
+      "adding": "Adding...",
+      "close": "Close",
+      "added_one": "Added {{count}} footprint.",
+      "added_other": "Added {{formatted}} footprints.",
+      "addedThinned": "Added {{kept}} of {{matched}} matching footprints (thinned to 1 in {{stride}}).",
+      "errorNoView": "The current map view is not available.",
+      "errorNoFootprints": "No footprints matched the selected beams and filters."
+    },
     "deckViz": {
       "defaultName": "Deck.gl Layer",
       "errorChooseFile": "Choose a CSV, JSON, or GeoJSON file.",
@@ -3322,6 +3346,7 @@
       "addPmtilesLayer": "Add PMTiles Layer",
       "addZarrLayer": "Add Zarr Layer",
       "addNetcdfLayer": "Add NetCDF / HDF Layer",
+      "addSpaceborneLidarLayer": "Add ICESat-2 / GEDI Layer",
       "addLidarLayer": "Add LiDAR Layer",
       "addSplattingLayer": "Add Gaussian Splatting",
       "add3dTilesLayer": "Add 3D Tiles Layer",
@@ -3689,6 +3714,7 @@
       "basemapExtract": "Offline Basemap Extract",
       "zarrLayer": "Zarr Layer",
       "netcdfHdf": "NetCDF / HDF",
+      "spaceborneLidarLayer": "ICESat-2 / GEDI",
       "lidarLayer": "LiDAR Layer",
       "splattingLayer": "Gaussian Splatting",
       "threeDTilesLayer": "3D Tiles Layer",
@@ -10301,6 +10327,14 @@
       "incompleteEditResults": "Incomplete ArcGIS edit results.",
       "noInsertedObjectIds": "ArcGIS did not return inserted object IDs.",
       "saveNotConfirmed": "ArcGIS save could not be confirmed. Check the service and add the layer again before saving to avoid duplicate inserts."
+    }
+  },
+  "spaceborneLidar": {
+    "errors": {
+      "notHdf5": "Could not read the file as HDF5. ({{detail}})",
+      "unsupportedProduct": "Not a supported ICESat-2 or GEDI product (found {{found}}). Supported: ATL06, ATL08, GEDI L2A, GEDI L2B, GEDI L4A.",
+      "unrecognizedProduct": "Not a recognized ICESat-2 or GEDI product. Supported: ATL06, ATL08, GEDI L2A, GEDI L2B, GEDI L4A.",
+      "noBeams": "The {{product}} file has no beams with footprints."
     }
   }
 }
