@@ -312,6 +312,7 @@ export {
   levelFeatures,
   mergeObjects,
   objectAdjacency,
+  rasterizePolygons,
   relabelGrid,
   type ObiaAdjacency,
   type ObiaLabelGrid,

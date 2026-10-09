@@ -10,6 +10,7 @@ import { ObiaAccuracyStep } from "./ObiaAccuracyStep";
 import { ObiaBatchStep } from "./ObiaBatchStep";
 import { ObiaClassifyStep } from "./ObiaClassifyStep";
 import { ObiaExportStep } from "./ObiaExportStep";
+import { ObiaImportPanel } from "./ObiaImportPanel";
 import { ObiaLevelsStep } from "./ObiaLevelsStep";
 import { ObiaMeasureStep } from "./ObiaMeasureStep";
 import { ObiaProvenance } from "./ObiaProvenance";
@@ -56,6 +57,7 @@ export function ObiaWorkbenchPanel({ mapControllerRef }: ObiaWorkbenchPanelProps
     >
       <p className="text-xs text-muted-foreground">{t("obia.description")}</p>
       <ObiaSegmentStep mapControllerRef={mapControllerRef} onAddRaster={addRaster} />
+      <ObiaImportPanel />
       <ObiaMeasureStep />
       <ObiaLevelsStep />
       <ObiaTrainStep />

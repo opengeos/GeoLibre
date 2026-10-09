@@ -11,6 +11,7 @@ import {
   levelFeatures,
   mergeObjects,
   objectAdjacency,
+  rasterizePolygons,
   relabelGrid,
   type ObiaFeatureTable,
 } from "@geolibre/processing";
@@ -214,5 +215,34 @@ describe("OBIA object hierarchy", () => {
     });
     assert.equal(parents.rows.get(1)?.child_frac_veg, 0.5);
     assert.equal(parents.rows.get(2)?.child_frac_roof, 1);
+  });
+
+  it("burns polygons by pixel center, with holes, and later ones on top", () => {
+    // A 6 x 4 grid; a 4 x 4 square with a 2 x 2 hole, and a later 2 x 2 square.
+    const square = (x0: number, y0: number, x1: number, y1: number): [number, number][] => [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+      [x0, y0],
+    ];
+    const ids = rasterizePolygons(
+      [
+        { id: 1, rings: [square(0, 0, 4, 4), square(1, 1, 3, 3)] },
+        { id: 2, rings: [square(4, 2, 6, 4)] },
+        { id: 3, rings: [square(3.6, 3.6, 3.9, 3.9)] }, // covers no pixel center
+      ],
+      6,
+      4,
+    );
+    assert.deepEqual(
+      [...ids],
+      [
+        1, 1, 1, 1, 0, 0,
+        1, 0, 0, 1, 0, 0,
+        1, 0, 0, 1, 2, 2,
+        1, 1, 1, 1, 2, 2,
+      ],
+    );
   });
 });

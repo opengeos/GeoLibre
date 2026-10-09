@@ -1,13 +1,12 @@
 import { useAppStore } from "@geolibre/core";
-import { OBIA_SEGMENT_ID_FIELD, applyObjectFeatures } from "@geolibre/processing";
+import { applyObjectFeatures } from "@geolibre/processing";
 import { Button } from "@geolibre/ui";
 import { Layers3, Loader2, Network } from "lucide-react";
 import { useCallback, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { obiaErrorMessage } from "../../../lib/obia/obia-errors";
 import { computeContextFeatures } from "../../../lib/obia/obia-context";
-import { ObiaLevelError, buildCoarserLevel } from "../../../lib/obia/obia-levels";
-import { OBIA_PARENT_FIELD } from "../../../lib/obia/obia-persistence";
+import { ObiaLevelError, addBuiltLevel, buildCoarserLevel } from "../../../lib/obia/obia-levels";
 import { useObiaSession } from "../../../lib/obia/obia-session";
 import {
   ObiaNumberField,
@@ -24,8 +23,6 @@ const LEVEL_ERRORS = {
   "not-top": "obia.levels.error.notTop",
 } as const;
 
-/** Outline colors by level, so nested levels read apart on the map. */
-const LEVEL_COLORS = ["#facc15", "#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
 
 /**
  * Step 3: the object hierarchy. Build coarser levels by merging the current
@@ -34,13 +31,11 @@ const LEVEL_COLORS = ["#facc15", "#22d3ee", "#f472b6", "#a3e635", "#fb923c"];
  */
 export function ObiaLevelsStep(): ReactElement | null {
   const { t } = useTranslation();
-  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const segmentation = useObiaSession((s) => s.segmentation);
   const features = useObiaSession((s) => s.features);
   const level = useObiaSession((s) => s.level);
   const levels = useObiaSession((s) => s.levels);
-  const addLevel = useObiaSession((s) => s.addLevel);
   const extendFeatures = useObiaSession((s) => s.extendFeatures);
   const [contextResult, setContextResult] = useState<string | null>(null);
   const switchLevel = useObiaSession((s) => s.switchLevel);
@@ -62,47 +57,10 @@ export function ObiaLevelsStep(): ReactElement | null {
         setError(t("obia.measure.error.resegmented"));
         return;
       }
-      const childLayer = useAppStore
-        .getState()
-        .layers.find((layer) => layer.id === segmentation.objectsLayerId);
-      if (!childLayer?.geojson) throw new Error(t("obia.measure.error.layersMissing"));
-      const next = built.record.level;
-      const objectsLayerId = addGeoJsonLayer(
-        t("obia.levels.layerName", { name: segmentation.source.name, level: next }),
-        applyObjectFeatures(built.objects, built.table),
+      addBuiltLevel(
+        built,
+        t("obia.levels.layerName", { name: segmentation.source.name, level: built.record.level }),
       );
-      const added = useAppStore.getState().layers.find((layer) => layer.id === objectsLayerId);
-      if (added) {
-        updateLayer(objectsLayerId, {
-          style: {
-            ...added.style,
-            fillOpacity: 0,
-            strokeColor: LEVEL_COLORS[(next - 1) % LEVEL_COLORS.length],
-            strokeWidth: 2,
-          },
-          metadata: { ...added.metadata, obiaRole: "objects", obiaLevel: next },
-        });
-      }
-      // Link each child to its parent on the level below's objects.
-      updateLayer(childLayer.id, {
-        geojson: {
-          ...childLayer.geojson,
-          features: childLayer.geojson.features.map((feature) => {
-            const id = Number(feature.properties?.[OBIA_SEGMENT_ID_FIELD] ?? feature.id);
-            return {
-              ...feature,
-              properties: {
-                ...feature.properties,
-                [OBIA_PARENT_FIELD]: built.parentOf.get(id) ?? null,
-              },
-            };
-          }),
-        },
-      });
-      addLevel({
-        ...built.record,
-        segmentation: { ...built.record.segmentation, objectsLayerId },
-      });
     } catch (err) {
       setError(
         isObiaCancel(err)
@@ -116,7 +74,7 @@ export function ObiaLevelsStep(): ReactElement | null {
       runningRef.current = false;
       setRunning(false);
     }
-  }, [segmentation, scale, addGeoJsonLayer, updateLayer, addLevel, progress, t]);
+  }, [segmentation, scale, progress, t]);
 
   const handleContext = useCallback(async () => {
     if (runningRef.current || !segmentation) return;

@@ -530,6 +530,7 @@ function restoreLevel(
     env: restoreEnv(seg.env),
     finishedAt: asString(seg.finishedAt),
     ...(restoreMerge(seg.merge) ? { merge: restoreMerge(seg.merge) } : {}),
+    ...(seg.imported === true ? { imported: true } : {}),
   };
   const record: ObiaLevelRecord = {
     level,
@@ -662,6 +663,22 @@ async function segmentedLabels(
   segmentation: ObiaSegmentationRun,
   run: ObiaRunOptions,
 ): Promise<Uint8Array> {
+  if (segmentation.imported) {
+    // Imported objects: burn the objects layer onto the same grid again.
+    const state = useAppStore.getState();
+    const source = state.layers.find((layer) => layer.id === segmentation.sourceLayerId);
+    const objects = state.layers.find((layer) => layer.id === segmentation.objectsLayerId);
+    if (!source || !objects?.geojson) throw new ObiaRestoreError("source-missing");
+    const { rasterizeObjects } = await import("./obia-import");
+    const burned = await rasterizeObjects(
+      objects.geojson,
+      source,
+      segmentation.bandIndexes,
+      OBIA_SEGMENT_ID_FIELD,
+      segmentation.area,
+    );
+    return burned.labels;
+  }
   const source = useAppStore
     .getState()
     .layers.find((layer) => layer.id === segmentation.sourceLayerId);

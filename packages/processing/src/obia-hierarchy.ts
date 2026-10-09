@@ -618,3 +618,56 @@ export function contextFeatures(inputs: ObiaContextInputs): ObiaFeatureTable {
 /** Whether a feature field is a context feature ({@link contextFeatures}). */
 export const isContextField = (field: string): boolean =>
   /^(nb_contrast_|parent_|child_frac_)/.test(field);
+
+/**
+ * Burn polygons onto a grid of object ids: a pixel takes a polygon's id when
+ * its center is inside the polygon (even-odd rule, so holes stay empty);
+ * later polygons win where they overlap.
+ *
+ * @param polygons Each polygon's rings (outer and holes, any number of
+ *   parts), already in grid pixel coordinates (x right, y down), and its id.
+ * @param width Grid width in pixels.
+ * @param height Grid height in pixels.
+ * @returns The ids, row by row; 0 where no polygon covers a pixel center.
+ */
+export function rasterizePolygons(
+  polygons: readonly { id: number; rings: readonly (readonly [number, number])[][] }[],
+  width: number,
+  height: number,
+): Int32Array {
+  const ids = new Int32Array(width * height);
+  const crossings: number[] = [];
+  for (const { id, rings } of polygons) {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const ring of rings) {
+      for (const [, y] of ring) {
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    const y0 = Math.max(0, Math.floor(minY));
+    const y1 = Math.min(height - 1, Math.ceil(maxY));
+    for (let row = y0; row <= y1; row += 1) {
+      const cy = row + 0.5;
+      crossings.length = 0;
+      for (const ring of rings) {
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+          const [xi, yi] = ring[i];
+          const [xj, yj] = ring[j];
+          // Half-open edges, so a vertex on the scanline counts once.
+          if (yi > cy !== yj > cy) crossings.push(xi + ((cy - yi) * (xj - xi)) / (yj - yi));
+        }
+      }
+      if (crossings.length < 2) continue;
+      crossings.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < crossings.length; k += 2) {
+        // Pixels whose center lies between the two crossings.
+        const from = Math.max(0, Math.ceil(crossings[k] - 0.5));
+        const to = Math.min(width - 1, Math.floor(crossings[k + 1] - 0.5));
+        for (let col = from; col <= to; col += 1) ids[row * width + col] = id;
+      }
+    }
+  }
+  return ids;
+}

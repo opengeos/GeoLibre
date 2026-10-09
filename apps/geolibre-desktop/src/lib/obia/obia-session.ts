@@ -68,6 +68,11 @@ export interface ObiaSegmentationRun {
    */
   merge?: ObiaLevelMerge;
   /**
+   * The objects were imported (polygons burned onto the image grid), not
+   * segmented; their labels are rebuilt by burning the objects layer again.
+   */
+  imported?: boolean;
+  /**
    * The sidecar job that segmented natively, whose labels the sidecar reuses
    * to measure while it keeps them. Not saved: it does not outlive the
    * sidecar.
