@@ -1144,7 +1144,9 @@ function getRasterControlClass(): Promise<RasterControlConstructor> {
     import("maplibre-gl-raster"),
     // The control's default engine tiles with cog-tiler-wasm, which it imports
     // itself: install the datum-shift hook on that same module first.
-    import("cog-tiler-wasm").then(installCogTilerDatumShift),
+    // An enhancement only: a tiler that fails to load must not block the
+    // panel (its engine reports its own error when it needs the tiler).
+    import("cog-tiler-wasm").then(installCogTilerDatumShift, () => undefined),
   ]).then(
     ([module]) => {
       defaultEpsgResolver = module.createResilientEpsgResolver;

@@ -1,6 +1,6 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { datumShiftEpsgResolver } from "./epsg-datum-resolver";
 import type { RasterControl, RasterLayerState } from "maplibre-gl-raster";
+import { datumShiftEpsgResolver } from "./epsg-datum-resolver";
 import type { RasterControlInternals } from "./maplibre-raster";
 
 export interface SwipeRasterSnapshot {

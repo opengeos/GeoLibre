@@ -1,8 +1,7 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { installCogTilerDatumShift, type GeoLibreLayer } from "@geolibre/core";
 import { cogRenderOptions, cogSourceUrl, rasterState, type CogTilerModule } from "./cog-imagery";
 import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
 import type { CogSource } from "cog-tiler-wasm";
-import { installCogTilerDatumShift } from "@geolibre/core";
 
 // A style rebuild reuses the source; weak keys release statistics when its reader is forgotten.
 const sourceStatistics = new WeakMap<CogSource, ReturnType<CogSource["statistics"]>>();

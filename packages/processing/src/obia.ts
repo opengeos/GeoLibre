@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, MultiPolygon, Polygon, Position } from "geojson";
 import { fromArrayBuffer, type GeoTIFF, type GeoTIFFImage } from "geotiff";
+import { withGeoKeysDatumShift } from "@geolibre/core";
 import {
   MAX_CLIENT_RASTER_BYTES,
   padShortSampleFormat,
@@ -9,7 +10,6 @@ import {
   writeUint8Bands,
 } from "./raster-client";
 import { runWasmToolInBackground } from "./wasm-tool-runner";
-import { withGeoKeysDatumShift } from "@geolibre/core";
 
 /**
  * Object-based image analysis (OBIA) engine for the Object-Based Analysis
@@ -534,8 +534,13 @@ export async function segmentLabels(
   return { labels, tool, args };
 }
 
-/** Degrees per pixel of the stand-in grid the polygonizer traces pixels on. */
-const PIXEL_GRID_STEP = 1e-3;
+/**
+ * Degrees per pixel of the stand-in grid the polygonizer traces pixels on:
+ * 1e-3, or less for a raster so large it would leave valid latitudes
+ * (the grid spans at most 80 degrees).
+ */
+const pixelGridStep = (width: number, height: number) =>
+  Math.min(1e-3, 80 / Math.max(width, height));
 
 /**
  * Pixel (column, row) to WGS84 for a raster, through its geokeys' CRS with the
@@ -595,14 +600,15 @@ export async function polygonizeLabels(
 ): Promise<FeatureCollection> {
   const raster = await readRasterData(toArrayBuffer(labels.slice()));
   const place = await pixelToWgs84(raster);
+  const step = pixelGridStep(raster.width, raster.height);
   const input = place
     ? new Uint8Array(
         writeRasterBands({
           ...raster,
           originX: 0,
           originY: 0,
-          resX: PIXEL_GRID_STEP,
-          resY: PIXEL_GRID_STEP,
+          resX: step,
+          resY: step,
           flipX: false,
           flipY: false,
           geoKeys: { GTModelTypeGeoKey: 2, GTRasterTypeGeoKey: 1, GeographicTypeGeoKey: 4326 },
@@ -619,7 +625,7 @@ export async function polygonizeLabels(
   if (!geojson) throw new Error("segments_to_polygons did not write polygons.");
   const pieces = JSON.parse(new TextDecoder().decode(geojson)) as FeatureCollection;
   if (place) {
-    const toWorld = ([x, y]: Position) => place(x / PIXEL_GRID_STEP, -y / PIXEL_GRID_STEP);
+    const toWorld = ([x, y]: Position) => place(x / step, -y / step);
     for (const feature of pieces.features) {
       const geometry = feature.geometry;
       if (geometry?.type === "Polygon" || geometry?.type === "MultiPolygon") {

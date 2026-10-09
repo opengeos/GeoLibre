@@ -1,4 +1,3 @@
-import { withGeoKeysDatumShift } from "@geolibre/core";
 /**
  * Per-pixel spectral profile for a multiband GeoTIFF / COG (issue #1818).
  *
@@ -16,6 +15,7 @@ import { withGeoKeysDatumShift } from "@geolibre/core";
  * clicked pixel is fetched rather than the whole scene.
  */
 
+import { withGeoKeysDatumShift } from "@geolibre/core";
 import { fromArrayBuffer, fromUrl } from "geotiff";
 import proj4 from "proj4";
 
