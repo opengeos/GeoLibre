@@ -52,6 +52,8 @@ const PRESET_COLORS = ["#b45309", "#16a34a"];
 /** How many fields "Fields" mode plots at once. */
 const MAX_FIELDS = 3;
 const MIN_SPAN_KM = 0.05;
+/** How far, in pixels, a hover or click may be from a footprint to pick it. */
+const PICK_RADIUS_PX = 16;
 
 function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return "";
@@ -161,15 +163,20 @@ function ProfileWindow({
   useEffect(() => setXDomain(null), [beam, seriesKey]);
   const domain = xDomain ?? fullDomain;
 
-  // Map selection → chart: follow a footprint selected on another beam.
+  // Map selection → chart: follow a footprint selected on another beam. Only
+  // when the selection itself changes, so the user can still pick another
+  // beam from the dropdown while a footprint stays selected.
   useEffect(() => {
     if (selectedFeatureId === null) return;
-    const feature = layer.geojson?.features.find(
-      (candidate, index) => String(candidate.id ?? index) === selectedFeatureId,
-    );
+    const feature = useAppStore
+      .getState()
+      .layers.find((candidate) => candidate.id === layer.id)
+      ?.geojson?.features.find(
+        (candidate, index) => String(candidate.id ?? index) === selectedFeatureId,
+      );
     const selectedBeam = (feature?.properties as Record<string, unknown> | null)?.beam;
-    if (typeof selectedBeam === "string" && selectedBeam !== beam) setBeam(selectedBeam);
-  }, [selectedFeatureId, layer, beam]);
+    if (typeof selectedBeam === "string") setBeam(selectedBeam);
+  }, [selectedFeatureId, layer.id]);
 
   // Chart size follows the window.
   const plotRef = useRef<HTMLDivElement | null>(null);
@@ -301,11 +308,13 @@ function ProfileWindow({
     const px = localX(clientX);
     if (px < MARGIN.left || px > MARGIN.left + innerW || points.length === 0) return null;
     const nearest = nearestProfileIndex(points, distanceAt(px));
-    // In a gap, the nearest footprint may sit outside the view; take none.
+    // In a gap, the nearest footprint may sit outside the view or far from
+    // the pointer; take none rather than a distant one.
     const inView =
       nearest >= 0 &&
       points[nearest].distance >= domain[0] &&
-      points[nearest].distance <= domain[1];
+      points[nearest].distance <= domain[1] &&
+      Math.abs(x(points[nearest].distance) - px) <= PICK_RADIUS_PX;
     return inView ? nearest : null;
   };
   const onPointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {

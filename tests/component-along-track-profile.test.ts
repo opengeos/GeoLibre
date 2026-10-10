@@ -120,6 +120,19 @@ describe("AlongTrackProfileWindow", () => {
     act(() => closeAlongTrackProfile());
   });
 
+  it("keeps the beam the user picks while a footprint stays selected", () => {
+    renderWindow();
+    act(() => {
+      useAppStore.getState().selectLayer(LAYER.id);
+      useAppStore.getState().selectFeature("1");
+    });
+    act(() => {
+      fireEvent.change(beamSelect(), { target: { value: "gt1r" } });
+    });
+    assert.equal(beamSelect().value, "gt1r");
+    act(() => closeAlongTrackProfile());
+  });
+
   it("selects on a tap without a prior hover", () => {
     renderWindow();
     const svg = screen.getByRole("img", { name: "Along-track profile of beam gt1l" });
