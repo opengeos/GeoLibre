@@ -717,6 +717,70 @@ def build_server(workspace: Workspace) -> MCPServer:
         return add(path, _project.lidar_layer(name, url), index)
 
     @tool()
+    def add_spaceborne_lidar_layer(
+        path: str,
+        input_file: str,
+        name: str | None = None,
+        beams: list[str] | None = None,
+        fields: list[str] | None = None,
+        quality_filter: bool = True,
+        bbox: list[float] | None = None,
+        max_points: int = 100_000,
+        color_by: str | None = None,
+        index: int | None = None,
+    ) -> dict[str, Any]:
+        """Add ICESat-2 (ATL06, ATL08) or GEDI (L2A, L2B, L4A) footprints from an HDF5 granule.
+
+        Reads a local granule the way the app's Add Data → ICESat-2 / GEDI
+        does: one point per segment or shot, the product's quality filter, and
+        `beam`, `beam_type`, `time` and `distance_km` on every point, colored by
+        the product's main field. The points are stored in the project, so the
+        granule is not needed afterwards. Needs `geolibre[spaceborne]`.
+
+        Args:
+            path: Path to the `.geolibre.json` file.
+            input_file: The `.h5` granule, inside the workspace.
+            name: Layer display name; `"<product> <file name>"` when omitted.
+            beams: Beams to read (`gt1l`..`gt3r` or `BEAM0000`..`BEAM1011`); all
+                when omitted.
+            fields: Field names (`h_canopy`, `rh50`) or dataset paths relative to
+                the beam; the product defaults when omitted.
+            quality_filter: Drop footprints the product's quality flag rejects.
+            bbox: `[west, south, east, north]` to keep only footprints inside.
+            max_points: Cap on points; every beam is thinned evenly to stay under it.
+            color_by: Field to color by; the main field when omitted, `""` for
+                one color.
+            index: Draw-order position; omit to add on top.
+
+        Returns:
+            A summary of the added layer, with the product and how many
+            footprints were read, matched and kept.
+        """
+        from geolibre.spaceborne_lidar import spaceborne_lidar_layer
+
+        file = workspace.resolve(input_file, must_exist=True)
+        if file.suffix.lower() not in (".h5", ".hdf5", ".he5"):
+            raise ValueError("The granule must be an .h5 (HDF5) file.")
+        layer, result = spaceborne_lidar_layer(
+            file,
+            name,
+            beams=beams,
+            fields=fields,
+            quality_filter=quality_filter,
+            bbox=bbox,
+            max_points=max_points,
+            color_by=color_by,
+        )
+        summary = add(path, layer, index)
+        summary["footprints"] = {
+            "product": result.product,
+            "total": result.total,
+            "matched": result.matched,
+            "kept": result.kept,
+        }
+        return summary
+
+    @tool()
     def get_point_cloud_annotations(path: str) -> dict[str, Any]:
         """Read the point labels and 3D boxes saved by the point cloud annotator.
 

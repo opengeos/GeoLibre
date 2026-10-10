@@ -233,6 +233,10 @@ anywhere untrusted, or use `Map.save_project`, which redacts by default.
   `[raster]` install just one half each -- `[all]` pulls in rasterio (and GDAL).
   The kernel reads local vectors and inlines them as GeoJSON; remote URLs for
   those formats stream through the in-browser vector control and need no extras.
+- `add_icesat2` / `add_gedi` read ICESat-2 (ATL06, ATL08) and GEDI (L2A, L2B,
+  L4A) HDF5 granules with h5py: `pip install "geolibre[spaceborne]"`. Download
+  granules with `earthaccess` (`earthaccess.download(...)`), then pass the path;
+  use `bbox=` for a regional subset of a GEDI orbit.
 - `add_geojson` inlines file/URL data into the project (up to 50 MB), so a large
   dataset is held in memory and re-synced on every project update. For very large
   layers, prefer a tile or COG source (`add_tile_layer`/`add_cog`) the app fetches

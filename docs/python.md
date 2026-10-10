@@ -38,6 +38,12 @@ pip install "geolibre[raster]"   # xarray/rioxarray/rasterio/rio-tiler only
 `[all]` is the union of the two, so it now installs rasterio (and GDAL with it);
 use `[vector]` to keep an existing vector-only environment as light as before.
 
+`add_icesat2` / `add_gedi` read ICESat-2 and GEDI HDF5 granules with h5py:
+
+```bash
+pip install "geolibre[spaceborne]"   # h5py + NumPy
+```
+
 The optional `[all]` extra is pip-only. If you installed via conda, add it with
 `pip install "geolibre[all]"` inside the same environment.
 
@@ -308,6 +314,8 @@ m.on_layer_change(lambda e: print("layers", e["layerIds"]))
 | `add_cog(url, name=, bands=, colormap=, rescale=, **style)` | Add a Cloud Optimized GeoTIFF (URL or a kernel-side local GeoTIFF path). |
 | `add_raster(source, name=, url=, bands=, colormap=, rescale=, array_args=, **style)` | Add a COG/GeoTIFF URL or path, or an xarray DataArray/Dataset (xarray needs `geolibre[raster]`). |
 | `add_lidar(url, name=None, **style)` | Add a LAS, LAZ, COPC or EPT point cloud by URL (COPC/EPT stream by level of detail). |
+| `add_icesat2(source, name=None, *, beams=None, fields=None, quality_filter=True, bbox=None, max_points=100000, color_by=None, colormap="viridis", **style)` | Add ICESat-2 ATL06 or ATL08 footprints from a local HDF5 granule as a point layer, read like the app's Add Data → ICESat-2 / GEDI (quality filter, `beam`, `beam_type`, `time`, `distance_km`; needs `geolibre[spaceborne]`). |
+| `add_gedi(source, name=None, *, beams=None, fields=None, quality_filter=True, bbox=None, max_points=100000, color_by=None, colormap="viridis", **style)` | Add GEDI L2A, L2B or L4A shots from a local HDF5 granule the same way (`rh98`, `cover` or `agbd` by default; needs `geolibre[spaceborne]`). |
 | `point_cloud_annotations()` | Read the point labels, instance ids, custom classes, 3D boxes and 3D vectors saved by the app's [point cloud annotator](user-guide/point-cloud-annotation.md). Labels and instance ids are keyed by source URL, then node key and point index; `geolibre.project.apply_point_labels` writes a whole-file source's labels onto `laspy` classification. |
 | `prelabel_point_cloud(url, input_file, tool="ground", only_unclassified=True)` | Run the annotator's Whitebox pre-label on a local copy of a LiDAR layer and save the changed classes as its labels (`ground` or `ground-vegetation`; needs `geolibre[pointcloud]`). |
 | `write_labeled_point_cloud(url, input_file, output_file)` | Write a local copy of a LiDAR layer's LAS/LAZ/COPC file with the saved labels and instance ids applied, streaming files larger than memory (needs `geolibre[pointcloud]`). |

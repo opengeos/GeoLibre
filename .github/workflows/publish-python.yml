@@ -48,9 +48,10 @@ jobs:
       # missing-Dash fallback without the latter, so install both here or the
       # MCP server and the Dash component ship untested. Likewise
       # tests/test_pointcloud.py skips without laspy/whitebox-workflows (the
-      # `pointcloud` extra).
+      # `pointcloud` extra) and tests/test_spaceborne_lidar.py without h5py
+      # (the `spaceborne` extra).
       - name: Install test dependencies
-        run: python -m pip install anywidget traitlets pytest "mcp>=2.0" "dash>=2.16" "laspy[lazrs]>=2.5" numpy "whitebox-workflows>=2.0.2"
+        run: python -m pip install anywidget traitlets pytest "mcp>=2.0" "dash>=2.16" "laspy[lazrs]>=2.5" numpy "whitebox-workflows>=2.0.2" "h5py>=3.8"
 
       - name: Run tests
         run: python -m pytest python/tests

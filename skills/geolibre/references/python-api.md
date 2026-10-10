@@ -61,6 +61,8 @@ m.add_wms(endpoint, layers, name, version="1.1.1", crs=None, bounds=None)
 m.add_wmts(endpoint, name, bounds=None)
 m.add_wfs(endpoint, type_name, max_features=1000)
 m.add_lidar(url, name=None)                          # LAS/LAZ/COPC/EPT point cloud by URL
+m.add_icesat2(path, bbox=None, fields=None)          # ICESat-2 ATL06/ATL08 footprints (geolibre[spaceborne])
+m.add_gedi(path, bbox=None, fields=None)             # GEDI L2A/L2B/L4A shots (geolibre[spaceborne])
 m.point_cloud_annotations()                           # labels, instances, classes + 3D boxes saved by the annotator
 m.set_point_cloud_classes([{"code": 64, "name": "Car", "color": "#e11d48"}])  # custom classes
 m.prelabel_point_cloud(url, "local.copc.laz", tool="ground")  # Whitebox pre-labels -> project labels

@@ -3112,6 +3112,147 @@ class Map(anywidget.AnyWidget):
             name = tail or "LiDAR"
         return self._add_layer(_project.lidar_layer(name, url, **style))
 
+    def add_icesat2(
+        self,
+        source: str | os.PathLike[str],
+        name: str | None = None,
+        *,
+        beams: Sequence[str] | None = None,
+        fields: Sequence[Any] | None = None,
+        quality_filter: bool = True,
+        bbox: Sequence[float] | None = None,
+        max_points: int | None = 100_000,
+        color_by: str | None = None,
+        colormap: str = "viridis",
+        **style: Any,
+    ) -> str:
+        """Add ICESat-2 ATL06 or ATL08 footprints from an HDF5 granule.
+
+        Reads the granule locally (with h5py) the way the app's Add Data →
+        ICESat-2 / GEDI does: one point per along-track segment in each ground
+        track, the product's quality filter applied, and ``beam``,
+        ``beam_type`` (strong/weak), ``time`` and ``distance_km`` on every
+        point, colored by the main field (``h_li`` for ATL06,
+        ``h_te_best_fit`` for ATL08). Download granules with ``earthaccess``
+        (``earthaccess.download(...)``) or from NASA Earthdata Search.
+
+        Args:
+            source: Path to an ATL06 or ATL08 ``.h5`` granule.
+            name: Layer name; ``"<product> <file name>"`` by default.
+            beams: Ground tracks to read, e.g. ``["gt1l", "gt2l"]`` (all by default).
+            fields: Fields to attach: default names (``"h_canopy"``) or dataset
+                paths relative to the ground track (the product defaults when
+                omitted).
+            quality_filter: Drop segments the product's quality flag rejects.
+            bbox: ``[west, south, east, north]`` to keep only segments inside.
+            max_points: Cap on points; every beam is thinned evenly to stay
+                under it. ``None`` keeps every segment.
+            color_by: Field to color by; ``""`` for a single color.
+            colormap: Color ramp for the graduated colors.
+            **style: Style overrides (e.g. ``circleRadius=4``).
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ImportError: Without h5py (``pip install "geolibre[spaceborne]"``).
+            ValueError: For a GEDI or unsupported granule, or no footprints kept.
+        """
+        return self._add_spaceborne_lidar(
+            ("ICESat-2",),
+            source,
+            name,
+            beams=beams,
+            fields=fields,
+            quality_filter=quality_filter,
+            bbox=bbox,
+            max_points=max_points,
+            color_by=color_by,
+            colormap=colormap,
+            **style,
+        )
+
+    def add_gedi(
+        self,
+        source: str | os.PathLike[str],
+        name: str | None = None,
+        *,
+        beams: Sequence[str] | None = None,
+        fields: Sequence[Any] | None = None,
+        quality_filter: bool = True,
+        bbox: Sequence[float] | None = None,
+        max_points: int | None = 100_000,
+        color_by: str | None = None,
+        colormap: str = "viridis",
+        **style: Any,
+    ) -> str:
+        """Add GEDI L2A, L2B or L4A shots from an HDF5 granule.
+
+        Reads the granule locally (with h5py) the way the app's Add Data →
+        ICESat-2 / GEDI does: one point per shot in each beam, the product's
+        quality flag applied, and ``beam``, ``beam_type`` (power/coverage),
+        ``time`` and ``distance_km`` on every point, colored by the main field
+        (``rh98`` for L2A, ``cover`` for L2B, ``agbd`` for L4A). A full orbit
+        holds millions of shots, so pass ``bbox`` for a regional subset.
+
+        Args:
+            source: Path to a GEDI L2A, L2B or L4A ``.h5`` granule.
+            name: Layer name; ``"<product> <file name>"`` by default.
+            beams: Beams to read, e.g. ``["BEAM0101"]`` (all by default).
+            fields: Fields to attach: default names (``"rh50"``) or dataset
+                paths relative to the beam (the product defaults when omitted).
+            quality_filter: Drop shots the product's quality flag rejects.
+            bbox: ``[west, south, east, north]`` to keep only shots inside.
+            max_points: Cap on points; every beam is thinned evenly to stay
+                under it. ``None`` keeps every shot.
+            color_by: Field to color by; ``""`` for a single color.
+            colormap: Color ramp for the graduated colors.
+            **style: Style overrides (e.g. ``circleRadius=4``).
+
+        Returns:
+            The id of the added layer.
+
+        Raises:
+            ImportError: Without h5py (``pip install "geolibre[spaceborne]"``).
+            ValueError: For an ICESat-2 or unsupported granule, or no shots kept.
+        """
+        return self._add_spaceborne_lidar(
+            ("GEDI",),
+            source,
+            name,
+            beams=beams,
+            fields=fields,
+            quality_filter=quality_filter,
+            bbox=bbox,
+            max_points=max_points,
+            color_by=color_by,
+            colormap=colormap,
+            **style,
+        )
+
+    def _add_spaceborne_lidar(
+        self,
+        missions: tuple[str, ...],
+        source: str | os.PathLike[str],
+        name: str | None,
+        **options: Any,
+    ) -> str:
+        """Build and add a footprint layer for :meth:`add_icesat2` / :meth:`add_gedi`.
+
+        Args:
+            missions: The missions the calling method accepts.
+            source: Path to the granule.
+            name: Layer name, or None for the default.
+            **options: Reader and style options.
+
+        Returns:
+            The id of the added layer.
+        """
+        from .spaceborne_lidar import spaceborne_lidar_layer
+
+        layer, _result = spaceborne_lidar_layer(source, name, missions=missions, **options)
+        return self._add_layer(layer)
+
     def point_cloud_annotations(self) -> dict[str, Any]:
         """The point labels and 3D boxes saved by the app's point cloud annotator.
 

@@ -1083,3 +1083,31 @@ def test_renderer_tools_persist_pane_kinds(server, tmp_path):
     saved = json.loads(Path(path).read_text())
     assert saved["primaryRenderer"] == "cesium"
     assert saved["secondaryMapViews"][0]["viewKind"] == "cesium"
+
+
+def test_add_spaceborne_lidar_layer_reads_a_workspace_granule(server, project_path, tmp_path):
+    """Add GEDI L4A footprints from a local granule, confined to the workspace."""
+    h5py = pytest.importorskip("h5py")
+    np = pytest.importorskip("numpy")
+    with h5py.File(tmp_path / "GEDI04_A_test.h5", "w") as f:
+        f.attrs["short_name"] = np.bytes_(b"GEDI_L4A")
+        beam = f.create_group("BEAM0101")
+        beam["lat_lowestmode"] = np.array([10.0, 10.001, 10.002])
+        beam["lon_lowestmode"] = np.array([20.0, 20.0, 20.0])
+        beam["delta_time"] = np.array([1.0e8, 1.0e8 + 1, 1.0e8 + 2])
+        beam["agbd"] = np.array([50.0, 60.0, 70.0], dtype=np.float32)
+        beam["l4_quality_flag"] = np.array([1, 0, 1], dtype=np.uint8)
+
+    result = call(
+        server, "add_spaceborne_lidar_layer", path=project_path, input_file="GEDI04_A_test.h5"
+    )
+    assert result["layerName"] == "GEDI_L4A GEDI04_A_test"
+    assert result["footprints"] == {"product": "GEDI_L4A", "total": 3, "matched": 2, "kept": 2}
+    layer = json.loads((tmp_path / project_path).read_text())["layers"][-1]
+    assert layer["metadata"]["sourceKind"] == "spaceborne-lidar"
+    assert [f["properties"]["agbd"] for f in layer["geojson"]["features"]] == [50.0, 70.0]
+
+    outside = call_error(
+        server, "add_spaceborne_lidar_layer", path=project_path, input_file="/etc/passwd"
+    )
+    assert "workspace" in outside.lower() or "outside" in outside.lower()
