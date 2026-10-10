@@ -372,6 +372,12 @@ describe("CesiumControlHost", () => {
     assert.equal(facade.getLayer("test-layer"), undefined);
     assert.equal(facade.getSource("test-src"), undefined);
 
+    // A custom layer draws through a WebGL context the globe does not have.
+    assert.throws(
+      () => facade.addLayer({ id: "gpu", type: "custom", render: () => {} }),
+      /cannot render on the globe/,
+    );
+
     host.destroy();
   });
 

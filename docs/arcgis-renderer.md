@@ -344,10 +344,10 @@ into a style that is never drawn by the SDK directly; instead:
   the engine from that store record, like any other layer.
 - Any other GeoJSON layer (a grid, a selection outline, a draw preview) is
   drawn as graphics in one overlay above the project layers. Fill, line,
-  circle and text layers are drawn, with filters, zoom ranges and data-driven
-  or zoom expressions evaluated per feature as MapLibre evaluates them.
-  Icons, fill patterns, extrusions and text along lines are not drawn, and
-  labels have no collision handling.
+  circle and text layers are drawn, with filters, zoom ranges, data-driven
+  or zoom expressions, and text anchors and offsets evaluated per feature as
+  MapLibre evaluates them. Icons, fill patterns, extrusions and text along
+  lines are not drawn, and labels have no collision handling.
 - Layer-scoped events (`map.on("click", layerId, ...)`, `mouseenter`,
   `mouseleave`) and a point `queryRenderedFeatures` answer from whichever of
   those two draws the layer. A box query answers empty.

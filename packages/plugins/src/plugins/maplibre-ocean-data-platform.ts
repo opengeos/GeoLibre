@@ -835,8 +835,8 @@ export const maplibreOceanDataPlatformPlugin: GeoLibrePlugin = {
   name: "Ocean Data Platform",
   version: "0.1.0",
   // Everything it adds is a vector-tiles or GeoJSON store layer, which every
-  // 2D engine hosts.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  // engine hosts (the globe drapes vector tiles).
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app) => {
     appRef = app;
     unregisterPanel =

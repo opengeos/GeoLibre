@@ -19,6 +19,13 @@ const ARCGIS_UNSUPPORTED_SOURCES = new Set([
 
 const ARCGIS_DECK_SOURCES = new Set(["deckgl-viz", "gltf-model", "lidar", "duckdb", "3d-tiles"]);
 
+// The LiDAR and Gaussian splat panels are MapLibre controls that render
+// through deck.gl / a custom layer, and cannot mount on the globe's control
+// host (it has no MapLibre transform or WebGL context to lend them), so on
+// the globe the entry would silently do nothing. Point clouds and splat
+// tilesets the globe draws natively come in as 3D Tiles or Cesium ion assets.
+const CESIUM_UNSUPPORTED_SOURCES = new Set(["lidar", "splatting"]);
+
 export function requiresArcgisDeckOverlay(id: string): boolean {
   return ARCGIS_DECK_SOURCES.has(id);
 }
@@ -33,5 +40,7 @@ export function supportsAddDataRenderer(
   // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine Add Data support table
   if (renderer === "arcgis")
     return !ARCGIS_UNSUPPORTED_SOURCES.has(id) && (deckOverlay || !requiresArcgisDeckOverlay(id));
+  // eslint-disable-next-line local/no-renderer-kind-checks -- per-engine Add Data support table
+  if (renderer === "cesium") return !CESIUM_UNSUPPORTED_SOURCES.has(id);
   return true;
 }

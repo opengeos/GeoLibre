@@ -705,6 +705,24 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.imageryRemoved.length, 0);
   });
 
+  it("draws a wms record whose tile is an ArcGIS REST export from that template", () => {
+    // Earthdata GIS records an ImageServer as `source.url`; GetMap against it
+    // returns no image, so the exportImage template is what draws.
+    const sync = newSync(f);
+    const tile =
+      "https://gis.example/rest/services/X/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&f=image";
+    sync.sync([
+      mkLayer({
+        id: "img",
+        type: "wms",
+        source: { url: "https://gis.example/rest/services/X/ImageServer", tiles: [tile] },
+      }),
+    ]);
+    assert.equal(f.calls.wmsProviders.length, 0);
+    assert.equal(f.calls.urlProviders.length, 1);
+    assert.equal(String(f.calls.urlProviders[0].url), tile);
+  });
+
   it("treats a wms layer with only a service url as globe-supported", () => {
     // WebMapServiceImageryProvider defaults `layers` to "", so a url is enough —
     // a scripted or hand-edited project without `layers` must not read "2D only".

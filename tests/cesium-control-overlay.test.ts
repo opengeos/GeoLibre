@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import * as Cesium from "@cesium/engine";
 import { useAppStore } from "@geolibre/core";
-import { CesiumControlHost } from "../packages/map/src/cesium-control-host";
+import {
+  CesiumControlHost,
+  restoreCompatibilityMouseEvents,
+} from "../packages/map/src/cesium-control-host";
 import { drawCesiumOverlayGraphics } from "../packages/map/src/cesium-control-overlay";
 import { shadowOverlayGraphics } from "../packages/map/src/shadow-overlay";
 
@@ -254,5 +257,78 @@ describe("CesiumControlHost recording facade", () => {
     ]);
     assert.deepEqual(framed, [[-10, -5, 10, 5]]);
     host.destroy();
+  });
+});
+
+describe("restoreCompatibilityMouseEvents", () => {
+  /** A window and canvas from Node's own EventTarget, with a MouseEvent that keeps its init. */
+  function fakeDom() {
+    class FakeMouseEvent extends Event {
+      clientX: number;
+      button: number;
+      constructor(type: string, init: { clientX?: number; button?: number } & EventInit) {
+        super(type, init);
+        this.clientX = init.clientX ?? 0;
+        this.button = init.button ?? 0;
+      }
+    }
+    const view = Object.assign(new EventTarget(), {
+      MouseEvent: FakeMouseEvent,
+      Node: EventTarget,
+    });
+    const canvas = Object.assign(new EventTarget(), { ownerDocument: { defaultView: view } });
+    // Bubble the canvas's events to the window, as the DOM does.
+    const dispatch = canvas.dispatchEvent.bind(canvas);
+    canvas.dispatchEvent = (event: Event) => {
+      const result = dispatch(event);
+      if (event.bubbles)
+        view.dispatchEvent(new (event.constructor as typeof Event)(event.type, event));
+      return result;
+    };
+    const pointer = (type: string, init: { cancel?: boolean; clientX?: number } = {}) => {
+      const event = Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
+        pointerType: "mouse",
+        pointerId: 1,
+        clientX: init.clientX ?? 0,
+        button: 0,
+      });
+      // Cesium's own handler on the canvas cancels the press.
+      if (init.cancel) event.preventDefault();
+      Object.defineProperty(event, "target", { value: canvas });
+      view.dispatchEvent(event);
+    };
+    return { view, canvas, pointer };
+  }
+
+  it("re-dispatches the mouse events a cancelled press suppresses, and stops on release", () => {
+    const { canvas, view, pointer } = fakeDom();
+    const seen: string[] = [];
+    for (const type of ["mousedown", "mousemove", "mouseup"])
+      canvas.addEventListener(type, (event) =>
+        seen.push(`${type}@${(event as MouseEvent).clientX}`),
+      );
+    const windowSeen: string[] = [];
+    view.addEventListener("mouseup", () => windowSeen.push("mouseup"));
+    const dispose = restoreCompatibilityMouseEvents(canvas as never);
+    pointer("pointerdown", { cancel: true, clientX: 1 });
+    pointer("pointermove", { clientX: 2 });
+    pointer("pointerup", { clientX: 3 });
+    pointer("pointermove", { clientX: 4 });
+    assert.deepEqual(seen, ["mousedown@1", "mousemove@2", "mouseup@3"]);
+    // Bubbled, so a control listening on the window for the release hears it.
+    assert.deepEqual(windowSeen, ["mouseup"]);
+    dispose();
+  });
+
+  it("leaves a press nothing cancelled to the browser's own mouse events", () => {
+    const { canvas, pointer } = fakeDom();
+    const seen: string[] = [];
+    canvas.addEventListener("mousedown", () => seen.push("mousedown"));
+    const dispose = restoreCompatibilityMouseEvents(canvas as never);
+    pointer("pointerdown");
+    assert.deepEqual(seen, []);
+    dispose();
+    pointer("pointerdown", { cancel: true });
+    assert.deepEqual(seen, [], "no listeners after dispose");
   });
 });

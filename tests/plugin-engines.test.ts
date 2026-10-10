@@ -113,18 +113,17 @@ describe("Tier 1 built-in plugin engine support audit", () => {
 
   // The STAC plugins come out of the same createStacPlugin factory, so they
   // are audited together: footprints, bbox drawing and picking use the
-  // native GeoJSON APIs shared by MapLibre and Mapbox.
-  it("declares MapLibre, Mapbox and ArcGIS support on the STAC catalog plugins", () => {
+  // native GeoJSON APIs shared by MapLibre and Mapbox, which the ArcGIS and
+  // Cesium control hosts record and answer.
+  it("declares every engine on the STAC catalog plugins", () => {
     for (const plugin of [
       maplibreStacCatalogsPlugin,
       maplibrePlanetOpenDataPlugin,
       maplibrePortolanPlugin,
     ]) {
-      assert.deepEqual(plugin.engines, ["maplibre", "mapbox", "arcgis"]);
-      assert.equal(isPluginEngineSupported(plugin, "mapbox"), true);
-      assert.equal(isPluginEngineSupported(plugin, "arcgis"), true);
-      assert.equal(isPluginEngineSupported(plugin, "maplibre"), true);
-      assert.equal(isPluginEngineSupported(plugin, "cesium"), false);
+      assert.deepEqual(plugin.engines, ["maplibre", "mapbox", "arcgis", "cesium"]);
+      for (const engine of ["maplibre", "mapbox", "arcgis", "cesium"] as const)
+        assert.equal(isPluginEngineSupported(plugin, engine), true, `${plugin.id} on ${engine}`);
     }
   });
 

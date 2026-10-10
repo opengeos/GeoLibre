@@ -391,7 +391,8 @@ function revealRasterLayer(
   bbox: [number, number, number, number],
   minVisibleZoom: number | null,
 ): boolean {
-  // Null on ArcGIS, which then fits the extent without the zoom-in to data.
+  // Null on ArcGIS and the Cesium globe, which then fit the extent without the
+  // zoom-in to data.
   // engine-audit-allow: arcgis-null-map
   const map = getStyleMap(appRef);
   if (!map || minVisibleZoom === null) {
@@ -1542,8 +1543,9 @@ export const maplibreEarthdataGisPlugin: GeoLibrePlugin = {
   name: "Earthdata GIS",
   version: "0.1.0",
   // Store-only adds (tile layers and ArcGIS feature layers) plus camera reads
-  // through the shared map surface, or the host's extent and fit on ArcGIS.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  // through the shared map surface, or the host's control map on ArcGIS and
+  // the Cesium globe.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
     appRef = app;
     unregisterPanel =

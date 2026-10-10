@@ -14,7 +14,7 @@ import {
   type FacingTest,
 } from "./cesium-control-overlay";
 import type { IdentifiedFeature } from "./map-engine";
-import { controlLayerMirrors, createShadowStyle } from "./shadow-style";
+import { controlLayerMirrors, createShadowStyle, storeStyleLayer } from "./shadow-style";
 
 /** The Cesium module namespace, injected so this file never imports the engine. */
 type CesiumNs = typeof import("@cesium/engine");
@@ -64,7 +64,25 @@ class CesiumMapFacade extends maplibregl.Evented {
     });
     this.peekStyle = peek;
     const images = new Set<string>();
+    // A store layer's derived style layers (`layer-<id>-fill`) read back too,
+    // as they would on MapLibre; see `storeStyleLayer`.
+    const getLayer = (id: string) =>
+      shadow.getLayer(id) ?? storeStyleLayer(useAppStore.getState().layers, id);
     Object.assign(this, shadow, {
+      getLayer,
+      // A custom layer renders through MapLibre's WebGL context, which the
+      // globe does not have: recording one would let a GPU control (the COG,
+      // LiDAR, splat and deck.gl overlays) mount and then never draw, or spin
+      // waiting for frames that never come. Refuse it loudly, as the facade
+      // refused every style call before it recorded them, so such a control
+      // fails to mount instead.
+      addLayer: (layer: { type?: string; id?: string }, beforeId?: string) => {
+        if (layer?.type === "custom")
+          throw new Error(
+            `CesiumControlHost: custom layer "${layer.id}" cannot render on the globe.`,
+          );
+        return shadow.addLayer(layer as never, beforeId);
+      },
       // Feature state and images have nothing to act on without a MapLibre
       // renderer; they answer as a map that has them would, so a control that
       // touches them in passing does not throw.
@@ -93,7 +111,7 @@ class CesiumMapFacade extends maplibregl.Evented {
       facade: this as unknown as maplibregl.Evented & Record<string, unknown>,
       pick: (lngLat, layerId, sourceId) => host.pickControlLayer(lngLat, layerId, sourceId),
       layerSource: (layerId) => {
-        const layer = shadow.getLayer(layerId);
+        const layer = getLayer(layerId);
         return layer && "source" in layer && typeof layer.source === "string"
           ? layer.source
           : undefined;
@@ -113,6 +131,7 @@ class CesiumMapFacade extends maplibregl.Evented {
       observer.observe(viewer.canvas);
       this.cleanups.push(() => observer.disconnect());
     }
+    this.cleanups.push(restoreCompatibilityMouseEvents(viewer.canvas));
     for (const name of [
       "click",
       "dblclick",
@@ -358,6 +377,78 @@ class CesiumMapFacade extends maplibregl.Evented {
   private scene() {
     return this.viewer.isDestroyed?.() ? null : (this.viewer.scene ?? null);
   }
+}
+
+/**
+ * Re-dispatch the mouse events the browser drops during a press on the globe.
+ *
+ * Cesium's input handler cancels `pointerdown`, and a cancelled `pointerdown`
+ * suppresses the compatibility `mousedown`, `mousemove` and `mouseup` until
+ * the pointer is released (only `click` still fires). A plugin control that
+ * draws by dragging - a STAC search box, a measure line - listens for those
+ * mouse events on the canvas and the window, as it would on MapLibre, so on
+ * the globe it never saw the press. While a mouse press Cesium cancelled is
+ * down, each pointer event is mirrored as its mouse event on the same target,
+ * bubbling as the real one would.
+ *
+ * Listeners sit on the window in the bubble phase, so they run after the
+ * canvas's own and see whether Cesium cancelled the press. A press nothing
+ * cancelled keeps the browser's own mouse events and is not mirrored.
+ *
+ * @param canvas - The globe's canvas.
+ * @returns Removes the listeners.
+ */
+export function restoreCompatibilityMouseEvents(canvas: HTMLCanvasElement): () => void {
+  const view = canvas.ownerDocument?.defaultView;
+  if (!view || typeof view.MouseEvent !== "function") return () => {};
+  let pressed: number | null = null;
+  const mirror = (type: string, event: PointerEvent) => {
+    const target = event.target instanceof view.Node ? event.target : canvas;
+    target.dispatchEvent(
+      new view.MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        screenX: event.screenX,
+        screenY: event.screenY,
+        button: event.button,
+        buttons: event.buttons,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        metaKey: event.metaKey,
+      }),
+    );
+  };
+  const onDown = (event: PointerEvent) => {
+    if (event.pointerType !== "mouse" || event.target !== canvas || !event.defaultPrevented) return;
+    pressed = event.pointerId;
+    mirror("mousedown", event);
+  };
+  const onMove = (event: PointerEvent) => {
+    if (event.pointerId === pressed) mirror("mousemove", event);
+  };
+  const onUp = (event: PointerEvent) => {
+    if (event.pointerId !== pressed) return;
+    pressed = null;
+    mirror("mouseup", event);
+  };
+  const onCancel = (event: PointerEvent) => {
+    if (event.pointerId === pressed) pressed = null;
+  };
+  view.addEventListener("pointerdown", onDown);
+  view.addEventListener("pointermove", onMove);
+  view.addEventListener("pointerup", onUp);
+  view.addEventListener("pointercancel", onCancel);
+  return () => {
+    view.removeEventListener("pointerdown", onDown);
+    view.removeEventListener("pointermove", onMove);
+    view.removeEventListener("pointerup", onUp);
+    view.removeEventListener("pointercancel", onCancel);
+  };
 }
 
 /** A MapLibre interaction handler with nothing to drive: it only keeps its flag. */

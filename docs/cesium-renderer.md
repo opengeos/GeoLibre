@@ -39,6 +39,46 @@ layer is marked as unavailable for the active engine and returns when the
 project is switched to a compatible renderer. Plugins follow the same model:
 only plugins whose `engines` list contains `cesium` remain active.
 
+## Plugin controls
+
+A plugin control on the globe receives the same MapLibre-shaped map it gets
+on the ArcGIS renderer (issue #3088): camera, pointer events and DOM act on
+the globe, and its Style Spec calls (`addSource`, `addLayer`,
+`setPaintProperty`, `getStyle`, ...) are recorded into a style that is never
+drawn as such. What that style holds reaches the globe in two ways:
+
+- A layer the plugin mirrors into the GeoLibre store (a Web Services WMS or
+  tile layer, STAC footprints) is drawn by the globe's layer sync from that
+  store record, like any other layer.
+- Any other GeoJSON layer (a grid, a graticule, a selection outline, a draw
+  preview) is drawn as ground-clamped globe entities. Fill, line, circle and
+  text layers are drawn with filters, zoom ranges, data-driven and zoom
+  expressions, and text anchors and offsets evaluated per feature as MapLibre
+  evaluates them. Lines and polygon edges follow rhumb lines, as a straight
+  segment on the 2D map does. Points and labels past the horizon are hidden.
+  Icons, fill patterns, extrusions and text along lines are not drawn, and
+  labels have no collision handling.
+
+Layer-scoped events (`map.on("click", layerId, ...)`, `mouseenter`,
+`mouseleave`) and a point `queryRenderedFeatures` answer from whichever of
+the two draws the layer, including the `layer-<id>-fill`-style ids MapLibre
+derives for a store layer. `dragPan.disable()` and `scrollZoom.disable()`
+suspend the globe's own camera inputs, so a control's box or line drawing
+receives the drag; the `mousedown`/`mousemove`/`mouseup` events a browser
+drops during a press on the globe are re-dispatched for it. Plugins read this
+map through `getControlMap` in `packages/plugins/src/plugins/style-map.ts`.
+
+A custom layer has no WebGL context to render into on the globe, so
+`addLayer` with `type: "custom"` throws and a control that needs one fails to
+mount, as before. Raster files added through the host's COG helpers import as
+store `cog` records the globe draws natively. The LiDAR and Gaussian splat
+panels cannot mount and are disabled in Add Data on the globe.
+
+The Web Services catalogs (FEMA NFHL, USGS National Map, US EPA EnviroAtlas,
+NASA Earthdata, Earthdata GIS, Ocean Data Platform, GeoLens, Hugging Face, and
+the STAC browsers), Esri Wayback, Gridlines, and the DGGS grids run on the
+globe this way.
+
 ## Scene and camera
 
 The globe provides 3D, 2D, and Columbus scene modes, terrain, native globe

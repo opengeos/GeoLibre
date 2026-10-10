@@ -2279,7 +2279,7 @@ function createGeoLensPlugin(config: GeoLensPluginConfig): GeoLibrePlugin {
     version: "0.1.0",
     // Public rasters and vector data are store layers; only a keyed raster
     // needs MapLibre's request transform (see registerRasterApiKey).
-    engines: ["maplibre", "mapbox", "arcgis"],
+    engines: ["maplibre", "mapbox", "arcgis", "cesium"],
     activate: (app: GeoLibreAppAPI) => {
       appRef = app;
       mountedPanels.add(remount);

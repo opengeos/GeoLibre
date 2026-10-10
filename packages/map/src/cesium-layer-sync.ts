@@ -472,6 +472,9 @@ const CREDENTIAL_PROXY = {
   },
 };
 
+/** An ArcGIS REST export template (`MapServer/export?`, `ImageServer/exportImage?`). */
+const ARCGIS_REST_EXPORT = /\/(?:Map|Image)Server\/export(?:Image)?\?/i;
+
 /** A `{z}`/`{level}` placeholder: a `source.url` that is a tile template. */
 const TILE_TEMPLATE = /\{(?:z|level)\}/;
 
@@ -3054,7 +3057,12 @@ export class CesiumLayerSync {
       // avoid. Defer to the tile template whenever it names a protocol, so the
       // layer falls through to the bridge below (nothing between here and it
       // matches a WMS layer).
-      !protocolScheme(firstTile(layer) ?? "")
+      !protocolScheme(firstTile(layer) ?? "") &&
+      // A "wms" record whose tile is an ArcGIS REST export draws from that
+      // template: Earthdata GIS records an ImageServer as `source.url` and its
+      // `exportImage?bbox={bbox-epsg-3857}` as the tile, so a WMS provider
+      // pointed at the url would request GetMap from a REST endpoint.
+      !ARCGIS_REST_EXPORT.test(firstTile(layer) ?? "")
     ) {
       return { isAsync: false, provider: wmsImageryProvider(Cesium, layer, makeResource) };
     } else if (wmtsCaps) {

@@ -19,8 +19,14 @@ function retainFile(id: string, url: string): void {
   });
 }
 
-/** Import through the store; the ArcGIS engine owns the native tile layer. */
-export async function addArcgisRaster(
+/**
+ * Import a GeoTIFF/COG through the store on a renderer that draws `cog`
+ * records natively (the ArcGIS view, the Cesium globe), instead of mounting
+ * maplibre-gl-raster's control, which renders through a MapLibre custom layer
+ * those renderers do not have. Only the header is read here, for the band
+ * count, palette and bounds; the engine owns the tiles.
+ */
+export async function addNativeRaster(
   app: GeoLibreAppAPI,
   source: string | File,
   options: Parameters<typeof addRasterToMap>[2] = {},
@@ -70,8 +76,8 @@ export async function addArcgisRaster(
   return id;
 }
 
-/** Restore desktop file references without mounting the MapLibre raster control. */
-export async function restoreArcgisRasterFiles(
+/** Restore desktop file references without mounting the MapLibre raster control (see {@link addNativeRaster}). */
+export async function restoreNativeRasterFiles(
   reader: LocalRasterFileReader | null,
 ): Promise<void> {
   if (!reader) return;

@@ -260,6 +260,12 @@ export interface GeoLibreAppAPI {
   // docs/arcgis-renderer.md, "Plugin controls"). Built-in plugins read it
   // through getControlMap(app) in style-map.ts.
   getArcgisControlMap?: () => import("maplibre-gl").Map | null;
+  // The same recording map on the primary Cesium globe, or null on another
+  // renderer and in a split pane: mirrored store layers draw through the
+  // globe's layer sync and other GeoJSON overlays as ground-clamped entities
+  // (see docs/cesium-renderer.md, "Plugin controls"). Custom layers throw.
+  // Built-in plugins read it through getControlMap(app) as well.
+  getCesiumControlMap?: () => import("maplibre-gl").Map | null;
   // The primary Cesium globe's scene (namespace, widget, scene, camera, clock,
   // canvas, readView), or null when the primary map is not a globe. The globe's
   // counterpart to getMap for plugins that declare engines: ["maplibre", "cesium"].
@@ -1474,7 +1480,7 @@ If instead you want a plugin compiled into the main JS bundle (no `plugin.json`,
 }
 ```
 
-The `entry` file must export a `GeoLibrePlugin` as either the default export or a named `plugin` export. The exported plugin `id`, `name`, and `version` must match `plugin.json`. The entry must be a self-contained `.js` or `.mjs` bundle because relative module imports inside the zip are not resolved by this first loader. The optional `engines` array declares which of GeoLibre's four map renderers the plugin supports (`"maplibre" | "mapbox" | "cesium" | "arcgis"`, defaulting to `["maplibre"]`). Plugins supporting the native globe add `"cesium"`; plugins that stay on the Style Spec surface can add `"mapbox"` (see [Supporting the Mapbox renderer](#supporting-the-mapbox-renderer)); and plugins with an ArcGIS-native adapter can add `"arcgis"` (see the [ArcGIS renderer](arcgis-renderer.md)). The host suspends a plugin when the selected engine is not in this list and restores it when a compatible engine becomes active.
+The `entry` file must export a `GeoLibrePlugin` as either the default export or a named `plugin` export. The exported plugin `id`, `name`, and `version` must match `plugin.json`. The entry must be a self-contained `.js` or `.mjs` bundle because relative module imports inside the zip are not resolved by this first loader. The optional `engines` array declares which of GeoLibre's four map renderers the plugin supports (`"maplibre" | "mapbox" | "cesium" | "arcgis"`, defaulting to `["maplibre"]`). Plugins supporting the native globe add `"cesium"`: either with a globe-native branch, or by staying on the store and the Style Spec surface the globe's control host records (see "Plugin controls" in [the Cesium renderer](cesium-renderer.md)); plugins that stay on the Style Spec surface can add `"mapbox"` (see [Supporting the Mapbox renderer](#supporting-the-mapbox-renderer)); and plugins with an ArcGIS-native adapter can add `"arcgis"` (see the [ArcGIS renderer](arcgis-renderer.md)). The host suspends a plugin when the selected engine is not in this list and restores it when a compatible engine becomes active.
 
 External plugin entries are executed with `import(URL.createObjectURL(...))`, which is why the desktop CSP in `tauri.conf.json` includes `blob:` in `script-src`. Removing `blob:` from `script-src` breaks external plugin loading. Combined with `'unsafe-eval'`, this means code that can create a blob URL can execute scripts, which is acceptable because external plugins are trusted local files installed by the user.
 

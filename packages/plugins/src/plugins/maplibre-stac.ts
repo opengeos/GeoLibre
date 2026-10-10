@@ -88,8 +88,8 @@ type StacMap = Omit<MapLibreMap | MapboxMap, "getSource" | "on" | "off"> & {
 
 /**
  * STAC uses the native GeoJSON, picking and pointer APIs shared by both 2D
- * engines; on ArcGIS the host's control map records them, draws the GeoJSON
- * itself and answers picks from it.
+ * engines; on ArcGIS and the Cesium globe the host's control map records them,
+ * draws the GeoJSON itself and answers picks from it.
  */
 function getStacMap(app: GeoLibreAppAPI | null): StacMap | null {
   return getControlMap(app) as StacMap | null;
@@ -1739,8 +1739,8 @@ function createStacPlugin(
     name,
     version: "0.1.0",
     // Footprints and interaction use the shared native GeoJSON APIs, which the
-    // host's control map answers on ArcGIS.
-    engines: ["maplibre", "mapbox", "arcgis"],
+    // host's control map answers on ArcGIS and the Cesium globe.
+    engines: ["maplibre", "mapbox", "arcgis", "cesium"],
     exclusiveGroup: "stac-catalog-browser",
     activate(app) {
       // The `?stac=` request is for the STAC Catalogs browser, never a sibling preset.
