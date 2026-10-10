@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import * as C from "@cesium/engine";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "../packages/core/src/types";
-import { createCesiumLabeler, pickLabelPart } from "../packages/map/src/cesium-labels";
+import {
+  createCesiumLabeler,
+  labelBaseColors,
+  pickLabelPart,
+  wrapLabelText,
+} from "../packages/map/src/cesium-labels";
 import { zoomToOrthoWidth } from "../packages/map/src/cesium-camera";
 
 const time = C.JulianDate.now();
@@ -158,4 +163,63 @@ it("re-evaluates a zoom-dependent expression as the camera zoom changes", () => 
   const empty = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
   createCesiumLabeler(C, live, l, () => zoom)(empty, 0);
   assert.equal(empty.label, undefined);
+});
+
+it("places the text by its anchor, as MapLibre's text-anchor does", () => {
+  const l = layer();
+  l.style.labels.anchor = "top-left";
+  l.style.labels.offsetY = 1;
+  const entity = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
+  createCesiumLabeler(C, viewer, l)(entity, 0);
+  assert.equal(entity.label?.horizontalOrigin?.getValue(time), C.HorizontalOrigin.LEFT);
+  assert.equal(entity.label?.verticalOrigin?.getValue(time), C.VerticalOrigin.TOP);
+  assert.equal(entity.label?.pixelOffset?.getValue(time).y, 13);
+  // Line placement ignores the anchor on the 2D map.
+  l.style.labels.placement = "line";
+  const centred = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
+  createCesiumLabeler(C, viewer, l)(centred, 0);
+  assert.equal(centred.label?.horizontalOrigin?.getValue(time), C.HorizontalOrigin.CENTER);
+});
+
+it("wraps at the max width in ems, keeping long words and explicit breaks", () => {
+  const ems = (value: string) => value.length * 0.5;
+  assert.equal(wrapLabelText("New York City Hall", 5, ems), "New York\nCity Hall");
+  assert.equal(wrapLabelText("Llanfairpwllgwyngyll", 5, ems), "Llanfairpwllgwyngyll");
+  assert.equal(wrapLabelText("A\nB C", 10, ems), "A\nB C");
+});
+
+it("applies the data-defined size, colour, opacity and visibility per feature", () => {
+  const l = layer();
+  l.opacity = 0.5;
+  l.geojson!.features.push({
+    type: "Feature",
+    properties: { name: "Hidden", pop: 0 },
+    geometry: { type: "Point", coordinates: [-84, 36] },
+  });
+  l.geojson!.features[0].properties = { name: "Knoxville", pop: 190000 };
+  Object.assign(l.style.labels, {
+    sizeExpression: '["case", [">", ["get", "pop"], 100000], 20, 10]',
+    colorExpression: '["to-color", "#ff0000"]',
+    opacityExpression: '["literal", 0.8]',
+    visibilityExpression: '[">", ["get", "pop"], 0]',
+  });
+  const label = createCesiumLabeler(C, viewer, l);
+  const shown = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
+  label(shown, 0);
+  assert.equal(shown.label?.font?.getValue(time), "20px sans-serif");
+  const fill = shown.label!.fillColor!.getValue(time);
+  assert.ok(fill.equalsEpsilon(new C.Color(1, 0, 0, 0.8), 1e-6), "the override replaces opacity");
+  assert.equal(labelBaseColors.get(shown)?.opacity, 0.8);
+  const hidden = new C.Entity({ position: C.Cartesian3.fromDegrees(-84, 36) });
+  label(hidden, 1);
+  assert.equal(hidden.label, undefined);
+});
+
+it("falls back to the layer controls when an override is invalid", () => {
+  const l = layer();
+  l.style.labels.sizeExpression = "not json";
+  const entity = new C.Entity({ position: C.Cartesian3.fromDegrees(-83.9, 35.9) });
+  createCesiumLabeler(C, viewer, l)(entity, 0);
+  assert.equal(entity.label?.font?.getValue(time), "13px sans-serif");
+  assert.equal(labelBaseColors.get(entity)?.opacity, undefined);
 });

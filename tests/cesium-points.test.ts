@@ -224,6 +224,35 @@ function makeCesium() {
 }
 
 describe("buildPointBatch", () => {
+  it("follows the horizon depth distance as the camera moves", () => {
+    const Cesium = makeCesium();
+    const layer = pointLayer(2);
+    const captured: { listener?: (distance: number) => boolean } = {};
+    const horizon = {
+      property: 1000,
+      distance: () => 1000,
+      subscribe: (fn: (distance: number) => boolean) => {
+        if (fn(1000)) captured.listener = fn;
+      },
+    };
+    const collection = buildPointBatch(
+      Cesium as never,
+      layer,
+      createFeatureStyleResolver(layer.style),
+      1,
+      0,
+      { horizon },
+    ) as unknown as InstanceType<typeof Cesium.PointPrimitiveCollection>;
+    const depth = () =>
+      collection.points.map(
+        (point) => (point as { disableDepthTestDistance: number }).disableDepthTestDistance,
+      );
+    assert.deepEqual(depth(), [1000, 1000]);
+    assert.ok(captured.listener);
+    assert.equal(captured.listener(5000), true);
+    assert.deepEqual(depth(), [5000, 5000]);
+  });
+
   it("creates one tagged primitive per point with the resolved symbol", () => {
     const Cesium = makeCesium();
     const layer = pointLayer(3, {

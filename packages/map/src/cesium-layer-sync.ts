@@ -47,7 +47,8 @@ import {
 import { getZarrStore } from "./zarr-source";
 import { PointCloudStreamer } from "./cesium-point-cloud-stream";
 import { createFeatureStyleResolver, type FeatureStyleResolver } from "./feature-style";
-import { createCesiumLabeler, pickLabelPart } from "./cesium-labels";
+import { createCesiumLabeler, labelBaseColors, pickLabelPart } from "./cesium-labels";
+import { horizonDepthDistance } from "./cesium-horizon";
 import {
   buildPointCloudCollection,
   isSplatTilesetUrl,
@@ -2644,7 +2645,8 @@ export class CesiumLayerSync {
         outlineColor: Cesium.Color.fromCssColorString(style.strokeColor),
         outlineWidth: style.strokeWidth,
         heightReference,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        // Over terrain on the near side, hidden by the Earth on the far side.
+        disableDepthTestDistance: horizonDepthDistance(Cesium, viewer).property,
       };
       entity.billboard = undefined;
       entity.point = (
@@ -2912,7 +2914,7 @@ export class CesiumLayerSync {
         resolver,
         this.effectiveOpacity(entry),
         zoom,
-        { scene: viewer.scene, clampToGround },
+        { scene: viewer.scene, clampToGround, horizon: horizonDepthDistance(Cesium, viewer) },
       );
       viewer.scene.primitives.add(collection);
       entry.handle = collection;
@@ -2936,8 +2938,12 @@ export class CesiumLayerSync {
     const plan = planPointRendering(entry.layer);
     entry.plan = plan;
     if (!plan.cluster || !dataSource.clustering?.clusterEvent) return;
-    entry.cluster = configureClustering(this.Cesium, dataSource, plan, () =>
-      clusterAppearance(entry.layer, this.effectiveOpacity(entry)),
+    entry.cluster = configureClustering(
+      this.Cesium,
+      dataSource,
+      plan,
+      () => clusterAppearance(entry.layer, this.effectiveOpacity(entry)),
+      horizonDepthDistance(this.Cesium, this.viewer),
     );
     entry.zoomCluster = true;
     entry.cluster.setEnabled(clusterActiveAtZoom(plan, this.cameraZoom()));
@@ -4124,8 +4130,16 @@ export class CesiumLayerSync {
           entity.billboard.color = new Cesium.ConstantProperty(marker);
         }
         if (entity.label) {
-          entity.label.fillColor = new Cesium.ConstantProperty(labelFill);
-          entity.label.outlineColor = new Cesium.ConstantProperty(labelOutline);
+          // A label built with per-feature colours or a data-defined opacity
+          // keeps them; only the layer opacity is reapplied.
+          const base = labelBaseColors.get(entity);
+          const alpha = base?.opacity ?? opacity;
+          entity.label.fillColor = new Cesium.ConstantProperty(
+            base ? base.fill.withAlpha(base.fill.alpha * alpha) : labelFill,
+          );
+          entity.label.outlineColor = new Cesium.ConstantProperty(
+            base ? base.outline.withAlpha(base.outline.alpha * alpha) : labelOutline,
+          );
         }
       }
     } finally {

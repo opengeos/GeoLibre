@@ -23,7 +23,10 @@ can alternatively set `CESIUM_TOKEN` or `VITE_CESIUM_TOKEN` at build time. See
 
 - Styled GeoJSON, including categorized, graduated, rule-based, expression,
   proportional, marker, cluster, label, pattern, extrusion, and Z-aware
-  rendering.
+  rendering. Labels follow their anchor, offset, maximum width, and
+  data-defined size, colour, opacity, and visibility; they are not rotated,
+  not drawn along a line's path, and not thinned by collision. Points and
+  labels on the far side of the Earth are hidden.
 - XYZ, WMS, WMTS, COG, raster PMTiles, local MBTiles, image overlays, and other
   tile sources connected through GeoLibre's protocol bridge.
 - Vector tiles, vector PMTiles, and vector MBTiles draped through a hidden

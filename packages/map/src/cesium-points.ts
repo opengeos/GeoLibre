@@ -10,6 +10,7 @@ import type {
 } from "@cesium/engine";
 import type { Feature } from "geojson";
 import type { FeatureStyleResolver } from "./feature-style";
+import type { HorizonDepthDistance } from "./cesium-horizon";
 
 // Point layers on the globe beyond one entity per feature (issue #2282).
 //
@@ -194,6 +195,7 @@ export function configureClustering(
   dataSource: DataSource,
   plan: PointRenderPlan,
   appearance: () => ClusterAppearance,
+  horizon?: HorizonDepthDistance,
 ): { refresh(): void; setEnabled(enabled: boolean): void; dispose(): void } {
   const clustering = dataSource.clustering;
   clustering.pixelRange = plan.clusterRadius;
@@ -215,7 +217,10 @@ export function configureClustering(
     cluster.point.color = colour(look.fill, look.fillOpacity * look.opacity);
     cluster.point.outlineColor = colour(look.stroke, look.strokeOpacity * look.opacity);
     cluster.point.outlineWidth = look.strokeWidth;
-    cluster.point.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+    // Bubbles re-form on every camera move, so the current horizon distance
+    // stays current (see cesium-horizon.ts).
+    const depth = horizon?.distance() ?? Number.POSITIVE_INFINITY;
+    cluster.point.disableDepthTestDistance = depth;
     cluster.label.show = true;
     cluster.label.text = abbreviateCount(count);
     cluster.label.font = "12px sans-serif";
@@ -223,7 +228,7 @@ export function configureClustering(
     cluster.label.style = Cesium.LabelStyle.FILL;
     cluster.label.horizontalOrigin = Cesium.HorizontalOrigin.CENTER;
     cluster.label.verticalOrigin = Cesium.VerticalOrigin.CENTER;
-    cluster.label.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+    cluster.label.disableDepthTestDistance = depth;
   };
   const remove = clustering.clusterEvent.addEventListener(onCluster as never);
   clustering.enabled = true;
@@ -292,6 +297,8 @@ export interface PointBatchPlacement {
   scene?: Scene;
   /** Clamp each point to terrain, the same decision the entity path makes. */
   clampToGround?: boolean;
+  /** The globe's horizon depth distance; without it points draw through the Earth. */
+  horizon?: HorizonDepthDistance;
 }
 
 /**
@@ -300,7 +307,7 @@ export interface PointBatchPlacement {
  * reference for picking (and the reference with its primitive, for the
  * reverse lookup). Points clamp to the ground when the layer would on the
  * entity path — which needs the scene on the collection — and draw through
- * terrain (`disableDepthTestDistance`) either way.
+ * terrain (`disableDepthTestDistance`) out to the horizon either way.
  */
 export function buildPointBatch(
   Cesium: CesiumNs,
@@ -335,11 +342,19 @@ export function buildPointBatch(
         outlineColor: colour(symbol.outline, symbol.strokeOpacity * opacity),
         outlineWidth: symbol.strokeWidth,
         heightReference,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        disableDepthTestDistance: placement.horizon?.distance() ?? Number.POSITIVE_INFINITY,
         id: ref,
       });
     }
   }
+  // A primitive holds a plain number, so follow the horizon as the camera
+  // moves; the subscription ends with the collection.
+  placement.horizon?.subscribe((distance) => {
+    if (collection.isDestroyed?.()) return false;
+    for (let i = 0; i < collection.length; i++)
+      collection.get(i).disableDepthTestDistance = distance;
+    return true;
+  });
   return collection;
 }
 

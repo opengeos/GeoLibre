@@ -6,9 +6,131 @@ import {
   documentLocale,
 } from "@geolibre/core";
 import type { Feature } from "geojson";
-import type { Cartesian3, DistanceDisplayCondition } from "@cesium/core";
+import type { Cartesian3, Color, DistanceDisplayCondition } from "@cesium/core";
 import type { CesiumWidget, Entity } from "@cesium/engine";
 import { readMapViewFromCamera, zoomToDisplayDistance } from "./cesium-camera";
+import { horizonDepthDistance } from "./cesium-horizon";
+
+/**
+ * A label's colours before the layer opacity, and the opacity override that
+ * replaces the layer opacity for it, if any. The in-place restyle (an opacity
+ * drag, a story fade) rescales these rather than repainting every label in
+ * the layer's one label colour, which would discard per-feature overrides.
+ */
+export interface LabelBaseColors {
+  fill: Color;
+  outline: Color;
+  /** A data-defined opacity, which replaces the layer opacity as on the 2D map. */
+  opacity?: number;
+}
+
+/** {@link LabelBaseColors} for each labelled entity. */
+export const labelBaseColors = new WeakMap<Entity, LabelBaseColors>();
+
+/** The average glyph advance in ems, for wrapping where no canvas can measure. */
+const FALLBACK_CHAR_EMS = 0.6;
+
+/**
+ * Wrap label text the way MapLibre's `text-max-width` does: break at spaces
+ * so no line runs past `maxWidth` ems, keeping a single long word whole.
+ * Explicit line breaks are kept.
+ *
+ * @param text - The label text.
+ * @param maxWidth - The maximum line width in ems.
+ * @param measure - The width of a string in ems.
+ * @returns The text with line breaks inserted.
+ */
+export function wrapLabelText(
+  text: string,
+  maxWidth: number,
+  measure: (value: string) => number,
+): string {
+  if (!(maxWidth > 0)) return text;
+  return text
+    .split("\n")
+    .map((paragraph) => {
+      const lines: string[] = [];
+      let line = "";
+      for (const word of paragraph.split(/ +/)) {
+        const candidate = line ? `${line} ${word}` : word;
+        if (line && measure(candidate) > maxWidth) {
+          lines.push(line);
+          line = word;
+        } else line = candidate;
+      }
+      if (line) lines.push(line);
+      return lines.join("\n");
+    })
+    .join("\n");
+}
+
+/**
+ * A text measurer in ems for one font size: a 2D canvas where there is one,
+ * else an average glyph advance.
+ */
+function emMeasurer(size: number): (value: string) => number {
+  let context: CanvasRenderingContext2D | null = null;
+  try {
+    context = globalThis.document?.createElement("canvas").getContext("2d") ?? null;
+  } catch {
+    context = null;
+  }
+  if (!context || typeof context.measureText !== "function")
+    return (value) => value.length * FALLBACK_CHAR_EMS;
+  context.font = `${size}px sans-serif`;
+  return (value) => context.measureText(value).width / size;
+}
+
+/** A compiled data-defined label override, or null when unset or invalid. */
+function labelOverride(source: string, expectedType: "number" | "color" | "boolean") {
+  const compiled = compileFeatureExpression(source, { expectedType });
+  return compiled.ok && compiled.evaluate ? compiled.evaluate : null;
+}
+
+/** An override's value for a feature, or undefined when it throws. */
+function evaluateOverride(
+  evaluate: ((feature: Feature, zoom?: number) => unknown) | null,
+  feature: Feature,
+  zoom: number,
+): unknown {
+  if (!evaluate) return undefined;
+  try {
+    return evaluate(feature, zoom);
+  } catch {
+    return undefined;
+  }
+}
+
+/** A style-spec colour value (a `Color` object or a CSS string) as CSS. */
+function cssColor(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "r" in value) {
+    const { r, g, b, a } = value as { r: number; g: number; b: number; a: number };
+    // The style-spec Color holds premultiplied channels.
+    const un = (channel: number) => Math.round(a > 0 ? (channel / a) * 255 : 0);
+    return `rgba(${un(r)},${un(g)},${un(b)},${a})`;
+  }
+  return undefined;
+}
+
+/**
+ * Cesium's origins for a MapLibre `text-anchor`: the side of the text that
+ * sits on the point (`"top"` puts the text below it).
+ */
+function anchorOrigins(C: typeof import("@cesium/engine"), anchor: string) {
+  return {
+    horizontalOrigin: anchor.includes("left")
+      ? C.HorizontalOrigin.LEFT
+      : anchor.includes("right")
+        ? C.HorizontalOrigin.RIGHT
+        : C.HorizontalOrigin.CENTER,
+    verticalOrigin: anchor.includes("top")
+      ? C.VerticalOrigin.TOP
+      : anchor.includes("bottom")
+        ? C.VerticalOrigin.BOTTOM
+        : C.VerticalOrigin.CENTER,
+  };
+}
 
 /** Whether a label expression reads `["zoom"]`, so its text changes with the camera. */
 const ZOOM_OPERAND = /\[\s*"zoom"\s*\]/;
@@ -29,6 +151,20 @@ export function createCesiumLabeler(
   const labels = { ...DEFAULT_LAYER_STYLE.labels, ...layer.style?.labels };
   if (!labels.enabled) return () => {};
   const expression = compileFeatureExpression(labels.expression);
+  // The 2D map's data-defined overrides (gl-style-compiler), evaluated per
+  // feature when its label is built. An invalid one falls back to the control.
+  const sizeOverride = labelOverride(labels.sizeExpression, "number");
+  const colorOverride = labelOverride(labels.colorExpression, "color");
+  const opacityOverride = labelOverride(labels.opacityExpression, "number");
+  const visibilityOverride = labelOverride(labels.visibilityExpression, "boolean");
+  const measurers = new Map<number, (value: string) => number>();
+  const wrap = (text: string, size: number) => {
+    let measure = measurers.get(size);
+    if (!measure) measurers.set(size, (measure = emMeasurer(size)));
+    return wrapLabelText(text, Math.max(1, labels.maxWidth), measure);
+  };
+  const horizon = horizonDepthDistance(C, viewer);
+  const origins = anchorOrigins(C, labels.placement === "line" ? "center" : labels.anchor);
   // MapLibre's style engine evaluates a `["zoom"]` text expression live; here
   // the text is a per-frame property instead, re-evaluated when the camera
   // pose changes. Reading the zoom picks the globe, so it is memoised on the
@@ -97,7 +233,9 @@ export function createCesiumLabeler(
   return (entity, index) => {
     const feature = layer.geojson?.features[index];
     if (!feature) return;
-    const text = readText(feature, zoomDependent ? currentZoom() : 0);
+    const zoomNow = zoomDependent ? currentZoom() : 0;
+    if (evaluateOverride(visibilityOverride, feature, zoomNow) === false) return;
+    const text = readText(feature, zoomNow);
     // A zoom-dependent label may be empty now and non-empty at another zoom,
     // so it keeps its entity; a static empty label has nothing to show.
     if (!text && !zoomDependent) return;
@@ -149,6 +287,27 @@ export function createCesiumLabeler(
     let lastZoom = NaN;
     let lastText = text;
     let conditionKey = "";
+    const sizeValue = evaluateOverride(sizeOverride, feature, zoomNow);
+    const size =
+      typeof sizeValue === "number" && Number.isFinite(sizeValue) && sizeValue > 0
+        ? sizeValue
+        : Math.max(1, labels.size);
+    const opacityValue = evaluateOverride(opacityOverride, feature, zoomNow);
+    const fixedOpacity =
+      typeof opacityValue === "number" && Number.isFinite(opacityValue)
+        ? Math.max(0, Math.min(1, opacityValue))
+        : undefined;
+    const fillCss = cssColor(evaluateOverride(colorOverride, feature, zoomNow)) ?? labels.color;
+    let fill: Color;
+    try {
+      fill = C.Color.fromCssColorString(fillCss) ?? C.Color.fromCssColorString(labels.color);
+    } catch {
+      fill = C.Color.fromCssColorString(labels.color);
+    }
+    const outline = C.Color.fromCssColorString(labels.haloColor);
+    const base: LabelBaseColors = { fill, outline, opacity: fixedOpacity };
+    labelBaseColors.set(entity, base);
+    const alpha = fixedOpacity ?? layer.opacity ?? 1;
     let near = 0;
     let far = Number.POSITIVE_INFINITY;
     entity.label = new C.LabelGraphics({
@@ -157,19 +316,21 @@ export function createCesiumLabeler(
             const zoom = currentZoom();
             if (zoom !== lastZoom) {
               lastZoom = zoom;
-              lastText = readText(feature, zoom);
+              lastText = wrap(readText(feature, zoom), size);
             }
             return lastText;
           }, false)
-        : text,
-      font: `${labels.size}px sans-serif`,
-      fillColor: C.Color.fromCssColorString(labels.color),
-      outlineColor: C.Color.fromCssColorString(labels.haloColor),
+        : wrap(text, size),
+      font: `${size}px sans-serif`,
+      fillColor: fill.withAlpha(fill.alpha * alpha),
+      outlineColor: outline.withAlpha(outline.alpha * alpha),
       outlineWidth: labels.haloWidth,
       style: C.LabelStyle.FILL_AND_OUTLINE,
-      pixelOffset: new C.Cartesian2(labels.offsetX * labels.size, labels.offsetY * labels.size),
+      ...origins,
+      pixelOffset: new C.Cartesian2(labels.offsetX * size, labels.offsetY * size),
       heightReference: C.HeightReference.CLAMP_TO_GROUND,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      // Over terrain on the near side, hidden by the Earth on the far side.
+      disableDepthTestDistance: horizon.property,
       // Near/far are metre distances, and the distance a zoom level maps to
       // depends on the canvas size and the scene mode (2D compares against the
       // orthographic frustum, not a camera distance), so evaluate them per frame

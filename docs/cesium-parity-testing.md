@@ -16,13 +16,18 @@ plugin engine declarations and menu gating have also landed.
 The baseline browser reproduction of #2275 left the status bar at `Coords: —`
 while pointing at the globe. The corrected browser reports longitude/latitude
 and clears the readout on exit. The real US cities dataset produces 109 entities
-and 109 labels. Label collision avoidance and the advanced label data-defined
-appearance fields are outside this batch, and so are the `LabelStyle` placement
-fields the globe does not read yet: `anchor`, `rotation`, `placement` (line
-placement along a path), `maxWidth`, and `allowOverlap`. A label styled with
-them on the 2D map renders centred and unrotated on the globe; #2279 is not
-complete until they are honoured. Scene-mode persistence is also not added
-here; #2291 describes it as a possible follow-up.
+and 109 labels. Since #3088 the globe also reads `anchor` (Cesium origins;
+centred for line placement, as on the 2D map), `maxWidth` (word wrapping at
+the em width, measured on a canvas), and the data-defined size, colour,
+opacity and visibility overrides, which the in-place opacity restyle
+preserves. Cesium labels have no rotation and no collision pass, so `rotation`,
+`allowOverlap` (the globe always overlaps), the priority override, and text
+along a line's path are not drawn; a line label sits at the line's midpoint.
+Store points and labels also stop drawing through the Earth: their depth-test
+distance follows the horizon (`cesium-horizon.ts`), verified with Natural Earth
+populated places over East Asia, where the Americas' cities used to show
+through. Scene-mode persistence is also not added here; #2291 describes it as
+a possible follow-up.
 
 ## Remaining work and ordering
 

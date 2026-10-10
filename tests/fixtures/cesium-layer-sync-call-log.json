@@ -373,16 +373,18 @@
         "font": "13px sans-serif",
         "fillColor": {
           "css": "#111827",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineColor": {
           "css": "#ffffff",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineWidth": 1.5,
         "style": 2,
+        "horizontalOrigin": 0,
+        "verticalOrigin": 0,
         "pixelOffset": {
           "__class": "Cartesian2",
           "args": [0, 0]
@@ -445,16 +447,18 @@
         "font": "13px sans-serif",
         "fillColor": {
           "css": "#111827",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineColor": {
           "css": "#ffffff",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineWidth": 1.5,
         "style": 2,
+        "horizontalOrigin": 0,
+        "verticalOrigin": 0,
         "pixelOffset": {
           "__class": "Cartesian2",
           "args": [0, 0]
@@ -475,11 +479,19 @@
         "args": ["[seen]"],
         "fillColor": {
           "__instance": "ConstantProperty",
-          "value": "[seen]"
+          "value": {
+            "css": "#111827",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
         },
         "outlineColor": {
           "__instance": "ConstantProperty",
-          "value": "[seen]"
+          "value": {
+            "css": "#ffffff",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
         }
       }
     ],
@@ -509,16 +521,18 @@
         "font": "13px sans-serif",
         "fillColor": {
           "css": "#111827",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineColor": {
           "css": "#ffffff",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineWidth": 1.5,
         "style": 2,
+        "horizontalOrigin": 0,
+        "verticalOrigin": 0,
         "pixelOffset": {
           "__class": "Cartesian2",
           "args": [0, 0]
@@ -539,11 +553,19 @@
         "args": ["[seen]"],
         "fillColor": {
           "__instance": "ConstantProperty",
-          "value": "[seen]"
+          "value": {
+            "css": "#111827",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
         },
         "outlineColor": {
           "__instance": "ConstantProperty",
-          "value": "[seen]"
+          "value": {
+            "css": "#ffffff",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
         }
       }
     ],
@@ -2156,16 +2178,18 @@
         "font": "13px sans-serif",
         "fillColor": {
           "css": "#111827",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineColor": {
           "css": "#ffffff",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineWidth": 1.5,
         "style": 2,
+        "horizontalOrigin": 0,
+        "verticalOrigin": 0,
         "pixelOffset": {
           "__class": "Cartesian2",
           "args": [0, 0]
@@ -2211,16 +2235,18 @@
         "font": "13px sans-serif",
         "fillColor": {
           "css": "#111827",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineColor": {
           "css": "#ffffff",
-          "alpha": 1,
+          "alpha": 0.8,
           "withAlpha": "[function]"
         },
         "outlineWidth": 1.5,
         "style": 2,
+        "horizontalOrigin": 0,
+        "verticalOrigin": 0,
         "pixelOffset": {
           "__class": "Cartesian2",
           "args": [0, 0]
@@ -2241,11 +2267,19 @@
         "args": ["[seen]"],
         "fillColor": {
           "__instance": "ConstantProperty",
-          "value": "[seen]"
+          "value": {
+            "css": "#111827",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
         },
         "outlineColor": {
           "__instance": "ConstantProperty",
-          "value": "[seen]"
+          "value": {
+            "css": "#ffffff",
+            "alpha": 0.8,
+            "withAlpha": "[function]"
+          }
         }
       }
     ],
