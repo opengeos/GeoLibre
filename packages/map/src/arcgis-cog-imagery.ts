@@ -1,6 +1,12 @@
 import { installCogTilerDatumShift, withJpegTablesPatch, type GeoLibreLayer } from "@geolibre/core";
 import { cogRenderOptions, cogSourceUrl, rasterState, type CogTilerModule } from "./cog-imagery";
-import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
+import type {
+  ArcgisProjectOperator,
+  ArcgisRasterLayer,
+  ArcgisSdk,
+  ArcgisSpatialReference,
+} from "./arcgis-sdk";
+import { createReprojectedTileLayer } from "./arcgis-reprojected-tiles";
 import type { CogSource } from "cog-tiler-wasm";
 
 // A style rebuild reuses the source; weak keys release statistics when its reader is forgotten.
@@ -16,12 +22,18 @@ export async function loadCogTiler(): Promise<CogTilerModule> {
   return withJpegTablesPatch(module);
 }
 
-/** A native SDK tile layer sharing the raster control's persisted band/stretch settings. */
+/**
+ * A native SDK tile layer sharing the raster control's persisted band/stretch
+ * settings. On a map in a projection other than Web Mercator (`reproject`),
+ * the same rendered tiles are warped into the view's projection instead,
+ * since the SDK cannot reproject a tile layer (issue #2708).
+ */
 export function createArcgisCogLayer(
   sdk: ArcgisSdk,
   layer: GeoLibreLayer,
   properties: Record<string, unknown>,
   loadTiler: () => Promise<CogTilerModule> = loadCogTiler,
+  reproject?: { operator: ArcgisProjectOperator; spatialReference: ArcgisSpatialReference },
 ): ArcgisRasterLayer {
   const url = cogSourceUrl(layer);
   if (!url) throw new Error("The COG layer has no readable source");
@@ -50,6 +62,22 @@ export function createArcgisCogLayer(
       ready = undefined;
       throw error;
     }));
+  if (reproject)
+    return createReprojectedTileLayer(
+      sdk,
+      reproject.operator,
+      reproject.spatialReference,
+      async () => {
+        const { source, render } = await prepare();
+        const maxZoom = (source.info() as { maxzoom?: unknown }).maxzoom;
+        return {
+          render: (z, x, y) => source.renderTileRGBA(z, x, y, render),
+          ...(typeof maxZoom === "number" && Number.isFinite(maxZoom) ? { maxZoom } : {}),
+          bounds: source.boundsLonLat,
+        };
+      },
+      properties,
+    );
   const CustomLayer = sdk.layers.BaseTileLayer.createSubclass({
     load(this: ArcgisRasterLayer) {
       this.addResolvingPromise(

@@ -56,6 +56,8 @@ export interface ArcgisSpatialReference {
   wkid?: number;
   isWebMercator?: boolean;
   isWGS84?: boolean;
+  /** Whether coordinates are degrees (a geographic system) rather than metres. */
+  isGeographic?: boolean;
 }
 
 export interface ArcgisPoint {
@@ -426,6 +428,8 @@ export interface ArcgisSdk {
   Graphic: ArcgisClass<ArcgisGraphic>;
   Point: ArcgisClass<ArcgisPoint>;
   Extent: ArcgisClass<ArcgisExtent>;
+  /** A tiling scheme; a custom-projection tile layer builds its own (issue #2708). */
+  TileInfo: ArcgisClass<unknown>;
   layers: {
     GeoJSONLayer: ArcgisClass<ArcgisLayer>;
     GraphicsLayer: ArcgisClass<ArcgisLayer>;
@@ -477,6 +481,7 @@ const SDK_MODULES = {
   Graphic: "Graphic",
   Point: "geometry/Point",
   Extent: "geometry/Extent",
+  TileInfo: "layers/support/TileInfo",
   GeoJSONLayer: "layers/GeoJSONLayer",
   GraphicsLayer: "layers/GraphicsLayer",
   BaseTileLayer: "layers/BaseTileLayer",
@@ -534,6 +539,7 @@ export function assembleArcgisSdk(modules: Record<ModuleKey, Record<string, unkn
     Graphic: member("Graphic"),
     Point: member("Point"),
     Extent: member("Extent"),
+    TileInfo: member("TileInfo"),
     layers: {
       GeoJSONLayer: member("GeoJSONLayer"),
       GraphicsLayer: member("GraphicsLayer"),
@@ -685,6 +691,12 @@ export interface ArcgisProjectOperator {
   isLoaded(): boolean;
   /** The geometry in `outSpatialReference`, or null when it cannot be projected. */
   execute<T>(geometry: T, outSpatialReference: { wkid: number }): T | null;
+  /**
+   * Each geometry in `outSpatialReference`, index for index (null where one
+   * cannot be projected). A multipoint would instead drop such points and
+   * shift the rest, so a sampling grid projects its points this way.
+   */
+  executeMany<T>(geometries: T[], outSpatialReference: { wkid: number }): (T | null)[];
 }
 
 let projectPromise: Promise<ArcgisProjectOperator> | null = null;

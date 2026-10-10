@@ -88,6 +88,7 @@ describe("arcgisPointLngLat", () => {
       if (p.x > 1e9) throw new Error("outside the projection's domain");
       return { x: p.x / 1000, y: p.y / 1000 } as T;
     },
+    executeMany: () => [],
   };
   it("reads longitude/latitude when the point has them", () => {
     assert.deepEqual(arcgisPointLngLat(point({ longitude: 10, latitude: 20 })), [10, 20]);

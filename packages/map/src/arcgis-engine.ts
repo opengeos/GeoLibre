@@ -1588,7 +1588,19 @@ export class ArcgisEngine implements MapEngine {
         return [];
       case "cog":
         return [
-          createArcgisCogLayer(this.sdk, plan.source, common, () => this.loadCachedCogTiler()),
+          createArcgisCogLayer(
+            this.sdk,
+            plan.source,
+            common,
+            () => this.loadCachedCogTiler(),
+            // A projected map warps the tiles into its projection (issue #2708).
+            this.options.projectOperator && this.view
+              ? {
+                  operator: this.options.projectOperator,
+                  spatialReference: this.view.spatialReference,
+                }
+              : undefined,
+          ),
         ];
       case "geojson":
         return plan.parts.map((part) => {

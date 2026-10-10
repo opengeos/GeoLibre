@@ -276,9 +276,19 @@ In another projection:
 - Vector layers (GeoJSON, feature services, the symbology pack's companion
   layers) are reprojected on the client by the SDK's `projectOperator`, which
   loads with the projected map only.
-- **No basemap is drawn.** The SDK cannot reproject tiled layers, so Esri
-  basemap styles and XYZ tiles have nothing to show; the Blank background
-  colour shows instead. Tiled data layers do not draw either.
+- **COGs are warped into the projection** (`arcgis-reprojected-tiles.ts`). The
+  SDK cannot reproject a tile layer, so the COG layer tiles the view's
+  projection instead and fills each tile from the same Web Mercator tiles
+  `cog-tiler-wasm` renders on a Web Mercator map, with the same bands,
+  stretch and colormap: a 33 × 33 grid of the tile's points is projected to
+  longitude/latitude and the pixels between them are interpolated. Cells that
+  straddle a seam of the projection (Spilhaus cuts the land) are projected
+  pixel by pixel, and each tile reads the source zoom that matches how far
+  the projection stretches it there. Web Mercator tiles stop at ±85.05°, so
+  the polar caps above that latitude stay empty.
+- **No basemap is drawn.** Esri basemap styles and XYZ tiles are not warped,
+  so the Blank background colour shows instead. Other tiled data layers (XYZ,
+  WMS tiles, PMTiles, Zarr) do not draw either.
 - The camera, pointer coordinates, identify, selection and extent drawing
   convert between the projection and longitude/latitude, so the shared
   camera, other split panes and saved views stay in degrees.

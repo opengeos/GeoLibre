@@ -2833,7 +2833,7 @@
       "coordinateEpsgHint": "EPSG code the status bar projects the pointer coordinate into, e.g. 3857 (Web Mercator) or 32618 (UTM zone 18N).",
       "coordinateEpsgUnknown": "Unknown EPSG code. The status bar shows decimal degrees until a known code is entered.",
       "arcgisProjection": "ArcGIS map projection",
-      "arcgisProjectionHint": "Projection of the flat map when the rendering engine is ArcGIS. Vector layers are reprojected; basemaps and tiled layers cannot be, so they are not drawn, and terrain is set aside. Picking a projection turns the globe off.",
+      "arcgisProjectionHint": "Projection of the flat map when the rendering engine is ArcGIS. Vector layers and COGs are reprojected; basemaps and other tiled layers are not drawn, and terrain is set aside. Picking a projection turns the globe off.",
       "arcgisProjectionWebMercator": "Web Mercator (default)",
       "arcgisProjectionCustom": "Custom WKID…",
       "arcgisProjectionWkid": "Well-known ID (WKID)",
