@@ -155,7 +155,10 @@ function ProfileWindow({
   }, [points]);
   const [xDomain, setXDomain] = useState<[number, number] | null>(null);
   // A new beam or field set starts zoomed out.
-  useEffect(() => setXDomain(null), [beam, series]);
+  // Keyed on the series keys, not the array: a layer edit (a restyle) rebuilds
+  // the definitions with the same content and must not undo the user's zoom.
+  const seriesKey = series.map((def) => def.key).join("|");
+  useEffect(() => setXDomain(null), [beam, seriesKey]);
   const domain = xDomain ?? fullDomain;
 
   // Map selection → chart: follow a footprint selected on another beam.
@@ -293,6 +296,18 @@ function ProfileWindow({
     drag.current = { startX: event.clientX, domain, moved: false };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
+  /** The footprint nearest a pointer x, or null outside the plot or in a gap. */
+  const nearestInView = (clientX: number): number | null => {
+    const px = localX(clientX);
+    if (px < MARGIN.left || px > MARGIN.left + innerW || points.length === 0) return null;
+    const nearest = nearestProfileIndex(points, distanceAt(px));
+    // In a gap, the nearest footprint may sit outside the view; take none.
+    const inView =
+      nearest >= 0 &&
+      points[nearest].distance >= domain[0] &&
+      points[nearest].distance <= domain[1];
+    return inView ? nearest : null;
+  };
   const onPointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     const active = drag.current;
     if (active && Math.abs(event.clientX - active.startX) > 3) {
@@ -303,26 +318,17 @@ function ProfileWindow({
       setHoverIndex(null);
       return;
     }
-    const px = localX(event.clientX);
-    if (px < MARGIN.left || px > MARGIN.left + innerW || points.length === 0) {
-      setHoverIndex(null);
-      return;
-    }
-    const nearest = nearestProfileIndex(points, distanceAt(px));
-    // In a gap, the nearest footprint may sit outside the view; show none.
-    const inView =
-      nearest >= 0 &&
-      points[nearest].distance >= domain[0] &&
-      points[nearest].distance <= domain[1];
-    setHoverIndex(inView ? nearest : null);
+    setHoverIndex(nearestInView(event.clientX));
   };
   const onPointerUp = (event: ReactPointerEvent<SVGSVGElement>) => {
     const active = drag.current;
     drag.current = null;
-    if (active && !active.moved && hoverIndex !== null) {
-      // Click: select the footprint so the map highlights it.
+    // Click or tap: select the footprint under the pointer (from the event,
+    // not the hover state, which a touch tap never sets).
+    const picked = active && !active.moved ? nearestInView(event.clientX) : null;
+    if (picked !== null) {
       selectLayer(layer.id);
-      selectFeature(points[hoverIndex].featureId);
+      selectFeature(points[picked].featureId);
     }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);

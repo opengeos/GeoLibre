@@ -279,8 +279,11 @@ export function AddSpaceborneLidarDialog({
       const name = `${file.product.id} ${baseName(fileName)}`;
       const id = store.addGeoJsonLayer(name, result.geojson, fileName);
       // Tag the layer so the Layers panel offers its along-track profile.
+      const added = useAppStore.getState().layers.find((entry) => entry.id === id);
       store.updateLayer(id, {
         metadata: {
+          // Keep whatever the store put there; updateLayer replaces the object.
+          ...added?.metadata,
           sourceKind: SPACEBORNE_LIDAR_SOURCE_KIND,
           product: file.product.id,
           beams: result.perBeam.filter((entry) => entry.kept > 0).map((entry) => entry.beam),

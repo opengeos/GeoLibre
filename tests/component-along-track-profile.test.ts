@@ -120,6 +120,17 @@ describe("AlongTrackProfileWindow", () => {
     act(() => closeAlongTrackProfile());
   });
 
+  it("selects on a tap without a prior hover", () => {
+    renderWindow();
+    const svg = screen.getByRole("img", { name: "Along-track profile of beam gt1l" });
+    act(() => {
+      fireEvent.pointerDown(svg, { clientX: 584, clientY: 100, pointerId: 2 });
+      fireEvent.pointerUp(svg, { clientX: 584, clientY: 100, pointerId: 2 });
+    });
+    assert.equal(useAppStore.getState().selectedFeatureId, "2");
+    act(() => closeAlongTrackProfile());
+  });
+
   it("closes itself when the layer is removed", () => {
     renderWindow();
     act(() => useAppStore.setState({ layers: [] }));
