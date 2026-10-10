@@ -4,17 +4,21 @@ import { withJpegTablesPatch } from "../packages/core/src/cog-jpeg-tables";
 
 describe("withJpegTablesPatch", () => {
   /** A cog-tiler source double with the internals the patch reads. */
-  function source(compression: string) {
+  function source(
+    compression: string,
+    photometric = 2,
+    rasters: number[][] = [
+      [1, 2],
+      [3, 4],
+      [5, 6],
+    ],
+  ) {
     return {
       levels: [{ compression }],
       tiff: {},
       _tiffImage: async () => ({
-        fileDirectory: { PhotometricInterpretation: 2 },
-        readRasters: async () => [
-          [1, 2],
-          [3, 4],
-          [5, 6],
-        ],
+        fileDirectory: { PhotometricInterpretation: photometric },
+        readRasters: async () => rasters,
       }),
       _assembleWindow: async (..._args: number[]): Promise<ArrayLike<number>> => [0, 0],
     };
@@ -36,6 +40,21 @@ describe("withJpegTablesPatch", () => {
     const patched = opened._assembleWindow;
     await module.openCog(undefined);
     assert.equal(opened._assembleWindow, patched);
+  });
+
+  it("converts YCbCr (photometric 6) windows to 8-bit RGB bands", async () => {
+    // No tags 529/532, so the TIFF default coefficients and reference apply:
+    // Y/Cb/Cr 100/150/200 is RGB 200.944/41.011/138.984 before rounding.
+    const jpeg = source("Jpeg", 6, [[100], [150], [200]]);
+    const opened = (await tiler(jpeg).openCog(undefined)) as typeof jpeg;
+    const bands = await Promise.all(
+      [0, 1, 2].map((band) => opened._assembleWindow(0, 0, 0, 1, 1, band)),
+    );
+    for (const band of bands) assert.ok(band instanceof Uint8ClampedArray);
+    assert.deepEqual(
+      bands.map((band) => Array.from(band)),
+      [[201], [41], [139]],
+    );
   });
 
   it("leaves every other codec untouched", async () => {

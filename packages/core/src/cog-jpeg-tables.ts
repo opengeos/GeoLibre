@@ -129,7 +129,11 @@ export function patchJpegCogSource(source: unknown): unknown {
   cog._assembleWindow = async (level, x, y, width, height, band = 0) => {
     const key = `${level}/${x}/${y}/${width}/${height}`;
     let decoded = windowCache.get(key);
-    if (!decoded) {
+    if (decoded) {
+      // Re-insert on a hit so the size cap below evicts the least recently used.
+      windowCache.delete(key);
+      windowCache.set(key, decoded);
+    } else {
       decoded = cog._tiffImage!(level).then(async (image) => {
         const rasters = await image.readRasters({
           window: [x, y, x + width, y + height],
@@ -152,13 +156,16 @@ export function patchJpegCogSource(source: unknown): unknown {
           return value as ArrayLike<number> | undefined;
         };
         const [coefficients, referenceBlackWhite] = await Promise.all([readTag(529), readTag(532)]);
+        // Baseline JPEG is 8-bit, so narrow the clamped float planes to one
+        // byte per sample before caching: a window held as Float64Array costs
+        // 8x the memory across the whole cache.
         return convertTiffYCbCrToRgb(
           rasters[0],
           rasters[1],
           rasters[2],
           coefficients,
           referenceBlackWhite,
-        );
+        ).map((plane) => Uint8ClampedArray.from(plane));
       });
       windowCache.set(key, decoded);
       void decoded.catch(() => {
