@@ -37,7 +37,22 @@ describe("normalizeArcgisWkid", () => {
     assert.equal(normalizeArcgisWkid(4326), 4326);
   });
   it("treats absent, malformed and Web Mercator codes as the default map", () => {
-    for (const value of [undefined, null, "", "abc", 0, -1, 1.5, Number.NaN, {}, 3857, 102100])
+    for (const value of [
+      undefined,
+      null,
+      "",
+      "abc",
+      "1e3",
+      "0x10",
+      "-5",
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      {},
+      3857,
+      102100,
+    ])
       assert.equal(normalizeArcgisWkid(value), undefined, String(value));
   });
   it("offers unique presets with translated names", () => {

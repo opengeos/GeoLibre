@@ -44,7 +44,9 @@ export const ARCGIS_PROJECTION_PRESETS: readonly ArcgisProjectionPreset[] = [
  *   default Web Mercator map (absent, malformed or a Web Mercator code).
  */
 export function normalizeArcgisWkid(value: unknown): number | undefined {
-  const wkid = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  // Digits only: `Number` would also read "1e3" or "0x10" as a code.
+  const wkid =
+    typeof value === "string" ? (/^\s*\d+\s*$/.test(value) ? Number(value) : undefined) : value;
   if (typeof wkid !== "number" || !Number.isInteger(wkid) || wkid <= 0) return undefined;
   return WEB_MERCATOR_WKIDS.has(wkid) ? undefined : wkid;
 }
