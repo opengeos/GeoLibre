@@ -9,8 +9,10 @@ import {
 import { pickOverlayGraphics, shadowOverlayGraphics, type OverlayGraphic } from "./shadow-overlay";
 import { groundHeightAt, pickGlobeHit } from "./cesium-camera";
 import {
+  applyHorizonVisibility,
   cameraFacingTest,
   drawCesiumOverlayGraphics,
+  type AnchoredEntity,
   type FacingTest,
 } from "./cesium-control-overlay";
 import type { IdentifiedFeature } from "./map-engine";
@@ -514,6 +516,7 @@ export class CesiumControlHost {
   private overlayGraphics: OverlayGraphic[] = [];
   private overlayQueued = false;
   private facing: FacingTest | null = null;
+  private anchored: AnchoredEntity[] = [];
   private destroyed = false;
   private cleanups: Array<() => void> = [];
 
@@ -558,6 +561,9 @@ export class CesiumControlHost {
     // expression reads changes.
     const redraw = () => this.refreshOverlay();
     this.facade.on("styledata", redraw);
+    // Points and labels past the horizon follow the camera, not the style.
+    for (const event of [viewer.camera?.changed, viewer.camera?.moveEnd])
+      if (event) this.cleanups.push(event.addEventListener(() => this.updateHorizon()));
     this.facade.on("sourcedata", redraw);
     let overlayZoom = Math.floor(this.facade.getZoom());
     this.facade.on("moveend", () => {
@@ -650,9 +656,17 @@ export class CesiumControlHost {
       this.overlay = new C.CustomDataSource("geolibre-plugin-overlays");
       void this.viewer.dataSources.add(this.overlay);
     }
-    this.facing ??= cameraFacingTest(C, this.viewer.scene);
-    drawCesiumOverlayGraphics(C, this.overlay, graphics, this.facing);
+    this.anchored = drawCesiumOverlayGraphics(C, this.overlay, graphics);
+    this.updateHorizon();
     this.viewer.scene?.requestRender?.();
+  }
+
+  /** Re-run the overlay's horizon pass (see `applyHorizonVisibility`). */
+  private updateHorizon(): void {
+    const C = this.Cesium;
+    if (!C || !this.anchored.length || this.viewer.isDestroyed?.()) return;
+    this.facing ??= cameraFacingTest(C, this.viewer.scene);
+    if (applyHorizonVisibility(this.anchored, this.facing)) this.viewer.scene?.requestRender?.();
   }
 
   destroy() {

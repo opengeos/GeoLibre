@@ -96,18 +96,16 @@ export function cameraFacingTest(
  * @param C - The Cesium namespace.
  * @param source - The data source the overlay owns; its entities are replaced.
  * @param graphics - The graphics, bottom to top.
- * @param facing - Hides points and labels past the globe's horizon; every
- *   one shows without it.
+ * @returns The point and label entities with their ground positions, for
+ *   {@link applyHorizonVisibility}.
  */
 export function drawCesiumOverlayGraphics(
   C: CesiumNs,
   source: CustomDataSource,
   graphics: readonly OverlayGraphic[],
-  facing?: FacingTest,
-): void {
+): AnchoredEntity[] {
   const { entities } = source;
-  const shown = (position: Cartesian3) =>
-    facing ? new C.CallbackProperty(() => facing(position), false) : true;
+  const anchored: AnchoredEntity[] = [];
   entities.suspendEvents();
   try {
     entities.removeAll();
@@ -184,10 +182,9 @@ export function drawCesiumOverlayGraphics(
           const stroke = toColor(C, outline?.color) ?? C.Color.TRANSPARENT;
           for (const [lng, lat] of points(graphic.geometry)) {
             const position = C.Cartesian3.fromDegrees(lng, lat);
-            add(graphic, {
+            const entity = add(graphic, {
               position,
               point: {
-                show: shown(position),
                 pixelSize: pixels(symbol.size, 10),
                 color,
                 outlineColor: stroke,
@@ -196,6 +193,7 @@ export function drawCesiumOverlayGraphics(
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
               },
             });
+            anchored.push({ entity, position });
           }
           break;
         }
@@ -207,10 +205,9 @@ export function drawCesiumOverlayGraphics(
           const haloSize = pixels(symbol.haloSize, 0);
           for (const [lng, lat] of points(graphic.geometry)) {
             const position = C.Cartesian3.fromDegrees(lng, lat);
-            add(graphic, {
+            const entity = add(graphic, {
               position,
               label: {
-                show: shown(position),
                 text,
                 horizontalOrigin:
                   symbol.horizontalAlignment === "left"
@@ -240,6 +237,7 @@ export function drawCesiumOverlayGraphics(
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
               },
             });
+            anchored.push({ entity, position });
           }
           break;
         }
@@ -248,4 +246,37 @@ export function drawCesiumOverlayGraphics(
   } finally {
     entities.resumeEvents();
   }
+  return anchored;
+}
+
+/** A point or label entity and the ground position it is drawn at. */
+export interface AnchoredEntity {
+  entity: Entity;
+  position: Cartesian3;
+}
+
+/**
+ * Hide the points and labels past the globe's horizon, and show the rest.
+ *
+ * One pass over the overlay, run when the camera moves rather than as a
+ * per-entity `show` callback that Cesium would re-evaluate on every frame:
+ * a grid's labels run to thousands of entities. Only a changed flag is
+ * written, so a still pose costs no visualizer updates.
+ *
+ * @param anchored - What {@link drawCesiumOverlayGraphics} returned.
+ * @param facing - Whether a position faces the camera.
+ * @returns Whether any entity's visibility changed.
+ */
+export function applyHorizonVisibility(
+  anchored: readonly AnchoredEntity[],
+  facing: FacingTest,
+): boolean {
+  let changed = false;
+  for (const { entity, position } of anchored) {
+    const show = facing(position);
+    if (entity.show === show) continue;
+    entity.show = show;
+    changed = true;
+  }
+  return changed;
 }

@@ -7,7 +7,11 @@ import {
   CesiumControlHost,
   restoreCompatibilityMouseEvents,
 } from "../packages/map/src/cesium-control-host";
-import { drawCesiumOverlayGraphics } from "../packages/map/src/cesium-control-overlay";
+import {
+  applyHorizonVisibility,
+  cameraFacingTest,
+  drawCesiumOverlayGraphics,
+} from "../packages/map/src/cesium-control-overlay";
 import { shadowOverlayGraphics } from "../packages/map/src/shadow-overlay";
 
 const originalDocument = globalThis.document;
@@ -130,6 +134,39 @@ describe("drawCesiumOverlayGraphics", () => {
     assert.equal(label?.label!.text!.getValue(time), "Pin");
     assert.equal(label?.label!.style!.getValue(time), Cesium.LabelStyle.FILL_AND_OUTLINE);
     assert.equal(label?.properties?.layerId.getValue(time), "text");
+  });
+
+  it("hides points and labels past the horizon in one pass, writing only changes", () => {
+    const source = new Cesium.CustomDataSource("test");
+    const point = (lng: number) => ({
+      layerId: "p",
+      featureId: String(lng),
+      properties: {},
+      geometry: { type: "Point" as const, coordinates: [lng, 0] },
+      featureGeometry: { type: "Point" as const, coordinates: [lng, 0] },
+      symbol: { type: "simple-marker", color: [0, 0, 0, 1], size: "8px" },
+    });
+    const anchored = drawCesiumOverlayGraphics(Cesium, source, [point(0), point(180)]);
+    assert.equal(anchored.length, 2);
+    // A camera far above (0°, 0°) sees the near point and not the antipode.
+    const scene = {
+      mode: Cesium.SceneMode.SCENE3D,
+      camera: { positionWC: Cesium.Cartesian3.fromDegrees(0, 0, 2e7) },
+    };
+    const facing = cameraFacingTest(Cesium, scene);
+    assert.equal(applyHorizonVisibility(anchored, facing), true);
+    assert.deepEqual(
+      anchored.map(({ entity }) => entity.show),
+      [true, false],
+    );
+    assert.equal(applyHorizonVisibility(anchored, facing), false, "a still pose writes nothing");
+    // Flat scene modes show everything.
+    scene.mode = Cesium.SceneMode.SCENE2D;
+    applyHorizonVisibility(anchored, facing);
+    assert.deepEqual(
+      anchored.map(({ entity }) => entity.show),
+      [true, true],
+    );
   });
 
   it("replaces what the source held and skips degenerate geometry", () => {

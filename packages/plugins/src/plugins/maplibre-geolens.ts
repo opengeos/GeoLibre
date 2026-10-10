@@ -219,7 +219,7 @@ export const DEFAULT_GEOLENS_LABELS: GeoLensLabels = {
   viewSuffix: "current view",
   addError: (message) => `Could not add layer: ${message}`,
   privateRasterNeedsMapLibre:
-    "Private rasters need the MapLibre renderer: Mapbox GL cannot attach the API key to tile requests.",
+    "Private rasters need the MapLibre renderer: only it can attach the API key to tile requests.",
   features: (count) => `${count.toLocaleString()} features`,
   editsHeading: "Edits",
   editsPending: (added, changed, deleted) =>
@@ -580,13 +580,14 @@ function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string
   rasterApiKeys.set(tileUrlPrefix(tiles), apiKey);
   // Deliberately the MapLibre map, not the shared one: `setTransformRequest`
   // is MapLibre-only (mapbox-gl accepts a transform at construction and never
-  // again), so a private raster cannot authenticate on Mapbox. Say so rather
-  // than add a layer whose every tile 401s.
+  // again), so a private raster cannot authenticate on Mapbox, ArcGIS or the
+  // Cesium globe. Say so rather than add a layer whose every tile 401s.
   // engine-audit-allow: getMap-mapbox
   const map = app.getMap?.();
   if (!map) {
+    const renderer = app.getMapRenderer?.();
     // eslint-disable-next-line local/no-renderer-kind-checks -- the private-raster protocol is MapLibre's
-    if (app.getMapboxMap?.() || app.getMapRenderer?.() === "arcgis")
+    if (app.getMapboxMap?.() || renderer === "arcgis" || renderer === "cesium")
       throw new Error(labels.privateRasterNeedsMapLibre);
     return;
   }
