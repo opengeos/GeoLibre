@@ -100,6 +100,11 @@ browser against an authenticated Mapbox map):
 - **USGS 3DEP** also declares Mapbox (October 2026). It reads the map through
   the same control-map path as the catalogs above and is covered by the engine
   tests, but has not been checked in a browser against a Mapbox map.
+- **Reverse Geocode** also declares Mapbox, and USGS NLDI's hover popup no
+  longer uses MapLibre's `Popup`, which cannot be added to a mapbox-gl map. Both
+  open their popups through `createMapPopup` (`map-popup.ts`), the same
+  `project()`-placed markup `annotation-marker.ts` uses for markers. Checked on
+  ArcGIS and the globe, not yet in a browser against a Mapbox map.
 - **Gridlines** and the **DGGS** grids (H3, S2, A5, DGGRID, DGGAL, OLC,
   Geohash, Tilecode), including cell labels and click identification. Mapbox
   Standard's root style carries no symbol layer to borrow a font from, so

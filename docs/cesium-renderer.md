@@ -87,6 +87,12 @@ grids run on the globe this way. Street View runs too: its location marker is a 
 globe positions over the canvas each frame (`cesium-dom-marker.ts` in the
 plugins package), in place of MapLibre's `Marker`, which reads a map
 transform the facade does not have.
+USGS NLDI and Reverse Geocode run as well: their popups go through
+`createMapPopup` (`map-popup.ts`), which keeps MapLibre's `Popup` on a MapLibre
+map and otherwise places the same markup through `project()` on every frame
+(the facade fires `render` from the scene's `postRender`). The facade also
+drops the `click` that ends a drag, as MapLibre's click tolerance does, so
+panning the globe does not trigger a click-driven control.
 
 ## Scene and camera
 

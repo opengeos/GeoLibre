@@ -26,6 +26,7 @@ import { maplibreSatelliteEmbeddingsPlugin } from "../packages/plugins/src/plugi
 import { maplibreVantorPlugin } from "../packages/plugins/src/plugins/maplibre-vantor";
 import { maplibreEarthaccessPlugin } from "../packages/plugins/src/plugins/maplibre-earthaccess";
 import { maplibreUsgsDemPlugin } from "../packages/plugins/src/plugins/maplibre-usgs-dem";
+import { maplibreUsgsNldiPlugin } from "../packages/plugins/src/plugins/maplibre-usgs-nldi";
 import { cartoLightPlugin } from "../packages/plugins/src/plugins/carto-light";
 import {
   isExternalPluginManifest,
@@ -151,6 +152,12 @@ describe("Tier 1 built-in plugin engine support audit", () => {
   // MapLibre-only in practice; it now goes through the control map.
   it("declares every engine on USGS 3DEP", () => {
     assert.deepEqual(maplibreUsgsDemPlugin.engines, ["maplibre", "mapbox", "arcgis", "cesium"]);
+  });
+
+  // NLDI's trace and basin are GeoJSON overlays the control maps record, and
+  // its hover popup goes through `createMapPopup`.
+  it("declares every engine on USGS NLDI", () => {
+    assert.deepEqual(maplibreUsgsNldiPlugin.engines, ["maplibre", "mapbox", "arcgis", "cesium"]);
   });
 
   it("defaults MapLibre-only plugins without explicit engines to maplibre", () => {

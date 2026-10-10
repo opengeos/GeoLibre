@@ -1,6 +1,8 @@
 import { geocodeReverse } from "@geolibre/core";
-import type { Map as MapLibreMap, MapMouseEvent, Popup } from "maplibre-gl";
+import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import type { MapPopup } from "./map-popup";
+import { getControlMap } from "./style-map";
 
 /**
  * Reverse geocoding: click the map to resolve a place/address, shown in a
@@ -17,7 +19,7 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  */
 export const REVERSE_GEOCODE_PLUGIN_ID = "maplibre-reverse-geocode";
 
-let popup: Popup | null = null;
+let popup: MapPopup | null = null;
 // The map the click handler is bound to, so restoreReverseGeocode can detect a
 // map re-initialization (a brand-new Map object) and rebind.
 let boundMap: MapLibreMap | null = null;
@@ -90,11 +92,12 @@ function buildPopupContent(title: string, body: string, copyLabel: string): HTML
 }
 
 /**
- * Resolve and render the address for a clicked point. The maplibre-gl `Popup`
- * class is lazy-imported (mirroring how the Directions plugin defers its heavy
- * library) so this module stays free of a runtime maplibre-gl dependency; the
- * import resolves from cache instantly since the app already loaded maplibre-gl
- * for the map.
+ * Resolve and render the address for a clicked point. The popup module is
+ * lazy-imported (mirroring how the Directions plugin defers its heavy library)
+ * so this module stays free of a runtime maplibre-gl dependency; the import
+ * resolves from cache instantly since the app already loaded maplibre-gl for
+ * the map. `createMapPopup` picks MapLibre's own popup or one placed through
+ * `project()`, so the lookup works on every engine.
  */
 async function showReverseGeocodePopup(
   map: MapLibreMap,
@@ -103,13 +106,12 @@ async function showReverseGeocodePopup(
   requestToken: number,
   signal: AbortSignal,
 ): Promise<void> {
-  const { Popup } = await import("maplibre-gl");
+  const { createMapPopup } = await import("./map-popup");
   // A teardown or a newer click during the import supersedes this lookup.
   if (requestToken !== lookupToken) return;
   popup?.remove();
-  popup = new Popup({
+  popup = createMapPopup(map, {
     closeButton: true,
-    closeOnClick: false,
     className: "geolibre-reverse-geocode-popup",
   })
     .setLngLat([lng, lat])
@@ -130,7 +132,7 @@ async function showReverseGeocodePopup(
 }
 
 function attach(app: GeoLibreAppAPI): void {
-  const map = app.getMap?.();
+  const map = getControlMap(app);
   if (!map) return;
   if (boundMap === map && clickHandler) return; // already bound to this map
 
@@ -161,7 +163,7 @@ function teardown(app: GeoLibreAppAPI): void {
   // is disabled.
   currentAbortController?.abort();
   currentAbortController = null;
-  const map = boundMap ?? app.getMap?.() ?? null;
+  const map = boundMap ?? getControlMap(app) ?? null;
   if (map && clickHandler) {
     map.off("click", clickHandler);
     map.getCanvas().style.cursor = previousCursor;
@@ -182,7 +184,7 @@ export function restoreReverseGeocode(app: GeoLibreAppAPI, active: boolean): voi
     teardown(app);
     return;
   }
-  const map = app.getMap?.();
+  const map = getControlMap(app);
   if (boundMap && boundMap === map && clickHandler) return; // already bound
   teardown(app);
   attach(app);
@@ -192,7 +194,9 @@ export const maplibreReverseGeocodePlugin: GeoLibrePlugin = {
   id: REVERSE_GEOCODE_PLUGIN_ID,
   name: "Reverse Geocode",
   version: "1.0.0",
-  engines: ["maplibre"],
+  // A click handler and a popup, both of which every engine's map hosts (the
+  // popup through `createMapPopup`).
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => attach(app),
   deactivate: (app: GeoLibreAppAPI) => teardown(app),
 };

@@ -1,12 +1,8 @@
 import type { Feature, FeatureCollection, Geometry, Point } from "geojson";
-import {
-  Popup,
-  type Map as MapLibreMap,
-  type MapLayerMouseEvent,
-  type MapMouseEvent,
-} from "maplibre-gl";
+import type { Map as MapLibreMap, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import { getStyleMap } from "./style-map";
+import { createMapPopup } from "./map-popup";
+import { getControlMap } from "./style-map";
 
 export const USGS_NLDI_PLUGIN_ID = "maplibre-usgs-nldi";
 export const NLDI_API = "https://api.water.usgs.gov/nldi";
@@ -497,7 +493,7 @@ function addNavigationLayer(
     });
     layerIds.push(pointId);
   }
-  const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+  const popup = createMapPopup(map, { offset: 8 });
   const enter = (event: MapLayerMouseEvent) => {
     const feature = event.features?.[0];
     map.getCanvas().style.cursor = "pointer";
@@ -572,10 +568,11 @@ export const maplibreUsgsNldiPlugin: GeoLibrePlugin = {
   name: "USGS NLDI",
   version: "1.0.0",
   // Draws its trace/basin results as GeoJSON sources and style layers, which
-  // both 2D engines host.
-  engines: ["maplibre", "mapbox"],
+  // both 2D engines host and the ArcGIS and Cesium control maps record and
+  // draw; the hover popup goes through `createMapPopup` for the same reason.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate(app: GeoLibreAppAPI) {
-    const map = getStyleMap(app);
+    const map = getControlMap(app);
     if (!map) return false;
     let selected: { point: Point; comid?: string } | null = null;
     let traceResult: NldiTraceResult | null = null;

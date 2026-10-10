@@ -197,9 +197,12 @@ override draws Esri World Imagery instead.
   World, Satellite Embeddings, IGN LiDAR HD, GeoLens, USGS 3DEP). Footprint clicks and
   hover, selection outlines and box drawing work; a GeoLens raster that needs
   an API key still requires MapLibre.
+- **USGS NLDI** and **Reverse Geocode**, whose popups are placed through the
+  control map's `project()` (`map-popup.ts` in the plugins package) in place of
+  MapLibre's `Popup`, which needs a MapLibre map.
 - **Controls** menu entries and plugins whose plugin needs a MapLibre, Mapbox
   or Cesium map (Atmospheric Effects, Sun, Route Animation, Flight Simulator,
-  Directions, Reverse Geocode, the Geo Editor, Annotations, Swipe, Street View,
+  Directions, the Geo Editor, Annotations, Swipe, Street View,
   Timelapse and others) are greyed out with the reason while ArcGIS is the
   primary renderer.
 - If the SDK cannot be loaded from the CDN, the map's banner offers **Retry**,

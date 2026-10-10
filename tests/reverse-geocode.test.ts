@@ -33,7 +33,12 @@ describe("maplibreReverseGeocodePlugin", () => {
   it("is a Controls toggle that is off by default", () => {
     assert.equal(maplibreReverseGeocodePlugin.id, REVERSE_GEOCODE_PLUGIN_ID);
     assert.equal(maplibreReverseGeocodePlugin.activeByDefault, undefined);
-    assert.deepEqual(maplibreReverseGeocodePlugin.engines, ["maplibre"]);
+    assert.deepEqual(maplibreReverseGeocodePlugin.engines, [
+      "maplibre",
+      "mapbox",
+      "arcgis",
+      "cesium",
+    ]);
     assert.equal(typeof maplibreReverseGeocodePlugin.activate, "function");
     assert.equal(typeof maplibreReverseGeocodePlugin.deactivate, "function");
   });
