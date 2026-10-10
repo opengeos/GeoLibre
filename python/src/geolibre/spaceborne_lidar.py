@@ -418,6 +418,7 @@ def read_spaceborne_lidar(
     quality_filter: bool = True,
     bbox: Sequence[float] | None = None,
     max_points: int | None = DEFAULT_MAX_POINTS,
+    missions: Sequence[str] | None = None,
 ) -> SpaceborneLidarResult:
     """Read an ICESat-2 or GEDI granule's footprints as GeoJSON points.
 
@@ -432,6 +433,8 @@ def read_spaceborne_lidar(
         bbox: ``[west, south, east, north]`` to keep only footprints inside.
         max_points: Cap on footprints; each beam is thinned evenly to stay
             under it. ``None`` or ``0`` keeps every footprint.
+        missions: Accepted missions (``"ICESat-2"``, ``"GEDI"``), checked
+            before any footprint is read; any when None.
 
     Returns:
         The footprints and counts.
@@ -450,6 +453,11 @@ def read_spaceborne_lidar(
                 "L2A/L2B/L4A granule."
             )
         spec = PRODUCTS[product_id]
+        if missions is not None and spec.mission not in missions:
+            raise ValueError(
+                f"{os.path.basename(path)} is a {spec.mission} {spec.id} granule, "
+                f"not {' or '.join(missions)}."
+            )
         all_beams = []
         for name in sorted(handle.keys()):
             group = handle[name]
@@ -667,13 +675,10 @@ def spaceborne_lidar_layer(
         quality_filter=quality_filter,
         bbox=bbox,
         max_points=max_points,
+        # Checked right after the product is identified, before any reading.
+        missions=missions,
     )
     spec = result.spec
-    if missions is not None and spec.mission not in missions:
-        raise ValueError(
-            f"{os.path.basename(os.fspath(source))} is a {spec.mission} {spec.id} granule, "
-            f"not {' or '.join(missions)}."
-        )
     if result.kept == 0:
         raise ValueError(
             "No footprints passed the filters. Turn off quality_filter, widen the "
