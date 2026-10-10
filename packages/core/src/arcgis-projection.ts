@@ -47,6 +47,6 @@ export function normalizeArcgisWkid(value: unknown): number | undefined {
   // Digits only: `Number` would also read "1e3" or "0x10" as a code.
   const wkid =
     typeof value === "string" ? (/^\s*\d+\s*$/.test(value) ? Number(value) : undefined) : value;
-  if (typeof wkid !== "number" || !Number.isInteger(wkid) || wkid <= 0) return undefined;
+  if (typeof wkid !== "number" || !Number.isSafeInteger(wkid) || wkid <= 0) return undefined;
   return WEB_MERCATOR_WKIDS.has(wkid) ? undefined : wkid;
 }

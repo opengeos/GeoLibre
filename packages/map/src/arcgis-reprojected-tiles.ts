@@ -37,8 +37,11 @@ const METRES_PER_DEGREE = 111319.49079327357;
 const MAX_SOURCE_TILES = 64;
 /** A grid cell this many times the tile's median size spans a seam in the projection. */
 const SEAM_FACTOR = 8;
-/** Source tiles kept per layer; one screen of warped tiles reads a few dozen. */
-const SOURCE_CACHE_SIZE = 256;
+/**
+ * Source tiles kept per layer (256 KB of RGBA each): enough for one output
+ * tile's worst case and its neighbours without holding a whole session.
+ */
+const SOURCE_CACHE_SIZE = 96;
 /** Zoom levels in the view's tiling scheme. */
 const LEVELS = 24;
 
