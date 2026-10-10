@@ -5,6 +5,7 @@ import * as Cesium from "@cesium/engine";
 import { useAppStore } from "@geolibre/core";
 import {
   CesiumControlHost,
+  mirrorSignature,
   restoreCompatibilityMouseEvents,
 } from "../packages/map/src/cesium-control-host";
 import {
@@ -239,6 +240,17 @@ describe("CesiumControlHost recording facade", () => {
 
     host.destroy();
     assert.equal(viewer.dataSources.length, 0);
+  });
+
+  it("redraws the overlay only when what decides mirroring changes", () => {
+    const layer = { id: "a", opacity: 1, metadata: { sourceId: "s" } };
+    const base = mirrorSignature([layer]);
+    assert.equal(mirrorSignature([{ ...layer, opacity: 0.4 }]), base, "an opacity drag");
+    assert.notEqual(
+      mirrorSignature([{ ...layer, metadata: { sourceId: "s", nativeLayerIds: ["x"] } }]),
+      base,
+    );
+    assert.notEqual(mirrorSignature([layer, { id: "b", metadata: {} }]), base);
   });
 
   it("answers layer-scoped queries from the mirroring store layer", () => {

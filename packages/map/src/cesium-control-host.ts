@@ -31,6 +31,26 @@ type CesiumNs = typeof import("@cesium/engine");
  */
 const OFF_SCREEN_PX = -1e6;
 
+/**
+ * The store-layer fields `controlLayerMirrors` reads, as one string: the
+ * overlay only needs a redraw when this changes.
+ *
+ * @param layers - The store layers.
+ * @returns A signature of their ids and mirror metadata.
+ */
+export function mirrorSignature(
+  layers: readonly { id: string; metadata: Record<string, unknown> }[],
+): string {
+  return JSON.stringify(
+    layers.map(({ id, metadata }) => [
+      id,
+      metadata.nativeLayerIds ?? null,
+      metadata.sourceId ?? null,
+      metadata.sourceIds ?? null,
+    ]),
+  );
+}
+
 /** The pointer events layer-scoped listeners are fed from. */
 const LAYER_POINTER = { click: true, mousemove: true, mousedown: true, mouseup: true };
 
@@ -572,9 +592,16 @@ export class CesiumControlHost {
       overlayZoom = zoom;
       this.refreshOverlay();
     });
+    // Only what decides which control layers are mirrored matters here: an
+    // opacity drag or a restyle must not rebuild every overlay entity.
+    let mirrors = mirrorSignature(useAppStore.getState().layers);
     this.cleanups.push(
       useAppStore.subscribe((state, previous) => {
-        if (state.layers !== previous.layers) this.refreshOverlay();
+        if (state.layers === previous.layers) return;
+        const next = mirrorSignature(state.layers);
+        if (next === mirrors) return;
+        mirrors = next;
+        this.refreshOverlay();
       }),
     );
   }
