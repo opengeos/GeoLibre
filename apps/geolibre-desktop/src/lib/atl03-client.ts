@@ -153,6 +153,7 @@ export async function openAtl03Granule(source: Atl03Source): Promise<Atl03Granul
   return {
     beams: primary.beams,
     async readPhotons(options, onProgress) {
+      if (closed) throw new Error("The ATL03 granule was closed.");
       const beams = options.beams ?? primary.beams.map((beam) => beam.name);
       const groups = source.kind === "url" ? splitBeams(beams, REMOTE_WORKERS) : [beams];
       // Open the extra readers on the first read (each opens the file once).
@@ -166,7 +167,12 @@ export async function openAtl03Granule(source: Atl03Source): Promise<Atl03Granul
         helpers.push(spawned);
       }
       const readers = [primary, ...(await Promise.all(helpers.slice(0, groups.length - 1)))];
-      if (closed) throw new Error("The ATL03 granule was closed.");
+      if (closed) {
+        // close() ran during the await and may have missed helpers spawned
+        // for this read; release them here.
+        for (const reader of readers.slice(1)) reader.close();
+        throw new Error("The ATL03 granule was closed.");
+      }
       let bytes = 0;
       for (const reader of readers) {
         reader.onFetch = (n) => {

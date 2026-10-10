@@ -189,6 +189,9 @@ export function AddSpaceborneLidarDialog({
 
   /** Open an ATL03 granule in the worker and show its photon options. */
   const openAtl03 = async (source: Parameters<typeof openAtl03Granule>[0], name: string) => {
+    // Cleared here too: the Earthaccess handoff reaches this without the picker.
+    setError(null);
+    setStatus(null);
     downloadAbort.current?.abort();
     downloadAbort.current = null;
     setDownloadPercent(null);

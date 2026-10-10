@@ -403,8 +403,10 @@ function readPhotons(file: H5File, beams: Atl03Beam[], options: Atl03ReadOptions
     const time = new Float64Array(end - start).fill(Number.NaN);
     const segDistDs = dataset(group, "geolocation/segment_dist_x");
     const segTimeDs = dataset(group, "geolocation/delta_time");
-    const segDist = segDistDs ? readRange(segDistDs, range.lo, range.hi + 1) : null;
-    const segTime = segTimeDs ? readRange(segTimeDs, range.lo, range.hi + 1) : null;
+    // The last segment can be in view, so never read past the dataset's end.
+    const segEnd = (ds: H5Dataset) => Math.min(range.hi + 1, ds.shape?.[0] ?? range.hi + 1);
+    const segDist = segDistDs ? readRange(segDistDs, range.lo, segEnd(segDistDs)) : null;
+    const segTime = segTimeDs ? readRange(segTimeDs, range.lo, segEnd(segTimeDs)) : null;
     for (let s = range.lo; s <= range.hi; s += 1) {
       const count = range.counts[s - range.base];
       const first = range.begs[s - range.base] - 1;
@@ -475,10 +477,12 @@ function readPhotons(file: H5File, beams: Atl03Beam[], options: Atl03ReadOptions
 
 /**
  * Merge photons read in parts (one part per worker, each a subset of the
- * beams, unthinned) into one result: concatenated in part order, thinned
- * evenly across all of them to `maxPoints`, and re-numbered.
+ * beams, possibly already thinned to `maxPoints` by its worker) into one
+ * result: concatenated in part order, thinned evenly across all of them to
+ * `maxPoints`, and re-numbered. `matched` sums the parts; `stride` is the
+ * overall thinning, approximated as matched / kept.
  *
- * @param parts Results of reading disjoint beam subsets with no cap.
+ * @param parts Results of reading disjoint beam subsets.
  * @param maxPoints Cap on photons, or 0 / undefined for none.
  * @returns The merged result.
  */
