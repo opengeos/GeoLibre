@@ -7,6 +7,7 @@ import {
   type LayerStyle,
 } from "../packages/core/src/types";
 import { CesiumLayerSync, isCesiumSupportedLayerType } from "../packages/map/src/cesium-layer-sync";
+import { labelBaseColors } from "../packages/map/src/cesium-labels";
 
 // Verifies the store → Cesium reconciler against a fake Cesium namespace + viewer
 // (the real engine never loads here — its import in the module is type-only). It
@@ -636,6 +637,42 @@ describe("CesiumLayerSync", () => {
     // text = 0.2 colour alpha × 0.5 layer opacity; the opaque halo = layer opacity.
     assert.ok(Math.abs(label.fillColor.value.alpha - 0.1) < 1e-9);
     assert.ok(Math.abs(label.outlineColor.value.alpha - 0.5) < 1e-9);
+  });
+
+  it("fades a data-defined label opacity with a story fade", async () => {
+    const sync = newSync(f);
+    const fc = { type: "FeatureCollection", features: [{}] };
+    sync.sync([
+      mkLayer({
+        id: "fade",
+        type: "geojson",
+        geojson: fc as never,
+        opacity: 0.5,
+        style: { labels: { ...DEFAULT_LAYER_STYLE.labels } },
+      }),
+    ]);
+    await f.flush();
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: { values: Array<{ label?: { fillColor: { value: { alpha: number } } } }> };
+    };
+    const entity = ds.entities.values[3];
+    const opaque = (css: string) => ({
+      alpha: 1,
+      withAlpha: (alpha: number) => ({ css, alpha }),
+    });
+    // As the labeler records a label with a data-defined opacity of 0.8.
+    labelBaseColors.set(entity as never, {
+      fill: opaque("#f00") as never,
+      outline: opaque("#fff") as never,
+      opacity: 0.8,
+    });
+    // Halfway from the layer's 0.5 down: the override fades by the same half.
+    sync.setStoryLayerOpacity("fade", 0.25);
+    assert.ok(Math.abs(entity.label!.fillColor.value.alpha - 0.4) < 1e-9);
+    sync.setStoryLayerOpacity("fade", 0);
+    assert.equal(entity.label!.fillColor.value.alpha, 0, "a fade to 0 hides it");
+    sync.restoreStoryLayerStyles();
+    assert.ok(Math.abs(entity.label!.fillColor.value.alpha - 0.8) < 1e-9);
   });
 
   it("renders xyz/raster tiles as an imagery layer with opacity + visibility", () => {

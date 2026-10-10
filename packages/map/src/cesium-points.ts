@@ -198,6 +198,7 @@ export function configureClustering(
   horizon?: HorizonDepthDistance,
 ): { refresh(): void; setEnabled(enabled: boolean): void; dispose(): void } {
   const clustering = dataSource.clustering;
+  let appliedDepth = horizon?.distance() ?? Number.POSITIVE_INFINITY;
   clustering.pixelRange = plan.clusterRadius;
   clustering.minimumClusterSize = 2;
   clustering.clusterPoints = true;
@@ -220,6 +221,7 @@ export function configureClustering(
     // Bubbles re-form on every camera move, so the current horizon distance
     // stays current (see cesium-horizon.ts).
     const depth = horizon?.distance() ?? Number.POSITIVE_INFINITY;
+    appliedDepth = depth;
     cluster.point.disableDepthTestDistance = depth;
     cluster.label.show = true;
     cluster.label.text = abbreviateCount(count);
@@ -232,7 +234,8 @@ export function configureClustering(
   };
   const remove = clustering.clusterEvent.addEventListener(onCluster as never);
   clustering.enabled = true;
-  return {
+  let disposed = false;
+  const handle = {
     refresh() {
       // Flipping `enabled` marks the clusterer dirty so the next frame
       // re-runs the handler with the current appearance; a same-value write
@@ -241,15 +244,32 @@ export function configureClustering(
       clustering.enabled = false;
       clustering.enabled = true;
     },
-    setEnabled(enabled) {
+    setEnabled(enabled: boolean) {
       clustering.enabled = enabled;
     },
     dispose() {
+      disposed = true;
       remove();
       clustering.enabled = false;
     },
   };
+  // Bubbles hold a plain number, and the clusterer only re-runs at
+  // `camera.changed`'s coarse threshold; re-cluster when the horizon has
+  // moved enough that the bubbles' depth-test distance is stale.
+  horizon?.subscribe((distance) => {
+    if (disposed) return false;
+    const stale =
+      Number.isFinite(distance) && Number.isFinite(appliedDepth)
+        ? Math.abs(distance - appliedDepth) > appliedDepth * CLUSTER_HORIZON_REFRESH
+        : distance !== appliedDepth;
+    if (stale) handle.refresh();
+    return true;
+  });
+  return handle;
 }
+
+/** Relative horizon change past which cluster bubbles are re-run (see configureClustering). */
+const CLUSTER_HORIZON_REFRESH = 0.05;
 
 /**
  * Whether clustering should be active at `zoom`: the 2D map stops clustering

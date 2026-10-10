@@ -380,6 +380,49 @@ describe("configureClustering", () => {
     handle.dispose();
     assert.equal(listeners.length, 0);
   });
+
+  it("re-clusters when the horizon moves enough to stale the bubbles' depth test", () => {
+    const Cesium = makeCesium();
+    const writes: boolean[] = [];
+    const clustering = {
+      pixelRange: 0,
+      clusterEvent: { addEventListener: () => () => {} },
+    } as Record<string, unknown>;
+    Object.defineProperty(clustering, "enabled", {
+      get: () => writes[writes.length - 1] ?? false,
+      set: (v: boolean) => writes.push(v),
+    });
+    const captured: { listener?: (distance: number) => boolean } = {};
+    const horizon = {
+      property: 1000,
+      distance: () => 1000,
+      subscribe: (fn: (distance: number) => boolean) => {
+        if (fn(1000)) captured.listener = fn;
+      },
+    };
+    const handle = configureClustering(
+      Cesium as never,
+      { clustering } as never,
+      planPointRendering(pointLayer(4, { style: { pointRenderer: "cluster" } })),
+      () => ({
+        fill: "#000",
+        fillOpacity: 1,
+        stroke: "#000",
+        strokeWidth: 1,
+        strokeOpacity: 1,
+        textColor: "#000",
+        opacity: 1,
+      }),
+      horizon,
+    );
+    assert.deepEqual(writes, [true]);
+    assert.equal(captured.listener!(1020), true);
+    assert.deepEqual(writes, [true], "a small move keeps the bubbles");
+    captured.listener!(1200);
+    assert.deepEqual(writes, [true, false, true], "a large one re-runs clustering");
+    handle.dispose();
+    assert.equal(captured.listener!(5000), false, "dispose ends the subscription");
+  });
 });
 
 /** A viewer whose data sources cluster and whose primitives collect. */

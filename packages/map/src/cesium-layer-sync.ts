@@ -4019,6 +4019,17 @@ export class CesiumLayerSync {
     // Point pins and marker sprites keep their baked-in colour; multiplying by
     // white+alpha only fades them.
     const marker = Cesium.Color.WHITE.withAlpha(opacity);
+    // A data-defined label opacity replaces the layer opacity but still
+    // follows a story fade, scaled by how far the fade has taken the layer
+    // from its own opacity (a fade to 0 hides it).
+    const story = this.storyOpacities.get(entry.layer.id);
+    const storyFactor = !story
+      ? 1
+      : entry.layer.opacity > 0
+        ? story.currentOpacity / entry.layer.opacity
+        : story.currentOpacity > 0
+          ? 1
+          : 0;
     const isExtruded = Boolean(style.extrusionEnabled);
     const extColorVal = isExtruded ? extrusionColorValue(style) : null;
     const extColorStr =
@@ -4133,7 +4144,8 @@ export class CesiumLayerSync {
           // A label built with per-feature colours or a data-defined opacity
           // keeps them; only the layer opacity is reapplied.
           const base = labelBaseColors.get(entity);
-          const alpha = base?.opacity ?? opacity;
+          const alpha =
+            base?.opacity === undefined ? opacity : Math.min(1, base.opacity * storyFactor);
           entity.label.fillColor = new Cesium.ConstantProperty(
             base ? base.fill.withAlpha(base.fill.alpha * alpha) : labelFill,
           );
