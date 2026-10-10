@@ -112,6 +112,8 @@ def test_filters_by_bbox_beams_and_caps_points(tmp_path):
     assert all(f["geometry"]["coordinates"][1] <= 35.05 for f in inside.geojson["features"])
     one_beam = sl.read_spaceborne_lidar(path, beams=["gt1r"], quality_filter=False)
     assert set(one_beam.per_beam) == {"gt1r"}
+    # A bare string names one beam.
+    assert set(sl.read_spaceborne_lidar(path, beams="gt1r").per_beam) == {"gt1r"}
     capped = sl.read_spaceborne_lidar(path, quality_filter=False, max_points=7)
     assert capped.stride == 6
     assert capped.kept <= 7
@@ -192,3 +194,13 @@ def test_reports_when_no_footprint_survives(m, tmp_path):
     _atl08(path)
     with pytest.raises(ValueError, match="No footprints"):
         m.add_icesat2(path, bbox=[0, 0, 1, 1])
+
+
+def test_along_track_distance_carries_over_invalid_coordinates():
+    lat = np.array([0.0, np.nan, 0.0, 0.0])
+    lon = np.array([0.0, 0.0, 0.01, 0.02])
+    km = sl._along_track_km(np, lat, lon)
+    assert km[0] == 0.0
+    assert km[1] == 0.0
+    assert km[2] == pytest.approx(1.112, abs=0.001)
+    assert km[3] == pytest.approx(2.224, abs=0.001)

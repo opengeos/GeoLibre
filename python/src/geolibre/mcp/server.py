@@ -761,17 +761,20 @@ def build_server(workspace: Workspace) -> MCPServer:
         file = workspace.resolve(input_file, must_exist=True)
         if file.suffix.lower() not in (".h5", ".hdf5", ".he5"):
             raise ValueError("The granule must be an .h5 (HDF5) file.")
-        layer, result = spaceborne_lidar_layer(
-            file,
-            name,
-            beams=beams,
-            fields=fields,
-            quality_filter=quality_filter,
-            bbox=bbox,
-            max_points=max_points,
-            color_by=color_by,
-        )
-        summary = add(path, layer, index)
+        # Read inside edit() so a bad project path fails before the granule read.
+        with edit(path) as (project_file, project):
+            layer, result = spaceborne_lidar_layer(
+                file,
+                name,
+                beams=beams,
+                fields=fields,
+                quality_filter=quality_filter,
+                bbox=bbox,
+                max_points=max_points,
+                color_by=color_by,
+            )
+            layer_id = authoring.add_layer(project, layer, index=index)
+        summary = _summarize(project_file, project, layerId=layer_id, layerName=layer.get("name"))
         summary["footprints"] = {
             "product": result.product,
             "total": result.total,

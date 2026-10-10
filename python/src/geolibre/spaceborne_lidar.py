@@ -78,7 +78,8 @@ class ProductSpec:
 
 
 def _keep_equals(target: float):
-    return lambda value: value == target
+    # Quality rules take the whole flag array and return a boolean mask.
+    return lambda values: values == target
 
 
 PRODUCTS: dict[str, ProductSpec] = {
@@ -119,7 +120,7 @@ PRODUCTS: dict[str, ProductSpec] = {
         primary_field="h_te_best_fit",
         # ATL08 has no quality flag; keep segments with a valid terrain height.
         quality_paths=("land_segments/terrain/h_te_best_fit",),
-        quality_keep=lambda value: True,
+        quality_keep=lambda values: values == values,
     ),
     "GEDI_L2A": ProductSpec(
         id="GEDI_L2A",
@@ -311,33 +312,32 @@ def _iso_time(seconds: float) -> str | None:
 
 
 def _along_track_km(np: Any, lat: Any, lon: Any):
-    """Cumulative haversine distance per footprint, in km (4 decimals)."""
+    """Cumulative haversine distance per footprint, in km (4 decimals).
+
+    Vectorized: a GEDI beam holds hundreds of thousands of shots. An invalid
+    coordinate carries the previous total forward, as in the app's reader.
+    """
+    valid = _valid_mask(np, lon, lat)
     out = np.zeros(len(lat), dtype=np.float64)
-    total = 0.0
-    prev = None
-    for i in range(len(lat)):
-        la, lo = float(lat[i]), float(lon[i])
-        if not _valid_coordinate(lo, la):
-            out[i] = total
-            continue
-        if prev is not None:
-            p_la, p_lo = prev
-            d_la = math.radians(la - p_la)
-            d_lo = math.radians(lo - p_lo)
-            a = (
-                math.sin(d_la / 2) ** 2
-                + math.cos(math.radians(p_la))
-                * math.cos(math.radians(la))
-                * math.sin(d_lo / 2) ** 2
-            )
-            total += 2 * _EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(a)))
-        prev = (la, lo)
-        out[i] = total
+    if valid.sum() < 2:
+        return out
+    la = np.radians(lat[valid])
+    lo = np.radians(lon[valid])
+    d_la = np.diff(la)
+    d_lo = np.diff(lo)
+    a = np.sin(d_la / 2) ** 2 + np.cos(la[:-1]) * np.cos(la[1:]) * np.sin(d_lo / 2) ** 2
+    steps = 2 * _EARTH_RADIUS_M * np.arcsin(np.minimum(1.0, np.sqrt(a)))
+    cumulative = np.concatenate(([0.0], np.cumsum(steps)))
+    out[valid] = cumulative
+    # Invalid positions take the running total so far (it never decreases).
+    out = np.maximum.accumulate(np.where(valid, out, 0.0))
     return np.round(out / 1000.0, 4)
 
 
-def _valid_coordinate(lon: float, lat: float) -> bool:
-    return math.isfinite(lon) and math.isfinite(lat) and abs(lat) <= 90 and abs(lon) <= 180
+def _valid_mask(np: Any, lon: Any, lat: Any):
+    """Finite coordinates within the valid lon/lat range, as a boolean array."""
+    with np.errstate(invalid="ignore"):
+        return np.isfinite(lon) & np.isfinite(lat) & (np.abs(lat) <= 90) & (np.abs(lon) <= 180)
 
 
 def _bbox_mask(np: Any, lon: Any, lat: Any, bbox: Sequence[float]):
@@ -462,9 +462,13 @@ def read_spaceborne_lidar(
             all_beams.append(name)
         if not all_beams:
             raise ValueError(f"{os.path.basename(path)} has no beams with footprints.")
-        chosen = list(all_beams) if beams is None else [b for b in all_beams if b in set(beams)]
+        # A bare string names one beam, not one per character.
+        wanted = None if beams is None else ({beams} if isinstance(beams, str) else set(beams))
+        chosen = list(all_beams) if wanted is None else [b for b in all_beams if b in wanted]
         if beams is not None and not chosen:
-            raise ValueError(f"None of the beams {list(beams)} exist; the granule has {all_beams}.")
+            raise ValueError(
+                f"None of the beams {sorted(wanted)} exist; the granule has {all_beams}."
+            )
         field_specs = _resolve_fields(spec, fields)
 
         # First pass: the indices each beam keeps after the quality and bbox filters.
@@ -476,7 +480,7 @@ def read_spaceborne_lidar(
             lat = np.asarray(group[spec.lat][()], dtype=np.float64)
             lon = np.asarray(group[spec.lon][()], dtype=np.float64)
             total += len(lat)
-            keep = np.array([_valid_coordinate(x, y) for x, y in zip(lon, lat)], dtype=bool)
+            keep = _valid_mask(np, lon, lat)
             if quality_filter:
                 for quality_path in spec.quality_paths:
                     flag_ds = _get(group, quality_path)
@@ -485,7 +489,7 @@ def read_spaceborne_lidar(
                     flags = np.asarray(flag_ds[()], dtype=np.float64)
                     fill = _fill_value(flag_ds)
                     keep &= ~_is_fill(np, flags, fill, spec.mission)
-                    keep &= np.array([bool(spec.quality_keep(v)) for v in flags], dtype=bool)
+                    keep &= np.asarray(spec.quality_keep(flags), dtype=bool)
                     break
             if bbox is not None:
                 keep &= _bbox_mask(np, lon, lat, bbox)
