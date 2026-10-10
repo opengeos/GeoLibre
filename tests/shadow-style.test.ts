@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { RasterLayerSpecification } from "maplibre-gl";
-import { createShadowStyle } from "../packages/map/src/shadow-style";
+import {
+  controlLayerMirrors,
+  createShadowStyle,
+  storeStyleLayer,
+} from "../packages/map/src/shadow-style";
 
 function setup() {
   const events: { type: string; data?: Record<string, unknown> }[] = [];
@@ -145,5 +149,29 @@ describe("shadow style", () => {
     style.removeSource("t");
     view.setTiles(["c"]);
     assert.equal(style.getSource("t"), undefined);
+  });
+});
+
+describe("store-derived style layer ids", () => {
+  const layers = [
+    { id: "a", metadata: {} },
+    { id: "a-b", metadata: {} },
+  ];
+
+  it("resolves a derived id to its own store layer, not a dash-prefix of it", () => {
+    assert.deepEqual(storeStyleLayer(layers, "layer-a-b-fill"), {
+      id: "layer-a-b-fill",
+      type: "fill",
+      source: "source-a-b",
+    });
+    assert.equal(storeStyleLayer(layers, "layer-a-cluster-count")?.type, "symbol");
+    assert.equal(storeStyleLayer(layers, "layer-a-unknown"), undefined);
+  });
+
+  it("mirrors a derived id only to the layer that derives it", () => {
+    assert.deepEqual(
+      controlLayerMirrors(layers, "layer-a-b-fill", undefined).map((layer) => layer.id),
+      ["a-b"],
+    );
   });
 });

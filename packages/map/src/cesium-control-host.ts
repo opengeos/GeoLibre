@@ -225,8 +225,11 @@ class CesiumMapFacade extends maplibregl.Evented {
     return true;
   }
 
+  /** "globe" in the 3D scene, "mercator" in the flat 2D and Columbus modes. */
   getProjection() {
-    return { type: "globe" };
+    const C = this.Cesium;
+    const mode = this.scene()?.mode;
+    return { type: C && mode !== undefined && mode !== C.SceneMode.SCENE3D ? "mercator" : "globe" };
   }
 
   triggerRepaint() {

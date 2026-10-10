@@ -499,6 +499,18 @@ describe("CesiumControlHost", () => {
     host.destroy();
   });
 
+  it("reports a Mercator projection in the flat scene modes", () => {
+    const sceneViewer = makeSceneViewer(doc);
+    const Cesium = { ...makeFakeCesium(), SceneMode: { SCENE3D: 3, SCENE2D: 2 } };
+    const host = new CesiumControlHost(sceneViewer as never, parent, Cesium as never);
+    const facade = facadeOf(host);
+    Object.assign(sceneViewer.scene, { mode: 3 });
+    assert.equal(facade.getProjection().type, "globe");
+    Object.assign(sceneViewer.scene, { mode: 2 });
+    assert.equal(facade.getProjection().type, "mercator");
+    host.destroy();
+  });
+
   it("projects and unprojects through the Cesium scene", () => {
     const sceneViewer = makeSceneViewer(doc);
     const host = new CesiumControlHost(sceneViewer as never, parent, makeFakeCesium() as never);

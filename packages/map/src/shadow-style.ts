@@ -289,7 +289,7 @@ export function controlLayerMirrors<L extends { id: string; metadata: Record<str
     };
     return (
       layer.id === nativeLayerId ||
-      nativeLayerId.startsWith(nativeLayerIdPrefix(layer.id)) ||
+      storeStyleLayerType(layer.id, nativeLayerId) !== undefined ||
       (Array.isArray(nativeLayerIds) && nativeLayerIds.includes(nativeLayerId)) ||
       (sourceId !== undefined &&
         (layer.metadata.sourceId === sourceId ||
@@ -331,10 +331,23 @@ export function storeStyleLayer(
   id: string,
 ): LayerSpecification | undefined {
   for (const layer of layers) {
-    const prefix = nativeLayerIdPrefix(layer.id);
-    if (!id.startsWith(prefix)) continue;
-    const type = STORE_STYLE_LAYER_TYPES[id.slice(prefix.length)];
+    const type = storeStyleLayerType(layer.id, id);
     if (type) return { id, type, source: storeSourceId(layer.id) } as LayerSpecification;
   }
   return undefined;
+}
+
+/**
+ * The type of the style layer `id` when `syncLayers` derives it for the store
+ * layer `layerId`, else undefined. The whole remainder after the prefix must
+ * be a known suffix: with store layers `a` and `a-b`, `layer-a-b-fill` is
+ * `a-b`'s fill, not something of `a`'s.
+ */
+function storeStyleLayerType(layerId: string, id: string): LayerSpecification["type"] | undefined {
+  const prefix = nativeLayerIdPrefix(layerId);
+  if (!id.startsWith(prefix)) return undefined;
+  const suffix = id.slice(prefix.length);
+  return Object.hasOwn(STORE_STYLE_LAYER_TYPES, suffix)
+    ? STORE_STYLE_LAYER_TYPES[suffix]
+    : undefined;
 }

@@ -245,7 +245,8 @@ describe("CesiumControlHost recording facade", () => {
   it("redraws the overlay only when what decides mirroring changes", () => {
     const layer = { id: "a", opacity: 1, metadata: { sourceId: "s" } };
     const base = mirrorSignature([layer]);
-    assert.equal(mirrorSignature([{ ...layer, opacity: 0.4 }]), base, "an opacity drag");
+    const faded = { ...layer, opacity: 0.4 };
+    assert.equal(mirrorSignature([faded]), base, "an opacity drag");
     assert.notEqual(
       mirrorSignature([{ ...layer, metadata: { sourceId: "s", nativeLayerIds: ["x"] } }]),
       base,
