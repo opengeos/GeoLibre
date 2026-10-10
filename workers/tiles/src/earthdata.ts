@@ -209,7 +209,9 @@ export async function handleEarthdataDownload(
   if (cacheKey && cachedUrl && isEarthdataRedirectUrl(cachedUrl)) {
     try {
       const upstream = await fetchImpl(cachedUrl, {
-        headers: range ? { range } : {},
+        headers: range
+          ? { range, "accept-encoding": "identity" }
+          : { "accept-encoding": "identity" },
         redirect: "manual",
       });
       if (upstream.ok) response = upstream;
@@ -222,6 +224,8 @@ export async function handleEarthdataDownload(
     const headers = new Headers();
     if (range) headers.set("range", range);
     if (hop === 0 && authorization) headers.set("authorization", authorization);
+    // Content-Length must describe the bytes relayed, so ask for them as stored.
+    headers.set("accept-encoding", "identity");
     let upstream: Response;
     try {
       upstream = await fetchImpl(url, { headers, redirect: "manual" });
@@ -267,8 +271,11 @@ export async function handleEarthdataDownload(
     if (value) headers.set(name, value);
   }
   headers.set("cache-control", "private, no-store");
-  const fileName = new URL(target).pathname.split("/").pop();
-  if (fileName)
-    headers.set("content-disposition", `attachment; filename="${fileName.replace(/"/g, "")}"`);
+  // A header-safe name: Headers.set throws on CR/LF and non-Latin-1 text.
+  const fileName = (new URL(target).pathname.split("/").pop() ?? "").replace(
+    /[^A-Za-z0-9._-]/g,
+    "_",
+  );
+  if (fileName) headers.set("content-disposition", `attachment; filename="${fileName}"`);
   return new Response(response.body, { status: response.status, headers });
 }

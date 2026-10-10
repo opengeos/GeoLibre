@@ -18,7 +18,10 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+    },
     time::Duration,
 };
 
@@ -140,6 +143,24 @@ impl Drop for PartFile {
             let _ = fs::remove_file(&self.path);
         }
     }
+}
+
+/// `folder/name`, or `folder/stem (n).ext` when that exists, so a folder
+/// download never silently replaces a file already there (the save dialog
+/// asks the user about that itself).
+fn unique_path(folder: &Path, name: &str) -> PathBuf {
+    let first = folder.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem, format!(".{extension}")),
+        _ => (name, String::new()),
+    };
+    (1..)
+        .map(|n| folder.join(format!("{stem} ({n}){extension}")))
+        .find(|candidate| !candidate.exists())
+        .unwrap_or(first)
 }
 
 /// Reduce a suggested name to a safe single path component.
@@ -351,7 +372,7 @@ pub(crate) async fn download_remote_file(
     };
     let saves_to_disk = request.save || folder.is_some();
     let destination = if let Some(folder) = folder {
-        folder.join(&file_name)
+        unique_path(&folder, &file_name)
     } else if request.save {
         match pick_save_path(&app, &file_name).await? {
             Some(path) => path,
@@ -417,7 +438,8 @@ pub(crate) async fn pick_download_folder(
     if !path.is_dir() {
         return Err("The chosen folder does not exist.".into());
     }
-    let id = format!("folder-{}", downloads.folders.lock().unwrap().len() + 1);
+    static NEXT_FOLDER_ID: AtomicU64 = AtomicU64::new(1);
+    let id = format!("folder-{}", NEXT_FOLDER_ID.fetch_add(1, Ordering::Relaxed));
     let shown = path.to_string_lossy().into_owned();
     downloads.folders.lock().unwrap().insert(id.clone(), path);
     Ok(Some(PickedDownloadFolder { id, path: shown }))
@@ -486,6 +508,20 @@ mod tests {
         assert_eq!(headers.len(), 1);
         assert_eq!(headers["authorization"], "Bearer abc");
         assert!(request_headers(vec![("bad name".into(), "x".into())]).is_err());
+    }
+
+    #[test]
+    fn folder_downloads_never_replace_an_existing_file() {
+        let dir = std::env::temp_dir().join(format!("geolibre-unique-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        assert_eq!(unique_path(&dir, "B04.tif"), dir.join("B04.tif"));
+        fs::write(dir.join("B04.tif"), b"x").unwrap();
+        assert_eq!(unique_path(&dir, "B04.tif"), dir.join("B04 (1).tif"));
+        fs::write(dir.join("B04 (1).tif"), b"x").unwrap();
+        assert_eq!(unique_path(&dir, "B04.tif"), dir.join("B04 (2).tif"));
+        fs::write(dir.join("README"), b"x").unwrap();
+        assert_eq!(unique_path(&dir, "README"), dir.join("README (1)"));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

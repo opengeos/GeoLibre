@@ -129,6 +129,26 @@ describe("Earthdata download proxy", () => {
     assert.equal(hops.length, 1);
   });
 
+  it("asks for identity encoding and sends a header-safe file name", async () => {
+    const encodings: (string | null)[] = [];
+    const odd =
+      "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/x/a%0D%0Ab%C3%A9%22.tif";
+    const upstream = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      encodings.push(new Headers(init?.headers).get("accept-encoding"));
+      return new Response("TIF", { status: 200 });
+    };
+    const response = await handleEarthdataDownload(
+      request(odd, { authorization: "Bearer e" }),
+      upstream,
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(encodings, ["identity"]);
+    assert.equal(
+      response.headers.get("content-disposition"),
+      'attachment; filename="a_0D_0Ab_C3_A9_22.tif"',
+    );
+  });
+
   it("answers 502 to a malformed redirect Location", async () => {
     const hops: Hop[] = [];
     const response = await handleEarthdataDownload(

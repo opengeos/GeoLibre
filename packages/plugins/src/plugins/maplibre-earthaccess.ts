@@ -138,6 +138,8 @@ interface PanelState {
   searching: boolean;
   granuleError: string | null;
   bbox: Bbox | null;
+  /** The date range of the current search, frozen for its later pages. */
+  temporal: [string, string] | null;
   selectedId: string | null;
   transfers: Map<string, TransferState>;
   authOpen: boolean;
@@ -173,6 +175,7 @@ function initialState(): PanelState {
     searching: false,
     granuleError: null,
     bbox: null,
+    temporal: null,
     selectedId: null,
     transfers: new Map(),
     authOpen: false,
@@ -283,7 +286,7 @@ function ensureFootprintLayers(map: MapLibreMap): void {
       id: FOOTPRINT_FILL_LAYER_ID,
       type: "fill",
       source: FOOTPRINT_SOURCE_ID,
-      filter: ["==", ["geometry-type"], "Polygon"],
+      filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
       paint: { "fill-color": FOOTPRINT_COLOR, "fill-opacity": 0.12 },
     });
   }
@@ -498,6 +501,8 @@ async function searchGranules(more: boolean): Promise<void> {
   if (!more) {
     clearGranules();
     state.bbox = viewBbox();
+    // "Load more" pages the same query, even if the dates were edited since.
+    state.temporal = [state.start, state.end];
   }
   const generation = ++searchGeneration;
   state.searching = true;
@@ -508,7 +513,7 @@ async function searchGranules(more: boolean): Promise<void> {
     const page = await searchEarthdataGranules({
       collectionConceptId: collection.conceptId,
       bbox: state.bbox,
-      temporal: [state.start, state.end],
+      temporal: state.temporal,
       pageSize: GRANULE_PAGE_SIZE,
       pageNum,
     });
@@ -774,6 +779,8 @@ function buildAuthSection(): HTMLElement {
   const tokenRow = element("div", CSS.row);
   tokenRow.append(tokenInput, saveToken);
   const tokenLink = element("a", CSS.link, tr("generateToken", "Generate a token"));
+  // An href keeps the link in the tab order; the click handler routes it.
+  tokenLink.href = EARTHDATA_TOKEN_PAGE_URL;
   tokenLink.addEventListener("click", (event) => {
     event.preventDefault();
     openExternal(EARTHDATA_TOKEN_PAGE_URL);

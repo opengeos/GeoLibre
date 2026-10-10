@@ -22,7 +22,14 @@ const listeners = new Set<() => void>();
  */
 export function requestSpaceborneLidarGranule(granule: PendingSpaceborneLidarGranule): void {
   pending = granule;
-  for (const listener of [...listeners]) listener();
+  for (const listener of [...listeners]) {
+    // One failing listener must not stop the others (or reach the plugin).
+    try {
+      listener();
+    } catch (error) {
+      console.error("[GeoLibre] ICESat-2 / GEDI handoff listener failed", error);
+    }
+  }
 }
 
 /**
