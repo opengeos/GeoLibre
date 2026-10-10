@@ -3,13 +3,45 @@ import type { Channel, invoke as nativeInvoke } from "@tauri-apps/api/core";
 interface ArcGISResponse {
   status: number;
   body: string;
+  /** An attachment download's bytes, base64-encoded; `body` is then empty. */
+  bodyBase64?: string;
+  contentType?: string;
 }
+
+/** A form-encoded edit, or a multipart attachment upload with its boundary type. */
+type ArcGISRequestBody = string | { base64: string; contentType: string };
 
 type ArcGISRequest = (
   url: string,
   signal?: AbortSignal | null,
-  body?: string,
+  body?: ArcGISRequestBody,
 ) => Promise<ArcGISResponse>;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  // Chunked so a large file does not overflow the argument limit of apply().
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** Serialize a multipart upload the way the browser would send it. */
+async function encodeFormData(body: FormData): Promise<{ base64: string; contentType: string }> {
+  const encoded = new Response(body);
+  const contentType = encoded.headers.get("Content-Type");
+  if (!contentType?.startsWith("multipart/form-data")) {
+    throw new Error("Could not encode the ArcGIS upload.");
+  }
+  return { base64: bytesToBase64(new Uint8Array(await encoded.arrayBuffer())), contentType };
+}
 
 /** Adapt the guarded Rust command to ArcGIS's fetch transport. */
 export function createNativeArcGISFetch(request: ArcGISRequest): typeof globalThis.fetch {
@@ -24,9 +56,16 @@ export function createNativeArcGISFetch(request: ArcGISRequest): typeof globalTh
       typeof body === "string" &&
       headers.get("Content-Type") === "application/x-www-form-urlencoded" &&
       [...headers].length === 1;
-    if (!post && (method.toUpperCase() !== "GET" || body != null || [...headers].length > 0)) {
+    // A FormData body sets its own multipart type, boundary included.
+    const multipart =
+      method.toUpperCase() === "POST" && body instanceof FormData && [...headers].length === 0;
+    if (
+      !post &&
+      !multipart &&
+      (method.toUpperCase() !== "GET" || body != null || [...headers].length > 0)
+    ) {
       throw new Error(
-        "Native ArcGIS fetch only supports GET without headers or a body, or form-encoded POST.",
+        "Native ArcGIS fetch only supports GET without headers or a body, form-encoded POST, or a FormData upload.",
       );
     }
     const url = input instanceof Request ? input.url : input.toString();
@@ -34,8 +73,14 @@ export function createNativeArcGISFetch(request: ArcGISRequest): typeof globalTh
     signal?.throwIfAborted();
     let onAbort: (() => void) | undefined;
     try {
+      const payload = multipart
+        ? await encodeFormData(body as FormData)
+        : post
+          ? (body as string)
+          : undefined;
+      signal?.throwIfAborted();
       // Reject promptly while the native cancellation acknowledgement is in flight.
-      const pending = request(url, signal, post ? (body as string) : undefined);
+      const pending = request(url, signal, payload);
       const result = signal
         ? await Promise.race([
             pending,
@@ -46,8 +91,11 @@ export function createNativeArcGISFetch(request: ArcGISRequest): typeof globalTh
             }),
           ])
         : await pending;
-      return new Response([204, 205, 304].includes(result.status) ? null : result.body, {
+      const content =
+        result.bodyBase64 === undefined ? result.body : base64ToBytes(result.bodyBase64);
+      return new Response([204, 205, 304].includes(result.status) ? null : content, {
         status: result.status,
+        headers: result.contentType ? { "Content-Type": result.contentType } : undefined,
       });
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
@@ -85,7 +133,11 @@ export function createArcGISRequest(
         url,
         requestId,
         ready,
-        ...(body === undefined ? {} : { body }),
+        ...(body === undefined
+          ? {}
+          : typeof body === "string"
+            ? { body }
+            : { bodyBase64: body.base64, contentType: body.contentType }),
       });
     } finally {
       signal?.removeEventListener("abort", onAbort);

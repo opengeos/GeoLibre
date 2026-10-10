@@ -2851,6 +2851,41 @@ async function withFreshArcGISToken(options: ArcGISLayerOptions): Promise<ArcGIS
 }
 const arcgisSavingLayers = new Set<string>();
 
+/** A feature layer's live REST connection, for requests beyond feature queries and edits. */
+export interface ArcGISFeatureLayerConnection {
+  /** The layer's REST URL, without `/query`. */
+  layerUrl: string;
+  /** A current access token, if the connection has one. */
+  token: string | undefined;
+  /** The installed transport: browser fetch, or the desktop's native one. */
+  fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+}
+
+/**
+ * Resolve the live connection of an ArcGIS feature layer: its REST URL and a
+ * current token. Credentials never leave the connection, so a layer restored
+ * from a project without one gets no token and the service decides access.
+ *
+ * @param layerId - A layer added through the ArcGIS feature path.
+ * @returns The connection, or `undefined` when the layer has no service URL.
+ */
+export async function arcGISFeatureLayerConnection(
+  layerId: string,
+): Promise<ArcGISFeatureLayerConnection | undefined> {
+  const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
+  const queryUrl = layer?.source.arcgisQueryUrl;
+  if (layer?.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND || typeof queryUrl !== "string")
+    return undefined;
+  const options = await withFreshArcGISToken(
+    arcgisEditOptions.get(layerId) ?? { layerType: "feature", sourceType: "url" },
+  );
+  return {
+    layerUrl: trimTrailingSlash(queryUrl).replace(/\/query$/i, ""),
+    token: options.token?.trim() || undefined,
+    fetch: arcGISFetch,
+  };
+}
+
 function arcGISBaseline(layer: GeoLibreLayer): FeatureCollection | undefined {
   const value = layer.metadata.arcgisEditBaseline as FeatureCollection | undefined;
   return value?.type === "FeatureCollection" && Array.isArray(value.features) ? value : undefined;

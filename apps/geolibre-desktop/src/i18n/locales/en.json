@@ -10516,7 +10516,11 @@
       "editsNotPermitted": "Layer permissions do not allow the requested edits.",
       "incompleteEditResults": "Incomplete ArcGIS edit results.",
       "noInsertedObjectIds": "ArcGIS did not return inserted object IDs.",
-      "saveNotConfirmed": "ArcGIS save could not be confirmed. Check the service and add the layer again before saving to avoid duplicate inserts."
+      "saveNotConfirmed": "ArcGIS save could not be confirmed. Check the service and add the layer again before saving to avoid duplicate inserts.",
+      "attachmentSignInRequired": "The ArcGIS service requires a valid sign-in for this attachment operation. Sign in again and retry.",
+      "attachmentNotPermitted": "You do not have permission for this attachment operation on the ArcGIS service.",
+      "attachmentInvalidResponse": "The ArcGIS service returned an unexpected attachment response.",
+      "attachmentUnconfirmed": "The attachment change could not be confirmed. Refresh the attachment list before trying again."
     }
   },
   "spaceborneLidar": {
@@ -10556,5 +10560,37 @@
     "elevationAxis": "Elevation (m)",
     "tooltipDistance": "{{value}} km",
     "hint": "Wheel to zoom, drag to pan, click to select a footprint."
+  },
+  "attachments": {
+    "title": "Attachments",
+    "openTitle": "Show the files the ArcGIS service stores for the selected record",
+    "openTitleNoRecord": "Select one record saved to the ArcGIS service to show its attachments",
+    "description": "Files stored by the service for record {{objectId}} of {{layer}}.",
+    "savesDirectly": "Adding, replacing and deleting files saves to the service immediately.",
+    "add": "Add files",
+    "refresh": "Refresh",
+    "loading": "Loading attachments…",
+    "empty": "This record has no attachments.",
+    "preview": "Preview",
+    "previewAria": "Preview {{name}}",
+    "download": "Download",
+    "downloadAria": "Download {{name}}",
+    "replace": "Replace",
+    "replaceAria": "Replace {{name}}",
+    "delete": "Delete",
+    "deleteAria": "Delete {{name}}",
+    "confirmDelete": "Delete from the service?",
+    "uploading_one": "Uploading {{count}} file…",
+    "uploading_other": "Uploading {{count}} files…",
+    "replacing": "Replacing {{name}}…",
+    "deleting": "Deleting {{name}}…",
+    "downloading": "Downloading {{name}}…",
+    "loadingPreview": "Loading {{name}}…",
+    "added": "Added {{name}}.",
+    "replaced": "Replaced {{name}} with {{file}}.",
+    "deleted": "Deleted {{name}}.",
+    "saved": "Saved {{name}}.",
+    "notSent": "{{name}} was not sent.",
+    "fileFailed": "{{name}}: {{message}}"
   }
 }

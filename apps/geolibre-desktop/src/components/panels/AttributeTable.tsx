@@ -25,6 +25,8 @@ import {
   useLayer,
 } from "@geolibre/core";
 import {
+  arcGISAttachmentObjectId,
+  arcGISAttachmentSupport,
   arcGISAttributeConstraints,
   arcGISLayerHasPendingEdits,
   getDuckDBLayerRows,
@@ -76,6 +78,7 @@ import {
   LayoutDashboard,
   MoreHorizontal,
   MousePointerSquareDashed,
+  Paperclip,
   Pencil,
   PanelBottomClose,
   PanelBottomOpen,
@@ -141,6 +144,7 @@ import {
 import { AttributeChartDialog } from "./AttributeChartDialog";
 import { AttributeStatsDialog } from "./AttributeStatsDialog";
 import { ColumnExplorerDialog } from "./ColumnExplorerDialog";
+import { ArcGISAttachmentsDialog } from "./ArcGISAttachmentsDialog";
 import {
   exportVectorLayer,
   formatAttributeValue,
@@ -628,6 +632,18 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
     ? duckDBRowsToAttributeRows(duckdbRows)
     : geojsonRows;
   const layerCaps = resolveLayerCapabilities(layer);
+  // ArcGIS service attachments of the one selected record, keyed by its object
+  // ID; a feature not yet saved to the service has none to show.
+  const attachmentSupport = useMemo(() => arcGISAttachmentSupport(layer), [layer]);
+  const attachmentObjectId = useMemo(() => {
+    if (!attachmentSupport?.list || !layer || selectedFeatureIds.length !== 1) return undefined;
+    const feature = features.find((f, index) => String(f.id ?? index) === selectedFeatureIds[0]);
+    return arcGISAttachmentObjectId(layer, feature);
+  }, [attachmentSupport, layer, features, selectedFeatureIds]);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  useEffect(() => {
+    if (attachmentObjectId === undefined) setAttachmentsOpen(false);
+  }, [attachmentObjectId]);
   const hasAttributeSource = Boolean((layer?.geojson || isDuckDBLayer) && layerCaps.query);
   // Add Vector Layer layers are read-only here (see isReadOnlyAttributeLayer).
   const isReadOnlyVectorLayer = isReadOnlyAttributeLayer(layer);
@@ -2126,6 +2142,23 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
         >
           <MousePointerSquareDashed className="h-3.5 w-3.5" />
         </Button>
+        {attachmentSupport?.list ? (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            title={
+              attachmentObjectId !== undefined
+                ? t("attachments.openTitle")
+                : t("attachments.openTitleNoRecord")
+            }
+            aria-label={t("attachments.title")}
+            disabled={attachmentObjectId === undefined}
+            onClick={() => setAttachmentsOpen(true)}
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="icon"
@@ -2714,6 +2747,16 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
           </div>
         </DialogContent>
       </Dialog>
+      {layer && attachmentSupport && attachmentObjectId !== undefined ? (
+        <ArcGISAttachmentsDialog
+          open={attachmentsOpen}
+          onOpenChange={setAttachmentsOpen}
+          layerId={layer.id}
+          layerName={layer.name}
+          objectId={attachmentObjectId}
+          support={attachmentSupport}
+        />
+      ) : null}
       <AttributeChartDialog
         open={chartOpen}
         onOpenChange={setChartOpen}

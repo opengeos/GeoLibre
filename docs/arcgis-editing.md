@@ -132,6 +132,39 @@ Access tokens stay in the live connection and are not saved in the project.
 Re-add protected services with a current token after reopening a project or when
 an existing token expires.
 
+## Attachments
+
+Records in a layer that advertises attachments (`hasAttachments`) can carry
+photos, PDFs, documents and other files stored by the service. Select one record
+in the attribute table and choose the paperclip button to list its attachments
+with their names, types and sizes.
+
+- **Download** saves an attachment's original bytes under its stored name.
+- **Preview** shows JPEG, PNG, GIF, WebP, BMP and AVIF images inline. Other
+  types, including SVG, PDF and Office documents, are download-only, so no
+  attachment content runs inside GeoLibre.
+- **Add files** uploads one or more files, one request per file, each with its
+  own result.
+- **Replace** uploads new content for an attachment and keeps its ID.
+- **Delete** asks for confirmation, then deletes that one attachment.
+
+Attachment changes do not join the pending feature edits: each one saves to the
+service immediately and the list is read back from the service afterwards. A
+new feature gets attachments once **Save edits to ArcGIS service** has given it
+an object ID. Attachments are addressed by layer, object ID and attachment ID,
+never by file name, so duplicate names are safe. If an upload's response is
+lost or the upload is cancelled in flight, GeoLibre reports the change as
+unconfirmed. Refresh the list before retrying so the file is not added twice.
+
+Adding needs the layer's Create or Update capability, and replacing or deleting
+needs Update, matching Esri's attachment operations. Versioned layers and
+MapServer layers list and download attachments only. The service still decides
+for the signed-in user, and its file-type and size policy applies: a refused
+file is reported with the service's message. The desktop app transfers at most
+64 MiB per request. Attachments use the layer's connection, so signing in or a
+token works the same as for feature edits, and no file, token or download URL is
+saved in the project.
+
 ## Signing in with ArcGIS
 
 In the **Add Data → ArcGIS Layer** dialog, set **Authentication** to **Sign in with ArcGIS** instead of
@@ -182,10 +215,16 @@ cannot be written through feature editing. GeoLibre validates basic field types,
 nullability, string lengths, and coded-value and range domains, including those
 a type or subtype overrides.
 
-Versioned services, M coordinates, dates in an unknown timezone, attachments,
+Versioned services, M coordinates, dates in an unknown timezone,
 related-record editing, and offline synchronization are outside this implementation.
+Attachments of standalone tables, the bulk `queryAttachments` operation,
+attachment keywords and upload IDs are not supported yet.
 There is no remote conflict-resolution protocol: if another client changes the
 same attribute or geometry, the service decides which submitted edit is accepted.
 Saving a project or exporting a layer does not itself write edits to the service.
 
-The implementation uses Esri's [layer applyEdits API](https://developers.arcgis.com/rest/services-reference/enterprise/apply-edits-feature-service-layer/).
+The implementation uses Esri's [layer applyEdits API](https://developers.arcgis.com/rest/services-reference/enterprise/apply-edits-feature-service-layer/)
+and its attachment operations ([attachment infos](https://developers.arcgis.com/rest/services-reference/enterprise/attachment-infos-feature-service/),
+[add](https://developers.arcgis.com/rest/services-reference/enterprise/add-attachment/),
+[update](https://developers.arcgis.com/rest/services-reference/enterprise/update-attachment/) and
+[delete](https://developers.arcgis.com/rest/services-reference/enterprise/delete-attachments/)).

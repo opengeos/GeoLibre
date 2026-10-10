@@ -137,6 +137,17 @@ export {
 } from "./plugins/arcgis-layer";
 export type { ArcGISDomainDiagnostic } from "./plugins/arcgis-domains";
 export {
+  addArcGISAttachment,
+  arcGISAttachmentObjectId,
+  arcGISAttachmentSupport,
+  deleteArcGISAttachments,
+  downloadArcGISAttachment,
+  listArcGISAttachments,
+  updateArcGISAttachment,
+  type ArcGISAttachmentInfo,
+  type ArcGISAttachmentSupport,
+} from "./plugins/arcgis-attachments";
+export {
   closeBookmarkPanel,
   closeColorbarPanel,
   closeHtmlPanel,

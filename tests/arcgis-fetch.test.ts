@@ -127,3 +127,38 @@ it("passes form-encoded ArcGIS writes to the native transport without changing t
   });
   assert.equal((await response.json()).deleteResults[0].success, true);
 });
+
+it("sends a FormData upload as multipart bytes with its boundary type", async () => {
+  const fetchImpl = createNativeArcGISFetch(async (url, _signal, posted) => {
+    assert.equal(url, "https://example.com/FeatureServer/0/7/addAttachment");
+    assert.ok(posted && typeof posted === "object");
+    assert.match(posted.contentType, /^multipart\/form-data; boundary=/);
+    const decoded = Buffer.from(posted.base64, "base64");
+    assert.ok(decoded.includes(Buffer.from([0x89, 0xff, 0x00])));
+    assert.ok(decoded.includes(Buffer.from('filename="photo 1.png"')));
+    return { status: 200, body: '{"addAttachmentResult":{"objectId":3,"success":true}}' };
+  });
+  const form = new FormData();
+  form.set("f", "json");
+  form.set("attachment", new File([new Uint8Array([0x89, 0xff, 0x00])], "photo 1.png"));
+  const response = await fetchImpl("https://example.com/FeatureServer/0/7/addAttachment", {
+    method: "POST",
+    body: form,
+  });
+  assert.equal((await response.json()).addAttachmentResult.objectId, 3);
+});
+
+it("returns a binary attachment body byte for byte with its content type", async () => {
+  const fetchImpl = createNativeArcGISFetch(async () => ({
+    status: 200,
+    body: "",
+    bodyBase64: Buffer.from([0x89, 0xff, 0x00, 0x50]).toString("base64"),
+    contentType: "image/png",
+  }));
+  const response = await fetchImpl("https://example.com/FeatureServer/0/7/attachments/1");
+  assert.equal(response.headers.get("Content-Type"), "image/png");
+  assert.deepEqual(
+    new Uint8Array(await response.arrayBuffer()),
+    new Uint8Array([0x89, 0xff, 0x00, 0x50]),
+  );
+});
