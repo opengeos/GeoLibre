@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseHTML } from "linkedom";
 import { arcgisFeatureSelectionMap } from "../packages/map/src/arcgis-feature-selection";
-import type { ArcgisView } from "../packages/map/src/arcgis-sdk";
+import type { ArcgisPoint, ArcgisView } from "../packages/map/src/arcgis-sdk";
 import type { MapEngine } from "../packages/map/src/map-engine";
+import { arcgisPointLngLat } from "../packages/map/src/arcgis-engine";
 
 // The shared selection gestures (map-feature-selection.ts) drive a
 // MapLibre-shaped map; this adapter is what they drive on ArcGIS (#2477).
@@ -26,11 +27,14 @@ function makeView() {
   let resumed = 0;
   const engine = {
     getRenderSurface: () => null,
+    lngLatOf: (point: ArcgisPoint | null) => arcgisPointLngLat(point),
     suspendNavigation: () => {
       suspended++;
       return () => resumed++;
     },
-  } as unknown as MapEngine;
+  } as unknown as MapEngine & {
+    lngLatOf(point: ArcgisPoint | null | undefined): [number, number] | null;
+  };
   const fire = (type: string, event: Record<string, unknown>) => {
     for (const handler of handlers.get(type) ?? []) handler(event);
   };

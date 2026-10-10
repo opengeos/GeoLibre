@@ -598,6 +598,7 @@ export function loadArcgisSdk(
 export function resetArcgisSdkForTests(): void {
   sdkPromise = null;
   scenePromise = null;
+  projectPromise = null;
 }
 
 // -------------------------------------------------------------- 3D modules
@@ -670,6 +671,45 @@ export function loadArcgisSceneSdk(
       });
   }
   return scenePromise;
+}
+
+// ------------------------------------------------------------- projection
+
+/**
+ * `geometry/operators/projectOperator`: client-side projection between
+ * coordinate systems. Only a flat map in a projection other than Web Mercator
+ * needs it (issue #2708), so it loads with that map, not with the core SDK.
+ */
+export interface ArcgisProjectOperator {
+  load(): Promise<void>;
+  isLoaded(): boolean;
+  /** The geometry in `outSpatialReference`, or null when it cannot be projected. */
+  execute<T>(geometry: T, outSpatialReference: { wkid: number }): T | null;
+}
+
+let projectPromise: Promise<ArcgisProjectOperator> | null = null;
+
+/**
+ * Load the project operator and its projection engine once per page; a failed
+ * load is forgotten so the next mount retries, as for the core SDK.
+ */
+export function loadArcgisProjectOperator(
+  importer: ArcgisModuleImporter = defaultImporter,
+): Promise<ArcgisProjectOperator> {
+  if (!projectPromise) {
+    projectPromise = loadArcgisSdk(importer)
+      .then(() => importer(arcgisModuleUrl("geometry/operators/projectOperator")))
+      .then(async (module) => {
+        const operator = (module.default ?? module) as ArcgisProjectOperator;
+        if (!operator.isLoaded()) await operator.load();
+        return operator;
+      })
+      .catch((error: unknown) => {
+        projectPromise = null;
+        throw error;
+      });
+  }
+  return projectPromise;
 }
 
 // ---------------------------------------------------------------------- CSS

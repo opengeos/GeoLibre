@@ -75,6 +75,7 @@ import {
   type ArcgisLayer,
   type ArcgisMap,
   type ArcgisPoint,
+  type ArcgisProjectOperator,
   type ArcgisSceneSdk,
   type ArcgisSceneView,
   type ArcgisSdk,
@@ -455,6 +456,45 @@ export function geojsonToArcgisGeometry(geometry: Geometry): ArcgisGeometryJson 
 }
 
 /**
+ * Project a geometry with the project operator, or null when it cannot be
+ * projected (a point outside the projection's domain).
+ */
+function safeProject<T>(operator: ArcgisProjectOperator, geometry: T): T | null {
+  try {
+    return operator.execute(geometry, { wkid: 4326 });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A view point as `[lng, lat]`, or null when there is no point or it has no
+ * finite geographic position. Points in Web Mercator or WGS 84 carry
+ * longitude/latitude; any other projection's are projected with
+ * `projectOperator` (issue #2708).
+ *
+ * Args:
+ *   point: A point from the view (`center`, `toMap`).
+ *   projectOperator: The loaded project operator, when the view needs one.
+ *
+ * Returns:
+ *   The point's longitude and latitude, or null.
+ */
+export function arcgisPointLngLat(
+  point: ArcgisPoint | null | undefined,
+  projectOperator?: ArcgisProjectOperator,
+): [number, number] | null {
+  if (!point) return null;
+  if (Number.isFinite(point.longitude) && Number.isFinite(point.latitude))
+    return [point.longitude, point.latitude];
+  if (!projectOperator) return null;
+  const projected = safeProject(projectOperator, point);
+  return projected && Number.isFinite(projected.x) && Number.isFinite(projected.y)
+    ? [projected.x, projected.y]
+    : null;
+}
+
+/**
  * The view's zoom level. A MapView with no tiling scheme (the Blank basemap)
  * reports -1, so the level is derived from its scale there; a view with no
  * scale yet (before it is ready) reads as zoom 0 rather than a non-finite one.
@@ -625,6 +665,13 @@ export class ArcgisEngine implements MapEngine {
       /** Whether an API key is configured, so Esri basemap styles are usable. */
       hasApiKey?: boolean;
       /**
+       * The loaded project operator, given when the flat view is in a
+       * projection other than Web Mercator (issue #2708). Its points carry no
+       * longitude/latitude, so every map position is projected through it,
+       * and tiled basemaps (which the SDK cannot reproject) are not drawn.
+       */
+      projectOperator?: ArcgisProjectOperator;
+      /**
        * The 3D modules, required when `view` is a `SceneView`: terrain builds
        * its elevation layers from them.
        */
@@ -677,8 +724,8 @@ export class ArcgisEngine implements MapEngine {
         return screen ? { x: screen.x, y: screen.y } : { x: 0, y: 0 };
       },
       unproject: (p) => {
-        const point = this.view?.toMap({ x: p[0], y: p[1] });
-        return point ? { lng: point.longitude, lat: point.latitude } : null;
+        const lngLat = this.lngLatOf(this.view?.toMap({ x: p[0], y: p[1] }));
+        return lngLat ? { lng: lngLat[0], lat: lngLat[1] } : null;
       },
       redraw: () => {},
     };
@@ -871,6 +918,14 @@ export class ArcgisEngine implements MapEngine {
       spatialReference: { wkid: 4326 },
     });
   }
+  /**
+   * A point from the view (`center`, `toMap`) as `[lng, lat]`, or null. A
+   * view in Web Mercator or WGS 84 reports longitude and latitude itself; one
+   * in any other projection does not, so the point is projected to WGS 84.
+   */
+  lngLatOf(point: ArcgisPoint | null | undefined): [number, number] | null {
+    return arcgisPointLngLat(point, this.options.projectOperator);
+  }
   private storeIdFor(native: ArcgisLayer): string | undefined {
     for (const [id, entry] of this.natives) if (entry.layers.includes(native)) return id;
     return undefined;
@@ -917,10 +972,10 @@ export class ArcgisEngine implements MapEngine {
   readView(): MapViewState {
     const view = this.view;
     if (!view) return { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 };
-    const center = view.center;
+    const center = this.lngLatOf(view.center) ?? [0, 0];
     const bounds = this.getViewBounds();
     return {
-      center: [center.longitude, center.latitude],
+      center,
       zoom: viewZoom(view),
       bearing: this.bearing(),
       // A MapView has no pitch.
@@ -1323,8 +1378,7 @@ export class ArcgisEngine implements MapEngine {
     const { minZoom, maxZoom } = this.zoomRange();
     const zoom = viewZoom(view);
     const bounds = p.restrictBounds ? normalizeMapBounds(p.bounds) : null;
-    const lng = view.center.longitude ?? 0;
-    const lat = view.center.latitude ?? 0;
+    const [lng, lat] = this.lngLatOf(view.center) ?? [0, 0];
     const center: [number, number] = bounds
       ? [
           Math.min(bounds[2], Math.max(bounds[0], lng)),
@@ -1840,7 +1894,11 @@ export class ArcgisEngine implements MapEngine {
    * The canvas calls this on mount and whenever either preference changes.
    */
   setBasemap(styleUrl: string | undefined, arcgisBasemap: string | undefined): void {
-    const plan = planArcgisBasemap(styleUrl, arcgisBasemap, this.options.hasApiKey === true);
+    // The SDK cannot reproject tiled layers, so a map in a projection other
+    // than Web Mercator has no basemap: the Blank background shows instead.
+    const plan: ArcgisBasemapPlan = this.options.projectOperator
+      ? { kind: "none" }
+      : planArcgisBasemap(styleUrl, arcgisBasemap, this.options.hasApiKey === true);
     if (this.basemapPlan && sameArcgisBasemapPlan(this.basemapPlan, plan)) return;
     this.basemapPlan = plan;
     const map = this.map;
@@ -2057,8 +2115,8 @@ export class ArcgisEngine implements MapEngine {
       });
     }
     try {
-      const mapPoint = view.toMap(screenPoint);
-      if (mapPoint) this.lastHit = { lngLat: [mapPoint.longitude, mapPoint.latitude], features };
+      const lngLat = this.lngLatOf(view.toMap(screenPoint));
+      if (lngLat) this.lastHit = { lngLat, features };
     } catch {
       // A view torn down between the hit test and the conversion has no
       // location to remember; the features are still the answer.
@@ -2470,9 +2528,9 @@ export class ArcgisEngine implements MapEngine {
       }
       if (!dragging) return;
       event.stopPropagation();
-      const point = view.toMap({ x: event.x, y: event.y });
-      if (point) {
-        position = [point.longitude, point.latitude];
+      const lngLat = this.lngLatOf(view.toMap({ x: event.x, y: event.y }));
+      if (lngLat) {
+        position = lngLat;
         pin.geometry = geojsonToArcgisGeometry({ type: "Point", coordinates: position });
       }
       if (event.action === "end") {
@@ -2501,8 +2559,7 @@ export class ArcgisEngine implements MapEngine {
     const stop = drawExtentOnCanvas(
       this.canvas(),
       (p) => {
-        const point = view.toMap({ x: p.x, y: p.y });
-        return point ? [point.longitude, point.latitude] : [0, 0];
+        return this.lngLatOf(view.toMap({ x: p.x, y: p.y })) ?? [0, 0];
       },
       () => this.suspendNavigation(),
       options,
@@ -2517,11 +2574,15 @@ export class ArcgisEngine implements MapEngine {
   getViewBounds(): MapExtent | null {
     const view = this.view;
     if (!view?.extent) return null;
+    const projectOperator = this.options.projectOperator;
     const extent = view.spatialReference?.isWebMercator
       ? this.sdk.webMercatorUtils.webMercatorToGeographic(view.extent)
-      : view.extent;
+      : projectOperator && !view.spatialReference?.isWGS84
+        ? safeProject(projectOperator, view.extent)
+        : view.extent;
     if (!extent) return null;
-    return [extent.xmin, extent.ymin, extent.xmax, extent.ymax];
+    const bounds: MapExtent = [extent.xmin, extent.ymin, extent.xmax, extent.ymax];
+    return bounds.every(Number.isFinite) ? bounds : null;
   }
   showExtent(extent: MapExtent): () => void {
     const map = this.map;
@@ -2598,8 +2659,8 @@ export class ArcgisEngine implements MapEngine {
     const view = this.view;
     if (!view) return () => {};
     const handle = view.on("click", (event) => {
-      const point = view.toMap({ x: event.x, y: event.y });
-      if (point) listener([point.longitude, point.latitude]);
+      const lngLat = this.lngLatOf(view.toMap({ x: event.x, y: event.y }));
+      if (lngLat) listener(lngLat);
     });
     this.handles.add(handle);
     return () => {

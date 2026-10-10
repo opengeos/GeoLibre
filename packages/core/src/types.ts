@@ -1716,6 +1716,14 @@ export interface MapPreferences {
    * basemap styles service requires one.
    */
   arcgisBasemap?: string;
+  /**
+   * ArcGIS-only projection of the flat map, as a WKID the ArcGIS Maps SDK
+   * resolves (`54099` Spilhaus, `54030` Robinson, ...). Absent means Web
+   * Mercator. Vector layers are reprojected on the client; tiled layers and
+   * basemaps cannot be, so they do not draw in another projection. The globe
+   * (a `SceneView`) ignores it. See `arcgis-projection.ts`.
+   */
+  arcgisWkid?: number;
   /** Cesium imagery override; absent follows the shared project basemap. */
   cesiumBasemap?: import("./cesium-imagery").CesiumBasemapId;
   /**

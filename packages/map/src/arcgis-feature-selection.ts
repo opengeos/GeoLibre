@@ -1,6 +1,6 @@
 import { CAMERA_HANDLERS, type CameraHandlerName } from "./feature-selection";
 import type { FeatureSelectionMap } from "./map-feature-selection";
-import type { ArcgisView, ArcgisViewEvent } from "./arcgis-sdk";
+import type { ArcgisPoint, ArcgisView, ArcgisViewEvent } from "./arcgis-sdk";
 import type { MapEngine } from "./map-engine";
 
 type SelectionListener = Parameters<FeatureSelectionMap["on"]>[1];
@@ -23,12 +23,15 @@ const DOM_EVENTS: Record<string, "pointerdown" | "pointermove" | "pointerup"> = 
  * {@link MapEngine.suspendNavigation} call; the view has no box zoom to
  * suspend.
  *
- * @param engine - The ArcGIS engine, for its render surface and navigation.
+ * @param engine - The ArcGIS engine, for its render surface, navigation and
+ *   view-point conversion (a view in a custom projection has no lng/lat).
  * @param view - The view whose container the gestures run in.
  * @returns A map-like object for `attachFeatureSelection`.
  */
 export function arcgisFeatureSelectionMap(
-  engine: MapEngine,
+  engine: MapEngine & {
+    lngLatOf(point: ArcgisPoint | null | undefined): [number, number] | null;
+  },
   view: ArcgisView,
 ): FeatureSelectionMap {
   const container = view.container as HTMLElement;
@@ -68,8 +71,8 @@ export function arcgisFeatureSelectionMap(
     getCanvas: () => engine.getRenderSurface()?.getCanvas() ?? (container as HTMLCanvasElement),
     getContainer: () => container,
     unproject: ([x, y]) => {
-      const point = view.toMap({ x, y });
-      return point ? { lng: point.longitude, lat: point.latitude } : { lng: NaN, lat: NaN };
+      const lngLat = engine.lngLatOf(view.toMap({ x, y }));
+      return lngLat ? { lng: lngLat[0], lat: lngLat[1] } : { lng: NaN, lat: NaN };
     },
     on(type, listener) {
       let remove: () => void;

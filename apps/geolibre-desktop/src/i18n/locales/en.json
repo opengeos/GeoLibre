@@ -2831,7 +2831,23 @@
       "coordinateFormatHint": "Notation the status bar reports the pointer coordinate in. Click the coordinates in the status bar to switch notation.",
       "coordinateEpsg": "Coordinate reference system (EPSG)",
       "coordinateEpsgHint": "EPSG code the status bar projects the pointer coordinate into, e.g. 3857 (Web Mercator) or 32618 (UTM zone 18N).",
-      "coordinateEpsgUnknown": "Unknown EPSG code. The status bar shows decimal degrees until a known code is entered."
+      "coordinateEpsgUnknown": "Unknown EPSG code. The status bar shows decimal degrees until a known code is entered.",
+      "arcgisProjection": "ArcGIS map projection",
+      "arcgisProjectionHint": "Projection of the flat map when the rendering engine is ArcGIS. Vector layers are reprojected; basemaps and tiled layers cannot be, so they are not drawn. Picking a projection turns the globe off.",
+      "arcgisProjectionWebMercator": "Web Mercator (default)",
+      "arcgisProjectionCustom": "Custom WKID…",
+      "arcgisProjectionWkid": "Well-known ID (WKID)",
+      "arcgisProjectionWkidHint": "An Esri or EPSG projected coordinate system ID, e.g. 54099 (Spilhaus) or 102017 (North Pole Lambert Azimuthal Equal Area).",
+      "arcgisProjections": {
+        "spilhaus": "Spilhaus (World Ocean)",
+        "equalEarth": "Equal Earth",
+        "robinson": "Robinson",
+        "winkelTripel": "Winkel Tripel",
+        "mollweide": "Mollweide",
+        "plateCarree": "Plate Carrée (WGS 84)",
+        "northPolar": "Arctic Polar Stereographic",
+        "southPolar": "Antarctic Polar Stereographic"
+      }
     },
     "layout": {
       "title": "Layout",

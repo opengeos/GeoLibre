@@ -1,3 +1,4 @@
+import { normalizeArcgisWkid } from "./arcgis-projection";
 import { normalizeCesiumBasemap } from "./cesium-imagery";
 import { parseCesiumIonAssetId } from "./cesium-ion";
 import { redactUrlCredentials } from "./credentials";
@@ -1541,6 +1542,8 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         normalizeString((map as Partial<ProjectPreferences["map"]>).mapboxStyleUrl) || undefined,
       arcgisBasemap:
         normalizeString((map as Partial<ProjectPreferences["map"]>).arcgisBasemap) || undefined,
+      // Missing (every project before #2708) or Web Mercator is the default map.
+      arcgisWkid: normalizeArcgisWkid((map as Partial<ProjectPreferences["map"]>).arcgisWkid),
       // Missing means follow the saved project basemap, as it does for
       // `mapboxStyleUrl` above: a project written before this field existed
       // chose nothing, and reapplying the new-project default would repaint

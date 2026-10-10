@@ -259,6 +259,31 @@ In a scene:
   the configured vertical scale and offset. Selection highlights use the same
   transformed coordinates. Source data stays unchanged.
 
+## Map projections
+
+MapLibre and Mapbox draw only Web Mercator and a globe, but the SDK can draw a
+flat `MapView` in any projected coordinate system it knows by well-known ID
+(issue #2708). **Settings → Map → ArcGIS map projection** offers Spilhaus
+(54099), Equal Earth (8857), Robinson (54030), Winkel Tripel (54042),
+Mollweide (54009), Plate Carrée (4326) and the Arctic (3995) and Antarctic
+(3031) polar stereographic projections, plus **Custom WKID…** for any other
+Esri or EPSG code. The choice is saved as `preferences.map.arcgisWkid`; absent
+means Web Mercator. Picking a projection turns the globe off, since only the
+flat map uses it, and the globe button still switches to the globe and back.
+
+In another projection:
+
+- Vector layers (GeoJSON, feature services, the symbology pack's companion
+  layers) are reprojected on the client by the SDK's `projectOperator`, which
+  loads with the projected map only.
+- **No basemap is drawn.** The SDK cannot reproject tiled layers, so Esri
+  basemap styles and XYZ tiles have nothing to show; the Blank background
+  colour shows instead. Tiled data layers do not draw either.
+- The camera, pointer coordinates, identify, selection and extent drawing
+  convert between the projection and longitude/latitude, so the shared
+  camera, other split panes and saved views stay in degrees.
+- MapLibre, Mapbox and Cesium panes ignore the setting.
+
 ## Adding data
 
 Files dropped onto the map, the host importers behind **Add Data → FlatGeobuf

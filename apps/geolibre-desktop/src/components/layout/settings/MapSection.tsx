@@ -1,6 +1,8 @@
 import {
+  ARCGIS_PROJECTION_PRESETS,
   DEFAULT_PROJECT_PREFERENCES,
   ELLIPSOIDS,
+  normalizeArcgisWkid,
   type MapPreferences,
   type MapProjection,
   type MapScaleUnit,
@@ -68,6 +70,18 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
     };
   }, [coordinateFormat, coordinateEpsgCode]);
 
+  // The ArcGIS projection picker: a preset WKID, "" for Web Mercator, or
+  // "custom" with the WKID typed in its own field (issue #2708).
+  const arcgisWkid = normalizeArcgisWkid(draftPreferences.map.arcgisWkid);
+  const isPresetWkid = ARCGIS_PROJECTION_PRESETS.some((preset) => preset.wkid === arcgisWkid);
+  const [customWkid, setCustomWkid] = useState(() => arcgisWkid !== undefined && !isPresetWkid);
+  const [wkidText, setWkidText] = useState(() => (arcgisWkid ? String(arcgisWkid) : ""));
+  const projectionChoice =
+    customWkid || (arcgisWkid !== undefined && !isPresetWkid)
+      ? "custom"
+      : arcgisWkid === undefined
+        ? ""
+        : String(arcgisWkid);
   const updateMapPreferences = (patch: Partial<MapPreferences>) => {
     setDraftPreferences((current) => ({
       ...current,
@@ -75,6 +89,13 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
     }));
     setError(null);
   };
+
+  // A projection only shows on the flat ArcGIS map, so choosing one turns the
+  // globe off; going back to Web Mercator leaves the globe setting alone.
+  const setArcgisWkid = (wkid: number | undefined) =>
+    updateMapPreferences(
+      wkid === undefined ? { arcgisWkid: undefined } : { arcgisWkid: wkid, projection: "mercator" },
+    );
 
   const updateBoundsValue = (index: number, value: number) => {
     // Ignore a cleared field (valueAsNumber is NaN) so it does not silently
@@ -109,7 +130,9 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
   };
 
   const resetMapPreferences = () => {
-    updateMapPreferences(DEFAULT_PROJECT_PREFERENCES.map);
+    // The defaults carry no `arcgisWkid`, so clear it explicitly.
+    updateMapPreferences({ ...DEFAULT_PROJECT_PREFERENCES.map, arcgisWkid: undefined });
+    setCustomWkid(false);
   };
 
   return (
@@ -302,6 +325,54 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
         </Select>
         <p className="text-xs text-muted-foreground">{t("settings.map.scaleUnitHint")}</p>
       </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="settings-arcgis-projection">{t("settings.map.arcgisProjection")}</Label>
+        <Select
+          id="settings-arcgis-projection"
+          value={projectionChoice}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === "custom") {
+              setCustomWkid(true);
+              const wkid = normalizeArcgisWkid(wkidText);
+              if (wkid !== undefined) setArcgisWkid(wkid);
+              return;
+            }
+            setCustomWkid(false);
+            const wkid = normalizeArcgisWkid(value);
+            if (wkid !== undefined) setWkidText(String(wkid));
+            setArcgisWkid(wkid);
+          }}
+        >
+          <option value="">{t("settings.map.arcgisProjectionWebMercator")}</option>
+          {ARCGIS_PROJECTION_PRESETS.map((preset) => (
+            <option key={preset.id} value={String(preset.wkid)}>
+              {`${t(`settings.map.arcgisProjections.${preset.id}`, { defaultValue: preset.name })} (${preset.wkid})`}
+            </option>
+          ))}
+          <option value="custom">{t("settings.map.arcgisProjectionCustom")}</option>
+        </Select>
+        <p className="text-xs text-muted-foreground">{t("settings.map.arcgisProjectionHint")}</p>
+      </div>
+      {projectionChoice === "custom" ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="settings-arcgis-wkid">{t("settings.map.arcgisProjectionWkid")}</Label>
+          <Input
+            id="settings-arcgis-wkid"
+            inputMode="numeric"
+            value={wkidText}
+            onChange={(event) => {
+              const text = event.target.value;
+              setWkidText(text);
+              const wkid = normalizeArcgisWkid(text);
+              if (wkid !== undefined) setArcgisWkid(wkid);
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("settings.map.arcgisProjectionWkidHint")}
+          </p>
+        </div>
+      ) : null}
       <div className="space-y-1.5">
         <Label htmlFor="settings-coordinate-format">{t("settings.map.coordinateFormat")}</Label>
         <Select
