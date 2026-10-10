@@ -79,6 +79,7 @@ export function createRemoteDownload(
             headers: Object.entries(options.headers ?? {}),
             fileName: options.fileName,
             save: options.target === "save",
+            ...(options.target === "folder" ? { folderId: options.folderId } : {}),
           },
           requestId,
           progress,
@@ -92,7 +93,7 @@ export function createRemoteDownload(
       signal?.removeEventListener("abort", onAbort);
     }
     if (!result) return null;
-    if (options.target === "save") return { path: result.path, size: result.size, data: null };
+    if (options.target !== "memory") return { path: result.path, size: result.size, data: null };
     const data = await invoke<ArrayBuffer>("take_cached_download", { requestId });
     return { path: null, size: result.size, data };
   };

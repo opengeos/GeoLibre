@@ -1,3 +1,4 @@
+import { useAppStore } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
 import { createPluginTranslator, pluginDisplayTitle } from "../plugin-i18n";
@@ -6,6 +7,7 @@ import {
   type Bbox,
   EARTHDATA_PRESETS,
   EARTHDATA_TOKEN_PAGE_URL,
+  earthdataProxyUrl,
   type EarthdataCollection,
   type EarthdataGranule,
   earthdataTokenExpiry,
@@ -29,13 +31,6 @@ const PANEL_ID = EARTHACCESS_PLUGIN_ID;
 const TOKEN_CREDENTIAL = "earthdataToken";
 const GRANULE_PAGE_SIZE = 25;
 const COLLECTION_PAGE_SIZE = 20;
-/**
- * The browser build cannot read protected DAAC files (no CORS, and the
- * `Authorization` preflight is refused), so it streams them through GeoLibre's
- * tiles Worker (`workers/tiles/src/earthdata.ts`). The desktop app downloads
- * natively and never sends the token there.
- */
-const EARTHDATA_PROXY_ENDPOINT = "https://tiles.geolibre.app/earthdata/download";
 
 // Plugin-owned overlays. The footprints are surfaced in the Layers panel as one
 // entry; the selection outline stays private to the plugin.
@@ -100,6 +95,12 @@ const CSS = {
     "padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;" +
     "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
     "color:hsl(var(--foreground));",
+  files: "display:flex;flex-direction:column;gap:2px;font-size:11px;",
+  filesSummary: "cursor:pointer;font-size:11px;color:hsl(var(--muted-foreground));",
+  fileRow: "display:flex;gap:4px;align-items:center;",
+  fileName:
+    "flex:1 1 auto;min-width:0;font-size:11px;white-space:nowrap;overflow:hidden;" +
+    "text-overflow:ellipsis;",
   actionPrimary:
     "padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;" +
     "border:1px solid hsl(var(--primary));background:hsl(var(--primary));" +
@@ -108,10 +109,13 @@ const CSS = {
 
 /** A download in flight or finished for one granule. */
 interface TransferState {
-  kind: "open" | "save";
+  kind: "open" | "save" | "all";
   /** 0-100, or null while the size is unknown. */
   percent: number | null;
   received: number;
+  /** Which file of a multi-file download is in flight (0-based). */
+  fileIndex: number;
+  fileCount: number;
   error: string | null;
   done: string | null;
   controller: AbortController | null;
@@ -137,6 +141,12 @@ interface PanelState {
   transfers: Map<string, TransferState>;
   authOpen: boolean;
   authError: string | null;
+  /** Granules whose file list is expanded, kept across re-renders. */
+  openFileLists: Set<string>;
+  /** COG URLs being added to the map. */
+  addingCog: Set<string>;
+  /** Errors from adding a COG, shown under the dataset. */
+  cogError: string | null;
 }
 
 function isoDate(date: Date): string {
@@ -166,6 +176,9 @@ function initialState(): PanelState {
     transfers: new Map(),
     authOpen: false,
     authError: null,
+    openFileLists: new Set(),
+    addingCog: new Set(),
+    cogError: null,
   };
 }
 
@@ -527,7 +540,7 @@ async function proxyDownload(
   signal: AbortSignal,
   onProgress: (received: number, total: number | null) => void,
 ): Promise<ArrayBuffer> {
-  const response = await fetch(`${EARTHDATA_PROXY_ENDPOINT}?url=${encodeURIComponent(url)}`, {
+  const response = await fetch(earthdataProxyUrl(url), {
     headers: authHeaders(),
     signal,
   });
@@ -579,15 +592,29 @@ function saveBlob(data: ArrayBuffer, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-async function transferGranule(granule: EarthdataGranule, kind: "open" | "save"): Promise<void> {
-  const url = primaryDataLink(granule);
-  if (!url || state.transfers.get(granule.conceptId)?.controller) return;
-  const fileName = fileNameFromUrl(url);
+/**
+ * Download one or more of a granule's files.
+ *
+ * - `open`: the primary file, into memory, handed to the ICESat-2 / GEDI dialog.
+ * - `save`: one file (`fileUrl`, else the primary one), saved where the user picks.
+ * - `all`: every data file; the desktop asks for a folder once, the browser
+ *   saves them one after another.
+ */
+async function transferGranule(
+  granule: EarthdataGranule,
+  kind: "open" | "save" | "all",
+  fileUrl?: string,
+): Promise<void> {
+  const files =
+    kind === "all" ? granule.dataLinks : [fileUrl ?? primaryDataLink(granule)].filter(Boolean);
+  if (files.length === 0 || state.transfers.get(granule.conceptId)?.controller) return;
   const controller = new AbortController();
   const transfer: TransferState = {
     kind,
     percent: null,
     received: 0,
+    fileIndex: 0,
+    fileCount: files.length,
     error: null,
     done: null,
     controller,
@@ -604,41 +631,72 @@ async function transferGranule(granule: EarthdataGranule, kind: "open" | "save")
       renderPanel?.();
     }
   };
+  const native = appRef?.downloadRemoteFile;
   try {
-    const native = appRef?.downloadRemoteFile;
-    if (native) {
-      const result = await native(url, {
-        headers: authHeaders(),
-        fileName,
-        target: kind === "save" ? "save" : "memory",
-        signal: controller.signal,
-        onProgress,
-      });
-      if (!result) {
+    let folder: { id: string; path: string } | null = null;
+    if (kind === "all" && native) {
+      folder = (await appRef?.pickDownloadFolder?.()) ?? null;
+      if (!folder) {
         state.transfers.delete(granule.conceptId);
         return;
       }
-      if (kind === "open" && result.data) {
-        appRef?.openSpaceborneLidarGranule?.(result.data, fileName);
-        transfer.done = tr("opened", "Opened in Add Data → ICESat-2 / GEDI.");
+    }
+    for (let index = 0; index < files.length; index += 1) {
+      const url = files[index] as string;
+      const fileName = fileNameFromUrl(url);
+      transfer.fileIndex = index;
+      transfer.received = 0;
+      transfer.percent = null;
+      renderPanel?.();
+      if (native) {
+        const result = await native(url, {
+          headers: authHeaders(),
+          fileName,
+          target: kind === "open" ? "memory" : folder ? "folder" : "save",
+          ...(folder ? { folderId: folder.id } : {}),
+          signal: controller.signal,
+          onProgress,
+        });
+        if (!result) {
+          state.transfers.delete(granule.conceptId);
+          return;
+        }
+        if (kind === "open" && result.data) {
+          appRef?.openSpaceborneLidarGranule?.(result.data, fileName);
+          transfer.done = tr("opened", "Opened in Add Data → ICESat-2 / GEDI.");
+        } else if (!folder) {
+          transfer.done = tr("saved", "Saved to {{path}}", { path: result.path ?? fileName });
+        }
       } else {
-        transfer.done = tr("saved", "Saved to {{path}}", { path: result.path ?? fileName });
+        const data = await proxyDownload(url, controller.signal, onProgress);
+        if (kind === "open") {
+          appRef?.openSpaceborneLidarGranule?.(data, fileName);
+          transfer.done = tr("opened", "Opened in Add Data → ICESat-2 / GEDI.");
+        } else {
+          saveBlob(data, fileName);
+          transfer.done = tr("downloaded", "Downloaded {{name}}", { name: fileName });
+        }
       }
-    } else {
-      const data = await proxyDownload(url, controller.signal, onProgress);
-      if (kind === "open") {
-        appRef?.openSpaceborneLidarGranule?.(data, fileName);
-        transfer.done = tr("opened", "Opened in Add Data → ICESat-2 / GEDI.");
-      } else {
-        saveBlob(data, fileName);
-        transfer.done = tr("downloaded", "Downloaded {{name}}", { name: fileName });
-      }
+    }
+    if (kind === "all") {
+      transfer.done = folder
+        ? tr("savedAll", "Saved {{count}} files to {{path}}", {
+            count: files.length,
+            path: folder.path,
+          })
+        : tr("downloadedAll", "Downloaded {{count}} files.", { count: files.length });
     }
   } catch (error) {
     if (controller.signal.aborted) {
       state.transfers.delete(granule.conceptId);
     } else {
-      transfer.error = errorMessage(error);
+      transfer.error =
+        files.length > 1
+          ? tr("fileFailed", "{{name}}: {{message}}", {
+              name: fileNameFromUrl(files[transfer.fileIndex] as string),
+              message: errorMessage(error),
+            })
+          : errorMessage(error);
     }
   } finally {
     transfer.controller = null;
@@ -890,6 +948,7 @@ function buildGranuleSection(): HTMLElement | null {
   section.append(grid, search);
 
   if (state.granuleError) section.append(element("p", CSS.error, state.granuleError));
+  if (state.cogError) section.append(element("p", CSS.error, state.cogError));
   if (state.searched) {
     section.append(
       element(
@@ -917,6 +976,105 @@ function buildGranuleSection(): HTMLElement | null {
     section.append(more);
   }
   return section;
+}
+
+/** Whether the host can add COG layers. */
+function canAddCog(): boolean {
+  return typeof appRef?.addCogLayer === "function";
+}
+
+/** Whether a COG is already on the map, found by its relay URL in the store. */
+function isCogAdded(url: string): boolean {
+  const relay = earthdataProxyUrl(url);
+  return useAppStore
+    .getState()
+    .layers.some((layer) => (layer.source as { url?: unknown }).url === relay);
+}
+
+/**
+ * Add one of a granule's GeoTIFFs as a COG layer. The layer reads through the
+ * tiles Worker relay, since the DAACs send no CORS headers, and its saved URL
+ * carries no token: the host adds the Earthdata Login token to relay requests.
+ */
+async function addCog(url: string): Promise<void> {
+  if (!appRef?.addCogLayer || state.addingCog.has(url)) return;
+  state.cogError = null;
+  if (!token()) {
+    state.authOpen = true;
+    state.cogError = tr(
+      "cogNeedsToken",
+      "Add an Earthdata Login token to put NASA GeoTIFFs on the map.",
+    );
+    renderPanel?.();
+    return;
+  }
+  state.addingCog.add(url);
+  renderPanel?.();
+  try {
+    await appRef.addCogLayer(fileNameFromUrl(url).replace(/\.tiff?$/i, ""), earthdataProxyUrl(url));
+  } catch (error) {
+    state.cogError = tr("cogFailed", "Could not add {{name}}: {{message}}", {
+      name: fileNameFromUrl(url),
+      message: errorMessage(error),
+    });
+  } finally {
+    state.addingCog.delete(url);
+    renderPanel?.();
+  }
+}
+
+/** Whether a data link is a (Cloud-Optimized) GeoTIFF the map can add. */
+function isCogUrl(url: string): boolean {
+  return /\.tiff?$/i.test(url.split(/[?#]/)[0]);
+}
+
+/** The collapsible per-file list of a granule: download one file, or add a COG. */
+function buildFileList(granule: EarthdataGranule, busy: boolean): HTMLElement {
+  const details = element("details", CSS.files);
+  details.open = state.openFileLists.has(granule.conceptId);
+  details.addEventListener("toggle", () => {
+    if (details.open) state.openFileLists.add(granule.conceptId);
+    else state.openFileLists.delete(granule.conceptId);
+  });
+  details.append(
+    element(
+      "summary",
+      CSS.filesSummary,
+      tr("files", "Files ({{count}})", { count: granule.dataLinks.length }),
+    ),
+  );
+  for (const url of granule.dataLinks) {
+    const row = element("div", CSS.fileRow);
+    const fullName = fileNameFromUrl(url);
+    // HLS-style files all start with the granule name; show what tells them apart.
+    const shortName = fullName.startsWith(`${granule.name}.`)
+      ? fullName.slice(granule.name.length + 1)
+      : fullName;
+    const name = element("span", CSS.fileName, shortName);
+    name.title = fullName;
+    row.append(name);
+    if (isCogUrl(url) && canAddCog()) {
+      const added = isCogAdded(url);
+      const add = button(
+        added ? tr("addedCog", "Added") : tr("addCog", "Add"),
+        CSS.action,
+        () => void addCog(url),
+        tr("addCogTitle", "Add this GeoTIFF to the map"),
+      );
+      add.disabled = added || state.addingCog.has(url);
+      row.append(add);
+    }
+    const download = button(
+      tr("download", "Download"),
+      CSS.action,
+      () => void transferGranule(granule, "save", url),
+      tr("downloadFileTitle", "Download this file"),
+    );
+    download.disabled = busy;
+    row.append(download);
+    details.append(row);
+  }
+  return details;
 }
 
 function buildCard(granule: EarthdataGranule): HTMLElement {
@@ -956,17 +1114,27 @@ function buildCard(granule: EarthdataGranule): HTMLElement {
     open.disabled = busy;
     actions.append(open);
   }
+  const multiFile = granule.dataLinks.length > 1;
   if (link) {
-    const download = button(
-      tr("download", "Download"),
-      CSS.action,
-      () => void transferGranule(granule, "save"),
-      granule.dataLinks.length > 1
-        ? tr("downloadFirstTitle", "Download the first file ({{name}})", {
-            name: fileNameFromUrl(link),
-          })
-        : tr("downloadTitle", "Download this granule"),
-    );
+    const download = multiFile
+      ? button(
+          tr("downloadAll", "Download all"),
+          CSS.action,
+          () => void transferGranule(granule, "all"),
+          appRef?.downloadRemoteFile
+            ? tr("downloadAllTitle", "Download all {{count}} files into a folder", {
+                count: granule.dataLinks.length,
+              })
+            : tr("downloadAllBrowserTitle", "Download all {{count}} files", {
+                count: granule.dataLinks.length,
+              }),
+        )
+      : button(
+          tr("download", "Download"),
+          CSS.action,
+          () => void transferGranule(granule, "save"),
+          tr("downloadTitle", "Download this granule"),
+        );
     download.disabled = busy;
     actions.append(download);
   }
@@ -980,6 +1148,7 @@ function buildCard(granule: EarthdataGranule): HTMLElement {
     ),
   );
   card.append(actions);
+  if (multiFile || granule.dataLinks.some(isCogUrl)) card.append(buildFileList(granule, busy));
 
   if (transfer) {
     if (transfer.controller) {
@@ -987,14 +1156,22 @@ function buildCard(granule: EarthdataGranule): HTMLElement {
       const progress = element(
         "span",
         CSS.sub,
-        transfer.received === 0
-          ? tr("starting", "Starting download…")
-          : transfer.percent !== null
-            ? tr("progress", "Downloading… {{percent}}% ({{mb}} MB)", {
-                percent: transfer.percent,
-                mb: megabytes(transfer.received),
-              })
-            : tr("progressUnknown", "Downloading… {{mb}} MB", { mb: megabytes(transfer.received) }),
+        (transfer.fileCount > 1
+          ? tr("fileOf", "File {{index}} of {{count}}: ", {
+              index: transfer.fileIndex + 1,
+              count: transfer.fileCount,
+            })
+          : "") +
+          (transfer.received === 0
+            ? tr("starting", "Starting download…")
+            : transfer.percent !== null
+              ? tr("progress", "Downloading… {{percent}}% ({{mb}} MB)", {
+                  percent: transfer.percent,
+                  mb: megabytes(transfer.received),
+                })
+              : tr("progressUnknown", "Downloading… {{mb}} MB", {
+                  mb: megabytes(transfer.received),
+                })),
       );
       row.append(
         progress,
@@ -1008,7 +1185,8 @@ function buildCard(granule: EarthdataGranule): HTMLElement {
     }
   }
   card.addEventListener("click", (event) => {
-    if ((event.target as HTMLElement).closest("button")) return;
+    // The file list toggles itself; selecting re-renders and would close it.
+    if ((event.target as HTMLElement).closest("button, details")) return;
     selectGranule(granule.conceptId, false);
   });
   return card;

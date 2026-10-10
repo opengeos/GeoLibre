@@ -25,6 +25,12 @@ export const EARTHDATA_SEARCH_URL = "https://search.earthdata.nasa.gov/search";
 
 const HTTP_URL_RE = /^https?:\/\//i;
 
+export {
+  EARTHDATA_PROXY_ENDPOINT,
+  earthdataProxyUrl,
+  isEarthdataProxyUrl,
+} from "./earthdata-relay";
+
 /** A dataset in CMR. */
 export interface EarthdataCollection {
   /** CMR concept id, e.g. `C2237824918-ORNL_CLOUD`. */

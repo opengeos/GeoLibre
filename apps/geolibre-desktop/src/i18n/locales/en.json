@@ -10399,7 +10399,6 @@
       "open": "Open",
       "openTitle": "Download this granule and add its footprints to the map",
       "download": "Download",
-      "downloadFirstTitle": "Download the first file ({{name}})",
       "downloadTitle": "Download this granule",
       "zoom": "Zoom",
       "details": "Details",
@@ -10408,7 +10407,21 @@
       "cancel": "Cancel",
       "hint": "Search NASA's Earthdata catalog (CMR) for datasets and granules over the map view, then download them or open ICESat-2 and GEDI granules on the map.",
       "starting": "Starting download…",
-      "detailsTitle": "Open this granule in Earthdata Search"
+      "detailsTitle": "Open this granule in Earthdata Search",
+      "savedAll": "Saved {{count}} files to {{path}}",
+      "downloadedAll": "Downloaded {{count}} files.",
+      "fileFailed": "{{name}}: {{message}}",
+      "cogNeedsToken": "Add an Earthdata Login token to put NASA GeoTIFFs on the map.",
+      "cogFailed": "Could not add {{name}}: {{message}}",
+      "files": "Files ({{count}})",
+      "addedCog": "Added",
+      "addCog": "Add",
+      "addCogTitle": "Add this GeoTIFF to the map",
+      "downloadFileTitle": "Download this file",
+      "downloadAll": "Download all",
+      "downloadAllTitle": "Download all {{count}} files into a folder",
+      "downloadAllBrowserTitle": "Download all {{count}} files",
+      "fileOf": "File {{index}} of {{count}}: "
     }
   },
   "arcgisService": {

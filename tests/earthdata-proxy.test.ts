@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
+  clearEarthdataPresignedCache,
   handleEarthdataDownload,
   isEarthdataDataUrl,
   isEarthdataRedirectUrl,
@@ -15,6 +16,7 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  clearEarthdataPresignedCache();
 });
 
 function request(target: string, headers: Record<string, string> = {}): Request {
@@ -66,6 +68,45 @@ describe("Earthdata download proxy", () => {
     assert.equal(response.headers.get("content-range"), "bytes 0-2/3");
     assert.equal(response.headers.get("set-cookie"), null);
     assert.match(response.headers.get("content-disposition") ?? "", /ATL08_2026/);
+  });
+
+  it("reuses the presigned URL for later range requests with the same token", async () => {
+    const hops: Hop[] = [];
+    const upstream = fakeUpstream(hops);
+    const auth = { authorization: "Bearer cache-me", range: "bytes=0-2" };
+    assert.equal((await handleEarthdataDownload(request(FILE, auth), upstream)).status, 206);
+    assert.equal((await handleEarthdataDownload(request(FILE, auth), upstream)).status, 206);
+    assert.deepEqual(
+      hops.map((hop) => hop.url),
+      [FILE, PRESIGNED, PRESIGNED],
+    );
+    assert.equal(hops[2].authorization, null);
+    // Another token does not see that entry.
+    await handleEarthdataDownload(
+      request(FILE, { authorization: "Bearer other", range: "bytes=0-2" }),
+      upstream,
+    );
+    assert.equal(hops[3].url, FILE);
+  });
+
+  it("falls back to the DAAC when a cached presigned URL stops working", async () => {
+    const hops: Hop[] = [];
+    let expired = false;
+    const base = fakeUpstream(hops);
+    const upstream = async (input: RequestInfo | URL, init?: RequestInit) =>
+      expired && String(input) === PRESIGNED
+        ? (hops.push({ url: PRESIGNED, authorization: null, range: null }),
+          new Response("expired", { status: 403 }))
+        : base(input, init);
+    const auth = { authorization: "Bearer t2" };
+    await handleEarthdataDownload(request(FILE, auth), upstream);
+    expired = true;
+    const response = await handleEarthdataDownload(request(FILE, auth), upstream);
+    assert.equal(response.status, 403);
+    assert.deepEqual(
+      hops.map((hop) => hop.url),
+      [FILE, PRESIGNED, PRESIGNED, FILE, PRESIGNED],
+    );
   });
 
   it("answers 401 when the DAAC sends the browser to the login page", async () => {

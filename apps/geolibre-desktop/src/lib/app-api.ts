@@ -28,6 +28,7 @@ import type {
   GeoLibreCogLayerOptions,
   GeoLibreCogRenderEngine,
   GeoLibreDeckGL,
+  GeoLibreDownloadFolder,
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreRasterWindowOptions,
@@ -472,6 +473,9 @@ export function createAppAPI(
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
     downloadRemoteFile: isTauriRuntime()
       ? createRemoteDownload(invoke, () => new Channel<RemoteDownloadProgress>())
+      : undefined,
+    pickDownloadFolder: isTauriRuntime()
+      ? () => invoke<GeoLibreDownloadFolder | null>("pick_download_folder")
       : undefined,
     openSpaceborneLidarGranule: (data: ArrayBuffer, fileName: string) =>
       requestSpaceborneLidarGranule({ data, fileName }),

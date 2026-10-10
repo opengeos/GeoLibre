@@ -81,6 +81,7 @@ function declaredAppApiMembers(): string[] {
 const DESKTOP_ONLY_MEMBERS = new Set([
   "nativeFetch",
   "downloadRemoteFile",
+  "pickDownloadFolder",
   "pickVectorFilesWithSidecars",
 ]);
 /** Members that are objects rather than functions. */
@@ -243,6 +244,7 @@ describe("plugin app API contract", () => {
       const api = createAppAPI(engineRef(), fakeHost().host);
       assert.equal(typeof api.nativeFetch, "function");
       assert.equal(typeof api.downloadRemoteFile, "function");
+      assert.equal(typeof api.pickDownloadFolder, "function");
       assert.equal(typeof api.pickVectorFilesWithSidecars, "function");
     } finally {
       if (previous === undefined) delete globals.window;

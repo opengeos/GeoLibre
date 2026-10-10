@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./assistant-tool-registry": "./src/assistant-tool-registry.ts",
     "./cog-spectral-profile": "./src/plugins/cog-spectral-profile.ts",
+    "./earthdata-relay": "./src/plugins/earthdata-relay.ts",
     "./elevation-profile-chart": "./src/plugins/elevation-profile/chart/profileChart.ts",
     "./geo-editor-geometry": "./src/plugins/geo-editor-geometry.ts",
     "./lidar": "./src/plugins/components/lidar.ts",

@@ -485,11 +485,25 @@ export interface GeoLibreRemoteDownloadOptions {
   headers?: Record<string, string>;
   /** Suggested file name (sanitized by the host). */
   fileName: string;
-  /** `"save"` asks where to save the file; `"memory"` returns its bytes. */
-  target: "save" | "memory";
+  /**
+   * `"save"` asks where to save the file; `"memory"` returns its bytes;
+   * `"folder"` writes it into the folder `folderId` names (see
+   * {@link GeoLibreAppAPI.pickDownloadFolder}) without asking.
+   */
+  target: "save" | "memory" | "folder";
+  /** The folder for a `"folder"` download. */
+  folderId?: string;
   signal?: AbortSignal;
   /** Bytes received so far, and the total when the server sent a length. */
   onProgress?: (received: number, total: number | null) => void;
+}
+
+/** A folder picked with {@link GeoLibreAppAPI.pickDownloadFolder}. */
+export interface GeoLibreDownloadFolder {
+  /** Opaque id passed back as `folderId`. */
+  id: string;
+  /** The folder's path, for display. */
+  path: string;
 }
 
 /** What {@link GeoLibreAppAPI.downloadRemoteFile} resolves with. */
@@ -763,6 +777,12 @@ export interface GeoLibreAppAPI {
    * reader without a copy; do not reuse it.
    */
   openSpaceborneLidarGranule?: (data: ArrayBuffer, fileName: string) => void;
+  /**
+   * Ask the user for a folder to save several downloads into, for
+   * {@link downloadRemoteFile}'s `"folder"` target. Resolves null when the user
+   * cancels. Desktop only.
+   */
+  pickDownloadFolder?: () => Promise<GeoLibreDownloadFolder | null>;
   /**
    * Resolve a fetchable URL for an asset shipped alongside an external
    * plugin's manifest (e.g. sample data bundled in the plugin folder). The

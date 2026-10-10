@@ -67,6 +67,18 @@ pub(crate) struct RemoteDownloadRequest {
     /// `true` asks where to save the file; `false` keeps it in the app cache
     /// for `take_cached_download`.
     save: bool,
+    /// A folder picked earlier with `pick_download_folder`, by its id: the file
+    /// is written there under its sanitized name, without a dialog. JavaScript
+    /// only ever holds the id, never a path it could point elsewhere.
+    #[serde(default)]
+    folder_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PickedDownloadFolder {
+    id: String,
+    path: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -92,6 +104,8 @@ type CancelDownload = Box<dyn Fn() + Send + Sync>;
 pub(crate) struct RemoteDownloads {
     active: Arc<Mutex<HashMap<String, CancelDownload>>>,
     cached: Arc<Mutex<HashMap<String, PathBuf>>>,
+    /// Folders the user picked for multi-file downloads, by id.
+    folders: Arc<Mutex<HashMap<String, PathBuf>>>,
 }
 
 impl RemoteDownloads {
@@ -323,7 +337,22 @@ pub(crate) async fn download_remote_file(
         return Err("Duplicate request ID.".into());
     }
     let file_name = sanitize_file_name(&request.file_name);
-    let destination = if request.save {
+    let folder = match &request.folder_id {
+        Some(id) => Some(
+            downloads
+                .folders
+                .lock()
+                .unwrap()
+                .get(id)
+                .cloned()
+                .ok_or_else(|| "Unknown download folder.".to_string())?,
+        ),
+        None => None,
+    };
+    let saves_to_disk = request.save || folder.is_some();
+    let destination = if let Some(folder) = folder {
+        folder.join(&file_name)
+    } else if request.save {
         match pick_save_path(&app, &file_name).await? {
             Some(path) => path,
             None => return Ok(None),
@@ -350,7 +379,7 @@ pub(crate) async fn download_remote_file(
     let size = task
         .await
         .map_err(|_| "Download cancelled.".to_string())??;
-    if request.save {
+    if saves_to_disk {
         Ok(Some(RemoteDownloadResult {
             path: Some(destination.to_string_lossy().into_owned()),
             size,
@@ -363,6 +392,35 @@ pub(crate) async fn download_remote_file(
             .insert(request_id, destination);
         Ok(Some(RemoteDownloadResult { path: None, size }))
     }
+}
+
+/// Ask for a folder to save several downloads into; `None` when the user
+/// cancels. The folder is remembered for the app session under the returned id,
+/// which [`download_remote_file`] accepts as `folderId`.
+#[tauri::command]
+pub(crate) async fn pick_download_folder(
+    app: tauri::AppHandle,
+    downloads: tauri::State<'_, RemoteDownloads>,
+) -> Result<Option<PickedDownloadFolder>, String> {
+    let dialog_app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app.dialog().file().blocking_pick_folder()
+    })
+    .await
+    .map_err(|error| format!("Could not open the folder picker: {error}"))?;
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|error| format!("Could not resolve the folder: {error}"))?;
+    if !path.is_dir() {
+        return Err("The chosen folder does not exist.".into());
+    }
+    let id = format!("folder-{}", downloads.folders.lock().unwrap().len() + 1);
+    let shown = path.to_string_lossy().into_owned();
+    downloads.folders.lock().unwrap().insert(id.clone(), path);
+    Ok(Some(PickedDownloadFolder { id, path: shown }))
 }
 
 /// Abort an in-flight [`download_remote_file`].

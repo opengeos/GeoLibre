@@ -65,6 +65,22 @@ describe("native remote download glue", () => {
     assert.equal(host.calls[1].args.requestId, host.calls[0].args.requestId);
   });
 
+  it("passes a picked folder's id and returns the saved path", async () => {
+    const host = fakeHost();
+    const pending = host.download("https://example.com/B04.tif", {
+      fileName: "B04.tif",
+      target: "folder",
+      folderId: "folder-1",
+    });
+    await Promise.resolve();
+    const request = host.calls[0].args.request as Record<string, unknown>;
+    assert.equal(request.folderId, "folder-1");
+    assert.equal(request.save, false);
+    host.finish({ path: "/data/hls/B04.tif", size: 9 });
+    assert.deepEqual(await pending, { path: "/data/hls/B04.tif", size: 9, data: null });
+    assert.equal(host.calls.length, 1);
+  });
+
   it("resolves null when the save dialog is cancelled", async () => {
     const host = fakeHost();
     const pending = host.download("https://example.com/a.h5", { fileName: "a.h5", target: "save" });
