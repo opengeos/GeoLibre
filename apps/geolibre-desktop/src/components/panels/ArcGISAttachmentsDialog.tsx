@@ -69,7 +69,11 @@ export function ArcGISAttachmentsDialog({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<AttachmentStatus[]>([]);
   // The transfer in progress, if any: its label and how to cancel it.
-  const [transfer, setTransfer] = useState<{ label: string; abort: AbortController } | null>(null);
+  // A delete cannot be cancelled once sent, so it has no abort controller.
+  const [transfer, setTransfer] = useState<{
+    label: string;
+    abort: AbortController | null;
+  } | null>(null);
   const [preview, setPreview] = useState<{ id: number; name: string; url: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +84,9 @@ export function ArcGISAttachmentsDialog({
   const recordKey = `${layerId}:${objectId}`;
   const recordKeyRef = useRef(recordKey);
   recordKeyRef.current = recordKey;
+  // A transfer that finishes after the dialog closes must not show a result.
+  const openRef = useRef(open);
+  openRef.current = open;
 
   const reload = useCallback(async () => {
     loadAbortRef.current?.abort();
@@ -106,6 +113,9 @@ export function ArcGISAttachmentsDialog({
       }
     }
   }, [layerId, objectId]);
+  // A transfer's read-back targets the current record, not the one it started on.
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
 
   // A new record (or reopening) starts from the service's current list.
   useEffect(() => {
@@ -133,17 +143,17 @@ export function ArcGISAttachmentsDialog({
   const runTransfer = async (
     label: string,
     work: (signal: AbortSignal) => Promise<AttachmentStatus[]>,
-    readBack = true,
+    { readBack = true, cancellable = true } = {},
   ) => {
     const abort = new AbortController();
-    setTransfer({ label, abort });
+    setTransfer({ label, abort: cancellable ? abort : null });
     try {
       report(await work(abort.signal));
     } catch (error) {
       if (!isAbort(error)) report([{ kind: "error", text: errorText(error) }]);
     } finally {
       setTransfer(null);
-      if (readBack) void reload();
+      if (readBack) void reloadRef.current();
     }
   };
 
@@ -186,16 +196,20 @@ export function ArcGISAttachmentsDialog({
 
   const removeAttachment = (target: ArcGISAttachmentInfo) => {
     setPendingDelete(null);
-    void runTransfer(t("attachments.deleting", { name: target.name }), async () => {
-      const { deleted, errors } = await deleteArcGISAttachments(layerId, objectId, [target.id]);
-      return [
-        ...deleted.map(() => ({
-          kind: "success" as const,
-          text: t("attachments.deleted", { name: target.name }),
-        })),
-        ...errors.map((text) => ({ kind: "error" as const, text })),
-      ];
-    });
+    void runTransfer(
+      t("attachments.deleting", { name: target.name }),
+      async () => {
+        const { deleted, errors } = await deleteArcGISAttachments(layerId, objectId, [target.id]);
+        return [
+          ...deleted.map(() => ({
+            kind: "success" as const,
+            text: t("attachments.deleted", { name: target.name }),
+          })),
+          ...errors.map((text) => ({ kind: "error" as const, text })),
+        ];
+      },
+      { cancellable: false },
+    );
   };
 
   const download = (target: ArcGISAttachmentInfo) => {
@@ -203,6 +217,7 @@ export function ArcGISAttachmentsDialog({
       t("attachments.downloading", { name: target.name }),
       async (signal) => {
         const blob = await downloadArcGISAttachment(layerId, objectId, target, signal);
+        if (!openRef.current) return [];
         const name = attachmentSaveName(target.name);
         const ext = attachmentExtension(name);
         const saved = await saveBinaryFileWithFallback(blob, {
@@ -213,7 +228,7 @@ export function ArcGISAttachmentsDialog({
         });
         return saved ? [{ kind: "success", text: t("attachments.saved", { name: saved }) }] : [];
       },
-      false,
+      { readBack: false },
     );
   };
 
@@ -223,12 +238,12 @@ export function ArcGISAttachmentsDialog({
       t("attachments.loadingPreview", { name: target.name }),
       async (signal) => {
         const blob = await downloadArcGISAttachment(layerId, objectId, target, signal);
-        if (recordKeyRef.current === key) {
+        if (openRef.current && recordKeyRef.current === key) {
           setPreview({ id: target.id, name: target.name, url: URL.createObjectURL(blob) });
         }
         return [];
       },
-      false,
+      { readBack: false },
     );
   };
 
@@ -270,9 +285,11 @@ export function ArcGISAttachmentsDialog({
               <span className="text-xs text-muted-foreground" role="status">
                 {transfer.label}
               </span>
-              <Button size="sm" variant="ghost" onClick={() => transfer.abort.abort()}>
-                {t("common.cancel")}
-              </Button>
+              {transfer.abort ? (
+                <Button size="sm" variant="ghost" onClick={() => transfer.abort?.abort()}>
+                  {t("common.cancel")}
+                </Button>
+              ) : null}
             </>
           ) : null}
           <input

@@ -340,7 +340,7 @@ function uploadForm(file: Blob, fileName: string, token: string | undefined): Fo
 function attachmentResult(
   result: ArcGISAttachmentEditResult | undefined,
   fallback: string,
-): number {
+): number | undefined {
   if (!result || typeof result.success !== "boolean") {
     throw new LocalizedError(
       `${ERROR_KEY}.attachmentInvalidResponse`,
@@ -348,7 +348,7 @@ function attachmentResult(
     );
   }
   if (!result.success) throw serviceError(result.error, fallback);
-  return Number.isSafeInteger(result.objectId) ? (result.objectId as number) : -1;
+  return Number.isSafeInteger(result.objectId) ? (result.objectId as number) : undefined;
 }
 
 /**
@@ -359,7 +359,7 @@ function attachmentResult(
  * @param file - The file to upload.
  * @param fileName - The name to store, defaulting to the file's own.
  * @param signal - Aborts the upload; an upload aborted in flight is unconfirmed.
- * @returns The new attachment's ID, or -1 when the service did not report one.
+ * @returns The new attachment's ID.
  */
 export async function addArcGISAttachment(
   layerId: string,
@@ -376,7 +376,15 @@ export async function addArcGISAttachment(
     signal,
   );
   if (json.error) throw serviceError(json.error, "ArcGIS rejected the attachment.");
-  return attachmentResult(json.addAttachmentResult, "ArcGIS rejected the attachment.");
+  const id = attachmentResult(json.addAttachmentResult, "ArcGIS rejected the attachment.");
+  // Success without the new attachment's ID is not a confirmed upload.
+  if (id === undefined) {
+    throw new LocalizedError(
+      `${ERROR_KEY}.attachmentUnconfirmed`,
+      "The attachment change could not be confirmed. Refresh the attachment list before trying again.",
+    );
+  }
+  return id;
 }
 
 /**

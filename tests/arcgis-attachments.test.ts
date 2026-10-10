@@ -282,6 +282,15 @@ describe("ArcGIS attachment operations", () => {
     await assert.rejects(deleteArcGISAttachments(service.id, 7, [1]), /could not be confirmed/);
   });
 
+  it("treats a successful add without the new attachment ID as unconfirmed", async () => {
+    const { id } = await load();
+    setArcGISFetch(async () => Response.json({ addAttachmentResult: { success: true } }));
+    await assert.rejects(
+      addArcGISAttachment(id, 7, new File(["x"], "a.txt")),
+      /could not be confirmed/,
+    );
+  });
+
   it("refuses writes over plain HTTP", async () => {
     const { id } = await load();
     useAppStore.getState().updateLayer(id, {
