@@ -131,7 +131,7 @@ Some entries are unavailable on layers they do not apply to: **Select by Locatio
 
 Vector layers have a **Layer actions → Styles** submenu for symbology interchange:
 
-- **Export style for URL loading…** writes a compact `.geolibre.style.json` file designed for the [`data` and `style` URL parameters](embedding.md#open-remote-data). It contains no feature data. Its MapLibre render layers use the original GeoJSON filename stem as `source`, allowing one style document to distinguish GeoJSON members in a ZIP.
+- **Export GeoLibre URL style** writes a compact `.geolibre.style.json` file designed for the [`data` and `style` URL parameters](embedding.md#open-remote-data). It contains no feature data. Its MapLibre render layers use the original GeoJSON filename stem as `source`, allowing one style document to distinguish GeoJSON members in a ZIP.
 - **Export as Mapbox GL style** writes a self-contained Mapbox/MapLibre style with the layer's GeoJSON embedded.
 - **Export as OGC SLD** and **Export as QGIS QML** produce styles for other desktop and server GIS software.
 - **Import style from file (GeoLibre URL / Mapbox GL / SLD / QML)…** applies a supported style file to the selected layer. When importing a GeoLibre URL style interactively, the filename-based `source` association is ignored because the selected layer is the target.

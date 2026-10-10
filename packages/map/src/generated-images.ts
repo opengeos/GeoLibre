@@ -218,8 +218,16 @@ export function ensureGeneratedImageHandler(map: maplibregl.Map): void {
   if (typeof map.setMissingStyleImageResolver === "function") {
     // MapLibre 6 fires styleimagemissing after collecting a tile's images.
     // Resolve beforehand, awaiting SVG rasterization as well as built-in tiles.
+    // The map holds a single resolver, so hand ids that are not generated
+    // images to whichever one was installed before ours (MapLibre exposes no
+    // getter; the field is read defensively).
+    const previous = (map as { _missingStyleImageResolver?: unknown })._missingStyleImageResolver;
+    const fallback =
+      typeof previous === "function"
+        ? (previous as (id: string) => void | Promise<void>)
+        : undefined;
     map.setMissingStyleImageResolver((id) =>
-      factories.has(id) ? addGeneratedImage(map, id) : undefined,
+      factories.has(id) ? addGeneratedImage(map, id) : fallback?.(id),
     );
   } else {
     // Mapbox GL and older MapLibre versions still request images by event.

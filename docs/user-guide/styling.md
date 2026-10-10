@@ -118,7 +118,7 @@ misread.
 
 ### Style interchange and URL styles
 
-The selected vector layer's **Layer actions → Styles** submenu imports and exports GeoLibre URL style JSON, Mapbox/MapLibre style JSON, OGC SLD, and QGIS QML. A GeoLibre URL style is a compact MapLibre style whose feature data is supplied separately through the `data` URL parameter. Use **Export style for URL loading…** when you want to publish the current symbology beside hosted GeoJSON or a ZIP of GeoJSON files; import it when you want to apply that symbology to a layer already open in GeoLibre.
+The selected vector layer's **Layer actions → Styles** submenu imports and exports GeoLibre URL style JSON, Mapbox/MapLibre style JSON, OGC SLD, and QGIS QML. A GeoLibre URL style is a compact MapLibre style whose feature data is supplied separately through the `data` URL parameter. Use **Export GeoLibre URL style** when you want to publish the current symbology beside hosted GeoJSON or a ZIP of GeoJSON files; import it when you want to apply that symbology to a layer already open in GeoLibre.
 
 GeoLibre URL styles preserve built-in polygon fill patterns and their colors, plus custom SVG fill patterns. Inline SVG markup and SVG data URLs are stored in the style file; HTTP(S) SVG URLs remain external references and must still be reachable when loading the style. Each fill render layer carries a versioned `geolibre:fill-pattern` entry in its `metadata`, so patterns stay associated with the correct source when combining styles for a multi-file ZIP. GeoLibre restores this extension through both URL loading and style import. Other MapLibre/Mapbox clients ignore the extension and use the flat fill. Custom point markers still require generated sprites and are not preserved by this export.
 

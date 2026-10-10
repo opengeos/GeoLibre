@@ -7889,7 +7889,7 @@
     "exportGeoTiff": "GeoTIFF (COG)",
     "extractSubset": "提取子集…",
     "stylesMenu": "样式",
-    "exportGeoLibreStyle": "导出用于 URL 加载的样式…",
+    "exportGeoLibreStyle": "导出 GeoLibre URL 样式",
     "exportGeoLibreStyleHint": "导出符号样式（包括填充图案），用于 ?data= 和 ?style= URL 参数。不包含要素数据，不保留自定义点标记。",
     "exportMapboxStyle": "导出为 Mapbox GL 样式",
     "exportSldStyle": "导出为 OGC SLD",

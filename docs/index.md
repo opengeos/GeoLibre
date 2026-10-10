@@ -150,7 +150,7 @@ You can also open hosted data directly. `data` accepts GeoJSON, GeoParquet, PMTi
 https://web.geolibre.app/?data=https://assets.geolibre.app/data/places.geojson&style=https://assets.geolibre.app/data/sample.style.json
 ```
 
-Vector layers can produce a compatible file from **Layer actions → Styles → Export style for URL loading…**, and apply it again with **Import style from file (GeoLibre URL / Mapbox GL / SLD / QML)…**, or with **Import style from text…** by pasting the style itself.
+Vector layers can produce a compatible file from **Layer actions → Styles → Export GeoLibre URL style**, and apply it again with **Import style from file (GeoLibre URL / Mapbox GL / SLD / QML)…**, or with **Import style from text…** by pasting the style itself.
 
 For narrow embeds, add `&layout=compact` to the demo URL to use icon-only toolbar buttons and hide project metadata:
 

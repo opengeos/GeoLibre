@@ -97,3 +97,29 @@ it("resolves failed asynchronous factories to a transparent fallback", async () 
     assert.deepEqual(images.get(id), { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
   }
 });
+
+it("hands non-generated ids to a resolver installed before GeoLibre's", async () => {
+  const requested: string[] = [];
+  let resolveMissing: ((id: string) => void | Promise<void>) | undefined;
+  const images = new Map<string, unknown>();
+  const map = {
+    on() {},
+    hasImage: (id: string) => images.has(id),
+    addImage: (id: string, image: unknown) => images.set(id, image),
+    _missingStyleImageResolver: (id: string) => {
+      requested.push(id);
+    },
+    setMissingStyleImageResolver(resolver: typeof resolveMissing) {
+      resolveMissing = resolver;
+    },
+  };
+  const image = { width: 1, height: 1, data: new Uint8Array([0, 249, 0, 255]) };
+  registerGeneratedImage("test-chained-pattern", () => ({ image, pixelRatio: 1 }));
+  ensureGeneratedImageHandler(map as never);
+  assert.ok(resolveMissing);
+  await resolveMissing("app-custom-icon");
+  assert.deepEqual(requested, ["app-custom-icon"]);
+  await resolveMissing("test-chained-pattern");
+  assert.deepEqual(requested, ["app-custom-icon"]);
+  assert.equal(images.get("test-chained-pattern"), image);
+});
