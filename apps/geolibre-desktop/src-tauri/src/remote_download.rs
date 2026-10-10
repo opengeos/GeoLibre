@@ -287,20 +287,18 @@ fn status_error(status: reqwest::StatusCode) -> String {
 }
 
 /// Stream `url` into `destination`. `part_tag` makes the partial file unique to
-/// the request; `reserved` says `destination` is an empty placeholder this
-/// download owns (a folder download), removed again if the download fails.
+/// the request; `placeholder` guards the empty file a folder download reserved
+/// at `destination`, removing it if the download fails or is dropped (it is
+/// created before the task is spawned, so an abort before the first poll still
+/// cleans up).
 async fn transfer(
     url: Url,
     headers: HeaderMap,
     destination: PathBuf,
     part_tag: String,
-    reserved: bool,
+    mut placeholder: Option<PartFile>,
     progress: tauri::ipc::Channel<RemoteDownloadProgress>,
 ) -> Result<u64, String> {
-    let mut placeholder = PartFile {
-        path: destination.clone(),
-        done: !reserved,
-    };
     let response = client(!headers.is_empty())?
         .get(url)
         .headers(headers)
@@ -355,7 +353,9 @@ async fn transfer(
     fs::rename(&part.path, &destination)
         .map_err(|error| format!("Could not finish the download: {error}"))?;
     part.done = true;
-    placeholder.done = true;
+    if let Some(placeholder) = placeholder.as_mut() {
+        placeholder.done = true;
+    }
     let _ = progress.send(RemoteDownloadProgress { received, total });
     Ok(received)
 }
@@ -423,8 +423,14 @@ pub(crate) async fn download_remote_file(
     };
     let is_folder = folder.is_some();
     let saves_to_disk = request.save || is_folder;
+    let mut placeholder = None;
     let destination = if let Some(folder) = folder {
-        reserve_unique_path(&folder, &file_name)?
+        let reserved = reserve_unique_path(&folder, &file_name)?;
+        placeholder = Some(PartFile {
+            path: reserved.clone(),
+            done: false,
+        });
+        reserved
     } else if request.save {
         match pick_save_path(&app, &file_name).await? {
             Some(path) => path,
@@ -444,7 +450,7 @@ pub(crate) async fn download_remote_file(
             headers,
             destination.clone(),
             sanitize_file_name(&request_id),
-            is_folder,
+            placeholder,
             progress,
         ));
         let abort = task.inner().abort_handle();
@@ -455,9 +461,10 @@ pub(crate) async fn download_remote_file(
         downloads: downloads.inner().clone(),
         id: request_id.clone(),
     };
-    let size = task
-        .await
-        .map_err(|_| "Download cancelled.".to_string())??;
+    let size = task.await.map_err(|error| match error {
+        tauri::Error::JoinError(join) if join.is_cancelled() => "Download cancelled.".to_string(),
+        other => format!("The download task failed: {other}"),
+    })??;
     if saves_to_disk {
         Ok(Some(RemoteDownloadResult {
             path: Some(destination.to_string_lossy().into_owned()),

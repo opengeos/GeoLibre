@@ -257,7 +257,11 @@ export async function handleEarthdataDownload(
       return plain(502, "The Earthdata file host redirected somewhere unexpected.");
     }
     url = next.toString();
-    if (hop === 0 && cacheKey) await storePresigned(cacheKey, url, now);
+    // Cache only a presigned target: another Earthdata hop would answer the
+    // tokenless replay with a redirect or 401 and be evicted every time.
+    if (hop === 0 && cacheKey && !isEarthdataDataUrl(url)) {
+      await storePresigned(cacheKey, url, now);
+    }
   }
   if (!response) return plain(508, "Too many redirects.");
   if (!response.ok) {

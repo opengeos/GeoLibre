@@ -89,6 +89,23 @@ describe("Earthdata download proxy", () => {
     assert.equal(hops[3].url, FILE);
   });
 
+  it("does not cache a first hop to another Earthdata host", async () => {
+    const MIDDLE = "https://data.ornldaac.earthdata.nasa.gov/protected/next.h5";
+    const hops: string[] = [];
+    const upstream = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      hops.push(url);
+      if (url === FILE) return new Response(null, { status: 303, headers: { location: MIDDLE } });
+      if (url === MIDDLE)
+        return new Response(null, { status: 303, headers: { location: PRESIGNED } });
+      return new Response("HDF", { status: 200 });
+    };
+    const auth = { authorization: "Bearer hop" };
+    await handleEarthdataDownload(request(FILE, auth), upstream);
+    await handleEarthdataDownload(request(FILE, auth), upstream);
+    assert.deepEqual(hops, [FILE, MIDDLE, PRESIGNED, FILE, MIDDLE, PRESIGNED]);
+  });
+
   it("falls back to the DAAC when a cached presigned URL stops working", async () => {
     const hops: Hop[] = [];
     let expired = false;
