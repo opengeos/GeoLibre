@@ -8,6 +8,7 @@ import {
   EARTHDATA_PRESETS,
   EARTHDATA_TOKEN_PAGE_URL,
   earthdataProxyUrl,
+  isEarthdataProxyUrl,
   type EarthdataCollection,
   type EarthdataGranule,
   earthdataTokenExpiry,
@@ -983,6 +984,16 @@ function canAddCog(): boolean {
   return typeof appRef?.addCogLayer === "function";
 }
 
+/** The relay URLs of the Earthdata COG layers on the map, as one comparable string. */
+function addedCogSignature(layers: readonly { source: unknown }[]): string {
+  const urls: string[] = [];
+  for (const layer of layers) {
+    const url = (layer.source as { url?: unknown } | undefined)?.url;
+    if (typeof url === "string" && isEarthdataProxyUrl(url)) urls.push(url);
+  }
+  return urls.sort().join("\n");
+}
+
 /** Whether a COG is already on the map, found by its relay URL in the store. */
 function isCogAdded(url: string): boolean {
   const relay = earthdataProxyUrl(url);
@@ -1213,9 +1224,21 @@ function buildPanel(container: HTMLElement): () => void {
     root.scrollTop = scroll;
   };
   renderPanel = render;
+  // Keep the file lists' Add / Added state in step with the map: re-render when
+  // an Earthdata COG layer is added or removed anywhere (the Layers panel, undo,
+  // a project load), but not for unrelated layer edits.
+  let addedCogs = addedCogSignature(useAppStore.getState().layers);
+  const unsubscribeLayers = useAppStore.subscribe((next, previous) => {
+    if (next.layers === previous.layers) return;
+    const signature = addedCogSignature(next.layers);
+    if (signature === addedCogs) return;
+    addedCogs = signature;
+    render();
+  });
   render();
   if (state.granules.length > 0) setFootprints();
   return () => {
+    unsubscribeLayers();
     if (renderPanel === render) renderPanel = null;
     container.replaceChildren();
   };
