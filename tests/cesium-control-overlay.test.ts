@@ -265,6 +265,26 @@ describe("CesiumControlHost recording facade", () => {
     host.destroy();
   });
 
+  it("keeps a hit tolerance next to the limb and across the antimeridian", () => {
+    const viewer = makeViewer(doc);
+    const { host } = mount(viewer);
+    const internals = host as unknown as {
+      facade: {
+        project: () => { x: number; y: number };
+        pickLngLat: (p: { x: number }) => unknown;
+      };
+      tolerance: (lngLat: [number, number]) => number;
+    };
+    internals.facade.project = () => ({ x: 100, y: 50 });
+    // Right of the point is space; the left probe still answers.
+    internals.facade.pickLngLat = ({ x }) => (x > 100 ? null : [9.5, 0]);
+    assert.equal(internals.tolerance([10, 0]), 0.5);
+    // A probe that wraps to the other side of the antimeridian.
+    internals.facade.pickLngLat = ({ x }) => (x > 100 ? [-179.5, 0] : null);
+    assert.equal(internals.tolerance([179.5, 0]), 1);
+    host.destroy();
+  });
+
   it("suspends and restores the globe's drag inputs through dragPan", () => {
     const viewer = makeViewer(doc);
     const { host, map } = mount(viewer);

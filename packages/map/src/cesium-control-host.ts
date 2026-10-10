@@ -621,10 +621,16 @@ export class CesiumControlHost {
   /** {@link HIT_TOLERANCE_PX} in degrees of longitude at `lngLat`. */
   private tolerance(lngLat: [number, number]): number {
     const at = this.facade.project(lngLat);
-    const beside = this.facade.pickLngLat({ x: at.x + HIT_TOLERANCE_PX, y: at.y });
-    if (!beside) return 0;
-    const span = Math.abs(beside[0] - lngLat[0]);
-    return Number.isFinite(span) ? Math.min(span, 180) : 0;
+    // Probe both sides: next to the limb one of them is off the globe, and a
+    // zero tolerance would leave points and lines there unclickable.
+    for (const dx of [HIT_TOLERANCE_PX, -HIT_TOLERANCE_PX]) {
+      const beside = this.facade.pickLngLat({ x: at.x + dx, y: at.y });
+      if (!beside) continue;
+      const span = Math.abs(beside[0] - lngLat[0]);
+      // Across the antimeridian the short way round is 360 minus the gap.
+      if (Number.isFinite(span)) return Math.min(span, 360 - span);
+    }
+    return 0;
   }
 
   /**
