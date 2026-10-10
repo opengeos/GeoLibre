@@ -9,9 +9,12 @@
 //! reads it back once. JavaScript never names a path to write, so the command
 //! cannot be turned into an arbitrary file writer.
 //!
-//! Request headers (an Earthdata Login bearer token) go to the first host only:
-//! reqwest drops `Authorization` when a redirect changes host, which is what the
-//! DAACs expect, since they answer with a presigned CloudFront URL.
+//! A bearer token goes to the first host only: reqwest drops its sensitive
+//! headers (`Authorization`, `Cookie`, `Proxy-Authorization`) when a redirect
+//! changes host, which is what the DAACs expect, since they answer with a
+//! presigned CloudFront URL. Other headers would follow every hop, so a request
+//! that carries headers must start on HTTPS and may only carry those sensitive
+//! ones plus `Accept`.
 
 use std::{
     collections::HashMap,
@@ -185,6 +188,18 @@ fn sanitize_file_name(name: &str) -> String {
     }
 }
 
+/// Headers a download may carry: credentials reqwest strips on a cross-host
+/// redirect, and `Accept`. Anything else would be replayed to every hop.
+const FORWARDABLE_REQUEST_HEADERS: &[&str] = &["authorization", "cookie", "accept"];
+
+/// Credentials never travel over plain HTTP.
+fn check_scheme(url: &Url, headers: &HeaderMap) -> Result<(), String> {
+    if url.scheme() != "https" && !headers.is_empty() {
+        return Err("Refusing to send credentials over a non-HTTPS URL.".into());
+    }
+    Ok(())
+}
+
 fn request_headers(headers: Vec<(String, String)>) -> Result<HeaderMap, String> {
     let mut map = HeaderMap::new();
     for (name, value) in headers {
@@ -192,6 +207,9 @@ fn request_headers(headers: Vec<(String, String)>) -> Result<HeaderMap, String> 
             .map_err(|_| format!("Invalid request header name: {name}"))?;
         if MANAGED_REQUEST_HEADERS.contains(&name.as_str()) {
             continue;
+        }
+        if !FORWARDABLE_REQUEST_HEADERS.contains(&name.as_str()) {
+            return Err(format!("Unsupported download header: {name}"));
         }
         let value = HeaderValue::from_str(&value)
             .map_err(|_| format!("Invalid value for request header {name}."))?;
@@ -346,6 +364,7 @@ pub(crate) async fn download_remote_file(
 ) -> Result<Option<RemoteDownloadResult>, String> {
     let url = Url::parse(&request.url).map_err(|_| "Invalid download URL.".to_string())?;
     let headers = request_headers(request.headers)?;
+    check_scheme(&url, &headers)?;
     let checked = url.clone();
     tauri::async_runtime::spawn_blocking(move || url_is_fetchable(&checked))
         .await
@@ -508,6 +527,17 @@ mod tests {
         assert_eq!(headers.len(), 1);
         assert_eq!(headers["authorization"], "Bearer abc");
         assert!(request_headers(vec![("bad name".into(), "x".into())]).is_err());
+        assert!(request_headers(vec![("X-Api-Key".into(), "k".into())]).is_err());
+    }
+
+    #[test]
+    fn credentials_require_https() {
+        let auth = request_headers(vec![("Authorization".into(), "Bearer t".into())]).unwrap();
+        let http = Url::parse("http://example.com/a.h5").unwrap();
+        let https = Url::parse("https://example.com/a.h5").unwrap();
+        assert!(check_scheme(&http, &auth).is_err());
+        assert!(check_scheme(&https, &auth).is_ok());
+        assert!(check_scheme(&http, &HeaderMap::new()).is_ok());
     }
 
     #[test]

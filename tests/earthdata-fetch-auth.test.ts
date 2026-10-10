@@ -4,6 +4,7 @@ import { withEarthdataAuth } from "../apps/geolibre-desktop/src/lib/earthdata-fe
 import {
   EARTHDATA_PROXY_ENDPOINT,
   earthdataProxyUrl,
+  isEarthdataDataUrl,
   isEarthdataProxyUrl,
 } from "../packages/plugins/src/plugins/earthdata-relay";
 
@@ -39,6 +40,25 @@ describe("Earthdata relay URLs", () => {
     assert.equal(isEarthdataProxyUrl("http://tiles.geolibre.app/earthdata/download?url=x"), false);
     assert.equal(isEarthdataProxyUrl(COG), false);
     assert.equal(isEarthdataProxyUrl("not a url"), false);
+  });
+});
+
+describe("Earthdata token hosts", () => {
+  it("allows only HTTPS NASA Earthdata data hosts", () => {
+    assert.equal(isEarthdataDataUrl(COG), true);
+    assert.equal(
+      isEarthdataDataUrl("https://data.ornldaac.earthdata.nasa.gov/protected/x.h5"),
+      true,
+    );
+    assert.equal(isEarthdataDataUrl("https://urs.earthdata.nasa.gov/api/users/tokens"), false);
+    assert.equal(isEarthdataDataUrl("http://data.lpdaac.earthdatacloud.nasa.gov/x.tif"), false);
+    assert.equal(
+      isEarthdataDataUrl("https://data.lpdaac.earthdatacloud.nasa.gov.evil.com/x"),
+      false,
+    );
+    assert.equal(isEarthdataDataUrl("https://datapool.asf.alaska.edu/x.zip"), false);
+    assert.equal(isEarthdataDataUrl("https://u:p@data.lpdaac.earthdatacloud.nasa.gov/x"), false);
+    assert.equal(isEarthdataDataUrl("not a url"), false);
   });
 });
 

@@ -2,9 +2,7 @@ import "./lib/symbol-dispose-polyfill";
 import "./lib/crypto-random-uuid-polyfill";
 // Must precede any Map construction (see the module docs).
 import "./lib/maplibre-worker";
-// Wraps `fetch` before Diagnostics does, so its restore keeps this wrapper:
-// adds the Earthdata Login token to Earthdata relay requests (NASA COG layers).
-import "./lib/earthdata-fetch-auth";
+import { installEarthdataFetchAuth } from "./lib/earthdata-fetch-auth";
 import React from "react";
 import ReactDOM from "react-dom/client";
 /* App typeface — see the --font-sans/--font-mono note in index.css.
@@ -87,6 +85,10 @@ import { initializeNativeProjectOpen } from "./lib/native-project-open";
 import { initializeNativeCoordinateOpen } from "./lib/native-coordinate-open";
 import { initializeNativeShareAuth } from "./lib/native-share-auth";
 import { configureShareOAuthReadiness, markColdShareCallback } from "./lib/share-oauth";
+
+// Adds the Earthdata Login token to Earthdata relay requests (NASA COG
+// layers). Before Diagnostics wraps `fetch`, so its restore keeps this wrapper.
+installEarthdataFetchAuth();
 
 installDiagnosticsCapture();
 

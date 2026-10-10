@@ -8,6 +8,7 @@ import {
   EARTHDATA_PRESETS,
   EARTHDATA_TOKEN_PAGE_URL,
   earthdataProxyUrl,
+  isEarthdataDataUrl,
   isEarthdataProxyUrl,
   type EarthdataCollection,
   type EarthdataGranule,
@@ -233,9 +234,13 @@ function token(): string {
   return appRef?.credentials?.get(TOKEN_CREDENTIAL) ?? "";
 }
 
-function authHeaders(): Record<string, string> {
+/**
+ * The Authorization header for a file URL: only NASA Earthdata hosts get the
+ * token, since CMR data links are chosen by each provider.
+ */
+function authHeaders(url: string): Record<string, string> {
   const value = token();
-  return value ? { Authorization: `Bearer ${value}` } : {};
+  return value && isEarthdataDataUrl(url) ? { Authorization: `Bearer ${value}` } : {};
 }
 
 function openExternal(url: string): void {
@@ -547,7 +552,7 @@ async function proxyDownload(
   onProgress: (received: number, total: number | null) => void,
 ): Promise<ArrayBuffer> {
   const response = await fetch(earthdataProxyUrl(url), {
-    headers: authHeaders(),
+    headers: authHeaders(url),
     signal,
   });
   if (!response.ok) {
@@ -656,7 +661,7 @@ async function transferGranule(
       renderPanel?.();
       if (native) {
         const result = await native(url, {
-          headers: authHeaders(),
+          headers: authHeaders(url),
           fileName,
           target: kind === "open" ? "memory" : folder ? "folder" : "save",
           ...(folder ? { folderId: folder.id } : {}),
@@ -674,6 +679,13 @@ async function transferGranule(
           transfer.done = tr("saved", "Saved to {{path}}", { path: result.path ?? fileName });
         }
       } else {
+        if (!isEarthdataDataUrl(url)) {
+          // The relay serves NASA Earthdata hosts only; let the browser fetch
+          // any other host itself (it signs in there if it needs to).
+          openExternal(url);
+          transfer.done = tr("openedInTab", "Opened {{name}} in a new tab.", { name: fileName });
+          continue;
+        }
         const data = await proxyDownload(url, controller.signal, onProgress);
         if (kind === "open") {
           appRef?.openSpaceborneLidarGranule?.(data, fileName);
@@ -1071,7 +1083,7 @@ function buildFileList(granule: EarthdataGranule, busy: boolean): HTMLElement {
     const name = element("span", CSS.fileName, shortName);
     name.title = fullName;
     row.append(name);
-    if (isCogUrl(url) && canAddCog()) {
+    if (isCogUrl(url) && isEarthdataDataUrl(url) && canAddCog()) {
       const added = isCogAdded(url);
       const add = button(
         added ? tr("addedCog", "Added") : tr("addCog", "Add"),

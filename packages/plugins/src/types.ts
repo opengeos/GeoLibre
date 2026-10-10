@@ -481,7 +481,10 @@ export interface AssistantToolSpec {
 
 /** Options for {@link GeoLibreAppAPI.downloadRemoteFile}. */
 export interface GeoLibreRemoteDownloadOptions {
-  /** Request headers, e.g. `Authorization`. */
+  /**
+   * Request headers: only `Authorization`, `Cookie` and `Accept`, which are
+   * sent to the first host only, and only over HTTPS. Others are rejected.
+   */
   headers?: Record<string, string>;
   /** Suggested file name (sanitized by the host). */
   fileName: string;

@@ -28,6 +28,7 @@ const HTTP_URL_RE = /^https?:\/\//i;
 export {
   EARTHDATA_PROXY_ENDPOINT,
   earthdataProxyUrl,
+  isEarthdataDataUrl,
   isEarthdataProxyUrl,
 } from "./earthdata-relay";
 

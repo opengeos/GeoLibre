@@ -11,6 +11,32 @@
 export const EARTHDATA_PROXY_ENDPOINT = "https://tiles.geolibre.app/earthdata/download";
 
 /**
+ * Whether a URL is on a NASA Earthdata data host, the only place the Earthdata
+ * Login token may be sent. CMR `data` links are chosen by each data provider,
+ * so a link on any other host gets no token. Mirrors `isEarthdataDataUrl` in
+ * `workers/tiles/src/earthdata.ts`, which the relay enforces on its side.
+ *
+ * @param url A granule file URL.
+ * @returns True for HTTPS `*.earthdatacloud.nasa.gov` / `*.earthdata.nasa.gov`,
+ *   never the login host.
+ */
+export function isEarthdataDataUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port) {
+    return false;
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (host === "urs.earthdata.nasa.gov") return false;
+  const within = (suffix: string) => host === suffix || host.endsWith(`.${suffix}`);
+  return within("earthdatacloud.nasa.gov") || within("earthdata.nasa.gov");
+}
+
+/**
  * The relay URL for an Earthdata file.
  *
  * @param url The DAAC file URL.

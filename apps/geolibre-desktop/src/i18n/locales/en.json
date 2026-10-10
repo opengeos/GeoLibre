@@ -10421,7 +10421,8 @@
       "downloadAll": "Download all",
       "downloadAllTitle": "Download all {{count}} files into a folder",
       "downloadAllBrowserTitle": "Download all {{count}} files",
-      "fileOf": "File {{index}} of {{count}}: "
+      "fileOf": "File {{index}} of {{count}}: ",
+      "openedInTab": "Opened {{name}} in a new tab."
     }
   },
   "arcgisService": {

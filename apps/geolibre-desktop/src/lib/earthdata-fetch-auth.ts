@@ -56,6 +56,14 @@ function savedToken(): string {
   }
 }
 
-if (typeof window !== "undefined" && typeof window.fetch === "function") {
+let installed = false;
+
+/**
+ * Wrap `window.fetch` once. Call it at boot, before Diagnostics wraps `fetch`,
+ * so Diagnostics' restore puts this wrapper back rather than the original.
+ */
+export function installEarthdataFetchAuth(): void {
+  if (installed || typeof window === "undefined" || typeof window.fetch !== "function") return;
+  installed = true;
   window.fetch = withEarthdataAuth(window.fetch.bind(window), savedToken);
 }
