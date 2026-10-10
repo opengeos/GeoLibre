@@ -219,3 +219,14 @@ def test_uint64_fill_values_stay_exact(tmp_path):
     )
     values = [f["properties"]["shot_number"] for f in result.geojson["features"]]
     assert values == [None, "7", "8", "9", "10"]
+
+
+def test_a_malformed_integer_fill_is_ignored(tmp_path):
+    path = tmp_path / "GEDI02_A_test.h5"
+    _gedi_l2a(path)
+    with h5py.File(path, "a") as f:
+        f["BEAM0101/shot_number"].attrs["_FillValue"] = "none"
+    result = sl.read_spaceborne_lidar(
+        path, beams=["BEAM0101"], fields=["shot_number"], quality_filter=False
+    )
+    assert all(isinstance(f["properties"]["shot_number"], str) for f in result.geojson["features"])

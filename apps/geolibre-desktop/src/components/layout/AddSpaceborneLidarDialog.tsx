@@ -156,8 +156,15 @@ export function AddSpaceborneLidarDialog({
       const input = document.createElement("input");
       input.type = "file";
       input.accept = LOCAL_EXTENSIONS.map((ext) => `.${ext}`).join(",");
-      input.onchange = () => resolve(input.files?.[0] ?? null);
-      input.addEventListener("cancel", () => resolve(null));
+      input.style.display = "none";
+      // Attached while picking, so no browser collects it before `change`.
+      document.body.appendChild(input);
+      const done = (file: File | null) => {
+        input.remove();
+        resolve(file);
+      };
+      input.onchange = () => done(input.files?.[0] ?? null);
+      input.addEventListener("cancel", () => done(null));
       input.click();
     });
 

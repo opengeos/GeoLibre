@@ -50,6 +50,8 @@ async function handle(request: Request): Promise<unknown> {
       setH5wasmUrl(request.h5wasmUrl);
       file?.close();
       dispose?.();
+      file = null;
+      dispose = null;
       const mod = await loadH5wasm();
       const mounted =
         request.source.kind === "file"

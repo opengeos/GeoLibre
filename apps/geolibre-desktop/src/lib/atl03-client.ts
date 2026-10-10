@@ -156,7 +156,15 @@ export async function openAtl03Granule(source: Atl03Source): Promise<Atl03Granul
       const beams = options.beams ?? primary.beams.map((beam) => beam.name);
       const groups = source.kind === "url" ? splitBeams(beams, REMOTE_WORKERS) : [beams];
       // Open the extra readers on the first read (each opens the file once).
-      while (helpers.length < groups.length - 1) helpers.push(spawnReader(source));
+      // A helper that fails to start is dropped, so the next read retries it.
+      while (helpers.length < groups.length - 1) {
+        const spawned = spawnReader(source);
+        void spawned.catch(() => {
+          const index = helpers.indexOf(spawned);
+          if (index >= 0) void helpers.splice(index, 1);
+        });
+        helpers.push(spawned);
+      }
       const readers = [primary, ...(await Promise.all(helpers.slice(0, groups.length - 1)))];
       if (closed) throw new Error("The ATL03 granule was closed.");
       let bytes = 0;
@@ -168,7 +176,9 @@ export async function openAtl03Granule(source: Atl03Source): Promise<Atl03Granul
       }
       try {
         const parts = await Promise.all(
-          groups.map((group, i) => readers[i].read({ ...options, beams: group, maxPoints: 0 })),
+          // Each worker caps its own part (the merge thins to the exact cap),
+          // so a dense view does not clone millions of photons to discard.
+          groups.map((group, i) => readers[i].read({ ...options, beams: group })),
         );
         return mergeAtl03Photons(parts, options.maxPoints);
       } finally {

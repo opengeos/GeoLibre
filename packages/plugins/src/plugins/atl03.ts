@@ -155,7 +155,10 @@ function inBbox(lon: number, lat: number, [west, south, east, north]: Atl03ReadO
   if (!(lat >= south && lat <= north)) return false;
   if (east - west >= 360) return true;
   if (west > east) return lon >= west || lon <= east;
-  return lon >= west && lon <= east;
+  // The map reports an antimeridian-crossing view unwrapped (east > 180),
+  // while photon longitudes are in [-180, 180].
+  const x = east > 180 && lon < west ? lon + 360 : lon;
+  return x >= west && x <= east;
 }
 
 /** Entries read per probe when searching a sorted dataset (about one HDF5 chunk). */
@@ -481,15 +484,17 @@ function readPhotons(file: H5File, beams: Atl03Beam[], options: Atl03ReadOptions
  */
 export function mergeAtl03Photons(parts: Atl03Photons[], maxPoints?: number): Atl03Photons {
   const matched = parts.reduce((sum, part) => sum + part.matched, 0);
+  // Parts may already be capped by their workers, so thin over what arrived.
+  const arrived = parts.reduce((sum, part) => sum + part.geojson.features.length, 0);
   const cap = maxPoints && maxPoints > 0 ? maxPoints : Infinity;
-  const stride = matched > cap ? Math.ceil(matched / cap) : 1;
+  const step = arrived > cap ? Math.ceil(arrived / cap) : 1;
   const features: Atl03Photons["geojson"]["features"] = [];
   const perBeam: Atl03Photons["perBeam"] = [];
   let offset = 0;
   for (const part of parts) {
     const counts = new Map<string, number>();
     for (const feature of part.geojson.features) {
-      if (offset % stride === 0) {
+      if (offset % step === 0) {
         features.push({ ...feature, id: features.length });
         counts.set(feature.properties.beam, (counts.get(feature.properties.beam) ?? 0) + 1);
       }
@@ -504,7 +509,7 @@ export function mergeAtl03Photons(parts: Atl03Photons[], maxPoints?: number): At
     scanned: parts.reduce((sum, part) => sum + part.scanned, 0),
     matched,
     kept: features.length,
-    stride,
+    stride: features.length > 0 ? Math.max(1, Math.round(matched / features.length)) : 1,
     perBeam,
   };
 }
@@ -606,9 +611,12 @@ function syncRange(
   const contentRange = xhr.getResponseHeader("Content-Range");
   const total = contentRange ? Number(contentRange.split("/")[1]) : null;
   const bytes = new Uint8Array(xhr.response as ArrayBuffer);
-  if (xhr.status === 200 && start > 0) {
-    // The server ignored the range and sent everything.
-    return { bytes: bytes.subarray(start, end + 1), total: bytes.length };
+  if (xhr.status === 200 && bytes.length > end - start + 1) {
+    // The server ignored the range: refuse rather than keep reading a
+    // multi-gigabyte file whole, one request at a time.
+    throw new Error(
+      "The server does not support byte-range requests, so the granule cannot be read lazily.",
+    );
   }
   return { bytes, total: Number.isFinite(total) ? total : null };
 }
@@ -642,7 +650,8 @@ export function createRangeFile(
   // round trips (about half a second each to NASA's storage). 256 KB measured
   // best for a dense granule's view.
   const chunkSize = options.chunkSize ?? 256 * 1024;
-  const maxChunks = options.maxChunks ?? 256;
+  // About 32 MB a worker; a remote read runs up to six.
+  const maxChunks = options.maxChunks ?? 128;
   const probe = syncRange(url, 0, 0, headers);
   const length = probe.total;
   if (!length) throw new Error("The server did not report the file size for a range request.");

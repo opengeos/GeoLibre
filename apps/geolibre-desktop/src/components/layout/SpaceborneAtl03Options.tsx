@@ -68,7 +68,9 @@ export function SpaceborneAtl03Options({ granule, fileName, appApi }: Spaceborne
       return;
     }
     const [west, south, east, north] = bbox;
-    if (north - south > MAX_VIEW_DEGREES || Math.abs(east - west) > MAX_VIEW_DEGREES) {
+    // A view across the antimeridian arrives with west > east or east > 180.
+    const width = east >= west ? east - west : east + 360 - west;
+    if (north - south > MAX_VIEW_DEGREES || width > MAX_VIEW_DEGREES) {
       setError(t("addData.spaceborneLidar.atl03.zoomIn", { degrees: MAX_VIEW_DEGREES }));
       return;
     }
@@ -99,8 +101,11 @@ export function SpaceborneAtl03Options({ granule, fileName, appApi }: Spaceborne
       }
       const store = useAppStore.getState();
       const id = store.addGeoJsonLayer(`ATL03 ${baseName(fileName)}`, photons.geojson, fileName);
+      const added = useAppStore.getState().layers.find((entry) => entry.id === id);
       store.updateLayer(id, {
         metadata: {
+          // Keep whatever the store put there; updateLayer replaces the object.
+          ...added?.metadata,
           sourceKind: SPACEBORNE_LIDAR_SOURCE_KIND,
           product: "ATL03",
           beams: photons.perBeam.filter((entry) => entry.kept > 0).map((entry) => entry.beam),
