@@ -77,7 +77,10 @@ panels cannot mount and are disabled in Add Data on the globe.
 The Web Services catalogs (FEMA NFHL, USGS National Map, US EPA EnviroAtlas,
 NASA Earthdata, Earthdata GIS, Ocean Data Platform, GeoLens, Hugging Face, and
 the STAC browsers), Esri Wayback, Gridlines, and the DGGS grids run on the
-globe this way.
+globe this way. Street View runs too: its location marker is a DOM element the
+globe positions over the canvas each frame (`cesium-dom-marker.ts` in the
+plugins package), in place of MapLibre's `Marker`, which reads a map
+transform the facade does not have.
 
 ## Scene and camera
 

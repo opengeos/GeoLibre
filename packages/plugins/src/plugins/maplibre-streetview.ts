@@ -5,6 +5,7 @@ import {
   type StreetViewControlOptions,
 } from "maplibre-gl-streetview";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition, GeoLibrePlugin } from "../types";
+import { createCesiumDomMarker } from "./cesium-dom-marker";
 
 const streetViewEnv = (
   import.meta as ImportMeta & {
@@ -166,9 +167,14 @@ function credentialsSignature(): string {
  * @returns A marker factory on a Mapbox host, else `undefined`.
  */
 export function streetViewMarkerFactory(
-  app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapRenderer"> | null,
+  app: Pick<GeoLibreAppAPI, "getMapboxGl" | "getMapRenderer" | "getCesiumScene"> | null,
 ): CreateStreetViewMarker | undefined {
   const renderer = app?.getMapRenderer?.();
+  // On the globe the control's facade has no transform for MapLibre's Marker
+  // to read; a DOM marker positioned from the scene stands in.
+  // eslint-disable-next-line local/no-renderer-kind-checks -- builds the globe marker factory
+  if (renderer === "cesium")
+    return ({ element }) => createCesiumDomMarker(() => app?.getCesiumScene?.() ?? null, element);
   // eslint-disable-next-line local/no-renderer-kind-checks -- builds the Mapbox marker factory
   const mapbox = renderer === undefined ? !!app?.getMapboxGl?.() : renderer === "mapbox";
   if (!mapbox) return undefined;
@@ -187,12 +193,13 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-streetview",
   name: "Street View",
   version: "0.5.0",
-  // Both 2D engines: the control stays on the Style Spec surface they share,
-  // and the one MapLibre class it built itself — the location `Marker` — now
-  // comes from `createMarker` (see streetViewMarkerFactory). A renderer swap
+  // Both 2D engines and the globe: the control stays on the Style Spec surface
+  // they share (the globe's control facade included), and the one MapLibre
+  // class it built itself — the location `Marker` — now comes from
+  // `createMarker` (see streetViewMarkerFactory). A renderer swap
   // tears every active plugin down and re-activates it, so the rebuilt control
   // picks up the new engine's factory.
-  engines: ["maplibre", "mapbox"],
+  engines: ["maplibre", "mapbox", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
     activeApp = app;
     addRuntimeEnvListener();

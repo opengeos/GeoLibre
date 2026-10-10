@@ -7,12 +7,15 @@ import {
   streetViewMarkerFactory,
 } from "../packages/plugins/src/plugins/maplibre-streetview";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+import * as Cesium from "@cesium/engine";
+import { createCesiumDomMarker } from "../packages/plugins/src/plugins/cesium-dom-marker";
 
 describe("maplibreStreetViewPlugin", () => {
-  it("declares both 2D engines", () => {
-    // The control only needs the Style Spec surface the two share; the one
-    // MapLibre class it built itself is now supplied per engine.
-    assert.deepEqual(plugin.engines, ["maplibre", "mapbox"]);
+  it("declares both 2D engines and the globe", () => {
+    // The control only needs the Style Spec surface they share (the globe's
+    // control facade included); the one MapLibre class it built itself, the
+    // location marker, is supplied per engine.
+    assert.deepEqual(plugin.engines, ["maplibre", "mapbox", "cesium"]);
   });
 });
 
@@ -211,6 +214,78 @@ describe("Street View API keys", () => {
       assert.deepEqual(Object.fromEntries(saved), { mapillary: "m-token" });
     } finally {
       plugin.deactivate?.(app);
+    }
+  });
+});
+
+describe("Street View on the globe", () => {
+  /** A scene handle whose camera looks straight down on (0°, 0°) from `height`. */
+  function makeScene(document: Document, height = 1e6) {
+    const container = document.createElement("div");
+    const canvas = Object.assign(document.createElement("canvas"), {
+      clientWidth: 800,
+      clientHeight: 600,
+    });
+    container.appendChild(canvas);
+    const postRender = new Cesium.Event();
+    const projected: { x: number; y: number } = { x: 400, y: 300 };
+    const scene = {
+      mode: Cesium.SceneMode.SCENE3D,
+      globe: { getHeight: () => 12 },
+      postRender,
+    };
+    const original = Cesium.SceneTransforms.worldToWindowCoordinates;
+    Cesium.SceneTransforms.worldToWindowCoordinates = (() =>
+      new Cesium.Cartesian2(projected.x, projected.y)) as never;
+    const camera = { positionWC: Cesium.Cartesian3.fromDegrees(0, 0, height) };
+    const handle = {
+      Cesium,
+      scene,
+      camera,
+      canvas,
+      requestRender: () => {},
+    };
+    return {
+      handle,
+      container,
+      projected,
+      postRender,
+      restore: () => (Cesium.SceneTransforms.worldToWindowCoordinates = original),
+    };
+  }
+
+  it("builds a globe marker for the cesium renderer", () => {
+    const factory = streetViewMarkerFactory({
+      getMapRenderer: () => "cesium",
+      getCesiumScene: () => null,
+    } as unknown as GeoLibreAppAPI);
+    assert.equal(typeof factory, "function");
+  });
+
+  it("follows the camera and hides past the horizon or off the canvas", () => {
+    const { document } = parseHTML("<html><body></body></html>");
+    const { handle, container, projected, postRender, restore } = makeScene(document);
+    try {
+      const element = document.createElement("div");
+      const marker = createCesiumDomMarker(() => handle as never, element);
+      marker.setLngLat([0, 0]).addTo({});
+      assert.equal(element.parentElement, container);
+      assert.equal(element.style.display, "");
+      assert.equal(element.style.left, "400px");
+      projected.x = 500;
+      postRender.raiseEvent();
+      assert.equal(element.style.left, "500px", "follows each frame");
+      projected.x = 900;
+      postRender.raiseEvent();
+      assert.equal(element.style.display, "none", "off the canvas");
+      projected.x = 400;
+      marker.setLngLat([180, 0]);
+      assert.equal(element.style.display, "none", "past the horizon");
+      marker.remove();
+      assert.equal(element.parentElement, null);
+      assert.equal(postRender.numberOfListeners, 0);
+    } finally {
+      restore();
     }
   });
 });
