@@ -8,6 +8,7 @@ import {
   nearestProfileIndex,
   profileBeams,
   profileCsv,
+  profileDots,
   profileFields,
   profileGapThreshold,
   profilePath,
@@ -155,6 +156,27 @@ describe("along-track profile series", () => {
     const points = buildProfilePoints(evenly, "gt1l", [fieldSeries("h_li")]);
     assert.ok(Math.abs(profileGapThreshold(points) - 0.5) < 1e-9);
     assert.equal(profileGapThreshold(points.slice(0, 2)), Number.POSITIVE_INFINITY);
+  });
+
+  it("plots ATL03 photon heights as dots", () => {
+    const [preset] = profilePresets("ATL03", ["h_ph", "signal_conf"]);
+    assert.equal(preset.id, "photons");
+    assert.equal(preset.dots, true);
+    const photons = layer([
+      footprint(0, "gt1l", 0.1, { h_ph: 5 }),
+      footprint(1, "gt1l", 0.2, { h_ph: 7 }),
+    ]);
+    const points = buildProfilePoints(photons, "gt1l", preset.series);
+    assert.equal(
+      profileDots(
+        points,
+        0,
+        (d) => d * 10,
+        (v) => v,
+        2,
+      ),
+      "M0.0 4.0h2v2h-2zM1.0 6.0h2v2h-2z",
+    );
   });
 
   it("exports the plotted profile as CSV", () => {

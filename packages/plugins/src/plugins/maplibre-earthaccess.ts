@@ -17,6 +17,7 @@ import {
   formatSizeMb,
   granuleDetailsUrl,
   granuleFootprints,
+  isAtl03Granule,
   isSpaceborneLidarGranule,
   newestCollection,
   primaryDataLink,
@@ -1008,6 +1009,21 @@ function buildGranuleSection(): HTMLElement | null {
   return section;
 }
 
+/**
+ * Hand an ATL03 granule to Add Data → ICESat-2 / GEDI, which reads its photons
+ * for the map view in byte ranges through the relay (it is 1-7 GB).
+ */
+function openAtl03(url: string): void {
+  if (!token()) {
+    state.authOpen = true;
+    state.cogError = tr("atl03NeedsToken", "Add an Earthdata Login token to read ATL03 photons.");
+    renderPanel?.();
+    return;
+  }
+  state.cogError = null;
+  appRef?.openSpaceborneLidarUrl?.(earthdataProxyUrl(url), fileNameFromUrl(url), authHeaders(url));
+}
+
 /** Whether the host can add COG layers. */
 function canAddCog(): boolean {
   return typeof appRef?.addCogLayer === "function";
@@ -1140,7 +1156,16 @@ function buildCard(granule: EarthdataGranule): HTMLElement {
   const transfer = state.transfers.get(granule.conceptId);
   const busy = Boolean(transfer?.controller);
   const link = primaryDataLink(granule);
-  if (
+  if (collection && link && isAtl03Granule(collection, granule) && appRef?.openSpaceborneLidarUrl) {
+    // ATL03 is read lazily for the map view through the relay, never downloaded.
+    const open = button(
+      tr("open", "Open"),
+      CSS.actionPrimary,
+      () => openAtl03(link),
+      tr("openAtl03Title", "Read this granule's photons for the map view"),
+    );
+    actions.append(open);
+  } else if (
     collection &&
     isSpaceborneLidarGranule(collection, granule) &&
     appRef?.openSpaceborneLidarGranule

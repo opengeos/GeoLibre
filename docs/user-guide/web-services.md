@@ -153,6 +153,7 @@ Searches NASA's [Common Metadata Repository](https://cmr.earthdata.nasa.gov/sear
 - Pick a **popular dataset** (ICESat-2 ATL06 and ATL08, GEDI L2A, L2B and L4A, HLS, NASADEM) or search by keyword. A popular pick uses the newest version in Earthdata Cloud.
 - **Search this view** lists the dataset's granules over the map view and a date range, newest first, and draws their footprints as one entry in the Layers panel. Click a footprint to find its card.
 - **Open** (ICESat-2 ATL06/ATL08 and GEDI L2A/L2B/L4A) downloads the granule and hands it to [Add Data → ICESat-2 / GEDI](adding-data.md), where you pick beams and fields as for a local file.
+- **Open** on an ICESat-2 **ATL03** granule does not download it: Add Data → ICESat-2 / GEDI reads the photons in the map view straight from NASA in byte ranges (several beams at once), showing how many MB have arrived. A dense daytime granule can take about a minute for a wide view; zoom in for faster reads.
 - **Download** saves the granule's file (**Download all** for a multi-file granule such as an HLS scene: the desktop app asks for a folder once), **Zoom** fits the map to it, and **Details** opens it in Earthdata Search.
 - **Files** lists a granule's files, each with its own **Download**; a GeoTIFF also gets **Add**, which puts it on the map as a COG layer (HLS bands, NASADEM tiles, …).
 

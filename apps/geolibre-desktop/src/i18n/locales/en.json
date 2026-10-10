@@ -1212,7 +1212,36 @@
       "added_other": "Added {{formatted}} footprints.",
       "addedThinned": "Added {{kept}} of {{matched}} matching footprints (thinned to 1 in {{stride}}).",
       "errorNoView": "The current map view is not available.",
-      "errorNoFootprints": "No footprints matched the selected beams and filters."
+      "errorNoFootprints": "No footprints matched the selected beams and filters.",
+      "atl03": {
+        "product": "ICESat-2 ATL03 Geolocated Photons",
+        "help": "ATL03 holds every photon of an orbit segment, so it is read from the file on demand instead of loaded: the photons in the current map view are added as points with height (h_ph), signal confidence and along-track distance.",
+        "photonCount": "{{count}} photons",
+        "surface": "Surface",
+        "surfaces": {
+          "land": "Land",
+          "ocean": "Ocean",
+          "sea_ice": "Sea ice",
+          "land_ice": "Land ice",
+          "inland_water": "Inland water"
+        },
+        "confidence": "Lowest signal confidence",
+        "confidenceLevels": {
+          "0": "Noise and above (all)",
+          "1": "Buffer and above",
+          "2": "Low and above (signal)",
+          "3": "Medium and above",
+          "4": "High only"
+        },
+        "maxPhotons": "Maximum photons",
+        "add": "Add photons in view",
+        "reading": "Reading the photons in view…",
+        "zoomIn": "Zoom in: photons are read for views up to {{degrees}}° across.",
+        "noPhotons": "No photons in this view pass the filters. Pan to a ground track or lower the signal confidence.",
+        "added": "Added {{kept}} photons.",
+        "addedThinned": "Added {{kept}} of {{matched}} photons (thinned evenly to the maximum).",
+        "readingProgress": "Reading the photons in view… {{mb}} MB"
+      }
     },
     "deckViz": {
       "defaultName": "Deck.gl Layer",
@@ -10423,7 +10452,9 @@
       "downloadAllBrowserTitle": "Download all {{count}} files",
       "fileOf": "File {{index}} of {{count}}: ",
       "openedInTab": "Opened {{name}} in a new tab.",
-      "startedAll": "Started {{count}} downloads. If your browser asks to allow multiple downloads, allow it."
+      "startedAll": "Started {{count}} downloads. If your browser asks to allow multiple downloads, allow it.",
+      "atl03NeedsToken": "Add an Earthdata Login token to read ATL03 photons.",
+      "openAtl03Title": "Read this granule's photons for the map view"
     }
   },
   "arcgisService": {
@@ -10473,12 +10504,14 @@
     "preset": {
       "groundCanopy": "Ground and canopy top",
       "surface": "Surface height",
-      "fields": "Fields"
+      "fields": "Fields",
+      "photons": "Photon heights"
     },
     "series": {
       "ground": "Ground",
       "canopyTop": "Canopy top",
-      "surfaceHeight": "Surface height"
+      "surfaceHeight": "Surface height",
+      "photonHeight": "Photon height"
     },
     "resetZoom": "Reset zoom",
     "exportPng": "Download the chart as PNG",

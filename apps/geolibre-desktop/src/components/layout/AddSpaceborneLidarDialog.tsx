@@ -21,7 +21,8 @@ import { useDialogResize } from "../../hooks/useDialogResize";
 import { buildSymbologyStyle } from "../../lib/assistant/symbology";
 import { SPACEBORNE_LIDAR_SOURCE_KIND } from "../../lib/along-track-profile";
 import { pointBounds } from "../../lib/point-bounds";
-import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
+import { isAtl03Name } from "@geolibre/plugins/atl03";
+import { openAtl03Granule, type Atl03Granule } from "../../lib/atl03-client";
 import {
   baseName,
   downloadWithProgress,
@@ -34,6 +35,7 @@ import {
   takePendingSpaceborneLidarGranule,
 } from "../../lib/spaceborne-lidar-handoff";
 import { SampleDataSelect } from "./add-data/shared";
+import { SpaceborneAtl03Options } from "./SpaceborneAtl03Options";
 import { SpaceborneLidarOptions } from "./SpaceborneLidarOptions";
 
 const LOCAL_EXTENSIONS = ["h5", "hdf5", "he5"];
@@ -90,9 +92,16 @@ export function AddSpaceborneLidarDialog({
   // Bumped on reset so an open that resolves after the dialog closed is dropped.
   const opGen = useRef(0);
 
+  // An ATL03 granule, opened lazily in a worker instead of loaded.
+  const [atl03, setAtl03] = useState<{ granule: Atl03Granule; name: string } | null>(null);
+  const atl03Ref = useRef<Atl03Granule | null>(null);
+
   const closeFile = () => {
     fileRef.current?.close();
     fileRef.current = null;
+    atl03Ref.current?.close();
+    atl03Ref.current = null;
+    setAtl03(null);
   };
 
   useEffect(
@@ -139,22 +148,64 @@ export function AddSpaceborneLidarDialog({
     }
   }, [chosenFields, colorBy]);
 
+  // A file input in every build, not the native dialog: an ATL03 granule
+  // (1-7 GB) must reach the worker as a File it can read lazily, which a
+  // native path cannot give, and the name decides that before any read.
+  const pickGranuleFile = () =>
+    new Promise<File | null>((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = LOCAL_EXTENSIONS.map((ext) => `.${ext}`).join(",");
+      input.onchange = () => resolve(input.files?.[0] ?? null);
+      input.addEventListener("cancel", () => resolve(null));
+      input.click();
+    });
+
   const handleChooseFile = async () => {
     setError(null);
     setStatus(null);
-    let selected: { data?: ArrayBuffer; path: string } | null;
+    const picked = await pickGranuleFile();
+    if (!picked) return;
+    if (isAtl03Name(picked.name)) {
+      await openAtl03({ kind: "file", file: picked }, picked.name);
+      return;
+    }
+    let data: ArrayBuffer;
     try {
-      selected = await openLocalDataFileWithFallback({
-        filters: [{ name: "ICESat-2 / GEDI (HDF5)", extensions: LOCAL_EXTENSIONS }],
-        accept: LOCAL_EXTENSIONS.map((ext) => `.${ext}`).join(","),
-        readBinary: true,
-      });
+      data = await picked.arrayBuffer();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       return;
     }
-    if (!selected?.data) return;
-    await openGranule(selected.data, selected.path);
+    await openGranule(data, picked.name);
+  };
+
+  /** Open an ATL03 granule in the worker and show its photon options. */
+  const openAtl03 = async (source: Parameters<typeof openAtl03Granule>[0], name: string) => {
+    downloadAbort.current?.abort();
+    downloadAbort.current = null;
+    setDownloadPercent(null);
+    opGen.current += 1;
+    const gen = opGen.current;
+    closeFile();
+    setAdding(false);
+    setFile(null);
+    setFields([]);
+    setFileName(name);
+    setLoading(true);
+    try {
+      const granule = await openAtl03Granule(source);
+      if (gen !== opGen.current) {
+        granule.close();
+        return;
+      }
+      atl03Ref.current = granule;
+      setAtl03({ granule, name });
+    } catch (err) {
+      if (gen === opGen.current) setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (gen === opGen.current) setLoading(false);
+    }
   };
 
   const handleSample = async (file: string) => {
@@ -234,10 +285,20 @@ export function AddSpaceborneLidarDialog({
   // mount, and whenever another arrives while the dialog is open.
   const openGranuleRef = useRef(openGranule);
   openGranuleRef.current = openGranule;
+  const openAtl03Ref = useRef(openAtl03);
+  openAtl03Ref.current = openAtl03;
   useEffect(() => {
     const takePending = () => {
       const granule = takePendingSpaceborneLidarGranule();
-      if (granule) void openGranuleRef.current(granule.data, granule.fileName);
+      if (!granule) return;
+      if (granule.url) {
+        void openAtl03Ref.current(
+          { kind: "url", url: granule.url, headers: granule.headers },
+          granule.fileName,
+        );
+      } else if (granule.data) {
+        void openGranuleRef.current(granule.data, granule.fileName);
+      }
     };
     takePending();
     return onSpaceborneLidarGranuleRequest(takePending);
@@ -405,6 +466,15 @@ export function AddSpaceborneLidarDialog({
             />
           </div>
 
+          {atl03 && (
+            <SpaceborneAtl03Options
+              key={atl03.name}
+              granule={atl03.granule}
+              fileName={atl03.name}
+              appApi={appApi}
+            />
+          )}
+
           {file && (
             <>
               <p className="text-sm font-medium" data-testid="spaceborne-lidar-product">
@@ -451,9 +521,11 @@ export function AddSpaceborneLidarDialog({
             >
               {t("addData.spaceborneLidar.close")}
             </Button>
-            <Button type="submit" disabled={!file || adding || selectedBeams.size === 0}>
-              {adding ? t("addData.spaceborneLidar.adding") : t("addData.spaceborneLidar.add")}
-            </Button>
+            {!atl03 && (
+              <Button type="submit" disabled={!file || adding || selectedBeams.size === 0}>
+                {adding ? t("addData.spaceborneLidar.adding") : t("addData.spaceborneLidar.add")}
+              </Button>
+            )}
           </div>
         </form>
       </DialogContent>

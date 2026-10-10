@@ -782,6 +782,18 @@ export interface GeoLibreAppAPI {
    */
   openSpaceborneLidarGranule?: (data: ArrayBuffer, fileName: string) => void;
   /**
+   * Open Add Data → ICESat-2 / GEDI on a granule read lazily from a URL rather
+   * than downloaded: for ATL03 photon granules (1-7 GB), whose photons the
+   * dialog reads for the map view in byte ranges. The URL must serve ranges
+   * with CORS (the Earthdata relay for NASA granules); `headers` go with every
+   * request (an Earthdata Login bearer token).
+   */
+  openSpaceborneLidarUrl?: (
+    url: string,
+    fileName: string,
+    headers?: Record<string, string>,
+  ) => void;
+  /**
    * Ask the user for a folder to save several downloads into, for
    * {@link downloadRemoteFile}'s `"folder"` target. Resolves null when the user
    * cancels. Desktop only.

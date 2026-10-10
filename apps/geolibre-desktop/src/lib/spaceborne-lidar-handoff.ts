@@ -5,9 +5,16 @@
  * mounts, or straight away if it is already open.
  */
 
-/** A downloaded granule waiting for the dialog. */
+/**
+ * A granule waiting for the dialog: downloaded bytes, or (for an ATL03
+ * granule, too large to download whole) a URL the dialog reads lazily.
+ */
 export interface PendingSpaceborneLidarGranule {
-  data: ArrayBuffer;
+  data?: ArrayBuffer;
+  /** A byte-range-capable URL (the Earthdata relay for NASA granules). */
+  url?: string;
+  /** Headers for `url`'s requests (an Earthdata Login bearer token). */
+  headers?: Record<string, string>;
   fileName: string;
 }
 

@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./assistant-tool-registry": "./src/assistant-tool-registry.ts",
+    "./atl03": "./src/plugins/atl03.ts",
     "./cog-spectral-profile": "./src/plugins/cog-spectral-profile.ts",
     "./earthdata-relay": "./src/plugins/earthdata-relay.ts",
     "./elevation-profile-chart": "./src/plugins/elevation-profile/chart/profileChart.ts",

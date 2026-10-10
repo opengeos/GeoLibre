@@ -10,6 +10,7 @@
  * desktop app's native transport.
  */
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
+import { isAtl03Name } from "./atl03";
 import { detectSpaceborneLidarProduct } from "./spaceborne-lidar";
 
 /** CMR search root. */
@@ -110,6 +111,7 @@ export interface EarthdataPreset {
  * ICESat-2 / GEDI reader opens, plus widely used imagery.
  */
 export const EARTHDATA_PRESETS: EarthdataPreset[] = [
+  { shortName: "ATL03", label: "ICESat-2 ATL03 Geolocated Photons" },
   { shortName: "ATL06", label: "ICESat-2 ATL06 Land Ice Height" },
   { shortName: "ATL08", label: "ICESat-2 ATL08 Land and Vegetation Height" },
   { shortName: "GEDI02_A", label: "GEDI L2A Elevation and Height Metrics" },
@@ -474,6 +476,23 @@ export function isSpaceborneLidarGranule(
   const link = primaryDataLink(granule);
   if (!link || !/\.(h5|hdf5|he5)$/i.test(link.split("?")[0])) return false;
   return detectSpaceborneLidarProduct(collection.shortName, fileNameFromUrl(link)) !== null;
+}
+
+/**
+ * Whether a granule is ICESat-2 ATL03 (geolocated photons), which the app reads
+ * lazily for the map view instead of downloading.
+ *
+ * @param collection The granule's dataset.
+ * @param granule The granule.
+ * @returns True for an ATL03 HDF5 granule.
+ */
+export function isAtl03Granule(
+  collection: Pick<EarthdataCollection, "shortName">,
+  granule: EarthdataGranule,
+): boolean {
+  const link = primaryDataLink(granule);
+  if (!link || !/\.(h5|hdf5|he5)$/i.test(link.split("?")[0])) return false;
+  return collection.shortName.toUpperCase() === "ATL03" || isAtl03Name(fileNameFromUrl(link));
 }
 
 /**

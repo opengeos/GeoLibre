@@ -4,6 +4,7 @@ import { Button } from "@geolibre/ui";
 import { Download, GripVertical, Image as ImageIcon, LineChart, RotateCcw, X } from "lucide-react";
 import {
   useCallback,
+  useId,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -22,6 +23,7 @@ import {
   nearestProfileIndex,
   profileBeams,
   profileCsv,
+  profileDots,
   profileFields,
   profileGapThreshold,
   profilePath,
@@ -133,6 +135,19 @@ function ProfileWindow({
   );
   const [mode, setMode] = useState<string>(presets[0]?.id ?? "fields");
   const [chosenFields, setChosenFields] = useState<string[]>(() => fields.slice(0, 1));
+  // A layer edit can drop the open beam or preset; fall back instead of
+  // charting nothing under a stale selection.
+  useEffect(() => {
+    if (beams.length > 0 && !beams.some((entry) => entry.name === beam)) {
+      setBeam((beams.find((b) => b.type === "strong" || b.type === "power") ?? beams[0]).name);
+    }
+  }, [beams, beam]);
+  useEffect(() => {
+    if (mode !== "fields" && !presets.some((preset) => preset.id === mode)) {
+      setMode(presets[0]?.id ?? "fields");
+    }
+  }, [presets, mode]);
+  const clipId = `${useId()}-atp-plot`;
 
   const series: ProfileSeriesDef[] = useMemo(() => {
     const preset = presets.find((candidate) => candidate.id === mode);
@@ -232,9 +247,13 @@ function ProfileWindow({
   const distanceAt = (px: number) =>
     domain[0] + ((px - MARGIN.left) / innerW) * (domain[1] - domain[0]);
 
+  const asDots = presets.find((candidate) => candidate.id === mode)?.dots === true;
   const paths = useMemo(
-    () => series.map((_, index) => profilePath(visible, index, x, y, gap)),
-    [series, visible, x, y, gap],
+    () =>
+      series.map((_, index) =>
+        asDots ? profileDots(visible, index, x, y) : profilePath(visible, index, x, y, gap),
+      ),
+    [series, visible, x, y, gap, asDots],
   );
   const xTicks = niceTickValues(domain[0], domain[1], Math.max(2, Math.floor(innerW / 90)));
   const yTicks = niceTickValues(yDomain[0], yDomain[1], Math.max(2, Math.floor(innerH / 45)));
@@ -520,7 +539,7 @@ function ProfileWindow({
               onDoubleClick={() => setXDomain(null)}
             >
               <defs>
-                <clipPath id={`atp-clip-${layer.id}`}>
+                <clipPath id={clipId}>
                   <rect x={MARGIN.left} y={MARGIN.top} width={innerW} height={innerH} />
                 </clipPath>
               </defs>
@@ -589,13 +608,13 @@ function ProfileWindow({
               >
                 {mode === "fields" ? labels.join(", ") : t("alongTrackProfile.elevationAxis")}
               </text>
-              <g clipPath={`url(#atp-clip-${layer.id})`}>
+              <g clipPath={`url(#${clipId})`}>
                 {paths.map((d, index) => (
                   <path
                     key={series[index].key}
                     d={d}
-                    fill="none"
-                    stroke={colors[index]}
+                    fill={asDots ? colors[index] : "none"}
+                    stroke={asDots ? "none" : colors[index]}
                     strokeWidth={1.5}
                     strokeLinejoin="round"
                   />

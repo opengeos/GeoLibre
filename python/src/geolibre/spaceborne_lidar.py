@@ -586,7 +586,14 @@ def _read_columns(np: Any, group: Any, specs: list[FieldSpec], selected: Any, mi
         picked = raw[selected]
         if raw.dtype.kind in "iu" and raw.dtype.itemsize == 8:
             # 64-bit integers (GEDI shot_number) do not fit a double exactly.
-            fill_int = int(fill) if fill is not None else None
+            # Read the fill as an exact int: a uint64 fill such as 2**64 - 1
+            # does not survive a round trip through float.
+            raw_fill = dataset.attrs.get("_FillValue")
+            fill_int = (
+                int(raw_fill.item() if hasattr(raw_fill, "item") else raw_fill)
+                if raw_fill is not None
+                else None
+            )
             out.append(
                 (
                     key,

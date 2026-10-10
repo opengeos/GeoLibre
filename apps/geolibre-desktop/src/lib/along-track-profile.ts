@@ -20,9 +20,9 @@ const BASE_PROPERTIES = new Set(["beam", "beam_type", "time", "distance_km"]);
 const PRODUCT_PREFIX = /^(ATL06|ATL08|GEDI_L2A|GEDI_L2B|GEDI_L4A)\b/;
 
 /** Label keys under `alongTrackProfile.series`. */
-export type ProfileSeriesLabelKey = "ground" | "canopyTop" | "surfaceHeight";
+export type ProfileSeriesLabelKey = "ground" | "canopyTop" | "surfaceHeight" | "photonHeight";
 /** Label keys under `alongTrackProfile.preset`. */
-export type ProfilePresetLabelKey = "groundCanopy" | "surface";
+export type ProfilePresetLabelKey = "groundCanopy" | "surface" | "photons";
 
 /** One line on the chart: a label and how to read its value from a footprint. */
 export interface ProfileSeriesDef {
@@ -38,6 +38,8 @@ export interface ProfilePreset {
   /** i18n key under `alongTrackProfile.preset`. */
   labelKey: ProfilePresetLabelKey;
   series: ProfileSeriesDef[];
+  /** Draw dots instead of lines (an ATL03 photon cloud is not a line). */
+  dots?: boolean;
 }
 
 /** One plotted footprint. */
@@ -184,6 +186,13 @@ export function profilePresets(product: string | null, fields: string[]): Profil
     presets.push(groundAndCanopy("elev_lowestmode", "rh98"));
   } else if (product === "GEDI_L2B" && has("elev_lowestmode", "rh100")) {
     presets.push(groundAndCanopy("elev_lowestmode", "rh100"));
+  } else if (product === "ATL03" && has("h_ph")) {
+    presets.push({
+      id: "photons",
+      labelKey: "photons",
+      series: [{ key: "h_ph", labelKey: "photonHeight", value: field("h_ph") }],
+      dots: true,
+    });
   } else if (product === "ATL06" && has("h_li")) {
     presets.push({
       id: "surface",
@@ -290,6 +299,34 @@ export function profilePath(
     const connect = previous !== null && point.distance - previous.distance <= maxGapKm;
     path += `${connect ? "L" : "M"}${x(point.distance).toFixed(1)} ${y(value).toFixed(1)}`;
     previous = point;
+  }
+  return path;
+}
+
+/**
+ * An SVG path of small squares, one per point with a value: a scatter for
+ * photon clouds, cheaper than thousands of `<circle>` elements.
+ *
+ * @param points Points sorted by distance.
+ * @param seriesIndex Which value to draw.
+ * @param x Maps a distance to an x pixel.
+ * @param y Maps a value to a y pixel.
+ * @param size Square side in pixels.
+ * @returns The `d` attribute.
+ */
+export function profileDots(
+  points: ProfilePoint[],
+  seriesIndex: number,
+  x: (distance: number) => number,
+  y: (value: number) => number,
+  size = 2,
+): string {
+  const half = size / 2;
+  let path = "";
+  for (const point of points) {
+    const value = point.values[seriesIndex];
+    if (value === null) continue;
+    path += `M${(x(point.distance) - half).toFixed(1)} ${(y(value) - half).toFixed(1)}h${size}v${size}h-${size}z`;
   }
   return path;
 }

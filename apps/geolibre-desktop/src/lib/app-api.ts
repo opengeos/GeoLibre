@@ -477,6 +477,8 @@ export function createAppAPI(
     pickDownloadFolder: isTauriRuntime()
       ? () => invoke<GeoLibreDownloadFolder | null>("pick_download_folder")
       : undefined,
+    openSpaceborneLidarUrl: (url: string, fileName: string, headers?: Record<string, string>) =>
+      requestSpaceborneLidarGranule({ url, fileName, ...(headers ? { headers } : {}) }),
     openSpaceborneLidarGranule: (data: ArrayBuffer, fileName: string) =>
       requestSpaceborneLidarGranule({ data, fileName }),
     resolvePluginAssetUrl: resolvePluginAssetUrlForLoadedPlugin,

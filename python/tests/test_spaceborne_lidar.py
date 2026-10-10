@@ -204,3 +204,18 @@ def test_along_track_distance_carries_over_invalid_coordinates():
     assert km[1] == 0.0
     assert km[2] == pytest.approx(1.112, abs=0.001)
     assert km[3] == pytest.approx(2.224, abs=0.001)
+
+
+def test_uint64_fill_values_stay_exact(tmp_path):
+    path = tmp_path / "GEDI02_A_test.h5"
+    _gedi_l2a(path)
+    with h5py.File(path, "a") as f:
+        del f["BEAM0101/shot_number"]
+        shots = np.array([2**64 - 1, 7, 8, 9, 10], dtype=np.uint64)
+        ds = f["BEAM0101"].create_dataset("shot_number", data=shots)
+        ds.attrs["_FillValue"] = np.uint64(2**64 - 1)
+    result = sl.read_spaceborne_lidar(
+        path, beams=["BEAM0101"], fields=["shot_number"], quality_filter=False
+    )
+    values = [f["properties"]["shot_number"] for f in result.geojson["features"]]
+    assert values == [None, "7", "8", "9", "10"]
