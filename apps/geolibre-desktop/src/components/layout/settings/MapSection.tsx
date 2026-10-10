@@ -133,6 +133,7 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
     // The defaults carry no `arcgisWkid`, so clear it explicitly.
     updateMapPreferences({ ...DEFAULT_PROJECT_PREFERENCES.map, arcgisWkid: undefined });
     setCustomWkid(false);
+    setWkidText("");
   };
 
   return (
@@ -368,9 +369,18 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
               if (wkid !== undefined) setArcgisWkid(wkid);
             }}
           />
-          <p className="text-xs text-muted-foreground">
-            {t("settings.map.arcgisProjectionWkidHint")}
-          </p>
+          {normalizeArcgisWkid(wkidText) === undefined ? (
+            // The draft keeps the last valid projection until a usable code is
+            // typed; an unknown WKID is reported by the map when it loads.
+            <p className="flex items-center gap-1 text-xs text-destructive">
+              <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+              {t("settings.map.arcgisProjectionWkidInvalid")}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t("settings.map.arcgisProjectionWkidHint")}
+            </p>
+          )}
         </div>
       ) : null}
       <div className="space-y-1.5">

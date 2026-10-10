@@ -282,6 +282,9 @@ In another projection:
 - The camera, pointer coordinates, identify, selection and extent drawing
   convert between the projection and longitude/latitude, so the shared
   camera, other split panes and saved views stay in degrees.
+- The flat map stays a `MapView` even with terrain on, since a local scene
+  cannot use the projection; terrain applies again on the globe or in Web
+  Mercator. An unknown WKID shows the SDK's error over the map.
 - MapLibre, Mapbox and Cesium panes ignore the setting.
 
 ## Adding data

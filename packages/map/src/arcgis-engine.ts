@@ -184,15 +184,18 @@ export type ArcgisSceneMode = "2d" | "global" | "local";
  * `MapView` cannot tilt, draw a globe or drape terrain, and a `SceneView`
  * does all three. So the globe projection selects a global scene, terrain on
  * a Mercator map selects a local (projected) scene, and only a Mercator map
- * without terrain stays a `MapView`. The canvas rebuilds the view when the
+ * without terrain stays a `MapView`. A flat map in a projection other than
+ * Web Mercator (issue #2708) is always a `MapView`: a local scene cannot use
+ * it, so terrain is set aside there. The canvas rebuilds the view when the
  * answer changes.
  */
 export function arcgisSceneMode(
   projection: MapProjection,
   terrainEnabled: boolean,
+  customProjection = false,
 ): ArcgisSceneMode {
   if (projection === "globe") return "global";
-  return terrainEnabled ? "local" : "2d";
+  return terrainEnabled && !customProjection ? "local" : "2d";
 }
 
 /** User-facing error messages the engine reports, which the app translates. */
@@ -597,6 +600,12 @@ export class ArcgisEngine implements MapEngine {
   private companions = new WeakSet<ArcgisLayer>();
   /** Whether {@link settleView} has placed the stored camera. */
   private placed = false;
+  /**
+   * The last centre `readView` could convert to longitude/latitude. A view in
+   * another projection can fail to convert a point outside the projection's
+   * domain, and the shared camera must not jump to [0, 0] when it does.
+   */
+  private lastCenter: [number, number] = [0, 0];
   private errors = new Map<string, string>();
   /** Store ids last seen as plugin layers, whose `layer:` error means "unsupported". */
   private pluginLayerIds = new Set<string>();
@@ -972,7 +981,8 @@ export class ArcgisEngine implements MapEngine {
   readView(): MapViewState {
     const view = this.view;
     if (!view) return { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 };
-    const center = this.lngLatOf(view.center) ?? [0, 0];
+    const center = this.lngLatOf(view.center) ?? this.lastCenter;
+    this.lastCenter = center;
     const bounds = this.getViewBounds();
     return {
       center,
@@ -1378,7 +1388,10 @@ export class ArcgisEngine implements MapEngine {
     const { minZoom, maxZoom } = this.zoomRange();
     const zoom = viewZoom(view);
     const bounds = p.restrictBounds ? normalizeMapBounds(p.bounds) : null;
-    const [lng, lat] = this.lngLatOf(view.center) ?? [0, 0];
+    const settled = this.lngLatOf(view.center);
+    // No geographic centre to clamp; correcting towards a substitute would move the map.
+    if (!settled) return;
+    const [lng, lat] = settled;
     const center: [number, number] = bounds
       ? [
           Math.min(bounds[2], Math.max(bounds[0], lng)),
@@ -2559,7 +2572,9 @@ export class ArcgisEngine implements MapEngine {
     const stop = drawExtentOnCanvas(
       this.canvas(),
       (p) => {
-        return this.lngLatOf(view.toMap({ x: p.x, y: p.y })) ?? [0, 0];
+        // A corner outside the projection's domain is no location; the
+        // drawing ignores it (or cancels, on release) rather than using one.
+        return this.lngLatOf(view.toMap({ x: p.x, y: p.y }));
       },
       () => this.suspendNavigation(),
       options,

@@ -9,7 +9,7 @@ import {
   parseProject,
   serializeProject,
 } from "@geolibre/core";
-import { arcgisPointLngLat } from "../packages/map/src/arcgis-engine";
+import { arcgisPointLngLat, arcgisSceneMode } from "../packages/map/src/arcgis-engine";
 import {
   loadArcgisProjectOperator,
   resetArcgisSdkForTests,
@@ -124,5 +124,14 @@ describe("loadArcgisProjectOperator", () => {
     assert.equal(await loadArcgisProjectOperator(importer), operator);
     assert.equal(loads, 1);
     resetArcgisSdkForTests();
+  });
+});
+
+describe("arcgisSceneMode with a custom projection", () => {
+  it("keeps a projected flat map a MapView even with terrain on", () => {
+    assert.equal(arcgisSceneMode("mercator", true, true), "2d");
+    assert.equal(arcgisSceneMode("mercator", false, true), "2d");
+    assert.equal(arcgisSceneMode("globe", true, true), "global");
+    assert.equal(arcgisSceneMode("mercator", true), "local");
   });
 });

@@ -145,10 +145,11 @@ export function ArcgisCanvas({
   // A split pane's toggle overrides the shared projection for that pane only.
   const [paneProjection, setPaneProjection] = useState<MapProjection | null>(null);
   const projection = (viewId ? paneProjection : null) ?? sharedProjection;
-  const sceneMode = arcgisSceneMode(projection, terrainEnabled);
-  // The flat map's projection (issue #2708); a globe or local scene ignores it.
-  const storedWkid = useAppStore((s) => s.preferences.map.arcgisWkid);
-  const wkid = sceneMode === "2d" ? normalizeArcgisWkid(storedWkid) : undefined;
+  // The flat map's projection (issue #2708); a globe ignores it, and it keeps
+  // a flat map a MapView even with terrain on.
+  const storedWkid = normalizeArcgisWkid(useAppStore((s) => s.preferences.map.arcgisWkid));
+  const sceneMode = arcgisSceneMode(projection, terrainEnabled, storedWkid !== undefined);
+  const wkid = sceneMode === "2d" ? storedWkid : undefined;
   useEffect(() => {
     let cancelled = false;
     let terrainRestoreError: string | null = null;
