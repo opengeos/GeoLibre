@@ -88,7 +88,7 @@ browser against an authenticated Mapbox map):
 - **Layer Control**, **Basemaps**, **Deck.gl Layer** and **Components** (as
   before).
 - **Web Services** — FEMA NFHL, NASA Earthdata (GIBS), US EPA EnviroAtlas,
-  USGS National Map, USGS NLDI, USGS 3DEP, Vantor, Planet Open Data, Earthdata GIS,
+  USGS National Map, USGS NLDI, Vantor, Planet Open Data, Earthdata GIS,
   OpenAerialMap, ArcGIS Hub, Socrata, CKAN, STAC Catalogs, Portolan, Source
   Cooperative, Natural Earth, Hugging Face, Esri Wayback, and GeoLens. The
   docked panels mount on the Mapbox map; the raster layers their controls
@@ -97,6 +97,9 @@ browser against an authenticated Mapbox map):
   GeoLens _private_ rasters need a per-request API key that only MapLibre's
   `setTransformRequest` can inject; the panel reports that they need the
   MapLibre renderer, while public rasters and vector data work.
+- **USGS 3DEP** also declares Mapbox (October 2026). It reads the map through
+  the same control-map path as the catalogs above and is covered by the engine
+  tests, but has not been checked in a browser against a Mapbox map.
 - **Gridlines** and the **DGGS** grids (H3, S2, A5, DGGRID, DGGAL, OLC,
   Geohash, Tilecode), including cell labels and click identification. Mapbox
   Standard's root style carries no symbol layer to borrow a font from, so
