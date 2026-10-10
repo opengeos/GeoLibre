@@ -96,6 +96,36 @@ describe("USGS 3DEP built-in plugin", () => {
     assert.equal(closeRightPanelCalledWith, USGS_DEM_PLUGIN_ID);
   });
 
+  it("binds its footprint handlers on the control map when there is no MapLibre map", () => {
+    const bound = new Map<string, unknown>();
+    const controlMap = {
+      getSource: () => null,
+      getLayer: () => null,
+      addSource: () => {},
+      addLayer: () => {},
+      removeLayer: () => {},
+      removeSource: () => {},
+      on: (type: string, layerId: string, fn: unknown) => bound.set(`${type}:${layerId}`, fn),
+      off: (type: string, layerId: string, fn: unknown) => {
+        if (bound.get(`${type}:${layerId}`) === fn) bound.delete(`${type}:${layerId}`);
+      },
+    };
+    const app = {
+      getMap: () => null,
+      getCesiumControlMap: () => controlMap,
+      registerRightPanel: () => () => {},
+    } as unknown as GeoLibreAppAPI;
+
+    maplibreUsgsDemPlugin.activate(app);
+    assert.deepEqual([...bound.keys()].sort(), [
+      "click:geolibre-usgs-dem-footprints-fill",
+      "mouseenter:geolibre-usgs-dem-footprints-fill",
+      "mouseleave:geolibre-usgs-dem-footprints-fill",
+    ]);
+    maplibreUsgsDemPlugin.deactivate?.(app);
+    assert.equal(bound.size, 0, "deactivate unbinds from the map it bound to");
+  });
+
   it("supports updating localized labels dynamically", () => {
     // `as`, not an annotation: the fake assigns it in a callback TS cannot follow.
     let panelOptions = null as GeoLibreRightPanelRegistration | null;

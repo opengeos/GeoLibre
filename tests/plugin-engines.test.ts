@@ -25,6 +25,7 @@ import { maplibreOpenAerialMapPlugin } from "../packages/plugins/src/plugins/map
 import { maplibreSatelliteEmbeddingsPlugin } from "../packages/plugins/src/plugins/maplibre-satellite-embeddings";
 import { maplibreVantorPlugin } from "../packages/plugins/src/plugins/maplibre-vantor";
 import { maplibreEarthaccessPlugin } from "../packages/plugins/src/plugins/maplibre-earthaccess";
+import { maplibreUsgsDemPlugin } from "../packages/plugins/src/plugins/maplibre-usgs-dem";
 import { cartoLightPlugin } from "../packages/plugins/src/plugins/carto-light";
 import {
   isExternalPluginManifest,
@@ -144,6 +145,12 @@ describe("Tier 1 built-in plugin engine support audit", () => {
       maplibreEarthaccessPlugin,
     ])
       assert.equal(isPluginEngineSupported(plugin, "cesium"), true, plugin.id);
+  });
+
+  // USGS 3DEP read the map through `app.getMap()` alone, so it was
+  // MapLibre-only in practice; it now goes through the control map.
+  it("declares every engine on USGS 3DEP", () => {
+    assert.deepEqual(maplibreUsgsDemPlugin.engines, ["maplibre", "mapbox", "arcgis", "cesium"]);
   });
 
   it("defaults MapLibre-only plugins without explicit engines to maplibre", () => {

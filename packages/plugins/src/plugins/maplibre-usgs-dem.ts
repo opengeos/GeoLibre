@@ -15,6 +15,7 @@ import type {
   MapMouseEvent,
 } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import { getControlMap } from "./style-map";
 import {
   buildUsgsDemSearchUrl,
   footprintCollection,
@@ -182,7 +183,7 @@ function normalizeLon(lon: number): number {
 }
 
 function currentBbox(): [number, number, number, number] | null {
-  const map = appRef?.getMap?.();
+  const map = getControlMap(appRef);
   if (!map) return null;
   const bounds = map.getBounds();
   const clampLat = (n: number): number => Math.max(-90, Math.min(90, n));
@@ -312,7 +313,6 @@ function updateFootprintSource(
   // Re-register on every non-empty search so the store layer's geojson tracks
   // the current result set (the Layers panel, attribute table, and exports read it).
   if (appRef?.registerExternalNativeLayer && fc.features.length > 0) {
-    footprintsRegistered = true;
     appRef.registerExternalNativeLayer({
       id: FOOTPRINT_STORE_LAYER_ID,
       name: currentLabels.footprintsLayer,
@@ -321,7 +321,23 @@ function updateFootprintSource(
       nativeLayerIds: [FOOTPRINT_FILL_LAYER_ID, FOOTPRINT_LINE_LAYER_ID],
       sourceIds: [FOOTPRINT_SOURCE_ID],
       metadata: { sourceKind: "usgs-dem-footprints", externalNativeLayer: true },
+      // Seed the store style from the native paint on the first registration
+      // only, so a re-search keeps the user's Style panel edits. The ArcGIS and
+      // Cesium engines draw the footprints from this style, and Mapbox mirrors
+      // it onto the native layers, so without it they paint the default fill.
+      ...(footprintsRegistered
+        ? {}
+        : {
+            opacity: 1,
+            style: {
+              fillColor: FOOTPRINT_COLOR,
+              fillOpacity: 0.15,
+              strokeColor: FOOTPRINT_COLOR,
+              strokeWidth: 1.5,
+            },
+          }),
     });
+    footprintsRegistered = true;
   } else if (footprintsRegistered && fc.features.length === 0) {
     // An empty search clears the map source, so drop the Layers-panel entry too.
     footprintsRegistered = false;
@@ -598,7 +614,7 @@ function mountPanel(container: HTMLElement): () => void {
 
   function onMapMouseDown(e: MapMouseEvent) {
     if (!isDrawing || mode !== "draw") return;
-    const map = appRef?.getMap?.();
+    const map = getControlMap(appRef);
     if (!map) return;
     e.preventDefault();
     drawStart = e.lngLat;
@@ -607,7 +623,7 @@ function mountPanel(container: HTMLElement): () => void {
 
   function onMapMouseMove(e: MapMouseEvent) {
     if (!isDrawing || !drawStart || mode !== "draw") return;
-    const map = appRef?.getMap?.();
+    const map = getControlMap(appRef);
     if (!map) return;
     const current = e.lngLat;
     const w = Math.min(drawStart.lng, current.lng);
@@ -620,7 +636,7 @@ function mountPanel(container: HTMLElement): () => void {
 
   function onMapMouseUp(e: MapMouseEvent) {
     if (!isDrawing || !drawStart || mode !== "draw") return;
-    const map = appRef?.getMap?.();
+    const map = getControlMap(appRef);
     if (!map) return;
     const current = e.lngLat;
     const w = Math.min(drawStart.lng, current.lng);
@@ -666,7 +682,7 @@ function mountPanel(container: HTMLElement): () => void {
     isDrawing = true;
     drawBtn.textContent = currentLabels.drawCancel;
     drawStatus.textContent = currentLabels.drawHint;
-    const map = appRef?.getMap?.();
+    const map = getControlMap(appRef);
     if (map) {
       map.getCanvas().style.cursor = "crosshair";
       map.on("mousedown", onMapMouseDown);
@@ -679,7 +695,7 @@ function mountPanel(container: HTMLElement): () => void {
     isDrawing = false;
     drawStart = null;
     drawBtn.textContent = currentLabels.drawStart;
-    const map = appRef?.getMap?.();
+    const map = getControlMap(appRef);
     if (map) {
       map.getCanvas().style.cursor = "";
       map.dragPan.enable();
@@ -702,7 +718,7 @@ function mountPanel(container: HTMLElement): () => void {
     const item = results.find((r) => r.id === id);
     if (item) {
       selectedId = item.id;
-      const map = appRef?.getMap?.();
+      const map = getControlMap(appRef);
       if (map) setSelectedFootprint(map, item);
       renderResults();
       const el = document.getElementById(`usgs-dem-card-${item.id}`);
@@ -758,7 +774,7 @@ function mountPanel(container: HTMLElement): () => void {
           throw new Error(currentLabels.errorQuadNotFound(qName, sName));
         }
         queryBbox = quadGeom.bbox;
-        const map = appRef?.getMap?.();
+        const map = getControlMap(appRef);
         if (map && queryBbox) {
           map.fitBounds(
             [
@@ -786,7 +802,7 @@ function mountPanel(container: HTMLElement): () => void {
       results = res.items;
       totalFound = res.total;
 
-      const map = appRef?.getMap?.();
+      const map = getControlMap(appRef);
       if (map) {
         const fc = footprintCollection(results);
         updateFootprintSource(map, fc);
@@ -801,7 +817,7 @@ function mountPanel(container: HTMLElement): () => void {
       results = [];
       totalFound = 0;
       selectedId = null;
-      const map = appRef?.getMap?.();
+      const map = getControlMap(appRef);
       if (map) {
         updateFootprintSource(map, footprintCollection([]));
         setSelectedFootprint(map, null);
@@ -840,7 +856,7 @@ function mountPanel(container: HTMLElement): () => void {
       card.onclick = (e) => {
         if ((e.target as HTMLElement).tagName === "BUTTON") return;
         selectedId = item.id;
-        const map = appRef?.getMap?.();
+        const map = getControlMap(appRef);
         if (map) setSelectedFootprint(map, item);
         renderResults();
       };
@@ -921,7 +937,7 @@ function mountPanel(container: HTMLElement): () => void {
         "padding:3px 8px;border-radius:4px;border:1px solid hsl(var(--border));background:transparent;color:hsl(var(--foreground));font-size:11px;cursor:pointer;";
       zoomBtn.textContent = currentLabels.zoom;
       zoomBtn.onclick = () => {
-        const map = appRef?.getMap?.();
+        const map = getControlMap(appRef);
         if (map && item.bbox) {
           map.fitBounds(
             [
@@ -982,12 +998,12 @@ function onMapClick(e: MapLayerMouseEvent): void {
 }
 
 function onMapMouseEnter(e: MapLayerMouseEvent): void {
-  const map = appRef?.getMap?.();
+  const map = getControlMap(appRef);
   if (map) map.getCanvas().style.cursor = "pointer";
 }
 
 function onMapMouseLeave(e: MapLayerMouseEvent): void {
-  const map = appRef?.getMap?.();
+  const map = getControlMap(appRef);
   if (map) map.getCanvas().style.cursor = "";
 }
 
@@ -998,10 +1014,15 @@ export const maplibreUsgsDemPlugin: GeoLibrePlugin = {
   id: USGS_DEM_PLUGIN_ID,
   name: "USGS 3DEP",
   version: "1.0.0",
+  // The footprints, selection outline and drawn box are GeoJSON Style Spec
+  // layers, and a loaded DEM is a store COG layer, so every engine hosts it:
+  // the 2D engines draw the overlays directly, and the ArcGIS and Cesium
+  // control maps record them for the engine to draw.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
 
   activate(app: GeoLibreAppAPI) {
     appRef = app;
-    const map = app.getMap?.();
+    const map = getControlMap(app);
 
     if (map) {
       ensureFootprintLayers(map);
@@ -1040,7 +1061,7 @@ export const maplibreUsgsDemPlugin: GeoLibrePlugin = {
     disposePanel = null;
     panelContainer = null;
 
-    const map = app.getMap?.();
+    const map = getControlMap(app);
     if (map) {
       map.off("click", FOOTPRINT_FILL_LAYER_ID, onMapClick);
       map.off("mouseenter", FOOTPRINT_FILL_LAYER_ID, onMapMouseEnter);

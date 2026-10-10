@@ -146,7 +146,7 @@ function isMapboxKindPluginLayer(layer: GeoLibreLayer): boolean {
       );
     case "cog":
       return external && sourceKind === "maplibre-gl-raster";
-    // OpenAerialMap's, Satellite Embeddings' and Fields of the World's search
+    // OpenAerialMap's, Satellite Embeddings', Fields of the World's and USGS 3DEP's search
     // footprints carry their GeoJSON (so the Layers panel can zoom to and
     // restyle them) but the plugin draws the fill and outline itself on
     // whichever map hosts it; compiling the record would paint them twice.
@@ -174,6 +174,7 @@ const PLUGIN_DRAWN_FOOTPRINT_KINDS = new Set([
   "satellite-embeddings-footprints",
   "fields-of-the-world-footprints",
   "earthaccess-footprints",
+  "usgs-dem-footprints",
 ]);
 
 /** Whether the store record alone gives the engine something to draw. */

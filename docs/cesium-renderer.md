@@ -81,7 +81,7 @@ panels cannot mount and are disabled in Add Data on the globe.
 
 The Web Services catalogs (FEMA NFHL, USGS National Map, US EPA EnviroAtlas,
 NASA Earthdata, NASA Earthaccess, Earthdata GIS, Ocean Data Platform, GeoLens,
-Hugging Face, OpenAerialMap, Vantor Open Data, Fields of the World, Satellite
+Hugging Face, OpenAerialMap, Vantor Open Data, Fields of the World, USGS 3DEP, Satellite
 Embeddings, and the STAC browsers), Esri Wayback, Gridlines, and the DGGS
 grids run on the globe this way. Street View runs too: its location marker is a DOM element the
 globe positions over the canvas each frame (`cesium-dom-marker.ts` in the

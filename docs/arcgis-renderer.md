@@ -194,7 +194,7 @@ override draws Esri World Imagery instead.
   **Historical Imagery** (Esri Wayback), the **DGGS** grids (H3, S2, A5,
   DGGRID, DGGAL, OLC, Geohash, Tilecode) and the **Graticule**, and the
   imagery catalogs with footprints (STAC, OpenAerialMap, Vantor, Fields of the
-  World, Satellite Embeddings, IGN LiDAR HD, GeoLens). Footprint clicks and
+  World, Satellite Embeddings, IGN LiDAR HD, GeoLens, USGS 3DEP). Footprint clicks and
   hover, selection outlines and box drawing work; a GeoLens raster that needs
   an API key still requires MapLibre.
 - **Controls** menu entries and plugins whose plugin needs a MapLibre, Mapbox
