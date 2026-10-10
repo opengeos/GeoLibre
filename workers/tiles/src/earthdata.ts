@@ -73,7 +73,9 @@ export function isEarthdataRedirectUrl(value: string): boolean {
   }
   if (url.protocol !== "https:" || url.username || url.password || url.port) return false;
   const host = url.hostname.toLowerCase();
-  return hostIn(host, "cloudfront.net") || hostIn(host, "amazonaws.com");
+  // CloudFront fronts the DAACs' presigned URLs; S3 hosts are matched by
+  // their `s3.` / `s3-` endpoint label, not every amazonaws.com service.
+  return hostIn(host, "cloudfront.net") || /(^|\.)s3[.-][a-z0-9.-]*amazonaws\.com$/.test(host);
 }
 
 function plain(status: number, message: string): Response {
@@ -129,7 +131,12 @@ export async function handleEarthdataDownload(
       response = upstream;
       break;
     }
-    const next = new URL(location, url);
+    let next: URL;
+    try {
+      next = new URL(location, url);
+    } catch {
+      return plain(502, "The Earthdata file host redirected somewhere unexpected.");
+    }
     if (next.hostname.toLowerCase() === LOGIN_HOST) {
       return plain(
         401,

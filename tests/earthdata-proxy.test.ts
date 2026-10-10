@@ -88,6 +88,16 @@ describe("Earthdata download proxy", () => {
     assert.equal(hops.length, 1);
   });
 
+  it("answers 502 to a malformed redirect Location", async () => {
+    const hops: Hop[] = [];
+    const response = await handleEarthdataDownload(
+      request(FILE, { authorization: "Bearer t" }),
+      fakeUpstream(hops, "https://[bad"),
+    );
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  });
+
   it("refuses non-Earthdata targets and malformed tokens before fetching", async () => {
     const hops: Hop[] = [];
     const upstream = fakeUpstream(hops);
@@ -144,6 +154,12 @@ describe("Earthdata download proxy", () => {
     );
     assert.equal(isEarthdataRedirectUrl(PRESIGNED), true);
     assert.equal(isEarthdataRedirectUrl("https://bucket.s3.us-west-2.amazonaws.com/x"), true);
+    assert.equal(isEarthdataRedirectUrl("https://s3.us-west-2.amazonaws.com/bucket/x"), true);
+    assert.equal(isEarthdataRedirectUrl("https://lambda-url.us-east-1.on.aws/x"), false);
+    assert.equal(
+      isEarthdataRedirectUrl("https://abc.execute-api.us-east-1.amazonaws.com/x"),
+      false,
+    );
     assert.equal(isEarthdataDataUrl(PRESIGNED), false);
   });
 });

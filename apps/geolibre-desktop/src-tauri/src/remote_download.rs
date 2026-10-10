@@ -53,6 +53,7 @@ const MANAGED_REQUEST_HEADERS: &[&str] = &[
     "keep-alive",
     "upgrade",
     "range",
+    "accept-encoding",
 ];
 
 #[derive(Deserialize)]
@@ -220,6 +221,9 @@ async fn transfer(
     let response = client()?
         .get(url)
         .headers(headers)
+        // The length check below compares against Content-Length, which is the
+        // encoded size; ask for the bytes as stored so the two always agree.
+        .header(reqwest::header::ACCEPT_ENCODING, "identity")
         .send()
         .await
         .map_err(|error| format!("Download failed: {}", error.without_url()))?;
@@ -311,6 +315,13 @@ pub(crate) async fn download_remote_file(
     tauri::async_runtime::spawn_blocking(move || url_is_fetchable(&checked))
         .await
         .map_err(|error| format!("URL validation failed: {error}"))??;
+    // Reject a reused ID before the save dialog opens, and never let a new
+    // cache entry orphan an earlier one's file.
+    if downloads.active.lock().unwrap().contains_key(&request_id)
+        || downloads.cached.lock().unwrap().contains_key(&request_id)
+    {
+        return Err("Duplicate request ID.".into());
+    }
     let file_name = sanitize_file_name(&request.file_name);
     let destination = if request.save {
         match pick_save_path(&app, &file_name).await? {
