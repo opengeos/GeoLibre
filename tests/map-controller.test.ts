@@ -1347,6 +1347,50 @@ describe("MapController camera and query helpers", () => {
     assert.deepEqual((jump.args[0] as { center: [number, number] }).center, [12, 48]);
   });
 
+  // Issue #3083: the store's echo of the view the map reported on moveend
+  // must not jump, or it stops a camera move started in between.
+  it("does not jump to the store's echo of the view it reported", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    const reported = controller.reportView();
+    controller.applyStoreView({ ...reported });
+
+    assert.ok(!fake.calls.some((c) => c.method === "jumpTo"));
+  });
+
+  it("jumps to a store view that differs from the one it reported", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.reportView();
+    controller.applyStoreView({ center: [12, 48], zoom: 6, bearing: 0, pitch: 0 });
+
+    assert.ok(fake.calls.some((c) => c.method === "jumpTo"));
+  });
+
+  it("skips only the first echo of a reported view", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    const reported = controller.reportView();
+    controller.applyStoreView(reported);
+    controller.applyStoreView(reported);
+
+    assert.equal(fake.calls.filter((c) => c.method === "jumpTo").length, 1);
+  });
+
+  it("jumps to a reported view once that report is forgotten", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    const reported = controller.reportView();
+    controller.forgetReportedView();
+    controller.applyStoreView(reported);
+
+    assert.ok(fake.calls.some((c) => c.method === "jumpTo"));
+  });
+
   it("normalizes the projection to globe/mercator", () => {
     const { map } = makeFakeMap();
     const controller = controllerWith(map);

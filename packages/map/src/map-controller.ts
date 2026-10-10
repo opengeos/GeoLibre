@@ -228,6 +228,11 @@ export class MapController implements MapEngine {
   private map: maplibregl.Map | null = null;
   /** Whether {@link clampViewToPreferences} has a clamp queued on `moveend`. */
   private pendingViewClamp = false;
+  /**
+   * The view {@link reportView} last handed to the store, until the store's
+   * echo of it reaches {@link applyStoreView} (issue #3083).
+   */
+  private reportedView: MapViewState | null = null;
   private navigationControl: maplibregl.NavigationControl | null = null;
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
   private compassControl: ResetBearingControl | null = null;
@@ -968,6 +973,45 @@ export class MapController implements MapEngine {
     // jumpTo stop()s drag handlers, so skip while the user is still panning.
     if (this.map.dragPan.isActive() || this.map.dragRotate.isActive()) return;
     this.map.jumpTo(constrainMapView(view, this.mapPreferences, this.map));
+  }
+
+  /**
+   * Read the current view to write into the store, and remember it so the
+   * store's echo of it can be told apart from a view set elsewhere. See
+   * {@link applyStoreView}.
+   */
+  reportView(): MapViewState {
+    const view = this.readView();
+    this.reportedView = view;
+    return view;
+  }
+
+  /**
+   * Apply a store view change to the map, except the echo of the view the map
+   * itself just reported through {@link reportView}.
+   *
+   * The map is already at that view, so the jump would do nothing but stop a
+   * camera move started since: a plugin's `fitBounds` begun in (or shortly
+   * after) the `moveend` that reported it was cancelled a render later, where
+   * it stood (issue #3083). Views set from outside (project load, undo,
+   * collaboration, a synced pane) still jump. The remembered view is consumed
+   * by the first store change that reaches here, so it never outlives the echo
+   * it was kept for.
+   */
+  applyStoreView(view: MapViewState): void {
+    const reported = this.reportedView;
+    this.reportedView = null;
+    if (reported && sameMapViewCamera(view, reported)) return;
+    this.applyView(view);
+  }
+
+  /**
+   * Forget the view {@link reportView} remembered, for a `moveend` whose view
+   * is deliberately kept out of the store: the map has moved away from it, so
+   * a store change back to it must jump again.
+   */
+  forgetReportedView(): void {
+    this.reportedView = null;
   }
 
   /**
@@ -2697,6 +2741,16 @@ function createMapTransformConstraint(
       zoom: constrainedZoom,
     };
   };
+}
+
+function sameMapViewCamera(a: MapViewState, b: MapViewState): boolean {
+  return (
+    a.center[0] === b.center[0] &&
+    a.center[1] === b.center[1] &&
+    a.zoom === b.zoom &&
+    a.bearing === b.bearing &&
+    a.pitch === b.pitch
+  );
 }
 
 function constrainMapView(
