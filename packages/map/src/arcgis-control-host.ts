@@ -10,12 +10,8 @@ import {
 } from "maplibre-gl";
 import type { MapEngine } from "./map-engine";
 import type { ArcgisSdk, ArcgisView, ArcgisViewEvent } from "./arcgis-sdk";
-import { installArcgisLayerEvents, type NativeLayerPicker } from "./arcgis-layer-events";
-import {
-  pickOverlayGraphics,
-  shadowOverlayGraphics,
-  type OverlayGraphic,
-} from "./arcgis-shadow-overlay";
+import { installControlLayerEvents, type NativeLayerPicker } from "./control-layer-events";
+import { pickOverlayGraphics, shadowOverlayGraphics, type OverlayGraphic } from "./shadow-overlay";
 import type { ArcgisGeometryJson, ArcgisLayer } from "./arcgis-sdk";
 import type { Geometry } from "geojson";
 import { createShadowStyle } from "./shadow-style";
@@ -150,7 +146,7 @@ export class ArcgisControlHost {
         ].map((name) => [name, inertHandler()]),
       ),
     });
-    installArcgisLayerEvents({
+    installControlLayerEvents({
       facade,
       // A control's layer is either mirrored by a store layer, which the
       // engine draws and picks, or drawn by this host's overlay.

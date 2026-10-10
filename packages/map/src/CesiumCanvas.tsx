@@ -435,7 +435,10 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         if (cancelled || viewer.isDestroyed()) return;
 
         if (viewId === undefined) {
-          const host = new CesiumControlHost(viewer, container, Cesium);
+          const host = new CesiumControlHost(viewer, container, Cesium, {
+            identify: (lngLat, layerId) => engine.identifyFeatures(lngLat, layerId),
+            fitBounds: (bounds) => engine.fitBounds(bounds),
+          });
           controlHostRef.current = host;
           setPrimaryCesiumControlHost(host);
           // Cesium's native toolbar widgets. Imported

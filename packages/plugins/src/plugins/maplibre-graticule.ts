@@ -448,6 +448,66 @@ interface GraticuleGeometry {
   step: number;
 }
 
+/** Where on-screen edge labels go: the latitude or longitude each screen edge shows. */
+export interface ScreenEdges {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}
+
+/**
+ * The latitudes and longitudes at the middle of each screen edge, on a globe.
+ *
+ * In Mercator the viewport bounds are the screen edges, so edge labels placed
+ * on them sit on the edges. On a globe (MapLibre's globe projection, the
+ * Cesium globe) the bounds are the rectangle around a curved footprint and
+ * run past the screen, which puts every edge label off it. An edge whose
+ * middle misses the globe (the view shows space there) keeps the bounds
+ * value: a point is only trusted when it projects back onto the screen near
+ * where it was read.
+ *
+ * @param map - The map, read through its `getProjection`, `getCanvas`,
+ *   `unproject` and `project`.
+ * @param fallback - The bounds-derived edges, kept for an edge that misses.
+ * @returns The screen edges, or `fallback` itself when the map is not a globe.
+ */
+export function globeScreenEdges(
+  map: Pick<MapLibreMap, "getCanvas" | "unproject" | "project"> & {
+    getProjection?: () => { type?: unknown } | undefined;
+  },
+  fallback: ScreenEdges,
+): ScreenEdges {
+  if (map.getProjection?.()?.type !== "globe") return fallback;
+  const canvas = map.getCanvas();
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (!(width > 0 && height > 0)) return fallback;
+  const inset = 2;
+  const read = (x: number, y: number) => {
+    const lngLat = map.unproject([x, y]);
+    const back = map.project(lngLat);
+    return Math.hypot(back.x - x, back.y - y) <= 2 ? lngLat : null;
+  };
+  /** A longitude moved into the unwrapped `west..east` range the lines use. */
+  const unwrap = (lng: number) => {
+    let out = lng;
+    while (out < fallback.west) out += 360;
+    while (out > fallback.east) out -= 360;
+    return out >= fallback.west ? out : lng;
+  };
+  const bottom = read(width / 2, height - inset);
+  const top = read(width / 2, inset);
+  const left = read(inset, height / 2);
+  const right = read(width - inset, height / 2);
+  return {
+    south: bottom ? Math.max(bottom.lat, fallback.south) : fallback.south,
+    north: top ? Math.min(top.lat, fallback.north) : fallback.north,
+    west: left ? unwrap(left.lng) : fallback.west,
+    east: right ? unwrap(right.lng) : fallback.east,
+  };
+}
+
 /** Build the grid lines and edge labels for the current viewport. */
 function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   if (settings.gridType === "utm") return buildUtmGeometry(activeMap);
@@ -465,6 +525,9 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   const lineFeatures: Feature<LineString>[] = [];
   const labelFeatures: Feature<Point>[] = [];
   const showAllEdges = settings.labelEdges === "all";
+  const edges = settings.showLabels
+    ? globeScreenEdges(activeMap, { south, north, west, east })
+    : { south, north, west, east };
 
   // Note: edge labels are positioned at the (possibly unwrapped) viewport bounds,
   // so for an antimeridian-crossing view their longitudes can exceed [-180, 180].
@@ -487,11 +550,11 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
     });
     if (settings.showLabels) {
       labelFeatures.push(
-        labelFeature(lon, south, formatLon(lon, step, settings.labelFormat), "bottom"),
+        labelFeature(lon, edges.south, formatLon(lon, step, settings.labelFormat), "bottom"),
       );
       if (showAllEdges) {
         labelFeatures.push(
-          labelFeature(lon, north, formatLon(lon, step, settings.labelFormat), "top"),
+          labelFeature(lon, edges.north, formatLon(lon, step, settings.labelFormat), "top"),
         );
       }
     }
@@ -512,11 +575,11 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
     });
     if (settings.showLabels) {
       labelFeatures.push(
-        labelFeature(west, lat, formatLat(lat, step, settings.labelFormat), "left"),
+        labelFeature(edges.west, lat, formatLat(lat, step, settings.labelFormat), "left"),
       );
       if (showAllEdges) {
         labelFeatures.push(
-          labelFeature(east, lat, formatLat(lat, step, settings.labelFormat), "right"),
+          labelFeature(edges.east, lat, formatLat(lat, step, settings.labelFormat), "right"),
         );
       }
     }
@@ -1472,8 +1535,8 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
   // Draws the graticule through the Style Spec surface both 2D engines share
   // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
   // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
-  // the host draws the same GeoJSON layers as its own graphics.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  // and the Cesium globe the host draws the same GeoJSON layers natively.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
     const activeMap = getControlMap(app);
     if (!activeMap) return false;

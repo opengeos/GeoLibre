@@ -1,5 +1,6 @@
 import { disposeArcgisControlAdapters, identifyArcgisControls } from "./arcgis-control-adapters";
 import { ArcgisControlHost, type ArcgisControlHostHooks } from "./arcgis-control-host";
+import { controlLayerMirrors } from "./shadow-style";
 import { createArcgisZarrLayer } from "./arcgis-zarr";
 import { createArcgisArchiveLayer } from "./arcgis-tile-archives";
 import { createArcgisTemplateTileLayer } from "./arcgis-template-tiles";
@@ -2081,20 +2082,9 @@ export class ArcgisEngine implements MapEngine {
   }
   /** The store layers that mirror a control's native layer or source. */
   private mirrorsOf(nativeLayerId: string, sourceId: string | undefined): GeoLibreLayer[] {
-    return this.layers.filter((layer) => {
-      const { nativeLayerIds, sourceIds } = layer.metadata as {
-        nativeLayerIds?: unknown;
-        sourceIds?: unknown;
-      };
-      return (
-        layer.id === nativeLayerId ||
-        (Array.isArray(nativeLayerIds) && nativeLayerIds.includes(nativeLayerId)) ||
-        (sourceId !== undefined &&
-          (layer.metadata.sourceId === sourceId ||
-            (Array.isArray(sourceIds) && sourceIds.includes(sourceId))))
-      );
-    });
+    return controlLayerMirrors(this.layers, nativeLayerId, sourceId);
   }
+
   /** What the control host borrows from the engine to pick and draw. */
   private controlHostHooks(): ArcgisControlHostHooks {
     return {

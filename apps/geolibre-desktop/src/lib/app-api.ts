@@ -530,6 +530,15 @@ export function createAppAPI(
         ? engine.getControlMap()
         : null;
     },
+    getCesiumControlMap: () => {
+      const engine = mapControllerRef?.current;
+      // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle
+      return engine?.kind === "cesium" &&
+        "getControlMap" in engine &&
+        typeof engine.getControlMap === "function"
+        ? engine.getControlMap()
+        : null;
+    },
     getMapboxMap: () => {
       const engine = mapControllerRef?.current;
       // eslint-disable-next-line local/no-renderer-kind-checks -- reaches that engine's own handle

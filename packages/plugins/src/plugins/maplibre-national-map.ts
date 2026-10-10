@@ -131,9 +131,10 @@ export const maplibreNationalMapPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-national-map",
   name: "USGS National Map",
   version: "0.1.1",
-  // The control's raster layers are mirrored into store layers; on ArcGIS its
-  // style is only recorded and the engine draws those store layers.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  // The control's raster layers are mirrored into store layers; on ArcGIS and
+  // the Cesium globe its style is only recorded and the engine draws those
+  // store layers.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     if (!nationalMapControl) {

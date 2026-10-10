@@ -39,9 +39,9 @@ export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
   version: "0.2.0",
   // The upstream control adds raster sources/layers through the shared Style
   // Spec API; the engine adopts them under their native ids on Mapbox. On
-  // ArcGIS the control's style is only recorded and the engine draws the
-  // store records, whose `url` is a tile template.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  // ArcGIS and the Cesium globe the control's style is only recorded and the
+  // engine draws the store records, whose `url` is a tile template.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     unregisterPanel = app.registerRightPanel({

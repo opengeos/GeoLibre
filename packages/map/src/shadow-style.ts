@@ -262,3 +262,35 @@ export function createShadowStyle(host: ShadowStyleHost): ShadowStyleMethods & {
     peek: () => ({ sources: Object.fromEntries(sources), layers }),
   };
 }
+
+/**
+ * The store layers that mirror a plugin control's native style layer: the
+ * record whose id is that layer's id, that lists it in `nativeLayerIds`, or
+ * that reads `sourceId` (`metadata.sourceId` / `sourceIds`). On a renderer
+ * that only records a control's style, the mirror is what is drawn and
+ * picked, so a hit on it is a hit on the control's layer.
+ *
+ * @param layers - The store layers to search, in any order.
+ * @param nativeLayerId - The control's style layer id.
+ * @param sourceId - The source that style layer reads, if known.
+ * @returns The mirroring layers, in the order given.
+ */
+export function controlLayerMirrors<L extends { id: string; metadata: Record<string, unknown> }>(
+  layers: readonly L[],
+  nativeLayerId: string,
+  sourceId: string | undefined,
+): L[] {
+  return layers.filter((layer) => {
+    const { nativeLayerIds, sourceIds } = layer.metadata as {
+      nativeLayerIds?: unknown;
+      sourceIds?: unknown;
+    };
+    return (
+      layer.id === nativeLayerId ||
+      (Array.isArray(nativeLayerIds) && nativeLayerIds.includes(nativeLayerId)) ||
+      (sourceId !== undefined &&
+        (layer.metadata.sourceId === sourceId ||
+          (Array.isArray(sourceIds) && sourceIds.includes(sourceId))))
+    );
+  });
+}

@@ -5,7 +5,7 @@ import {
   pickOverlayGraphics,
   shadowOverlayGraphics,
   type OverlayStyle,
-} from "../packages/map/src/arcgis-shadow-overlay";
+} from "../packages/map/src/shadow-overlay";
 
 const square = {
   type: "Polygon" as const,
@@ -47,6 +47,31 @@ function style(layers: LayerSpecification[]): OverlayStyle {
 const never = () => false;
 
 describe("ArcGIS shadow overlay", () => {
+  it("carries a label's anchor and em offset as text-symbol placement", () => {
+    const [label] = shadowOverlayGraphics(
+      style([
+        {
+          id: "edge",
+          type: "symbol",
+          source: "cells",
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 10,
+            "text-anchor": "bottom-left",
+            "text-offset": [0.5, -0.5],
+          },
+        },
+      ]),
+      4,
+      never,
+    );
+    assert.equal(label.symbol.horizontalAlignment, "left");
+    assert.equal(label.symbol.verticalAlignment, "bottom");
+    // Ems times the text size; MapLibre's y runs down, the SDK's yoffset up.
+    assert.equal(label.symbol.xoffset, 5);
+    assert.equal(label.symbol.yoffset, 5);
+  });
+
   it("draws fill, line, circle and text with per-feature paint", () => {
     const graphics = shadowOverlayGraphics(
       style([

@@ -1,10 +1,14 @@
 import { createStyleLayerEvaluator, type StyleGeometryKind } from "@geolibre/core";
 import type { Feature, Geometry, MultiLineString, Position } from "geojson";
 import type { LayerSpecification } from "maplibre-gl";
-import { geometryContainsPoint } from "./arcgis-layers";
+import { geometryContainsPoint } from "./geometry-hit";
 import type { IdentifiedFeature } from "./map-engine";
 
-/** One graphic the overlay draws: a GeoJSON geometry and a 2D SDK symbol. */
+/**
+ * One graphic the overlay draws: a GeoJSON geometry and a symbol in the
+ * ArcGIS Maps SDK's JSON form (`simple-fill`, `simple-line`, `simple-marker`,
+ * `text`), which that SDK takes as is and the Cesium host translates.
+ */
 export interface OverlayGraphic {
   layerId: string;
   featureId: string;
@@ -124,14 +128,47 @@ function labelPoint(geometry: Geometry): Geometry | null {
   }
 }
 
+/**
+ * MapLibre's `text-anchor` and `text-offset` as the SDK's text-symbol fields:
+ * which side of the text sits on the point, and a shift in pixels (`yoffset`
+ * up, where MapLibre's em offset runs down). A label a control pins to the
+ * viewport edge (a graticule's coordinates) relies on them to sit inside it.
+ */
+function textPlacement(
+  anchor: unknown,
+  offset: unknown,
+  em: number,
+): {
+  horizontalAlignment: "left" | "right" | "center";
+  verticalAlignment: "top" | "bottom" | "middle";
+  xoffset: number;
+  yoffset: number;
+} {
+  const side = typeof anchor === "string" ? anchor : "center";
+  const [dx, dy] =
+    Array.isArray(offset) && offset.length === 2 && offset.every(Number.isFinite)
+      ? (offset as [number, number])
+      : [0, 0];
+  return {
+    horizontalAlignment: side.includes("left")
+      ? "left"
+      : side.includes("right")
+        ? "right"
+        : "center",
+    verticalAlignment: side.includes("top") ? "top" : side.includes("bottom") ? "bottom" : "middle",
+    xoffset: dx * em,
+    yoffset: -dy * em,
+  };
+}
+
 const px = (value: unknown, fallback: number): string =>
   `${typeof value === "number" && Number.isFinite(value) ? value : fallback}px`;
 
 /**
  * The SDK graphics for a shadow style's GeoJSON layers: the overlays a plugin
  * control draws on MapLibre (a grid, a selection outline, a draw preview, a
- * trace) that no store layer mirrors, drawn as the ArcGIS renderer's own 2D
- * symbols. Fill, line, circle and text are drawn, with paint and filters
+ * trace) that no store layer mirrors, as symbols in the ArcGIS SDK's JSON form
+ * (see {@link OverlayGraphic}). Fill, line, circle and text are drawn, with paint and filters
  * evaluated per feature as MapLibre evaluates them; icons, patterns,
  * extrusions and text placement along lines are not. A layer the store
  * mirrors (`isMirrored`) is skipped: the engine already draws that record.
@@ -237,13 +274,16 @@ export function shadowOverlayGraphics(
           if (!anchor) return;
           const color = rgba(value("paint", "text-color"), value("paint", "text-opacity"));
           const halo = rgba(value("paint", "text-halo-color"), value("paint", "text-opacity"));
+          const size = value("layout", "text-size");
+          const em = typeof size === "number" && Number.isFinite(size) ? size : 16;
           push(anchor, {
             type: "text",
             text,
             color: color ?? [0, 0, 0, 1],
             haloColor: halo ?? [0, 0, 0, 0],
             haloSize: px(value("paint", "text-halo-width"), 0),
-            font: { size: px(value("layout", "text-size"), 16) },
+            font: { size: `${em}px` },
+            ...textPlacement(value("layout", "text-anchor"), value("layout", "text-offset"), em),
           });
           return;
         }

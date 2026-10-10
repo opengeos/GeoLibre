@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Evented } from "maplibre-gl";
 import {
-  installArcgisLayerEvents,
+  installControlLayerEvents,
   type NativeLayerPicker,
-} from "../packages/map/src/arcgis-layer-events";
+} from "../packages/map/src/control-layer-events";
 
 const FEATURE = {
   layerId: "store-footprints",
@@ -13,7 +13,7 @@ const FEATURE = {
   geometry: { type: "Point" as const, coordinates: [1, 2] },
 };
 
-/** The layer-scoped overloads `installArcgisLayerEvents` adds to the facade. */
+/** The layer-scoped overloads `installControlLayerEvents` adds to the facade. */
 interface LayerScopedEvents {
   on(type: string, layer: string | string[], listener: (event: never) => unknown): unknown;
   off(type: string, layer: string | string[], listener: (event: never) => unknown): unknown;
@@ -25,7 +25,7 @@ function setup(picker?: NativeLayerPicker) {
   const facade = new Facade() as Evented & Record<string, unknown>;
   const picks: [string, string | undefined][] = [];
   let hit = true;
-  installArcgisLayerEvents({
+  installControlLayerEvents({
     facade,
     pick:
       picker ??

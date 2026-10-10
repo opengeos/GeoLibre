@@ -270,7 +270,7 @@ for (const grid of GRIDS) {
   describe(`${grid.name} grid (createGridPlugin)`, () => {
     it("keeps its plugin id", () => {
       assert.equal(grid.plugin.id, grid.id);
-      assert.deepEqual(grid.plugin.engines, ["maplibre", "mapbox", "arcgis"]);
+      assert.deepEqual(grid.plugin.engines, ["maplibre", "mapbox", "arcgis", "cesium"]);
     });
 
     it("fills a small bbox with unique cells at the requested resolution", () => {

@@ -1302,8 +1302,8 @@ export const maplibreDggridPlugin: GeoLibrePlugin = {
   // Draws the grid through the Style Spec surface both 2D engines share
   // (GeoJSON sources, fill/line/symbol layers, camera and pointer events), read
   // through getControlMap so the Mapbox renderer hosts it as well. On ArcGIS
-  // the host draws the same GeoJSON layers as its own graphics.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  // and the Cesium globe the host draws the same GeoJSON layers natively.
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: async (app) => {
     const activeMap = getControlMap(app);
     if (!activeMap) return false;

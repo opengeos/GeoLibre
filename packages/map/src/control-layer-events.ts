@@ -4,8 +4,9 @@ import type { IdentifiedFeature } from "./map-engine";
 /**
  * Store features under a point that a plugin's native layer draws: the hits on
  * the store layer that mirrors `nativeLayerId` (by `nativeLayerIds`), or that
- * reads `sourceId`. On the ArcGIS renderer the store layer is what is drawn, so
- * a hit on it is a hit on the plugin's layer.
+ * reads `sourceId`. On a renderer that only records a control's style (ArcGIS,
+ * the Cesium globe) the store layer is what is drawn, so a hit on it is a hit
+ * on the plugin's layer.
  */
 export type NativeLayerPicker = (
   lngLat: [number, number],
@@ -49,9 +50,23 @@ interface LayerEventHost {
   /** Every shadow-style layer id, for a query that names no layers. */
   layerIds: () => string[];
   unproject: (point: { x: number; y: number }) => [number, number] | null;
+  /**
+   * Feed pointer events in by hand through the returned `dispatch` instead of
+   * listening on the facade, for a host that skips the work of locating a
+   * pointer no listener wants (see the returned `listening`).
+   */
+  manualPointer?: boolean;
 }
 
-type PointerSource = "click" | "mousemove" | "mousedown" | "mouseup";
+/** What a host that feeds pointer events by hand drives the layer events with. */
+export interface LayerEventDispatch {
+  /** Deliver a facade pointer event to the layer-scoped listeners. */
+  dispatch: (type: PointerSource, event: PointerEvent) => void;
+  /** Whether any layer-scoped listener is fed by `type`. */
+  listening: (type: PointerSource) => boolean;
+}
+
+export type PointerSource = "click" | "mousemove" | "mousedown" | "mouseup";
 
 /**
  * Which facade event feeds each layer-scoped event. Types the facade never
@@ -69,18 +84,19 @@ const POINTER_SOURCE: Record<string, PointerSource> = {
 };
 
 /**
- * Give an ArcGIS control facade MapLibre's layer-scoped events and point
- * `queryRenderedFeatures`, answered from the store layers that mirror the
- * control's native layers.
+ * Give a recording control facade (the ArcGIS and Cesium control hosts')
+ * MapLibre's layer-scoped events and point `queryRenderedFeatures`, answered
+ * from the store layers that mirror the control's native layers, or from the
+ * host's own overlay graphics.
  *
  * Without this, `map.on("click", "footprints", fn)` lands on `Evented.on`,
  * which takes the layer id for the listener, and a click then throws; and a
  * `queryRenderedFeatures` call is not a function. With it, a catalog plugin's
- * footprint click and hover work on ArcGIS as long as the footprints reach the
- * store (`registerExternalNativeLayer`), which is what ArcGIS draws. A box
+ * footprint click and hover work as long as the footprints reach the store
+ * (`registerExternalNativeLayer`), which is what the engine draws. A box
  * query or one with no geometry answers empty: the engine picks by point only.
  */
-export function installArcgisLayerEvents(host: LayerEventHost): void {
+export function installControlLayerEvents(host: LayerEventHost): LayerEventDispatch {
   const { facade } = host;
   const registrations: Registration[] = [];
   const baseOn = facade.on.bind(facade);
@@ -132,8 +148,9 @@ export function installArcgisLayerEvents(host: LayerEventHost): void {
       entry.inside = hit;
     }
   };
-  for (const type of ["click", "mousemove", "mousedown", "mouseup"] as const)
-    baseOn(type, dispatch(type) as never);
+  if (!host.manualPointer)
+    for (const type of ["click", "mousemove", "mousedown", "mouseup"] as const)
+      baseOn(type, dispatch(type) as never);
 
   const layerIdsOf = (value: unknown): string[] | null =>
     typeof value === "string" ? [value] : Array.isArray(value) ? value.map(String) : null;
@@ -212,6 +229,10 @@ export function installArcgisLayerEvents(host: LayerEventHost): void {
     const lngLat = host.unproject(point);
     if (!lngLat) return [];
     return pickAt(lngLat, options?.layers ?? host.layerIds());
+  };
+  return {
+    dispatch: (type, event) => dispatch(type)(event),
+    listening: (type) => registrations.some((entry) => POINTER_SOURCE[entry.type] === type),
   };
 }
 

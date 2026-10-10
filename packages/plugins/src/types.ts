@@ -891,6 +891,15 @@ export interface GeoLibreAppAPI {
    * Read it through `getControlMap` in `style-map.ts` rather than directly.
    */
   getArcgisControlMap?: () => MapLibreMap | null;
+  /**
+   * The same recording map on the Cesium globe (null while another engine is
+   * active, and in a split pane): camera, events and DOM go through the globe,
+   * a layer mirrored into the store is drawn by the globe's layer sync, and
+   * any other GeoJSON fill, line, circle or text layer is drawn as globe
+   * entities clamped to the ground. Read it through `getControlMap` in
+   * `style-map.ts` rather than directly.
+   */
+  getCesiumControlMap?: () => MapLibreMap | null;
   /** Native Mapbox map, available only while Mapbox is the primary renderer. */
   getMapboxMap?: () => ReturnType<import("@geolibre/map").MapboxEngine["getMapboxMap"]>;
   /**

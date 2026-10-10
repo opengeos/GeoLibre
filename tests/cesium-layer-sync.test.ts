@@ -937,6 +937,28 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.imageryRemoved.length, 1);
   });
 
+  it("reads a raster record's Esri-style tile template from source.url", async () => {
+    // The Esri Wayback control mirrors its release as a raster record whose
+    // `source.url` is a `{level}/{row}/{col}` template, as ArcGIS reads it.
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "wayback",
+        type: "raster",
+        source: {
+          type: "raster",
+          url: "https://wayback.example/tile/10/{level}/{row}/{col}",
+        },
+      }),
+    ]);
+    await f.flush();
+    assert.equal(f.calls.urlProviders.length, 1);
+    assert.equal(
+      String(f.calls.urlProviders[0].url),
+      "https://wayback.example/tile/10/{z}/{y}/{x}",
+    );
+  });
+
   it("renders an arcgis MapServer layer via ArcGisMapServerImageryProvider.fromUrl", async () => {
     const sync = newSync(f);
     sync.sync([

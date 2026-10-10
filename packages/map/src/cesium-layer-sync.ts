@@ -472,9 +472,27 @@ const CREDENTIAL_PROXY = {
   },
 };
 
+/** A `{z}`/`{level}` placeholder: a `source.url` that is a tile template. */
+const TILE_TEMPLATE = /\{(?:z|level)\}/;
+
+/**
+ * A raster layer's first tile template, in the `{z}/{x}/{y}` form Cesium's
+ * template provider reads.
+ *
+ * `source.tiles` is the usual home. A raster record whose `source.url` is
+ * itself a template is read too, as the ArcGIS renderer reads it: the Esri
+ * Wayback control mirrors its release that way, with Esri's
+ * `{level}/{row}/{col}` placeholders, which are rewritten here.
+ */
 function firstTile(layer: GeoLibreLayer): string | undefined {
   const tiles = layer.source.tiles;
-  return Array.isArray(tiles) ? str(tiles[0]) : undefined;
+  const tile = Array.isArray(tiles) ? str(tiles[0]) : undefined;
+  const url = layer.type === "raster" ? str(layer.source.url) : undefined;
+  const template = tile ?? (url && TILE_TEMPLATE.test(url) ? url : undefined);
+  return template
+    ?.replaceAll("{level}", "{z}")
+    .replaceAll("{row}", "{y}")
+    .replaceAll("{col}", "{x}");
 }
 
 function tilesetUrl(layer: GeoLibreLayer): string | undefined {

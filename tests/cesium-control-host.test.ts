@@ -350,19 +350,26 @@ describe("CesiumControlHost", () => {
     assert.equal(facade.getCenter().lng, -122.4);
     assert.equal(facade.getCenter().lat, 37.7);
 
-    // Unsupported style-spec mutations throw explicitly
-    assert.throws(() => facade.addLayer({}), /addLayer is not supported/);
-    assert.throws(() => facade.setPaintProperty(), /setPaintProperty is not supported/);
-    assert.throws(() => facade.setLayoutProperty(), /setLayoutProperty is not supported/);
-    assert.throws(() => facade.getStyle(), /getStyle is not supported/);
-
-    // Source mutations must not report success without rendering anything.
-    assert.throws(
-      () => facade.addSource("test-src", { type: "geojson" }),
-      /addSource is not supported/,
+    // Style-spec calls record into a shadow style (issue #3088): they succeed
+    // and read back, as a control's own bookkeeping expects.
+    facade.addSource("test-src", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    facade.addLayer({ id: "test-layer", type: "line", source: "test-src" });
+    assert.equal(facade.getLayer("test-layer")?.type, "line");
+    facade.setPaintProperty("test-layer", "line-color", "#ff0000");
+    assert.equal(facade.getPaintProperty("test-layer", "line-color"), "#ff0000");
+    facade.setLayoutProperty("test-layer", "visibility", "none");
+    assert.equal(facade.getLayoutProperty("test-layer", "visibility"), "none");
+    assert.deepEqual(
+      facade.getStyle().layers.map((layer: { id: string }) => layer.id),
+      ["test-layer"],
     );
-    assert.throws(() => facade.removeSource("test-src"), /removeSource is not supported/);
-    assert.throws(() => facade.removeLayer("test-layer"), /removeLayer is not supported/);
+    assert.equal(facade.getSource("test-src")?.type, "geojson");
+    facade.removeLayer("test-layer");
+    facade.removeSource("test-src");
+    assert.equal(facade.getLayer("test-layer"), undefined);
     assert.equal(facade.getSource("test-src"), undefined);
 
     host.destroy();

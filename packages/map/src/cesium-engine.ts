@@ -1226,6 +1226,17 @@ export class CesiumEngine implements MapEngine {
     return getPrimaryCesiumControlHost()?.addControl(control, position) ?? false;
   }
 
+  /**
+   * The MapLibre-shaped map plugin controls receive on the globe: camera,
+   * events and DOM through the globe, and a style that is recorded rather
+   * than drawn (see `CesiumControlHost`). Null for a grid pane, which hosts no
+   * controls, and before the primary host exists.
+   */
+  getControlMap(): maplibregl.Map | null {
+    if (!this.isPrimary) return null;
+    return getPrimaryCesiumControlHost()?.getControlMap() ?? null;
+  }
+
   /** No-op for a grid pane, which never mounted a control. See {@link addControl}. */
   removeControl(control: maplibregl.IControl): void {
     if (!this.isPrimary) return;

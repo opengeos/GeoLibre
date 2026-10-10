@@ -171,9 +171,10 @@ describe("grid, timeline and profile plugins on a Mapbox-only host", () => {
       assert.equal(isPluginEngineSupported(plugin, "mapbox"), true, plugin.id);
       assert.equal(isPluginEngineSupported(plugin, "maplibre"), true, plugin.id);
     }
-    // The globe adapter is the profile's own; the grids have none.
+    // The profile has a globe adapter of its own; the grids draw on the globe
+    // through the control host's recorded style (issue #3088).
     assert.equal(isPluginEngineSupported(maplibreElevationProfilePlugin, "cesium"), true);
-    assert.equal(isPluginEngineSupported(maplibreGraticulePlugin, "cesium"), false);
+    assert.equal(isPluginEngineSupported(maplibreGraticulePlugin, "cesium"), true);
   });
 
   it("draws the graticule's lines and labels on the Mapbox map and tears them down", () => {

@@ -8,6 +8,7 @@ import {
   formatLon,
   formatNorthing,
   getGraticuleSettings,
+  globeScreenEdges,
   maplibreGraticulePlugin,
   normalizeGraticuleSettings,
   setGraticuleSettings,
@@ -108,6 +109,46 @@ describe("normalizeGraticuleSettings", () => {
     assert.equal(result.lineColor, "#ff0000");
     // Shorthand expands so the native color input can display it.
     assert.equal(result.labelColor, "#00aa00");
+  });
+});
+
+describe("globeScreenEdges", () => {
+  const fallback = { south: -40, north: 60, west: -30, east: 50 };
+  /** A map whose screen x/y are longitude/latitude offsets, within a disc of radius `r`. */
+  const globe = (r: number, type = "globe") => ({
+    getProjection: () => ({ type }),
+    getCanvas: () => ({ clientWidth: 200, clientHeight: 100 }) as HTMLCanvasElement,
+    unproject: ([x, y]: [number, number]) => {
+      // Off the disc the globe has no answer; like the Cesium facade, it
+      // falls back to the view centre, which does not project back there.
+      const off = Math.hypot(x - 100, y - 50) > r;
+      return off ? { lng: 10, lat: 10 } : { lng: (x - 100) / 4 + 10, lat: (50 - y) / 4 + 10 };
+    },
+    project: ({ lng, lat }: { lng: number; lat: number }) => ({
+      x: (lng - 10) * 4 + 100,
+      y: 50 - (lat - 10) * 4,
+    }),
+  });
+
+  it("reads each edge where the screen meets it on a globe", () => {
+    const edges = globeScreenEdges(globe(1000) as never, fallback);
+    assert.equal(edges.south, 10 - 48 / 4);
+    assert.equal(edges.north, 10 + 48 / 4);
+    assert.equal(edges.west, 10 - 98 / 4);
+    assert.equal(edges.east, 10 + 98 / 4);
+  });
+
+  it("keeps the bounds for an edge whose middle misses the globe", () => {
+    // A disc of radius 60 reaches the top and bottom edge middles (48 px
+    // away) but not the left and right ones (98 px away).
+    const edges = globeScreenEdges(globe(60) as never, fallback);
+    assert.equal(edges.south, 10 - 48 / 4);
+    assert.equal(edges.west, fallback.west);
+    assert.equal(edges.east, fallback.east);
+  });
+
+  it("leaves a flat map's bounds alone", () => {
+    assert.equal(globeScreenEdges(globe(1000, "mercator") as never, fallback), fallback);
   });
 });
 
