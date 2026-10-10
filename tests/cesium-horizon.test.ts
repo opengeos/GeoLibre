@@ -18,12 +18,22 @@ describe("horizon depth distance", () => {
     const viewer = makeViewer(1e7);
     const distance = horizonDistance(C, viewer);
     const R = C.Ellipsoid.WGS84.maximumRadius;
-    assert.ok(Math.abs(distance / Math.sqrt(1e7 * (2 * R + 1e7)) - 1.01) < 1e-9);
+    const beyond = Math.sqrt(8849 * (2 * R + 8849));
+    assert.ok(Math.abs(distance / (Math.sqrt(1e7 * (2 * R + 1e7)) + beyond) - 1.01) < 1e-9);
     const eye = viewer.camera.positionWC;
     const near = C.Cartesian3.distance(eye, C.Cartesian3.fromDegrees(30, 10));
     const far = C.Cartesian3.distance(eye, C.Cartesian3.fromDegrees(150, 0));
     assert.ok(near < distance, "a visible point skips the depth test");
     assert.ok(far > distance, "a far-side point is depth-tested against the globe");
+
+    // From 1 km up, a ridge 200 km away is past the smooth horizon (~113 km)
+    // but in view; it still draws over the terrain it sits on.
+    const low = makeViewer(1000);
+    const ridge = C.Cartesian3.distance(
+      low.camera.positionWC,
+      C.Cartesian3.fromDegrees(1.8, 0, 3000),
+    );
+    assert.ok(ridge < horizonDistance(C, low));
   });
 
   it("is infinite in the flat scene modes and below the ellipsoid", () => {

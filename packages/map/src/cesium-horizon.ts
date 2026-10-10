@@ -14,6 +14,9 @@ type CesiumNs = typeof import("@cesium/engine");
  * at most the horizon distance `sqrt(h (2R + h))` from a camera at height `h`,
  * and every far-side point is farther, so a depth-test distance equal to it
  * keeps the near side drawing over terrain while the globe hides the far side.
+ * The distance is extended by how far past the horizon the highest terrain is
+ * still visible, so a marker on a distant ridge is not clipped by its own hill;
+ * a marker that far past the limb on the far side is a sliver of the view.
  */
 export interface HorizonDepthDistance {
   /** One shared property for entity graphics, read every frame by Cesium. */
@@ -35,6 +38,14 @@ const REPUBLISH_FRACTION = 0.005;
  * not flicker between the two depth modes as the camera breathes.
  */
 const HORIZON_MARGIN = 1.01;
+
+/**
+ * The highest terrain a marker can sit on (Everest, in metres). A peak of
+ * height `H` stays in view `sqrt(H (2R + H))` past the smooth horizon, so a
+ * marker on a ridge beyond it must still skip the depth test, or the terrain
+ * it sits on would clip it.
+ */
+const MAX_TERRAIN_HEIGHT = 8849;
 
 const horizons = new WeakMap<object, HorizonDepthDistance>();
 
@@ -102,5 +113,6 @@ export function horizonDistance(C: CesiumNs, viewer: CesiumWidget): number {
   const height = ellipsoid.cartesianToCartographic(viewer.camera.positionWC)?.height;
   if (!(typeof height === "number" && height > 0)) return Number.POSITIVE_INFINITY;
   const radius = ellipsoid.maximumRadius;
-  return Math.sqrt(height * (2 * radius + height)) * HORIZON_MARGIN;
+  const beyond = Math.sqrt(MAX_TERRAIN_HEIGHT * (2 * radius + MAX_TERRAIN_HEIGHT));
+  return (Math.sqrt(height * (2 * radius + height)) + beyond) * HORIZON_MARGIN;
 }
