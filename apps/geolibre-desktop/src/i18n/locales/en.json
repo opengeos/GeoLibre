@@ -10462,5 +10462,33 @@
       "unrecognizedProduct": "Not a recognized ICESat-2 or GEDI product. Supported: ATL06, ATL08, GEDI L2A, GEDI L2B, GEDI L4A.",
       "noBeams": "The {{product}} file has no beams with footprints."
     }
+  },
+  "alongTrackProfile": {
+    "menuItem": "Along-track profile",
+    "heading": "Along-track profile",
+    "close": "Close the profile",
+    "beam": "Beam",
+    "show": "Show",
+    "fields": "Fields to plot",
+    "preset": {
+      "groundCanopy": "Ground and canopy top",
+      "surface": "Surface height",
+      "fields": "Fields"
+    },
+    "series": {
+      "ground": "Ground",
+      "canopyTop": "Canopy top",
+      "surfaceHeight": "Surface height"
+    },
+    "resetZoom": "Reset zoom",
+    "exportPng": "Download the chart as PNG",
+    "exportCsv": "Download the profile as CSV",
+    "exportError": "Could not export the chart.",
+    "empty": "No footprints with values on this beam.",
+    "chartLabel": "Along-track profile of beam {{beam}}",
+    "distanceAxis": "Along-track distance (km)",
+    "elevationAxis": "Elevation (m)",
+    "tooltipDistance": "{{value}} km",
+    "hint": "Wheel to zoom, drag to pan, click to select a footprint."
   }
 }

@@ -545,6 +545,9 @@ class SpaceborneLidarGranule implements SpaceborneLidarFile {
         }
         features.push({
           type: "Feature",
+          // A stable id lets the map select a footprint unambiguously (and the
+          // along-track profile link to it); property matching cannot.
+          id: features.length,
           geometry: { type: "Point", coordinates: [round(lon[i], 7), round(lat[i], 7)] },
           properties,
         });

@@ -55,6 +55,7 @@ import {
   FolderPlus,
   LassoSelect,
   Library,
+  LineChart,
   Locate,
   Lock,
   MousePointerClick,
@@ -76,6 +77,8 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { isSpaceborneLidarLayer } from "../../../lib/along-track-profile";
+import { openAlongTrackProfile } from "../../../lib/along-track-profile-store";
 import { canOpenLayerAttributeTable } from "../../../lib/attribute-table-source";
 import type { CollaborationApi } from "../../../hooks/useCollaboration";
 import {
@@ -268,6 +271,7 @@ export function LayerActionsMenuItems({
   const canMaterializeDuckDB =
     isDuckDBQueryLayer(layer) && typeof layer.metadata.query === "string";
   const canOpenAttributeTable = canOpenLayerAttributeTable(layer);
+  const canOpenAlongTrackProfile = layer.type === "geojson" && isSpaceborneLidarLayer(layer);
   // The interactive selection dialogs (#1314) resolve selection ids
   // against in-store features, like the highlight overlay does, and
   // inspecting which features match is a read of the layer's data.
@@ -572,6 +576,12 @@ export function LayerActionsMenuItems({
         >
           <TableProperties className="me-2 h-3.5 w-3.5" />
           {t("layers.openAttributeTable")}
+        </DropdownMenuItem>
+      )}
+      {canOpenAlongTrackProfile && (
+        <DropdownMenuItem onSelect={() => openAlongTrackProfile(layer.id)}>
+          <LineChart className="me-2 h-3.5 w-3.5" />
+          {t("alongTrackProfile.menuItem")}
         </DropdownMenuItem>
       )}
       {canSelectFeatures && (

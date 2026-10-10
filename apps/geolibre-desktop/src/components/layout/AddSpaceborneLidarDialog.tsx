@@ -19,6 +19,7 @@ import {
 import { FileUp, Satellite } from "lucide-react";
 import { useDialogResize } from "../../hooks/useDialogResize";
 import { buildSymbologyStyle } from "../../lib/assistant/symbology";
+import { SPACEBORNE_LIDAR_SOURCE_KIND } from "../../lib/along-track-profile";
 import { pointBounds } from "../../lib/point-bounds";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import {
@@ -277,6 +278,14 @@ export function AddSpaceborneLidarDialog({
       const store = useAppStore.getState();
       const name = `${file.product.id} ${baseName(fileName)}`;
       const id = store.addGeoJsonLayer(name, result.geojson, fileName);
+      // Tag the layer so the Layers panel offers its along-track profile.
+      store.updateLayer(id, {
+        metadata: {
+          sourceKind: SPACEBORNE_LIDAR_SOURCE_KIND,
+          product: file.product.id,
+          beams: result.perBeam.filter((entry) => entry.kept > 0).map((entry) => entry.beam),
+        },
+      });
       const layer = useAppStore.getState().layers.find((entry) => entry.id === id);
       let style: Parameters<typeof store.setLayerStyle>[1] = { circleRadius: FOOTPRINT_RADIUS };
       if (layer && colorBy) {

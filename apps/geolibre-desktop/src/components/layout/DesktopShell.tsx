@@ -70,6 +70,7 @@ import { NetcdfSampleMarkers } from "./NetcdfSampleMarkers";
 import { NetcdfCubeSetupDialog } from "./NetcdfCubeSetupDialog";
 import { NetcdfCubeWindow } from "./NetcdfCubeWindow";
 import { NetcdfProfileWindow } from "./NetcdfProfileWindow";
+import { AlongTrackProfileWindow } from "./AlongTrackProfileWindow";
 import { hasElevationConsent } from "../../lib/elevation-consent";
 import { MapLegendPanel } from "../legend/MapLegendPanel";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
@@ -888,6 +889,7 @@ export function DesktopShell({
                 <BoundsRestrictionIndicator />
                 <QuickAnalysisBanner />
                 <NetcdfProfileWindow />
+                <AlongTrackProfileWindow mapControllerRef={mapControllerRef} />
                 <MountWhenOpened isOpen={(ui) => ui.styleManagerOpen}>
                   <Suspense fallback={null}>
                     <StyleManagerPanel />
