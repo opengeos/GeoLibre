@@ -215,6 +215,9 @@ export class ArcgisControlHost {
           point,
           lngLat: new LngLat(lngLat.lng, lngLat.lat),
           originalEvent: event.native,
+          // MapLibre's mouse events carry it, and a control that draws by
+          // dragging (USGS 3DEP's box) calls it on mousedown.
+          preventDefault: () => event.native?.preventDefault(),
         });
       };
     for (const handle of [

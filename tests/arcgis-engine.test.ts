@@ -2079,6 +2079,11 @@ it("hosts DOM controls with instant jumps, navigation events and complete cleanu
     events.splice(3);
     fireViewEvent("click", { x: 5, y: 6 });
     assert.deepEqual(clicked, [5, 6]);
+    // A box-drawing control calls `preventDefault` on mousedown, as on MapLibre.
+    let prevented = 0;
+    facade.on("mousedown", (event: { preventDefault(): void }) => event.preventDefault());
+    fireViewEvent("pointer-down", { x: 1, y: 2, native: { preventDefault: () => prevented++ } });
+    assert.equal(prevented, 1);
     engine.removeControl(control);
     assert.equal(facade.hasControl(control), false);
     assert.equal(removed, 1);
