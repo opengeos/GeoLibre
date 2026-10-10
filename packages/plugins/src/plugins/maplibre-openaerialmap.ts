@@ -1338,7 +1338,7 @@ export const maplibreOpenAerialMapPlugin: GeoLibrePlugin = {
   // Spec sources and layers, so both 2D engines host them. On ArcGIS the
   // host's control map draws the footprint overlays and the imagery is a store
   // tile layer.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
     appRef = app;
     unregisterPanel =

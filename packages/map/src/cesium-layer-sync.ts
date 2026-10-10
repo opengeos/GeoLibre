@@ -1,4 +1,9 @@
-import { cesiumKmlSource, isCesiumKmlLayer, installCogTilerDatumShift } from "@geolibre/core";
+import {
+  cesiumKmlSource,
+  isCesiumKmlLayer,
+  installCogTilerDatumShift,
+  withJpegTablesPatch,
+} from "@geolibre/core";
 import { bindDocumentOpacity } from "./cesium-document-opacity";
 import { imageryColorAdjustments } from "./raster-color-adjustments";
 import {
@@ -2262,7 +2267,9 @@ export class CesiumLayerSync {
         installCogTilerDatumShift(module);
         const { default: wasmUrl } = await import("lerc/lerc-wasm.wasm?url");
         module.configureLercDecoder({ wasmUrl });
-        return module;
+        // JPEG COGs whose tiles omit their tables (Maxar/Vantor open data)
+        // decode through geotiff.js, as on the 2D raster control.
+        return withJpegTablesPatch(module);
       })
     )().then(cachingCogTiler, (error) => {
       // A failed module load must not poison every later COG for the life

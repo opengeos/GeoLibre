@@ -28,7 +28,9 @@ can alternatively set `CESIUM_TOKEN` or `VITE_CESIUM_TOKEN` at build time. See
   not drawn along a line's path, and not thinned by collision. Points and
   labels on the far side of the Earth are hidden.
 - XYZ, WMS, WMTS, COG, raster PMTiles, local MBTiles, image overlays, and other
-  tile sources connected through GeoLibre's protocol bridge.
+  tile sources connected through GeoLibre's protocol bridge. COGs whose JPEG
+  tiles omit their own tables (Maxar/Vantor open data) decode through
+  geotiff.js, as on the 2D map.
 - Vector tiles, vector PMTiles, and vector MBTiles draped through a hidden
   MapLibre renderer so their Style Specification output is preserved.
 - Native 3D Tiles, Cesium ion tilesets and imagery, CZML, KML/KMZ, I3S scene
@@ -78,9 +80,10 @@ store `cog` records the globe draws natively. The LiDAR and Gaussian splat
 panels cannot mount and are disabled in Add Data on the globe.
 
 The Web Services catalogs (FEMA NFHL, USGS National Map, US EPA EnviroAtlas,
-NASA Earthdata, Earthdata GIS, Ocean Data Platform, GeoLens, Hugging Face, and
-the STAC browsers), Esri Wayback, Gridlines, and the DGGS grids run on the
-globe this way. Street View runs too: its location marker is a DOM element the
+NASA Earthdata, NASA Earthaccess, Earthdata GIS, Ocean Data Platform, GeoLens,
+Hugging Face, OpenAerialMap, Vantor Open Data, Fields of the World, Satellite
+Embeddings, and the STAC browsers), Esri Wayback, Gridlines, and the DGGS
+grids run on the globe this way. Street View runs too: its location marker is a DOM element the
 globe positions over the canvas each frame (`cesium-dom-marker.ts` in the
 plugins package), in place of MapLibre's `Marker`, which reads a map
 transform the facade does not have.

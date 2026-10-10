@@ -258,3 +258,10 @@ export {
   withDatumShift,
   withGeoKeysDatumShift,
 } from "./datum-shift";
+
+export {
+  convertTiffYCbCrToRgb,
+  isAbbreviatedJpegCompression,
+  patchJpegCogSource,
+  withJpegTablesPatch,
+} from "./cog-jpeg-tables";

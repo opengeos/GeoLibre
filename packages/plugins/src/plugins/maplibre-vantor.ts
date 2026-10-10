@@ -44,7 +44,7 @@ export const maplibreVantorPlugin: GeoLibrePlugin = {
   // imagery goes through the host's COG path, which the raster control
   // already draws on Mapbox and ArcGIS. The host's control map draws the
   // footprints and bbox on ArcGIS.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app: GeoLibreAppAPI) => {
     if (!getControlMap(app) || !app.registerRightPanel || !app.openRightPanel) return false;
     control ??= createControl(app);

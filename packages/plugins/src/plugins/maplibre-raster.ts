@@ -6,6 +6,7 @@ import {
   styleValue,
   useAppStore,
   installCogTilerDatumShift,
+  patchJpegCogSource,
 } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
 import type { Map as MapboxMap } from "mapbox-gl";
@@ -39,7 +40,6 @@ import {
   unwireRasterStoreSync,
   wireRasterStoreSync,
 } from "./raster-layer-sync";
-import { isAbbreviatedJpegCompression } from "./cog-compression";
 import {
   activateRasterClassification,
   disposeAllRasterClassification,
@@ -47,7 +47,6 @@ import {
 } from "./raster-symbology-texture";
 import { disposeAllPaletteLegends, disposePaletteLegend } from "./raster-palette";
 import { isNonTiledRasterError } from "./non-tiled-raster-error";
-import { convertTiffYCbCrToRgb } from "./tiff-ycbcr";
 import { readableStacLayerHref } from "./stac-signing";
 import { configureMapboxRasterEngine } from "./raster-mapbox-compat";
 import { focusPanel, restorePanelFocus } from "./panel-focus";
@@ -184,31 +183,6 @@ type CogTilerModule = {
   /** cog-tiler-wasm >= 0.3.6: where lerc's wasm is served from. */
   configureLercDecoder?: (options: { wasmUrl?: string | null }) => void;
   [key: string]: unknown;
-};
-type GeoTiffImage = {
-  fileDirectory?: {
-    PhotometricInterpretation?: number;
-    getValue?: (tag: number) => unknown;
-    hasTag?: (tag: number) => boolean;
-    loadValue?: (tag: number) => Promise<unknown>;
-  };
-  readRasters: (options: {
-    window: [number, number, number, number];
-  }) => Promise<ArrayLike<ArrayLike<number>>>;
-};
-type CogSourceInternals = {
-  levels?: Array<{ compression?: string }>;
-  tiff?: unknown;
-  _tiffImage?: (level: number) => Promise<GeoTiffImage>;
-  _assembleWindow?: (
-    level: number,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    band?: number,
-  ) => Promise<ArrayLike<number>>;
-  geolibreJpegTablesPatched?: boolean;
 };
 type RasterTileArray = {
   bands?: unknown[];
@@ -1089,66 +1063,6 @@ async function configureLercWasmUrl(module: CogTilerModule): Promise<void> {
       error,
     );
   }
-}
-
-function patchJpegCogSource(source: unknown): unknown {
-  const cog = source as CogSourceInternals;
-  if (
-    cog.geolibreJpegTablesPatched ||
-    !isAbbreviatedJpegCompression(cog.levels?.[0]?.compression) ||
-    !cog.tiff ||
-    !cog._tiffImage ||
-    !cog._assembleWindow
-  ) {
-    return source;
-  }
-
-  const windowCache = new Map<string, Promise<ArrayLike<ArrayLike<number>>>>();
-  cog._assembleWindow = async (level, x, y, width, height, band = 0) => {
-    const key = `${level}/${x}/${y}/${width}/${height}`;
-    let decoded = windowCache.get(key);
-    if (!decoded) {
-      decoded = cog._tiffImage!(level).then(async (image) => {
-        const rasters = await image.readRasters({
-          window: [x, y, x + width, y + height],
-        });
-        // geotiff.js expands the chroma subsampling but deliberately returns
-        // the TIFF's native Y/Cb/Cr samples. The renderer expects RGB bands,
-        // like the GPU engine, so perform the TIFF/JPEG color transform once
-        // for the shared three-band window.
-        const photometric =
-          image.fileDirectory?.PhotometricInterpretation ?? image.fileDirectory?.getValue?.(262);
-        if (photometric !== 6 || rasters.length < 3) {
-          return rasters;
-        }
-        const directory = image.fileDirectory;
-        const readTag = async (tag: number): Promise<ArrayLike<number> | undefined> => {
-          if (directory?.hasTag?.(tag) === false) return undefined;
-          const value = directory?.loadValue
-            ? await directory.loadValue(tag)
-            : directory?.getValue?.(tag);
-          return value as ArrayLike<number> | undefined;
-        };
-        const [coefficients, referenceBlackWhite] = await Promise.all([readTag(529), readTag(532)]);
-        return convertTiffYCbCrToRgb(
-          rasters[0],
-          rasters[1],
-          rasters[2],
-          coefficients,
-          referenceBlackWhite,
-        );
-      });
-      windowCache.set(key, decoded);
-      void decoded.catch(() => {
-        if (windowCache.get(key) === decoded) windowCache.delete(key);
-      });
-      if (windowCache.size > 32) windowCache.delete(windowCache.keys().next().value!);
-    }
-    const rasters = await decoded;
-    return rasters[band] ?? rasters[0];
-  };
-  cog.geolibreJpegTablesPatched = true;
-  return source;
 }
 
 function getRasterControlClass(): Promise<RasterControlConstructor> {

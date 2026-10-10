@@ -1529,7 +1529,7 @@ export const maplibreFieldsOfTheWorldPlugin: GeoLibrePlugin = {
   // The field layers are PMTiles and GeoJSON store layers and the footprints
   // are Style Spec sources and layers, so both 2D engines host them, and the
   // host's control map draws them on ArcGIS.
-  engines: ["maplibre", "mapbox", "arcgis"],
+  engines: ["maplibre", "mapbox", "arcgis", "cesium"],
   activate: (app) => {
     appRef = app;
     unregisterPanel =

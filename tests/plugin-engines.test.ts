@@ -20,6 +20,11 @@ import {
   maplibreSourceCoopPlugin,
 } from "../packages/plugins/src/plugins/maplibre-source-coop";
 import { osmBasemapPlugin } from "../packages/plugins/src/plugins/osm-basemap";
+import { maplibreFieldsOfTheWorldPlugin } from "../packages/plugins/src/plugins/maplibre-fields-of-the-world";
+import { maplibreOpenAerialMapPlugin } from "../packages/plugins/src/plugins/maplibre-openaerialmap";
+import { maplibreSatelliteEmbeddingsPlugin } from "../packages/plugins/src/plugins/maplibre-satellite-embeddings";
+import { maplibreVantorPlugin } from "../packages/plugins/src/plugins/maplibre-vantor";
+import { maplibreEarthaccessPlugin } from "../packages/plugins/src/plugins/maplibre-earthaccess";
 import { cartoLightPlugin } from "../packages/plugins/src/plugins/carto-light";
 import {
   isExternalPluginManifest,
@@ -125,6 +130,20 @@ describe("Tier 1 built-in plugin engine support audit", () => {
       for (const engine of ["maplibre", "mapbox", "arcgis", "cesium"] as const)
         assert.equal(isPluginEngineSupported(plugin, engine), true, `${plugin.id} on ${engine}`);
     }
+  });
+
+  // Catalog panels whose footprints and imagery reach the map through the
+  // control map and the store, which the globe's control host records and
+  // draws (#3088's model).
+  it("declares Cesium on the store-backed imagery catalogs", () => {
+    for (const plugin of [
+      maplibreFieldsOfTheWorldPlugin,
+      maplibreOpenAerialMapPlugin,
+      maplibreSatelliteEmbeddingsPlugin,
+      maplibreVantorPlugin,
+      maplibreEarthaccessPlugin,
+    ])
+      assert.equal(isPluginEngineSupported(plugin, "cesium"), true, plugin.id);
   });
 
   it("defaults MapLibre-only plugins without explicit engines to maplibre", () => {

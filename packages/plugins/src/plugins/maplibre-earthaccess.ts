@@ -1316,7 +1316,7 @@ export const maplibreEarthaccessPlugin: GeoLibrePlugin = {
   id: EARTHACCESS_PLUGIN_ID,
   name: PLUGIN_NAME,
   version: "0.1.0",
-  engines: ["maplibre", "mapbox"],
+  engines: ["maplibre", "mapbox", "cesium"],
   activate: (app) => {
     appRef = app;
     unregisterPanel =

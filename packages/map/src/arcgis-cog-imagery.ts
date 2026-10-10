@@ -1,4 +1,4 @@
-import { installCogTilerDatumShift, type GeoLibreLayer } from "@geolibre/core";
+import { installCogTilerDatumShift, withJpegTablesPatch, type GeoLibreLayer } from "@geolibre/core";
 import { cogRenderOptions, cogSourceUrl, rasterState, type CogTilerModule } from "./cog-imagery";
 import type { ArcgisRasterLayer, ArcgisSdk } from "./arcgis-sdk";
 import type { CogSource } from "cog-tiler-wasm";
@@ -12,7 +12,8 @@ export async function loadCogTiler(): Promise<CogTilerModule> {
   installCogTilerDatumShift(module);
   const { default: wasmUrl } = await import("lerc/lerc-wasm.wasm?url");
   module.configureLercDecoder({ wasmUrl });
-  return module;
+  // JPEG COGs whose tiles omit their tables decode through geotiff.js.
+  return withJpegTablesPatch(module);
 }
 
 /** A native SDK tile layer sharing the raster control's persisted band/stretch settings. */
