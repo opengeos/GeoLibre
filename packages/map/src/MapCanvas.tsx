@@ -390,21 +390,13 @@ export const MapCanvas = memo(function MapCanvas({
       // effect below: its jumpTo cancels an in-flight chapter fly, after which
       // the rotate handler starts orbiting the previous chapter instead of the
       // one just clicked. Skipping the sync keeps the presenter authoritative.
-      //
-      // A skipped move leaves the map away from the view last reported, so
-      // forget it: a store change back to that view must jump again.
-      if (useAppStore.getState().ui.storymapPresenting) {
-        mc.forgetReportedView();
-        return;
-      }
+      const live = useAppStore.getState();
+      if (live.ui.storymapPresenting) return;
       // The flight simulator likewise owns the camera while it flies, and jumps
       // it every animation frame. Writing each of those into the store would
       // overwrite the project's saved view ~60 times a second.
-      if (event?.flightCameraToken !== undefined) {
-        mc.forgetReportedView();
-        return;
-      }
-      setMapView(mc.reportView(), Boolean(event?.originalEvent));
+      if (event?.flightCameraToken !== undefined) return;
+      setMapView(mc.reportView(live.mapView), Boolean(event?.originalEvent));
       // Same moveend cadence as zoom/bearing/pitch: a bar where one number is
       // live and the rest lag during a drag reads as broken.
       setCameraAltitude(mc.readCameraAltitude());

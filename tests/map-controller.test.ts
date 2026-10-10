@@ -1349,11 +1349,13 @@ describe("MapController camera and query helpers", () => {
 
   // Issue #3083: the store's echo of the view the map reported on moveend
   // must not jump, or it stops a camera move started in between.
+  const PREVIOUS_STORE_VIEW = { center: [0, 0] as [number, number], zoom: 1, bearing: 0, pitch: 0 };
+
   it("does not jump to the store's echo of the view it reported", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
 
-    const reported = controller.reportView();
+    const reported = controller.reportView(PREVIOUS_STORE_VIEW);
     controller.applyStoreView({ ...reported });
 
     assert.ok(!fake.calls.some((c) => c.method === "jumpTo"));
@@ -1363,7 +1365,7 @@ describe("MapController camera and query helpers", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
 
-    controller.reportView();
+    controller.reportView(PREVIOUS_STORE_VIEW);
     controller.applyStoreView({ center: [12, 48], zoom: 6, bearing: 0, pitch: 0 });
 
     assert.ok(fake.calls.some((c) => c.method === "jumpTo"));
@@ -1373,19 +1375,20 @@ describe("MapController camera and query helpers", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
 
-    const reported = controller.reportView();
+    const reported = controller.reportView(PREVIOUS_STORE_VIEW);
     controller.applyStoreView(reported);
     controller.applyStoreView(reported);
 
     assert.equal(fake.calls.filter((c) => c.method === "jumpTo").length, 1);
   });
 
-  it("jumps to a reported view once that report is forgotten", () => {
+  it("does not remember a report that leaves the store's camera unchanged", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
 
-    const reported = controller.reportView();
-    controller.forgetReportedView();
+    // The write changes nothing, so no store sync consumes it; a later store
+    // change back to this view must still jump.
+    const reported = controller.reportView(controller.readView());
     controller.applyStoreView(reported);
 
     assert.ok(fake.calls.some((c) => c.method === "jumpTo"));

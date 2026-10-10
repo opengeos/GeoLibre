@@ -979,10 +979,15 @@ export class MapController implements MapEngine {
    * Read the current view to write into the store, and remember it so the
    * store's echo of it can be told apart from a view set elsewhere. See
    * {@link applyStoreView}.
+   *
+   * Only a view whose camera differs from `storeView`, the store's view before
+   * the write, is remembered: a write that leaves the camera unchanged never
+   * re-runs the store sync, so nothing would consume it and a later store
+   * change back to that view would wrongly be taken for its echo.
    */
-  reportView(): MapViewState {
+  reportView(storeView: MapViewState): MapViewState {
     const view = this.readView();
-    this.reportedView = view;
+    if (!sameMapViewCamera(view, storeView)) this.reportedView = view;
     return view;
   }
 
@@ -1003,15 +1008,6 @@ export class MapController implements MapEngine {
     this.reportedView = null;
     if (reported && sameMapViewCamera(view, reported)) return;
     this.applyView(view);
-  }
-
-  /**
-   * Forget the view {@link reportView} remembered, for a `moveend` whose view
-   * is deliberately kept out of the store: the map has moved away from it, so
-   * a store change back to it must jump again.
-   */
-  forgetReportedView(): void {
-    this.reportedView = null;
   }
 
   /**
