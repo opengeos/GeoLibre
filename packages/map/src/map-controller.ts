@@ -229,10 +229,10 @@ export class MapController implements MapEngine {
   /** Whether {@link clampViewToPreferences} has a clamp queued on `moveend`. */
   private pendingViewClamp = false;
   /**
-   * The view {@link reportView} last handed to the store, until the store's
-   * echo of it reaches {@link applyStoreView} (issue #3083).
+   * Views {@link reportView} handed to the store whose echo has not reached
+   * {@link applyStoreView} yet, oldest first (issue #3083).
    */
-  private reportedView: MapViewState | null = null;
+  private reportedViews: MapViewState[] = [];
   private navigationControl: maplibregl.NavigationControl | null = null;
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
   private compassControl: ResetBearingControl | null = null;
@@ -987,7 +987,7 @@ export class MapController implements MapEngine {
    */
   reportView(storeView: MapViewState): MapViewState {
     const view = this.readView();
-    if (!sameMapViewCamera(view, storeView)) this.reportedView = view;
+    if (!sameMapViewCamera(view, storeView)) this.reportedViews.push(view);
     return view;
   }
 
@@ -999,14 +999,21 @@ export class MapController implements MapEngine {
    * camera move started since: a plugin's `fitBounds` begun in (or shortly
    * after) the `moveend` that reported it was cancelled a render later, where
    * it stood (issue #3083). Views set from outside (project load, undo,
-   * collaboration, a synced pane) still jump. The remembered view is consumed
-   * by the first store change that reaches here, so it never outlives the echo
-   * it was kept for.
+   * collaboration, a synced pane) still jump.
+   *
+   * Reports are queued rather than kept one at a time because a later
+   * `moveend` can report again before the store sync for an earlier report
+   * has run; each echo consumes its own report and any older ones. A view set
+   * from outside clears the queue, so no report outlives the store change
+   * that superseded it.
    */
   applyStoreView(view: MapViewState): void {
-    const reported = this.reportedView;
-    this.reportedView = null;
-    if (reported && sameMapViewCamera(view, reported)) return;
+    const echoed = this.reportedViews.findIndex((reported) => sameMapViewCamera(view, reported));
+    if (echoed >= 0) {
+      this.reportedViews.splice(0, echoed + 1);
+      return;
+    }
+    this.reportedViews = [];
     this.applyView(view);
   }
 

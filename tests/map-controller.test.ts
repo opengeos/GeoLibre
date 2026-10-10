@@ -1382,6 +1382,33 @@ describe("MapController camera and query helpers", () => {
     assert.equal(fake.calls.filter((c) => c.method === "jumpTo").length, 1);
   });
 
+  it("skips the echo of an earlier report that a later moveend overtook", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    const camera = map as { getCenter: () => { lng: number; lat: number } };
+
+    // moveend reports A; before the store sync for A runs, another moveend
+    // reports B. Neither echo may jump, or A's would cancel the move to B.
+    const a = controller.reportView(PREVIOUS_STORE_VIEW);
+    camera.getCenter = () => ({ lng: 9.16, lat: 45.47 });
+    const b = controller.reportView(a);
+    controller.applyStoreView(a);
+    controller.applyStoreView(b);
+
+    assert.ok(!fake.calls.some((c) => c.method === "jumpTo"));
+  });
+
+  it("forgets pending reports once a view is set from outside", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    const reported = controller.reportView(PREVIOUS_STORE_VIEW);
+    controller.applyStoreView({ center: [12, 48], zoom: 6, bearing: 0, pitch: 0 });
+    controller.applyStoreView(reported);
+
+    assert.equal(fake.calls.filter((c) => c.method === "jumpTo").length, 2);
+  });
+
   it("does not remember a report that leaves the store's camera unchanged", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
