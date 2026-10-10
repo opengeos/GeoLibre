@@ -4279,7 +4279,8 @@
     "reverseLookingUp": "Looking up address...",
     "reverseNoAddress": "No address found.",
     "reverseCopyAddress": "Copy address",
-    "reverseFailed": "Reverse geocoding failed."
+    "reverseFailed": "Reverse geocoding failed.",
+    "reverseClosePopup": "Close popup"
   },
   "graticule": {
     "title": "Gridlines",

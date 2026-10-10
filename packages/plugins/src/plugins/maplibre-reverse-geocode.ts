@@ -43,6 +43,8 @@ export interface ReverseGeocodeLabels {
   noAddress: string;
   copyAddress: string;
   failed: string;
+  /** Accessible name of the popup's close button. */
+  closePopup: string;
 }
 
 let labels: ReverseGeocodeLabels = {
@@ -50,6 +52,7 @@ let labels: ReverseGeocodeLabels = {
   noAddress: "No address found.",
   copyAddress: "Copy address",
   failed: "Reverse geocoding failed.",
+  closePopup: "Close popup",
 };
 
 /** Override the popup strings (called from the app layer with translated text). */
@@ -112,6 +115,7 @@ async function showReverseGeocodePopup(
   popup?.remove();
   popup = createMapPopup(map, {
     closeButton: true,
+    closeButtonLabel: labels.closePopup,
     className: "geolibre-reverse-geocode-popup",
   })
     .setLngLat([lng, lat])

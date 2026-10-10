@@ -63,11 +63,12 @@ describe("createMapPopup", () => {
 
   it("closes from its close button and drops every listener", () => {
     const map = fakeMap();
-    const popup = createMapPopup(asMap(map), { closeButton: true })
+    const popup = createMapPopup(asMap(map), { closeButton: true, closeButtonLabel: "Fermer" })
       .setLngLat([1, 1])
       .setDOMContent(document.createElement("span"))
       .addTo(asMap(map));
     const close = map.container.querySelector(".maplibregl-popup-close-button") as HTMLElement;
+    assert.equal(close.getAttribute("aria-label"), "Fermer");
     close.click();
     assert.equal(popup.isOpen(), false);
     assert.equal(map.container.childElementCount, 0);

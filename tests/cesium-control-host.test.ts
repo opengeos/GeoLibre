@@ -456,6 +456,19 @@ describe("CesiumControlHost", () => {
     fire("pointerdown", 100, 100);
     fire("click", 102, 101);
     assert.equal(clicks.length, 1);
+    // A click with no press of its own after a drag is not measured against
+    // the drag's stale press.
+    fire("pointerdown", 100, 100);
+    fire("click", 160, 100);
+    fire("click", 300, 300);
+    assert.equal(clicks.length, 2);
+    // The dblclick that ends a drag is dropped with its click.
+    const dblclicks: unknown[] = [];
+    facade.on("dblclick", (event: unknown) => dblclicks.push(event));
+    fire("pointerdown", 100, 100);
+    fire("click", 150, 100);
+    fire("dblclick", 150, 100);
+    assert.equal(dblclicks.length, 0);
     host.destroy();
   });
 

@@ -16,6 +16,11 @@ export interface MapPopup {
 export interface MapPopupOptions {
   /** Show an "×" button that closes the popup. Defaults to `false`. */
   closeButton?: boolean;
+  /**
+   * Accessible name of the close button. The plugins cannot call `t()`, so a
+   * caller passes its translated label; defaults to MapLibre's English one.
+   */
+  closeButtonLabel?: string;
   /** Extra class names for the popup root. */
   className?: string;
   /** Pixels between the coordinate and the popup's tip. Defaults to 0. */
@@ -42,12 +47,22 @@ export interface MapPopupOptions {
  */
 export function createMapPopup(map: maplibregl.Map, options: MapPopupOptions = {}): MapPopup {
   if (map instanceof maplibregl.Map) {
-    return new maplibregl.Popup({
+    const popup = new maplibregl.Popup({
       closeButton: options.closeButton ?? false,
       closeOnClick: false,
       className: options.className,
       offset: options.offset,
     });
+    const label = options.closeButtonLabel;
+    // MapLibre names the button from the map's locale; the caller's label wins.
+    if (label)
+      popup.on("open", () =>
+        popup
+          .getElement()
+          ?.querySelector(".maplibregl-popup-close-button")
+          ?.setAttribute("aria-label", label),
+      );
+    return popup;
   }
   return new ProjectedPopup(options);
 }
@@ -103,7 +118,7 @@ class ProjectedPopup implements MapPopup {
       const close = doc.createElement("button");
       close.type = "button";
       close.classList.add(...classes("popup-close-button"));
-      close.setAttribute("aria-label", "Close popup");
+      close.setAttribute("aria-label", options.closeButtonLabel ?? "Close popup");
       close.textContent = "×";
       close.addEventListener("click", () => this.remove());
       this.content.appendChild(close);

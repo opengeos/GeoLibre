@@ -172,13 +172,25 @@ class CesiumMapFacade extends maplibregl.Evented {
       this.cleanups.push(() => observer.disconnect());
     }
     this.cleanups.push(restoreCompatibilityMouseEvents(viewer.canvas));
-    // Where the last press started, to drop the `click` that ends a drag.
+    // Where the current press started, to drop the `click` that ends a drag.
+    // Each click consumes it, so a later click with no press of its own (from
+    // the keyboard, or dispatched) is not measured against a stale one; the
+    // consumed press stays on hand for the `dblclick` that follows the click.
     let pressedAt: { x: number; y: number } | null = null;
+    let clickPress: { x: number; y: number } | null = null;
     const onPress = (event: PointerEvent) => {
       pressedAt = { x: event.clientX, y: event.clientY };
     };
+    const onCancel = () => {
+      pressedAt = null;
+      clickPress = null;
+    };
     viewer.canvas.addEventListener("pointerdown", onPress, true);
-    this.cleanups.push(() => viewer.canvas.removeEventListener("pointerdown", onPress, true));
+    viewer.canvas.addEventListener("pointercancel", onCancel, true);
+    this.cleanups.push(() => {
+      viewer.canvas.removeEventListener("pointerdown", onPress, true);
+      viewer.canvas.removeEventListener("pointercancel", onCancel, true);
+    });
     for (const name of [
       "click",
       "dblclick",
@@ -188,6 +200,14 @@ class CesiumMapFacade extends maplibregl.Evented {
       "contextmenu",
     ] as const) {
       const listener = (originalEvent: MouseEvent) => {
+        // Consume the press before any early return, so it never goes stale.
+        const press = name === "dblclick" ? clickPress : name === "click" ? pressedAt : null;
+        if (name === "click") {
+          clickPress = pressedAt;
+          pressedAt = null;
+        } else if (name === "dblclick") {
+          clickPress = null;
+        }
         const C = this.Cesium;
         const scene = this.scene();
         if (!C || !scene) return;
@@ -198,9 +218,8 @@ class CesiumMapFacade extends maplibregl.Evented {
         const layered = name in LAYER_POINTER && this.layerEvents.listening(name as PointerSource);
         if (!this.listens(name) && !layered) return;
         if (
-          (name === "click" || name === "dblclick") &&
-          pressedAt &&
-          Math.hypot(originalEvent.clientX - pressedAt.x, originalEvent.clientY - pressedAt.y) >
+          press &&
+          Math.hypot(originalEvent.clientX - press.x, originalEvent.clientY - press.y) >
             CLICK_TOLERANCE_PX
         )
           return;

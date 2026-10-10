@@ -60,6 +60,7 @@ export function usePluginLabelSync(): void {
       noAddress: t("geocode.reverseNoAddress"),
       copyAddress: t("geocode.reverseCopyAddress"),
       failed: t("geocode.reverseFailed"),
+      closePopup: t("geocode.reverseClosePopup"),
     });
     setBasemapControlLabels({
       confirmStyleReplace: (name, count) => t("basemaps.confirmStyleReplace", { name, count }),
