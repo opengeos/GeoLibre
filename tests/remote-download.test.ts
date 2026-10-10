@@ -19,7 +19,7 @@ function fakeHost() {
   const invoke = (async (cmd: string, args?: Record<string, unknown>) => {
     calls.push({ cmd, args: args ?? {} });
     if (cmd === "download_remote_file") {
-      return new Promise((resolve) => {
+      return new Promise<unknown>((resolve) => {
         finish = resolve;
       });
     }

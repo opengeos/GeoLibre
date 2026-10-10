@@ -6,6 +6,7 @@ import {
   earthdataTokenExpiry,
   fileNameFromUrl,
   formatSizeMb,
+  granuleDetailsUrl,
   granuleFootprints,
   granuleGeometry,
   isSpaceborneLidarGranule,
@@ -252,6 +253,16 @@ describe("granule files", () => {
     assert.equal(isSpaceborneLidarGranule({ shortName: "HLSL30" }, tif), false);
     const atl03 = { ...granule, dataLinks: ["https://example.com/ATL03_2020.h5"] };
     assert.equal(isSpaceborneLidarGranule({ shortName: "ATL03" }, atl03), false);
+  });
+
+  it("links a granule to its Earthdata Search page", () => {
+    assert.equal(
+      granuleDetailsUrl({
+        conceptId: "G4353707350-LPCLOUD",
+        collectionConceptId: "C2021957657-LPCLOUD",
+      }),
+      "https://search.earthdata.nasa.gov/search/granules?p=C2021957657-LPCLOUD&g=G4353707350-LPCLOUD",
+    );
   });
 
   it("formats sizes", () => {

@@ -11,6 +11,7 @@ import {
   earthdataTokenExpiry,
   fileNameFromUrl,
   formatSizeMb,
+  granuleDetailsUrl,
   granuleFootprints,
   isSpaceborneLidarGranule,
   newestCollection,
@@ -971,10 +972,11 @@ function buildCard(granule: EarthdataGranule): HTMLElement {
   }
   actions.append(
     button(tr("zoom", "Zoom"), CSS.action, () => selectGranule(granule.conceptId, true)),
-    button(tr("details", "Details"), CSS.action, () =>
-      openExternal(
-        `https://cmr.earthdata.nasa.gov/search/concepts/${encodeURIComponent(granule.conceptId)}.html`,
-      ),
+    button(
+      tr("details", "Details"),
+      CSS.action,
+      () => openExternal(granuleDetailsUrl(granule)),
+      tr("detailsTitle", "Open this granule in Earthdata Search"),
     ),
   );
   card.append(actions);

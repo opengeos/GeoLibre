@@ -10407,7 +10407,8 @@
       "progressUnknown": "Downloading… {{mb}} MB",
       "cancel": "Cancel",
       "hint": "Search NASA's Earthdata catalog (CMR) for datasets and granules over the map view, then download them or open ICESat-2 and GEDI granules on the map.",
-      "starting": "Starting download…"
+      "starting": "Starting download…",
+      "detailsTitle": "Open this granule in Earthdata Search"
     }
   },
   "arcgisService": {

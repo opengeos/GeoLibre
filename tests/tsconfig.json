@@ -25,6 +25,7 @@
     "aircraft-proxy.test.ts",
     "cctv-proxy.test.ts",
     "celestrak-proxy.test.ts",
+    "earthdata-proxy.test.ts",
     "edge-proxy-redirect.test.ts",
     "firms-proxy.test.ts",
     "gods-eye-view-fire-feeds.test.ts",

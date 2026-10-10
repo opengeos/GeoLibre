@@ -78,7 +78,11 @@ function declaredAppApiMembers(): string[] {
 }
 
 /** Members only the desktop (Tauri) runtime provides; undefined in a browser. */
-const DESKTOP_ONLY_MEMBERS = new Set(["nativeFetch", "pickVectorFilesWithSidecars"]);
+const DESKTOP_ONLY_MEMBERS = new Set([
+  "nativeFetch",
+  "downloadRemoteFile",
+  "pickVectorFilesWithSidecars",
+]);
 /** Members that are objects rather than functions. */
 const OBJECT_MEMBERS = new Set(["credentials"]);
 
@@ -238,6 +242,7 @@ describe("plugin app API contract", () => {
     try {
       const api = createAppAPI(engineRef(), fakeHost().host);
       assert.equal(typeof api.nativeFetch, "function");
+      assert.equal(typeof api.downloadRemoteFile, "function");
       assert.equal(typeof api.pickVectorFilesWithSidecars, "function");
     } finally {
       if (previous === undefined) delete globals.window;

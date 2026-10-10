@@ -419,6 +419,20 @@ export function granuleFootprints(
   return { type: "FeatureCollection", features };
 }
 
+/**
+ * The granule's page in Earthdata Search. CMR serves granule records only as
+ * metadata formats (`.json`, `.umm_json`, `.xml`), not as HTML.
+ *
+ * @param granule The granule.
+ * @returns A URL that opens the granule in Earthdata Search.
+ */
+export function granuleDetailsUrl(
+  granule: Pick<EarthdataGranule, "conceptId" | "collectionConceptId">,
+): string {
+  const params = new URLSearchParams({ p: granule.collectionConceptId, g: granule.conceptId });
+  return `${EARTHDATA_SEARCH_URL}/granules?${params}`;
+}
+
 /** The last path segment of a URL, without its query string. */
 export function fileNameFromUrl(url: string): string {
   const path = url.split(/[?#]/)[0];

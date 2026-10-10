@@ -55,6 +55,10 @@
     "description": "NASA EOSDIS ArcGIS image, map, and feature services, and published web maps.",
     "docs": "web-services.md#earthdata-gis"
   },
+  "geolibre-earthaccess": {
+    "description": "Search NASA Earthdata (CMR) for datasets and granules over the map view and download them with an Earthdata Login; ICESat-2 and GEDI granules open onto the map.",
+    "docs": "web-services.md#nasa-earthaccess"
+  },
   "maplibre-gl-openaerialmap": {
     "description": "Openly licensed drone and aerial imagery.",
     "docs": "web-services.md#openaerialmap"
