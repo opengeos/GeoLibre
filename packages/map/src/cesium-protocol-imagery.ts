@@ -75,8 +75,16 @@ export interface ProtocolImageryOptions {
   maxConcurrentRequests?: number;
 }
 
-/** Web Mercator's latitude limit, in degrees. */
-const MAX_MERCATOR_LATITUDE = 85.05113;
+/**
+ * Web Mercator's latitude limit, in degrees, kept just inside Cesium's own
+ * (`WebMercatorProjection.MaximumLatitude`, 85.05112877980659°). A rectangle
+ * edge even a hair past it lies outside the tiling scheme, so
+ * `positionToTileXY` answers `undefined` for its corner and the globe stops
+ * rendering in `_createTileImagerySkeletons` ("reading 'x'"); the exact
+ * constant fails too once `Rectangle.fromDegrees` rounds it to radians. Only a
+ * source reaching the poles hits it, such as a global COG or WMS (GEBCO).
+ */
+const MAX_MERCATOR_LATITUDE = 85.0511287798;
 
 /**
  * A Cesium `Rectangle` from `[west, south, east, north]` degrees, clamped to

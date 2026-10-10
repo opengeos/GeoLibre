@@ -829,6 +829,18 @@ describe("review follow-ups", () => {
     assert.ok(rect.north < (85.1 * Math.PI) / 180 && rect.north > (85 * Math.PI) / 180);
   });
 
+  it("keeps a global source inside Cesium's real Web Mercator tiling scheme", async () => {
+    // A rectangle edge past Cesium's limit has no tile, and the globe stops
+    // rendering when it asks for the corner's tile (a global COG or WMS).
+    const Real = await import("@cesium/engine");
+    const { webMercatorRectangle } = await import("../packages/map/src/cesium-protocol-imagery");
+    const rect = webMercatorRectangle(Real, [-180, -90, 180, 90]);
+    const scheme = new Real.WebMercatorTilingScheme();
+    for (const corner of [Real.Rectangle.northwest(rect), Real.Rectangle.southeast(rect)])
+      for (const level of [0, 3, 12])
+        assert.ok(scheme.positionToTileXY(corner, level), `level ${level}`);
+  });
+
   it("falls back to an RGB composite only when the source has three bands", () => {
     assert.deepEqual(cogRenderBands({ mode: "rgb", bands: [] }, 4), [1, 2, 3]);
     assert.deepEqual(cogRenderBands({ mode: "rgb", bands: [] }, 1), [1]);
