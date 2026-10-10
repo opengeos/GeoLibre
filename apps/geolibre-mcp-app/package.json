@@ -14,10 +14,8 @@
     "@modelcontextprotocol/core": "^2.3.1",
     "@modelcontextprotocol/ext-apps": "^2.0.3",
     "i18next": "^26.4.2",
-    "lucide-react": "^1.55.0",
+    "lucide": "^1.55.0",
     "maplibre-gl": "^6.11.2",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
     "zod": "^4.2.0"
   },
   "devDependencies": {

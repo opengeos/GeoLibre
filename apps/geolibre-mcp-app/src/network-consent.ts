@@ -3,9 +3,7 @@ import type { AddProtocolAction, RequestTransformFunction } from "maplibre-gl";
 import type { CallToolResult } from "@modelcontextprotocol/client";
 import { z } from "zod";
 import { createInstance } from "i18next";
-import { Map as MapIcon } from "lucide-react";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { createElement, Map as MapIcon } from "lucide";
 import { mcpPreview } from "../../geolibre-desktop/src/i18n/locales/en.json";
 
 const consentI18n = createInstance();
@@ -17,7 +15,6 @@ void consentI18n.init({
   interpolation: { escapeValue: false },
 });
 const t = consentI18n.getFixedT("en", "translation", "mcpPreview.networkConsent");
-const consentMapIcon = renderToStaticMarkup(createElement(MapIcon, { size: 24 }));
 
 const PREFIX = "geolibre-preview://";
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -187,7 +184,7 @@ export function createNetworkConsent(
     const mark = document.createElement("span");
     mark.className = "consent-mark";
     mark.setAttribute("aria-hidden", "true");
-    mark.innerHTML = consentMapIcon;
+    mark.append(createElement(MapIcon, { width: 24, height: 24 }));
     const heading = document.createElement("div");
     const label = document.createElement("p");
     label.className = "consent-eyebrow";

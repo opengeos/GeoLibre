@@ -198,6 +198,9 @@ checkout. Prebuilt sdists can produce wheels without Node or the monorepo
 sources. Both frontend build outputs and pre-staged package assets are scanned
 for credentials before packaging.
 
+The consent panel uses a named vanilla Lucide icon rendered directly into SVG
+DOM nodes, keeping React's server renderer out of the single-file preview.
+
 ## The workspace
 
 Every path in every tool call is resolved against the allowed roots before the
