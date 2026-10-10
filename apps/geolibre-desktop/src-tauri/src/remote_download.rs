@@ -148,22 +148,32 @@ impl Drop for PartFile {
     }
 }
 
-/// `folder/name`, or `folder/stem (n).ext` when that exists, so a folder
-/// download never silently replaces a file already there (the save dialog
-/// asks the user about that itself).
-fn unique_path(folder: &Path, name: &str) -> PathBuf {
-    let first = folder.join(name);
-    if !first.exists() {
-        return first;
-    }
+/// Reserve `folder/name`, or `folder/stem (n).ext` when that is taken, by
+/// creating it empty with `create_new`, so a folder download never replaces a
+/// file already there, and two downloads of the same name running at once
+/// never pick the same destination (the save dialog asks the user itself).
+fn reserve_unique_path(folder: &Path, name: &str) -> Result<PathBuf, String> {
     let (stem, extension) = match name.rsplit_once('.') {
         Some((stem, extension)) if !stem.is_empty() => (stem, format!(".{extension}")),
         _ => (name, String::new()),
     };
-    (1..)
-        .map(|n| folder.join(format!("{stem} ({n}){extension}")))
-        .find(|candidate| !candidate.exists())
-        .unwrap_or(first)
+    for n in 0..10_000u32 {
+        let candidate = if n == 0 {
+            folder.join(name)
+        } else {
+            folder.join(format!("{stem} ({n}){extension}"))
+        };
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(_) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("Could not create the download file: {error}")),
+        }
+    }
+    Err("Could not find a free file name in the chosen folder.".into())
 }
 
 /// Reduce a suggested name to a safe single path component.
@@ -218,24 +228,35 @@ fn request_headers(headers: Vec<(String, String)>) -> Result<HeaderMap, String> 
     Ok(map)
 }
 
-fn client() -> Result<reqwest::Client, String> {
-    static CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
-    CLIENT
-        .get_or_init(|| {
-            guarded_async_client_builder(Policy::custom(|attempt| {
-                if attempt.previous().len() >= MAX_HTTP_REDIRECTS {
-                    return attempt.error("Too many redirects.");
-                }
-                match redirect_target_allowed(attempt.url()) {
-                    Ok(()) => attempt.follow(),
-                    Err(error) => attempt.error(error),
-                }
-            }))?
-            .read_timeout(Duration::from_secs(READ_TIMEOUT_SECS))
-            .build()
-            .map_err(|error| format!("Could not create the download client: {error}"))
-        })
-        .clone()
+/// The download client. A request that carries credentials gets one whose
+/// redirects must stay on HTTPS: reqwest strips credentials only when the host
+/// changes, so a same-host `https` to `http` hop would otherwise resend them in
+/// clear text.
+fn client(credentialed: bool) -> Result<reqwest::Client, String> {
+    static PLAIN: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+    static CREDENTIALED: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+    let build = move || {
+        guarded_async_client_builder(Policy::custom(move |attempt| {
+            if attempt.previous().len() >= MAX_HTTP_REDIRECTS {
+                return attempt.error("Too many redirects.");
+            }
+            if credentialed && attempt.url().scheme() != "https" {
+                return attempt.error("Refusing a redirect from HTTPS to plain HTTP.");
+            }
+            match redirect_target_allowed(attempt.url()) {
+                Ok(()) => attempt.follow(),
+                Err(error) => attempt.error(error),
+            }
+        }))?
+        .read_timeout(Duration::from_secs(READ_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| format!("Could not create the download client: {error}"))
+    };
+    if credentialed {
+        CREDENTIALED.get_or_init(build).clone()
+    } else {
+        PLAIN.get_or_init(build).clone()
+    }
 }
 
 /// The cache directory for downloads, emptied once per app session so files
@@ -265,13 +286,22 @@ fn status_error(status: reqwest::StatusCode) -> String {
     }
 }
 
+/// Stream `url` into `destination`. `part_tag` makes the partial file unique to
+/// the request; `reserved` says `destination` is an empty placeholder this
+/// download owns (a folder download), removed again if the download fails.
 async fn transfer(
     url: Url,
     headers: HeaderMap,
     destination: PathBuf,
+    part_tag: String,
+    reserved: bool,
     progress: tauri::ipc::Channel<RemoteDownloadProgress>,
 ) -> Result<u64, String> {
-    let response = client()?
+    let mut placeholder = PartFile {
+        path: destination.clone(),
+        done: !reserved,
+    };
+    let response = client(!headers.is_empty())?
         .get(url)
         .headers(headers)
         // The length check below compares against Content-Length, which is the
@@ -285,14 +315,15 @@ async fn transfer(
         return Err(status_error(status));
     }
     let total = response.content_length();
+    let part_name = format!(
+        "{}.{part_tag}.part",
+        destination
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    );
     let mut part = PartFile {
-        path: destination.with_extension(format!(
-            "{}part",
-            destination
-                .extension()
-                .map(|ext| format!("{}.", ext.to_string_lossy()))
-                .unwrap_or_default()
-        )),
+        path: destination.with_file_name(part_name),
         done: false,
     };
     let mut file = fs::File::create(&part.path)
@@ -324,6 +355,7 @@ async fn transfer(
     fs::rename(&part.path, &destination)
         .map_err(|error| format!("Could not finish the download: {error}"))?;
     part.done = true;
+    placeholder.done = true;
     let _ = progress.send(RemoteDownloadProgress { received, total });
     Ok(received)
 }
@@ -389,9 +421,10 @@ pub(crate) async fn download_remote_file(
         ),
         None => None,
     };
-    let saves_to_disk = request.save || folder.is_some();
+    let is_folder = folder.is_some();
+    let saves_to_disk = request.save || is_folder;
     let destination = if let Some(folder) = folder {
-        unique_path(&folder, &file_name)
+        reserve_unique_path(&folder, &file_name)?
     } else if request.save {
         match pick_save_path(&app, &file_name).await? {
             Some(path) => path,
@@ -406,8 +439,14 @@ pub(crate) async fn download_remote_file(
         if active.contains_key(&request_id) {
             return Err("Duplicate request ID.".into());
         }
-        let task =
-            tauri::async_runtime::spawn(transfer(url, headers, destination.clone(), progress));
+        let task = tauri::async_runtime::spawn(transfer(
+            url,
+            headers,
+            destination.clone(),
+            sanitize_file_name(&request_id),
+            is_folder,
+            progress,
+        ));
         let abort = task.inner().abort_handle();
         active.insert(request_id.clone(), Box::new(move || abort.abort()));
         task
@@ -541,16 +580,29 @@ mod tests {
     }
 
     #[test]
-    fn folder_downloads_never_replace_an_existing_file() {
+    fn folder_downloads_reserve_distinct_names() {
         let dir = std::env::temp_dir().join(format!("geolibre-unique-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        assert_eq!(unique_path(&dir, "B04.tif"), dir.join("B04.tif"));
-        fs::write(dir.join("B04.tif"), b"x").unwrap();
-        assert_eq!(unique_path(&dir, "B04.tif"), dir.join("B04 (1).tif"));
-        fs::write(dir.join("B04 (1).tif"), b"x").unwrap();
-        assert_eq!(unique_path(&dir, "B04.tif"), dir.join("B04 (2).tif"));
-        fs::write(dir.join("README"), b"x").unwrap();
-        assert_eq!(unique_path(&dir, "README"), dir.join("README (1)"));
+        // Each reservation creates its file, so back-to-back (or concurrent)
+        // downloads of one name get distinct destinations.
+        assert_eq!(
+            reserve_unique_path(&dir, "B04.tif").unwrap(),
+            dir.join("B04.tif")
+        );
+        assert_eq!(
+            reserve_unique_path(&dir, "B04.tif").unwrap(),
+            dir.join("B04 (1).tif")
+        );
+        assert_eq!(
+            reserve_unique_path(&dir, "B04.tif").unwrap(),
+            dir.join("B04 (2).tif")
+        );
+        fs::write(dir.join("README"), b"keep").unwrap();
+        assert_eq!(
+            reserve_unique_path(&dir, "README").unwrap(),
+            dir.join("README (1)")
+        );
+        assert_eq!(fs::read(dir.join("README")).unwrap(), b"keep");
         let _ = fs::remove_dir_all(&dir);
     }
 

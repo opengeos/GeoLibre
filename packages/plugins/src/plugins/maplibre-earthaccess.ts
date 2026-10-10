@@ -660,14 +660,18 @@ async function transferGranule(
       transfer.percent = null;
       renderPanel?.();
       if (native) {
-        const result = await native(url, {
+        const common = {
           headers: authHeaders(url),
           fileName,
-          target: kind === "open" ? "memory" : folder ? "folder" : "save",
-          ...(folder ? { folderId: folder.id } : {}),
           signal: controller.signal,
           onProgress,
-        });
+        };
+        const result = await native(
+          url,
+          folder
+            ? { ...common, target: "folder", folderId: folder.id }
+            : { ...common, target: kind === "open" ? "memory" : "save" },
+        );
         if (!result) {
           state.transfers.delete(granule.conceptId);
           return;
@@ -702,7 +706,13 @@ async function transferGranule(
             count: files.length,
             path: folder.path,
           })
-        : tr("downloadedAll", "Downloaded {{count}} files.", { count: files.length });
+        : // Browsers may ask before saving several files, and drop them if
+          // declined, so this cannot claim they were all saved.
+          tr(
+            "startedAll",
+            "Started {{count}} downloads. If your browser asks to allow multiple downloads, allow it.",
+            { count: files.length },
+          );
     }
   } catch (error) {
     if (controller.signal.aborted) {

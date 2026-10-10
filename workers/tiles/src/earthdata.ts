@@ -96,7 +96,7 @@ async function lookupPresigned(key: string, now: number): Promise<string | null>
     const hit = await cache.match(edgeCacheRequest(key));
     if (!hit) return null;
     const url = await hit.text();
-    presignedCache.set(key, { url, expires: now + PRESIGNED_TTL_MS });
+    rememberPresigned(key, url, now);
     return url;
   } catch {
     return null;

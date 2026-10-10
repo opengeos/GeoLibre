@@ -81,6 +81,18 @@ describe("native remote download glue", () => {
     assert.equal(host.calls.length, 1);
   });
 
+  it("rejects a folder download without a folder id", async () => {
+    const host = fakeHost();
+    await assert.rejects(
+      host.download("https://example.com/a.tif", {
+        fileName: "a.tif",
+        target: "folder",
+      } as unknown as Parameters<typeof host.download>[1]),
+      /folderId/,
+    );
+    assert.equal(host.calls.length, 0);
+  });
+
   it("resolves null when the save dialog is cancelled", async () => {
     const host = fakeHost();
     const pending = host.download("https://example.com/a.h5", { fileName: "a.h5", target: "save" });

@@ -40,6 +40,10 @@ export function createRemoteDownload(
   return async (url, options) => {
     const { signal } = options;
     signal?.throwIfAborted();
+    // Plugins may be plain JavaScript, so check what the type promises.
+    if (options.target === "folder" && !options.folderId) {
+      throw new TypeError("A folder download needs the folderId from pickDownloadFolder.");
+    }
     const requestId = crypto.randomUUID();
     const progress = createChannel();
     // Rust registers the download (and so can cancel it) just before its first

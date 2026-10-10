@@ -10409,7 +10409,6 @@
       "starting": "Starting download…",
       "detailsTitle": "Open this granule in Earthdata Search",
       "savedAll": "Saved {{count}} files to {{path}}",
-      "downloadedAll": "Downloaded {{count}} files.",
       "fileFailed": "{{name}}: {{message}}",
       "cogNeedsToken": "Add an Earthdata Login token to put NASA GeoTIFFs on the map.",
       "cogFailed": "Could not add {{name}}: {{message}}",
@@ -10422,7 +10421,8 @@
       "downloadAllTitle": "Download all {{count}} files into a folder",
       "downloadAllBrowserTitle": "Download all {{count}} files",
       "fileOf": "File {{index}} of {{count}}: ",
-      "openedInTab": "Opened {{name}} in a new tab."
+      "openedInTab": "Opened {{name}} in a new tab.",
+      "startedAll": "Started {{count}} downloads. If your browser asks to allow multiple downloads, allow it."
     }
   },
   "arcgisService": {

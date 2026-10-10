@@ -480,7 +480,7 @@ export interface AssistantToolSpec {
 }
 
 /** Options for {@link GeoLibreAppAPI.downloadRemoteFile}. */
-export interface GeoLibreRemoteDownloadOptions {
+interface GeoLibreRemoteDownloadBaseOptions {
   /**
    * Request headers: only `Authorization`, `Cookie` and `Accept`, which are
    * sent to the first host only, and only over HTTPS. Others are rejected.
@@ -488,18 +488,19 @@ export interface GeoLibreRemoteDownloadOptions {
   headers?: Record<string, string>;
   /** Suggested file name (sanitized by the host). */
   fileName: string;
-  /**
-   * `"save"` asks where to save the file; `"memory"` returns its bytes;
-   * `"folder"` writes it into the folder `folderId` names (see
-   * {@link GeoLibreAppAPI.pickDownloadFolder}) without asking.
-   */
-  target: "save" | "memory" | "folder";
-  /** The folder for a `"folder"` download. */
-  folderId?: string;
   signal?: AbortSignal;
   /** Bytes received so far, and the total when the server sent a length. */
   onProgress?: (received: number, total: number | null) => void;
 }
+
+/**
+ * Options for {@link GeoLibreAppAPI.downloadRemoteFile}: `"save"` asks where
+ * to save the file, `"memory"` returns its bytes, and `"folder"` writes it into
+ * the folder `folderId` names (see {@link GeoLibreAppAPI.pickDownloadFolder})
+ * without asking, never replacing a file already there.
+ */
+export type GeoLibreRemoteDownloadOptions = GeoLibreRemoteDownloadBaseOptions &
+  ({ target: "save" | "memory"; folderId?: never } | { target: "folder"; folderId: string });
 
 /** A folder picked with {@link GeoLibreAppAPI.pickDownloadFolder}. */
 export interface GeoLibreDownloadFolder {
