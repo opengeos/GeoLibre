@@ -44,7 +44,7 @@ differences noted; **No** is not available.
 | Super-object features | `parent_<feature>` | **Yes** for band means, indices and size |
 | Existence of super-object of class | `parent_is_<class>` | **Yes** |
 | Sub-object features (number, relative area of class) | `child_count`, `child_frac_<class>` | **Yes** |
-| Thematic layer features (e.g. number of overlapping thematic objects) | Import a feature table with that column | **Partly**: computed outside the workbench, e.g. in a GIS |
+| Thematic layer features (e.g. number of overlapping thematic objects) | [Import a feature table](obia.md#import-from-other-software) with a `segment_id` column and that feature column | **Partly**: computed outside the workbench, e.g. in a GIS |
 | Distance to class | None | **No** |
 
 ## Classification and rulesets
