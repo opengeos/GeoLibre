@@ -20,6 +20,7 @@ differences noted; **No** is not available.
 | Multiresolution segmentation (first level) | Seeded region growing, SLIC or Felzenszwalb | **Partly**: different algorithms, so a scale parameter does not carry over; tune on your imagery |
 | Multiresolution segmentation (level above) | **Build coarser level** | **Partly**: the same color heterogeneity criterion on whole objects, best-first; no shape criterion (compactness/smoothness weights) |
 | Chessboard / quadtree segmentation | None | **No** |
+| Thematic layers in segmentation (objects cut along vector boundaries) | None | **No** |
 | Spectral difference segmentation | **Build coarser level** with a small scale | **Partly**: merges by heterogeneity increase, not by mean difference |
 | Super-objects contain sub-objects | Every coarser level is a union of whole children (`obia_parent`, `child_count`) | **Yes** |
 | Merge region (by class) | None (merging is by heterogeneity only) | **No** |
@@ -43,7 +44,8 @@ differences noted; **No** is not available.
 | Super-object features | `parent_<feature>` | **Yes** for band means, indices and size |
 | Existence of super-object of class | `parent_is_<class>` | **Yes** |
 | Sub-object features (number, relative area of class) | `child_count`, `child_frac_<class>` | **Yes** |
-| Distance to class, thematic layer features | None | **No** |
+| Thematic layer features (e.g. number of overlapping thematic objects) | Import a feature table with that column | **Partly**: computed outside the workbench, e.g. in a GIS |
+| Distance to class | None | **No** |
 
 ## Classification and rulesets
 
@@ -138,7 +140,20 @@ any of its children does):
 ## Validation pilot
 
 To see how far a translated eCognition workflow gets, the workbench was run
-against an eCognition result.
+against eCognition results in three workflows from an eCognition training
+course, each scored against the classification eCognition produced for it:
+
+1. A threshold ruleset, translated by hand ([Classification](#classification),
+   with a segmentation comparison in [Segmentation](#segmentation)).
+2. A supervised nearest neighbor classification, redone with the random
+   forest ([Supervised classification](#supervised-classification)).
+3. A process tree with a thematic layer and a grow loop, partly imported
+   ([Imported process tree](#imported-process-tree)).
+
+Workflows 1 and 3 use the scene below; workflow 2 uses another area of it.
+Workflows 2 and 3 ran the workbench's own segmentation, measurement,
+classifier and ruleset code outside the app, and all three are scored on the
+image grid.
 
 - **Data:** a Landsat 7 ETM+ scene (September 1999) of upland North Wales,
   1001 × 1001 pixels at 15 m: the panchromatic band plus the six
@@ -225,6 +240,71 @@ placed off their image (see
 polygons rather than their labels understated every browser result in an
 earlier version of this section.
 
+### Supervised classification
+
+- **Data:** another area of the same scene, 701 × 701 pixels at 15 m with the
+  same seven layers. The reference is eCognition's four-class classification
+  of it (forest, water, non-vegetation, other vegetation) by standard nearest
+  neighbor on the object means, trained on samples.
+- **Workbench:** region growing at the default threshold (minimum object
+  size 10 pixels, 10,473 objects), then the random forest (100 trees) on the
+  same object means. Samples were objects at least 90% in one eCognition
+  class, taken from 2.5 km checkerboard blocks; agreement is measured in the
+  other blocks, by area. Each sample count was drawn three times.
+
+For comparison, a 1-nearest-neighbor classifier (scikit-learn) on the same
+samples and means, each mean scaled by its standard deviation, stands in for
+eCognition's standard nearest neighbor:
+
+| Samples per class | Random forest | Kappa | 1-nearest neighbor | Kappa |
+| --- | --- | --- | --- | --- |
+| 10 | 82% to 87% | 0.67 to 0.75 | 81% to 91% | 0.65 to 0.82 |
+| 25 | 82% to 84% | 0.67 to 0.69 | 81% to 87% | 0.65 to 0.74 |
+| 100 | 88% to 90% | 0.76 to 0.80 | 86% to 88% | 0.74 to 0.77 |
+| All (3,836 objects) | 93.5% | 0.86 | 92.6% | 0.84 |
+
+With all samples, the random forest reached a producer's/user's accuracy of
+0.97/0.96 for water, 0.91/0.92 for forest, 0.96/0.95 for other vegetation and
+0.65/0.82 for non-vegetation. The random forest does as well as the nearest
+neighbor on the same samples, so the change of classifier is not what limits
+a migrated supervised workflow; how many samples there are matters more.
+
+The first workflow's threshold ruleset, with its three grassland and heath
+classes grouped as other vegetation, agreed with this classification on 91.6%
+of the area (kappa 0.83).
+
+### Imported process tree
+
+- **Workflow:** the eCognition project for the first workflow's scene, with
+  a process tree that marks clouds from a thematic layer (a cloud polygon
+  layer), classifies non-vegetation by NDVI, then water within it by a SWIR
+  band mean and NDVI, and grows water ten times into adjoining
+  non-vegetation objects with "Rel. border to Water".
+- **Import:** the importer converted the cloud classification, the only
+  classification the project file holds. Its feature, the thematic layer's
+  `Num. of overlap: Cloud`, kept its eCognition name; a feature table supplied
+  it (1 where most of an object lies inside the cloud polygons). The two
+  segmentations (one cut along the cloud and upland/lowland polygons) were
+  not converted, as reported.
+- **Translated by hand:** the non-vegetation and water processes (`assign`
+  with conditions), and the grow loop (`loop` with `maxIterations` 10 over an
+  `assign` whose domain reads `nb_border_water`, then an `assign` back to
+  water). The workbench's loop stopped after 3 passes, when nothing changed.
+  The merge region step has no equivalent and was left out.
+
+Against eCognition's classification of the scene, by area:
+
+| Class | Producer's | User's |
+| --- | --- | --- |
+| Water | 0.97 | 0.97 |
+| Water, without the grow loop | 0.88 | 0.99 |
+| Non-vegetation | 0.74 | 0.82 |
+
+eCognition's output leaves the cloud area unclassified. The workbench's cloud
+objects covered 91% of that area, and 98% of them lay inside it. The grow
+loop raised the share of water found from 0.88 to 0.97; the original process
+tree has it for the parts of a lake under small patches of cloud.
+
 ### Conclusions
 
 - **Recommended workflow:**
@@ -234,8 +314,9 @@ earlier version of this section.
   3. Import or translate the eCognition classification rules, check what did
      not convert, and assess the result against the eCognition output.
 - **What carries over:** the classification logic (thresholds, membership
-  functions, class order and domains) translates directly and gives similar
-  results.
+  functions, class order, domains and loops over neighbor relations)
+  translates directly and gives similar results, and the random forest
+  replaces the nearest neighbor without losing accuracy on the same samples.
 - **What does not:** eCognition's segmentation, whose objects no method here
   reproduces, and processes that work across levels. These are the main
   differences to expect.
