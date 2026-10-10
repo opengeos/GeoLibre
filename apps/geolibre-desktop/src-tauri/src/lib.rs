@@ -2,6 +2,7 @@ mod arcgis_http;
 mod aws_credentials;
 mod aws_sts;
 mod plugin_http;
+mod remote_download;
 // Earth Engine sign-in uses Google's OAuth loopback-redirect flow, which binds
 // a listener on 127.0.0.1 to accept the browser's redirect. Accepting an
 // inbound connection requires the `com.apple.security.network.server`
@@ -431,6 +432,7 @@ pub fn run() {
         .manage(SelectedImagePaths::default())
         .manage(arcgis_http::ArcGISRequests::default())
         .manage(plugin_http::PluginHttpRequests::default())
+        .manage(remote_download::RemoteDownloads::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         // Runs before persisted-scope's setup hook so legacy photo grants are
@@ -498,6 +500,9 @@ pub fn run() {
             arcgis_http::cancel_arcgis_request,
             plugin_http::plugin_http_request,
             plugin_http::cancel_plugin_http_request,
+            remote_download::download_remote_file,
+            remote_download::cancel_remote_download,
+            remote_download::take_cached_download,
             aws_credentials::aws_list_profiles,
             aws_credentials::aws_resolve_credentials,
             aws_credentials::aws_sso_login_start,

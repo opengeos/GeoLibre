@@ -78,7 +78,7 @@ fn method(name: &str) -> Result<Method, String> {
 /// Check a redirect hop. A hostname is re-checked by the guarded DNS resolver
 /// when reqwest connects, but a literal IP never reaches a resolver, so check
 /// it here; otherwise a redirect to `169.254.169.254` would be followed.
-fn redirect_target_allowed(url: &Url) -> Result<(), String> {
+pub(crate) fn redirect_target_allowed(url: &Url) -> Result<(), String> {
     match url.scheme() {
         "http" | "https" => {}
         other => return Err(format!("Unsupported redirect scheme: {other}")),

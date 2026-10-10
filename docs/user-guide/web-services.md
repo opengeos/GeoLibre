@@ -28,6 +28,7 @@ They are grouped together because they behave the same way, not because they sha
 | [Planet Open Data](#planet-open-data) | Planet Labs | Planet's disaster data releases, through the STAC browser |
 | [Portolan](#portolan) | Portolan Registry | Registered geospatial catalogs, or a publisher's catalog URL, through the STAC browser |
 | [Earthdata GIS](#earthdata-gis) | NASA EOSDIS | ArcGIS image, map, and feature services, and published web maps |
+| [NASA Earthaccess](#nasa-earthaccess) | NASA CMR / Earthdata Login | Search any NASA Earthdata dataset for granules over the map view, and download them; ICESat-2 and GEDI granules open straight onto the map |
 | [OpenAerialMap](#openaerialmap) | OpenAerialMap | Openly licensed drone and aerial imagery |
 | [OSM Downloader](#osm-downloader) | OpenStreetMap / Overpass | Buildings, roads, amenities, waterways, land use, or custom OSM tags |
 | [IGN LiDAR HD](#ign-lidar-hd) | IGN (France) | LiDAR HD tile coverage and COPC point clouds |
@@ -144,6 +145,19 @@ This is a different catalog from [NASA Earthdata](#nasa-earthdata) above: GIBS s
 - **FeatureServer** items are added as GeoJSON vector layers, arriving with attributes, styling, and export intact.
 - Published **web maps** are expanded into their constituent layers.
 - An ArcGIS service can be **exported to a Cloud-Optimized GeoTIFF**; GeoLibre re-encodes the plain GeoTIFF ArcGIS returns, since ArcGIS has no COG output of its own.
+
+## NASA Earthaccess
+
+Searches NASA's [Common Metadata Repository](https://cmr.earthdata.nasa.gov/search) (CMR), the catalog behind Earthdata Search, and downloads files with your Earthdata Login: the in-app counterpart of the Python [earthaccess](https://earthaccess.readthedocs.io) library.
+
+- Pick a **popular dataset** (ICESat-2 ATL06 and ATL08, GEDI L2A, L2B and L4A, HLS, NASADEM) or search by keyword. A popular pick uses the newest version in Earthdata Cloud.
+- **Search this view** lists the dataset's granules over the map view and a date range, newest first, and draws their footprints as one entry in the Layers panel. Click a footprint to find its card.
+- **Open** (ICESat-2 ATL06/ATL08 and GEDI L2A/L2B/L4A) downloads the granule and hands it to [Add Data → ICESat-2 / GEDI](adding-data.md), where you pick beams and fields as for a local file.
+- **Download** saves the granule's file, **Zoom** fits the map to it, and **Details** opens its CMR record.
+
+Searching needs no account. Downloading needs an [Earthdata Login](https://urs.earthdata.nasa.gov) token: paste one from your profile's **Generate Token** page, or, in the desktop app, sign in with your user name and password (only the token is kept). The token is stored in the system keychain on the desktop and in browser storage on the web. Some datasets also require accepting their EULA on the Earthdata Login site once.
+
+NASA's data servers do not allow browser (CORS) requests, so the desktop app downloads natively and streams large files to disk, while the web app relays downloads through GeoLibre's tile service, which forwards your token to the NASA data host only and never stores it. In the browser a download is held in memory until it is saved, so prefer the desktop app for multi-gigabyte GEDI L2A granules.
 
 ## OpenAerialMap
 

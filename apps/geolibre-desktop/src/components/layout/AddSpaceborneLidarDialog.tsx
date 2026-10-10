@@ -28,6 +28,10 @@ import {
   SAMPLE_BASE_URL,
   SAMPLES,
 } from "../../lib/spaceborne-lidar-samples";
+import {
+  onSpaceborneLidarGranuleRequest,
+  takePendingSpaceborneLidarGranule,
+} from "../../lib/spaceborne-lidar-handoff";
 import { SampleDataSelect } from "./add-data/shared";
 import { SpaceborneLidarOptions } from "./SpaceborneLidarOptions";
 
@@ -224,6 +228,19 @@ export function AddSpaceborneLidarDialog({
       if (gen === opGen.current) setLoading(false);
     }
   };
+
+  // A granule handed over by a plugin (the Earthaccess panel): take it on
+  // mount, and whenever another arrives while the dialog is open.
+  const openGranuleRef = useRef(openGranule);
+  openGranuleRef.current = openGranule;
+  useEffect(() => {
+    const takePending = () => {
+      const granule = takePendingSpaceborneLidarGranule();
+      if (granule) void openGranuleRef.current(granule.data, granule.fileName);
+    };
+    takePending();
+    return onSpaceborneLidarGranuleRequest(takePending);
+  }, []);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();

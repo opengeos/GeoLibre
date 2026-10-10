@@ -596,6 +596,15 @@ export {
   type EarthdataGisSearchResult,
   type EarthdataServiceKind,
 } from "./plugins/earthdata-gis-api";
+export { EARTHACCESS_PLUGIN_ID, maplibreEarthaccessPlugin } from "./plugins/maplibre-earthaccess";
+export {
+  CMR_SEARCH_URL,
+  EARTHDATA_PRESETS,
+  searchEarthdataCollections,
+  searchEarthdataGranules,
+  type EarthdataCollection,
+  type EarthdataGranule,
+} from "./plugins/earthaccess-api";
 export {
   DEFAULT_OPENAERIALMAP_LABELS,
   maplibreOpenAerialMapPlugin,

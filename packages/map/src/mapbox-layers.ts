@@ -173,6 +173,7 @@ const PLUGIN_DRAWN_FOOTPRINT_KINDS = new Set([
   "openaerialmap-footprints",
   "satellite-embeddings-footprints",
   "fields-of-the-world-footprints",
+  "earthaccess-footprints",
 ]);
 
 /** Whether the store record alone gives the engine something to draw. */

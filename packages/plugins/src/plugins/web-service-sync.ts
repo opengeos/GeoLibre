@@ -32,6 +32,7 @@ export const WEB_SERVICE_PLUGIN_IDS = [
   "maplibre-gl-usgs-dem",
   "geolibre-planet-open-data",
   "maplibre-gl-earthdata-gis",
+  "geolibre-earthaccess",
   "maplibre-gl-openaerialmap",
   "geolibre-osm-downloader",
   "geolibre-ign-lidar-hd",

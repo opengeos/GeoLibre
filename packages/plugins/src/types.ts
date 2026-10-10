@@ -479,6 +479,28 @@ export interface AssistantToolSpec {
   callback: (input: unknown) => unknown | Promise<unknown>;
 }
 
+/** Options for {@link GeoLibreAppAPI.downloadRemoteFile}. */
+export interface GeoLibreRemoteDownloadOptions {
+  /** Request headers, e.g. `Authorization`. */
+  headers?: Record<string, string>;
+  /** Suggested file name (sanitized by the host). */
+  fileName: string;
+  /** `"save"` asks where to save the file; `"memory"` returns its bytes. */
+  target: "save" | "memory";
+  signal?: AbortSignal;
+  /** Bytes received so far, and the total when the server sent a length. */
+  onProgress?: (received: number, total: number | null) => void;
+}
+
+/** What {@link GeoLibreAppAPI.downloadRemoteFile} resolves with. */
+export interface GeoLibreRemoteDownloadResult {
+  /** Where a saved file landed; null for a memory download. */
+  path: string | null;
+  size: number;
+  /** The bytes of a memory download; null for a saved file. */
+  data: ArrayBuffer | null;
+}
+
 /** Where `app.credentials` keeps values: the OS credential store on desktop, localStorage elsewhere. */
 export type GeoLibreCredentialLocation = "keychain" | "browser";
 
@@ -722,6 +744,25 @@ export interface GeoLibreAppAPI {
    * Requests to link-local and cloud-metadata addresses are refused.
    */
   nativeFetch?: typeof globalThis.fetch;
+  /**
+   * Download a large file through the desktop app's native HTTP: no CORS, no
+   * size cap, streamed to disk rather than buffered. `target: "save"` asks the
+   * user where to save it and resolves with the path; `target: "memory"`
+   * resolves with the bytes (the temporary file is deleted once read). Resolves
+   * null when the user cancels the save dialog. Headers go to the first host
+   * only, so a bearer token is not forwarded to a redirect's presigned URL.
+   * Desktop only; undefined in the browser and Jupyter builds.
+   */
+  downloadRemoteFile?: (
+    url: string,
+    options: GeoLibreRemoteDownloadOptions,
+  ) => Promise<GeoLibreRemoteDownloadResult | null>;
+  /**
+   * Open Add Data → ICESat-2 / GEDI with a granule already loaded, so the user
+   * picks beams and fields as for a local file. The buffer is handed to the
+   * reader without a copy; do not reuse it.
+   */
+  openSpaceborneLidarGranule?: (data: ArrayBuffer, fileName: string) => void;
   /**
    * Resolve a fetchable URL for an asset shipped alongside an external
    * plugin's manifest (e.g. sample data bundled in the plugin folder). The

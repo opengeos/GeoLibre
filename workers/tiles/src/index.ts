@@ -54,6 +54,11 @@ import {
   TRANSIT_UPSTREAMS,
   FIRMS_UPSTREAMS,
 } from "./allowlisted-fetch";
+import {
+  EARTHDATA_CORS_HEADERS,
+  EARTHDATA_DOWNLOAD_PATH,
+  handleEarthdataDownload,
+} from "./earthdata";
 import { odpUpstream } from "./odp";
 import { isAllowedOverpassQuery } from "./overpass-query";
 import { remapRowsToMercator, tileGeoBounds, wmsBboxFor } from "./reproject";
@@ -1140,7 +1145,12 @@ export const tilesWorker = {
   async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") {
-      const headers = url.pathname === OVERPASS_PATH ? OVERPASS_CORS_HEADERS : CORS_HEADERS;
+      const headers =
+        url.pathname === OVERPASS_PATH
+          ? OVERPASS_CORS_HEADERS
+          : url.pathname === EARTHDATA_DOWNLOAD_PATH
+            ? EARTHDATA_CORS_HEADERS
+            : CORS_HEADERS;
       return new Response(null, { status: 204, headers });
     }
     if (url.pathname === OVERPASS_PATH && request.method === "POST") {
@@ -1169,6 +1179,7 @@ export const tilesWorker = {
           "  Reprojected WMS: /wms/<dataset>/<z>/<x>/<y>.png\n" +
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
+          "  NASA Earthdata granule download: /earthdata/download?url=... (Authorization: Bearer)\n" +
           "  CKAN search: /ckan/search?q=...&rows=...&start=...\n" +
           "  CelesTrak TLE groups: /celestrak/<group>\n" +
           "  Launch Library 2 recent missions: /launch-library/recent\n" +
@@ -1196,6 +1207,16 @@ export const tilesWorker = {
 
     // OpenAerialMap metadata search: forward the allowlisted query params to the
     // fixed upstream and re-emit the JSON with CORS (see OAM_META_PATH above).
+    // NASA Earthdata granule download for the Earthaccess plugin's web build
+    // (see workers/tiles/src/earthdata.ts). Origin-gated: the route forwards a
+    // user's Earthdata token, so only GeoLibre's own pages may drive it.
+    if (url.pathname === EARTHDATA_DOWNLOAD_PATH) {
+      if (!isAllowedProxyOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", { status: 403, headers: EARTHDATA_CORS_HEADERS });
+      }
+      return handleEarthdataDownload(request);
+    }
+
     if (url.pathname === OAM_META_PATH) {
       // Abuse guard: this is a wildcard-CORS proxy to a fixed upstream, so
       // restrict it to GeoLibre's own origins (see isAllowedProxyOrigin) — every
