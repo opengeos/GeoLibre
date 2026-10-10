@@ -1347,78 +1347,62 @@ describe("MapController camera and query helpers", () => {
     assert.deepEqual((jump.args[0] as { center: [number, number] }).center, [12, 48]);
   });
 
-  // Issue #3083: the store's echo of the view the map reported on moveend
-  // must not jump, or it stops a camera move started in between.
-  const PREVIOUS_STORE_VIEW = { center: [0, 0] as [number, number], zoom: 1, bearing: 0, pitch: 0 };
+  // Issue #3083: the store's echo of the view the map wrote on moveend must
+  // not jump, or it stops a camera move started in between.
+  const storeView = (lng: number) => ({
+    center: [lng, 0] as [number, number],
+    zoom: 4,
+    bearing: 0,
+    pitch: 0,
+  });
 
-  it("does not jump to the store's echo of the view it reported", () => {
+  it("does not jump to a store echo of the map's own view", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
 
-    const reported = controller.reportView(PREVIOUS_STORE_VIEW);
-    controller.applyStoreView({ ...reported });
+    const echo = storeView(1);
+    controller.markStoreEcho(echo);
+    controller.applyStoreView(echo);
 
     assert.ok(!fake.calls.some((c) => c.method === "jumpTo"));
   });
 
-  it("jumps to a store view that differs from the one it reported", () => {
+  it("skips each echo even when a later moveend overtook an earlier one", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
 
-    controller.reportView(PREVIOUS_STORE_VIEW);
-    controller.applyStoreView({ center: [12, 48], zoom: 6, bearing: 0, pitch: 0 });
-
-    assert.ok(fake.calls.some((c) => c.method === "jumpTo"));
-  });
-
-  it("skips only the first echo of a reported view", () => {
-    const { map, fake } = makeFakeMap();
-    const controller = controllerWith(map);
-
-    const reported = controller.reportView(PREVIOUS_STORE_VIEW);
-    controller.applyStoreView(reported);
-    controller.applyStoreView(reported);
-
-    assert.equal(fake.calls.filter((c) => c.method === "jumpTo").length, 1);
-  });
-
-  it("skips the echo of an earlier report that a later moveend overtook", () => {
-    const { map, fake } = makeFakeMap();
-    const controller = controllerWith(map);
-    const camera = map as { getCenter: () => { lng: number; lat: number } };
-
-    // moveend reports A; before the store sync for A runs, another moveend
-    // reports B. Neither echo may jump, or A's would cancel the move to B.
-    const a = controller.reportView(PREVIOUS_STORE_VIEW);
-    camera.getCenter = () => ({ lng: 9.16, lat: 45.47 });
-    const b = controller.reportView(a);
+    const a = storeView(1);
+    const b = storeView(2);
+    controller.markStoreEcho(a);
+    controller.markStoreEcho(b);
     controller.applyStoreView(a);
     controller.applyStoreView(b);
 
     assert.ok(!fake.calls.some((c) => c.method === "jumpTo"));
   });
 
-  it("forgets pending reports once a view is set from outside", () => {
+  it("jumps to a view set from outside even when it equals an echo", () => {
     const { map, fake } = makeFakeMap();
     const controller = controllerWith(map);
 
-    const reported = controller.reportView(PREVIOUS_STORE_VIEW);
-    controller.applyStoreView({ center: [12, 48], zoom: 6, bearing: 0, pitch: 0 });
-    controller.applyStoreView(reported);
-
-    assert.equal(fake.calls.filter((c) => c.method === "jumpTo").length, 2);
-  });
-
-  it("does not remember a report that leaves the store's camera unchanged", () => {
-    const { map, fake } = makeFakeMap();
-    const controller = controllerWith(map);
-
-    // The write changes nothing, so no store sync consumes it; a later store
-    // change back to this view must still jump.
-    const reported = controller.reportView(controller.readView());
-    controller.applyStoreView(reported);
+    const echo = storeView(1);
+    controller.markStoreEcho(echo);
+    controller.markStoreEcho(storeView(2));
+    controller.applyStoreView({ ...echo });
 
     assert.ok(fake.calls.some((c) => c.method === "jumpTo"));
+  });
+
+  it("skips an echo only once", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    const echo = storeView(1);
+    controller.markStoreEcho(echo);
+    controller.applyStoreView(echo);
+    controller.applyStoreView(echo);
+
+    assert.equal(fake.calls.filter((c) => c.method === "jumpTo").length, 1);
   });
 
   it("normalizes the projection to globe/mercator", () => {

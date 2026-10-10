@@ -390,13 +390,14 @@ export const MapCanvas = memo(function MapCanvas({
       // effect below: its jumpTo cancels an in-flight chapter fly, after which
       // the rotate handler starts orbiting the previous chapter instead of the
       // one just clicked. Skipping the sync keeps the presenter authoritative.
-      const live = useAppStore.getState();
-      if (live.ui.storymapPresenting) return;
+      if (useAppStore.getState().ui.storymapPresenting) return;
       // The flight simulator likewise owns the camera while it flies, and jumps
       // it every animation frame. Writing each of those into the store would
       // overwrite the project's saved view ~60 times a second.
       if (event?.flightCameraToken !== undefined) return;
-      setMapView(mc.reportView(live.mapView), Boolean(event?.originalEvent));
+      setMapView(mc.readView(), Boolean(event?.originalEvent));
+      // The store-sync effect below must not jump to this write (issue #3083).
+      mc.markStoreEcho(useAppStore.getState().mapView);
       // Same moveend cadence as zoom/bearing/pitch: a bar where one number is
       // live and the rest lag during a drag reads as broken.
       setCameraAltitude(mc.readCameraAltitude());
@@ -1444,7 +1445,7 @@ export const MapCanvas = memo(function MapCanvas({
   }, [hoverTooltipKey]);
 
   // applyStoreView, not applyView: the store's echo of a view the map itself
-  // reported on moveend must not jump, or it stops any camera move a plugin or
+  // wrote on moveend must not jump, or it stops any camera move a plugin or
   // script started since (issue #3083).
   useEffect(() => {
     controller.current?.applyStoreView(mapView);

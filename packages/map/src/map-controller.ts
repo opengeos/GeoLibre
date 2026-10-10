@@ -229,10 +229,10 @@ export class MapController implements MapEngine {
   /** Whether {@link clampViewToPreferences} has a clamp queued on `moveend`. */
   private pendingViewClamp = false;
   /**
-   * Views {@link reportView} handed to the store whose echo has not reached
-   * {@link applyStoreView} yet, oldest first (issue #3083).
+   * The store `mapView` objects {@link markStoreEcho} recorded, until their
+   * store sync reaches {@link applyStoreView} (issue #3083).
    */
-  private reportedViews: MapViewState[] = [];
+  private storeEchoes = new WeakSet<MapViewState>();
   private navigationControl: maplibregl.NavigationControl | null = null;
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
   private compassControl: ResetBearingControl | null = null;
@@ -976,44 +976,28 @@ export class MapController implements MapEngine {
   }
 
   /**
-   * Read the current view to write into the store, and remember it so the
-   * store's echo of it can be told apart from a view set elsewhere. See
-   * {@link applyStoreView}.
-   *
-   * Only a view whose camera differs from `storeView`, the store's view before
-   * the write, is remembered: a write that leaves the camera unchanged never
-   * re-runs the store sync, so nothing would consume it and a later store
-   * change back to that view would wrongly be taken for its echo.
+   * Record `storeView`, the store's `mapView` object right after the map wrote
+   * its own view into the store, as an echo for {@link applyStoreView} to
+   * skip. Identity, not camera values, marks the echo: any other store write
+   * makes a new object, so a view set from outside always jumps even when its
+   * values match one the map reported.
    */
-  reportView(storeView: MapViewState): MapViewState {
-    const view = this.readView();
-    if (!sameMapViewCamera(view, storeView)) this.reportedViews.push(view);
-    return view;
+  markStoreEcho(storeView: MapViewState): void {
+    this.storeEchoes.add(storeView);
   }
 
   /**
-   * Apply a store view change to the map, except the echo of the view the map
-   * itself just reported through {@link reportView}.
+   * Apply a store view change to the map, except an echo recorded by
+   * {@link markStoreEcho}.
    *
-   * The map is already at that view, so the jump would do nothing but stop a
-   * camera move started since: a plugin's `fitBounds` begun in (or shortly
-   * after) the `moveend` that reported it was cancelled a render later, where
-   * it stood (issue #3083). Views set from outside (project load, undo,
+   * The map was already at an echoed view, so the jump would do nothing but
+   * stop a camera move started since: a plugin's `fitBounds` begun in (or
+   * shortly after) the `moveend` that wrote it was cancelled a render later,
+   * where it stood (issue #3083). Views set from outside (project load, undo,
    * collaboration, a synced pane) still jump.
-   *
-   * Reports are queued rather than kept one at a time because a later
-   * `moveend` can report again before the store sync for an earlier report
-   * has run; each echo consumes its own report and any older ones. A view set
-   * from outside clears the queue, so no report outlives the store change
-   * that superseded it.
    */
   applyStoreView(view: MapViewState): void {
-    const echoed = this.reportedViews.findIndex((reported) => sameMapViewCamera(view, reported));
-    if (echoed >= 0) {
-      this.reportedViews.splice(0, echoed + 1);
-      return;
-    }
-    this.reportedViews = [];
+    if (this.storeEchoes.delete(view)) return;
     this.applyView(view);
   }
 
@@ -2744,16 +2728,6 @@ function createMapTransformConstraint(
       zoom: constrainedZoom,
     };
   };
-}
-
-function sameMapViewCamera(a: MapViewState, b: MapViewState): boolean {
-  return (
-    a.center[0] === b.center[0] &&
-    a.center[1] === b.center[1] &&
-    a.zoom === b.zoom &&
-    a.bearing === b.bearing &&
-    a.pitch === b.pitch
-  );
 }
 
 function constrainMapView(
