@@ -226,18 +226,19 @@ export function updateNavigation(
     ]);
   }
   const { corridor, far } = offRouteCorridor(route.mode, fix.accuracy);
+  projection ??= projectOntoPolyline(route.coordinates, route.cumulative, point);
+  if (!projection) return { state, events };
   if (!prev) {
-    // The first fix is matched near the start when it is on the route there:
-    // on a round trip the start and the end are the same place, and matching
-    // the end would arrive before the drive began.
+    // The first fix is matched near the start whenever that is about as close
+    // as the best match: on a round trip the start and the end are the same
+    // place, and matching the end would arrive before the drive began. This
+    // holds when starting off the road too (a parking lot, a driveway).
     const nearStart = projectOntoPolyline(route.coordinates, route.cumulative, point, [
       0,
       FIRST_FIX_WINDOW_M,
     ]);
-    if (nearStart && nearStart.offset <= corridor) projection = nearStart;
+    if (nearStart && nearStart.offset <= projection.offset + corridor) projection = nearStart;
   }
-  projection ??= projectOntoPolyline(route.coordinates, route.cumulative, point);
-  if (!projection) return { state, events };
 
   const tuning = TUNING[route.mode];
   // A fix without a speed figure is treated as moving: desktop browsers often

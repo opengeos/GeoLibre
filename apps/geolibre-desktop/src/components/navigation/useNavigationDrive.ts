@@ -182,7 +182,10 @@ export function useNavigationDrive({
         return;
       }
       const targets = d.targets.slice(d.state.stopsPassed);
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        clearLatch();
+        return;
+      }
       const { language: lang, imperial: imp, t: tr } = langRef.current;
       if (now - d.lastRerouteSpokenAt > REROUTE_SPEAK_MIN_MS) {
         d.lastRerouteSpokenAt = now;

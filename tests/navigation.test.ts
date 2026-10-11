@@ -453,7 +453,11 @@ describe("navigation formatting", () => {
     assert.equal(formatNavDuration(3600, "en"), "1 hr");
     assert.equal(formatNavDuration(3900, "en"), "1 hr 5 min");
     const now = Date.UTC(2026, 0, 1, 12, 0);
-    assert.match(formatArrivalTime(600, "en", now), /\d{1,2}:10/);
+    // Compare with the same formatter, so the test holds in any time zone.
+    const expected = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" }).format(
+      new Date(now + 600_000),
+    );
+    assert.equal(formatArrivalTime(600, "en", now), expected);
   });
 });
 
@@ -539,6 +543,16 @@ describe("round trips", () => {
     assert.equal(state.arrived, false);
     assert.ok(!events.some((e) => e.type === "arrive"));
     assert.ok(state.progress && state.progress.along < 1);
+  });
+
+  it("starts at the beginning of the loop from a fix off the road", () => {
+    const route = loopRoute();
+    // 60 m south of the shared start/end corner, outside a 28 m corridor.
+    const { state } = drive(route, [
+      { lng: 0.0001, lat: -0.00054, accuracy: 5, speed: 0, timestamp: 0 },
+    ]);
+    assert.equal(state.arrived, false);
+    assert.ok(state.progress && state.progress.along < 50);
   });
 
   it("arrives at the end of the loop", () => {

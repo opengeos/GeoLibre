@@ -67,7 +67,9 @@ export function WaypointField({
 
   const search = () => {
     const query = text.trim();
-    if (!query) return;
+    // Enter on an untouched field would geocode its display label ("My
+    // location", a road name, formatted coordinates) and move the point.
+    if (!query || !editing) return;
     const typed = parseTypedCoordinates(query);
     if (typed) {
       choose(typed);
