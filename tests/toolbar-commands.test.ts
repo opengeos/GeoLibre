@@ -173,6 +173,7 @@ const FULL_REGISTRY_IDS = [
   "control.maptoolkit-logo",
   "control.effects",
   "control.directions",
+  "control.turn-by-turn",
   "control.search",
   "control.colorbar",
   "control.legend",

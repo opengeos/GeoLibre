@@ -77,6 +77,7 @@ import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { LineOfSightPanel } from "./LineOfSightPanel";
+import { NavigationPanel } from "../navigation/NavigationPanel";
 import { MapContextMenu } from "./MapContextMenu";
 import { KnowledgeCardPanel } from "./KnowledgeCardPanel";
 import { KnowledgeCardConsentDialog } from "./KnowledgeCardConsentDialog";
@@ -863,6 +864,14 @@ export function DesktopShell({
                   mapControllerRef={mapControllerRef}
                   mapReadyGeneration={mapReadyGeneration}
                 />
+                {/* Its own boundary: the drive's banner sits over the map, and a
+                  fault in it must not take the map down. */}
+                <SilentErrorBoundary label="Navigation">
+                  <NavigationPanel
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                </SilentErrorBoundary>
                 <KnowledgeCardPanel
                   place={knowledgePlace}
                   lang={wikipediaLang(i18n.language)}

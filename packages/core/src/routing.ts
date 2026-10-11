@@ -436,3 +436,22 @@ export function requestRoute(
 ): Promise<unknown> {
   return postJson(`${stripTrailingSlash(endpoint)}/route`, body, signal);
 }
+
+/**
+ * Requests a turn-by-turn route from the Valhalla server. Unlike
+ * {@link requestRoute}, the body is passed through as is, so the caller can ask
+ * for Valhalla's OSRM-compatible output with voice and banner instructions,
+ * alternates, a start heading, and costing options (the navigation tool).
+ *
+ * @param endpoint - The Valhalla base URL.
+ * @param body - The `/route` request body.
+ * @param signal - Optional abort signal.
+ * @returns The Valhalla `/route` response.
+ */
+export function requestNavigationRoute(
+  endpoint: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return postJson(`${stripTrailingSlash(endpoint)}/route`, body, signal);
+}

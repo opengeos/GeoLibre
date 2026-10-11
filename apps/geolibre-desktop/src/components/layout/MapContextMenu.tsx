@@ -21,7 +21,9 @@ import {
   Eye,
   MapIcon,
   MapPin,
+  Navigation2,
   Route,
+  Signpost,
   Sparkles,
   Spline,
   ZoomIn,
@@ -42,6 +44,7 @@ import {
   type QuickBufferPreset,
 } from "../../lib/quick-analysis";
 import { useLineOfSightTool } from "../../lib/line-of-sight-store";
+import { useNavigationTool } from "../../lib/navigation/store";
 import { hasRoutingConsent, recordRoutingConsent } from "../../lib/routing-consent";
 import { runViewshed } from "../../lib/run-viewshed";
 import { RoutingConsentDialog } from "./RoutingConsentDialog";
@@ -349,6 +352,15 @@ export function MapContextMenu({
     if (!menu) return;
     openLineOfSight({ lng: menu.lng, lat: menu.lat });
   }, [menu, openLineOfSight]);
+  // Navigation draws MapLibre style layers too, so it shares the same gate.
+  const openNavigation = useNavigationTool((s) => s.openNavigation);
+  const directionsHere = useCallback(
+    (as: "origin" | "destination") => {
+      if (!menu) return;
+      openNavigation({ point: { lng: menu.lng, lat: menu.lat }, as });
+    },
+    [menu, openNavigation],
+  );
 
   const bufferHere = useCallback(
     (preset: QuickBufferPreset) => {
@@ -482,6 +494,18 @@ export function MapContextMenu({
             <ZoomIn className="h-4 w-4 shrink-0 text-muted-foreground" />
             {t("mapContextMenu.zoomInHere")}
           </DropdownMenuItem>
+          {lineOfSightAvailable ? (
+            <>
+              <DropdownMenuItem onSelect={() => directionsHere("destination")} className="gap-2">
+                <Signpost className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {t("mapContextMenu.directionsToHere")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => directionsHere("origin")} className="gap-2">
+                <Navigation2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {t("mapContextMenu.directionsFromHere")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="gap-2">
