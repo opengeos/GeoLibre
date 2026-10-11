@@ -10,11 +10,14 @@ const HEIGHT_OFFSET_STEP = 1;
 /**
  * Read a 3D Tiles layer's altitude offset in metres.
  *
+ * Only `source.altitudeOffset` is read: it is what every renderer applies, so
+ * the field never shows an offset the tileset is not actually drawn with.
+ *
  * @param layer - The 3D Tiles layer.
  * @returns The stored offset, or 0 when it is missing or not a finite number.
  */
 export function tilesetHeightOffset(layer: GeoLibreLayer): number {
-  const value = Number(layer.source.altitudeOffset ?? layer.metadata.altitudeOffset);
+  const value = Number(layer.source.altitudeOffset);
   return Number.isFinite(value) ? value : 0;
 }
 

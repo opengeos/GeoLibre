@@ -22,9 +22,10 @@ const tileset = (source: Record<string, unknown>, metadata: Record<string, unkno
   }) as GeoLibreLayer;
 
 describe("tilesetHeightOffset", () => {
-  it("reads the source offset, falling back to the metadata mirror", () => {
+  it("reads the source offset, which is what the renderers apply", () => {
     assert.equal(tilesetHeightOffset(tileset({ altitudeOffset: -43.2 })), -43.2);
-    assert.equal(tilesetHeightOffset(tileset({}, { altitudeOffset: 7 })), 7);
+    // The metadata mirror alone does not move the tileset, so it is not shown.
+    assert.equal(tilesetHeightOffset(tileset({}, { altitudeOffset: 7 })), 0);
   });
 
   it("treats a missing or non-numeric offset as zero", () => {
