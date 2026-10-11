@@ -21,10 +21,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex, OnceLock,
-    },
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 
@@ -483,6 +480,7 @@ pub(crate) async fn download_remote_file(
 /// Ask for a folder to save several downloads into; `None` when the user
 /// cancels. The folder is remembered for the app session under the returned id,
 /// which [`download_remote_file`] accepts as `folderId`.
+#[cfg(desktop)]
 #[tauri::command]
 pub(crate) async fn pick_download_folder(
     app: tauri::AppHandle,
@@ -503,11 +501,20 @@ pub(crate) async fn pick_download_folder(
     if !path.is_dir() {
         return Err("The chosen folder does not exist.".into());
     }
+    use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT_FOLDER_ID: AtomicU64 = AtomicU64::new(1);
     let id = format!("folder-{}", NEXT_FOLDER_ID.fetch_add(1, Ordering::Relaxed));
     let shown = path.to_string_lossy().into_owned();
     downloads.folders.lock().unwrap().insert(id.clone(), path);
     Ok(Some(PickedDownloadFolder { id, path: shown }))
+}
+
+/// Mobile stand-in for [`pick_download_folder`]: the dialog plugin has no
+/// folder picker on Android or iOS.
+#[cfg(mobile)]
+#[tauri::command]
+pub(crate) async fn pick_download_folder() -> Result<Option<PickedDownloadFolder>, String> {
+    Err("Choosing a download folder is not supported on this platform.".into())
 }
 
 /// Abort an in-flight [`download_remote_file`].
