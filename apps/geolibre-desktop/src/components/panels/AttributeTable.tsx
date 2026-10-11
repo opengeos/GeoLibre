@@ -2784,7 +2784,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
         <ArcGISAttachmentsDialog
           open={attachmentsOpen}
           onOpenChange={setAttachmentsOpen}
-          layerId={layer.id}
+          source={layer.id}
           layerName={layer.name}
           objectId={attachmentObjectId}
           support={attachmentSupport}

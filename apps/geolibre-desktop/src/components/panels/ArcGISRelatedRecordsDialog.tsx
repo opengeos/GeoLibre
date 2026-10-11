@@ -12,6 +12,7 @@ import {
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
   addArcGISRelatedRecord,
+  arcGISRelatedAttachmentSupport,
   arcGISRelatedEditSupport,
   arcGISRelatedFields,
   arcGISRelatedNewRecordDefaults,
@@ -27,7 +28,7 @@ import {
   type ArcGISRelationship,
 } from "@geolibre/plugins";
 import type { Feature } from "geojson";
-import { Network, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Network, Paperclip, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -36,6 +37,7 @@ import {
   relatedInputValue,
   relatedValueOutsideDomain,
 } from "../../lib/arcgis-related-values";
+import { ArcGISAttachmentsDialog } from "./ArcGISAttachmentsDialog";
 
 interface ArcGISRelatedRecordsDialogProps {
   open: boolean;
@@ -103,6 +105,8 @@ export function ArcGISRelatedRecordsDialog({
   );
   const [editing, setEditing] = useState<Editing | null>(null);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  // The related row whose attachments are shown, by its service object ID.
+  const [attachmentsFor, setAttachmentsFor] = useState<number | null>(null);
   const loadAbortRef = useRef<AbortController | null>(null);
   // The parent and relationship a request was made for; a reply for another is stale.
   const layerId = layer.id;
@@ -172,6 +176,7 @@ export function ArcGISRelatedRecordsDialog({
     setStatuses([]);
     setEditing(null);
     setPendingDelete(null);
+    setAttachmentsFor(null);
     void reload(null);
     return () => loadAbortRef.current?.abort();
   }, [open, reload]);
@@ -191,6 +196,12 @@ export function ArcGISRelatedRecordsDialog({
   const oneToOneTaken = relationship?.cardinality === "oneToOne" && (records?.length ?? 0) > 0;
   const canAdd = support.add && parentKey !== undefined && !oneToOneTaken;
   const canWrite = support.add || support.update || support.delete;
+  // Attachments of related rows follow the related table's own metadata.
+  const attachmentSupport = useMemo(
+    () => (related ? arcGISRelatedAttachmentSupport(layer, related) : undefined),
+    [layer, related],
+  );
+  const showActions = support.update || support.delete || Boolean(attachmentSupport?.list);
 
   /** Run one write at a time, then read the rows back. */
   const runWrite = async (
@@ -542,7 +553,7 @@ export function ArcGISRelatedRecordsDialog({
                       {field.label}
                     </th>
                   ))}
-                  {support.update || support.delete ? (
+                  {showActions ? (
                     <th className="sticky end-0 bg-muted px-2 py-1.5">
                       <span className="sr-only">{t("relatedRecords.actions")}</span>
                     </th>
@@ -573,7 +584,7 @@ export function ArcGISRelatedRecordsDialog({
                           </td>
                         );
                       })}
-                      {support.update || support.delete ? (
+                      {showActions ? (
                         // Kept in view while wide tables scroll sideways.
                         <td className="sticky end-0 whitespace-nowrap bg-background px-2 py-1 text-end">
                           {pendingDelete === record.objectId ? (
@@ -597,6 +608,21 @@ export function ArcGISRelatedRecordsDialog({
                             </span>
                           ) : (
                             <>
+                              {attachmentSupport?.list ? (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  disabled={busy}
+                                  title={t("relatedRecords.attachments")}
+                                  aria-label={t("relatedRecords.attachmentsAria", {
+                                    id: record.objectId,
+                                  })}
+                                  onClick={() => setAttachmentsFor(record.objectId)}
+                                >
+                                  <Paperclip className="h-3.5 w-3.5" />
+                                </Button>
+                              ) : null}
                               {support.update ? (
                                 <Button
                                   size="icon"
@@ -639,6 +665,18 @@ export function ArcGISRelatedRecordsDialog({
           )}
         </div>
       </DialogContent>
+      {attachmentSupport && attachmentsFor !== null && relatedTableId !== undefined ? (
+        <ArcGISAttachmentsDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setAttachmentsFor(null);
+          }}
+          source={{ layerId, tableId: relatedTableId }}
+          layerName={tableName}
+          objectId={attachmentsFor}
+          support={attachmentSupport}
+        />
+      ) : null}
     </Dialog>
   );
 }

@@ -140,11 +140,13 @@ export {
   addArcGISAttachment,
   arcGISAttachmentObjectId,
   arcGISAttachmentSupport,
+  arcGISRelatedAttachmentSupport,
   deleteArcGISAttachments,
   downloadArcGISAttachment,
   listArcGISAttachments,
   updateArcGISAttachment,
   type ArcGISAttachmentInfo,
+  type ArcGISAttachmentSource,
   type ArcGISAttachmentSupport,
 } from "./plugins/arcgis-attachments";
 export {

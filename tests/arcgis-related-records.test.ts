@@ -16,6 +16,11 @@ import {
   type ArcGISRelatedTableInfo,
 } from "../packages/plugins/src/plugins/arcgis-related-records";
 import { addArcGISLayer, setArcGISFetch } from "../packages/plugins/src/plugins/arcgis-layer";
+import {
+  addArcGISAttachment,
+  arcGISRelatedAttachmentSupport,
+  listArcGISAttachments,
+} from "../packages/plugins/src/plugins/arcgis-attachments";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import {
   relatedDisplayText,
@@ -153,6 +158,12 @@ async function load({
     const path = url.pathname.replace("/arcgis/rest/services/Hydrants/FeatureServer", "");
     if ((init?.method ?? "GET") === "POST") {
       assert.equal(init?.redirect, "error");
+      if (init?.body instanceof FormData) {
+        // An attachment upload to a related row.
+        posts.push({ path, body: new URLSearchParams() });
+        assert.equal(init.body.get("token"), "secret");
+        return Response.json({ addAttachmentResult: { objectId: 41, success: true } });
+      }
       const body = new URLSearchParams(String(init?.body));
       posts.push({ path, body });
       if (failNextPost) {
@@ -187,6 +198,10 @@ async function load({
     if (path === "/0" || path === "/0/") return Response.json(parent);
     if (path === "/1") return Response.json(inspectionInfo);
     if (path === "/2") return Response.json({ error: { code: 400, message: "Invalid URL" } });
+    if (path === "/1/2/attachments")
+      return Response.json({
+        attachmentInfos: [{ id: 40, name: "gauge.jpg", contentType: "image/jpeg", size: 9 }],
+      });
     if (path === "/0/queryRelatedRecords") {
       const oid = Number(url.searchParams.get("objectIds"));
       const asset = oid === 7 ? "H-001" : "H-002";
@@ -523,6 +538,41 @@ describe("related record writes", () => {
     await assert.rejects(add(), /Rejected by rule/);
     setArcGISFetch(async () => Response.json({ error: { code: 403, message: "nope" } }));
     await assert.rejects(add(), /do not have permission/);
+  });
+});
+
+describe("attachments of related rows", () => {
+  it("follow the related table's metadata and the parent's permissions", async () => {
+    const { layer } = await load();
+    assert.equal(arcGISRelatedAttachmentSupport(layer, inspectionInfo), undefined);
+    const withFiles = { ...inspectionInfo, hasAttachments: true };
+    assert.deepEqual(arcGISRelatedAttachmentSupport(layer, withFiles), {
+      list: true,
+      add: true,
+      update: true,
+      delete: true,
+    });
+    assert.deepEqual(
+      arcGISRelatedAttachmentSupport(layer, { ...withFiles, capabilities: "Query" }),
+      { list: true, add: false, update: false, delete: false },
+    );
+    const readOnly = { ...layer, capabilities: { update: false, create: false } } as GeoLibreLayer;
+    assert.equal(arcGISRelatedAttachmentSupport(readOnly, withFiles)?.add, false);
+  });
+
+  it("are listed and added under the related table, not the parent layer", async () => {
+    const { layer, gets, posts } = await load();
+    const source = { layerId: layer.id, tableId: 1 };
+    const list = await listArcGISAttachments(source, 2);
+    assert.deepEqual(
+      list.map((a) => [a.id, a.name]),
+      [[40, "gauge.jpg"]],
+    );
+    assert.ok(gets.some((url) => url.pathname.endsWith("/FeatureServer/1/2/attachments")));
+    const id = await addArcGISAttachment(source, 2, new Blob(["x"]), "note.txt");
+    assert.equal(id, 41);
+    assert.equal(posts.at(-1)?.path, "/1/2/addAttachment");
+    await assert.rejects(listArcGISAttachments({ layerId: layer.id, tableId: -1 }, 2), /table ID/);
   });
 });
 

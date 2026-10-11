@@ -44,7 +44,7 @@ export interface ArcGISAttachmentSupport {
   delete: boolean;
 }
 
-interface ArcGISAttachmentLayerInfo extends ArcGISEditInfo {
+export interface ArcGISAttachmentLayerInfo extends ArcGISEditInfo {
   hasAttachments?: boolean;
 }
 
@@ -91,8 +91,33 @@ export function arcGISAttachmentSupport(
   layer: GeoLibreLayer | null | undefined,
 ): ArcGISAttachmentSupport | undefined {
   if (layer?.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND) return undefined;
+  return supportFor(layer, layer.metadata.arcgisEditInfo as ArcGISAttachmentLayerInfo | undefined);
+}
+
+/**
+ * The attachment operations a table related to an ArcGIS feature layer
+ * advertises, for its rows. The rules are those of
+ * {@link arcGISAttachmentSupport}, read from the related table's own
+ * metadata; the parent layer's GeoLibre permissions still apply, and writes
+ * still need the service to be a FeatureServer.
+ *
+ * @param layer - The parent ArcGIS feature layer.
+ * @param related - The related table's `?f=json` metadata.
+ * @returns The supported operations, or `undefined` when the table has no attachments.
+ */
+export function arcGISRelatedAttachmentSupport(
+  layer: GeoLibreLayer | null | undefined,
+  related: ArcGISAttachmentLayerInfo | null | undefined,
+): ArcGISAttachmentSupport | undefined {
+  if (layer?.metadata.sourceKind !== ARCGIS_FEATURE_SOURCE_KIND) return undefined;
+  return supportFor(layer, related ?? undefined);
+}
+
+function supportFor(
+  layer: GeoLibreLayer,
+  info: ArcGISAttachmentLayerInfo | undefined,
+): ArcGISAttachmentSupport | undefined {
   if (typeof layer.source.arcgisQueryUrl !== "string") return undefined;
-  const info = layer.metadata.arcgisEditInfo as ArcGISAttachmentLayerInfo | undefined;
   if (!info?.hasAttachments || !info.objectIdField) return undefined;
   const caps = new Set(
     info.capabilities
@@ -135,12 +160,27 @@ export function arcGISAttachmentObjectId(
   }
 }
 
-async function connect(layerId: string): Promise<ArcGISFeatureLayerConnection> {
+/**
+ * Whose attachments: an ArcGIS feature layer's own records (its layer ID), or
+ * the rows of a table related to it in the same service, which use the
+ * layer's connection.
+ */
+export type ArcGISAttachmentSource = string | { layerId: string; tableId: number };
+
+async function connect(source: ArcGISAttachmentSource): Promise<ArcGISFeatureLayerConnection> {
+  const layerId = typeof source === "string" ? source : source.layerId;
   const connection = await arcGISFeatureLayerConnection(layerId);
   if (!connection) {
     throw new LocalizedError(`${ERROR_KEY}.missingServiceUrl`, "Missing ArcGIS service URL.");
   }
-  return connection;
+  if (typeof source === "string") return connection;
+  if (!Number.isSafeInteger(source.tableId) || source.tableId < 0) {
+    throw new Error(`Invalid ArcGIS table ID: ${source.tableId}.`);
+  }
+  return {
+    ...connection,
+    layerUrl: `${connection.layerUrl.replace(/\/\d+$/, "")}/${source.tableId}`,
+  };
 }
 
 function recordUrl(connection: ArcGISFeatureLayerConnection, objectId: number): string {
@@ -177,17 +217,17 @@ function parseAttachmentInfo(value: unknown): ArcGISAttachmentInfo | undefined {
 /**
  * List the files attached to one record.
  *
- * @param layerId - The ArcGIS feature layer.
+ * @param source - The ArcGIS feature layer, or a table related to it.
  * @param objectId - The record's service object ID.
  * @param signal - Aborts the request, for example when the selection changes.
  * @returns The record's attachments, in service order.
  */
 export async function listArcGISAttachments(
-  layerId: string,
+  source: ArcGISAttachmentSource,
   objectId: number,
   signal?: AbortSignal,
 ): Promise<ArcGISAttachmentInfo[]> {
-  const connection = await connect(layerId);
+  const connection = await connect(source);
   const url = withQuery(`${recordUrl(connection, objectId)}/attachments`, {
     f: "json",
     token: connection.token,
@@ -210,19 +250,19 @@ export async function listArcGISAttachments(
  * An attachment that is itself JSON passes through untouched; for any other
  * type, a JSON body is the service reporting an error in place of the file.
  *
- * @param layerId - The ArcGIS feature layer.
+ * @param source - The ArcGIS feature layer, or a table related to it.
  * @param objectId - The record's service object ID.
  * @param attachment - The attachment, as listed.
  * @param signal - Aborts the transfer.
  * @returns The file, typed with the attachment's content type.
  */
 export async function downloadArcGISAttachment(
-  layerId: string,
+  source: ArcGISAttachmentSource,
   objectId: number,
   attachment: Pick<ArcGISAttachmentInfo, "id" | "contentType">,
   signal?: AbortSignal,
 ): Promise<Blob> {
-  const connection = await connect(layerId);
+  const connection = await connect(source);
   const url = withQuery(`${recordUrl(connection, objectId)}/attachments/${attachment.id}`, {
     token: connection.token,
   });
@@ -288,7 +328,7 @@ function attachmentResult(
 /**
  * Attach a file to a record.
  *
- * @param layerId - The ArcGIS feature layer.
+ * @param source - The ArcGIS feature layer, or a table related to it.
  * @param objectId - The record's service object ID.
  * @param file - The file to upload.
  * @param fileName - The name to store, defaulting to the file's own.
@@ -296,13 +336,13 @@ function attachmentResult(
  * @returns The new attachment's ID.
  */
 export async function addArcGISAttachment(
-  layerId: string,
+  source: ArcGISAttachmentSource,
   objectId: number,
   file: Blob,
   fileName = file instanceof File ? file.name : "attachment",
   signal?: AbortSignal,
 ): Promise<number> {
-  const connection = await connect(layerId);
+  const connection = await connect(source);
   const json = await postAttachmentWrite<{ addAttachmentResult?: ArcGISAttachmentEditResult }>(
     connection,
     `${recordUrl(connection, objectId)}/addAttachment`,
@@ -321,7 +361,7 @@ export async function addArcGISAttachment(
 /**
  * Replace the content of an existing attachment, keeping its ID.
  *
- * @param layerId - The ArcGIS feature layer.
+ * @param source - The ArcGIS feature layer, or a table related to it.
  * @param objectId - The record's service object ID.
  * @param attachmentId - The attachment to replace.
  * @param file - The new content.
@@ -329,14 +369,14 @@ export async function addArcGISAttachment(
  * @param signal - Aborts the upload; an upload aborted in flight is unconfirmed.
  */
 export async function updateArcGISAttachment(
-  layerId: string,
+  source: ArcGISAttachmentSource,
   objectId: number,
   attachmentId: number,
   file: Blob,
   fileName = file instanceof File ? file.name : "attachment",
   signal?: AbortSignal,
 ): Promise<void> {
-  const connection = await connect(layerId);
+  const connection = await connect(source);
   const form = uploadForm(file, fileName, connection.token);
   form.set("attachmentId", String(attachmentId));
   const json = await postAttachmentWrite<{
@@ -349,18 +389,18 @@ export async function updateArcGISAttachment(
 /**
  * Delete attachments of one record.
  *
- * @param layerId - The ArcGIS feature layer.
+ * @param source - The ArcGIS feature layer, or a table related to it.
  * @param objectId - The record's service object ID.
  * @param attachmentIds - The attachments to delete.
  * @returns The IDs deleted, and a message per attachment the service refused.
  */
 export async function deleteArcGISAttachments(
-  layerId: string,
+  source: ArcGISAttachmentSource,
   objectId: number,
   attachmentIds: number[],
 ): Promise<{ deleted: number[]; errors: string[] }> {
   if (!attachmentIds.length) return { deleted: [], errors: [] };
-  const connection = await connect(layerId);
+  const connection = await connect(source);
   const body = new URLSearchParams({ f: "json", attachmentIds: attachmentIds.join(",") });
   if (connection.token) body.set("token", connection.token);
   const json = await postAttachmentWrite<{ deleteAttachmentResults?: unknown }>(

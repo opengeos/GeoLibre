@@ -202,6 +202,11 @@ service afterwards. These writes do not join the pending feature edits.
   read-only. Rows are addressed by their object ID only.
 - Delete asks for confirmation and removes that one row. Composite relationship
   behavior is left to the service.
+- Rows of a related table that advertises attachments get a paperclip button.
+  It opens the same Attachments dialog for that row, addressed by the related
+  table and the row's object ID, so files of a related row never mix with the
+  parent's. What it allows follows the related table's own capabilities, as
+  described under [Attachments](#attachments).
 - A lost or interrupted response is reported as unconfirmed and the editor
   closes, so the same row is not inserted twice. Refresh before retrying.
 
@@ -267,10 +272,11 @@ a type or subtype overrides.
 
 Versioned services, M coordinates, dates in an unknown timezone, and offline
 synchronization are outside this implementation. Related records cover existing
-saved parents; creating a parent and its related rows together, nested
-relationships, and attachments of related table rows are not supported yet.
-Attachments of standalone tables, the bulk `queryAttachments` operation,
-attachment keywords and upload IDs are not supported yet.
+saved parents; creating a parent and its related rows together and nested
+relationships are not supported yet.
+Attachments of tables added on their own (outside a relationship), the bulk
+`queryAttachments` operation, attachment keywords and upload IDs are not
+supported yet.
 There is no remote conflict-resolution protocol: if another client changes the
 same attribute or geometry, the service decides which submitted edit is accepted.
 Saving a project or exporting a layer does not itself write edits to the service.

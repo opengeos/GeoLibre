@@ -13,10 +13,11 @@ import {
   listArcGISAttachments,
   updateArcGISAttachment,
   type ArcGISAttachmentInfo,
+  type ArcGISAttachmentSource,
   type ArcGISAttachmentSupport,
 } from "@geolibre/plugins";
 import { Download, Eye, FileUp, Paperclip, RefreshCw, Replace, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   attachmentExtension,
@@ -29,7 +30,9 @@ import { saveBinaryFileWithFallback } from "../../lib/file-io/file-dialogs";
 interface ArcGISAttachmentsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  layerId: string;
+  /** The feature layer, or a table related to it, whose record this is. */
+  source: ArcGISAttachmentSource;
+  /** The layer or related table name shown in the description. */
   layerName: string;
   /** The selected record's service object ID. */
   objectId: number;
@@ -58,11 +61,16 @@ function errorText(error: unknown): string {
 export function ArcGISAttachmentsDialog({
   open,
   onOpenChange,
-  layerId,
+  source: sourceProp,
   layerName,
   objectId,
   support,
 }: ArcGISAttachmentsDialogProps) {
+  // Keyed by value: a caller may pass a new source object on every render.
+  const sourceKey =
+    typeof sourceProp === "string" ? sourceProp : `${sourceProp.layerId}#${sourceProp.tableId}`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const source = useMemo(() => sourceProp, [sourceKey]);
   const { t, i18n } = useTranslation();
   const [attachments, setAttachments] = useState<ArcGISAttachmentInfo[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,7 +89,7 @@ export function ArcGISAttachmentsDialog({
   const replaceTargetRef = useRef<ArcGISAttachmentInfo | null>(null);
   const loadAbortRef = useRef<AbortController | null>(null);
   // The record a request was made for; a reply for another record is stale.
-  const recordKey = `${layerId}:${objectId}`;
+  const recordKey = `${sourceKey}:${objectId}`;
   const recordKeyRef = useRef(recordKey);
   recordKeyRef.current = recordKey;
   // A transfer that finishes after the dialog closes must not show a result.
@@ -92,14 +100,14 @@ export function ArcGISAttachmentsDialog({
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
-    const key = `${layerId}:${objectId}`;
+    const key = `${sourceKey}:${objectId}`;
     // A replacement keeps the attachment ID, so a preview cannot be matched to
     // the new list by ID: every read-back starts without one.
     setPreview(null);
     setLoading(true);
     setLoadError(null);
     try {
-      const list = await listArcGISAttachments(layerId, objectId, controller.signal);
+      const list = await listArcGISAttachments(source, objectId, controller.signal);
       if (recordKeyRef.current !== key || controller.signal.aborted) return;
       setAttachments(list);
     } catch (error) {
@@ -112,7 +120,7 @@ export function ArcGISAttachmentsDialog({
         setLoading(false);
       }
     }
-  }, [layerId, objectId]);
+  }, [source, sourceKey, objectId]);
   // A transfer's read-back targets the current record, not the one it started on.
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
@@ -169,7 +177,7 @@ export function ArcGISAttachmentsDialog({
           continue;
         }
         try {
-          await addArcGISAttachment(layerId, objectId, file, file.name, signal);
+          await addArcGISAttachment(source, objectId, file, file.name, signal);
           results.push({ kind: "success", text: t("attachments.added", { name: file.name }) });
         } catch (error) {
           results.push({
@@ -184,7 +192,7 @@ export function ArcGISAttachmentsDialog({
 
   const replaceFile = (target: ArcGISAttachmentInfo, file: File) => {
     void runTransfer(t("attachments.replacing", { name: target.name }), async (signal) => {
-      await updateArcGISAttachment(layerId, objectId, target.id, file, file.name, signal);
+      await updateArcGISAttachment(source, objectId, target.id, file, file.name, signal);
       return [
         {
           kind: "success",
@@ -199,7 +207,7 @@ export function ArcGISAttachmentsDialog({
     void runTransfer(
       t("attachments.deleting", { name: target.name }),
       async () => {
-        const { deleted, errors } = await deleteArcGISAttachments(layerId, objectId, [target.id]);
+        const { deleted, errors } = await deleteArcGISAttachments(source, objectId, [target.id]);
         return [
           ...deleted.map(() => ({
             kind: "success" as const,
@@ -216,7 +224,7 @@ export function ArcGISAttachmentsDialog({
     void runTransfer(
       t("attachments.downloading", { name: target.name }),
       async (signal) => {
-        const blob = await downloadArcGISAttachment(layerId, objectId, target, signal);
+        const blob = await downloadArcGISAttachment(source, objectId, target, signal);
         if (!openRef.current) return [];
         const name = attachmentSaveName(target.name);
         const ext = attachmentExtension(name);
@@ -237,7 +245,7 @@ export function ArcGISAttachmentsDialog({
     void runTransfer(
       t("attachments.loadingPreview", { name: target.name }),
       async (signal) => {
-        const blob = await downloadArcGISAttachment(layerId, objectId, target, signal);
+        const blob = await downloadArcGISAttachment(source, objectId, target, signal);
         if (openRef.current && recordKeyRef.current === key) {
           setPreview({ id: target.id, name: target.name, url: URL.createObjectURL(blob) });
         }

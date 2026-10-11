@@ -10721,6 +10721,8 @@
     "editAria": "Edit related record {{id}}",
     "delete": "Delete",
     "deleteAria": "Delete related record {{id}}",
+    "attachments": "Attachments",
+    "attachmentsAria": "Attachments of related record {{id}}",
     "confirmDelete": "Delete from the service?",
     "newRecord": "New record in {{table}}",
     "editRecord": "Related record {{id}}",
