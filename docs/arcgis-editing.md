@@ -165,6 +165,56 @@ file is reported with the service's message. The desktop app transfers at most
 token works the same as for feature edits, and no file, token or download URL is
 saved in the project.
 
+## Related records
+
+Many services keep related information in separate tables: a hydrant's
+inspections, a parcel's assessments. When a layer publishes relationship classes
+in its metadata (`relationships[]`), select one record saved to the service in
+the attribute table and choose the related records button to see the rows each
+relationship links to it.
+
+- **Relationship** chooses among the layer's published relationships. Nothing
+  is inferred from field or table names.
+- The rows come from `queryRelatedRecords` for the selected record's object ID
+  and the relationship ID, and are shown with the related table's own field
+  aliases, coded-value names and dates. A stored value outside its domain is
+  flagged rather than hidden or replaced.
+- When the layer supports related-query pagination
+  (`supportsQueryRelatedPagination`), every row is read page by page. A service
+  that caps the result without paging shows a notice that the list is
+  incomplete.
+- Rows reported under any other parent are rejected, and a reply that arrives
+  after the selection or relationship changed is discarded.
+
+Where the related table allows it, **Add record**, **Edit** and **Delete** write
+straight to the related table's `applyEdits`; the rows are read back from the
+service afterwards. These writes do not join the pending feature edits.
+
+- A new row starts from the related table's own creation defaults (template,
+  subtype and field defaults). Its foreign key is set from the parent's value
+  for the published key field, which may be a global ID or any other field,
+  never the object ID by assumption. The key is shown read-only and an edit that
+  would move a row to another parent is refused.
+- Values are checked against the related table's own field types, nullability,
+  lengths and domains, not the parent's. An edit sends only the fields that
+  changed, so a row holding a historical value can still be edited.
+- Object IDs, global IDs, editor tracking and other server-managed fields are
+  read-only. Rows are addressed by their object ID only.
+- Delete asks for confirmation and removes that one row. Composite relationship
+  behavior is left to the service.
+- A lost or interrupted response is reported as unconfirmed and the editor
+  closes, so the same row is not inserted twice. Refresh before retrying.
+
+Writes need the layer to be the origin of a one-to-one or one-to-many
+relationship without an intermediate table, both ends on a FeatureServer, and
+the related table to advertise the edit and name the foreign key in its own
+`relationships[]` entry. Rows can be added to nonspatial tables only; related
+feature layers can be browsed, edited and deleted. Many-to-many and attributed
+relationships, relationships seen from the child side, and MapServer layers are
+browse-only. The service still decides for the signed-in user. Related records
+use the layer's connection, so signing in or a token works the same as for
+feature edits, and nothing is saved in the project.
+
 ## Signing in with ArcGIS
 
 In the **Add Data → ArcGIS Layer** dialog, set **Authentication** to **Sign in with ArcGIS** instead of
@@ -215,8 +265,10 @@ cannot be written through feature editing. GeoLibre validates basic field types,
 nullability, string lengths, and coded-value and range domains, including those
 a type or subtype overrides.
 
-Versioned services, M coordinates, dates in an unknown timezone,
-related-record editing, and offline synchronization are outside this implementation.
+Versioned services, M coordinates, dates in an unknown timezone, and offline
+synchronization are outside this implementation. Related records cover existing
+saved parents; creating a parent and its related rows together, nested
+relationships, and attachments of related table rows are not supported yet.
 Attachments of standalone tables, the bulk `queryAttachments` operation,
 attachment keywords and upload IDs are not supported yet.
 There is no remote conflict-resolution protocol: if another client changes the
@@ -228,3 +280,4 @@ and its attachment operations ([attachment infos](https://developers.arcgis.com/
 [add](https://developers.arcgis.com/rest/services-reference/enterprise/add-attachment/),
 [update](https://developers.arcgis.com/rest/services-reference/enterprise/update-attachment/) and
 [delete](https://developers.arcgis.com/rest/services-reference/enterprise/delete-attachments/)).
+Related records use [query related records](https://developers.arcgis.com/rest/services-reference/enterprise/query-related-records-feature-service/).

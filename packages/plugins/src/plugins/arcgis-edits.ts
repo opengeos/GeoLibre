@@ -313,9 +313,20 @@ export function arcGISGeometry(geometry: Geometry | null, info: ArcGISEditInfo):
 /** Numeric text that converts to a number at save: plain decimals only. */
 const DECIMAL_TEXT = /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/;
 
-function attributes(
-  feature: Feature,
-  previous: Feature | undefined,
+/**
+ * The attributes an edit sends, validated against the layer's fields and
+ * domains: every attribute of a new record, or only the changed ones of an
+ * existing record. Server-managed values on a new record are left to the
+ * service; changing one on an existing record is refused.
+ *
+ * @param feature - The record as edited.
+ * @param previous - The record as last read from the service, or `undefined` for an insert.
+ * @param info - The layer or table's `?f=json` metadata.
+ * @returns The attributes to send, normalized to the fields' types.
+ */
+export function arcGISEditAttributes(
+  feature: Pick<Feature, "properties">,
+  previous: Pick<Feature, "properties"> | undefined,
   info: ArcGISEditInfo,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
@@ -444,7 +455,7 @@ export function planArcGISEdits(
         feature,
         index,
         payload: {
-          attributes: attributes(feature, undefined, info),
+          attributes: arcGISEditAttributes(feature, undefined, info),
           geometry: arcGISGeometry(feature.geometry, info),
         },
       });
@@ -470,7 +481,7 @@ export function planArcGISEdits(
       feature,
       objectId: id,
       payload: {
-        attributes: { ...attributes(feature, prior, info), [field]: id },
+        attributes: { ...arcGISEditAttributes(feature, prior, info), [field]: id },
         ...(geometryChanged ? { geometry: arcGISGeometry(feature.geometry, info) } : {}),
       },
     });

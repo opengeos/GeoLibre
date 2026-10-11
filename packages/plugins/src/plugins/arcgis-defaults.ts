@@ -129,7 +129,9 @@ export function arcGISNewFeatureProperties(
   const selector = arcGISSubtypeField(info);
   const fieldDefaults = new Map(
     (info.fields ?? [])
-      .filter((field) => field.defaultValue != null)
+      // Hosted services publish `""` for a field without a default, date and
+      // numeric fields included; it is no default, not an empty value to store.
+      .filter((field) => field.defaultValue != null && field.defaultValue !== "")
       .map((field) => [field.name, field.defaultValue]),
   );
   const choices = templateChoices(info);

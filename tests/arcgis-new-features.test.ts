@@ -44,6 +44,22 @@ describe("arcGISNewFeatureProperties", () => {
     });
   });
 
+  it("treats an empty default as no default, as hosted services publish it", () => {
+    const info: ArcGISEditInfo = {
+      ...base,
+      fields: [
+        ...fields,
+        { name: "INSPECTED", type: "esriFieldTypeDate", defaultValue: "" },
+        { name: "DEPTH", type: "esriFieldTypeDouble", defaultValue: "" },
+      ],
+    };
+    assert.deepEqual(arcGISNewFeatureProperties(info, {}), {
+      ASSET_TYPE: 2,
+      STATUS: 1,
+      NOTES: "none",
+    });
+  });
+
   it("never replaces a value already on the feature, and drops server-managed ones", () => {
     assert.deepEqual(
       arcGISNewFeatureProperties(base, {

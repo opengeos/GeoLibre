@@ -13,9 +13,15 @@ import type { GeoLibreLayer } from "@geolibre/core";
 import { ARCGIS_FEATURE_SOURCE_KIND } from "./arcgis-defaults";
 import { arcGISObjectId, type ArcGISEditInfo } from "./arcgis-edits";
 import { arcGISFeatureLayerConnection, type ArcGISFeatureLayerConnection } from "./arcgis-layer";
+import {
+  arcGISServiceError,
+  postArcGISWrite,
+  readArcGISJson,
+  withQuery,
+  type ArcGISOperationMessages,
+  type ArcGISServiceError,
+} from "./arcgis-service-request";
 import { LocalizedError } from "../localized-error";
-
-const ERROR_KEY = "arcgisService.errors";
 
 /** One file attached to a record, as the service lists it. */
 export interface ArcGISAttachmentInfo {
@@ -42,12 +48,32 @@ interface ArcGISAttachmentLayerInfo extends ArcGISEditInfo {
   hasAttachments?: boolean;
 }
 
-interface ArcGISServiceError {
-  code?: unknown;
-  message?: string;
-  description?: string;
-  details?: unknown;
-}
+const ERROR_KEY = "arcgisService.errors";
+
+const MESSAGES: ArcGISOperationMessages = {
+  signInRequired: () =>
+    new LocalizedError(
+      `${ERROR_KEY}.attachmentSignInRequired`,
+      "The ArcGIS service requires a valid sign-in for this attachment operation. Sign in again and retry.",
+    ),
+  notPermitted: () =>
+    new LocalizedError(
+      `${ERROR_KEY}.attachmentNotPermitted`,
+      "You do not have permission for this attachment operation on the ArcGIS service.",
+    ),
+  invalidResponse: () =>
+    new LocalizedError(
+      `${ERROR_KEY}.attachmentInvalidResponse`,
+      "The ArcGIS service returned an unexpected attachment response.",
+    ),
+  unconfirmed: (cause) =>
+    new LocalizedError(
+      `${ERROR_KEY}.attachmentUnconfirmed`,
+      "The attachment change could not be confirmed. Refresh the attachment list before trying again.",
+      undefined,
+      cause ? { cause } : undefined,
+    ),
+};
 
 /**
  * The attachment operations a layer's metadata advertises.
@@ -124,62 +150,12 @@ function recordUrl(connection: ArcGISFeatureLayerConnection, objectId: number): 
   return `${connection.layerUrl}/${objectId}`;
 }
 
-function withQuery(url: string, params: Record<string, string | undefined>): string {
-  const parsed = new URL(url);
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) parsed.searchParams.set(key, value);
-  }
-  return parsed.toString();
-}
-
-function requireHttps(url: string): void {
-  if (new URL(url).protocol !== "https:") {
-    throw new LocalizedError(`${ERROR_KEY}.writesRequireHttps`, "ArcGIS writes require HTTPS.");
-  }
-}
-
 /** Turn a service error envelope into a message, distinguishing sign-in and permission refusals. */
 function serviceError(error: ArcGISServiceError | undefined, fallback: string): Error {
-  const code = typeof error?.code === "number" ? error.code : Number(error?.code);
-  if (code === 498 || code === 499) {
-    return new LocalizedError(
-      `${ERROR_KEY}.attachmentSignInRequired`,
-      "The ArcGIS service requires a valid sign-in for this attachment operation. Sign in again and retry.",
-    );
-  }
-  if (code === 403) {
-    return new LocalizedError(
-      `${ERROR_KEY}.attachmentNotPermitted`,
-      "You do not have permission for this attachment operation on the ArcGIS service.",
-    );
-  }
-  const details = Array.isArray(error?.details)
-    ? error.details.filter((d): d is string => typeof d === "string" && d.trim() !== "")
-    : [];
-  const text = [error?.message ?? error?.description, ...details]
-    .filter((part): part is string => Boolean(part?.trim()))
-    .join(" ");
-  return new Error(text || fallback);
+  return arcGISServiceError(error, fallback, MESSAGES);
 }
 
-async function readJson<T>(response: Response): Promise<T & { error?: ArcGISServiceError }> {
-  if (!response.ok) {
-    throw new LocalizedError(
-      `${ERROR_KEY}.serviceRequestFailed`,
-      "ArcGIS service request failed with {{status}}.",
-      { status: response.status },
-    );
-  }
-  const text = await response.text();
-  try {
-    return JSON.parse(text) as T & { error?: ArcGISServiceError };
-  } catch {
-    throw new LocalizedError(
-      `${ERROR_KEY}.attachmentInvalidResponse`,
-      "The ArcGIS service returned an unexpected attachment response.",
-    );
-  }
-}
+const readJson = <T>(response: Response) => readArcGISJson<T>(response, MESSAGES);
 
 function parseAttachmentInfo(value: unknown): ArcGISAttachmentInfo | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -221,10 +197,7 @@ export async function listArcGISAttachments(
   );
   if (json.error) throw serviceError(json.error, "ArcGIS could not list the attachments.");
   if (!Array.isArray(json.attachmentInfos)) {
-    throw new LocalizedError(
-      `${ERROR_KEY}.attachmentInvalidResponse`,
-      "The ArcGIS service returned an unexpected attachment response.",
-    );
+    throw MESSAGES.invalidResponse();
   }
   return json.attachmentInfos
     .map(parseAttachmentInfo)
@@ -284,49 +257,13 @@ interface ArcGISAttachmentEditResult {
   error?: ArcGISServiceError;
 }
 
-/**
- * Post a write, telling a refused write apart from one whose outcome is
- * unknown: once the request may have reached the server, a lost response must
- * not be reported as a failure that is safe to repeat.
- */
-async function postAttachmentWrite<T>(
+function postAttachmentWrite<T>(
   connection: ArcGISFeatureLayerConnection,
   url: string,
   body: FormData | URLSearchParams,
   signal?: AbortSignal,
-): Promise<T & { error?: ArcGISServiceError }> {
-  requireHttps(url);
-  signal?.throwIfAborted();
-  const unconfirmed = (cause?: unknown) =>
-    new LocalizedError(
-      `${ERROR_KEY}.attachmentUnconfirmed`,
-      "The attachment change could not be confirmed. Refresh the attachment list before trying again.",
-      undefined,
-      { cause },
-    );
-  let response: Response;
-  try {
-    response =
-      body instanceof FormData
-        ? await connection.fetch(url, { method: "POST", body, redirect: "error", signal })
-        : await connection.fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: body.toString(),
-            redirect: "error",
-            signal,
-          });
-  } catch (error) {
-    throw unconfirmed(error);
-  }
-  // A client error is a refusal; a server error or an unreadable body leaves
-  // the outcome open.
-  if (response.status >= 400 && response.status < 500) return readJson<T>(response);
-  try {
-    return await readJson<T>(response);
-  } catch (error) {
-    throw unconfirmed(error);
-  }
+) {
+  return postArcGISWrite<T>(connection, url, body, MESSAGES, signal);
 }
 
 function uploadForm(file: Blob, fileName: string, token: string | undefined): FormData {
@@ -342,10 +279,7 @@ function attachmentResult(
   fallback: string,
 ): number | undefined {
   if (!result || typeof result.success !== "boolean") {
-    throw new LocalizedError(
-      `${ERROR_KEY}.attachmentInvalidResponse`,
-      "The ArcGIS service returned an unexpected attachment response.",
-    );
+    throw MESSAGES.invalidResponse();
   }
   if (!result.success) throw serviceError(result.error, fallback);
   return Number.isSafeInteger(result.objectId) ? (result.objectId as number) : undefined;
@@ -379,10 +313,7 @@ export async function addArcGISAttachment(
   const id = attachmentResult(json.addAttachmentResult, "ArcGIS rejected the attachment.");
   // Success without the new attachment's ID is not a confirmed upload.
   if (id === undefined) {
-    throw new LocalizedError(
-      `${ERROR_KEY}.attachmentUnconfirmed`,
-      "The attachment change could not be confirmed. Refresh the attachment list before trying again.",
-    );
+    throw MESSAGES.unconfirmed();
   }
   return id;
 }
@@ -440,10 +371,7 @@ export async function deleteArcGISAttachments(
   if (json.error) throw serviceError(json.error, "ArcGIS could not delete the attachments.");
   const results = json.deleteAttachmentResults;
   if (!Array.isArray(results) || results.length !== attachmentIds.length) {
-    throw new LocalizedError(
-      `${ERROR_KEY}.attachmentInvalidResponse`,
-      "The ArcGIS service returned an unexpected attachment response.",
-    );
+    throw MESSAGES.invalidResponse();
   }
   const deleted: number[] = [];
   const errors: string[] = [];

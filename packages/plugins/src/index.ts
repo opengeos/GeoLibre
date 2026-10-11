@@ -148,6 +148,25 @@ export {
   type ArcGISAttachmentSupport,
 } from "./plugins/arcgis-attachments";
 export {
+  addArcGISRelatedRecord,
+  arcGISRelatedEditSupport,
+  arcGISRelatedFields,
+  arcGISRelatedNewRecordDefaults,
+  arcGISRelatedParentKey,
+  arcGISRelatedParentObjectId,
+  arcGISRelationships,
+  deleteArcGISRelatedRecord,
+  fetchArcGISRelatedTableInfo,
+  queryArcGISRelatedRecords,
+  updateArcGISRelatedRecord,
+  type ArcGISRelatedEditSupport,
+  type ArcGISRelatedField,
+  type ArcGISRelatedRecord,
+  type ArcGISRelatedRecords,
+  type ArcGISRelatedTableInfo,
+  type ArcGISRelationship,
+} from "./plugins/arcgis-related-records";
+export {
   closeBookmarkPanel,
   closeColorbarPanel,
   closeHtmlPanel,

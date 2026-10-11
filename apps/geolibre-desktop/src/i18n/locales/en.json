@@ -10619,7 +10619,14 @@
       "attachmentSignInRequired": "The ArcGIS service requires a valid sign-in for this attachment operation. Sign in again and retry.",
       "attachmentNotPermitted": "You do not have permission for this attachment operation on the ArcGIS service.",
       "attachmentInvalidResponse": "The ArcGIS service returned an unexpected attachment response.",
-      "attachmentUnconfirmed": "The attachment change could not be confirmed. Refresh the attachment list before trying again."
+      "attachmentUnconfirmed": "The attachment change could not be confirmed. Refresh the attachment list before trying again.",
+      "relatedSignInRequired": "The ArcGIS service requires a valid sign-in for related records. Sign in again and retry.",
+      "relatedNotPermitted": "You do not have permission for this related record operation on the ArcGIS service.",
+      "relatedInvalidResponse": "The ArcGIS service returned an unexpected related records response.",
+      "relatedUnconfirmed": "The related record change could not be confirmed. Refresh the related records before trying again.",
+      "relatedUnavailable": "The related table {{id}} is not available from this service. Check that it is published in the same service and shared with you.",
+      "relatedEditNotSupported": "This relationship does not allow that related record edit.",
+      "relatedKeyManaged": "The relationship key of a related record cannot be changed here."
     }
   },
   "spaceborneLidar": {
@@ -10691,5 +10698,42 @@
     "saved": "Saved {{name}}.",
     "notSent": "{{name}} was not sent.",
     "fileFailed": "{{name}}: {{message}}"
+  },
+  "relatedRecords": {
+    "title": "Related records",
+    "openTitle": "Show the records the ArcGIS service relates to the selected record",
+    "openTitleNoRecord": "Select one record saved to the ArcGIS service to show its related records",
+    "description": "Records related to record {{objectId}} of {{layer}}.",
+    "savesDirectly": "Adding, editing and deleting related records saves to the service immediately.",
+    "relationship": "Relationship",
+    "relatedTable": "Related table: {{table}}.",
+    "parentKeyMissing": "New records cannot be added because this record has no {{field}} value.",
+    "add": "Add record",
+    "refresh": "Refresh",
+    "loading": "Loading related records…",
+    "empty": "This record has no related records.",
+    "incomplete_one": "The service returned only {{count}} related record and cannot page through the rest, so this list is incomplete.",
+    "incomplete_other": "The service returned only {{count}} related records and cannot page through the rest, so this list is incomplete.",
+    "actions": "Actions",
+    "edit": "Edit",
+    "editAria": "Edit related record {{id}}",
+    "delete": "Delete",
+    "deleteAria": "Delete related record {{id}}",
+    "confirmDelete": "Delete from the service?",
+    "newRecord": "New record in {{table}}",
+    "editRecord": "Related record {{id}}",
+    "managedKey": "Set by the relationship",
+    "noValue": "(no value)",
+    "outsideDomain": "This stored value is not in the field's domain. Choose a valid value to change it.",
+    "outsideDomainEntered": "This value is outside the field's domain.",
+    "outsideDomainOption": "{{value}} (not in domain)",
+    "outsideDomainTitle": "{{value}} is not in the field's domain",
+    "save": "Save to service",
+    "saving": "Saving…",
+    "deleting": "Deleting record {{id}}…",
+    "added": "Added related record {{id}}.",
+    "updated": "Saved related record {{id}}.",
+    "unchanged": "Nothing changed, so nothing was sent.",
+    "deleted": "Deleted related record {{id}}."
   }
 }
