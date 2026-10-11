@@ -173,6 +173,9 @@ export function useNavigationDrive({
       // but clear the off-route latch, so the next off-route fixes ask again.
       const clearLatch = () => {
         d.state = { ...d.state, offRoute: false, offRouteHits: 0, onRouteStreak: 0 };
+        // The engine no longer counts the drive as off route, so it will not
+        // send backOnRoute; clear the banner here or it stays on "Off route".
+        setOffRoute(false);
       };
       if (now - d.lastRerouteAt < REROUTE_COOLDOWN_MS) {
         clearLatch();
@@ -321,7 +324,13 @@ export function useNavigationDrive({
         .addTo(map);
 
       // Keep the screen on while driving, where the platform allows it.
-      d.wakeLock = await requestScreenWakeLock();
+      const lock = await requestScreenWakeLock();
+      // The drive may have ended (or the tool closed) during the await.
+      if (d.route !== route) {
+        void lock?.release().catch(() => undefined);
+        return;
+      }
+      d.wakeLock = lock;
 
       if (simulate) {
         let along = 0;
@@ -413,6 +422,11 @@ export function useNavigationDrive({
     const onVisible = () => {
       if (document.visibilityState !== "visible" || drive.current.wakeLock) return;
       void requestScreenWakeLock().then((lock) => {
+        // Granted after the drive ended: give it straight back.
+        if (!drive.current.route || drive.current.wakeLock) {
+          void lock?.release().catch(() => undefined);
+          return;
+        }
         drive.current.wakeLock = lock;
       });
     };

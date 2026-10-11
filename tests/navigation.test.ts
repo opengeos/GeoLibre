@@ -492,3 +492,58 @@ describe("typed coordinates", () => {
     assert.equal(parseTypedCoordinates("35.96"), null);
   });
 });
+
+describe("round trips", () => {
+  /** A square loop that starts and ends at the same corner. */
+  function loopRoute(): NavRoute {
+    const coordinates: LngLat[] = [
+      [0, 0],
+      [0.01, 0],
+      [0.01, 0.01],
+      [0, 0.01],
+      [0, 0],
+    ];
+    const cumulative = cumulativeDistances(coordinates);
+    const distance = cumulative[cumulative.length - 1];
+    return {
+      coordinates,
+      cumulative,
+      distance,
+      duration: distance / 10,
+      steps: [
+        {
+          legIndex: 0,
+          type: "depart",
+          instruction: "Go",
+          name: "",
+          location: coordinates[0],
+          distance,
+          duration: distance / 10,
+          startDistance: 0,
+          endDistance: distance,
+          voice: [],
+          banners: [],
+        },
+      ],
+      legEnds: [distance],
+      voiceLocale: "en-US",
+      summary: "",
+      waypointNames: [],
+      mode: "auto",
+    };
+  }
+
+  it("does not arrive on the first fix when the start is the destination", () => {
+    const route = loopRoute();
+    const { state, events } = drive(route, [simulatedFix(route, 0, 0)]);
+    assert.equal(state.arrived, false);
+    assert.ok(!events.some((e) => e.type === "arrive"));
+    assert.ok(state.progress && state.progress.along < 1);
+  });
+
+  it("arrives at the end of the loop", () => {
+    const route = loopRoute();
+    const { state } = drive(route, simulatedDrive(route, 20));
+    assert.equal(state.arrived, true);
+  });
+});

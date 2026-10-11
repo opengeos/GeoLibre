@@ -114,6 +114,10 @@ export const BACK_ON_ROUTE_FIXES = 2;
 const WINDOW_BEHIND_M = 30;
 /** Within this of the destination, the drive has arrived. */
 export const ARRIVE_RADIUS_M = 20;
+/** Arriving by distance to the destination needs this little route left. */
+export const ARRIVE_NEAR_END_M = 150;
+/** How far along the route the first fix is looked for first. */
+const FIRST_FIX_WINDOW_M = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -221,10 +225,20 @@ export function updateNavigation(
       prev.along + ahead,
     ]);
   }
+  const { corridor, far } = offRouteCorridor(route.mode, fix.accuracy);
+  if (!prev) {
+    // The first fix is matched near the start when it is on the route there:
+    // on a round trip the start and the end are the same place, and matching
+    // the end would arrive before the drive began.
+    const nearStart = projectOntoPolyline(route.coordinates, route.cumulative, point, [
+      0,
+      FIRST_FIX_WINDOW_M,
+    ]);
+    if (nearStart && nearStart.offset <= corridor) projection = nearStart;
+  }
   projection ??= projectOntoPolyline(route.coordinates, route.cumulative, point);
   if (!projection) return { state, events };
 
-  const { corridor, far } = offRouteCorridor(route.mode, fix.accuracy);
   const tuning = TUNING[route.mode];
   // A fix without a speed figure is treated as moving: desktop browsers often
   // report none, and holding the count forever would never reroute.
@@ -306,9 +320,11 @@ export function updateNavigation(
 
   const distanceRemaining = Math.max(0, route.distance - along);
   const destination = route.coordinates[route.coordinates.length - 1];
+  // Being near the destination counts only once the drive is near the end of
+  // the route too: a round trip or an out-and-back passes it at the start.
   const arrived =
     (distanceRemaining <= ARRIVE_RADIUS_M && inside) ||
-    haversine(point, destination) <= ARRIVE_RADIUS_M;
+    (distanceRemaining <= ARRIVE_NEAR_END_M && haversine(point, destination) <= ARRIVE_RADIUS_M);
   if (arrived) events.push({ type: "arrive" });
 
   const nextStopEnd = route.legEnds.find((end) => end > along + 1) ?? route.distance;

@@ -613,14 +613,20 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       group: t("toolbar.commandGroup.controls"),
       run: consent.handleToggleDirections,
     },
-    {
-      id: "control.turn-by-turn",
-      title: t("toolbar.item.navigation"),
-      group: t("toolbar.commandGroup.controls"),
-      keywords: "navigation turn by turn directions route routing gps drive walk bike voice",
-      icon: Signpost,
-      run: () => useNavigationTool.getState().openNavigation(),
-    },
+    // Draws transient MapLibre style layers, so like Line of sight it is
+    // dropped where no MapLibre map exists rather than offered as a no-op.
+    ...(!capabilities.nativeMapInstance
+      ? []
+      : [
+          {
+            id: "control.turn-by-turn",
+            title: t("toolbar.item.navigation"),
+            group: t("toolbar.commandGroup.controls"),
+            keywords: "navigation turn by turn directions route routing gps drive walk bike voice",
+            icon: Signpost,
+            run: () => useNavigationTool.getState().openNavigation(),
+          },
+        ]),
     {
       id: "control.search",
       title: t("toolbar.command.toggleSearch"),
