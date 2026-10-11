@@ -339,7 +339,11 @@ export function useNavigationDrive({
       d.wakeLock = lock;
 
       if (simulate) {
-        d.stopTracking = startSimulation(route, () => settingsRef.current.simSpeed, handleFix);
+        const stop = startSimulation(route, () => settingsRef.current.simSpeed, handleFix);
+        // The first fix runs synchronously and can already arrive (a tiny
+        // route), when stopTracking found nothing to stop yet.
+        if (d.startId !== startId || d.state.arrived) stop();
+        else d.stopTracking = stop;
         return;
       }
 
@@ -359,6 +363,7 @@ export function useNavigationDrive({
         }
         d.stopTracking = unsubscribe;
       } catch (error) {
+        if (d.startId !== startId) return;
         logNavigation("Could not start following the device location.", error);
         setDriveError(langRef.current.t("navigation.locationError"));
       }
