@@ -213,19 +213,15 @@ see the [Roadmap](roadmap.md).
 
 ### Recently added
 
-Newest capabilities, still settling in. The v3.3 release added interactive
-[line of sight](user-guide/map-controls.md), MGRS/USNG grids and coordinate
-readouts, SQL Server and Azure SQL sources on desktop, a
-[project history](user-guide/projects.md#project-history-and-crash-recovery)
-that compares snapshots and restores single layers, editable layer metadata
-with STAC Item export, glTF, OBJ, and STL export of 3D-extruded layers, and
-plugin panels that dock in the side panel. Since then, `main` has added an
-[ArcGIS Portal](user-guide/web-services.md#arcgis-portal) browser and a
-[Sentinel-2 Explorer](user-guide/web-services.md#sentinel-2-explorer) under Web
-Services, Sign in with ArcGIS for secured services, administrative boundaries
-from geoBoundaries, Cesium Ion terrain assets, custom point markers from PNG,
-JPEG, and GIF images, standard deviation and geometric interval
-classification, and LAS/LAZ/COPC export of LiDAR tool outputs.
+Newest capabilities, still settling in. The v3.4 release added an
+[Object-Based Image Analysis](user-guide/obia.md) workbench with eCognition
+rule-set import, ICESat-2 and GEDI spaceborne LiDAR footprints and photons, a
+[NASA Earthaccess](user-guide/web-services.md#nasa-earthaccess) plugin,
+[Dynamical](user-guide/web-services.md#dynamical) weather forecasts, turn-by-turn
+navigation with voice guidance, domain-, attachment-, and related-record-aware
+[ArcGIS editing](arcgis-editing.md) behind Sign in with ArcGIS, Spilhaus and
+other projections on the ArcGIS engine, and plugin panels, point clouds, and
+Street View on the Cesium globe.
 
 The [roadmap](roadmap.md) tracks every release, version by version.
 
