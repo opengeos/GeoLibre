@@ -337,6 +337,27 @@ describe("navigation engine", () => {
     assert.equal(state.offRoute, true);
   });
 
+  it("stays off route while stopped just off the line", () => {
+    const route = loadRoute();
+    const along = route.steps[1].startDistance + 200;
+    const offState: NavState = {
+      ...drive(route, [simulatedFix(route, along, 0)]).state,
+      offRoute: true,
+    };
+    // 50 m off: outside a 28 m corridor, inside the 56 m far distance, stopped.
+    const near = offsetEast(pointAlong(route.coordinates, route.cumulative, along), 50);
+    const fixes: NavFix[] = [1, 2, 3].map((i) => ({
+      lng: near[0],
+      lat: near[1],
+      accuracy: 5,
+      speed: 0,
+      timestamp: i * 1000,
+    }));
+    const { state, events } = drive(route, fixes, offState);
+    assert.equal(state.offRoute, true);
+    assert.ok(!events.some((e) => e.type === "backOnRoute"));
+  });
+
   it("returns to the route after two fixes back on it", () => {
     const route = loadRoute();
     const offState: NavState = { ...initialNavState(), offRoute: true };

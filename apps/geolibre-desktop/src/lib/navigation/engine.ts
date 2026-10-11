@@ -273,7 +273,9 @@ export function updateNavigation(
     onRouteStreak = 0;
     events.push({ type: "offRoute" });
   } else if (offRoute) {
-    onRouteStreak = hits === 0 ? onRouteStreak + 1 : 0;
+    // Only a fix actually on the route counts: a stopped fix just off it
+    // holds the hit count at 0 without being back on the road.
+    onRouteStreak = inside && !wrongWay ? onRouteStreak + 1 : 0;
     if (onRouteStreak >= BACK_ON_ROUTE_FIXES) {
       offRoute = false;
       onRouteStreak = 0;
