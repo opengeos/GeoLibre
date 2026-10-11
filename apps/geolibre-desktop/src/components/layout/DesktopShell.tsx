@@ -864,14 +864,10 @@ export function DesktopShell({
                   mapControllerRef={mapControllerRef}
                   mapReadyGeneration={mapReadyGeneration}
                 />
-                {/* Its own boundary: the drive's banner sits over the map, and a
-                  fault in it must not take the map down. */}
-                <SilentErrorBoundary label="Navigation">
-                  <NavigationPanel
-                    mapControllerRef={mapControllerRef}
-                    mapReadyGeneration={mapReadyGeneration}
-                  />
-                </SilentErrorBoundary>
+                <NavigationPanel
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
                 <KnowledgeCardPanel
                   place={knowledgePlace}
                   lang={wikipediaLang(i18n.language)}

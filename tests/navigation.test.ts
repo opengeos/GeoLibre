@@ -29,6 +29,25 @@ import {
   type NavFix,
   type NavState,
 } from "../apps/geolibre-desktop/src/lib/navigation/engine";
+import {
+  formatArrivalTime,
+  formatNavDistance,
+  formatNavDuration,
+} from "../apps/geolibre-desktop/src/lib/navigation/format";
+import {
+  activeBanner,
+  boundsOf,
+  DEFAULT_NAV_SETTINGS,
+  fixFromPosition,
+  loadNavSettings,
+  NARROW_BOTTOM_CLEARANCE,
+  NAV_SETTINGS_KEY,
+  PLAN_PANEL_CLEARANCE,
+  planPadding,
+  saveNavSettings,
+  parseTypedCoordinates,
+  upcomingStops,
+} from "../apps/geolibre-desktop/src/lib/navigation/session";
 
 // A real Valhalla OSRM-format response (Knoxville, TN; origin, one stop, and a
 // destination), trimmed to one intersection per step.
@@ -334,5 +353,142 @@ describe("navigation engine", () => {
   it("zooms out on fast roads", () => {
     assert.ok(followZoom(30, "auto") < followZoom(5, "auto"));
     assert.equal(followZoom(1, "pedestrian"), 18);
+  });
+});
+
+describe("navigation session helpers", () => {
+  const memoryStorage = () => {
+    const data = new Map<string, string>();
+    return {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => void data.set(key, value),
+    };
+  };
+
+  it("round-trips settings and drops invalid values", () => {
+    const storage = memoryStorage();
+    assert.deepEqual(loadNavSettings(storage), DEFAULT_NAV_SETTINGS);
+    saveNavSettings(
+      {
+        mode: "bicycle",
+        avoid: { tolls: true, highways: false, ferries: true },
+        voice: false,
+        simSpeed: 4,
+      },
+      storage,
+    );
+    assert.deepEqual(loadNavSettings(storage), {
+      mode: "bicycle",
+      avoid: { tolls: true, highways: false, ferries: true },
+      voice: false,
+      simSpeed: 4,
+    });
+    storage.setItem(NAV_SETTINGS_KEY, JSON.stringify({ mode: "plane", simSpeed: 3, avoid: "x" }));
+    const cleaned = loadNavSettings(storage);
+    assert.equal(cleaned.mode, "auto");
+    assert.equal(cleaned.simSpeed, DEFAULT_NAV_SETTINGS.simSpeed);
+    assert.deepEqual(cleaned.avoid, { tolls: false, highways: false, ferries: false });
+    storage.setItem(NAV_SETTINGS_KEY, "{not json");
+    assert.deepEqual(loadNavSettings(storage), DEFAULT_NAV_SETTINGS);
+    assert.deepEqual(loadNavSettings(null), DEFAULT_NAV_SETTINGS);
+  });
+
+  it("turns a browser position into a fix, nulling NaN heading and speed", () => {
+    const fix = fixFromPosition({
+      coords: { longitude: 1, latitude: 2, accuracy: 8, heading: Number.NaN, speed: null },
+      timestamp: 42,
+    } as unknown as GeolocationPosition);
+    assert.deepEqual(fix, {
+      lng: 1,
+      lat: 2,
+      accuracy: 8,
+      heading: null,
+      speed: null,
+      timestamp: 42,
+    });
+  });
+
+  it("computes bounds and padding that clears the planner", () => {
+    assert.equal(boundsOf([]), null);
+    assert.deepEqual(
+      boundsOf([
+        [1, 5],
+        [-2, 3],
+        [4, -1],
+      ]),
+      [
+        [-2, -1],
+        [4, 5],
+      ],
+    );
+    assert.equal(planPadding(1000, false).left, PLAN_PANEL_CLEARANCE);
+    assert.equal(planPadding(1000, true).right, PLAN_PANEL_CLEARANCE);
+    assert.equal(planPadding(700, false).left, 60);
+    assert.equal(planPadding(400, false).bottom, NARROW_BOTTOM_CLEARANCE);
+  });
+
+  it("shows the closest banner now due", () => {
+    const route = loadRoute();
+    const step = route.steps[1];
+    assert.equal(activeBanner(undefined, 0), null);
+    const far = activeBanner(step, step.distance + 1000);
+    assert.equal(far, step.banners[0]);
+    assert.equal(activeBanner(step, 0), step.banners[step.banners.length - 1]);
+  });
+});
+
+describe("navigation formatting", () => {
+  it("rounds distances like a navigation banner", () => {
+    assert.equal(formatNavDistance(37, false, "en"), "40 m");
+    assert.equal(formatNavDistance(260, false, "en"), "250 m");
+    assert.equal(formatNavDistance(1234, false, "en"), "1.2 km");
+    assert.equal(formatNavDistance(15_600, false, "en"), "16 km");
+    assert.equal(formatNavDistance(30, true, "en"), "100 ft");
+    assert.equal(formatNavDistance(1609.344 * 2.34, true, "en"), "2.3 mi");
+  });
+
+  it("formats durations and arrival times", () => {
+    assert.equal(formatNavDuration(30, "en"), "1 min");
+    assert.equal(formatNavDuration(12 * 60, "en"), "12 min");
+    assert.equal(formatNavDuration(3600, "en"), "1 hr");
+    assert.equal(formatNavDuration(3900, "en"), "1 hr 5 min");
+    const now = Date.UTC(2026, 0, 1, 12, 0);
+    assert.match(formatArrivalTime(600, "en", now), /\d{1,2}:10/);
+  });
+});
+
+describe("upcoming stops", () => {
+  it("lists the stop and the destination with distance and time to each", () => {
+    const route = loadRoute();
+    const stops = upcomingStops(route, 0);
+    assert.equal(stops.length, 2);
+    assert.equal(stops[0].destination, false);
+    assert.equal(stops[1].destination, true);
+    assert.ok(Math.abs(stops[0].distance - route.legEnds[0]) < 1e-6);
+    assert.ok(Math.abs(stops[1].distance - route.distance) < 1e-6);
+    assert.ok(stops[0].duration > 0 && stops[0].duration < stops[1].duration);
+    assert.ok(
+      Math.abs(stops[1].duration - route.steps.reduce((sum, s) => sum + s.duration, 0)) < 1,
+    );
+    assert.equal(stops[0].name, route.waypointNames[1]);
+  });
+
+  it("drops a stop once it is passed", () => {
+    const route = loadRoute();
+    const stops = upcomingStops(route, route.legEnds[0] + 50);
+    assert.equal(stops.length, 1);
+    assert.equal(stops[0].destination, true);
+    assert.ok(Math.abs(stops[0].distance - (route.distance - route.legEnds[0] - 50)) < 1e-6);
+  });
+});
+
+describe("typed coordinates", () => {
+  it("reads lat, lng pairs and rejects anything else", () => {
+    assert.deepEqual(parseTypedCoordinates("35.96, -83.92"), { lat: 35.96, lng: -83.92 });
+    assert.deepEqual(parseTypedCoordinates(" -12.5 130 "), { lat: -12.5, lng: 130 });
+    assert.equal(parseTypedCoordinates("91, 10"), null);
+    assert.equal(parseTypedCoordinates("10, 181"), null);
+    assert.equal(parseTypedCoordinates("1600 Pennsylvania Ave"), null);
+    assert.equal(parseTypedCoordinates("35.96"), null);
   });
 });
