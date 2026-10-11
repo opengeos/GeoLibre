@@ -9,6 +9,7 @@ import { NetcdfProfilePanel } from "../NetcdfProfilePanel";
 import { NetcdfSymbologySection } from "../NetcdfSymbologySection";
 import { QuickFiltersSection } from "../QuickFiltersSection";
 import { STYLE_PANEL_ASIDE_CLASS } from "./constants";
+import { TilesetHeightOffsetSection } from "./TilesetHeightOffsetSection";
 
 interface NoPaintControlsStylePanelProps {
   layer: GeoLibreLayer;
@@ -98,7 +99,11 @@ export function NoPaintControlsStylePanel({
             // attribute list comes from `metadata.fields`, which the globe
             // fills in from the first rendered tile, so it appears once the
             // tileset has drawn rather than while it is still loading.
+            // The height field comes first: it applies on every renderer,
+            // while the symbology below only reaches the globe (#3107).
             <>
+              <TilesetHeightOffsetSection layer={layer} />
+              <Separator />
               <p className="text-xs text-muted-foreground">{t("style.tilesetSymbology")}</p>
               {vectorSymbologyControls}
             </>

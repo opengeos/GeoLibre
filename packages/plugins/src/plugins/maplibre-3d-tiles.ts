@@ -443,6 +443,13 @@ function createThreeDTilesControl(): ThreeDTilesControl {
       if (currentLayer.opacity !== layer.opacity) {
         setThreeDTilesOpacity(control, currentLayer.id, currentLayer.opacity);
       }
+
+      // The Style panel's height field writes the offset to the store (#3107);
+      // the control repositions the loaded tileset without reloading it.
+      const offset = numberValue(currentLayer.source.altitudeOffset, 0);
+      if (offset !== numberValue(layer.source.altitudeOffset, 0)) {
+        setThreeDTilesAltitudeOffset(control, currentLayer.id, offset);
+      }
     }
   });
 
@@ -2093,6 +2100,16 @@ function keepThreeDTilesPanelExpanded(control: ThreeDTilesControl): void {
 function setThreeDTilesOpacity(control: ThreeDTilesControl, id: string, opacity: number): void {
   runWithThreeDTilesStoreSyncSuspended(() => {
     control.setOpacity(opacity, id, false);
+  });
+}
+
+function setThreeDTilesAltitudeOffset(
+  control: ThreeDTilesControl,
+  id: string,
+  altitudeOffset: number,
+): void {
+  runWithThreeDTilesStoreSyncSuspended(() => {
+    control.setAltitudeOffset(altitudeOffset, id, false);
   });
 }
 

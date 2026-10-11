@@ -7633,6 +7633,8 @@
     "mode3dExtrusion": "Estrusione 3D",
     "noControls": "I controlli di stile non sono ancora disponibili per questo tipo di layer.",
     "tilesetSymbology": "I colori e i filtri si applicano a questo tileset sul globo 3D.",
+    "tilesetHeightOffset": "Offset di altezza (m)",
+    "tilesetHeightOffsetHint": "Alza o abbassa il tileset, ad esempio per correggere l'altezza di un modello convertito da un SR nazionale a WGS84. Usa un valore negativo per abbassarlo.",
     "selectedLayerType": "Tipo di layer selezionato: {{type}}",
     "footerDeck": "Le modifiche si applicano in tempo reale allo stile del layer deck.gl DuckDB.",
     "footerMaplibre": "Le modifiche si applicano in tempo reale alle proprietà paint di MapLibre.",

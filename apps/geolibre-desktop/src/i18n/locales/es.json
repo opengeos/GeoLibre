@@ -7633,6 +7633,8 @@
     "mode3dExtrusion": "Extrusión 3D",
     "noControls": "Los controles de estilo aún no están disponibles para este tipo de capa.",
     "tilesetSymbology": "Los colores y filtros se aplican a este conjunto de teselas en el globo 3D.",
+    "tilesetHeightOffset": "Desplazamiento de altura (m)",
+    "tilesetHeightOffsetHint": "Sube o baja el tileset, por ejemplo para corregir la altura de un modelo convertido de un SRC nacional a WGS84. Use un valor negativo para bajarlo.",
     "selectedLayerType": "Tipo de capa seleccionada: {{type}}",
     "footerDeck": "Los cambios se aplican en vivo al estilo de la capa deck.gl de DuckDB.",
     "footerMaplibre": "Los cambios se aplican en vivo a las propiedades de pintura de MapLibre.",

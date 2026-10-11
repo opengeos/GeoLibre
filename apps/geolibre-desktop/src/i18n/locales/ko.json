@@ -7545,6 +7545,8 @@
     "mode3dExtrusion": "3D 돌출",
     "noControls": "이 레이어 유형에서는 아직 스타일 컨트롤을 사용할 수 없습니다.",
     "tilesetSymbology": "색상과 필터는 3D 지구본의 이 타일셋에 적용됩니다.",
+    "tilesetHeightOffset": "높이 오프셋 (m)",
+    "tilesetHeightOffsetHint": "타일셋을 올리거나 내립니다. 예를 들어 국가 좌표계에서 WGS84로 변환한 모델의 높이를 보정할 수 있습니다. 내리려면 음수 값을 사용하세요.",
     "selectedLayerType": "선택한 레이어 유형: {{type}}",
     "footerDeck": "변경 사항은 DuckDB deck.gl 레이어 스타일에 즉시 적용됩니다.",
     "footerMaplibre": "변경 사항은 MapLibre 페인트 속성에 즉시 적용됩니다.",

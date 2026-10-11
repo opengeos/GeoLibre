@@ -7545,6 +7545,8 @@
     "mode3dExtrusion": "Ekstrusi 3D",
     "noControls": "Kontrol gaya belum tersedia untuk jenis layer ini.",
     "tilesetSymbology": "Warna dan filter berlaku untuk tileset ini pada globe 3D.",
+    "tilesetHeightOffset": "Offset ketinggian (m)",
+    "tilesetHeightOffsetHint": "Menaikkan atau menurunkan tileset, misalnya untuk mengoreksi ketinggian model yang dikonversi dari CRS nasional ke WGS84. Gunakan nilai negatif untuk menurunkannya.",
     "selectedLayerType": "Jenis layer yang dipilih: {{type}}",
     "footerDeck": "Perubahan berlaku langsung pada penataan gaya layer deck.gl DuckDB.",
     "footerMaplibre": "Perubahan berlaku langsung pada properti paint MapLibre.",

@@ -7633,6 +7633,8 @@
     "mode3dExtrusion": "Extrusion 3D",
     "noControls": "Les commandes de style ne sont pas encore disponibles pour ce type de couche.",
     "tilesetSymbology": "Les couleurs et les filtres s'appliquent à ce jeu de tuiles sur le globe 3D.",
+    "tilesetHeightOffset": "Décalage de hauteur (m)",
+    "tilesetHeightOffsetHint": "Élève ou abaisse le tileset, par exemple pour corriger la hauteur d'un modèle converti d'un SCR national vers WGS84. Utilisez une valeur négative pour l'abaisser.",
     "selectedLayerType": "Type de couche sélectionnée : {{type}}",
     "footerDeck": "Les modifications s'appliquent en direct au style de la couche deck.gl de DuckDB.",
     "footerMaplibre": "Les modifications s'appliquent en direct aux propriétés de peinture de MapLibre.",

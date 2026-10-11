@@ -7545,6 +7545,8 @@
     "mode3dExtrusion": "3D押し出し",
     "noControls": "このレイヤータイプではまだスタイルコントロールを利用できません。",
     "tilesetSymbology": "色とフィルターは 3D グローブ上のこのタイルセットに適用されます。",
+    "tilesetHeightOffset": "高さオフセット (m)",
+    "tilesetHeightOffsetHint": "タイルセットを上下に移動します。たとえば、国の座標参照系から WGS84 に変換したモデルの高さを補正できます。下げるには負の値を使用します。",
     "selectedLayerType": "選択中のレイヤータイプ: {{type}}",
     "footerDeck": "変更はDuckDB deck.glレイヤーのスタイルにリアルタイムで反映されます。",
     "footerMaplibre": "変更はMapLibreのペイントプロパティにリアルタイムで反映されます。",

@@ -106,6 +106,7 @@ import type {
   BoundingSphere,
   Cartesian2,
   Cartesian3,
+  Cartographic,
   Color,
   DistanceDisplayCondition,
   Rectangle,
@@ -343,6 +344,8 @@ interface LayerEntry {
    */
   added?: boolean;
   loadError?: string;
+  /** The tileset altitude offset (metres) last applied as a model matrix. */
+  appliedAltitude?: number;
   /** Last opacity key applied in place to a geojson entry (skips redundant restyles). */
   appliedAlpha?: string;
   /** Last filter expression key applied in place (skips redundant filter evaluations). */
@@ -935,8 +938,10 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
         cesiumIonAssetId(prev) !== cesiumIonAssetId(next) ||
         str(prev.metadata?.sourceKind) !== str(next.metadata?.sourceKind) ||
         JSON.stringify(prev.source.requestHeaders ?? null) !==
-          JSON.stringify(next.source.requestHeaders ?? null) ||
-        prev.source.altitudeOffset !== next.source.altitudeOffset
+          JSON.stringify(next.source.requestHeaders ?? null)
+        // No `altitudeOffset` here: the offset is a model matrix applied in
+        // place by `applyTilesetAltitude`, so the Style panel's height field
+        // moves the tileset without re-downloading it (#3107).
       );
     case "kml":
       return cesiumKmlSource(prev) !== cesiumKmlSource(next);
@@ -3555,7 +3560,6 @@ export class CesiumLayerSync {
           return;
         }
         viewer.scene.primitives.add(tileset);
-        this.applyTilesetAltitude(tileset, Number(layer.source.altitudeOffset));
         entry.handle = tileset;
         this.discoverTilesetFields(entry, tileset);
         this.applyAppearance(entry);
@@ -3598,9 +3602,7 @@ export class CesiumLayerSync {
           return;
         }
         viewer.scene.primitives.add(provider);
-        const offset = Number(layer.source.altitudeOffset);
         const tilesets = i3sTilesets(provider);
-        for (const tileset of tilesets) this.applyTilesetAltitude(tileset, offset);
         entry.handle = provider;
         // One sub-layer is enough for the schema: an I3S scene service publishes
         // one attribute set that every layer it drives shares.
@@ -3614,7 +3616,6 @@ export class CesiumLayerSync {
         return;
       }
       viewer.scene.primitives.add(tileset);
-      this.applyTilesetAltitude(tileset, Number(layer.source.altitudeOffset));
       if (layer.type === "lidar" && tileset.pointCloudShading) {
         // Eye-dome lighting and attenuation: the reading aids the 2D LiDAR
         // control's dynamic mode gives, native in Cesium's point-cloud shader.
@@ -3630,15 +3631,45 @@ export class CesiumLayerSync {
     }
   }
 
-  /** Raise/lower a tileset by an altitude offset (metres) at its centre. */
-  private applyTilesetAltitude(tileset: Cesium3DTileset, offset: number): void {
-    if (!Number.isFinite(offset) || offset === 0) return;
+  /**
+   * Where each tileset sat before any offset moved it. Read once, while its
+   * model matrix is still the identity: `boundingSphere` follows the model
+   * matrix (and lags it until the next frame), so re-reading it after a move
+   * would compound the offsets.
+   */
+  private readonly tilesetAnchors = new WeakMap<Cesium3DTileset, Cartographic>();
+
+  /**
+   * Raise/lower a 3D Tiles entry by the layer's altitude offset (metres).
+   *
+   * Applied in place on every sync rather than at creation, so editing the
+   * offset (the Style panel's height field, #3107) moves the loaded tileset
+   * instead of rebuilding it. A zero offset restores the identity matrix.
+   *
+   * @param entry The 3D Tiles entry to position.
+   */
+  private applyTilesetAltitude(entry: LayerEntry): void {
+    const raw = Number(entry.layer.source.altitudeOffset);
+    const offset = Number.isFinite(raw) ? raw : 0;
+    if ((entry.appliedAltitude ?? 0) === offset) return;
     const { Cesium } = this;
-    const carto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
-    const surface = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, 0);
-    const target = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, offset);
-    const translation = Cesium.Cartesian3.subtract(target, surface, new Cesium.Cartesian3());
-    tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+    for (const tileset of this.entryTilesets(entry)) {
+      let anchor = this.tilesetAnchors.get(tileset);
+      if (!anchor) {
+        anchor = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+        this.tilesetAnchors.set(tileset, anchor);
+      }
+      if (offset === 0) {
+        tileset.modelMatrix = Cesium.Matrix4.clone(Cesium.Matrix4.IDENTITY);
+        continue;
+      }
+      const surface = Cesium.Cartesian3.fromRadians(anchor.longitude, anchor.latitude, 0);
+      const target = Cesium.Cartesian3.fromRadians(anchor.longitude, anchor.latitude, offset);
+      const translation = Cesium.Cartesian3.subtract(target, surface, new Cesium.Cartesian3());
+      tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+    }
+    entry.appliedAltitude = offset;
+    this.viewer.scene.requestRender();
   }
 
   /**
@@ -3688,6 +3719,7 @@ export class CesiumLayerSync {
       this.applyGeoJsonFilter(entry);
     } else {
       (handle as Cesium3DTileset | I3SDataProvider).show = layer.visible;
+      this.applyTilesetAltitude(entry);
       this.applyTilesetStyle(entry);
     }
   }

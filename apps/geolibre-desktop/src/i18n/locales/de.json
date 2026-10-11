@@ -7633,6 +7633,8 @@
     "mode3dExtrusion": "3D-Extrusion",
     "noControls": "Stil-Steuerelemente sind für diesen Ebenentyp noch nicht verfügbar.",
     "tilesetSymbology": "Farben und Filter gelten für dieses Tileset auf dem 3D-Globus.",
+    "tilesetHeightOffset": "Höhenversatz (m)",
+    "tilesetHeightOffsetHint": "Hebt oder senkt das Tileset, zum Beispiel um die Höhe eines Modells zu korrigieren, das von einem nationalen KBS nach WGS84 umgerechnet wurde. Ein negativer Wert senkt es ab.",
     "selectedLayerType": "Ausgewählter Ebenentyp: {{type}}",
     "footerDeck": "Änderungen werden sofort auf die deck.gl-Ebenengestaltung von DuckDB angewendet.",
     "footerMaplibre": "Änderungen werden sofort auf die MapLibre-Paint-Eigenschaften angewendet.",

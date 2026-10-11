@@ -271,6 +271,34 @@ function makeFakes() {
     Cesium3DTileStyle: class {
       constructor(public spec: unknown) {}
     },
+    // Just enough geodesy for the tileset altitude offset: a "cartesian" is
+    // the (lon, lat, height) it was made from, so a translation reads back as
+    // the height difference.
+    Cartographic: {
+      fromCartesian: () => ({ longitude: 0.1, latitude: 0.9, height: 0 }),
+    },
+    Cartesian3: Object.assign(
+      class {
+        constructor(
+          public x = 0,
+          public y = 0,
+          public z = 0,
+        ) {}
+      },
+      {
+        fromRadians: (x: number, y: number, z = 0) => ({ x, y, z }),
+        subtract: (
+          a: { x: number; y: number; z: number },
+          b: { x: number; y: number; z: number },
+          out: { x: number; y: number; z: number },
+        ) => Object.assign(out, { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }),
+      },
+    ),
+    Matrix4: {
+      IDENTITY: { identity: true },
+      clone: (m: object) => ({ ...m }),
+      fromTranslation: (translation: unknown) => ({ translation }),
+    },
     Color: {
       fromCssColorString: (css: string) => ({
         css,
@@ -847,6 +875,38 @@ describe("CesiumLayerSync", () => {
     // draw its own colours again rather than keep the stale conditions.
     sync.sync([mkLayer({ id: "t", type: "3d-tiles", source: { url: "https://tiles/root.json" } })]);
     assert.equal(tileset.style, undefined);
+  });
+
+  it("moves a loaded tileset in place when its altitude offset changes", async () => {
+    const sync = newSync(f);
+    const layer = mkLayer({
+      id: "t",
+      type: "3d-tiles",
+      source: { url: "https://tiles/root.json", altitudeOffset: -43.5 },
+    });
+    sync.sync([layer]);
+    await f.flush();
+    const tileset = f.calls.primitivesAdded[0] as { modelMatrix: unknown };
+    const height = () => (tileset.modelMatrix as { translation: { z: number } }).translation.z;
+    assert.equal(height(), -43.5);
+
+    // The Style panel's height field (#3107): no reload, just a new matrix.
+    sync.sync([{ ...layer, source: { ...layer.source, altitudeOffset: 12 } }]);
+    assert.equal(f.calls.tilesetUrls.length, 1, "the tileset is not rebuilt");
+    assert.equal(f.calls.primitivesAdded.length, 1);
+    assert.equal(height(), 12);
+
+    // Back to zero restores the identity rather than leaving the last offset.
+    sync.sync([{ ...layer, source: { ...layer.source, altitudeOffset: 0 } }]);
+    assert.deepEqual(tileset.modelMatrix, { identity: true });
+    assert.equal(f.calls.tilesetUrls.length, 1);
+  });
+
+  it("leaves a tileset's model matrix alone when it has no altitude offset", async () => {
+    const sync = newSync(f);
+    sync.sync([mkLayer({ id: "t", type: "3d-tiles", source: { url: "https://tiles/root.json" } })]);
+    await f.flush();
+    assert.equal((f.calls.primitivesAdded[0] as { modelMatrix: unknown }).modelMatrix, null);
   });
 
   it("fades a tileset with the layer opacity without tinting it", async () => {

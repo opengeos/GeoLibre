@@ -7545,6 +7545,8 @@
     "mode3dExtrusion": "đùn 3D",
     "noControls": "Điều khiển kiểu chưa có sẵn cho loại lớp này.",
     "tilesetSymbology": "Màu sắc và bộ lọc áp dụng cho tập ô này trên quả địa cầu 3D.",
+    "tilesetHeightOffset": "Độ lệch chiều cao (m)",
+    "tilesetHeightOffsetHint": "Nâng hoặc hạ tileset, ví dụ để hiệu chỉnh độ cao của mô hình được chuyển từ CRS quốc gia sang WGS84. Dùng giá trị âm để hạ xuống.",
     "selectedLayerType": "Loại lớp đã chọn: {{type}}",
     "footerDeck": "Các thay đổi áp dụng trực tiếp cho kiểu dáng lớp DuckDB deck.gl.",
     "footerMaplibre": "Các thay đổi áp dụng trực tiếp cho thuộc tính sơn MapLibre.",

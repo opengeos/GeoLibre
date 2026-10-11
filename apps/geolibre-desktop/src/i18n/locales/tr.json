@@ -7633,6 +7633,8 @@
     "mode3dExtrusion": "3B yükseltme",
     "noControls": "Bu katman türü için stil denetimleri henüz kullanılamıyor.",
     "tilesetSymbology": "Renkler ve filtreler bu döşeme kümesine 3B küre üzerinde uygulanır.",
+    "tilesetHeightOffset": "Yükseklik ofseti (m)",
+    "tilesetHeightOffsetHint": "Döşeme kümesini yükseltir veya alçaltır; örneğin ulusal bir KRS'den WGS84'e dönüştürülmüş bir modelin yüksekliğini düzeltmek için. Alçaltmak için negatif bir değer kullanın.",
     "selectedLayerType": "Seçili katman türü: {{type}}",
     "footerDeck": "Değişiklikler, DuckDB deck.gl katman stiline anlık olarak uygulanır.",
     "footerMaplibre": "Değişiklikler, MapLibre paint özelliklerine anlık olarak uygulanır.",

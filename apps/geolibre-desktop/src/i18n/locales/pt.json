@@ -7633,6 +7633,8 @@
     "mode3dExtrusion": "Extrusão 3D",
     "noControls": "Os controles de estilo ainda não estão disponíveis para este tipo de camada.",
     "tilesetSymbology": "As cores e os filtros aplicam-se a este conjunto de tiles no globo 3D.",
+    "tilesetHeightOffset": "Deslocamento de altura (m)",
+    "tilesetHeightOffsetHint": "Eleva ou rebaixa o tileset, por exemplo para corrigir a altura de um modelo convertido de um SRC nacional para WGS84. Use um valor negativo para rebaixá-lo.",
     "selectedLayerType": "Tipo de camada selecionado: {{type}}",
     "footerDeck": "As alterações são aplicadas ao vivo ao estilo da camada deck.gl do DuckDB.",
     "footerMaplibre": "As alterações são aplicadas ao vivo às propriedades paint do MapLibre.",

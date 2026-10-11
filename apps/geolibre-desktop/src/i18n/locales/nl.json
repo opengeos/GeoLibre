@@ -7633,6 +7633,8 @@
     "mode3dExtrusion": "3D-extrusie",
     "noControls": "Stijlbesturingselementen zijn nog niet beschikbaar voor dit laagtype.",
     "tilesetSymbology": "Kleuren en filters gelden voor deze tileset op de 3D-globe.",
+    "tilesetHeightOffset": "Hoogteverschuiving (m)",
+    "tilesetHeightOffsetHint": "Verhoogt of verlaagt de tileset, bijvoorbeeld om de hoogte te corrigeren van een model dat van een nationaal CRS naar WGS84 is omgezet. Gebruik een negatieve waarde om te verlagen.",
     "selectedLayerType": "Geselecteerd laagtype: {{type}}",
     "footerDeck": "Wijzigingen worden direct toegepast op de deck.gl-laagstijl van DuckDB.",
     "footerMaplibre": "Wijzigingen worden direct toegepast op de paint-eigenschappen van MapLibre.",

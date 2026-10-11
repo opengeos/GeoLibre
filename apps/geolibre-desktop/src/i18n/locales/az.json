@@ -7697,6 +7697,8 @@
     "mode3dExtrusion": "3D ekstruziya",
     "noControls": "Bu lay növü üçün üslub idarəetmələri hələ mövcud deyil.",
     "tilesetSymbology": "Rənglər və filtrlər 3D qlobusda bu plitələr dəstinə tətbiq olunur.",
+    "tilesetHeightOffset": "Hündürlük sürüşməsi (m)",
+    "tilesetHeightOffsetHint": "Tayl dəstini qaldırır və ya endirir, məsələn milli CRS-dən WGS84-ə çevrilmiş modelin hündürlüyünü düzəltmək üçün. Endirmək üçün mənfi dəyər istifadə edin.",
     "selectedLayerType": "Seçilmiş layın növü: {{type}}",
     "footerDeck": "Dəyişikliklər DuckDB deck.gl layının üslubuna dərhal tətbiq olunur.",
     "footerMaplibre": "Dəyişikliklər MapLibre rəngləmə xassələrinə dərhal tətbiq olunur.",
