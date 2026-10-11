@@ -481,6 +481,9 @@ export async function queryArcGISRelatedRecords(
       : DEFAULT_RELATED_PAGE_SIZE;
   const records: ArcGISRelatedRecord[] = [];
   const seen = new Set<number>();
+  // The server may cap a page below the size asked for, so the next page
+  // starts after the rows actually received, never at a fixed stride.
+  let offset = 0;
   for (let page = 0; page < (paged ? MAX_RELATED_PAGES : 1); page++) {
     const url = withQuery(`${connection.layerUrl}/queryRelatedRecords`, {
       f: "json",
@@ -491,7 +494,7 @@ export async function queryArcGISRelatedRecords(
       ...(paged
         ? {
             orderByFields: `${relatedOid} ASC`,
-            resultOffset: String(page * pageSize),
+            resultOffset: String(offset),
             resultRecordCount: String(pageSize),
           }
         : {}),
@@ -503,6 +506,7 @@ export async function queryArcGISRelatedRecords(
     );
     if (json.error) throw serviceError(json.error, "ArcGIS could not read the related records.");
     if (!Array.isArray(json.relatedRecordGroups)) throw MESSAGES.invalidResponse();
+    let received = 0;
     for (const group of json.relatedRecordGroups as Array<Record<string, unknown>>) {
       if (group?.objectId !== objectId || !Array.isArray(group.relatedRecords))
         throw MESSAGES.invalidResponse();
@@ -512,6 +516,7 @@ export async function queryArcGISRelatedRecords(
         const id = valueOf(attributes as Record<string, unknown>, relatedOid);
         if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 0)
           throw MESSAGES.invalidResponse();
+        received++;
         // Overlapping pages can repeat a row; the first copy is kept.
         if (seen.has(id)) continue;
         seen.add(id);
@@ -519,6 +524,9 @@ export async function queryArcGISRelatedRecords(
       }
     }
     if (!json.exceededTransferLimit) return { records, complete: true };
+    // A capped page without rows cannot advance; report what was read.
+    if (!received) break;
+    offset += received;
   }
   return { records, complete: false };
 }

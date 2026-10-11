@@ -192,7 +192,8 @@ async function load({
       const asset = oid === 7 ? "H-001" : "H-002";
       const all = rows.filter((r) => r.HydrantAssetID === asset);
       const offset = Number(url.searchParams.get("resultOffset") ?? 0);
-      const count = Number(url.searchParams.get("resultRecordCount") ?? 2);
+      // The server's own cap is two rows per page, whatever was asked for.
+      const count = Math.min(Number(url.searchParams.get("resultRecordCount") ?? 2), 2);
       const page = all.slice(offset, offset + count);
       return Response.json({
         relatedRecordGroups: page.length
@@ -333,6 +334,25 @@ describe("queryArcGISRelatedRecords", () => {
     assert.equal(queries[0].searchParams.get("orderByFields"), "OBJECTID ASC");
     assert.equal(queries[1].searchParams.get("resultOffset"), "2");
     assert.equal(queries[0].searchParams.get("token"), "secret");
+  });
+
+  it("advances by the rows received when the server caps pages below the size asked", async () => {
+    const { layer, gets } = await load();
+    const [inspections] = arcGISRelationships(layer);
+    // The service serves one row per page although two were asked for.
+    const result = await queryArcGISRelatedRecords(layer.id, 7, inspections, {
+      ...inspectionInfo,
+      maxRecordCount: 3,
+    });
+    assert.deepEqual(
+      result.records.map((r) => r.objectId),
+      [1, 2, 3],
+    );
+    assert.equal(result.complete, true);
+    const offsets = gets
+      .filter((url) => url.pathname.endsWith("/queryRelatedRecords"))
+      .map((url) => url.searchParams.get("resultOffset"));
+    assert.deepEqual(offsets, ["0", "2"]);
   });
 
   it("reports a capped result as incomplete when the service cannot page", async () => {

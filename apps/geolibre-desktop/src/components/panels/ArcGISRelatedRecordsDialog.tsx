@@ -199,12 +199,18 @@ export function ArcGISRelatedRecordsDialog({
     { cancellable = true } = {},
   ) => {
     const abort = new AbortController();
+    // A write that finishes after the parent or relationship changed must not
+    // report into the new view; that view starts from the service's state.
+    const writeViewKey = viewKey;
     setTransfer({ label, abort: cancellable ? abort : null });
     let ok = false;
     try {
-      setStatuses(await work(abort.signal));
+      const next = await work(abort.signal);
+      if (viewKeyRef.current !== writeViewKey) return false;
+      setStatuses(next);
       ok = true;
     } catch (error) {
+      if (viewKeyRef.current !== writeViewKey) return false;
       if (!isAbort(error)) setStatuses([{ kind: "error", text: errorText(error) }]);
       // An unknown outcome may already be saved: close the editor so the same
       // insert cannot be sent again before the rows are read back.
