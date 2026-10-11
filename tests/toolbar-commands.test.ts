@@ -173,6 +173,7 @@ const FULL_REGISTRY_IDS = [
   "control.maptoolkit-logo",
   "control.effects",
   "control.directions",
+  "control.turn-by-turn",
   "control.search",
   "control.colorbar",
   "control.legend",
@@ -228,7 +229,7 @@ describe("buildToolbarCommands", () => {
     assert.equal(new Set(all).size, all.length);
   });
 
-  it("drops share, collaborate, and the canvas-reading AI commands when unavailable", () => {
+  it("drops share, collaborate, the canvas-reading AI commands, and navigation when unavailable", () => {
     const gated = ids({
       shareAvailable: false,
       collaboration: { enabled: false },
@@ -241,6 +242,7 @@ describe("buildToolbarCommands", () => {
       "proc.objectDetection",
       "proc.segmentEverything",
       "proc.lineOfSight",
+      "control.turn-by-turn",
       "proc.earth-engine",
     ]) {
       assert.ok(!gated.includes(id), `${id} should be gated out`);
@@ -255,6 +257,7 @@ describe("buildToolbarCommands", () => {
             "proc.objectDetection",
             "proc.segmentEverything",
             "proc.lineOfSight",
+            "control.turn-by-turn",
             "proc.earth-engine",
           ].includes(id),
       ),

@@ -75,6 +75,7 @@ const COMMAND_MENU_ITEMS: ReadonlyArray<readonly [string, string]> = [
   ["proc.earth-engine", "processing.earthEngine"],
   ["control.effects", "controls.atmosphereEffects"],
   ["control.directions", "controls.directions"],
+  ["control.turn-by-turn", "controls.navigation"],
   ["control.search", "controls.search"],
   ["control.colorbar", "controls.colorbar"],
   ["control.legend", "controls.legend"],

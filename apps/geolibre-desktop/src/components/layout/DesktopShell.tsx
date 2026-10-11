@@ -77,6 +77,7 @@ import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { BasemapExtractPanel } from "./BasemapExtractPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { LineOfSightPanel } from "./LineOfSightPanel";
+import { NavigationPanel } from "../navigation/NavigationPanel";
 import { MapContextMenu } from "./MapContextMenu";
 import { KnowledgeCardPanel } from "./KnowledgeCardPanel";
 import { KnowledgeCardConsentDialog } from "./KnowledgeCardConsentDialog";
@@ -860,6 +861,10 @@ export function DesktopShell({
                   onExplorePlace={handleExplorePlace}
                 />
                 <LineOfSightPanel
+                  mapControllerRef={mapControllerRef}
+                  mapReadyGeneration={mapReadyGeneration}
+                />
+                <NavigationPanel
                   mapControllerRef={mapControllerRef}
                   mapReadyGeneration={mapReadyGeneration}
                 />

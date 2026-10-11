@@ -760,6 +760,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
     tier: "intermediate",
   },
   {
+    id: "controls.navigation",
+    menuId: "controls",
+    labelKey: "toolbar.item.navigation",
+    tier: "intermediate",
+  },
+  {
     id: "controls.reverseGeocode",
     menuId: "controls",
     labelKey: "toolbar.item.reverseGeocode",

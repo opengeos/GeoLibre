@@ -1,0 +1,301 @@
+{
+  "routes": [
+    {
+      "voiceLocale": "en-US",
+      "weight_name": "auto",
+      "duration": 236.123,
+      "distance": 2189.199,
+      "legs": [
+        {
+          "via_waypoints": [],
+          "admins": [{ "iso_3166_1_alpha3": "USA", "iso_3166_1": "US" }],
+          "weight": 168.306,
+          "duration": 90.022,
+          "steps": [
+            {
+              "bannerInstructions": [
+                {
+                  "primary": {
+                    "type": "turn",
+                    "modifier": "left",
+                    "text": "Cumberland Avenue",
+                    "components": [{ "text": "Cumberland Avenue", "type": "text" }]
+                  },
+                  "distanceAlongGeometry": 44.121
+                }
+              ],
+              "voiceInstructions": [
+                {
+                  "ssmlAnnouncement": "<speak>Drive northwest on U.S. 4 41, Henley Street. Then Turn left onto Cumberland Avenue.</speak>",
+                  "announcement": "Drive northwest on U.S. 4 41, Henley Street. Then Turn left onto Cumberland Avenue.",
+                  "distanceAlongGeometry": 44.1
+                },
+                {
+                  "ssmlAnnouncement": "<speak>Turn left onto Cumberland Avenue.</speak>",
+                  "announcement": "Turn left onto Cumberland Avenue.",
+                  "distanceAlongGeometry": 11.0
+                }
+              ],
+              "intersections": [
+                {
+                  "entry": [true],
+                  "bearings": [333],
+                  "out": 0,
+                  "geometry_index": 0,
+                  "location": [-83.920767, 35.960573]
+                }
+              ],
+              "maneuver": {
+                "instruction": "Drive northwest on US 441/Henley Street.",
+                "type": "depart",
+                "bearing_after": 333,
+                "bearing_before": 0,
+                "location": [-83.920767, 35.960573]
+              },
+              "name": "Henley Street",
+              "duration": 2.9,
+              "distance": 44.121,
+              "driving_side": "right",
+              "weight": 3.393,
+              "mode": "driving",
+              "ref": "US 441",
+              "geometry": "ynzqcA|vba_DiM|GmAp@}DrA"
+            },
+            {
+              "bannerInstructions": [
+                {
+                  "primary": {
+                    "type": "arrive",
+                    "modifier": "right",
+                    "text": "Your destination is on the right.",
+                    "components": [{ "text": "Your destination is on the right.", "type": "text" }]
+                  },
+                  "distanceAlongGeometry": 812.938
+                }
+              ],
+              "voiceInstructions": [
+                {
+                  "ssmlAnnouncement": "<speak>Continue for 800 meters.</speak>",
+                  "announcement": "Continue for 800 meters.",
+                  "distanceAlongGeometry": 802.9
+                },
+                {
+                  "ssmlAnnouncement": "<speak>In 300 meters, Your destination will be on the right.</speak>",
+                  "announcement": "In 300 meters, Your destination will be on the right.",
+                  "distanceAlongGeometry": 343.0
+                },
+                {
+                  "ssmlAnnouncement": "<speak>Your destination is on the right.</speak>",
+                  "announcement": "Your destination is on the right.",
+                  "distanceAlongGeometry": 88.2
+                }
+              ],
+              "intersections": [
+                {
+                  "entry": [false, false, true, true],
+                  "in": 1,
+                  "bearings": [68, 160, 246, 338],
+                  "out": 2,
+                  "geometry_index": 3,
+                  "location": [-83.920977, 35.960936]
+                }
+              ],
+              "maneuver": {
+                "modifier": "left",
+                "instruction": "Turn left onto Cumberland Avenue.",
+                "type": "turn",
+                "bearing_after": 241,
+                "bearing_before": 340,
+                "location": [-83.920977, 35.960936]
+              },
+              "name": "Cumberland Avenue",
+              "duration": 87.122,
+              "distance": 812.938,
+              "driving_side": "right",
+              "weight": 164.912,
+              "mode": "driving",
+              "geometry": "oe{qcA`dca_D|CpL~AxElA|DfP`XlU~PnI~IpDfErDdGbEbItDdC|@tEnGp^xD|Zv@pGtDpYn@vEd@nCnL|v@vEnYrIvf@x@jEtF~XtF~Rp@fCb@dBnBxH\\tA`@zAtPnr@l@vC`AlDxD~M"
+            },
+            {
+              "intersections": [
+                {
+                  "bearings": [64],
+                  "entry": [true],
+                  "in": 0,
+                  "geometry_index": 35,
+                  "location": [-83.928909, 35.957845]
+                }
+              ],
+              "voiceInstructions": [],
+              "bannerInstructions": [],
+              "maneuver": {
+                "modifier": "right",
+                "instruction": "Your destination is on the right.",
+                "type": "arrive",
+                "bearing_after": 0,
+                "bearing_before": 244,
+                "location": [-83.928909, 35.957845]
+              },
+              "name": "Cumberland Avenue",
+              "duration": 0.0,
+              "distance": 0.0,
+              "driving_side": "right",
+              "weight": 0.0,
+              "mode": "driving",
+              "geometry": "iduqcAxsra_D??"
+            }
+          ],
+          "distance": 857.059,
+          "summary": "US 441, Cumberland Avenue"
+        },
+        {
+          "via_waypoints": [],
+          "admins": [{ "iso_3166_1_alpha3": "USA", "iso_3166_1": "US" }],
+          "weight": 265.329,
+          "duration": 146.101,
+          "steps": [
+            {
+              "bannerInstructions": [
+                {
+                  "primary": {
+                    "type": "turn",
+                    "modifier": "right",
+                    "text": "Tyson McGhee Park Street Southwest",
+                    "components": [{ "text": "Tyson McGhee Park Street Southwest", "type": "text" }]
+                  },
+                  "distanceAlongGeometry": 1206.062
+                }
+              ],
+              "voiceInstructions": [
+                {
+                  "ssmlAnnouncement": "<speak>Drive southwest on Cumberland Avenue.</speak>",
+                  "announcement": "Drive southwest on Cumberland Avenue.",
+                  "distanceAlongGeometry": 1206.1
+                },
+                {
+                  "ssmlAnnouncement": "<speak>In 300 meters, Turn right onto Tyson McGhee Park Street Southwest.</speak>",
+                  "announcement": "In 300 meters, Turn right onto Tyson McGhee Park Street Southwest.",
+                  "distanceAlongGeometry": 320.4
+                },
+                {
+                  "ssmlAnnouncement": "<speak>Turn right onto Tyson McGhee Park Street Southwest.</speak>",
+                  "announcement": "Turn right onto Tyson McGhee Park Street Southwest.",
+                  "distanceAlongGeometry": 79.3
+                }
+              ],
+              "intersections": [
+                {
+                  "entry": [true],
+                  "bearings": [244],
+                  "out": 0,
+                  "geometry_index": 0,
+                  "location": [-83.928909, 35.957845]
+                }
+              ],
+              "maneuver": {
+                "instruction": "Drive southwest on Cumberland Avenue.",
+                "type": "depart",
+                "bearing_after": 244,
+                "bearing_before": 0,
+                "location": [-83.928909, 35.957845]
+              },
+              "name": "Cumberland Avenue",
+              "duration": 122.975,
+              "distance": 1206.062,
+              "driving_side": "right",
+              "weight": 231.596,
+              "mode": "driving",
+              "geometry": "iduqcAxsra_Dv]pnAjAdFnA|EbY~fAlAlDr@bIzId]zA|FrA~ErMje@zF~RfG|Tr@rCd@dBxJ~^nIl[`GxTr@dCzOhj@|EbQlC|J~A~FlBvG|DtNxG`VxCtKbApDv@vClBdHdDvLbJz[Vz@bFbQ`@rAbDhHtA~ExFhSzE`QbCvItBpHxBrHnEhPrA~EtAlFjAlEvA|EZbA"
+            },
+            {
+              "bannerInstructions": [
+                {
+                  "primary": {
+                    "type": "arrive",
+                    "modifier": "left",
+                    "text": "Your destination is on the left.",
+                    "components": [{ "text": "Your destination is on the left.", "type": "text" }]
+                  },
+                  "distanceAlongGeometry": 126.078
+                }
+              ],
+              "voiceInstructions": [
+                {
+                  "ssmlAnnouncement": "<speak>Your destination is on the left.</speak>",
+                  "announcement": "Your destination is on the left.",
+                  "distanceAlongGeometry": 59.4
+                }
+              ],
+              "intersections": [
+                {
+                  "entry": [false, true, true],
+                  "in": 0,
+                  "bearings": [63, 244, 334],
+                  "out": 2,
+                  "geometry_index": 47,
+                  "location": [-83.941055, 35.953261]
+                }
+              ],
+              "maneuver": {
+                "modifier": "right",
+                "instruction": "Turn right onto Tyson McGhee Park Street Southwest.",
+                "type": "turn",
+                "bearing_after": 334,
+                "bearing_before": 243,
+                "location": [-83.941055, 35.953261]
+              },
+              "name": "Tyson McGhee Park Street Southwest",
+              "duration": 23.126,
+              "distance": 126.078,
+              "driving_side": "right",
+              "weight": 33.733,
+              "mode": "driving",
+              "geometry": "yelqcA|jjb_DmDfBcK|DyF`EiDdCaEfFyHnN{@bBgC~G"
+            },
+            {
+              "intersections": [
+                {
+                  "bearings": [120],
+                  "entry": [true],
+                  "in": 0,
+                  "geometry_index": 55,
+                  "location": [-83.941924, 35.954104]
+                }
+              ],
+              "voiceInstructions": [],
+              "bannerInstructions": [],
+              "maneuver": {
+                "modifier": "left",
+                "instruction": "Your destination is on the left.",
+                "type": "arrive",
+                "bearing_after": 0,
+                "bearing_before": 300,
+                "location": [-83.941924, 35.954104]
+              },
+              "name": "Tyson McGhee Park Street Southwest",
+              "duration": 0.0,
+              "distance": 0.0,
+              "driving_side": "right",
+              "weight": 0.0,
+              "mode": "driving",
+              "geometry": "ozmqcAfalb_D??"
+            }
+          ],
+          "distance": 1332.14,
+          "summary": "Cumberland Avenue, Tyson McGhee Park Street Southwest"
+        }
+      ],
+      "geometry": "ynzqcA|vba_DiM|GmAp@}DrA|CpL~AxElA|DfP`XlU~PnI~IpDfErDdGbEbItDdC|@tEnGp^xD|Zv@pGtDpYn@vEd@nCnL|v@vEnYrIvf@x@jEtF~XtF~Rp@fCb@dBnBxH\\tA`@zAtPnr@l@vC`AlDxD~Mv]pnAjAdFnA|EbY~fAlAlDr@bIzId]zA|FrA~ErMje@zF~RfG|Tr@rCd@dBxJ~^nIl[`GxTr@dCzOhj@|EbQlC|J~A~FlBvG|DtNxG`VxCtKbApDv@vClBdHdDvLbJz[Vz@bFbQ`@rAbDhHtA~ExFhSzE`QbCvItBpHxBrHnEhPrA~EtAlFjAlEvA|EZbAmDfBcK|DyF`EiDdCaEfFyHnN{@bBgC~G"
+    }
+  ],
+  "waypoints": [
+    { "distance": 6.738, "name": "US 441", "location": [-83.920767, 35.960573] },
+    { "distance": 19.083, "name": "Cumberland Avenue", "location": [-83.928909, 35.957845] },
+    {
+      "distance": 13.481,
+      "name": "Tyson McGhee Park Street Southwest",
+      "location": [-83.941924, 35.954104]
+    }
+  ],
+  "code": "Ok"
+}

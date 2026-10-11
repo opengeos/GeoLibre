@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { TERRAIN_SETTINGS_EVENT } from "@geolibre/map";
+import { rendererCapabilities, TERRAIN_SETTINGS_EVENT } from "@geolibre/map";
 import {
   DEFAULT_EFFECTS_SETTINGS,
   type EffectsSettings,
@@ -52,6 +52,7 @@ import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { isMaptoolkitBasemapActive } from "../../../lib/maptoolkit-basemap";
+import { useNavigationTool } from "../../../lib/navigation/store";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import {
   LOGO_CONTROL_IDS,
@@ -148,6 +149,8 @@ export function ControlsMenu({
     primaryRenderer,
   );
   const directionsDisabled = !directionsSupported && !directionsActive;
+  // Navigation draws MapLibre style layers, so it needs a MapLibre primary map.
+  const navigationSupported = rendererCapabilities(primaryRenderer).nativeMapInstance;
   // A plugin the live renderer does not support cannot activate, so its entry
   // is greyed with the reason rather than toggling nothing (or opening a panel
   // that stays empty). One already on stays reachable so it can be turned off.
@@ -227,6 +230,7 @@ export function ControlsMenu({
     show("controls.routeAnimation") ||
     show("controls.flightSimulator") ||
     show("controls.directions") ||
+    show("controls.navigation") ||
     show("controls.reverseGeocode");
   // Whether the middle group (panels) has any visible item. The separator that
   // precedes the Field Collection / Record Tour group is gated on this so it
@@ -398,6 +402,20 @@ export function ControlsMenu({
             >
               {t("toolbar.item.directions")}
               {directionsActive ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.navigation") && (
+            <DropdownMenuItem
+              disabled={!navigationSupported}
+              className={REASON_ON_HOVER}
+              title={
+                navigationSupported
+                  ? t("toolbar.item.navigationTooltip")
+                  : t("renderer.pluginUnsupported")
+              }
+              onClick={() => useNavigationTool.getState().openNavigation()}
+            >
+              {t("toolbar.item.navigation")}
             </DropdownMenuItem>
           )}
           {show("controls.reverseGeocode") && (

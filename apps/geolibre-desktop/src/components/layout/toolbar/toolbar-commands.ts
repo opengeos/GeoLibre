@@ -20,8 +20,8 @@ import {
   Grid2x2,
   Info,
   Keyboard,
-  LayoutTemplate,
   Layers,
+  LayoutTemplate,
   Link2,
   LocateFixed,
   MapPin,
@@ -34,6 +34,7 @@ import {
   Save,
   Shapes,
   Share2,
+  Signpost,
   SlidersHorizontal,
   Sparkles,
   Sun,
@@ -53,6 +54,7 @@ import type { Command } from "../../../lib/commands";
 import { CVD_MODE_LABEL_KEYS, useCvdPreviewStore } from "../../../lib/cvd-preview-store";
 import { CVD_MODES } from "../../../lib/cvd-simulation";
 import { useLineOfSightTool } from "../../../lib/line-of-sight-store";
+import { useNavigationTool } from "../../../lib/navigation/store";
 import { masHidesDataSource } from "../../../lib/mas-build";
 import { openObiaWorkbench } from "../../../lib/obia/obia-panel";
 import { pluginDisplayName } from "../../../lib/plugin-display-name";
@@ -611,6 +613,20 @@ export function buildToolbarCommands(context: ToolbarCommandContext): Command[] 
       group: t("toolbar.commandGroup.controls"),
       run: consent.handleToggleDirections,
     },
+    // Draws transient MapLibre style layers, so like Line of sight it is
+    // dropped where no MapLibre map exists rather than offered as a no-op.
+    ...(!capabilities.nativeMapInstance
+      ? []
+      : [
+          {
+            id: "control.turn-by-turn",
+            title: t("toolbar.item.navigation"),
+            group: t("toolbar.commandGroup.controls"),
+            keywords: "navigation turn by turn directions route routing gps drive walk bike voice",
+            icon: Signpost,
+            run: () => useNavigationTool.getState().openNavigation(),
+          },
+        ]),
     {
       id: "control.search",
       title: t("toolbar.command.toggleSearch"),
