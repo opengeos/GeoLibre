@@ -437,20 +437,14 @@ export function useNavigationDrive({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [phase]);
 
-  // Closing the tool ends the drive and puts the camera back.
+  // Closing the tool ends the drive: tracking, reroute, wake lock, voice, arrow.
   useEffect(
     () => () => {
-      const d = drive.current;
-      d.stopTracking?.();
-      d.stopTracking = null;
-      d.reroute?.abort();
-      d.marker?.remove();
-      d.marker = null;
-      void d.wakeLock?.release().catch(() => undefined);
-      d.wakeLock = null;
-      stopSpeaking();
+      stopTracking();
+      drive.current.marker?.remove();
+      drive.current.marker = null;
     },
-    [],
+    [stopTracking],
   );
 
   const recenter = useCallback(() => {
