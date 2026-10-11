@@ -226,7 +226,9 @@ export function updateNavigation(
     ]);
   }
   const { corridor, far } = offRouteCorridor(route.mode, fix.accuracy);
-  projection ??= projectOntoPolyline(route.coordinates, route.cumulative, point);
+  // Once the drive has progress it stays in its window: matching the whole
+  // route could land on a later leg of a route that crosses itself.
+  if (!prev) projection ??= projectOntoPolyline(route.coordinates, route.cumulative, point);
   if (!projection) return { state, events };
   if (!prev) {
     // The first fix is matched near the start whenever that is about as close

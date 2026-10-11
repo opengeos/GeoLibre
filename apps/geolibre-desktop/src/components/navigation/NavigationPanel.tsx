@@ -43,6 +43,10 @@ import { DriveView } from "./DriveView";
 import { PlanView } from "./PlanView";
 import { useNarrowMap } from "./useNarrowMap";
 import { useNavigationDrive } from "./useNavigationDrive";
+import { useRouteRequest } from "./useRouteRequest";
+
+/** Zoom shown around the device's location, close enough to pick a street. */
+const MY_LOCATION_ZOOM = 15;
 
 /**
  * The turn-by-turn navigation tool: plan a route between points picked on the
@@ -199,70 +203,23 @@ function NavigationTool({
 
   // --- Routing ---------------------------------------------------------------
 
-  const complete = waypoints.every((w): w is NavPoint => w !== null);
-  const waypointKey = waypoints.map((w) => (w ? `${w.lng},${w.lat}` : "-")).join(";");
-  const avoidKey = `${settings.avoid.tolls}${settings.avoid.highways}${settings.avoid.ferries}`;
-  const routeRequestRef = useRef(0);
-  useEffect(() => {
-    if (phase !== "plan") return;
-    if (!complete) {
-      setRoutes([]);
-      setStatus("idle");
-      return;
-    }
-    const points = waypoints as NavPoint[];
-    const controller = new AbortController();
-    const token = ++routeRequestRef.current;
-    setStatus("loading");
-    const timer = setTimeout(() => {
-      const body = buildNavRouteRequest({
-        waypoints: points,
-        mode: settings.mode,
-        language,
-        imperial,
-        avoid: settings.avoid,
-        alternates: 2,
-      });
-      requestNavigationRoute(getRoutingConfig().endpoint, body, controller.signal)
-        .then((response) => {
-          if (controller.signal.aborted || token !== routeRequestRef.current) return;
-          const parsed = parseNavRoutes(response, settings.mode);
-          setRoutes(parsed);
-          setSelected(0);
-          setStatus(parsed.length > 0 ? "idle" : "noRoute");
-          // On a phone the full card would hide the route: fold it to the bar
-          // that still carries the time, Start, and Simulate.
-          if (parsed.length > 0 && narrowRef.current) setMinimized(true);
-          const bounds = boundsOf(parsed.flatMap((r) => r.coordinates));
-          const map = getMap();
-          if (bounds && map) {
-            const container = map.getContainer();
-            const rtl = getComputedStyle(container).direction === "rtl";
-            map.fitBounds(bounds, {
-              padding: planPadding(container.clientWidth, rtl),
-              maxZoom: 16,
-              duration: 600,
-            });
-          }
-        })
-        .catch((error: unknown) => {
-          if (controller.signal.aborted || token !== routeRequestRef.current) return;
-          setRoutes([]);
-          // Valhalla answers 400 when it finds no path between the points.
-          if (error instanceof RoutingRequestError && error.status === 400) setStatus("noRoute");
-          else {
-            logNavigation("Navigation route request failed.", error);
-            setStatus("error");
-          }
-        });
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-    // waypointKey and avoidKey stand in for the arrays they are built from.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, complete, waypointKey, settings.mode, avoidKey, language, imperial, getMap]);
+  // On a phone the full card would hide the route: fold it to the bar that
+  // still carries the time, Start, and Simulate.
+  const onRoutesFound = useCallback(() => {
+    if (narrowRef.current) setMinimized(true);
+  }, []);
+  useRouteRequest({
+    enabled: phase === "plan",
+    waypoints,
+    settings,
+    language,
+    imperial,
+    getMap,
+    setRoutes,
+    setSelected,
+    setStatus,
+    onRoutesFound,
+  });
 
   // --- Map interaction while planning ----------------------------------------
 
@@ -347,9 +304,17 @@ function NavigationTool({
         const next = current.slice();
         next[0] = { lng: position.coords.longitude, lat: position.coords.latitude, mine: true };
         setWaypoints(next);
-        if (pick === 0 || pick === null) {
-          const empty = next.findIndex((w) => w === null);
-          setPickIndex(empty === -1 ? null : empty);
+        const empty = next.findIndex((w) => w === null);
+        if (pick === 0 || pick === null) setPickIndex(empty === -1 ? null : empty);
+        // Show where you are, so the next point can be picked around it. With
+        // every point placed the route fit frames the trip instead.
+        const map = getMap();
+        if (map && empty !== -1) {
+          map.flyTo({
+            center: [position.coords.longitude, position.coords.latitude],
+            zoom: Math.max(map.getZoom(), MY_LOCATION_ZOOM),
+            duration: 800,
+          });
         }
       })
       .catch((error: unknown) => {
@@ -357,7 +322,7 @@ function NavigationTool({
         setLocateError(t("navigation.locationError"));
       })
       .finally(() => setLocating(false));
-  }, [t]);
+  }, [getMap, t]);
 
   // A point placed from a typed address: fill the slot, then move on to the
   // next empty one, as a map pick does.

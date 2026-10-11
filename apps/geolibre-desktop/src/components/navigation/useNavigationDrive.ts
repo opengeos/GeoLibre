@@ -6,8 +6,6 @@ import { watchPosition } from "../../lib/geolocation";
 import {
   followZoom,
   initialNavState,
-  simulatedFix,
-  simulatedSpeed,
   updateNavigation,
   type NavEvent,
   type NavFix,
@@ -17,6 +15,7 @@ import {
 import {
   createPuckElement,
   requestScreenWakeLock,
+  startSimulation,
   type ScreenWakeLock,
 } from "../../lib/navigation/device";
 import { sliceAlong } from "../../lib/navigation/geometry";
@@ -51,6 +50,8 @@ interface DriveRefs {
   lastFix: NavFix | null;
   marker: maplibregl.Marker | null;
   wakeLock: ScreenWakeLock | null;
+  /** Bumped by every start and end, so a start superseded mid-await bails out. */
+  startId: number;
 }
 
 /** What the drive needs from the planner. */
@@ -111,6 +112,7 @@ export function useNavigationDrive({
     lastFix: null,
     marker: null,
     wakeLock: null,
+    startId: 0,
   });
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -301,6 +303,7 @@ export function useNavigationDrive({
       if (!route || !map) return;
       const d = drive.current;
       stopTracking();
+      const startId = ++d.startId;
       d.route = route;
       d.state = initialNavState();
       d.targets = (waypoints.slice(1) as NavPoint[]).filter(Boolean);
@@ -329,27 +332,14 @@ export function useNavigationDrive({
       // Keep the screen on while driving, where the platform allows it.
       const lock = await requestScreenWakeLock();
       // The drive may have ended (or the tool closed) during the await.
-      if (d.route !== route) {
+      if (d.startId !== startId) {
         void lock?.release().catch(() => undefined);
         return;
       }
       d.wakeLock = lock;
 
       if (simulate) {
-        let along = 0;
-        handleFix(simulatedFix(route, 0, Date.now()));
-        const timer = setInterval(() => {
-          const current = d.route;
-          if (!current) return;
-          along = Math.min(
-            current.distance,
-            along +
-              simulatedSpeed(current, along) * settingsRef.current.simSpeed * (SIM_TICK_MS / 1000),
-          );
-          const fix = simulatedFix(current, along, Date.now());
-          handleFix({ ...fix, speed: (fix.speed ?? 0) * settingsRef.current.simSpeed });
-        }, SIM_TICK_MS);
-        d.stopTracking = () => clearInterval(timer);
+        d.stopTracking = startSimulation(route, () => settingsRef.current.simSpeed, handleFix);
         return;
       }
 
@@ -363,7 +353,7 @@ export function useNavigationDrive({
           },
           { enableHighAccuracy: true, maximumAge: 0, timeout: 30_000 },
         );
-        if (d.route !== route || !d.marker) {
+        if (d.startId !== startId || !d.marker) {
           unsubscribe();
           return;
         }
@@ -379,6 +369,7 @@ export function useNavigationDrive({
   const endDrive = useCallback(() => {
     stopTracking();
     const d = drive.current;
+    d.startId += 1;
     d.marker?.remove();
     d.marker = null;
     d.route = null;
@@ -441,6 +432,9 @@ export function useNavigationDrive({
   useEffect(
     () => () => {
       stopTracking();
+      // A wake lock still being requested sees the drive gone and releases it.
+      drive.current.route = null;
+      drive.current.startId += 1;
       drive.current.marker?.remove();
       drive.current.marker = null;
     },
