@@ -3653,7 +3653,11 @@ export class CesiumLayerSync {
     const offset = Number.isFinite(raw) ? raw : 0;
     if ((entry.appliedAltitude ?? 0) === offset) return;
     const { Cesium } = this;
-    for (const tileset of this.entryTilesets(entry)) {
+    const tilesets = this.entryTilesets(entry);
+    // Nothing to move yet (an I3S provider before its sub-layers exist): leave
+    // the offset unrecorded so the next sync tries again.
+    if (tilesets.length === 0) return;
+    for (const tileset of tilesets) {
       let anchor = this.tilesetAnchors.get(tileset);
       if (!anchor) {
         anchor = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
