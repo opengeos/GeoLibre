@@ -57,6 +57,7 @@ import { cogEngineDefaults } from "./cog-render-engine";
 import { appendDiagnostic } from "./diagnostics";
 import { createExternalNativeStoreLayer } from "./external-native-layer";
 import { resolvePluginAssetUrlForLoadedPlugin } from "./external-plugins";
+import { isDesktopRuntime } from "./is-mobile";
 import { fetchNativeWithWebviewFallback } from "./native-fetch-fallback";
 import { fetchUrlBytes } from "./native-http";
 import { nativeWmsTileUrl } from "./native-wms-url";
@@ -471,10 +472,10 @@ export function createAppAPI(
       }),
     fetchArrayBuffer: fetchRemoteArrayBuffer,
     nativeFetch: isTauriRuntime() ? pluginNativeFetch() : undefined,
-    downloadRemoteFile: isTauriRuntime()
+    downloadRemoteFile: isDesktopRuntime()
       ? createRemoteDownload(invoke, () => new Channel<RemoteDownloadProgress>())
       : undefined,
-    pickDownloadFolder: isTauriRuntime()
+    pickDownloadFolder: isDesktopRuntime()
       ? () => invoke<GeoLibreDownloadFolder | null>("pick_download_folder")
       : undefined,
     openSpaceborneLidarUrl: (url: string, fileName: string, headers?: Record<string, string>) =>
