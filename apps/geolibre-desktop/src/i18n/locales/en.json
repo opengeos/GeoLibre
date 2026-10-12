@@ -4970,7 +4970,7 @@
     "download": "Download",
     "adding": "Adding {{asset}}…",
     "added": "Added {{asset}} to the map.",
-    "addUnsupported": "Only GeoTIFF/COG, GeoJSON, GeoParquet, PMTiles, and Zarr assets can be added to the map",
+    "addUnsupported": "Only GeoTIFF/COG, GeoJSON, GeoParquet, PMTiles, Zarr, and COPC/LAZ/EPT point cloud assets can be added to the map",
     "addFailed": "Could not add asset",
     "addNoSourceLayers": "This archive lists no layers to draw",
     "addNoTarget": "This asset lists nothing to draw",
@@ -4987,6 +4987,7 @@
     "formatPmtiles": "PMTiles",
     "formatParquet": "Parquet",
     "formatZarr": "Zarr",
+    "formatPointCloud": "Point cloud",
     "formatUnknown": "Unknown format",
     "notAddable": "not addable"
   },

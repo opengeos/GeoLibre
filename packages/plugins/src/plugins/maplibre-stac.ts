@@ -55,7 +55,7 @@ import {
 import { buildCatalogTree } from "./stac-catalog-tree";
 import { el, setDisabled } from "../panel-dom";
 import { addVectorLayersFromUrl } from "./maplibre-vector";
-import { addZarrRasterLayer } from "./maplibre-components";
+import { addLidarLayerFromUrl, addZarrRasterLayer } from "./maplibre-components";
 import {
   icechunkLayerUrl,
   icechunkTimeAttributesReader,
@@ -250,6 +250,7 @@ export interface StacLabels {
   formatPmtiles: string;
   formatParquet: string;
   formatZarr: string;
+  formatPointCloud: string;
   formatUnknown: string;
   addNoTarget: string;
   addIcechunkFailed: string;
@@ -345,7 +346,7 @@ let labels: StacLabels = {
   add: "Add",
   download: "Download",
   addUnsupported:
-    "Only GeoTIFF/COG, GeoJSON, GeoParquet, PMTiles, and Zarr assets can be added to the map",
+    "Only GeoTIFF/COG, GeoJSON, GeoParquet, PMTiles, Zarr, and COPC/LAZ/EPT point cloud assets can be added to the map",
   addFailed: "Could not add asset",
   addNoSourceLayers: "This archive lists no layers to draw",
   cogUnsupported: "This GeoLibre host cannot visualize remote GeoTIFF assets",
@@ -354,6 +355,7 @@ let labels: StacLabels = {
   formatPmtiles: "PMTiles",
   formatParquet: "Parquet",
   formatZarr: "Zarr",
+  formatPointCloud: "Point cloud",
   formatUnknown: "Unknown format",
   addNoTarget: "This asset lists nothing to draw",
   addIcechunkFailed: "This Icechunk repository could not be opened",
@@ -694,6 +696,8 @@ function assetFormatLabel(asset: StacAsset): string {
       return labels.formatParquet;
     case "zarr":
       return labels.formatZarr;
+    case "pointcloud":
+      return labels.formatPointCloud;
     case null:
       return labels.formatUnknown;
   }
@@ -886,6 +890,15 @@ async function visualizeAsset(
       const href = await readableStacAssetHref(access, asset.href, signal);
       const layerId = await appRef.addCogLayer(name, href, cogOptions);
       rememberAssetAccess(layerId, access);
+      return;
+    }
+    case "pointcloud": {
+      if (!appRef) throw new Error(labels.addFailed);
+      // The LiDAR control streams COPC and EPT by URL (range reads / octree nodes). Signed for a
+      // private Planetary Computer container, but not remembered: only raster sync re-signs on
+      // restore, and recording the access would swap the layer's URL for the unsigned one.
+      const href = await readableHref(connection, item, asset.href, signal);
+      if (!(await addLidarLayerFromUrl(appRef, href))) throw new Error(labels.addFailed);
       return;
     }
     case null:

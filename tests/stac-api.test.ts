@@ -2478,3 +2478,27 @@ test("an asset's own storage options outrank the ones beside them", async () => 
     "https://assetaccount.blob.core.windows.net/era5/a.zarr",
   );
 });
+
+test("assetFormat recognizes COPC, LAZ, and EPT point cloud assets", () => {
+  // Data to Science (stac.d2s.org) publishes COPC without a media type.
+  assert.equal(assetFormat({ href: "https://example.com/flight.copc.laz" }), "pointcloud");
+  assert.equal(assetFormat({ href: "https://example.com/tile.LAZ?sig=1" }), "pointcloud");
+  assert.equal(assetFormat({ href: "https://example.com/tile.las" }), "pointcloud");
+  assert.equal(
+    assetFormat({ href: "https://example.com/blob", type: "application/vnd.laszip+copc" }),
+    "pointcloud",
+  );
+  // USGS 3DEP on AWS: an untyped asset pointing at an Entwine Point Tiles root.
+  assert.equal(
+    assetFormat({
+      href: "https://s3-us-west-2.amazonaws.com/usgs-lidar-public/AK_BrooksCamp_2012/ept.json",
+    }),
+    "pointcloud",
+  );
+  assert.equal(
+    assetFormat({ href: "https://example.com/x/ept.json", type: "application/json" }),
+    "pointcloud",
+  );
+  assert.equal(assetFormat({ href: "https://example.com/concept.json" }), null);
+  assert.equal(assetFormat({ href: "s3://bucket/tile.copc.laz" }), null);
+});

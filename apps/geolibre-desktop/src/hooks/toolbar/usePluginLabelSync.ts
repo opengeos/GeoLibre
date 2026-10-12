@@ -1025,6 +1025,7 @@ export function usePluginLabelSync(): void {
       formatPmtiles: t("stacPlugin.formatPmtiles"),
       formatParquet: t("stacPlugin.formatParquet"),
       formatZarr: t("stacPlugin.formatZarr"),
+      formatPointCloud: t("stacPlugin.formatPointCloud"),
       formatUnknown: t("stacPlugin.formatUnknown"),
       addNoTarget: t("stacPlugin.addNoTarget"),
       addIcechunkFailed: t("stacPlugin.addIcechunkFailed"),

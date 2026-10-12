@@ -940,7 +940,7 @@ export function itemBbox(item: StacItem): [number, number, number, number] | und
 }
 
 /** A format {@link assetFormat} recognizes, and {@link visualizeAsset} knows how to add. */
-export type StacAssetFormat = "pmtiles" | "geojson" | "cog" | "parquet" | "zarr";
+export type StacAssetFormat = "pmtiles" | "geojson" | "cog" | "parquet" | "zarr" | "pointcloud";
 export type StacAssetDisplayFormat = StacAssetFormat;
 
 interface AssetFormatRule {
@@ -961,6 +961,10 @@ const ASSET_FORMATS: readonly AssetFormatRule[] = [
   // An Icechunk repository is a Zarr hierarchy behind a manifest; isIcechunkAsset routes it to its
   // own reader.
   { format: "zarr", mediaType: "x-icechunk", extension: /\.icechunk(\/|$|\?)/i },
+  // LAS/LAZ/COPC (`application/vnd.laszip+copc`, `application/vnd.laszip`, `application/vnd.las`)
+  // and Entwine Point Tiles, whose root is an `ept.json` catalogs type as plain JSON or not at all
+  // (USGS 3DEP on AWS). The LiDAR control streams COPC and EPT by URL.
+  { format: "pointcloud", mediaType: "vnd.las", extension: /(\.(laz|las)|\/ept\.json)($|\?)/i },
 ];
 
 export function assetDisplayFormat(asset: StacAsset): StacAssetDisplayFormat | null {
