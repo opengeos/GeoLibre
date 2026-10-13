@@ -124,6 +124,7 @@ import {
   openFloatingPanel,
   closeFloatingPanel,
   getOpenFloatingPanels,
+  getGeometryEditTargetLayerId,
   setArcGisPortalAuth,
   setLocalizedErrorTranslator,
 } from "@geolibre/plugins";
@@ -1227,6 +1228,7 @@ const appApiHost: AppApiHost = {
   openFloatingPanel,
   closeFloatingPanel,
   getOpenFloatingPanels,
+  getGeometryEditTargetLayerId,
 };
 
 /**

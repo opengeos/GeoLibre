@@ -553,6 +553,25 @@ export interface GeoLibreAppAPI {
 
   setBasemap: (styleUrl: string) => void;
   addGeoJsonLayer: (name: string, data: FeatureCollection, sourcePath?: string) => string;
+  /**
+   * Replace a GeoJSON layer's features, keeping its id, name, place in the
+   * layer order, group, style and visibility, the way saving a GeoEditor
+   * session or refreshing a layer does. For a plugin that shows data held
+   * elsewhere and needs to show its current version, without removing and
+   * re-adding the layer. Returns false, changing nothing, when there is no
+   * GeoJSON layer with that id or the layer is being edited in the GeoEditor.
+   * Typed optional for forward-compatibility with host variants, so call it
+   * with optional chaining.
+   */
+  updateGeoJsonLayer?: (layerId: string, data: FeatureCollection) => boolean;
+  /**
+   * Remove a layer, as the Layers panel's remove action does: references to it
+   * (selection, legend, panes) are cleared, and a GeoEditor session on it is
+   * ended without saving. Does nothing when there is no layer with that id.
+   * Typed optional for forward-compatibility with host variants, so call it
+   * with optional chaining.
+   */
+  removeLayer?: (layerId: string) => void;
   listLayers?: () => GeoLibreLayerSummary[];
   getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
   /**

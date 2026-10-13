@@ -140,6 +140,10 @@ export interface GeoLibreAppAPI {
     data: FeatureCollection,
     sourcePath?: string
   ) => string;
+  // Replace a GeoJSON layer's features in place, or remove a layer.
+  // See "Updating and removing layers".
+  updateGeoJsonLayer?: (layerId: string, data: FeatureCollection) => boolean;
+  removeLayer?: (layerId: string) => void;
   listLayers?: () => GeoLibreLayerSummary[];
   getLayerFeatures?: (layerId: string) => Feature<Geometry | null>[];
   // Dress a layer with an SLD, QML or Mapbox GL style. See "Layer styles".
@@ -760,6 +764,29 @@ Replacing one active selection gesture with another keeps
 
 Both methods are optional so plugins remain compatible with older hosts.
 
+
+## Updating and removing layers
+
+A plugin that shows data held elsewhere, such as records in a remote service, can keep its layer current without removing and re-adding it. `updateGeoJsonLayer` replaces a GeoJSON layer's features, as saving a GeoEditor session or refreshing a layer does: the layer keeps its id, name, place in the layer order, group, style and visibility. `removeLayer` removes a layer the way the Layers panel does.
+
+```typescript
+const layerId = app.addGeoJsonLayer("Survey records", await fetchRecords());
+
+async function refresh() {
+  // false when the layer is gone, isn't GeoJSON, or is being edited.
+  if (!app.updateGeoJsonLayer?.(layerId, await fetchRecords())) {
+    // Retry after the edit session ends, or tell the user.
+  }
+}
+
+function deactivate() {
+  app.removeLayer?.(layerId);
+}
+```
+
+- **Edit sessions win.** While the layer is open in the GeoEditor, `updateGeoJsonLayer` returns `false` and changes nothing, so the user's unsaved edits aren't overwritten.
+- **Removal is complete.** `removeLayer` clears the selection, legend and other references to the layer, and ends a GeoEditor session on it without saving. Unknown ids are ignored.
+- Both are optional, so call them with optional chaining for older hosts.
 
 ## Layer groups
 

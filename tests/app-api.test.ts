@@ -190,6 +190,7 @@ function fakeHost(overrides: Partial<AppApiHost> = {}): { host: AppApiHost; call
     openFloatingPanel,
     closeFloatingPanel,
     getOpenFloatingPanels,
+    getGeometryEditTargetLayerId: () => null,
     ...overrides,
   } as unknown as AppApiHost;
   return { host, calls };
@@ -352,6 +353,70 @@ describe("plugin app API layers", () => {
       [id],
     );
     assert.deepEqual(seen, [[id]]);
+  });
+
+  it("replaces a GeoJSON layer's features in place, keeping its place and settings", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const empty = { type: "FeatureCollection" as const, features: [] };
+    const first = api.addGeoJsonLayer("First", empty, "service://records/first");
+    const second = api.addGeoJsonLayer("Second", empty);
+    useAppStore.getState().updateLayer(first, { opacity: 0.4, visible: false });
+    const point = {
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [1, 2] },
+      properties: { name: "kept" },
+    };
+
+    assert.equal(
+      api.updateGeoJsonLayer(first, { type: "FeatureCollection", features: [point] }),
+      true,
+    );
+
+    const { layers } = useAppStore.getState();
+    const layer = layers.find((item) => item.id === first);
+    assert.deepEqual(layer?.geojson?.features, [point]);
+    assert.equal(layer?.name, "First");
+    assert.equal(layer?.opacity, 0.4);
+    assert.equal(layer?.visible, false);
+    assert.equal(layer?.sourcePath, "service://records/first");
+    assert.deepEqual(
+      layers.map((item) => item.id),
+      [first, second],
+    );
+  });
+
+  it("refuses to replace the features of an unknown, non-GeoJSON or edited layer", () => {
+    const empty = { type: "FeatureCollection" as const, features: [] };
+    const point = {
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [1, 2] },
+      properties: {},
+    };
+    const api = createAppAPI(undefined, fakeHost().host);
+    const tiles = api.addTileLayer("Tiles", "https://tiles.example.com/{z}/{x}/{y}.png");
+    assert.equal(api.updateGeoJsonLayer("missing", empty), false);
+    assert.equal(api.updateGeoJsonLayer(tiles, empty), false);
+
+    const edited = api.addGeoJsonLayer("Edited", { type: "FeatureCollection", features: [point] });
+    const editingApi = createAppAPI(
+      undefined,
+      fakeHost({ getGeometryEditTargetLayerId: () => edited }).host,
+    );
+    assert.equal(editingApi.updateGeoJsonLayer(edited, empty), false);
+    const layer = useAppStore.getState().layers.find((item) => item.id === edited);
+    assert.deepEqual(layer?.geojson?.features, [point], "the open session's data is left alone");
+  });
+
+  it("removes a layer and the selection on it, and ignores unknown ids", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const id = api.addGeoJsonLayer("Points", { type: "FeatureCollection", features: [] });
+    assert.equal(useAppStore.getState().selectedLayerId, id);
+
+    api.removeLayer(id);
+    api.removeLayer("missing");
+
+    assert.deepEqual(api.getLayers(), []);
+    assert.notEqual(useAppStore.getState().selectedLayerId, id);
   });
 
   it("stores a tile layer without leaking beforeLayerId into its options", () => {
