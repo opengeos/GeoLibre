@@ -88,6 +88,7 @@ export async function restoreNativeRasterFiles(
   reader: LocalRasterFileReader | null,
 ): Promise<string[]> {
   const unrestorable: string[] = [];
+  const generation = useAppStore.getState().projectGeneration;
   for (const layer of useAppStore.getState().layers) {
     const path = layer.metadata.localFilePath;
     if (
@@ -119,5 +120,7 @@ export async function restoreNativeRasterFiles(
       if (current()) unrestorable.push(layer.name);
     }
   }
-  return unrestorable;
+  // A project opened while a read was pending is not the one these names
+  // came from, so report nothing rather than describe the wrong project.
+  return useAppStore.getState().projectGeneration === generation ? unrestorable : [];
 }

@@ -930,8 +930,9 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
       if (
         control === rasterControl &&
         useAppStore.getState().projectGeneration === restoreGeneration
-      )
+      ) {
         reportUnrestorableRasters(unrestorable);
+      }
       // Defer one task so this sync runs after the deferred panel expand in
       // applyRestoredRasterPanelState: with no pending rasters, allSettled
       // resolves as a microtask, and syncing then would briefly write the
