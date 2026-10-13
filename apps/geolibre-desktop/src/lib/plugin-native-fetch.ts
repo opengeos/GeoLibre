@@ -75,6 +75,16 @@ interface ExpectedOutcome {
   statuses: Set<number>;
 }
 
+/**
+ * The Diagnostics record for one native request.
+ *
+ * @param method - The HTTP method.
+ * @param url - The request URL; credentials in it are redacted.
+ * @param durationMs - How long the request took.
+ * @param outcome - The response status, or the error the request failed with.
+ * @param expected - What the plugin marked as expected, which records as info.
+ * @returns The record to append.
+ */
 function diagnosticRecord(
   method: string,
   url: string,

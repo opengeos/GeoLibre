@@ -441,6 +441,13 @@ function emitNetworkResponse(observation: NetworkResponseObservation): void {
   }
 }
 
+/**
+ * Capture the app's fetch requests, console errors and warnings, and uncaught
+ * errors into Diagnostics. Calls are reference-counted, so nested installs
+ * share one capture.
+ *
+ * @returns A function that removes this install's capture.
+ */
 export function installDiagnosticsCapture(): () => void {
   captureRefCount += 1;
   if (captureCleanup) {
