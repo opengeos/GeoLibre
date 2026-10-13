@@ -9396,7 +9396,14 @@
     "cogConvertTooLarge": "\"{{name}}\" is too large to convert safely in the browser. Convert it to a Cloud-Optimized GeoTIFF with gdal_translate or rio cogeo, then load the result.",
     "cogConvertFailed": "Could not convert \"{{name}}\" to a Cloud-Optimized GeoTIFF. Try converting it with gdal_translate or rio cogeo, then load the result.",
     "rasterDownloadFailed": "Could not download \"{{name}}\". The server may be slow, unreachable, or blocking cross-origin requests, or the file may be too large to hold in memory. Check the URL and try again.",
-    "rasterNotGeotiff": "\"{{name}}\" did not return a GeoTIFF. The server may have sent an error or login page instead. Check the URL and try again."
+    "rasterNotGeotiff": "\"{{name}}\" did not return a GeoTIFF. The server may have sent an error or login page instead. Check the URL and try again.",
+    "localRasterNotSaved_one": "{{count}} local raster layer was not saved with the project",
+    "localRasterNotSaved_other": "{{count}} local raster layers were not saved with the project",
+    "localRasterNotSavedDesc": "{{names}} came from a local file, and a project file does not hold raster data. Add the file again after reopening the project, or use a remote COG URL instead.",
+    "localRasterNotSavedDescDesktop": "{{names}} has no file on disk for the project to reference (for example, a tool output). Save it as a GeoTIFF file and add that file to keep it in the project.",
+    "localRasterNotRestored_one": "{{count}} local raster layer could not be restored",
+    "localRasterNotRestored_other": "{{count}} local raster layers could not be restored",
+    "localRasterNotRestoredDesc": "{{names}} came from a local file whose data the project does not hold, or the file could not be read. Add the file again."
   },
   "attributeForm": {
     "error": {

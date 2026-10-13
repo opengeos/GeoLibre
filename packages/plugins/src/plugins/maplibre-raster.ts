@@ -298,8 +298,40 @@ export interface PickedLocalRaster {
  */
 export type LocalRasterPicker = () => Promise<PickedLocalRaster[]>;
 
+/**
+ * Told the names of local rasters a reopened project could not reload, so the
+ * host can tell the user (the plugin layer has no notification API).
+ */
+export type UnrestorableRasterHandler = (layerNames: string[]) => void;
+
 let localRasterFileReader: LocalRasterFileReader | null = null;
 let localRasterPicker: LocalRasterPicker | null = null;
+let unrestorableRasterHandler: UnrestorableRasterHandler | null = null;
+
+/**
+ * Register (or clear, with `null`) the handler told which local rasters a
+ * reopened project dropped because their data was not saved (GeoLibre#3120).
+ *
+ * @param handler - The handler, or `null` to unregister.
+ */
+export function setUnrestorableRasterHandler(handler: UnrestorableRasterHandler | null): void {
+  unrestorableRasterHandler = handler;
+}
+
+/**
+ * Hands the dropped layer names to the registered handler, if any. A handler
+ * failure is logged and never aborts the restore that reported it.
+ *
+ * @param layerNames - The dropped layers' names; nothing is reported when empty.
+ */
+function reportUnrestorableRasters(layerNames: string[]): void {
+  if (layerNames.length === 0 || !unrestorableRasterHandler) return;
+  try {
+    unrestorableRasterHandler(layerNames);
+  } catch (error) {
+    console.error("[GeoLibre] Unrestorable raster handler failed", error);
+  }
+}
 
 /**
  * Register (or clear, with `null`) the reader that reloads a File-backed raster
@@ -738,6 +770,7 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
   if (drawsCogNatively(app)) {
     void import("./native-raster-import")
       .then(({ restoreNativeRasterFiles }) => restoreNativeRasterFiles(localRasterFileReader))
+      .then(reportUnrestorableRasters)
       .catch(console.error);
     return;
   }
@@ -794,6 +827,7 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     );
 
     const pending: Promise<unknown>[] = [];
+    const unrestorable: string[] = [];
     const panelCollapsed = rasterPanelCollapsedFromLayers(useAppStore.getState().layers);
     // The suspension covers the synchronous events fired inside this block:
     // removeRaster's rasterremove, and the rasteradd each addRaster emits
@@ -838,9 +872,8 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
         // control re-derives its own blob URL from the File, as on a fresh add.
         const source = url ?? localFiles.get(layer.id);
         if (!source) {
-          // Console-only on purpose for this first pass: the plugin layer has
-          // no toast/notification API today. Surface this through an in-app
-          // notification once one is exposed to plugins.
+          // The host turns these into an in-app notice after the replay.
+          unrestorable.push(layer.name);
           console.info(
             `[GeoLibre] Raster layer "${layer.name}" came from a local file and cannot be restored from the saved project.`,
           );
@@ -881,6 +914,7 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
         );
       }
     });
+    reportUnrestorableRasters(unrestorable);
 
     // Each addRaster syncs on its own events too, but those run while other
     // restores may still be loading; this final pass settles the store once

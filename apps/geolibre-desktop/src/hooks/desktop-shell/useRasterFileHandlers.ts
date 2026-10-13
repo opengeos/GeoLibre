@@ -4,6 +4,7 @@ import {
   setLocalRasterFileReader,
   setLocalRasterPicker,
   setNonTiledRasterHandler,
+  setUnrestorableRasterHandler,
 } from "@geolibre/plugins";
 import {
   convertGeoTiffToCog,
@@ -16,6 +17,7 @@ import {
 import type { TFunction } from "i18next";
 import { useEffect, type RefObject } from "react";
 import { notify } from "../../lib/notify";
+import { notifyUnrestorableRasters } from "../../lib/local-raster-notices";
 import { isTauri, pickLocalRasterFiles, readRasterFileAtPath } from "../../lib/tauri-io";
 import { createAppAPI } from "../usePlugins";
 
@@ -43,6 +45,13 @@ export function useRasterFileHandlers(
       setLocalRasterFileReader(null);
       setLocalRasterPicker(null);
     };
+  }, []);
+
+  // Tell the user which local rasters a reopened project dropped: their data
+  // was never saved (always on the web), or the saved file could not be read.
+  useEffect(() => {
+    setUnrestorableRasterHandler(notifyUnrestorableRasters);
+    return () => setUnrestorableRasterHandler(null);
   }, []);
 
   // When a GeoTIFF fails to load because it is striped (not a tiled COG), offer

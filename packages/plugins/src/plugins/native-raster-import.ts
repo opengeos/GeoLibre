@@ -76,20 +76,25 @@ export async function addNativeRaster(
   return id;
 }
 
-/** Restore desktop file references without mounting the MapLibre raster control (see {@link addNativeRaster}). */
+/**
+ * Restore desktop file references without mounting the MapLibre raster control
+ * (see {@link addNativeRaster}).
+ *
+ * @param reader - The host's local-path reader; `null` in the browser.
+ * @returns The names of local rasters whose data could not be reloaded: no
+ *   recorded path, no reader, or a read that failed (GeoLibre#3120).
+ */
 export async function restoreNativeRasterFiles(
   reader: LocalRasterFileReader | null,
-): Promise<void> {
-  if (!reader) return;
+): Promise<string[]> {
+  const unrestorable: string[] = [];
   for (const layer of useAppStore.getState().layers) {
     const path = layer.metadata.localFilePath;
-    if (
-      layer.type !== "cog" ||
-      layer.source.url ||
-      layer.metadata.localBytesUrl ||
-      typeof path !== "string"
-    )
+    if (layer.type !== "cog" || layer.source.url || layer.metadata.localBytesUrl) continue;
+    if (!reader || typeof path !== "string" || !path) {
+      unrestorable.push(layer.name);
       continue;
+    }
     try {
       const source = await reader(path);
       if (useAppStore.getState().layers.find((current) => current.id === layer.id) !== layer)
@@ -101,6 +106,8 @@ export async function restoreNativeRasterFiles(
       if (typeof source !== "string") retainFile(layer.id, url);
     } catch (error) {
       console.warn(`[GeoLibre] Could not reopen raster ${layer.name}`, error);
+      unrestorable.push(layer.name);
     }
   }
+  return unrestorable;
 }

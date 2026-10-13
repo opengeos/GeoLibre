@@ -140,6 +140,25 @@ export function isRasterControlStoreLayer(layer: GeoLibreLayer): boolean {
 }
 
 /**
+ * Detects a raster read from a local file that a saved project cannot reload:
+ * its bytes live only behind a session blob URL (stripped on save) and it has
+ * no remote URL, nor a recorded file path the host can reopen. The browser
+ * build can never reopen a path, so every local raster qualifies there; on
+ * desktop only one added without a path (a tool output, a conversion) does.
+ * Such a layer is dropped when the project is reopened (GeoLibre#3120).
+ *
+ * @param layer - A store layer.
+ * @param canReloadPaths - Whether the host can reopen a recorded local path.
+ * @returns True when the layer's data will not survive a save and reopen.
+ */
+export function isUnsavableLocalRaster(layer: GeoLibreLayer, canReloadPaths: boolean): boolean {
+  if (!isRasterControlStoreLayer(layer) || layer.metadata.rasterSource !== "file") return false;
+  if (typeof layer.source.url === "string" && layer.source.url) return false;
+  const path = layer.metadata.localFilePath;
+  return !(canReloadPaths && typeof path === "string" && path.length > 0);
+}
+
+/**
  * Builds the store layer mirroring a control raster snapshot.
  *
  * The deck.gl COGLayer renders through the control's shared overlay, so the

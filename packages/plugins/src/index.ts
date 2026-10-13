@@ -376,11 +376,15 @@ export {
   setLocalRasterPicker,
   setNonTiledRasterHandler,
   setRasterPixelInspect,
+  setUnrestorableRasterHandler,
   type LocalRasterFileReader,
   type LocalRasterPicker,
   type NonTiledRasterRequest,
   type PickedLocalRaster,
+  type UnrestorableRasterHandler,
 } from "./plugins/maplibre-raster";
+// Lets the save flow warn about local rasters a saved project cannot reload.
+export { isUnsavableLocalRaster } from "./plugins/raster-layer-sync";
 export { getSharedDeckLoadState } from "./plugins/shared-deck-overlay";
 export {
   RASTER_MAX_CLASSES,

@@ -53,6 +53,7 @@ import { isLayersPanelCollapsed } from "../lib/layer-panel-collapse";
 import { ensureHtmlFileName, ensureJsonFileName, ensureProjectFileName } from "../lib/file-names";
 import { pickLayerStylesFile } from "../lib/layer-style-files";
 import { notify } from "../lib/notify";
+import { notifyUnsavedLocalRasters } from "../lib/local-raster-notices";
 import { APP_LAYERS_FILE_HOST, buildLayersFileContent } from "../lib/startup-layers";
 import { mergeStringLists } from "../lib/string-lists";
 import { fetchProjectFromUrl } from "../lib/project-url";
@@ -1693,6 +1694,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     rememberStartupProjectSnapshot(path, contentToSave);
     markSaved();
     recordExplicitProjectSave();
+    // A local raster's data cannot go in the file, so it would vanish on reopen.
+    notifyUnsavedLocalRasters(project.layers);
     return true;
   };
 

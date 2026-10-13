@@ -5,6 +5,7 @@ import type { RasterLayerInfo, RasterLayerState } from "maplibre-gl-raster";
 import {
   createRasterStoreLayer,
   isRasterControlStoreLayer,
+  isUnsavableLocalRaster,
   localRasterPath,
   rememberLocalRasterPath,
   removeRasterStoreLayers,
@@ -299,6 +300,36 @@ describe("createRasterStoreLayer", () => {
 
     assert.equal(layer.metadata.bandCount, null);
     assert.equal(layer.metadata.bandNames, null);
+  });
+});
+
+// GeoLibre#3120: the save flow warns about rasters whose data a project file
+// cannot reload, rather than letting them vanish on reopen.
+describe("isUnsavableLocalRaster", () => {
+  const fileInfo = rasterInfo({
+    source: { kind: "file", fileName: "local.tif", objectUrl: "blob:x" },
+  });
+
+  it("flags a browser-file raster on every host", () => {
+    const layer = createRasterStoreLayer(fileInfo);
+    assert.equal(isUnsavableLocalRaster(layer, false), true);
+    assert.equal(isUnsavableLocalRaster(layer, true), true);
+  });
+
+  it("flags a raster with a recorded path only where paths cannot be reopened", () => {
+    rememberLocalRasterPath("raster-1", "/data/local.tif");
+    try {
+      const layer = createRasterStoreLayer(fileInfo);
+      assert.equal(isUnsavableLocalRaster(layer, true), false);
+      assert.equal(isUnsavableLocalRaster(layer, false), true);
+    } finally {
+      rememberLocalRasterPath("raster-1", undefined);
+    }
+  });
+
+  it("never flags a remote raster or a non-raster layer", () => {
+    assert.equal(isUnsavableLocalRaster(createRasterStoreLayer(rasterInfo()), false), false);
+    assert.equal(isUnsavableLocalRaster(otherStoreLayer(), false), false);
   });
 });
 
