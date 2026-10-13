@@ -65,5 +65,8 @@ export function notifyUnrestorableRasters(names: string[]): void {
       names: formatLayerNames(names),
     }),
     durationMs: null,
+    // A project replayed again (a renderer swap) reports the same layers;
+    // collapse the repeat instead of stacking another toast.
+    dedupeKey: `local-raster-not-restored:${names.join("\n")}`,
   });
 }

@@ -9399,11 +9399,11 @@
     "rasterNotGeotiff": "\"{{name}}\" did not return a GeoTIFF. The server may have sent an error or login page instead. Check the URL and try again.",
     "localRasterNotSaved_one": "{{count}} local raster layer was not saved with the project",
     "localRasterNotSaved_other": "{{count}} local raster layers were not saved with the project",
-    "localRasterNotSavedDesc": "{{names}} came from a local file, and a project file does not hold raster data. Add the file again after reopening the project, or use a remote COG URL instead.",
-    "localRasterNotSavedDescDesktop": "{{names}} has no file on disk for the project to reference (for example, a tool output). Save it as a GeoTIFF file and add that file to keep it in the project.",
+    "localRasterNotSavedDesc": "Loaded from a local file: {{names}}. A project file does not hold raster data, so add the file again after reopening the project, or use a remote COG URL instead.",
+    "localRasterNotSavedDescDesktop": "No file on disk for the project to reference (for example, a tool output): {{names}}. Save each as a GeoTIFF file and add that file to keep it in the project.",
     "localRasterNotRestored_one": "{{count}} local raster layer could not be restored",
     "localRasterNotRestored_other": "{{count}} local raster layers could not be restored",
-    "localRasterNotRestoredDesc": "{{names}} came from a local file whose data the project does not hold, or the file could not be read. Add the file again."
+    "localRasterNotRestoredDesc": "Loaded from a local file: {{names}}. The project does not hold raster data, or the file could not be read. Add the file again."
   },
   "attributeForm": {
     "error": {

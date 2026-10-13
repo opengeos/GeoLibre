@@ -1474,6 +1474,8 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         recordExplicitProjectSave();
       }
       setRemoteSaveWarning(updated.warning ? updatedRemoteProject : null);
+      // The shared copy cannot carry local raster data either.
+      notifyUnsavedLocalRasters(project.layers);
       return true;
     } catch (error) {
       console.error("Failed to update shared project", error);

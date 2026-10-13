@@ -11,7 +11,7 @@ const localLayer = () =>
     type: "cog",
     geojson: undefined,
     source: { type: "raster" },
-    metadata: { localFilePath: "/data/dem.tif" },
+    metadata: { rasterSource: "file", localFilePath: "/data/dem.tif" },
   });
 
 it("retains restored file bytes until the layer is removed and skips already-restored sources", async () => {
@@ -63,7 +63,9 @@ it("skips remote sources and local layers without a saved path", async () => {
   useAppStore.setState({
     layers: [
       { ...localLayer(), source: { type: "raster", url: "https://example.test/a.tif" } },
-      { ...localLayer(), id: "no-path", metadata: {} },
+      { ...localLayer(), id: "no-path", metadata: { rasterSource: "file" } },
+      // A url-less cog that never came from a local file is not reported.
+      { ...localLayer(), id: "not-a-file", metadata: {} },
     ],
   });
   let reads = 0;
@@ -74,7 +76,7 @@ it("skips remote sources and local layers without a saved path", async () => {
   assert.equal(reads, 0);
   // The path-less local raster has nothing to reload from, so it is reported.
   assert.deepEqual(unrestorable, [localLayer().name]);
-  assert.equal(useAppStore.getState().layers.length, 2);
+  assert.equal(useAppStore.getState().layers.length, 3);
 });
 
 it("reports a local raster whose saved file can no longer be read", async () => {

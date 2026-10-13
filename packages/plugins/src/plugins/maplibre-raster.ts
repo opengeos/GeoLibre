@@ -910,16 +910,21 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
             })
             .catch((error) => {
               console.error(`[GeoLibre] Failed to restore raster layer "${layer.name}"`, error);
+              // A re-read local file that no longer opens is reported with the
+              // dropped ones; a remote failure is not a local-raster problem.
+              if (url === undefined) unrestorable.push(layer.name);
             }),
         );
       }
     });
-    reportUnrestorableRasters(unrestorable);
 
     // Each addRaster syncs on its own events too, but those run while other
     // restores may still be loading; this final pass settles the store once
     // every raster has either loaded or failed.
     void Promise.allSettled(pending).then(() => {
+      // After every replay settled, so local files that failed to load are
+      // included. Not for a control replaced mid-restore: that project is gone.
+      if (control === rasterControl) reportUnrestorableRasters(unrestorable);
       // Defer one task so this sync runs after the deferred panel expand in
       // applyRestoredRasterPanelState: with no pending rasters, allSettled
       // resolves as a microtask, and syncing then would briefly write the
