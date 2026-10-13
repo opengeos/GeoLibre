@@ -12,7 +12,12 @@
 
 import type { Channel, invoke as nativeInvoke } from "@tauri-apps/api/core";
 import { redactUrlCredentials } from "@geolibre/core";
-import type { DiagnosticInput } from "./diagnostics";
+import {
+  EXPECTED_STATUS_HEADER,
+  OPTIONAL_RESOURCE_HEADER,
+  parseExpectedStatuses,
+  type DiagnosticInput,
+} from "./diagnostics";
 
 /** The request the native command takes; the body is base64. */
 export interface PluginHttpPayload {
@@ -59,13 +64,27 @@ function fromBase64(value: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+/**
+ * What the plugin marked as expected, with the same client-only request headers
+ * the webview's fetch capture honors (see `diagnostics.ts`).
+ */
+interface ExpectedOutcome {
+  /** Any failure is expected, as for `x-geolibre-optional-resource`. */
+  optional: boolean;
+  /** HTTP statuses that are expected, as for `x-geolibre-expected-status`. */
+  statuses: Set<number>;
+}
+
 function diagnosticRecord(
   method: string,
   url: string,
   durationMs: number,
   outcome: { status: number } | { error: unknown },
+  expected: ExpectedOutcome,
 ): DiagnosticInput {
-  const failed = "error" in outcome || outcome.status >= 400;
+  const failed =
+    !expected.optional &&
+    ("error" in outcome || (outcome.status >= 400 && !expected.statuses.has(outcome.status)));
   return {
     category: "network",
     level: failed ? "error" : "info",
@@ -98,11 +117,18 @@ export function createPluginNativeFetch(
     const request = new Request(input, init);
     const { signal } = request;
     signal.throwIfAborted();
+    const expected: ExpectedOutcome = {
+      optional: request.headers.has(OPTIONAL_RESOURCE_HEADER),
+      statuses: parseExpectedStatuses(request.headers.get(EXPECTED_STATUS_HEADER)),
+    };
     const bytes = request.body ? new Uint8Array(await request.arrayBuffer()) : null;
     const payload: PluginHttpPayload = {
       url: request.url,
       method: request.method,
-      headers: [...request.headers],
+      // The markers only shape the Diagnostics record; the server never sees them.
+      headers: [...request.headers].filter(
+        ([name]) => name !== OPTIONAL_RESOURCE_HEADER && name !== EXPECTED_STATUS_HEADER,
+      ),
       ...(bytes ? { body: toBase64(bytes) } : {}),
     };
     const startedAt = performance.now();
@@ -121,9 +147,13 @@ export function createPluginNativeFetch(
     } catch (error) {
       if (signal.aborted) throw signal.reason;
       record?.(
-        diagnosticRecord(request.method, request.url, Math.round(performance.now() - startedAt), {
-          error,
-        }),
+        diagnosticRecord(
+          request.method,
+          request.url,
+          Math.round(performance.now() - startedAt),
+          { error },
+          expected,
+        ),
       );
       // A network failure from fetch is a TypeError; keep that contract.
       throw new TypeError(error instanceof Error ? error.message : String(error));
@@ -131,9 +161,13 @@ export function createPluginNativeFetch(
       if (onAbort) signal.removeEventListener("abort", onAbort);
     }
     record?.(
-      diagnosticRecord(request.method, request.url, Math.round(performance.now() - startedAt), {
-        status: result.status,
-      }),
+      diagnosticRecord(
+        request.method,
+        request.url,
+        Math.round(performance.now() - startedAt),
+        { status: result.status },
+        expected,
+      ),
     );
     const body =
       NULL_BODY_STATUSES.has(result.status) || request.method === "HEAD"

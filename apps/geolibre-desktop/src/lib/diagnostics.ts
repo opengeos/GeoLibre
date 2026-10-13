@@ -107,6 +107,11 @@ export const EXPECTED_STATUS_HEADER = "x-geolibre-expected-status";
 
 const DIAGNOSTIC_REQUEST_HEADERS = [OPTIONAL_RESOURCE_HEADER, EXPECTED_STATUS_HEADER] as const;
 
+/** The statuses listed in an {@link EXPECTED_STATUS_HEADER} value, e.g. "400, 404". */
+export function parseExpectedStatuses(headerValue: string | null): Set<number> {
+  return new Set(headerValue?.split(",").map((status) => Number(status.trim())) ?? []);
+}
+
 /** Read a single header value across the Headers/array/record init shapes. */
 function readHeader(headers: HeadersInit | undefined, name: string): string | null {
   if (!headers) return null;
@@ -472,9 +477,8 @@ export function installDiagnosticsCapture(): () => void {
     // Optional-resource requests downgrade any failure; expected-status requests
     // downgrade only listed HTTP responses. Both markers are stripped before fetch.
     const optional = requestMarker(input, init, OPTIONAL_RESOURCE_HEADER) !== null;
-    const expectedStatusHeader = requestMarker(input, init, EXPECTED_STATUS_HEADER);
-    const expectedStatuses = new Set(
-      expectedStatusHeader?.split(",").map((status) => Number(status.trim())) ?? [],
+    const expectedStatuses = parseExpectedStatuses(
+      requestMarker(input, init, EXPECTED_STATUS_HEADER),
     );
     const forwarded = stripRequestMarkers(input, init);
     try {

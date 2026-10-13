@@ -1388,6 +1388,23 @@ const user = await (await http(`${server}/api/v1/users/current`)).json(); // sen
 - **One jar for the session.** It is shared by every plugin and cleared when the app restarts, so a plugin should be ready to sign in again.
 - **Limits:** request and response bodies up to 64 MiB, a 120 second timeout, and no link-local or cloud-metadata addresses. `AbortSignal` cancels the native request.
 
+### Expected responses
+
+Diagnostics records a request that fails, or answers with a 4xx or 5xx status, as an error, and users see those errors. Some protocols use error statuses for normal answers: an OAuth device sign-in polls the token endpoint, which answers `400 authorization_pending` until the user approves ([RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628#section-3.5)). Mark such requests with a client-only header, and Diagnostics records them as info:
+
+```typescript
+const http = app.nativeFetch ?? fetch;
+await http(`${server}/o/token/`, {
+  method: "POST",
+  headers: { "x-geolibre-expected-status": "400" }, // comma-separated statuses
+  body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:device_code", device_code, client_id }),
+});
+```
+
+- **`x-geolibre-expected-status`** lists the statuses that are expected; any other failure is still an error.
+- **`x-geolibre-optional-resource`** (any value) marks the whole request as optional, so any failure, including a network error, is recorded as info.
+- **Neither reaches the server.** Both `app.nativeFetch` and the browser's `fetch` in GeoLibre remove them before sending, so they don't need to be allowed by the server's CORS settings.
+
 ## Floating panels
 
 A floating panel is a draggable, closeable card the host overlays on the map, opening at the corner named by `position` (top-left by default). Unlike a dockable right panel (one active panel docked at a fixed position), several floating panels can be open at once and they do not shrink the map. The render contract is the same plain-DOM `render(container)` as right panels.

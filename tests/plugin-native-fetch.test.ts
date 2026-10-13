@@ -108,6 +108,71 @@ describe("createPluginNativeFetch", () => {
     assert.equal(records[0].status, 401);
   });
 
+  it("records an expected status as info, without sending the marker", async () => {
+    const records: DiagnosticInput[] = [];
+    const sent: PluginHttpPayload[] = [];
+    const fetchImpl = createPluginNativeFetch(
+      async (request) => {
+        sent.push(request);
+        return result({ status: 400, body: encode('{"error":"authorization_pending"}') });
+      },
+      (record) => records.push(record),
+    );
+    // An OAuth device-code poll: 400 means "not approved yet" (RFC 8628).
+    const response = await fetchImpl("https://d2s.example/o/token/", {
+      method: "POST",
+      headers: { "x-geolibre-expected-status": "400, 428" },
+      body: new URLSearchParams({ grant_type: "device_code" }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(records[0].level, "info");
+    assert.equal(records[0].status, 400);
+    assert.ok(
+      !sent[0].headers.some(([name]) => name === "x-geolibre-expected-status"),
+      "the marker stays on the client",
+    );
+  });
+
+  it("still records a status that wasn't listed as expected as an error", async () => {
+    const records: DiagnosticInput[] = [];
+    const fetchImpl = createPluginNativeFetch(
+      async () => result({ status: 500 }),
+      (record) => records.push(record),
+    );
+    await fetchImpl("https://d2s.example/o/token/", {
+      headers: { "x-geolibre-expected-status": "400" },
+    });
+    assert.equal(records[0].level, "error");
+  });
+
+  it("records any failure of an optional request as info", async () => {
+    const records: DiagnosticInput[] = [];
+    const sent: PluginHttpPayload[] = [];
+    const fetchImpl = createPluginNativeFetch(
+      async (request) => {
+        sent.push(request);
+        if (sent.length === 1) return result({ status: 404 });
+        throw "Request failed: connection refused";
+      },
+      (record) => records.push(record),
+    );
+    const optional = { headers: { "x-geolibre-optional-resource": "1" } };
+    await fetchImpl("https://d2s.example/api/v1/optional", optional);
+    await assert.rejects(fetchImpl("https://d2s.example/api/v1/optional", optional), {
+      name: "TypeError",
+    });
+    assert.deepEqual(
+      records.map((record) => record.level),
+      ["info", "info"],
+    );
+    assert.ok(
+      sent.every((request) =>
+        request.headers.every(([name]) => name !== "x-geolibre-optional-resource"),
+      ),
+      "the marker stays on the client",
+    );
+  });
+
   it("aborts without waiting for the native request", async () => {
     const controller = new AbortController();
     const fetchImpl = createPluginNativeFetch(() => new Promise(() => {}));
