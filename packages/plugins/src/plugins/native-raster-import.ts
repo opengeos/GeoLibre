@@ -97,14 +97,16 @@ export async function restoreNativeRasterFiles(
       layer.metadata.localBytesUrl
     )
       continue;
+    // An earlier iteration's read may have let the user replace the project.
+    const current = () =>
+      useAppStore.getState().layers.find((candidate) => candidate.id === layer.id) === layer;
     if (!reader || typeof path !== "string" || !path) {
-      unrestorable.push(layer.name);
+      if (current()) unrestorable.push(layer.name);
       continue;
     }
     try {
       const source = await reader(path);
-      if (useAppStore.getState().layers.find((current) => current.id === layer.id) !== layer)
-        continue;
+      if (!current()) continue;
       const url = typeof source === "string" ? source : URL.createObjectURL(source);
       useAppStore.getState().updateLayer(layer.id, {
         metadata: { ...layer.metadata, localBytesUrl: url },
@@ -114,8 +116,7 @@ export async function restoreNativeRasterFiles(
       console.warn(`[GeoLibre] Could not reopen raster ${layer.name}`, error);
       // Not for a layer the user removed (or a project they replaced) while
       // the read was pending: the warning would describe the wrong project.
-      if (useAppStore.getState().layers.find((current) => current.id === layer.id) === layer)
-        unrestorable.push(layer.name);
+      if (current()) unrestorable.push(layer.name);
     }
   }
   return unrestorable;

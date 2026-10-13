@@ -777,6 +777,8 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
   const hasRasterLayers = useAppStore.getState().layers.some(isRasterControlStoreLayer);
   if (!hasRasterLayers && !rasterControl) return;
 
+  // The project this restore replays; a report for an older one is dropped.
+  const restoreGeneration = useAppStore.getState().projectGeneration;
   void (async () => {
     const control = await ensureRasterControl(app);
     if (!control) return;
@@ -923,8 +925,13 @@ export function restoreRasterLayers(app: GeoLibreAppAPI): void {
     // every raster has either loaded or failed.
     void Promise.allSettled(pending).then(() => {
       // After every replay settled, so local files that failed to load are
-      // included. Not for a control replaced mid-restore: that project is gone.
-      if (control === rasterControl) reportUnrestorableRasters(unrestorable);
+      // included. Not once the control or the project was replaced
+      // mid-restore: the names would describe a project that is gone.
+      if (
+        control === rasterControl &&
+        useAppStore.getState().projectGeneration === restoreGeneration
+      )
+        reportUnrestorableRasters(unrestorable);
       // Defer one task so this sync runs after the deferred panel expand in
       // applyRestoredRasterPanelState: with no pending rasters, allSettled
       // resolves as a microtask, and syncing then would briefly write the
