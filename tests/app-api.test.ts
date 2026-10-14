@@ -805,6 +805,10 @@ describe("plugin app API layers", () => {
           customLayerType: "custom",
           externalNativeLayer: true,
           nativeLayerIds: ["someone-elses-layer"],
+          sourceIds: ["someone-elses-source"],
+          externalDeckLayer: true,
+          controlOwnsPaint: true,
+          nativeFillExtrusion: true,
         },
       },
     );
@@ -830,7 +834,15 @@ describe("plugin app API layers", () => {
     assert.equal(templateLayer?.metadata.publisher, "Records");
     assert.deepEqual(templateLayer?.metadata.sourceLayers, ["node"], "GeoLibre's keys win");
     assert.equal(templateLayer?.metadata.sourceKind, "plugin-vector-tiles");
-    for (const key of ["customLayerType", "externalNativeLayer", "nativeLayerIds"]) {
+    for (const key of [
+      "customLayerType",
+      "externalNativeLayer",
+      "nativeLayerIds",
+      "sourceIds",
+      "externalDeckLayer",
+      "controlOwnsPaint",
+      "nativeFillExtrusion",
+    ]) {
       assert.equal(key in (templateLayer?.metadata ?? {}), false, `${key} is dropped`);
     }
     assert.deepEqual(
