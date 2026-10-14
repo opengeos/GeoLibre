@@ -143,6 +143,14 @@ export interface GeoLibreVectorTileLayerOptions {
    * {@link GeoLibreTileLayerOptions.metadata}. GeoLibre's own keys win.
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Headers sent with the layer's tile and TileJSON requests, such as
+   * `Authorization` for a service that needs the signed-in user. Held in memory
+   * for the session only: never saved with the project or shared. Replace them
+   * with {@link GeoLibreAppAPI.setLayerRequestHeaders}, e.g. after a token
+   * refresh. MapLibre maps only.
+   */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -727,6 +735,18 @@ export interface GeoLibreAppAPI {
     url: string,
     options: GeoLibreVectorTileLayerOptions,
   ) => string;
+  /**
+   * Send headers with a tile layer's tile and TileJSON requests (any layer with
+   * a tile URL or TileJSON URL, from {@link addVectorTileLayer},
+   * {@link addTileLayer}, or Add Data), replacing those set before; `null`
+   * stops sending them. Use it to refresh a token without reloading the layer:
+   * the next tile request carries the new value. Headers are held in memory,
+   * never saved with the project, and dropped when another project opens.
+   * Only MapLibre maps send them. Returns false when there is no such layer or
+   * it has no tile URL; throws on an invalid header. Typed optional for
+   * forward-compatibility, so call it with optional chaining.
+   */
+  setLayerRequestHeaders?: (layerId: string, headers: Record<string, string> | null) => boolean;
   /**
    * Add a native WMS raster layer and return its layer id. The host builds the
    * GetMap tile URL from {@link GeoLibreWmsLayerOptions.url} and

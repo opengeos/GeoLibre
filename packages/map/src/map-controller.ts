@@ -96,6 +96,7 @@ import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control"
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import { installMapTransformCompat } from "./map-transform-compat";
+import { transformTileRequest } from "./tile-request-headers";
 import {
   MAPLIBRE_CAPABILITIES,
   type BuiltInMapControl,
@@ -370,6 +371,9 @@ export class MapController implements MapEngine {
       // that discard the drawing buffer after compositing (most mobile GPUs).
       // Trade-off: adds one extra framebuffer copy per frame on tiled renderers.
       canvasContextAttributes: { preserveDrawingBuffer: true },
+      // The map's only request transform: plugins register headers for their
+      // tile services rather than replacing it (see tile-request-headers.ts).
+      transformRequest: transformTileRequest,
     });
     ensureGeneratedImageHandler(this.map);
     // A leftover text selection would otherwise turn a map drag into a native

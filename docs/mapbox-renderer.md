@@ -94,8 +94,8 @@ browser against an authenticated Mapbox map):
   docked panels mount on the Mapbox map; the raster layers their controls
   create are adopted by the engine under the controls' own ids (one copy,
   store visibility/opacity/removal apply, rebuilt after a basemap swap).
-  GeoLens _private_ rasters need a per-request API key that only MapLibre's
-  `setTransformRequest` can inject; the panel reports that they need the
+  GeoLens _private_ rasters need a per-request API key that only the MapLibre
+  maps' request transform can inject; the panel reports that they need the
   MapLibre renderer, while public rasters and vector data work.
 - **USGS 3DEP** also declares Mapbox (October 2026). It reads the map through
   the same control-map path as the catalogs above and is covered by the engine

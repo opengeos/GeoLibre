@@ -25,7 +25,6 @@ import {
   normalizeTileColumns,
   parseDataset,
   rasterTemplatesForServer,
-  rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
   stacCatalogUrl,
@@ -582,43 +581,6 @@ describe("tileUrlPrefix", () => {
 
   it("returns a template without placeholders unchanged", () => {
     assert.equal(tileUrlPrefix("https://h/tiles.png"), "https://h/tiles.png");
-  });
-});
-
-describe("rasterTileAuthHeaders", () => {
-  const keys = new Map([
-    ["https://demo.example.com/raster-tiles/abc/tiles/", "key-abc"],
-    ["https://other.example.com/raster-tiles/xyz/tiles/", "key-xyz"],
-  ]);
-
-  it("attaches the key registered for that tile endpoint", () => {
-    assert.deepEqual(
-      rasterTileAuthHeaders("https://demo.example.com/raster-tiles/abc/tiles/3/2/1.png", keys),
-      { "X-Api-Key": "key-abc" },
-    );
-  });
-
-  it("picks the matching server when several are registered", () => {
-    assert.deepEqual(
-      rasterTileAuthHeaders("https://other.example.com/raster-tiles/xyz/tiles/0/0/0.png", keys),
-      { "X-Api-Key": "key-xyz" },
-    );
-  });
-
-  it("does not leak the key to a basemap or another host", () => {
-    assert.equal(rasterTileAuthHeaders("https://tiles.openfreemap.org/1/2/3.pbf", keys), null);
-    assert.equal(rasterTileAuthHeaders("https://demo.example.com.evil.test/x", keys), null);
-  });
-
-  it("does not attach a key to a different dataset on the same server", () => {
-    assert.equal(
-      rasterTileAuthHeaders("https://demo.example.com/raster-tiles/zzz/tiles/1/1/1.png", keys),
-      null,
-    );
-  });
-
-  it("returns null when nothing is registered", () => {
-    assert.equal(rasterTileAuthHeaders("https://demo.example.com/x", new Map()), null);
   });
 });
 

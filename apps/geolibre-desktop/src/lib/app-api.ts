@@ -74,6 +74,10 @@ import { createPluginLocaleApi, type PluginLocaleI18n } from "./plugin-locale";
 import { createPluginHttpSend, createPluginNativeFetch } from "./plugin-native-fetch";
 import { authorizeInPopup, getPluginOAuthRedirectUri } from "./plugin-oauth";
 import { openProjectFromUrlForPlugin } from "./plugin-open-project";
+import {
+  clearLayerRequestHeaders,
+  setPluginLayerRequestHeaders,
+} from "./plugin-tile-request-headers";
 import { addPluginVectorTileLayer } from "./plugin-vector-tile-layer";
 import { createRemoteDownload, type RemoteDownloadProgress } from "./remote-download";
 import { requestSpaceborneLidarGranule } from "./spaceborne-lidar-handoff";
@@ -282,8 +286,10 @@ export function createAppAPI(
     removeLayer: (layerId: string) => {
       const state = useAppStore.getState();
       if (state.layers.some((layer) => layer.id === layerId)) {
-        // A plugin-painted native layer's bridge lives outside the store.
+        // A plugin-painted native layer's bridge and a tile layer's request
+        // headers live outside the store.
         clearExternalNativePaintBridge(layerId);
+        clearLayerRequestHeaders(layerId);
         state.removeLayer(layerId);
       }
     },
@@ -370,6 +376,8 @@ export function createAppAPI(
       ),
     addVectorTileLayer: (name: string, url: string, options: GeoLibreVectorTileLayerOptions) =>
       addPluginVectorTileLayer(name, url, options),
+    setLayerRequestHeaders: (layerId: string, headers: Record<string, string> | null) =>
+      setPluginLayerRequestHeaders(layerId, headers),
     addWmsLayer: (name: string, options: GeoLibreWmsLayerOptions) => {
       const {
         beforeLayerId,

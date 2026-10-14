@@ -5,6 +5,7 @@ import { tool } from "@strands-agents/sdk";
 import { z } from "zod";
 import { getExternalNativePaintBridge, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
+import { tileRequestHeadersFor } from "@geolibre/map/tile-request-headers";
 import { createAppAPI, type AppApiHost } from "../apps/geolibre-desktop/src/lib/app-api";
 import { GEOMETRY_EDIT_QUEUE_WAIT_MS } from "../apps/geolibre-desktop/src/lib/geometry-edit-session";
 import {
@@ -920,6 +921,47 @@ describe("plugin app API layers", () => {
       );
     }
     assert.deepEqual(api.getLayers(), []);
+  });
+
+  it("sends a tile layer's request headers for the session only", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const template = "https://records.example.org/mvt/node/{z}/{x}/{y}.pbf";
+    const tile = "https://records.example.org/mvt/node/3/2/1.pbf";
+    const vector = api.addVectorTileLayer("Records", template, {
+      sourceLayers: ["node"],
+      headers: { Authorization: "Bearer first" },
+    });
+    assert.deepEqual(tileRequestHeadersFor(tile), { Authorization: "Bearer first" });
+    assert.equal(
+      JSON.stringify(useAppStore.getState().layers).includes("Bearer"),
+      false,
+      "headers never reach the store or a saved project",
+    );
+
+    assert.equal(api.setLayerRequestHeaders(vector, { Authorization: "Bearer second" }), true);
+    assert.deepEqual(tileRequestHeadersFor(tile), { Authorization: "Bearer second" });
+    assert.equal(api.setLayerRequestHeaders(vector, null), true);
+    assert.equal(tileRequestHeadersFor(tile), undefined);
+
+    const raster = api.addTileLayer("Raster", "https://tiles.example.com/{z}/{x}/{y}.png");
+    assert.equal(api.setLayerRequestHeaders(raster, { "X-Api-Key": "k" }), true);
+    assert.deepEqual(tileRequestHeadersFor("https://tiles.example.com/1/1/1.png"), {
+      "X-Api-Key": "k",
+    });
+    api.removeLayer(raster);
+    assert.equal(tileRequestHeadersFor("https://tiles.example.com/1/1/1.png"), undefined);
+
+    const points = api.addGeoJsonLayer("Points", { type: "FeatureCollection", features: [] });
+    assert.equal(api.setLayerRequestHeaders(points, { Authorization: "Bearer x" }), false);
+    assert.equal(api.setLayerRequestHeaders("missing", { Authorization: "Bearer x" }), false);
+    assert.throws(
+      () => api.setLayerRequestHeaders(vector, { Authorization: "Bearer x\r\nX-Injected: 1" }),
+      /header "Authorization"/,
+    );
+
+    api.setLayerRequestHeaders(vector, { Authorization: "Bearer third" });
+    useAppStore.getState().newProject({ name: "Next" });
+    assert.equal(tileRequestHeadersFor(tile), undefined, "another project starts without them");
   });
 
   it("keeps queryable: false on a WMS layer and leaves it out otherwise (#2887)", () => {

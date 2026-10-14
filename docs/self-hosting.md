@@ -458,8 +458,9 @@ The project fetch and every layer fetch is now cross-origin, so:
   signed tile URL, or your own HMAC scheme), because MapLibre's own tile requests
   cannot carry a custom header that GeoLibre has not been told about. The GeoLens
   plugin is the exception on the header path: it sends `X-Api-Key` on its API
-  calls, and attaches it to that dataset's raster tiles through MapLibre's
-  `transformRequest` hook.
+  calls, and registers it for that dataset's raster tiles with the request
+  headers GeoLibre adds to MapLibre tile requests (plugins can do the same with
+  `setLayerRequestHeaders`).
 - **Tokens in URLs leak** into browser history, proxy logs, referrer headers, and
   anything the user copies and pastes. Keep expiries short and scope each token
   to one dataset.

@@ -34,6 +34,7 @@
     "./style-import": "./src/style-import.ts",
     "./style-export": "./src/mapbox-style-export.ts",
     "./style-layer-ids": "./src/style-layer-ids.ts",
+    "./tile-request-headers": "./src/tile-request-headers.ts",
     "./layer-labels": "./src/layer-labels.ts",
     "./map-capture": "./src/map-capture.ts",
     "./arcgis-sdk": "./src/arcgis-sdk.ts",
@@ -73,6 +74,10 @@
         "types": "./dist/style-layer-ids.d.mts",
         "import": "./dist/style-layer-ids.mjs"
       },
+      "./tile-request-headers": {
+        "types": "./dist/tile-request-headers.d.mts",
+        "import": "./dist/tile-request-headers.mjs"
+      },
       "./layer-labels": {
         "types": "./dist/layer-labels.d.mts",
         "import": "./dist/layer-labels.mjs"
@@ -101,7 +106,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/mapbox-style-export.ts src/style-layer-ids.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts --format esm --dts"
+    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/mapbox-style-export.ts src/style-layer-ids.ts src/tile-request-headers.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts --format esm --dts"
   },
   "dependencies": {
     "@cesium/core": "^0.1.0",

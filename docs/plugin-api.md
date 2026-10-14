@@ -191,6 +191,10 @@ export interface GeoLibreAppAPI {
     url: string,
     options: GeoLibreVectorTileLayerOptions
   ) => string;
+  setLayerRequestHeaders?: (
+    layerId: string,
+    headers: Record<string, string> | null
+  ) => boolean;
   addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
   addWfsLayer?: (name: string, options: GeoLibreWfsLayerOptions) => Promise<string>;
   // Native client-side COG (reads the GeoTIFF directly; band/rescale/colormap/
@@ -1037,6 +1041,7 @@ export interface GeoLibreVectorTileLayerOptions {
   opacity?: number; // default 1
   beforeLayerId?: string; // insert beneath this layer
   metadata?: Record<string, unknown>; // provenance merged into layer.metadata
+  headers?: Record<string, string>; // sent with tile requests; see below
 }
 
 const layerId = app.addVectorTileLayer?.("Sites", "https://tiles.example.org/sites/{z}/{x}/{y}.pbf", {
@@ -1046,6 +1051,26 @@ const layerId = app.addVectorTileLayer?.("Sites", "https://tiles.example.org/sit
 ```
 
 The URL must be absolute HTTP(S), and a template needs all three of `{z}`, `{x}` and `{y}`, written in lowercase (a URL with none is read as TileJSON). Other placeholders such as `{s}` or `{-y}` aren't recognized; for a TMS tileset, serve or rewrite an XYZ template. It throws when that isn't so, `name` is blank or not a string, `sourceLayers` is missing, empty or holds a blank name, `bounds` is not four numbers, the zoom range is out of bounds or inverted, or `opacity` is outside 0–1. With a TileJSON URL, MapLibre reads the zoom range from the TileJSON, so `minzoom` and `maxzoom` throw there; `bounds` is still kept as the extent **Zoom to layer** uses. `bounds` must lie within ±180° and ±90° with `west` ≤ `east` and `south` ≤ `north` (an extent can't cross the antimeridian). Tiles are drawn on MapLibre, Mapbox and the ArcGIS renderer, and draped on the Cesium globe, like other vector tile layers.
+
+### Authenticated tile requests
+
+A tile service that needs the signed-in user (an `Authorization` header, an API key header) can't take credentials in the tile URL without leaking them into the saved project. Pass `headers` to `addVectorTileLayer`, or call `setLayerRequestHeaders` for any tile layer (from `addVectorTileLayer`, `addTileLayer`, `addWmtsLayer` or Add Data), and GeoLibre adds them to the requests whose URL starts with the layer's tile template up to its first `{`, or with its TileJSON URL.
+
+```typescript
+const layerId = app.addVectorTileLayer?.("Sites", tilesUrl, {
+  sourceLayers: ["sites"],
+  headers: { Authorization: `Bearer ${accessToken}` },
+});
+
+// After a token refresh: the next tile request carries the new token.
+app.setLayerRequestHeaders?.(layerId, { Authorization: `Bearer ${newAccessToken}` });
+```
+
+- **Session only.** Headers are held in memory, never written to the layer, a saved project or a share. Opening another project drops them, and so does `removeLayer`. A project reopened with the layer needs them set again; `setLayerRequestHeaders(layerId, null)` stops sending them, for example when the plugin deactivates.
+- **One transform for everyone.** GeoLibre builds its MapLibre maps with a single `transformRequest` that adds the registered headers, and GeoLens's private rasters use it too, so don't call `getMap().setTransformRequest`: it would replace GeoLibre's and stop every layer's headers.
+- **MapLibre only.** The Mapbox, ArcGIS and Cesium renderers request tiles without them, and so does the desktop app's native WMS route, which fetches WMS tiles outside MapLibre.
+- **CORS.** A header turns a tile request into one the browser preflights, so the service must allow the app's origin and the header (for example `Access-Control-Allow-Headers: Authorization`).
+- `setLayerRequestHeaders` returns false when there is no such layer or it has no tile URL, and throws on a header name that isn't a valid token or a value with a line break.
 
 ## Zarr layers
 
@@ -1958,8 +1983,8 @@ only for the shared surface; a mapbox-gl map has none of MapLibre's extensions:
   MapLibre-only (Overture Maps instead asks `maplibre-gl-overture-maps` for
   plain `.pmtiles` URLs, which mapbox-gl 3.30+ reads through its own tile
   provider). `setTransformRequest` — Mapbox takes `transformRequest`
-  only at construction, so GeoLens private rasters (whose API key is injected
-  per request) are MapLibre-only. Custom `CustomLayerInterface` layers
+  only at construction, so tile request headers (`setLayerRequestHeaders`,
+  GeoLens private rasters) are MapLibre-only. Custom `CustomLayerInterface` layers
   (`capabilities.customLayers` is false on Mapbox). The terrain camera helpers
   (`calculateCameraOptionsFromCameraLngLatAltRotation`,
   `getCenterClampedToGround`): Mapbox kept the free camera those replaced, so

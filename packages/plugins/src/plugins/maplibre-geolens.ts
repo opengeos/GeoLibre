@@ -27,7 +27,10 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import type { Map as MapLibreMap, RequestParameters, ResourceType } from "maplibre-gl";
+import {
+  clearTileRequestHeadersWhere,
+  setTileRequestHeaders,
+} from "@geolibre/map/tile-request-headers";
 import { createLayerId } from "../layer-ids";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import { isTauriRuntime } from "./earth-engine-auth";
@@ -41,13 +44,13 @@ import {
   fetchCapabilities,
   fetchDatasetFeatures,
   fetchDatasetFields,
+  GEOLENS_API_KEY_HEADER,
   geometryKind,
   isEditPlanEmpty,
   mintTileToken,
   normalizeBaseUrl,
   normalizeTileColumns,
   rasterTemplatesForServer,
-  rasterTileAuthHeaders,
   resolveRasterTiles,
   searchDatasets,
   tileColumnsOf,
@@ -537,68 +540,39 @@ function clearAllRefreshTimers(): void {
   refreshTimers.clear();
 }
 
-/**
- * Raster tile URL prefixes that need an `X-Api-Key` header, mapped to the key.
- *
- * MapLibre issues raster tile requests itself, so an API-key-only private raster
- * cannot carry the key the way the fetch calls in `./geolens-api` do.
- * `transformRequest` is the supported hook: `RasterTileSource` routes every tile
- * URL through it, and supplying any header other than `accept` moves the request
- * off `HTMLImageElement` onto fetch, which sends headers. (Verified against
- * maplibre-gl 5.24: `ImageRequest.doImageRequest` only takes the
- * `HTMLImageElement` path when `requestParameters.headers` is empty or
- * `accept`-only.)
- *
- * Keyed by tile-URL prefix (everything before the `{z}` placeholder) rather than
- * by origin, so a key is only ever attached to the exact GeoLens raster endpoint
- * that issued it. A basemap, another plugin's tiles, or a second GeoLens server
- * reachable on the same origin never sees it.
- */
-const rasterApiKeys = new Map<string, string>();
-
-let installedOnMap: MapLibreMap | null = null;
-
-function geolensTransformRequest(
-  url: string,
-  resourceType?: ResourceType,
-): RequestParameters | undefined {
-  if (resourceType !== "Tile" || rasterApiKeys.size === 0) return undefined;
-  const headers = rasterTileAuthHeaders(url, rasterApiKeys);
-  return headers ? { url, headers } : undefined;
-}
+/** Prefix of this plugin's keys in the host's tile request header registry. */
+const RASTER_API_KEY_OWNER = "geolens-raster:";
 
 /**
  * Register a private raster's tile URL so its requests carry the API key.
  *
- * Installs the transform on first use only. GeoLibre sets no `transformRequest`
- * of its own, and `Map` exposes no getter for an existing one, so this
- * deliberately does not try to chain: it returns `undefined` for anything it
- * does not recognize, which is the documented "leave this request alone" answer
- * and keeps the hook cheap to hand over if the host ever wants to own it.
+ * MapLibre issues raster tile requests itself, so an API-key-only private raster
+ * cannot carry the key the way the fetch calls in `./geolens-api` do. The host's
+ * request transform adds it (see `@geolibre/map`'s `setTileRequestHeaders`). It
+ * is keyed by tile-URL prefix (everything before the `{z}` placeholder) rather
+ * than by origin, so a key is only ever attached to the exact GeoLens raster
+ * endpoint that issued it. A basemap, another plugin's tiles, or a second
+ * GeoLens server reachable on the same origin never sees it.
  */
 function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string): void {
-  rasterApiKeys.set(tileUrlPrefix(tiles), apiKey);
-  // Deliberately the MapLibre map, not the shared one: `setTransformRequest`
-  // is MapLibre-only (mapbox-gl accepts a transform at construction and never
-  // again), so a private raster cannot authenticate on Mapbox, ArcGIS or the
-  // Cesium globe. Say so rather than add a layer whose every tile 401s.
+  const prefix = tileUrlPrefix(tiles);
+  setTileRequestHeaders(`${RASTER_API_KEY_OWNER}${prefix}`, [prefix], {
+    [GEOLENS_API_KEY_HEADER]: apiKey,
+  });
+  // Only MapLibre maps are built with the host's request transform (mapbox-gl
+  // takes one at construction and the ArcGIS and Cesium renderers have none),
+  // so a private raster cannot authenticate on Mapbox, ArcGIS or the Cesium
+  // globe. Say so rather than add a layer whose every tile 401s.
   // engine-audit-allow: getMap-mapbox
-  const map = app.getMap?.();
-  if (!map) {
-    const renderer = app.getMapRenderer?.();
-    // eslint-disable-next-line local/no-renderer-kind-checks -- the private-raster protocol is MapLibre's
-    if (app.getMapboxMap?.() || renderer === "arcgis" || renderer === "cesium")
-      throw new Error(labels.privateRasterNeedsMapLibre);
-    return;
-  }
-  if (installedOnMap === map) return;
-  // engine-audit-allow: maplibre-only
-  map.setTransformRequest(geolensTransformRequest);
-  installedOnMap = map;
+  if (app.getMap?.()) return;
+  const renderer = app.getMapRenderer?.();
+  // eslint-disable-next-line local/no-renderer-kind-checks -- the request transform is MapLibre's
+  if (app.getMapboxMap?.() || renderer === "arcgis" || renderer === "cesium")
+    throw new Error(labels.privateRasterNeedsMapLibre);
 }
 
 /**
- * Drop every registered key and uninstall the hook (plugin deactivation).
+ * Drop every registered key (plugin deactivation).
  *
  * Raster layers the user added stay on the map, but a private one stops
  * rendering once its key is gone. That is deliberate: the credential was
@@ -607,10 +581,7 @@ function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string
  * layers when the user reconnects with a key.
  */
 function clearRasterApiKeys(): void {
-  rasterApiKeys.clear();
-  // engine-audit-allow: maplibre-only (installedOnMap is only ever a MapLibre map)
-  installedOnMap?.setTransformRequest(null);
-  installedOnMap = null;
+  clearTileRequestHeadersWhere((key) => key.startsWith(RASTER_API_KEY_OWNER));
 }
 
 // ---------------------------------------------------------------------------
