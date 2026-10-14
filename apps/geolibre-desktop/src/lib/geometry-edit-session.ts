@@ -131,7 +131,14 @@ async function startWhenIdle(
     }
     if (!activated || !manager.isActive(GEO_EDITOR_PLUGIN_ID)) return "activation-failed";
   }
-  return (await geoEditor.startLayerGeometryEdit(app, layerId)) ? "started" : "start-failed";
+  try {
+    return (await geoEditor.startLayerGeometryEdit(app, layerId)) ? "started" : "start-failed";
+  } catch (error) {
+    // Ending the previous session (its write-back or sketches restore) can
+    // throw; report a failed start rather than reject.
+    console.error("Starting a geometry edit session failed:", error);
+    return "start-failed";
+  }
 }
 
 /**

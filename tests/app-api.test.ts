@@ -618,6 +618,34 @@ describe("plugin app API edit sessions", () => {
     assert.deepEqual(started, [], "no session starts without the editor");
   });
 
+  it("reports false when starting the session throws", async () => {
+    const manager = new PluginManager();
+    manager.register({
+      id: GEO_EDITOR_PLUGIN_ID,
+      name: "GeoEditor",
+      version: "0.0.0",
+      activate: () => undefined,
+      deactivate: () => undefined,
+    });
+    const api = createAppAPI(
+      undefined,
+      fakeHost({
+        plugins: manager,
+        startLayerGeometryEdit: async () => {
+          throw new Error("restoring the sketches failed");
+        },
+      }).host,
+    );
+    const roads = api.addGeoJsonLayer("Roads", EMPTY_COLLECTION);
+    const originalConsoleError = console.error;
+    console.error = () => undefined;
+    try {
+      assert.equal(await api.startEditSession(roads), false);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
   it("refuses a layer that doesn't exist without activating the GeoEditor", async () => {
     const manager = new PluginManager();
     manager.register({
