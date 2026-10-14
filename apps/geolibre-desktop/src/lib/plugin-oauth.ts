@@ -9,6 +9,7 @@
  * itself, so no plugin secret passes through the host.
  */
 
+import type { GeoLibreOAuthFailure } from "@geolibre/plugins";
 import { isDesktopRuntime } from "./is-mobile";
 import {
   DESKTOP_SHARE_CALLBACK,
@@ -24,16 +25,15 @@ const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
 /** Why a plugin sign-in ended without an authorization code. */
-export type PluginOAuthFailure =
-  | "invalid-request"
-  | "popup-blocked"
-  | "already-pending"
-  | "access-denied"
-  | "invalid-callback"
-  | "cancelled"
-  | "timeout"
-  | "restart-required"
-  | "launch-failed";
+export type PluginOAuthFailure = GeoLibreOAuthFailure;
+
+// The desktop callback failures plugins see under their own name; the rest
+// (a malformed or mismatched callback) are an invalid callback.
+const NATIVE_CALLBACK_FAILURES: Partial<Record<string, PluginOAuthFailure>> = {
+  "access-denied": "access-denied",
+  timeout: "timeout",
+  "restart-required": "restart-required",
+};
 
 export class PluginOAuthError extends Error {
   constructor(readonly reason: PluginOAuthFailure) {
@@ -92,6 +92,10 @@ export async function authorizeInPopup(
     popup!.location.href = url.toString();
     return await waitForPopupCode(popup!, state, timeoutMs);
   } catch (error) {
+    // The callback page closes the popup on success; after a timeout, denial or
+    // bad callback it would stay on the provider's page, and the next sign-in
+    // would pick it up again by name.
+    popup?.close();
     if (error instanceof OAuthPopupError) throw new PluginOAuthError(error.reason);
     throw error;
   } finally {
@@ -165,15 +169,7 @@ async function authorizeInSystemBrowser(url: URL, state: string, timeoutMs: numb
   } catch (error) {
     waiter.cancel();
     if (error instanceof NativeShareCallbackError) {
-      throw new PluginOAuthError(
-        error.code === "access-denied"
-          ? "access-denied"
-          : error.code === "timeout"
-            ? "timeout"
-            : error.code === "restart-required"
-              ? "restart-required"
-              : "invalid-callback",
-      );
+      throw new PluginOAuthError(NATIVE_CALLBACK_FAILURES[error.code] ?? "invalid-callback");
     }
     throw error;
   }

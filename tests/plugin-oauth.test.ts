@@ -126,10 +126,11 @@ describe("plugin OAuth popup sign-in", () => {
     assert.equal(popupOpened, false);
   });
 
-  it("rejects a callback for another flow, a denial, and a closed popup", async () => {
+  it("rejects a callback for another flow, a denial, and a closed popup, closing its popup", async () => {
     const request = authorizationUrl({ state: "s1", redirect_uri: REDIRECT_URI });
     respond = () => ({ code: "foreign-code", state: "someone-else" });
     assert.equal(await rejection(authorizeInPopup(request)), "invalid-callback");
+    assert.equal(popupClosed, true, "a failed sign-in closes its popup");
     respond = (requestState) => ({ error: "access_denied", state: requestState ?? undefined });
     assert.equal(await rejection(authorizeInPopup(request)), "access-denied");
     respond = () => "close";
