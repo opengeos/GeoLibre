@@ -272,6 +272,8 @@ export function createAppAPI(
     removeLayer: (layerId: string) => {
       const state = useAppStore.getState();
       if (state.layers.some((layer) => layer.id === layerId)) {
+        // A plugin-painted native layer's bridge lives outside the store.
+        clearExternalNativePaintBridge(layerId);
         state.removeLayer(layerId);
       }
     },

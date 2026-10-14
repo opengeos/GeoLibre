@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { tool } from "@strands-agents/sdk";
 import { z } from "zod";
-import { useAppStore } from "@geolibre/core";
+import { getExternalNativePaintBridge, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { createAppAPI, type AppApiHost } from "../apps/geolibre-desktop/src/lib/app-api";
 import {
@@ -478,6 +478,21 @@ describe("plugin app API layers", () => {
     );
     // Unregistering an unknown id is a no-op rather than a throw.
     api.unregisterExternalNativeLayer("ext-1");
+  });
+
+  it("clears a native layer's paint bridge when removeLayer removes it", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    api.registerExternalNativeLayer({
+      id: "ext-painted",
+      name: "Painted",
+      nativeLayerIds: ["ext-painted-custom"],
+      paintBridge: { setOpacity: () => undefined },
+    });
+    assert.ok(getExternalNativePaintBridge("ext-painted"));
+
+    api.removeLayer("ext-painted");
+
+    assert.equal(getExternalNativePaintBridge("ext-painted"), undefined);
   });
 
   it("routes the basemap to the Mapbox style while Mapbox is the primary renderer", () => {
