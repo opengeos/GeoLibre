@@ -318,13 +318,16 @@ export function createAppAPI(
         // Remember the delivered state first, so a callback that changes the
         // session (or a nested notification) cannot emit it twice.
         const endedLayerId = previousLayerId;
+        // Only an end recorded since the last notification describes this
+        // session; an older record for the same layer belongs to an earlier one.
+        const endIsNew = end !== previousEnd;
         previousLayerId = layerId;
         previousEnd = end;
         if (endedLayerId) {
           callback({
             layerId: endedLayerId,
             state: "ended",
-            saved: end?.layerId === endedLayerId && end.saved,
+            saved: endIsNew && end?.layerId === endedLayerId && end.saved,
           });
         }
         if (layerId) callback({ layerId, state: "started" });

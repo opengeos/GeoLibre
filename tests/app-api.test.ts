@@ -368,6 +368,11 @@ function fakeEditSessions() {
       layerId = null;
       notify();
     },
+    // Ends the open session without recording how it ended.
+    endWithoutRecord() {
+      layerId = null;
+      notify();
+    },
     // Ends the open session and starts another on the same layer, notifying
     // once for both.
     restartInOneNotification(saved: boolean) {
@@ -435,6 +440,20 @@ describe("plugin app API edit sessions", () => {
       { layerId: "roads", state: "ended", saved: true },
       { layerId: "roads", state: "started" },
     ]);
+  });
+
+  it("doesn't report an earlier session's save for a session that ended without a record", () => {
+    const sessions = fakeEditSessions();
+    const api = createAppAPI(undefined, fakeHost(sessions.host).host);
+    sessions.start("roads");
+    sessions.end(true);
+    sessions.start("roads");
+    const changes: GeoLibreEditSessionChange[] = [];
+    api.onEditSessionChange((change) => changes.push(change));
+
+    sessions.endWithoutRecord();
+
+    assert.deepEqual(changes, [{ layerId: "roads", state: "ended", saved: false }]);
   });
 
   it("runs overlapping starts one after another", async () => {
