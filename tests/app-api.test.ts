@@ -430,6 +430,74 @@ describe("plugin app API layers", () => {
     assert.equal("beforeLayerId" in (layer ?? {}), false);
   });
 
+  it("adds a vector tile layer from a tile template or a TileJSON URL", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const below = api.addGeoJsonLayer("Below", { type: "FeatureCollection", features: [] });
+    const template = api.addVectorTileLayer(
+      "Records",
+      "https://records.example.org/mvt/node/{z}/{x}/{y}.pbf",
+      {
+        sourceLayers: ["node"],
+        bounds: [-10, -5, 10, 5],
+        minzoom: 0,
+        maxzoom: 14,
+        opacity: 0.5,
+        beforeLayerId: below,
+        metadata: { publisher: "Records", sourceLayers: ["ignored"] },
+      },
+    );
+    const tileJson = api.addVectorTileLayer("Roads", "https://tiles.example.com/roads.json", {
+      sourceLayers: ["roads", "labels"],
+    });
+    const layers = useAppStore.getState().layers;
+    const templateLayer = layers.find((item) => item.id === template);
+    assert.equal(templateLayer?.type, "vector-tiles");
+    assert.deepEqual(templateLayer?.source, {
+      type: "vector",
+      tiles: ["https://records.example.org/mvt/node/{z}/{x}/{y}.pbf"],
+      sourceLayer: "node",
+      sourceLayers: ["node"],
+      bounds: [-10, -5, 10, 5],
+      minzoom: 0,
+      maxzoom: 14,
+    });
+    assert.equal(templateLayer?.opacity, 0.5);
+    assert.equal(templateLayer?.metadata.publisher, "Records");
+    assert.deepEqual(templateLayer?.metadata.sourceLayers, ["node"], "GeoLibre's keys win");
+    assert.deepEqual(layers.map((item) => item.id).slice(0, 2), [template, below]);
+    const tileJsonLayer = layers.find((item) => item.id === tileJson);
+    assert.equal(tileJsonLayer?.source.url, "https://tiles.example.com/roads.json");
+    assert.equal("tiles" in (tileJsonLayer?.source ?? {}), false);
+  });
+
+  it("rejects a vector tile layer it could not draw", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const url = "https://tiles.example.com/{z}/{x}/{y}.pbf";
+    assert.throws(
+      () =>
+        api.addVectorTileLayer("Tiles", "file:///tiles/{z}/{x}/{y}.pbf", { sourceLayers: ["a"] }),
+      /url must be/,
+    );
+    assert.throws(() => api.addVectorTileLayer("Tiles", url, { sourceLayers: [] }), /sourceLayers/);
+    assert.throws(
+      () => api.addVectorTileLayer("Tiles", url, { sourceLayers: ["a", ""] }),
+      /sourceLayers/,
+    );
+    assert.throws(
+      () => api.addVectorTileLayer("Tiles", url, { sourceLayers: ["a"], minzoom: 10, maxzoom: 4 }),
+      /minzoom/,
+    );
+    assert.throws(
+      () =>
+        api.addVectorTileLayer("Tiles", url, {
+          sourceLayers: ["a"],
+          bounds: [0, 0, 1] as unknown as [number, number, number, number],
+        }),
+      /bounds/,
+    );
+    assert.deepEqual(api.getLayers(), []);
+  });
+
   it("keeps queryable: false on a WMS layer and leaves it out otherwise (#2887)", () => {
     const api = createAppAPI(undefined, fakeHost().host);
     const options = { url: "https://example.com/wms", layers: "buildings" };

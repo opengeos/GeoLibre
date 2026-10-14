@@ -119,6 +119,33 @@ export interface GeoLibreTileLayerOptions {
 }
 
 /**
+ * Options for {@link GeoLibreAppAPI.addVectorTileLayer}. Vector tiles carry no
+ * styling, so the plugin names the tileset's source layers to draw; GeoLibre
+ * styles them like a vector tile layer added from Add Data.
+ */
+export interface GeoLibreVectorTileLayerOptions {
+  /** The tileset's source layer names to draw (at least one). */
+  sourceLayers: string[];
+  /** Tile extent as `[west, south, east, north]` in WGS84 degrees. */
+  bounds?: [number, number, number, number];
+  /** Minimum zoom at which tiles are requested (0–24). */
+  minzoom?: number;
+  /** Maximum zoom at which tiles are requested (0–24); overzoomed beyond it. */
+  maxzoom?: number;
+  /** Initial visibility (default true). */
+  visible?: boolean;
+  /** Initial opacity in [0, 1] (default 1). */
+  opacity?: number;
+  /** Insert the new layer directly beneath the layer with this id. */
+  beforeLayerId?: string;
+  /**
+   * Provenance fields merged into the new layer's `metadata`, as for
+   * {@link GeoLibreTileLayerOptions.metadata}. GeoLibre's own keys win.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Options for {@link GeoLibreAppAPI.addWmsLayer}. The GetMap tile URL is built
  * from the service `url` plus `layers`, so the plugin passes the WMS request
  * parameters instead of a tile URL template.
@@ -641,6 +668,21 @@ export interface GeoLibreAppAPI {
    * call it with optional chaining.
    */
   addWmtsLayer?: (name: string, url: string, options?: GeoLibreTileLayerOptions) => string;
+  /**
+   * Add a vector tile (MVT) layer and return its layer id. `url` is a tile URL
+   * template with `{z}`/`{x}`/`{y}` placeholders, or a TileJSON URL. The layer
+   * is the same as one added from Add Data → OGC Vector Tiles: it appears in
+   * the Layers panel, takes the Style panel's controls (the attribute list and
+   * geometry type are read from the tiles), and persists with the project.
+   * Throws on a non-HTTP(S) URL, missing source layers, or an invalid extent or
+   * zoom range. Typed optional for forward-compatibility, so call it with
+   * optional chaining.
+   */
+  addVectorTileLayer?: (
+    name: string,
+    url: string,
+    options: GeoLibreVectorTileLayerOptions,
+  ) => string;
   /**
    * Add a native WMS raster layer and return its layer id. The host builds the
    * GetMap tile URL from {@link GeoLibreWmsLayerOptions.url} and
