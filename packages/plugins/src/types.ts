@@ -119,6 +119,33 @@ export interface GeoLibreTileLayerOptions {
 }
 
 /**
+ * Options for {@link GeoLibreAppAPI.addVectorTileLayer}. Vector tiles carry no
+ * styling, so the plugin names the tileset's source layers to draw; GeoLibre
+ * styles them like a vector tile layer added from Add Data.
+ */
+export interface GeoLibreVectorTileLayerOptions {
+  /** The tileset's source layer names to draw (at least one). */
+  sourceLayers: string[];
+  /** Tile extent as `[west, south, east, north]` in WGS84 degrees. */
+  bounds?: [number, number, number, number];
+  /** Minimum zoom at which tiles are requested (0–24). */
+  minzoom?: number;
+  /** Maximum zoom at which tiles are requested (0–24); overzoomed beyond it. */
+  maxzoom?: number;
+  /** Initial visibility (default true). */
+  visible?: boolean;
+  /** Initial opacity in [0, 1] (default 1). */
+  opacity?: number;
+  /** Insert the new layer directly beneath the layer with this id. */
+  beforeLayerId?: string;
+  /**
+   * Provenance fields merged into the new layer's `metadata`, as for
+   * {@link GeoLibreTileLayerOptions.metadata}. GeoLibre's own keys win.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Options for {@link GeoLibreAppAPI.addWmsLayer}. The GetMap tile URL is built
  * from the service `url` plus `layers`, so the plugin passes the WMS request
  * parameters instead of a tile URL template.
@@ -467,6 +494,39 @@ export interface GeoLibreSelection {
 /** The host tool currently owning map clicks, or null for ordinary map interaction. */
 export type GeoLibreActiveMapTool = "identify" | "feature-selection" | "geo-editor" | null;
 
+/** A GeoEditor session starting or ending, for {@link GeoLibreAppAPI.onEditSessionChange}. */
+export type GeoLibreEditSessionChange =
+  | {
+      /** The layer the session edits. */
+      layerId: string;
+      state: "started";
+    }
+  | {
+      /** The layer the session edited. */
+      layerId: string;
+      state: "ended";
+      /**
+       * True when the edits were saved to the layer; false when the session
+       * was cancelled, or ended because its layer was removed.
+       */
+      saved: boolean;
+    };
+
+/**
+ * Why {@link GeoLibreAppAPI.authorizeInPopup} ended without a code, as the
+ * `reason` of the error it rejects with.
+ */
+export type GeoLibreOAuthFailure =
+  | "invalid-request"
+  | "popup-blocked"
+  | "already-pending"
+  | "access-denied"
+  | "invalid-callback"
+  | "cancelled"
+  | "timeout"
+  | "restart-required"
+  | "launch-failed";
+
 /** A lightweight assistant tool for standalone plugins. No runtime SDK import is needed.
  * JSON Schema describes input to the model but does NOT validate it at runtime.
  * The callback must validate its own input. Return JSON-serializable data;
@@ -609,6 +669,32 @@ export interface GeoLibreAppAPI {
    */
   onActiveMapToolChange?: (callback: (tool: GeoLibreActiveMapTool) => void) => () => void;
   /**
+   * The layer open in a GeoEditor session, or null when none is. Typed optional
+   * for forward-compatibility with host variants, so call it with optional
+   * chaining.
+   */
+  getEditSessionLayerId?: () => string | null;
+  /**
+   * Subscribe to GeoEditor sessions starting and ending, for a plugin that acts
+   * when the user finishes editing its layer (offering to sync the changes, for
+   * example). Switching layers reports the old session's end, then the new
+   * one's start. Does not call back immediately; read
+   * {@link getEditSessionLayerId} for the current session. Call the returned
+   * unsubscribe function on deactivation. Typed optional for
+   * forward-compatibility with host variants, so call it with optional chaining.
+   */
+  onEditSessionChange?: (callback: (change: GeoLibreEditSessionChange) => void) => () => void;
+  /**
+   * Open a GeoEditor session on a layer, as the layer's Edit geometry action
+   * does, activating the GeoEditor if it is off. An open session on another
+   * layer is saved first. Resolves true once the session is open (or already
+   * was), or false when it cannot start: an unsupported renderer, a layer that
+   * isn't an editable vector layer, or the GeoEditor failing to activate.
+   * Typed optional for forward-compatibility with host variants, so call it
+   * with optional chaining.
+   */
+  startEditSession?: (layerId: string) => Promise<boolean>;
+  /**
    * Add a native XYZ raster tile layer from a tile URL template (with
    * `{x}`/`{y}`/`{z}` placeholders) and return its layer id. Unlike calling
    * `getMap().addSource()/addLayer()` directly, the layer appears in the Layers
@@ -626,6 +712,21 @@ export interface GeoLibreAppAPI {
    * call it with optional chaining.
    */
   addWmtsLayer?: (name: string, url: string, options?: GeoLibreTileLayerOptions) => string;
+  /**
+   * Add a vector tile (MVT) layer and return its layer id. `url` is a tile URL
+   * template with `{z}`/`{x}`/`{y}` placeholders, or a TileJSON URL. The layer
+   * is the same as one added from Add Data → OGC Vector Tiles: it appears in
+   * the Layers panel, takes the Style panel's controls (the attribute list and
+   * geometry type are read from the tiles), and persists with the project.
+   * Throws on a non-HTTP(S) URL, missing source layers, or an invalid extent or
+   * zoom range. Typed optional for forward-compatibility, so call it with
+   * optional chaining.
+   */
+  addVectorTileLayer?: (
+    name: string,
+    url: string,
+    options: GeoLibreVectorTileLayerOptions,
+  ) => string;
   /**
    * Add a native WMS raster layer and return its layer id. The host builds the
    * GetMap tile URL from {@link GeoLibreWmsLayerOptions.url} and
@@ -1200,6 +1301,29 @@ export interface GeoLibreAppAPI {
    * can still read each other's values. Never put secrets in `getProjectState`.
    */
   credentials?: GeoLibrePluginCredentials;
+  /**
+   * The redirect URI to register with an OAuth provider for
+   * {@link authorizeInPopup}: the app's callback page on the web, its custom URL
+   * scheme on the desktop. Typed optional for forward-compatibility with host
+   * variants, so call it with optional chaining.
+   */
+  getOAuthRedirectUri?: () => string;
+  /**
+   * Run an OAuth authorization-code sign-in: send the user to the provider's
+   * page (a popup on the web, the system browser on the desktop) and resolve
+   * with the authorization code it redirects back with. The URL must carry a
+   * `state` and a `redirect_uri` equal to {@link getOAuthRedirectUri}; the
+   * callback is accepted only when its `state` matches. The plugin keeps its
+   * PKCE verifier and exchanges the code itself. On the web, call it from a
+   * click handler before any `await`, or the browser blocks the popup.
+   * Rejects with an error whose `reason` is a {@link GeoLibreOAuthFailure}.
+   * Typed optional for forward-compatibility with host variants, so call it
+   * with optional chaining.
+   */
+  authorizeInPopup?: (
+    authorizationUrl: string,
+    options?: { timeoutMs?: number },
+  ) => Promise<string>;
   /**
    * Register a plugin-owned top-level toolbar menu shown in the GeoLibre banner
    * beside the built-in menus, with nested submenus and action items. Returns

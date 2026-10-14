@@ -125,6 +125,10 @@ import {
   closeFloatingPanel,
   getOpenFloatingPanels,
   getGeometryEditTargetLayerId,
+  getLastGeometryEditEnd,
+  subscribeGeometryEdit,
+  isPluginEngineSupported,
+  startLayerGeometryEdit,
   setArcGisPortalAuth,
   setLocalizedErrorTranslator,
 } from "@geolibre/plugins";
@@ -1229,6 +1233,11 @@ const appApiHost: AppApiHost = {
   closeFloatingPanel,
   getOpenFloatingPanels,
   getGeometryEditTargetLayerId,
+  getLastGeometryEditEnd,
+  subscribeGeometryEdit,
+  isPluginEngineSupported,
+  maplibreGeoEditorPlugin,
+  startLayerGeometryEdit,
 };
 
 /**

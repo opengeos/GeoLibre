@@ -167,6 +167,12 @@ export interface GeoLibreAppAPI {
   onActiveMapToolChange?: (
     callback: (tool: GeoLibreActiveMapTool) => void
   ) => () => void;
+  // GeoEditor sessions on a layer. See "GeoEditor sessions".
+  getEditSessionLayerId?: () => string | null;
+  onEditSessionChange?: (
+    callback: (change: GeoLibreEditSessionChange) => void
+  ) => () => void;
+  startEditSession?: (layerId: string) => Promise<boolean>;
   // Native raster/tile layers (see "Raster and tile layers" below). Each
   // returns the new layer's id and the layer appears in the Layers panel and
   // persists with the project, like addGeoJsonLayer does for vector data.
@@ -179,6 +185,11 @@ export interface GeoLibreAppAPI {
     name: string,
     url: string,
     options?: GeoLibreTileLayerOptions
+  ) => string;
+  addVectorTileLayer?: (
+    name: string,
+    url: string,
+    options: GeoLibreVectorTileLayerOptions
   ) => string;
   addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
   addWfsLayer?: (name: string, options: GeoLibreWfsLayerOptions) => Promise<string>;
@@ -317,6 +328,12 @@ export interface GeoLibreAppAPI {
   ) => void;
   // Credential storage (see "Saving credentials" below).
   credentials?: GeoLibrePluginCredentials;
+  // OAuth authorization-code sign-in (see "Signing in with OAuth" below).
+  getOAuthRedirectUri?: () => string;
+  authorizeInPopup?: (
+    authorizationUrl: string,
+    options?: { timeoutMs?: number }
+  ) => Promise<string>;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
@@ -764,6 +781,30 @@ Replacing one active selection gesture with another keeps
 
 Both methods are optional so plugins remain compatible with older hosts.
 
+## GeoEditor sessions
+
+A plugin whose layer users edit in the GeoEditor can follow those sessions, for example to offer to sync the changes to a server when the user finishes, and can open one for the user.
+
+```typescript
+const unsubscribe = app.onEditSessionChange?.((change) => {
+  // `saved` is only on an "ended" change.
+  if (change.layerId === myLayerId && change.state === "ended" && change.saved) {
+    offerToSync(app.getLayerFeatures?.(myLayerId) ?? []);
+  }
+});
+
+// From a "Draw the location" button in the plugin's panel:
+if (!(await app.startEditSession?.(myLayerId))) {
+  showMessage("This layer can't be edited here.");
+}
+```
+
+- **`getEditSessionLayerId`** returns the layer open in the GeoEditor, or `null`.
+- **`onEditSessionChange`** reports `{ layerId, state: "started" }`, and `{ layerId, state: "ended", saved }` when the session ends. `saved` is only on an `"ended"` change, and is `false` when the user cancelled, or the layer was removed mid-session. A callback that throws is logged, and still gets the next change (such as the new session's start on a switch). Switching to another layer reports the old session's end, then the new one's start. It doesn't call back immediately; read `getEditSessionLayerId` for the current state.
+- **`startEditSession`** opens a session the way a layer's **Edit geometry** action does, activating the GeoEditor if it's off and saving an open session on another layer first. It resolves `false` on a renderer the editor doesn't support, for a layer that isn't an editable vector layer, or if the GeoEditor can't be activated. Overlapping calls run one after another. Starting saves and ends any open session first, so after overlapping calls the open session is the last call's, but only if that call resolved `true`. A call still waiting for earlier ones after a minute gives up and resolves `false`.
+
+All three are optional, so call them with optional chaining for older hosts.
+
 
 ## Updating and removing layers
 
@@ -981,6 +1022,30 @@ const layerId = await app.addWfsLayer?.("Roads", {
 The helpers are typed optional for forward-compatibility with host variants, so call them with optional chaining (`app.addTileLayer?.(...)`).
 
 > **Desktop (Tauri) note:** The desktop app enforces a Content Security Policy. Its `connect-src` allows any `https:` or `http:` host, so tile and data requests from a plugin reach their server, but `script-src` only allows the app itself, `blob:` URLs and a short list of version-pinned CDN paths. A plugin that injects a `<script>` or `import()`s a module from another host is blocked; bundle that code into the plugin instead. A bundled (first-party) plugin can add the path to `script-src` in `apps/geolibre-desktop/src-tauri/tauri.conf.json` (see [Desktop CSP `script-src` allowlist](maintenance.md#desktop-csp-script-src-allowlist)). The web build is unaffected.
+
+### Vector tile layers
+
+`addVectorTileLayer` adds a vector tile (MVT) layer from a tile URL template (`{z}`/`{x}`/`{y}`) or a TileJSON URL and returns its id. The layer is the same as one added from **Add Data → OGC Vector Tiles**: it appears in the Layers panel, takes the Style panel's controls, and persists with the project. Vector tiles carry no styling, so name the tileset's source layers to draw; GeoLibre reads the geometry type and attribute names from the tiles it loads.
+
+```typescript
+export interface GeoLibreVectorTileLayerOptions {
+  sourceLayers: string[]; // at least one
+  bounds?: [number, number, number, number]; // [west, south, east, north] in WGS84
+  minzoom?: number; // 0-24
+  maxzoom?: number; // 0-24; overzoomed beyond it
+  visible?: boolean; // default true
+  opacity?: number; // default 1
+  beforeLayerId?: string; // insert beneath this layer
+  metadata?: Record<string, unknown>; // provenance merged into layer.metadata
+}
+
+const layerId = app.addVectorTileLayer?.("Sites", "https://tiles.example.org/sites/{z}/{x}/{y}.pbf", {
+  sourceLayers: ["sites"],
+  maxzoom: 14,
+});
+```
+
+The URL must be absolute HTTP(S), and a template needs all three of `{z}`, `{x}` and `{y}`, written in lowercase (a URL with none is read as TileJSON). Other placeholders such as `{s}` or `{-y}` aren't recognized; for a TMS tileset, serve or rewrite an XYZ template. It throws when that isn't so, `name` is blank or not a string, `sourceLayers` is missing, empty or holds a blank name, `bounds` is not four numbers, the zoom range is out of bounds or inverted, or `opacity` is outside 0–1. With a TileJSON URL, MapLibre reads the zoom range from the TileJSON, so `minzoom` and `maxzoom` throw there; `bounds` is still kept as the extent **Zoom to layer** uses. `bounds` must lie within ±180° and ±90° with `west` ≤ `east` and `south` ≤ `north` (an extent can't cross the antimeridian). Tiles are drawn on MapLibre, Mapbox and the ArcGIS renderer, and draped on the Cesium globe, like other vector tile layers.
 
 ## Zarr layers
 
@@ -1397,6 +1462,37 @@ const where = app.credentials?.location(); // "keychain" | "browser", for UI cop
 - **The desktop credential store cannot be read from a plugin.** The app reads every saved credential in one native call during startup, before any external plugin loads, and the store then refuses further reads until the window reloads (the loader also closes reads before importing a plugin, in case that read never ran). A plugin calling the store's Tauri command directly gets an error instead of the saved tokens. This narrows what a plugin can reach; it does not isolate plugins. Values the app has already loaded into memory (Settings tokens, other plugins' `app.credentials` values) remain reachable from the shared JavaScript realm, writes to the store are not restricted, and on the web, Jupyter and mobile builds the values sit in `localStorage`. Install only plugins you trust.
 - **Never put secrets in `getProjectState`.** Plugin settings are saved in project files and shared or exported with them.
 - **Built-in plugins use it too.** The Hugging Face, Mapillary and God's Eye View tokens moved from their own `localStorage` keys to `app.credentials`; the host migrates an existing plaintext value on first launch and removes it only after the new write succeeds.
+
+## Signing in with OAuth
+
+A plugin that signs users in to a service with OAuth 2.0 (authorization code with PKCE) can let GeoLibre run the browser round trip. `app.authorizeInPopup` sends the user to the provider's authorization page and resolves with the code from the redirect: on the web it opens a popup that comes back through the app's `oauth-callback.html`, and on the desktop it opens the system browser and receives the app's custom-scheme callback. The plugin builds the authorization URL, keeps the PKCE verifier, and exchanges the code for tokens itself, so no client secret or token passes through the host.
+
+```typescript
+const redirectUri = app.getOAuthRedirectUri?.(); // register this with the provider
+const state = crypto.randomUUID();
+const verifier = createCodeVerifier(); // your PKCE helpers
+const authorizationUrl = new URL(`${server}/o/authorize/`);
+authorizationUrl.search = new URLSearchParams({
+  response_type: "code",
+  client_id: clientId,
+  redirect_uri: redirectUri,
+  state,
+  code_challenge: await createCodeChallenge(verifier), // compute before the click
+  code_challenge_method: "S256",
+}).toString();
+
+signInButton.onclick = async () => {
+  const code = await app.authorizeInPopup?.(authorizationUrl.toString()); // no await before this
+  const tokens = await exchangeCode(code, verifier, redirectUri); // POST to the token endpoint
+  app.credentials?.set("refresh-token", tokens.refresh_token);
+};
+```
+
+- **Call it from a click handler, before any `await`.** Browsers only allow a popup opened as part of a user gesture, so build the URL (including the PKCE challenge) ahead of time.
+- **The request must carry `state` and the app's redirect URI.** `redirect_uri` must equal `app.getOAuthRedirectUri()`, which is the callback page on the web (it follows the site's base path) and `org.geolibre.desktop:/oauth/callback` on the desktop; register both with the provider if the plugin runs in both. A callback is accepted only from that popup, at the app's origin, with the request's `state`.
+- **Failures** reject with an error whose `reason` is `invalid-request` (no `state`, another redirect URI, not an HTTP(S) URL, or a `timeoutMs` that isn't a positive number of milliseconds up to 2,147,483,647), `popup-blocked`, `already-pending`, `access-denied`, `invalid-callback`, `cancelled` (the popup was closed), `timeout` (five minutes by default; pass `{ timeoutMs }`), `restart-required` (the desktop callback receiver is not running), or `launch-failed` (the desktop app could not open the system browser).
+- **One plugin sign-in at a time.** A second call while one is in progress rejects with `already-pending` and leaves the first alone. On the desktop the deep-link receiver is shared with the app's own sign-ins, so those wait for each other too; on the web, the app's ArcGIS sign-in uses its own popup and can run alongside a plugin's.
+- **The token request is the plugin's.** Use `app.nativeFetch` on the desktop if the token endpoint does not allow cross-origin requests, and keep refresh tokens in `app.credentials`.
 
 ## Signing in with a session cookie
 

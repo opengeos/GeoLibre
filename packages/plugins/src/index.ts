@@ -566,6 +566,8 @@ export {
   startLayerGeometryEdit,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
+  getLastGeometryEditEnd,
+  type GeometryEditEnd,
   selectGeometryEditFeature,
   isGeoEditorUsingRightClick,
   subscribeGeometryEdit,
