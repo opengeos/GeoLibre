@@ -497,6 +497,34 @@ describe("plugin app API edit sessions", () => {
     assert.deepEqual(started, [roads]);
   });
 
+  it("reports false when the GeoEditor can't be activated", async () => {
+    const manager = new PluginManager();
+    manager.register({
+      id: GEO_EDITOR_PLUGIN_ID,
+      name: "GeoEditor",
+      version: "0.0.0",
+      activate: () => {
+        throw new Error("the editor's packages failed to load");
+      },
+      deactivate: () => undefined,
+    });
+    const started: string[] = [];
+    const api = createAppAPI(
+      undefined,
+      fakeHost({
+        plugins: manager,
+        startLayerGeometryEdit: async (_app: GeoLibreAppAPI, layerId: string) => {
+          started.push(layerId);
+          return true;
+        },
+      }).host,
+    );
+    const roads = api.addGeoJsonLayer("Roads", EMPTY_COLLECTION);
+
+    assert.equal(await api.startEditSession(roads), false);
+    assert.deepEqual(started, [], "no session starts without the editor");
+  });
+
   it("refuses a layer that doesn't exist without activating the GeoEditor", async () => {
     const manager = new PluginManager();
     manager.register({

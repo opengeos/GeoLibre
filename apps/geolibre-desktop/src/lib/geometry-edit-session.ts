@@ -85,7 +85,13 @@ async function startWhenIdle(
   if (!manager.isActive(GEO_EDITOR_PLUGIN_ID)) {
     // The editor's packages load on first activation, so the result can be a
     // promise; awaiting a plain boolean is harmless.
-    const activated = await manager.activate(GEO_EDITOR_PLUGIN_ID, app);
+    let activated: boolean;
+    try {
+      activated = await manager.activate(GEO_EDITOR_PLUGIN_ID, app);
+    } catch {
+      // The plugin manager rethrows an activate() that throws.
+      return "activation-failed";
+    }
     if (!activated || !manager.isActive(GEO_EDITOR_PLUGIN_ID)) return "activation-failed";
   }
   return (await geoEditor.startLayerGeometryEdit(app, layerId)) ? "started" : "start-failed";
