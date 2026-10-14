@@ -775,8 +775,9 @@ Both methods are optional so plugins remain compatible with older hosts.
 A plugin whose layer users edit in the GeoEditor can follow those sessions, for example to offer to sync the changes to a server when the user finishes, and can open one for the user.
 
 ```typescript
-const unsubscribe = app.onEditSessionChange?.(({ layerId, state, saved }) => {
-  if (layerId === myLayerId && state === "ended" && saved) {
+const unsubscribe = app.onEditSessionChange?.((change) => {
+  // `saved` is only on an "ended" change.
+  if (change.layerId === myLayerId && change.state === "ended" && change.saved) {
     offerToSync(app.getLayerFeatures?.(myLayerId) ?? []);
   }
 });
@@ -788,7 +789,7 @@ if (!(await app.startEditSession?.(myLayerId))) {
 ```
 
 - **`getEditSessionLayerId`** returns the layer open in the GeoEditor, or `null`.
-- **`onEditSessionChange`** reports `{ layerId, state: "started" }`, and `{ layerId, state: "ended", saved }` when the session ends. `saved` is `false` when the user cancelled, or the layer was removed mid-session. Switching to another layer reports the old session's end, then the new one's start. It doesn't call back immediately; read `getEditSessionLayerId` for the current state.
+- **`onEditSessionChange`** reports `{ layerId, state: "started" }`, and `{ layerId, state: "ended", saved }` when the session ends. `saved` is only on an `"ended"` change, and is `false` when the user cancelled, or the layer was removed mid-session. A callback that throws is logged and doesn't stop other listeners. Switching to another layer reports the old session's end, then the new one's start. It doesn't call back immediately; read `getEditSessionLayerId` for the current state.
 - **`startEditSession`** opens a session the way a layer's **Edit geometry** action does, activating the GeoEditor if it's off and saving an open session on another layer first. It resolves `false` on a renderer the editor doesn't support, for a layer that isn't an editable vector layer, or if the GeoEditor can't be activated. Overlapping calls run one after another. Starting saves and ends any open session first, so after overlapping calls the open session is the last call's, but only if that call resolved `true`.
 
 All three are optional, so call them with optional chaining for older hosts.

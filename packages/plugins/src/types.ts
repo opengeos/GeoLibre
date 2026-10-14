@@ -468,16 +468,22 @@ export interface GeoLibreSelection {
 export type GeoLibreActiveMapTool = "identify" | "feature-selection" | "geo-editor" | null;
 
 /** A GeoEditor session starting or ending, for {@link GeoLibreAppAPI.onEditSessionChange}. */
-export interface GeoLibreEditSessionChange {
-  /** The layer the session edits. */
-  layerId: string;
-  state: "started" | "ended";
-  /**
-   * For `"ended"`: true when the edits were saved to the layer; false when
-   * the session was cancelled, or ended because its layer was removed.
-   */
-  saved?: boolean;
-}
+export type GeoLibreEditSessionChange =
+  | {
+      /** The layer the session edits. */
+      layerId: string;
+      state: "started";
+    }
+  | {
+      /** The layer the session edited. */
+      layerId: string;
+      state: "ended";
+      /**
+       * True when the edits were saved to the layer; false when the session
+       * was cancelled, or ended because its layer was removed.
+       */
+      saved: boolean;
+    };
 
 /** A lightweight assistant tool for standalone plugins. No runtime SDK import is needed.
  * JSON Schema describes input to the model but does NOT validate it at runtime.
