@@ -30,17 +30,39 @@ export interface GeometryEditStartContext {
   >;
 }
 
+// Starts run one at a time: a second start would end the first session while
+// the first is still loading its features, then the first load could finish
+// against the wrong session.
+let pendingStarts: Promise<unknown> = Promise.resolve();
+
 /**
  * Start a GeoEditor session on a layer, as the Layers panel's Edit geometry
  * action does: check the renderer can host the editor, read the layer's
  * features from its MapLibre source if the store has none, activate the
- * GeoEditor plugin if needed, then start the session.
+ * GeoEditor plugin if needed, then start the session. Calls are queued, so
+ * overlapping starts run one after another.
  *
  * @param layerId - The layer to edit.
  * @param context - The host's app API, plugin manager, map and GeoEditor functions.
  * @returns "started", or why the session could not start.
  */
-export async function startGeometryEditSession(
+export function startGeometryEditSession(
+  layerId: string,
+  context: GeometryEditStartContext,
+): Promise<GeometryEditStartResult> {
+  const start = pendingStarts.then(() => startWhenIdle(layerId, context));
+  pendingStarts = start.catch(() => undefined);
+  return start;
+}
+
+/**
+ * The start itself, run once every earlier start has settled.
+ *
+ * @param layerId - The layer to edit.
+ * @param context - The host's app API, plugin manager, map and GeoEditor functions.
+ * @returns "started", or why the session could not start.
+ */
+async function startWhenIdle(
   layerId: string,
   context: GeometryEditStartContext,
 ): Promise<GeometryEditStartResult> {

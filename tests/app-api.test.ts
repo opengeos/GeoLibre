@@ -368,6 +368,12 @@ function fakeEditSessions() {
       layerId = null;
       notify();
     },
+    // Ends the open session and starts another on the same layer, notifying
+    // once for both.
+    restartInOneNotification(saved: boolean) {
+      if (layerId) lastEnd = { layerId, saved };
+      notify();
+    },
   };
 }
 
@@ -412,6 +418,53 @@ describe("plugin app API edit sessions", () => {
       { layerId: "roads", state: "ended", saved: true },
       { layerId: "rivers", state: "started" },
     ]);
+  });
+
+  it("reports a session that ends and restarts on the same layer in one notification", () => {
+    const sessions = fakeEditSessions();
+    const api = createAppAPI(undefined, fakeHost(sessions.host).host);
+    sessions.start("roads");
+    const changes: GeoLibreEditSessionChange[] = [];
+    api.onEditSessionChange((change) => changes.push(change));
+
+    sessions.restartInOneNotification(true);
+
+    assert.deepEqual(changes, [
+      { layerId: "roads", state: "ended", saved: true },
+      { layerId: "roads", state: "started" },
+    ]);
+  });
+
+  it("runs overlapping starts one after another", async () => {
+    const manager = new PluginManager();
+    manager.register({
+      id: GEO_EDITOR_PLUGIN_ID,
+      name: "GeoEditor",
+      version: "0.0.0",
+      activate: () => undefined,
+      deactivate: () => undefined,
+    });
+    const steps: string[] = [];
+    const api = createAppAPI(
+      undefined,
+      fakeHost({
+        plugins: manager,
+        startLayerGeometryEdit: async (_app: GeoLibreAppAPI, layerId: string) => {
+          steps.push(`begin ${layerId}`);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          steps.push(`end ${layerId}`);
+          return true;
+        },
+      }).host,
+    );
+
+    const results = await Promise.all([
+      api.startEditSession("roads"),
+      api.startEditSession("rivers"),
+    ]);
+
+    assert.deepEqual(results, [true, true]);
+    assert.deepEqual(steps, ["begin roads", "end roads", "begin rivers", "end rivers"]);
   });
 
   it("starts a session, activating the GeoEditor first", async () => {

@@ -308,15 +308,19 @@ export function createAppAPI(
     getEditSessionLayerId: () => host.getGeometryEditTargetLayerId(),
     onEditSessionChange: (callback: (change: GeoLibreEditSessionChange) => void) => {
       let previousLayerId = host.getGeometryEditTargetLayerId();
+      let previousEnd = host.getLastGeometryEditEnd();
       return host.subscribeGeometryEdit(() => {
         const layerId = host.getGeometryEditTargetLayerId();
-        if (layerId === previousLayerId) return;
+        const end = host.getLastGeometryEditEnd();
+        // A new end record with the same layer still active means the session
+        // ended and restarted on that layer between two notifications.
+        if (layerId === previousLayerId && end === previousEnd) return;
         // Remember the delivered state first, so a callback that changes the
         // session (or a nested notification) cannot emit it twice.
         const endedLayerId = previousLayerId;
         previousLayerId = layerId;
+        previousEnd = end;
         if (endedLayerId) {
-          const end = host.getLastGeometryEditEnd();
           callback({
             layerId: endedLayerId,
             state: "ended",
