@@ -249,6 +249,12 @@ let editTargetOriginalGeometries: ReadonlyMap<string, string> | null = null;
 let editTargetOriginalIds: EditedFeatureIds | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
+/**
+ * The sketches restore still running after a session ended, or null. A session
+ * ends (and releases its layer) before the restore finishes, so a new session
+ * waits for it.
+ */
+let pendingSketchesRestore: Promise<void> | null = null;
 
 /**
  * Baseline of the features most recently loaded from a map view, keyed by their
@@ -1113,7 +1119,16 @@ export function subscribeGeometryEdit(listener: () => void): () => void {
 }
 
 function notifyGeometryEdit(): void {
-  for (const listener of geometryEditListeners) listener();
+  for (const listener of geometryEditListeners) {
+    // Listeners include plugin callbacks (onEditSessionChange). One that throws
+    // must not keep the rest, such as the Layers panel's editing state, from
+    // hearing that a session started or ended.
+    try {
+      listener();
+    } catch (error) {
+      console.error("A geometry edit session listener failed:", error);
+    }
+  }
 }
 
 /**
@@ -1273,6 +1288,12 @@ export async function startLayerGeometryEdit(
   layerId: string,
 ): Promise<boolean> {
   if (!pluginActive || !geoEditorControl) return false;
+  // A session ended elsewhere (the toolbar's Save or Cancel) may still be
+  // putting the sketches back; starting now would interleave with that.
+  if (pendingSketchesRestore) {
+    await pendingSketchesRestore;
+    if (!pluginActive || !geoEditorControl) return false;
+  }
 
   // Only one session at a time; finish any open one first (saving its work).
   // Await it so its sketches restore completes before the new session starts.
@@ -1468,8 +1489,27 @@ function abortGeometryEditSession(): void {
   notifyGeometryEdit();
 }
 
+/**
+ * Clear the editor and reload the sketches stashed at session start, after
+ * any restore already under way.
+ *
+ * @returns Resolves once the sketches are back in the editor.
+ */
+function restoreSketchesAfterSession(): Promise<void> {
+  const restore = pendingSketchesRestore
+    ? pendingSketchesRestore.then(restoreSketchesNow)
+    : restoreSketchesNow();
+  const settled: Promise<void> = restore
+    .catch(() => undefined)
+    .then(() => {
+      if (pendingSketchesRestore === settled) pendingSketchesRestore = null;
+    });
+  pendingSketchesRestore = settled;
+  return restore;
+}
+
 /** Clear the editor and reload the sketches stashed at session start. */
-async function restoreSketchesAfterSession(): Promise<void> {
+async function restoreSketchesNow(): Promise<void> {
   if (!geoEditorControl) {
     savedSketchesCollection = null;
     return;
