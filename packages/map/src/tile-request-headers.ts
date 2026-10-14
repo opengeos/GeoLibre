@@ -32,12 +32,36 @@ export function tileUrlPrefix(template: string): string {
   return brace === -1 ? template : template.slice(0, brace);
 }
 
+// An HTTP(S) origin with a fixed host, followed by the start of a path.
+const SCOPED_PREFIX = /^https?:\/\/[^/?#{}]+\//i;
+
+/**
+ * Whether `prefix` is narrow enough to carry credentials: an HTTP(S) URL whose
+ * host is fixed and which goes on past it with `/`. A looser prefix would also
+ * match other servers' requests: `https://` (a template with a placeholder in
+ * its host), or `https://host` (which matches `https://host.evil.test`).
+ *
+ * @param prefix - A URL prefix, as {@link tileUrlPrefix} returns.
+ * @returns True if it names one host and a path on it.
+ */
+export function isScopedTileUrlPrefix(prefix: string): boolean {
+  if (!SCOPED_PREFIX.test(prefix)) return false;
+  try {
+    new URL(prefix);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Attach `headers` to every tile and TileJSON request whose URL starts with one
  * of `urlPrefixes`, replacing what `key` registered before.
  *
  * @param key - The owner's key, such as a layer id.
- * @param urlPrefixes - URL prefixes to match; see {@link tileUrlPrefix}.
+ * @param urlPrefixes - URL prefixes to match; see {@link tileUrlPrefix}. Each
+ *   must pass {@link isScopedTileUrlPrefix}, or this throws and registers
+ *   nothing, so credentials can't reach other servers.
  * @param headers - The headers to send, such as `Authorization`.
  */
 export function setTileRequestHeaders(
@@ -49,6 +73,12 @@ export function setTileRequestHeaders(
   if (prefixes.length === 0 || Object.keys(headers).length === 0) {
     entries.delete(key);
     return;
+  }
+  const unscoped = prefixes.find((prefix) => !isScopedTileUrlPrefix(prefix));
+  if (unscoped !== undefined) {
+    throw new Error(
+      `Tile request headers need a URL with a fixed host and path before its first placeholder; "${unscoped}" could match other servers.`,
+    );
   }
   entries.set(key, { urlPrefixes: [...prefixes], headers: { ...headers } });
 }

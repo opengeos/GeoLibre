@@ -964,6 +964,55 @@ describe("plugin app API layers", () => {
     assert.equal(tileRequestHeadersFor(tile), undefined, "another project starts without them");
   });
 
+  it("drops a layer's headers however the layer is removed", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const tile = "https://records.example.org/mvt/node/3/2/1.pbf";
+    const vector = api.addVectorTileLayer(
+      "Records",
+      "https://records.example.org/mvt/node/{z}/{x}/{y}.pbf",
+      { sourceLayers: ["node"], headers: { Authorization: "Bearer token" } },
+    );
+    assert.ok(tileRequestHeadersFor(tile));
+
+    // As the Layers panel does: straight through the store, not the plugin API.
+    useAppStore.getState().removeLayer(vector);
+
+    assert.equal(tileRequestHeadersFor(tile), undefined);
+  });
+
+  it("refuses headers that could reach other servers or repeat a name", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    // A placeholder in the host leaves only "https://" to match on.
+    assert.throws(
+      () =>
+        api.addVectorTileLayer("Shards", "https://{z}.tiles.example.com/{x}/{y}.pbf", {
+          sourceLayers: ["a"],
+          headers: { Authorization: "Bearer token" },
+        }),
+      /fixed host and path/,
+    );
+    assert.deepEqual(api.getLayers(), [], "no layer is added");
+    const sharded = api.addTileLayer("Shards", "https://{z}.tiles.example.com/{x}/{y}.png");
+    assert.throws(
+      () => api.setLayerRequestHeaders(sharded, { Authorization: "Bearer token" }),
+      /fixed host and path/,
+    );
+    assert.equal(tileRequestHeadersFor("https://basemap.example.com/1/1/1.png"), undefined);
+    assert.equal(api.setLayerRequestHeaders(sharded, null), true, "clearing still works");
+
+    const vector = api.addVectorTileLayer("Records", "https://tiles.example.com/{z}/{x}/{y}.pbf", {
+      sourceLayers: ["a"],
+    });
+    assert.throws(
+      () =>
+        api.setLayerRequestHeaders(vector, {
+          Authorization: "Bearer a",
+          authorization: "Bearer b",
+        }),
+      /given more than once/,
+    );
+  });
+
   it("keeps queryable: false on a WMS layer and leaves it out otherwise (#2887)", () => {
     const api = createAppAPI(undefined, fakeHost().host);
     const options = { url: "https://example.com/wms", layers: "buildings" };

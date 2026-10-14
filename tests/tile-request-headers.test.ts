@@ -4,6 +4,7 @@ import type { ResourceType } from "maplibre-gl";
 import {
   clearTileRequestHeaders,
   clearTileRequestHeadersWhere,
+  isScopedTileUrlPrefix,
   setTileRequestHeaders,
   tileRequestHeadersFor,
   transformTileRequest,
@@ -40,6 +41,39 @@ describe("tile request headers", () => {
       transformTileRequest("https://demo.example.com/raster-tiles/zzz/tiles/1/1/1.png", TILE),
       undefined,
     );
+  });
+
+  it("only takes prefixes that name one host and a path on it", () => {
+    for (const scoped of [
+      "https://host/",
+      "https://host:8443/tiles/",
+      "http://localhost:8002/mvt/node/",
+    ]) {
+      assert.equal(isScopedTileUrlPrefix(scoped), true, scoped);
+    }
+    // A placeholder in the host, a host with no path after it, or not HTTP(S).
+    for (const unscoped of [
+      "https://",
+      "https://tiles",
+      "https://host",
+      "ftp://host/",
+      "/tiles/",
+    ]) {
+      assert.equal(isScopedTileUrlPrefix(unscoped), false, unscoped);
+      assert.throws(
+        () => setTileRequestHeaders("loose", [unscoped], { Authorization: "Bearer a" }),
+        /fixed host and path/,
+      );
+    }
+    assert.equal(tileRequestHeadersFor("https://any.example.com/1/1/1.pbf"), undefined);
+    // Clearing still works whatever the prefix.
+    setTileRequestHeaders("loose", ["https://"], {});
+  });
+
+  it("keeps a host's headers from a look-alike host", () => {
+    setTileRequestHeaders("host", ["https://host/"], { Authorization: "Bearer a" });
+    assert.equal(tileRequestHeadersFor("https://host.evil.test/1/1/1.pbf"), undefined);
+    assert.ok(tileRequestHeadersFor("https://host/1/1/1.pbf"));
   });
 
   it("prefers the longest matching prefix", () => {

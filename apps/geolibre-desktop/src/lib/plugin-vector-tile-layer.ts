@@ -178,7 +178,7 @@ export function addPluginVectorTileLayer(
   );
   // Adding the source can request the TileJSON straight away, so the headers
   // have to be in place first.
-  registerLayerRequestHeaders(layer, headers);
+  registerLayerRequestHeaders(METHOD, layer, headers);
   try {
     useAppStore.getState().addLayer(
       {
