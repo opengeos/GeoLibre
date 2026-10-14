@@ -433,12 +433,13 @@ describe("plugin app API layers", () => {
   it("adds a vector tile layer from a tile template or a TileJSON URL", () => {
     const api = createAppAPI(undefined, fakeHost().host);
     const below = api.addGeoJsonLayer("Below", { type: "FeatureCollection", features: [] });
+    const bounds: [number, number, number, number] = [-10, -5, 10, 5];
     const template = api.addVectorTileLayer(
       "Records",
       "https://records.example.org/mvt/node/{z}/{x}/{y}.pbf",
       {
         sourceLayers: ["node"],
-        bounds: [-10, -5, 10, 5],
+        bounds,
         minzoom: 0,
         maxzoom: 14,
         opacity: 0.5,
@@ -448,7 +449,10 @@ describe("plugin app API layers", () => {
     );
     const tileJson = api.addVectorTileLayer("Roads", "https://tiles.example.com/roads.json", {
       sourceLayers: ["roads", "labels", " roads "],
+      // Not a layer: kept as a map anchor, and the layer goes on top.
+      beforeLayerId: "basemap-labels",
     });
+    bounds[0] = 99;
     const layers = useAppStore.getState().layers;
     const templateLayer = layers.find((item) => item.id === template);
     assert.equal(templateLayer?.type, "vector-tiles");
@@ -464,7 +468,15 @@ describe("plugin app API layers", () => {
     assert.equal(templateLayer?.opacity, 0.5);
     assert.equal(templateLayer?.metadata.publisher, "Records");
     assert.deepEqual(templateLayer?.metadata.sourceLayers, ["node"], "GeoLibre's keys win");
-    assert.deepEqual(layers.map((item) => item.id).slice(0, 2), [template, below]);
+    assert.deepEqual(
+      templateLayer?.metadata.bounds,
+      [-10, -5, 10, 5],
+      "a copy of the plugin's array",
+    );
+    assert.deepEqual(
+      layers.map((item) => item.id),
+      [template, below, tileJson],
+    );
     const tileJsonLayer = layers.find((item) => item.id === tileJson);
     assert.equal(tileJsonLayer?.source.url, "https://tiles.example.com/roads.json");
     assert.equal("tiles" in (tileJsonLayer?.source ?? {}), false);
