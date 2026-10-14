@@ -20,6 +20,8 @@ import { OAuthPopupError, waitForPopupCode } from "./oauth-popup";
 import { deriveCallbackUrl, waitForDesktopOAuthReady } from "./share-oauth";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
+// setTimeout's largest delay; a longer one fires straight away.
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 /** Why a plugin sign-in ended without an authorization code. */
 export type PluginOAuthFailure =
@@ -30,7 +32,8 @@ export type PluginOAuthFailure =
   | "invalid-callback"
   | "cancelled"
   | "timeout"
-  | "restart-required";
+  | "restart-required"
+  | "launch-failed";
 
 export class PluginOAuthError extends Error {
   constructor(readonly reason: PluginOAuthFailure) {
@@ -67,35 +70,22 @@ export async function authorizeInPopup(
   authorizationUrl: string,
   options: { timeoutMs?: number } = {},
 ): Promise<string> {
+  // Everything up to window.open is synchronous, so the browser still treats
+  // the popup as part of the user's click. Refuse a second sign-in before
+  // opening anything: the popup's name is fixed, so window.open would hand back
+  // the first sign-in's popup and navigate it away.
+  if (pendingFlow) throw new PluginOAuthError("already-pending");
+  const { url, state } = parseAuthorizationRequest(authorizationUrl);
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMEOUT_MS) {
+    throw new PluginOAuthError("invalid-request");
+  }
   const desktop = isDesktopRuntime();
-  // Reserve the popup synchronously, while the browser still treats this call
-  // as part of the user's click.
   const popup = desktop
     ? null
     : window.open("about:blank", "geolibre-plugin-oauth", "popup,width=520,height=720");
-  const fail = (reason: PluginOAuthFailure): never => {
-    popup?.close();
-    throw new PluginOAuthError(reason);
-  };
+  if (!desktop && !popup) throw new PluginOAuthError("popup-blocked");
 
-  let url: URL;
-  try {
-    url = new URL(authorizationUrl);
-  } catch {
-    return fail("invalid-request");
-  }
-  const state = url.searchParams.get("state");
-  if (
-    (url.protocol !== "https:" && url.protocol !== "http:") ||
-    !state ||
-    url.searchParams.get("redirect_uri") !== getPluginOAuthRedirectUri()
-  ) {
-    return fail("invalid-request");
-  }
-  if (!desktop && !popup) return fail("popup-blocked");
-  if (pendingFlow) return fail("already-pending");
-
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   pendingFlow = true;
   try {
     if (desktop) return await authorizeInSystemBrowser(url, state, timeoutMs);
@@ -109,6 +99,40 @@ export async function authorizeInPopup(
   }
 }
 
+/**
+ * Check a plugin's authorization URL: HTTP(S), with a `state` and the app's
+ * redirect URI.
+ *
+ * @param authorizationUrl - The provider's authorization URL.
+ * @returns The parsed URL and its `state`.
+ */
+function parseAuthorizationRequest(authorizationUrl: string): { url: URL; state: string } {
+  let url: URL;
+  try {
+    url = new URL(authorizationUrl);
+  } catch {
+    throw new PluginOAuthError("invalid-request");
+  }
+  const state = url.searchParams.get("state");
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:") ||
+    !state ||
+    url.searchParams.get("redirect_uri") !== getPluginOAuthRedirectUri()
+  ) {
+    throw new PluginOAuthError("invalid-request");
+  }
+  return { url, state };
+}
+
+/**
+ * The desktop round trip: open the authorization page in the system browser
+ * and wait for the app's deep-link callback.
+ *
+ * @param url - The validated authorization URL.
+ * @param state - Its `state`.
+ * @param timeoutMs - How long the user has to finish.
+ * @returns The authorization code.
+ */
 async function authorizeInSystemBrowser(url: URL, state: string, timeoutMs: number) {
   try {
     // The deep-link receiver starts asynchronously after launch.
@@ -132,6 +156,11 @@ async function authorizeInSystemBrowser(url: URL, state: string, timeoutMs: numb
   try {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url.toString());
+  } catch {
+    waiter.cancel();
+    throw new PluginOAuthError("launch-failed");
+  }
+  try {
     return await waiter.code;
   } catch (error) {
     waiter.cancel();

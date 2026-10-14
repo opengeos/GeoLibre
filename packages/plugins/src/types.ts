@@ -479,7 +479,8 @@ export type GeoLibreOAuthFailure =
   | "invalid-callback"
   | "cancelled"
   | "timeout"
-  | "restart-required";
+  | "restart-required"
+  | "launch-failed";
 
 /** A lightweight assistant tool for standalone plugins. No runtime SDK import is needed.
  * JSON Schema describes input to the model but does NOT validate it at runtime.

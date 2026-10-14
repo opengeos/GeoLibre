@@ -95,12 +95,16 @@ describe("plugin OAuth popup sign-in", () => {
     assert.equal(code, "the-code");
   });
 
-  it("refuses a request without state or with another redirect URI, closing the popup", async () => {
+  it("refuses an invalid request without opening a popup", async () => {
     assert.equal(
       await rejection(authorizeInPopup(authorizationUrl({ redirect_uri: REDIRECT_URI }))),
       "invalid-request",
     );
-    assert.equal(popupClosed, true);
+    const request = authorizationUrl({ state: "s1", redirect_uri: REDIRECT_URI });
+    for (const timeoutMs of [Number.NaN, -1, 0, 2 ** 31]) {
+      assert.equal(await rejection(authorizeInPopup(request, { timeoutMs })), "invalid-request");
+    }
+    assert.equal(popupOpened, false);
     assert.equal(
       await rejection(
         authorizeInPopup(
@@ -132,11 +136,18 @@ describe("plugin OAuth popup sign-in", () => {
     assert.equal(await rejection(authorizeInPopup(request)), "cancelled");
   });
 
-  it("allows one sign-in at a time", async () => {
-    respond = () => "close";
+  it("refuses a second sign-in without touching the first one's popup", async () => {
+    let opened = 0;
+    const realOpen = (window as unknown as { open: () => unknown }).open;
+    (window as unknown as { open: () => unknown }).open = () => {
+      opened += 1;
+      return realOpen();
+    };
     const request = authorizationUrl({ state: "s1", redirect_uri: REDIRECT_URI });
     const first = authorizeInPopup(request);
     assert.equal(await rejection(authorizeInPopup(request)), "already-pending");
-    assert.equal(await rejection(first), "cancelled");
+    assert.equal(await first, "the-code");
+    assert.equal(opened, 1);
+    assert.equal(popupClosed, false);
   });
 });
