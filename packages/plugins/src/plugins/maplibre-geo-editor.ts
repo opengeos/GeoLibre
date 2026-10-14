@@ -1077,6 +1077,9 @@ export interface GeometryEditEnd {
   saved: boolean;
 }
 
+// Every path that ends a session writes a new record here before notifying
+// listeners: onEditSessionChange in the app API only trusts a record written
+// since its last notification.
 let lastGeometryEditEnd: GeometryEditEnd | null = null;
 
 /**
@@ -1117,13 +1120,16 @@ function notifyGeometryEdit(): void {
  * Write the editor's current features back to the target layer. Called only
  * when a session ends with save, so the target's map source is rebuilt once
  * rather than on every edit operation.
+ *
+ * @returns False when there was nothing to write to (no editor, no session, or
+ *   the layer is gone), so the session isn't reported as saved.
  */
-function syncEditTargetToStore(): void {
-  if (!geoEditorControl || !editTargetLayerId) return;
+function syncEditTargetToStore(): boolean {
+  if (!geoEditorControl || !editTargetLayerId) return false;
 
   const store = useAppStore.getState();
   const layer = store.layers.find((l) => l.id === editTargetLayerId);
-  if (!layer) return;
+  if (!layer) return false;
 
   const tagged = cloneFeatureCollection(geoEditorControl.getAllFeatureCollection());
   const edited = reconcileEditedFeatures(
@@ -1151,6 +1157,7 @@ function syncEditTargetToStore(): void {
   // own rather than from `layer.geojson`, so push the edits there too or the map
   // would keep showing the pre-edit geometry.
   writeBackToVectorSource(layer, edited);
+  return true;
 }
 
 /**
@@ -1416,10 +1423,7 @@ export async function endLayerGeometryEdit(
   // cannot leave the session half-torn-down with the target layer still hidden
   // and the user unable to exit.
   try {
-    if (save) {
-      syncEditTargetToStore();
-      saved = true;
-    }
+    if (save) saved = syncEditTargetToStore();
   } finally {
     lastGeometryEditEnd = { layerId: targetId, saved };
     editTargetLayerId = null;
