@@ -560,6 +560,12 @@ describe("plugin app API layers", () => {
         }),
       /url must be/,
     );
+    for (const name of ["", "   ", 7 as unknown as string]) {
+      assert.throws(
+        () => api.addVectorTileLayer(name, url, { sourceLayers: ["a"] }),
+        /name must be/,
+      );
+    }
     assert.deepEqual(api.getLayers(), []);
   });
 

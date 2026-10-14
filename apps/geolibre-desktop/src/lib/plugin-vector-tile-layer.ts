@@ -114,6 +114,11 @@ export function addPluginVectorTileLayer(
   url: string,
   options: GeoLibreVectorTileLayerOptions,
 ): string {
+  // Plugins can be plain JavaScript; the name is the Layers panel label and is
+  // saved with the project.
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new Error(`${METHOD}: name must be a non-empty string.`);
+  }
   const { url: tileUrl, isTemplate } = validateUrl(url);
   // Plugins can be plain JavaScript, so options may be missing altogether.
   const {
