@@ -72,9 +72,9 @@ import { createPluginLocaleApi, type PluginLocaleI18n } from "./plugin-locale";
 import { createPluginHttpSend, createPluginNativeFetch } from "./plugin-native-fetch";
 import { authorizeInPopup, getPluginOAuthRedirectUri } from "./plugin-oauth";
 import { openProjectFromUrlForPlugin } from "./plugin-open-project";
+import { addPluginVectorTileLayer } from "./plugin-vector-tile-layer";
 import { createRemoteDownload, type RemoteDownloadProgress } from "./remote-download";
 import { requestSpaceborneLidarGranule } from "./spaceborne-lidar-handoff";
-import { addPluginVectorTileLayer } from "./plugin-vector-tile-layer";
 import { addPluginWfsLayer } from "./plugin-wfs-layer";
 import {
   browserSaveFallsBackToDownload,

@@ -39,13 +39,12 @@ function validateUrl(value: unknown): { url: string; isTemplate: boolean } {
 
 /** Require one or more non-blank source layer names, returned trimmed and once each. */
 function validateSourceLayers(value: unknown): string[] {
-  const sourceLayers = Array.isArray(value)
-    ? value.filter(
-        (sourceLayer): sourceLayer is string =>
-          typeof sourceLayer === "string" && sourceLayer.trim() !== "",
-      )
-    : [];
-  if (sourceLayers.length === 0 || sourceLayers.length !== (value as unknown[]).length) {
+  const requested: unknown[] = Array.isArray(value) ? value : [];
+  const sourceLayers = requested.filter(
+    (sourceLayer): sourceLayer is string =>
+      typeof sourceLayer === "string" && sourceLayer.trim() !== "",
+  );
+  if (sourceLayers.length === 0 || sourceLayers.length !== requested.length) {
     throw new Error(`${METHOD}: options.sourceLayers must list one or more source layer names.`);
   }
   return [...new Set(sourceLayers.map((sourceLayer) => sourceLayer.trim()))];
