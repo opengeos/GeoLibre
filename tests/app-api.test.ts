@@ -456,6 +456,32 @@ describe("plugin app API edit sessions", () => {
     assert.deepEqual(changes, [{ layerId: "roads", state: "ended", saved: false }]);
   });
 
+  it("still reports the new session to a callback that threw on the old one's end", () => {
+    const sessions = fakeEditSessions();
+    const api = createAppAPI(undefined, fakeHost(sessions.host).host);
+    sessions.start("roads");
+    const changes: GeoLibreEditSessionChange[] = [];
+    api.onEditSessionChange((change) => {
+      changes.push(change);
+      if (change.state === "ended") throw new Error("plugin bug");
+    });
+    const originalConsoleError = console.error;
+    console.error = () => undefined;
+    try {
+      sessions.restartInOneNotification(true);
+      sessions.start("rivers");
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    assert.deepEqual(changes, [
+      { layerId: "roads", state: "ended", saved: true },
+      { layerId: "roads", state: "started" },
+      { layerId: "roads", state: "ended", saved: true },
+      { layerId: "rivers", state: "started" },
+    ]);
+  });
+
   it("runs overlapping starts one after another", async () => {
     const manager = new PluginManager();
     manager.register({

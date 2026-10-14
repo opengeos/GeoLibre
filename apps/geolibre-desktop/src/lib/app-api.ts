@@ -309,6 +309,15 @@ export function createAppAPI(
     onEditSessionChange: (callback: (change: GeoLibreEditSessionChange) => void) => {
       let previousLayerId = host.getGeometryEditTargetLayerId();
       let previousEnd = host.getLastGeometryEditEnd();
+      // A switch delivers an end and a start together; a callback that throws
+      // on the end must still get the start.
+      const deliver = (change: GeoLibreEditSessionChange) => {
+        try {
+          callback(change);
+        } catch (error) {
+          console.error("An onEditSessionChange callback failed:", error);
+        }
+      };
       return host.subscribeGeometryEdit(() => {
         const layerId = host.getGeometryEditTargetLayerId();
         const end = host.getLastGeometryEditEnd();
@@ -324,13 +333,13 @@ export function createAppAPI(
         previousLayerId = layerId;
         previousEnd = end;
         if (endedLayerId) {
-          callback({
+          deliver({
             layerId: endedLayerId,
             state: "ended",
             saved: endIsNew && end?.layerId === endedLayerId && end.saved,
           });
         }
-        if (layerId) callback({ layerId, state: "started" });
+        if (layerId) deliver({ layerId, state: "started" });
       });
     },
     startEditSession: async (layerId: string) =>
