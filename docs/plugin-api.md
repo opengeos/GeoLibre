@@ -1015,7 +1015,7 @@ const layerId = app.addVectorTileLayer?.("Sites", "https://tiles.example.org/sit
 });
 ```
 
-The URL must be absolute HTTP(S), and a template needs all three of `{z}`, `{x}` and `{y}` (a URL with none is read as TileJSON). It throws when that isn't so, `sourceLayers` is missing, empty or holds a blank name, `bounds` is not four numbers, the zoom range is out of bounds or inverted, or `opacity` is outside 0–1. With a TileJSON URL, MapLibre reads the extent and zoom range from the TileJSON, so `bounds`, `minzoom` and `maxzoom` only apply to a template. Tiles are drawn on MapLibre, Mapbox and the ArcGIS renderer, and draped on the Cesium globe, like other vector tile layers.
+The URL must be absolute HTTP(S), and a template needs all three of `{z}`, `{x}` and `{y}` (a URL with none is read as TileJSON). It throws when that isn't so, `sourceLayers` is missing, empty or holds a blank name, `bounds` is not four numbers, the zoom range is out of bounds or inverted, or `opacity` is outside 0–1. With a TileJSON URL, MapLibre reads the zoom range from the TileJSON, so `minzoom` and `maxzoom` throw there; `bounds` is still kept as the extent **Zoom to layer** uses. `bounds` must lie within ±180° and ±90° with `west` ≤ `east` and `south` ≤ `north` (an extent can't cross the antimeridian). Tiles are drawn on MapLibre, Mapbox and the ArcGIS renderer, and draped on the Cesium globe, like other vector tile layers.
 
 ## Zarr layers
 

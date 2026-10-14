@@ -37,7 +37,7 @@ function validateUrl(value: unknown): { url: string; isTemplate: boolean } {
   return { url, isTemplate: placeholderCount > 0 };
 }
 
-/** Require one or more non-blank source layer names, returned trimmed. */
+/** Require one or more non-blank source layer names, returned trimmed and once each. */
 function validateSourceLayers(value: unknown): string[] {
   const sourceLayers = Array.isArray(value)
     ? value.filter(
@@ -48,16 +48,28 @@ function validateSourceLayers(value: unknown): string[] {
   if (sourceLayers.length === 0 || sourceLayers.length !== (value as unknown[]).length) {
     throw new Error(`${METHOD}: options.sourceLayers must list one or more source layer names.`);
   }
-  return sourceLayers.map((sourceLayer) => sourceLayer.trim());
+  return [...new Set(sourceLayers.map((sourceLayer) => sourceLayer.trim()))];
 }
 
-/** Require a four-number WGS84 extent when one is given. */
+/**
+ * Require a WGS84 `[west, south, east, north]` extent when one is given, not
+ * crossing the antimeridian.
+ */
 function validateBounds(value: unknown): void {
   if (value === undefined) return;
+  const isExtent =
+    Array.isArray(value) &&
+    value.length === 4 &&
+    value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate));
+  const [west, south, east, north] = isExtent ? (value as number[]) : [];
   if (
-    !Array.isArray(value) ||
-    value.length !== 4 ||
-    !value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))
+    !isExtent ||
+    west < -180 ||
+    east > 180 ||
+    west > east ||
+    south < -90 ||
+    north > 90 ||
+    south > north
   ) {
     throw new Error(`${METHOD}: options.bounds must be a WGS84 [west, south, east, north] extent.`);
   }
@@ -118,6 +130,12 @@ export function addPluginVectorTileLayer(
   const sourceLayers = validateSourceLayers(requestedSourceLayers);
   validateBounds(bounds);
   validateZoomRange(minzoom, maxzoom);
+  // MapLibre reads a TileJSON tileset's zoom range from the TileJSON itself.
+  if (!isTemplate && (minzoom !== undefined || maxzoom !== undefined)) {
+    throw new Error(
+      `${METHOD}: options.minzoom and maxzoom apply to a tile URL template; a TileJSON URL sets its own zoom range.`,
+    );
+  }
   validateOpacity(opacity);
   const metadata = pluginLayerMetadata(METHOD, requestedMetadata);
 

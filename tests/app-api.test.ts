@@ -447,7 +447,7 @@ describe("plugin app API layers", () => {
       },
     );
     const tileJson = api.addVectorTileLayer("Roads", "https://tiles.example.com/roads.json", {
-      sourceLayers: ["roads", "labels"],
+      sourceLayers: ["roads", "labels", " roads "],
     });
     const layers = useAppStore.getState().layers;
     const templateLayer = layers.find((item) => item.id === template);
@@ -468,6 +468,7 @@ describe("plugin app API layers", () => {
     const tileJsonLayer = layers.find((item) => item.id === tileJson);
     assert.equal(tileJsonLayer?.source.url, "https://tiles.example.com/roads.json");
     assert.equal("tiles" in (tileJsonLayer?.source ?? {}), false);
+    assert.deepEqual(tileJsonLayer?.source.sourceLayers, ["roads", "labels"]);
   });
 
   it("rejects a vector tile layer it could not draw", () => {
@@ -520,6 +521,32 @@ describe("plugin app API layers", () => {
           undefined as unknown as Parameters<typeof api.addVectorTileLayer>[2],
         ),
       /sourceLayers/,
+    );
+    for (const bounds of [
+      [0, -100, 10, 100],
+      [10, 0, 0, 10],
+      [0, 10, 10, 0],
+      [-200, 0, 10, 10],
+    ] as [number, number, number, number][]) {
+      assert.throws(
+        () => api.addVectorTileLayer("Tiles", url, { sourceLayers: ["a"], bounds }),
+        /bounds/,
+      );
+    }
+    assert.throws(
+      () =>
+        api.addVectorTileLayer("Tiles", "https://tiles.example.com/tiles.json", {
+          sourceLayers: ["a"],
+          minzoom: 2,
+        }),
+      /TileJSON URL sets its own zoom range/,
+    );
+    assert.throws(
+      () =>
+        api.addVectorTileLayer("Tiles", 42 as unknown as string, {
+          sourceLayers: ["a"],
+        }),
+      /url must be/,
     );
     assert.deepEqual(api.getLayers(), []);
   });
