@@ -789,7 +789,7 @@ if (!(await app.startEditSession?.(myLayerId))) {
 
 - **`getEditSessionLayerId`** returns the layer open in the GeoEditor, or `null`.
 - **`onEditSessionChange`** reports `{ layerId, state: "started" }`, and `{ layerId, state: "ended", saved }` when the session ends. `saved` is `false` when the user cancelled, or the layer was removed mid-session. Switching to another layer reports the old session's end, then the new one's start. It doesn't call back immediately; read `getEditSessionLayerId` for the current state.
-- **`startEditSession`** opens a session the way a layer's **Edit geometry** action does, activating the GeoEditor if it's off and saving an open session on another layer first. It resolves `false` on a renderer the editor doesn't support, for a layer that isn't an editable vector layer, or if the GeoEditor can't be activated. Overlapping calls run one after another, so the last one called is the session left open.
+- **`startEditSession`** opens a session the way a layer's **Edit geometry** action does, activating the GeoEditor if it's off and saving an open session on another layer first. It resolves `false` on a renderer the editor doesn't support, for a layer that isn't an editable vector layer, or if the GeoEditor can't be activated. Overlapping calls run one after another. Starting saves and ends any open session first, so after overlapping calls the open session is the last call's, but only if that call resolved `true`.
 
 All three are optional, so call them with optional chaining for older hosts.
 

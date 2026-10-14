@@ -67,6 +67,10 @@ async function startWhenIdle(
   context: GeometryEditStartContext,
 ): Promise<GeometryEditStartResult> {
   const { app, manager, geoEditor } = context;
+  // Don't load and activate the editor for a layer that isn't there.
+  if (!useAppStore.getState().layers.some((layer) => layer.id === layerId)) {
+    return "start-failed";
+  }
   // The editor draws through a MapLibre or Mapbox map; on another renderer it
   // cannot start, and waiting for the map will not help.
   if (

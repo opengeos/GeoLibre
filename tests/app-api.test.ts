@@ -377,6 +377,8 @@ function fakeEditSessions() {
   };
 }
 
+const EMPTY_COLLECTION: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+
 describe("plugin app API edit sessions", () => {
   beforeEach(() => {
     useAppStore.getState().newProject({ name: "App API edit sessions" });
@@ -458,13 +460,13 @@ describe("plugin app API edit sessions", () => {
       }).host,
     );
 
-    const results = await Promise.all([
-      api.startEditSession("roads"),
-      api.startEditSession("rivers"),
-    ]);
+    const roads = api.addGeoJsonLayer("Roads", EMPTY_COLLECTION);
+    const rivers = api.addGeoJsonLayer("Rivers", EMPTY_COLLECTION);
+
+    const results = await Promise.all([api.startEditSession(roads), api.startEditSession(rivers)]);
 
     assert.deepEqual(results, [true, true]);
-    assert.deepEqual(steps, ["begin roads", "end roads", "begin rivers", "end rivers"]);
+    assert.deepEqual(steps, [`begin ${roads}`, `end ${roads}`, `begin ${rivers}`, `end ${rivers}`]);
   });
 
   it("starts a session, activating the GeoEditor first", async () => {
@@ -488,9 +490,26 @@ describe("plugin app API edit sessions", () => {
       }).host,
     );
 
-    assert.equal(await api.startEditSession("roads"), true);
+    const roads = api.addGeoJsonLayer("Roads", EMPTY_COLLECTION);
+
+    assert.equal(await api.startEditSession(roads), true);
     assert.equal(manager.isActive(GEO_EDITOR_PLUGIN_ID), true);
-    assert.deepEqual(started, ["roads"]);
+    assert.deepEqual(started, [roads]);
+  });
+
+  it("refuses a layer that doesn't exist without activating the GeoEditor", async () => {
+    const manager = new PluginManager();
+    manager.register({
+      id: GEO_EDITOR_PLUGIN_ID,
+      name: "GeoEditor",
+      version: "0.0.0",
+      activate: () => undefined,
+      deactivate: () => undefined,
+    });
+    const api = createAppAPI(undefined, fakeHost({ plugins: manager }).host);
+
+    assert.equal(await api.startEditSession("missing"), false);
+    assert.equal(manager.isActive(GEO_EDITOR_PLUGIN_ID), false);
   });
 
   it("refuses to start on an unsupported renderer, or when the layer can't be edited", async () => {
@@ -498,7 +517,8 @@ describe("plugin app API edit sessions", () => {
       undefined,
       fakeHost({ isPluginEngineSupported: () => false }).host,
     );
-    assert.equal(await unsupported.startEditSession("roads"), false);
+    const roads = unsupported.addGeoJsonLayer("Roads", EMPTY_COLLECTION);
+    assert.equal(await unsupported.startEditSession(roads), false);
 
     const manager = new PluginManager();
     manager.register({
@@ -512,7 +532,8 @@ describe("plugin app API edit sessions", () => {
       undefined,
       fakeHost({ plugins: manager, startLayerGeometryEdit: async () => false }).host,
     );
-    assert.equal(await notEditable.startEditSession("tiles"), false);
+    const tiles = notEditable.addTileLayer("Tiles", "https://tiles.example.com/{z}/{x}/{y}.png");
+    assert.equal(await notEditable.startEditSession(tiles), false);
   });
 });
 
