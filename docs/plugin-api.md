@@ -317,6 +317,12 @@ export interface GeoLibreAppAPI {
   ) => void;
   // Credential storage (see "Saving credentials" below).
   credentials?: GeoLibrePluginCredentials;
+  // OAuth authorization-code sign-in (see "Signing in with OAuth" below).
+  getOAuthRedirectUri?: () => string;
+  authorizeInPopup?: (
+    authorizationUrl: string,
+    options?: { timeoutMs?: number }
+  ) => Promise<string>;
   // Top toolbar menus (see "Toolbar menus" below).
   registerToolbarMenu?: (menu: GeoLibreToolbarMenu) => () => void;
   unregisterToolbarMenu?: (id: string) => void;
@@ -1397,6 +1403,36 @@ const where = app.credentials?.location(); // "keychain" | "browser", for UI cop
 - **The desktop credential store cannot be read from a plugin.** The app reads every saved credential in one native call during startup, before any external plugin loads, and the store then refuses further reads until the window reloads (the loader also closes reads before importing a plugin, in case that read never ran). A plugin calling the store's Tauri command directly gets an error instead of the saved tokens. This narrows what a plugin can reach; it does not isolate plugins. Values the app has already loaded into memory (Settings tokens, other plugins' `app.credentials` values) remain reachable from the shared JavaScript realm, writes to the store are not restricted, and on the web, Jupyter and mobile builds the values sit in `localStorage`. Install only plugins you trust.
 - **Never put secrets in `getProjectState`.** Plugin settings are saved in project files and shared or exported with them.
 - **Built-in plugins use it too.** The Hugging Face, Mapillary and God's Eye View tokens moved from their own `localStorage` keys to `app.credentials`; the host migrates an existing plaintext value on first launch and removes it only after the new write succeeds.
+
+## Signing in with OAuth
+
+A plugin that signs users in to a service with OAuth 2.0 (authorization code with PKCE) can let GeoLibre run the browser round trip. `app.authorizeInPopup` sends the user to the provider's authorization page and resolves with the code from the redirect: on the web it opens a popup that comes back through the app's `oauth-callback.html`, and on the desktop it opens the system browser and receives the app's custom-scheme callback. The plugin builds the authorization URL, keeps the PKCE verifier, and exchanges the code for tokens itself, so no client secret or token passes through the host.
+
+```typescript
+const redirectUri = app.getOAuthRedirectUri?.(); // register this with the provider
+const state = crypto.randomUUID();
+const verifier = createCodeVerifier(); // your PKCE helpers
+const authorizationUrl = new URL(`${server}/o/authorize/`);
+authorizationUrl.search = new URLSearchParams({
+  response_type: "code",
+  client_id: clientId,
+  redirect_uri: redirectUri,
+  state,
+  code_challenge: await createCodeChallenge(verifier), // compute before the click
+  code_challenge_method: "S256",
+}).toString();
+
+signInButton.onclick = async () => {
+  const code = await app.authorizeInPopup?.(authorizationUrl.toString()); // no await before this
+  const tokens = await exchangeCode(code, verifier, redirectUri); // POST to the token endpoint
+  app.credentials?.set("refresh-token", tokens.refresh_token);
+};
+```
+
+- **Call it from a click handler, before any `await`.** Browsers only allow a popup opened as part of a user gesture, so build the URL (including the PKCE challenge) ahead of time.
+- **The request must carry `state` and the app's redirect URI.** `redirect_uri` must equal `app.getOAuthRedirectUri()`, which is the callback page on the web (it follows the site's base path) and `org.geolibre.desktop:/oauth/callback` on the desktop; register both with the provider if the plugin runs in both. A callback is accepted only from that popup, at the app's origin, with the request's `state`.
+- **Failures** reject with an error whose `reason` is `invalid-request` (no `state`, another redirect URI, or not an HTTP(S) URL), `popup-blocked`, `already-pending` (one sign-in at a time, shared with the app's own sign-ins on the desktop), `access-denied`, `invalid-callback`, `cancelled` (the popup was closed), `timeout` (five minutes by default; pass `{ timeoutMs }`), or `restart-required` (the desktop callback receiver is not running).
+- **The token request is the plugin's.** Use `app.nativeFetch` on the desktop if the token endpoint does not allow cross-origin requests, and keep refresh tokens in `app.credentials`.
 
 ## Signing in with a session cookie
 

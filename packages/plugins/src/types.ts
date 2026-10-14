@@ -467,6 +467,20 @@ export interface GeoLibreSelection {
 /** The host tool currently owning map clicks, or null for ordinary map interaction. */
 export type GeoLibreActiveMapTool = "identify" | "feature-selection" | "geo-editor" | null;
 
+/**
+ * Why {@link GeoLibreAppAPI.authorizeInPopup} ended without a code, as the
+ * `reason` of the error it rejects with.
+ */
+export type GeoLibreOAuthFailure =
+  | "invalid-request"
+  | "popup-blocked"
+  | "already-pending"
+  | "access-denied"
+  | "invalid-callback"
+  | "cancelled"
+  | "timeout"
+  | "restart-required";
+
 /** A lightweight assistant tool for standalone plugins. No runtime SDK import is needed.
  * JSON Schema describes input to the model but does NOT validate it at runtime.
  * The callback must validate its own input. Return JSON-serializable data;
@@ -1200,6 +1214,29 @@ export interface GeoLibreAppAPI {
    * can still read each other's values. Never put secrets in `getProjectState`.
    */
   credentials?: GeoLibrePluginCredentials;
+  /**
+   * The redirect URI to register with an OAuth provider for
+   * {@link authorizeInPopup}: the app's callback page on the web, its custom URL
+   * scheme on the desktop. Typed optional for forward-compatibility with host
+   * variants, so call it with optional chaining.
+   */
+  getOAuthRedirectUri?: () => string;
+  /**
+   * Run an OAuth authorization-code sign-in: send the user to the provider's
+   * page (a popup on the web, the system browser on the desktop) and resolve
+   * with the authorization code it redirects back with. The URL must carry a
+   * `state` and a `redirect_uri` equal to {@link getOAuthRedirectUri}; the
+   * callback is accepted only when its `state` matches. The plugin keeps its
+   * PKCE verifier and exchanges the code itself. On the web, call it from a
+   * click handler before any `await`, or the browser blocks the popup.
+   * Rejects with an error whose `reason` is a {@link GeoLibreOAuthFailure}.
+   * Typed optional for forward-compatibility with host variants, so call it
+   * with optional chaining.
+   */
+  authorizeInPopup?: (
+    authorizationUrl: string,
+    options?: { timeoutMs?: number },
+  ) => Promise<string>;
   /**
    * Register a plugin-owned top-level toolbar menu shown in the GeoLibre banner
    * beside the built-in menus, with nested submenus and action items. Returns

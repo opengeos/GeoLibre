@@ -20,19 +20,18 @@ import {
   NO_ISSUER,
   waitForNativeShareCode,
 } from "./native-share-auth";
+import { OAuthPopupError, waitForPopupCode } from "./oauth-popup";
 import {
   deriveCallbackUrl,
   waitForDesktopOAuthReady,
   randomUrlSafeToken,
   s256Challenge,
-  validateCallbackPayload,
 } from "./share-oauth";
 
 export const ARCGIS_ONLINE_PORTAL = "https://www.arcgis.com";
 
 /** Give the user five minutes to finish the portal's sign-in page. */
 const SIGN_IN_TIMEOUT_MS = 5 * 60_000;
-const POPUP_POLL_MS = 500;
 /** Renew an access token this long before its stated expiry. */
 const ACCESS_EXPIRY_BUFFER_MS = 60_000;
 const TOKEN_REQUEST_TIMEOUT_MS = 30_000;
@@ -284,44 +283,6 @@ export function cancelArcGISSignIn(): void {
   cancelActiveFlow?.();
 }
 
-function waitForPopupCode(popup: Window, state: string): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    let settled = false;
-    const finish = (run: () => void) => {
-      if (settled) return;
-      settled = true;
-      window.removeEventListener("message", onMessage);
-      window.clearInterval(poll);
-      window.clearTimeout(timer);
-      run();
-    };
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || event.source !== popup) return;
-      // ArcGIS sends no `iss`, so only the state binds the callback to this flow.
-      const verdict = validateCallbackPayload(event.data, { state, issuer: NO_ISSUER });
-      if (!verdict.ok) {
-        finish(() =>
-          reject(
-            new ArcGISAuthError(
-              verdict.code === "access-denied" ? "access-denied" : "exchange-failed",
-            ),
-          ),
-        );
-        return;
-      }
-      finish(() => resolve(verdict.code));
-    };
-    const poll = window.setInterval(() => {
-      if (popup.closed) finish(() => reject(new ArcGISAuthError("cancelled")));
-    }, POPUP_POLL_MS);
-    const timer = window.setTimeout(
-      () => finish(() => reject(new ArcGISAuthError("timeout"))),
-      SIGN_IN_TIMEOUT_MS,
-    );
-    window.addEventListener("message", onMessage);
-  });
-}
-
 /**
  * Sign in to an ArcGIS portal through its own sign-in page.
  *
@@ -415,7 +376,16 @@ export async function signInToArcGIS(options: {
       }
     } else {
       popup!.location.href = authorizeUrl.toString();
-      code = await waitForPopupCode(popup!, state);
+      try {
+        code = await waitForPopupCode(popup!, state, SIGN_IN_TIMEOUT_MS);
+      } catch (error) {
+        if (error instanceof OAuthPopupError) {
+          throw new ArcGISAuthError(
+            error.reason === "invalid-callback" ? "exchange-failed" : error.reason,
+          );
+        }
+        throw error;
+      }
     }
     if (cancelled) throw new ArcGISAuthError("cancelled");
 

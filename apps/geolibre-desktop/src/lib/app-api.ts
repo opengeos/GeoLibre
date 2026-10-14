@@ -69,6 +69,7 @@ import { createPluginLayerQueries } from "./plugin-layer-queries";
 import { createPluginLayerStyleActions } from "./plugin-layer-style";
 import { createPluginLocaleApi, type PluginLocaleI18n } from "./plugin-locale";
 import { createPluginHttpSend, createPluginNativeFetch } from "./plugin-native-fetch";
+import { authorizeInPopup, getPluginOAuthRedirectUri } from "./plugin-oauth";
 import { openProjectFromUrlForPlugin } from "./plugin-open-project";
 import { createRemoteDownload, type RemoteDownloadProgress } from "./remote-download";
 import { requestSpaceborneLidarGranule } from "./spaceborne-lidar-handoff";
@@ -864,6 +865,9 @@ export function createAppAPI(
     getActiveRightPanelDock: host.getActiveRightPanelDock,
     ...createPluginLocaleApi(host.i18n),
     credentials: host.credentials,
+    getOAuthRedirectUri: () => getPluginOAuthRedirectUri(),
+    authorizeInPopup: (authorizationUrl: string, options?: { timeoutMs?: number }) =>
+      authorizeInPopup(authorizationUrl, options),
     registerAssistantTool: host.registerAssistantTool,
     registerAssistantToolSpec: host.registerAssistantToolSpec,
     registerAssistantGuidance: host.registerAssistantGuidance,
