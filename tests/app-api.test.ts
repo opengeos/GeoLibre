@@ -797,7 +797,15 @@ describe("plugin app API layers", () => {
         maxzoom: 14,
         opacity: 0.5,
         beforeLayerId: below,
-        metadata: { publisher: "Records", sourceLayers: ["ignored"] },
+        metadata: {
+          publisher: "Records",
+          sourceLayers: ["ignored"],
+          // Keys that would route the layer away from the vector tile path.
+          sourceKind: "maplibre-gl-vector",
+          customLayerType: "custom",
+          externalNativeLayer: true,
+          nativeLayerIds: ["someone-elses-layer"],
+        },
       },
     );
     const tileJson = api.addVectorTileLayer("Roads", "  https://tiles.example.com/roads.json\n", {
@@ -821,6 +829,10 @@ describe("plugin app API layers", () => {
     assert.equal(templateLayer?.opacity, 0.5);
     assert.equal(templateLayer?.metadata.publisher, "Records");
     assert.deepEqual(templateLayer?.metadata.sourceLayers, ["node"], "GeoLibre's keys win");
+    assert.equal(templateLayer?.metadata.sourceKind, "plugin-vector-tiles");
+    for (const key of ["customLayerType", "externalNativeLayer", "nativeLayerIds"]) {
+      assert.equal(key in (templateLayer?.metadata ?? {}), false, `${key} is dropped`);
+    }
     assert.deepEqual(
       templateLayer?.metadata.bounds,
       [-10, -5, 10, 5],

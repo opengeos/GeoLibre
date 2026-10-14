@@ -5,6 +5,23 @@ import { pluginLayerMetadata } from "./plugin-layer-metadata";
 
 const METHOD = "addVectorTileLayer";
 const TILE_PLACEHOLDERS = ["{z}", "{x}", "{y}"];
+/** `metadata.sourceKind` of a vector tile layer a plugin added. */
+const PLUGIN_VECTOR_TILES_SOURCE_KIND = "plugin-vector-tiles";
+/**
+ * Metadata keys the map reads to decide how a layer is drawn (a control-owned
+ * or plugin-painted layer, say). Plugin provenance must not set them, or the
+ * layer could be routed away from the vector tile path and never drawn.
+ */
+const RENDER_ROUTING_METADATA_KEYS = [
+  "sourceKind",
+  "customLayerType",
+  "nativeLayerIds",
+  "sourceIds",
+  "externalNativeLayer",
+  "externalDeckLayer",
+  "controlOwnsPaint",
+  "nativeFillExtrusion",
+];
 
 /**
  * Check the tile URL: absolute HTTP(S), and either a template with all of
@@ -99,6 +116,20 @@ function validateZoomRange(minzoom: unknown, maxzoom: unknown): void {
 }
 
 /**
+ * The plugin's metadata without the keys that route rendering.
+ *
+ * @param metadata - Validated plugin metadata, if any.
+ * @returns A copy without {@link RENDER_ROUTING_METADATA_KEYS}.
+ */
+function withoutRenderRouting(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const kept = { ...metadata };
+  for (const key of RENDER_ROUTING_METADATA_KEYS) delete kept[key];
+  return kept;
+}
+
+/**
  * Add a vector tile layer for a plugin: the same store record the OGC Vector
  * Tiles Add Data source builds, so the layer renders, styles, and saves like
  * one the user added.
@@ -159,7 +190,8 @@ export function addPluginVectorTileLayer(
       ...(maxzoom !== undefined ? { maxzoom } : {}),
     },
     {
-      ...metadata,
+      ...withoutRenderRouting(metadata),
+      sourceKind: PLUGIN_VECTOR_TILES_SOURCE_KIND,
       ...(bounds ? { bounds: [...bounds] } : {}),
       ...(minzoom !== undefined ? { minzoom } : {}),
       ...(maxzoom !== undefined ? { maxzoom } : {}),
