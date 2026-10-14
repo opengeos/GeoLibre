@@ -1069,6 +1069,27 @@ export function getGeometryEditTargetLayerId(): string | null {
   return editTargetLayerId;
 }
 
+/** How a geometry-edit session ended. */
+export interface GeometryEditEnd {
+  /** The layer the session edited. */
+  layerId: string;
+  /** True when the edits were written back to the layer. */
+  saved: boolean;
+}
+
+let lastGeometryEditEnd: GeometryEditEnd | null = null;
+
+/**
+ * How the most recent geometry-edit session ended: saved, cancelled, or
+ * abandoned because its layer was removed. Set before session listeners are
+ * notified, so a listener seeing a session end can read it.
+ *
+ * @returns The last session's end, or null before any session has ended.
+ */
+export function getLastGeometryEditEnd(): GeometryEditEnd | null {
+  return lastGeometryEditEnd;
+}
+
 /**
  * Whether the geo editor is in a draw or edit mode that acts on right-click
  * (vertex removal, finishing a draw, the rotate popup). The map's right-click
@@ -1378,6 +1399,7 @@ export async function endLayerGeometryEdit(
   // Defensive: if the control was torn down while a session id lingered, clear
   // the session state so the UI does not get stuck in the "editing" state.
   if (!geoEditorControl) {
+    lastGeometryEditEnd = { layerId: editTargetLayerId, saved: false };
     editTargetLayerId = null;
     editTargetOriginalVisible = null;
     editTargetOriginalProperties = null;
@@ -1389,12 +1411,17 @@ export async function endLayerGeometryEdit(
   }
 
   const targetId = editTargetLayerId;
+  let saved = false;
   // Run the write-back in try/finally so a throw (e.g. from the store update)
   // cannot leave the session half-torn-down with the target layer still hidden
   // and the user unable to exit.
   try {
-    if (save) syncEditTargetToStore();
+    if (save) {
+      syncEditTargetToStore();
+      saved = true;
+    }
   } finally {
+    lastGeometryEditEnd = { layerId: targetId, saved };
     editTargetLayerId = null;
     unionSketchesWithStoreOnNextSync = false;
     // Restore the target layer's normal rendering (it now reflects the saved
@@ -1425,6 +1452,7 @@ function abortGeometryEditSession(): void {
   );
   // The layer is gone, so there is no visibility to restore; just drop the flag.
   // (restoreSketchesAfterSession exits Geoman edit modes.)
+  if (editTargetLayerId) lastGeometryEditEnd = { layerId: editTargetLayerId, saved: false };
   editTargetOriginalVisible = null;
   editTargetOriginalProperties = null;
   editTargetOriginalIds = null;

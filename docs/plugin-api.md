@@ -167,6 +167,12 @@ export interface GeoLibreAppAPI {
   onActiveMapToolChange?: (
     callback: (tool: GeoLibreActiveMapTool) => void
   ) => () => void;
+  // GeoEditor sessions on a layer. See "GeoEditor sessions".
+  getEditSessionLayerId?: () => string | null;
+  onEditSessionChange?: (
+    callback: (change: GeoLibreEditSessionChange) => void
+  ) => () => void;
+  startEditSession?: (layerId: string) => Promise<boolean>;
   // Native raster/tile layers (see "Raster and tile layers" below). Each
   // returns the new layer's id and the layer appears in the Layers panel and
   // persists with the project, like addGeoJsonLayer does for vector data.
@@ -763,6 +769,29 @@ Replacing one active selection gesture with another keeps
 `"feature-selection"` active without an intermediate `null`.
 
 Both methods are optional so plugins remain compatible with older hosts.
+
+## GeoEditor sessions
+
+A plugin whose layer users edit in the GeoEditor can follow those sessions, for example to offer to sync the changes to a server when the user finishes, and can open one for the user.
+
+```typescript
+const unsubscribe = app.onEditSessionChange?.(({ layerId, state, saved }) => {
+  if (layerId === myLayerId && state === "ended" && saved) {
+    offerToSync(app.getLayerFeatures?.(myLayerId) ?? []);
+  }
+});
+
+// From a "Draw the location" button in the plugin's panel:
+if (!(await app.startEditSession?.(myLayerId))) {
+  showMessage("This layer can't be edited here.");
+}
+```
+
+- **`getEditSessionLayerId`** returns the layer open in the GeoEditor, or `null`.
+- **`onEditSessionChange`** reports `{ layerId, state: "started" }`, and `{ layerId, state: "ended", saved }` when the session ends. `saved` is `false` when the user cancelled, or the layer was removed mid-session. Switching to another layer reports the old session's end, then the new one's start. It doesn't call back immediately; read `getEditSessionLayerId` for the current state.
+- **`startEditSession`** opens a session the way a layer's **Edit geometry** action does, activating the GeoEditor if it's off and saving an open session on another layer first. It resolves `false` on a renderer the editor doesn't support, for a layer that isn't an editable vector layer, or if the GeoEditor can't be activated.
+
+All three are optional, so call them with optional chaining for older hosts.
 
 
 ## Updating and removing layers

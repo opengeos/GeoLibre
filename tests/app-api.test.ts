@@ -43,6 +43,7 @@ import {
 import type {
   GeoLibreActiveMapTool,
   GeoLibreAppAPI,
+  GeoLibreEditSessionChange,
   GeoLibrePlugin,
 } from "../packages/plugins/src/types";
 
@@ -191,6 +192,11 @@ function fakeHost(overrides: Partial<AppApiHost> = {}): { host: AppApiHost; call
     closeFloatingPanel,
     getOpenFloatingPanels,
     getGeometryEditTargetLayerId: () => null,
+    getLastGeometryEditEnd: () => null,
+    subscribeGeometryEdit: () => () => undefined,
+    isPluginEngineSupported: () => true,
+    maplibreGeoEditorPlugin: {},
+    startLayerGeometryEdit: unused("startLayerGeometryEdit"),
     ...overrides,
   } as unknown as AppApiHost;
   return { host, calls };
@@ -330,6 +336,130 @@ describe("plugin app API map tools", () => {
 
     await manager.activate(GEO_EDITOR_PLUGIN_ID, api as unknown as GeoLibreAppAPI);
     assert.equal(events.length, 6);
+  });
+});
+
+/** A GeoEditor session a test drives by hand, through the host's hooks. */
+function fakeEditSessions() {
+  let layerId: string | null = null;
+  let lastEnd: { layerId: string; saved: boolean } | null = null;
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
+  return {
+    host: {
+      getGeometryEditTargetLayerId: () => layerId,
+      getLastGeometryEditEnd: () => lastEnd,
+      subscribeGeometryEdit: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    },
+    start(id: string) {
+      if (layerId) this.end(true);
+      layerId = id;
+      notify();
+    },
+    end(saved: boolean) {
+      if (layerId) lastEnd = { layerId, saved };
+      layerId = null;
+      notify();
+    },
+  };
+}
+
+describe("plugin app API edit sessions", () => {
+  beforeEach(() => {
+    useAppStore.getState().newProject({ name: "App API edit sessions" });
+  });
+
+  it("reports sessions starting and ending, saved or not, and unsubscribes", () => {
+    const sessions = fakeEditSessions();
+    const api = createAppAPI(undefined, fakeHost(sessions.host).host);
+    const changes: GeoLibreEditSessionChange[] = [];
+    const unsubscribe = api.onEditSessionChange((change) => changes.push(change));
+
+    sessions.start("roads");
+    assert.equal(api.getEditSessionLayerId(), "roads");
+    sessions.end(true);
+    sessions.start("rivers");
+    sessions.end(false);
+    unsubscribe();
+    sessions.start("after-unsubscribe");
+
+    assert.equal(api.getEditSessionLayerId(), "after-unsubscribe");
+    assert.deepEqual(changes, [
+      { layerId: "roads", state: "started" },
+      { layerId: "roads", state: "ended", saved: true },
+      { layerId: "rivers", state: "started" },
+      { layerId: "rivers", state: "ended", saved: false },
+    ]);
+  });
+
+  it("reports the old session ending before the new one starts on a switch", () => {
+    const sessions = fakeEditSessions();
+    const api = createAppAPI(undefined, fakeHost(sessions.host).host);
+    sessions.start("roads");
+    const changes: GeoLibreEditSessionChange[] = [];
+    api.onEditSessionChange((change) => changes.push(change));
+
+    sessions.start("rivers");
+
+    assert.deepEqual(changes, [
+      { layerId: "roads", state: "ended", saved: true },
+      { layerId: "rivers", state: "started" },
+    ]);
+  });
+
+  it("starts a session, activating the GeoEditor first", async () => {
+    const manager = new PluginManager();
+    manager.register({
+      id: GEO_EDITOR_PLUGIN_ID,
+      name: "GeoEditor",
+      version: "0.0.0",
+      activate: () => undefined,
+      deactivate: () => undefined,
+    });
+    const started: string[] = [];
+    const api = createAppAPI(
+      undefined,
+      fakeHost({
+        plugins: manager,
+        startLayerGeometryEdit: async (_app: GeoLibreAppAPI, layerId: string) => {
+          started.push(layerId);
+          return true;
+        },
+      }).host,
+    );
+
+    assert.equal(await api.startEditSession("roads"), true);
+    assert.equal(manager.isActive(GEO_EDITOR_PLUGIN_ID), true);
+    assert.deepEqual(started, ["roads"]);
+  });
+
+  it("refuses to start on an unsupported renderer, or when the layer can't be edited", async () => {
+    const unsupported = createAppAPI(
+      undefined,
+      fakeHost({ isPluginEngineSupported: () => false }).host,
+    );
+    assert.equal(await unsupported.startEditSession("roads"), false);
+
+    const manager = new PluginManager();
+    manager.register({
+      id: GEO_EDITOR_PLUGIN_ID,
+      name: "GeoEditor",
+      version: "0.0.0",
+      activate: () => undefined,
+      deactivate: () => undefined,
+    });
+    const notEditable = createAppAPI(
+      undefined,
+      fakeHost({ plugins: manager, startLayerGeometryEdit: async () => false }).host,
+    );
+    assert.equal(await notEditable.startEditSession("tiles"), false);
   });
 });
 

@@ -29,6 +29,7 @@ import type {
   GeoLibreCogRenderEngine,
   GeoLibreDeckGL,
   GeoLibreDownloadFolder,
+  GeoLibreEditSessionChange,
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreRasterWindowOptions,
@@ -57,6 +58,7 @@ import { cogEngineDefaults } from "./cog-render-engine";
 import { appendDiagnostic } from "./diagnostics";
 import { createExternalNativeStoreLayer } from "./external-native-layer";
 import { resolvePluginAssetUrlForLoadedPlugin } from "./external-plugins";
+import { startGeometryEditSession } from "./geometry-edit-session";
 import { isDesktopRuntime } from "./is-mobile";
 import { fetchNativeWithWebviewFallback } from "./native-fetch-fallback";
 import { fetchUrlBytes } from "./native-http";
@@ -128,6 +130,11 @@ export interface AppApiHost extends Pick<
   | "closeFloatingPanel"
   | "getOpenFloatingPanels"
   | "getGeometryEditTargetLayerId"
+  | "getLastGeometryEditEnd"
+  | "subscribeGeometryEdit"
+  | "isPluginEngineSupported"
+  | "maplibreGeoEditorPlugin"
+  | "startLayerGeometryEdit"
 > {
   /** The shared plugin manager, for `activatePlugin`/`deactivatePlugin`. */
   plugins: Pick<
@@ -298,6 +305,34 @@ export function createAppAPI(
         unsubscribePlugins();
       };
     },
+    getEditSessionLayerId: () => host.getGeometryEditTargetLayerId(),
+    onEditSessionChange: (callback: (change: GeoLibreEditSessionChange) => void) => {
+      let previousLayerId = host.getGeometryEditTargetLayerId();
+      return host.subscribeGeometryEdit(() => {
+        const layerId = host.getGeometryEditTargetLayerId();
+        if (layerId === previousLayerId) return;
+        // Remember the delivered state first, so a callback that changes the
+        // session (or a nested notification) cannot emit it twice.
+        const endedLayerId = previousLayerId;
+        previousLayerId = layerId;
+        if (endedLayerId) {
+          const end = host.getLastGeometryEditEnd();
+          callback({
+            layerId: endedLayerId,
+            state: "ended",
+            saved: end?.layerId === endedLayerId && end.saved,
+          });
+        }
+        if (layerId) callback({ layerId, state: "started" });
+      });
+    },
+    startEditSession: async (layerId: string) =>
+      (await startGeometryEditSession(layerId, {
+        app: api,
+        manager,
+        map: mapControllerRef?.current,
+        geoEditor: host,
+      })) === "started",
     addTileLayer: (name: string, url: string, options?: GeoLibreTileLayerOptions) =>
       store.addTileLayer(
         name,

@@ -467,6 +467,18 @@ export interface GeoLibreSelection {
 /** The host tool currently owning map clicks, or null for ordinary map interaction. */
 export type GeoLibreActiveMapTool = "identify" | "feature-selection" | "geo-editor" | null;
 
+/** A GeoEditor session starting or ending, for {@link GeoLibreAppAPI.onEditSessionChange}. */
+export interface GeoLibreEditSessionChange {
+  /** The layer the session edits. */
+  layerId: string;
+  state: "started" | "ended";
+  /**
+   * For `"ended"`: true when the edits were saved to the layer; false when
+   * the session was cancelled, or ended because its layer was removed.
+   */
+  saved?: boolean;
+}
+
 /** A lightweight assistant tool for standalone plugins. No runtime SDK import is needed.
  * JSON Schema describes input to the model but does NOT validate it at runtime.
  * The callback must validate its own input. Return JSON-serializable data;
@@ -608,6 +620,32 @@ export interface GeoLibreAppAPI {
    * initial value. Call the returned unsubscribe function on deactivation.
    */
   onActiveMapToolChange?: (callback: (tool: GeoLibreActiveMapTool) => void) => () => void;
+  /**
+   * The layer open in a GeoEditor session, or null when none is. Typed optional
+   * for forward-compatibility with host variants, so call it with optional
+   * chaining.
+   */
+  getEditSessionLayerId?: () => string | null;
+  /**
+   * Subscribe to GeoEditor sessions starting and ending, for a plugin that acts
+   * when the user finishes editing its layer (offering to sync the changes, for
+   * example). Switching layers reports the old session's end, then the new
+   * one's start. Does not call back immediately; read
+   * {@link getEditSessionLayerId} for the current session. Call the returned
+   * unsubscribe function on deactivation. Typed optional for
+   * forward-compatibility with host variants, so call it with optional chaining.
+   */
+  onEditSessionChange?: (callback: (change: GeoLibreEditSessionChange) => void) => () => void;
+  /**
+   * Open a GeoEditor session on a layer, as the layer's Edit geometry action
+   * does, activating the GeoEditor if it is off. An open session on another
+   * layer is saved first. Resolves true once the session is open (or already
+   * was), or false when it cannot start: an unsupported renderer, a layer that
+   * isn't an editable vector layer, or the GeoEditor failing to activate.
+   * Typed optional for forward-compatibility with host variants, so call it
+   * with optional chaining.
+   */
+  startEditSession?: (layerId: string) => Promise<boolean>;
   /**
    * Add a native XYZ raster tile layer from a tile URL template (with
    * `{x}`/`{y}`/`{z}` placeholders) and return its layer id. Unlike calling
