@@ -49,13 +49,13 @@
   },
   "dependencies": {
     "@maplibre/maplibre-gl-style-spec": "^26.2.1",
-    "uuid": "^14.0.2",
+    "uuid": "^14.0.3",
     "zundo": "^2.3.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "tsdown": "^0.23.0",
+    "tsdown": "^0.23.1",
     "typescript": "^7.0.2"
   }
 }

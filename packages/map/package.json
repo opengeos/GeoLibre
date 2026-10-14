@@ -124,10 +124,10 @@
     "copc": "^0.0.9",
     "fast-xml-parser": "^5.11.2",
     "geotiff": "^3.0.5",
-    "geotiff-geokeys-to-proj4": "^2026.8.16",
+    "geotiff-geokeys-to-proj4": "^2026.10.9",
     "laz-perf": "^0.0.7",
     "mapbox-gl": "^3.32.0",
-    "maplibre-gl": "^6.11.2",
+    "maplibre-gl": "^6.14.0",
     "maplibre-gl-layer-control": "^0.18.2",
     "pmtiles": "^4.5.0",
     "proj4": "^2.22.0",
@@ -141,7 +141,7 @@
     "@types/geojson": "^7946.0.16",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "tsdown": "^0.23.0",
+    "tsdown": "^0.23.1",
     "typescript": "^7.0.2"
   },
   "peerDependencies": {
