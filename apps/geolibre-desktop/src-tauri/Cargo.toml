@@ -113,7 +113,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 # Reading the OAuth callback scheme's registered handler (#3042). Already an
 # indirect dep via tauri-plugin-deep-link, so this adds no new crate either.
-windows-registry = "0.6"
+windows-registry = "0.100"
 
 # OS credential store for tokens and API keys saved in Settings (issue #1667).
 # Desktop only: mobile keeps the webview's localStorage path. Pinned to 3.6.3:
