@@ -495,6 +495,32 @@ describe("plugin app API layers", () => {
         }),
       /bounds/,
     );
+    assert.throws(
+      () =>
+        api.addVectorTileLayer("Tiles", "https://tiles.example.com/{x}/{y}.pbf", {
+          sourceLayers: ["a"],
+        }),
+      /needs all of/,
+    );
+    assert.throws(
+      () => api.addVectorTileLayer("Tiles", url, { sourceLayers: ["a"], maxzoom: Number.NaN }),
+      /maxzoom/,
+    );
+    for (const opacity of [Number.NaN, -0.5, 2]) {
+      assert.throws(
+        () => api.addVectorTileLayer("Tiles", url, { sourceLayers: ["a"], opacity }),
+        /opacity/,
+      );
+    }
+    assert.throws(
+      () =>
+        api.addVectorTileLayer(
+          "Tiles",
+          url,
+          undefined as unknown as Parameters<typeof api.addVectorTileLayer>[2],
+        ),
+      /sourceLayers/,
+    );
     assert.deepEqual(api.getLayers(), []);
   });
 

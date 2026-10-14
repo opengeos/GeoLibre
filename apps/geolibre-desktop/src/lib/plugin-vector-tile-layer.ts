@@ -4,10 +4,23 @@ import { createBaseLayer } from "../components/layout/add-data/helpers";
 import { pluginLayerMetadata } from "./plugin-layer-metadata";
 
 const METHOD = "addVectorTileLayer";
-const TILE_TEMPLATE_PLACEHOLDER = "{z}";
+const TILE_PLACEHOLDERS = ["{z}", "{x}", "{y}"];
 
-function validateUrl(value: unknown): string {
+/**
+ * Check the tile URL: absolute HTTP(S), and either a template with all of
+ * `{z}`, `{x}` and `{y}` or a TileJSON URL with none of them.
+ *
+ * @param value - The plugin's URL.
+ * @returns The trimmed URL and whether it is a template.
+ */
+function validateUrl(value: unknown): { url: string; isTemplate: boolean } {
   const url = typeof value === "string" ? value.trim() : "";
+  const placeholderCount = TILE_PLACEHOLDERS.filter((placeholder) =>
+    url.includes(placeholder),
+  ).length;
+  if (placeholderCount > 0 && placeholderCount < TILE_PLACEHOLDERS.length) {
+    throw new Error(`${METHOD}: a tile URL template needs all of {z}, {x} and {y}.`);
+  }
   let parsedUrl: URL | undefined;
   try {
     // The placeholders are not valid URL characters everywhere, so parse a
@@ -21,9 +34,10 @@ function validateUrl(value: unknown): string {
       `${METHOD}: url must be an absolute HTTP(S) tile URL template or TileJSON URL.`,
     );
   }
-  return url;
+  return { url, isTemplate: placeholderCount > 0 };
 }
 
+/** Require one or more non-blank source layer names, returned trimmed. */
 function validateSourceLayers(value: unknown): string[] {
   const sourceLayers = Array.isArray(value)
     ? value.filter(
@@ -37,6 +51,7 @@ function validateSourceLayers(value: unknown): string[] {
   return sourceLayers.map((sourceLayer) => sourceLayer.trim());
 }
 
+/** Require a four-number WGS84 extent when one is given. */
 function validateBounds(value: unknown): void {
   if (value === undefined) return;
   if (
@@ -48,12 +63,20 @@ function validateBounds(value: unknown): void {
   }
 }
 
+/** Require an opacity from 0 to 1 when one is given. */
+function validateOpacity(value: unknown): void {
+  if (value !== undefined && (typeof value !== "number" || !(value >= 0 && value <= 1))) {
+    throw new Error(`${METHOD}: options.opacity must be a number from 0 to 1.`);
+  }
+}
+
+/** Require zooms from 0 to 24, with minzoom no greater than maxzoom. */
 function validateZoomRange(minzoom: unknown, maxzoom: unknown): void {
   for (const [name, zoom] of [
     ["minzoom", minzoom],
     ["maxzoom", maxzoom],
   ] as const) {
-    if (zoom !== undefined && (typeof zoom !== "number" || zoom < 0 || zoom > 24)) {
+    if (zoom !== undefined && (typeof zoom !== "number" || !(zoom >= 0 && zoom <= 24))) {
       throw new Error(`${METHOD}: options.${name} must be a number from 0 to 24.`);
     }
   }
@@ -80,14 +103,24 @@ export function addPluginVectorTileLayer(
   url: string,
   options: GeoLibreVectorTileLayerOptions,
 ): string {
-  const tileUrl = validateUrl(url);
-  const sourceLayers = validateSourceLayers(options?.sourceLayers);
-  const { bounds, minzoom, maxzoom, visible, opacity, beforeLayerId } = options;
+  const { url: tileUrl, isTemplate } = validateUrl(url);
+  // Plugins can be plain JavaScript, so options may be missing altogether.
+  const {
+    sourceLayers: requestedSourceLayers,
+    bounds,
+    minzoom,
+    maxzoom,
+    visible,
+    opacity,
+    beforeLayerId,
+    metadata: requestedMetadata,
+  } = options ?? ({} as Partial<GeoLibreVectorTileLayerOptions>);
+  const sourceLayers = validateSourceLayers(requestedSourceLayers);
   validateBounds(bounds);
   validateZoomRange(minzoom, maxzoom);
-  const metadata = pluginLayerMetadata(METHOD, options.metadata);
+  validateOpacity(opacity);
+  const metadata = pluginLayerMetadata(METHOD, requestedMetadata);
 
-  const isTemplate = tileUrl.includes(TILE_TEMPLATE_PLACEHOLDER);
   const layer = createBaseLayer(
     name,
     "vector-tiles",
