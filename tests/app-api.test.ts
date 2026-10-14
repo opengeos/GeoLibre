@@ -447,7 +447,7 @@ describe("plugin app API layers", () => {
         metadata: { publisher: "Records", sourceLayers: ["ignored"] },
       },
     );
-    const tileJson = api.addVectorTileLayer("Roads", "https://tiles.example.com/roads.json", {
+    const tileJson = api.addVectorTileLayer("Roads", "  https://tiles.example.com/roads.json\n", {
       sourceLayers: ["roads", "labels", " roads "],
       // Not a layer: kept as a map anchor, and the layer goes on top.
       beforeLayerId: "basemap-labels",

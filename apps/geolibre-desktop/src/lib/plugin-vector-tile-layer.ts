@@ -143,6 +143,9 @@ export function addPluginVectorTileLayer(
   validateOpacity(opacity);
   const metadata = pluginLayerMetadata(METHOD, requestedMetadata);
 
+  // Source and metadata each get their own copies of the arrays: a plugin that
+  // changes its array later, or an edit to one of the two, must not reach the
+  // other or the stored layer.
   const layer = createBaseLayer(
     name,
     "vector-tiles",
