@@ -32,27 +32,64 @@ export interface GeometryEditStartContext {
 
 // Starts run one at a time: a second start would end the first session while
 // the first is still loading its features, then the first load could finish
-// against the wrong session.
-let pendingStarts: Promise<unknown> = Promise.resolve();
+// against the wrong session. Settles once every start queued so far has.
+let pendingStarts: Promise<void> = Promise.resolve();
+
+/**
+ * How long a start waits for the ones queued before it. A start that is
+ * already running is never abandoned (that could leave the editor half set
+ * up), but one that never finishes must not keep every later start, and the
+ * Layers panel's Edit geometry toggle, waiting forever.
+ */
+export const GEOMETRY_EDIT_QUEUE_WAIT_MS = 60_000;
 
 /**
  * Start a GeoEditor session on a layer, as the Layers panel's Edit geometry
  * action does: check the renderer can host the editor, read the layer's
  * features from its MapLibre source if the store has none, activate the
  * GeoEditor plugin if needed, then start the session. Calls are queued, so
- * overlapping starts run one after another.
+ * overlapping starts run one after another; a start still waiting after
+ * {@link GEOMETRY_EDIT_QUEUE_WAIT_MS} gives up with "start-failed".
  *
  * @param layerId - The layer to edit.
  * @param context - The host's app API, plugin manager, map and GeoEditor functions.
  * @returns "started", or why the session could not start.
  */
-export function startGeometryEditSession(
+export async function startGeometryEditSession(
   layerId: string,
   context: GeometryEditStartContext,
 ): Promise<GeometryEditStartResult> {
-  const start = pendingStarts.then(() => startWhenIdle(layerId, context));
-  pendingStarts = start.catch(() => undefined);
-  return start;
+  const earlierStarts = pendingStarts;
+  let finished!: () => void;
+  const thisStart = new Promise<void>((resolve) => {
+    finished = resolve;
+  });
+  // The next start waits for this one and, through it, for everything before:
+  // even a start that gave up waiting leaves a stuck earlier one in the queue.
+  pendingStarts = earlierStarts.then(() => thisStart);
+  try {
+    if (!(await settlesWithin(earlierStarts, GEOMETRY_EDIT_QUEUE_WAIT_MS))) return "start-failed";
+    return await startWhenIdle(layerId, context);
+  } finally {
+    finished();
+  }
+}
+
+/**
+ * Wait for `promise` to settle, for at most `timeoutMs`.
+ *
+ * @param promise - What to wait for; it never rejects here.
+ * @param timeoutMs - The longest wait.
+ * @returns True if it settled in time.
+ */
+function settlesWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), timeoutMs);
+  });
+  return Promise.race([promise.then(() => true as const), timedOut]).finally(() =>
+    clearTimeout(timer),
+  );
 }
 
 /**

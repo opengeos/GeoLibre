@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { tool } from "@strands-agents/sdk";
 import { z } from "zod";
 import { getExternalNativePaintBridge, useAppStore } from "@geolibre/core";
 import type { MapEngine } from "@geolibre/map";
 import { createAppAPI, type AppApiHost } from "../apps/geolibre-desktop/src/lib/app-api";
+import { GEOMETRY_EDIT_QUEUE_WAIT_MS } from "../apps/geolibre-desktop/src/lib/geometry-edit-session";
 import {
   listAssistantToolEntries,
   registerAssistantGuidance,
@@ -512,6 +513,53 @@ describe("plugin app API edit sessions", () => {
 
     assert.deepEqual(results, [true, true]);
     assert.deepEqual(steps, [`begin ${roads}`, `end ${roads}`, `begin ${rivers}`, `end ${rivers}`]);
+  });
+
+  it("gives up waiting behind a start that never finishes, without running alongside it", async () => {
+    const manager = new PluginManager();
+    manager.register({
+      id: GEO_EDITOR_PLUGIN_ID,
+      name: "GeoEditor",
+      version: "0.0.0",
+      activate: () => undefined,
+      deactivate: () => undefined,
+    });
+    let releaseStuckStart!: (started: boolean) => void;
+    const ran: string[] = [];
+    const api = createAppAPI(
+      undefined,
+      fakeHost({
+        plugins: manager,
+        startLayerGeometryEdit: (_app: GeoLibreAppAPI, layerId: string) => {
+          ran.push(layerId);
+          return ran.length === 1
+            ? new Promise<boolean>((resolve) => {
+                releaseStuckStart = resolve;
+              })
+            : Promise.resolve(true);
+        },
+      }).host,
+    );
+    const stuck = api.addGeoJsonLayer("Stuck", EMPTY_COLLECTION);
+    const later = api.addGeoJsonLayer("Later", EMPTY_COLLECTION);
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const stuckStart = api.startEditSession(stuck);
+      const waitingStart = api.startEditSession(later);
+      await flush();
+      mock.timers.tick(GEOMETRY_EDIT_QUEUE_WAIT_MS);
+      assert.equal(await waitingStart, false);
+      assert.deepEqual(ran, [stuck], "the waiting start never ran alongside the stuck one");
+
+      releaseStuckStart(true);
+      assert.equal(await stuckStart, true);
+      assert.equal(await api.startEditSession(later), true);
+      assert.deepEqual(ran, [stuck, later]);
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   it("starts a session, activating the GeoEditor first", async () => {
