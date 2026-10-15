@@ -172,6 +172,14 @@ describe("convertGeoTiffToCog", () => {
     builder.set_overview_levels(new Uint32Array());
     const source = builder.write_f32(new Float32Array(16 * 16).fill(1));
     builder.free();
+    // CogBuilder writes the datum as user-defined (32767). Retag it as GDAL
+    // does, GeographicTypeGeoKey (2048) = 4148, the case that was misread.
+    const words = new Uint16Array(source.buffer, source.byteOffset, source.byteLength >> 1);
+    const entry = words.findIndex(
+      (w, i) => w === 2048 && words[i + 1] === 0 && words[i + 2] === 1 && words[i + 3] === 32767,
+    );
+    assert.ok(entry >= 0, "GeographicTypeGeoKey entry not found");
+    words[entry + 3] = 4148;
 
     const reader = new GeoTiffReader(await convertGeoTiffToCog(source));
     try {
