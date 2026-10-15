@@ -1354,9 +1354,11 @@ function pwaPlugin(): Plugin[] {
     // subsequent requests. We deliberately suppress workbox's default
     // force-reload-on-activate via `onNeedReload` in main.tsx — that reload
     // fired spuriously on the relative-base `/demo/` subpath and discarded map
-    // state. Page refreshes are left to installStaleChunkReload
-    // (src/lib/stale-chunk-reload.ts), which reloads on-demand only when a now
-    // orphaned lazy chunk actually 404s; precached chunks never 404.
+    // state. Instead the user is offered a reload (src/lib/app-update.ts) once
+    // the deployed index.html is confirmed to load a different build, and
+    // installStaleChunkReload (src/lib/stale-chunk-reload.ts) still reloads
+    // on-demand if a now orphaned lazy chunk 404s first; precached chunks never
+    // 404.
     registerType: "autoUpdate",
     // We register the SW by hand in main.tsx so registration lives next to the
     // stale-chunk reload it coordinates with; no auto-injected snippet.

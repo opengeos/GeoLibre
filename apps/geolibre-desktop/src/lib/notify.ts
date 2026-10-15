@@ -37,6 +37,11 @@ export interface NotifyOptions {
    */
   dedupeKey?: string;
   /**
+   * Keep the toast on screen when later toasts overflow the visible cap, for a
+   * notice whose action is still pending (e.g. "a new version is available").
+   */
+  pinned?: boolean;
+  /**
    * The underlying error, recorded in Diagnostics with an error notification
    * (its stack never appears in the toast itself).
    */
@@ -58,6 +63,8 @@ export interface AppNotification {
   /** Resolved auto-dismiss delay; `null` persists until dismissed. */
   durationMs: number | null;
   dedupeKey: string;
+  /** Exempt from eviction by {@link capVisible}; see {@link NotifyOptions.pinned}. */
+  pinned?: boolean;
   /** How many times this notification fired while visible (1 = once). */
   count: number;
   /** Bumped on every repeat so the region can re-announce and restart timers. */
@@ -110,12 +117,13 @@ function scheduleTimer(notification: AppNotification): void {
 /**
  * Drops the oldest notifications past {@link MAX_VISIBLE_NOTIFICATIONS},
  * preferring to drop non-errors so a burst of infos cannot push an unread error
- * off screen.
+ * off screen. Pinned notifications are dropped only when nothing else is left.
  */
 function capVisible(list: AppNotification[]): AppNotification[] {
   const next = [...list];
   while (next.length > MAX_VISIBLE_NOTIFICATIONS) {
-    const index = next.findIndex((item) => item.kind !== "error");
+    let index = next.findIndex((item) => !item.pinned && item.kind !== "error");
+    if (index === -1) index = next.findIndex((item) => !item.pinned);
     const evicted = next.splice(index === -1 ? 0 : index, 1)[0];
     clearTimer(evicted.id);
   }
@@ -160,6 +168,7 @@ function push(kind: NotificationKind, message: string, options: NotifyOptions = 
       description: options.description,
       action: options.action ?? existing.action,
       durationMs,
+      pinned: options.pinned ?? existing.pinned,
       count: existing.count + 1,
       revision: existing.revision + 1,
       // Only an error carries a report; a de-escalated repeat drops it.
@@ -178,6 +187,7 @@ function push(kind: NotificationKind, message: string, options: NotifyOptions = 
       action: options.action,
       durationMs,
       dedupeKey,
+      pinned: options.pinned,
       count: 1,
       revision: 0,
       diagnostic,

@@ -120,6 +120,18 @@ describe("notify", () => {
     assert.ok(!messages.includes("info 0"), "the oldest info is evicted");
   });
 
+  it("keeps a pinned notification through a burst of later ones", () => {
+    notify.info("pinned notice", { durationMs: null, pinned: true });
+    notify.error("first error");
+    for (let index = 0; index < MAX_VISIBLE_NOTIFICATIONS * 2; index += 1) {
+      notify.info(`info ${index}`);
+      notify.error(`error ${index}`);
+    }
+    const messages = visible().map((item) => item.message);
+    assert.equal(messages.length, MAX_VISIBLE_NOTIFICATIONS);
+    assert.ok(messages.includes("pinned notice"), "the pinned notice survives");
+  });
+
   it("evicts the oldest error once only errors remain", () => {
     for (let index = 0; index <= MAX_VISIBLE_NOTIFICATIONS; index += 1) {
       notify.error(`error ${index}`);

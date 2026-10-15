@@ -9,6 +9,11 @@
  * not force a reload when the new worker activates (it would discard the user's
  * map), so instead this offers one: a persistent toast with a Reload button.
  *
+ * The worker's activation is not proof of a new build: on the relative-base
+ * `/demo/` deployment workbox has flagged a re-fetched, unchanged worker as an
+ * update. So the notice is only offered once the deployed index.html is seen to
+ * load a different entry script than the running page ({@link isNewBuildDeployed}).
+ *
  * A tab can stay open for days, so the registration is also re-checked when the
  * tab becomes visible again and periodically while it stays open.
  */
@@ -20,6 +25,61 @@ export const APP_UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 /** Toasts sharing this key collapse, so repeat activations show one notice. */
 export const APP_UPDATE_DEDUPE_KEY = "app-update-available";
+
+/** Matches the entry module script tag Vite writes into index.html. */
+const ENTRY_SCRIPT_PATTERN = /<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["']/i;
+
+/**
+ * Return the entry module script URL referenced by an index.html document.
+ *
+ * @param html - The index.html source.
+ * @param baseUrl - URL the document was fetched from, to resolve a relative src.
+ * @returns The absolute entry script URL, or null when none is found.
+ */
+export function entryScriptUrl(html: string, baseUrl: string): string | null {
+  const match = ENTRY_SCRIPT_PATTERN.exec(html);
+  if (!match) return null;
+  try {
+    return new URL(match[1], baseUrl).href;
+  } catch {
+    return null;
+  }
+}
+
+export interface NewBuildCheckDeps {
+  /** Absolute URL of the entry script the running page loaded, if known. */
+  currentEntryUrl: string | null;
+  /** Fetch the deployed index.html (bypassing the HTTP cache) from this URL. */
+  fetchText: (url: string) => Promise<string>;
+}
+
+/**
+ * Whether the deployed build differs from the one the page is running.
+ *
+ * Vite content-hashes the entry script, so a deploy that changes the app
+ * changes the entry URL in index.html. index.html sits one level above the
+ * entry (`<base>/assets/main-<hash>.js`). When the comparison cannot be made
+ * (unknown entry, failed fetch, unparseable HTML) the worker's word is taken
+ * and the answer is true: a needless notice beats a missed update.
+ *
+ * @param deps - The running entry URL and a fetcher, injected for testability.
+ * @returns True when a different build is deployed, or when it cannot be told.
+ */
+export async function isNewBuildDeployed(deps: NewBuildCheckDeps): Promise<boolean> {
+  if (!deps.currentEntryUrl) return true;
+  let indexUrl: string;
+  try {
+    indexUrl = new URL("../index.html", deps.currentEntryUrl).href;
+  } catch {
+    return true;
+  }
+  try {
+    const deployed = entryScriptUrl(await deps.fetchText(indexUrl), indexUrl);
+    return deployed === null || deployed !== deps.currentEntryUrl;
+  } catch {
+    return true;
+  }
+}
 
 export interface AppUpdateNoticeDeps {
   /** Show a toast (the app's `notify.info`). */
@@ -37,13 +97,16 @@ export interface AppUpdateNoticeDeps {
  *
  * The toast persists until the user reloads or dismisses it: a reload is the
  * user's call, because it discards in-memory map state (and the unsaved-changes
- * guard still prompts before it does).
+ * guard still prompts before it does). It is pinned, so a burst of later
+ * toasts cannot evict it.
  *
  * @param deps - Toast, translated strings, and reload, injected for testability.
  */
 export function offerAppUpdate(deps: AppUpdateNoticeDeps): void {
   deps.showInfo(deps.message, {
     durationMs: null,
+    // Later toasts must not push the notice off screen while it is unanswered.
+    pinned: true,
     dedupeKey: APP_UPDATE_DEDUPE_KEY,
     action: { label: deps.reloadLabel, onClick: deps.reload },
   });
@@ -54,9 +117,9 @@ export interface AppUpdateWatchEnv {
   /** The document whose visibility gates the checks. */
   document: Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
   /** Start a repeating timer; returns its handle. */
-  setInterval: (handler: () => void, ms: number) => unknown;
+  setInterval: (handler: () => void, ms: number) => number;
   /** Stop a timer started by {@link setInterval}. */
-  clearInterval: (handle: unknown) => void;
+  clearInterval: (handle: number) => void;
 }
 
 /**

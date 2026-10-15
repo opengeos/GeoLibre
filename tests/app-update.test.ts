@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   APP_UPDATE_CHECK_INTERVAL_MS,
   APP_UPDATE_DEDUPE_KEY,
+  entryScriptUrl,
+  isNewBuildDeployed,
   offerAppUpdate,
   watchForAppUpdates,
   type AppUpdateWatchEnv,
@@ -28,6 +30,8 @@ describe("offerAppUpdate", () => {
     // The reload is the user's call, so the notice must not time out on its own.
     assert.equal(shown[0].options?.durationMs, null);
     assert.equal(shown[0].options?.dedupeKey, APP_UPDATE_DEDUPE_KEY);
+    // Pinned, so later toasts cannot evict it while it is unanswered.
+    assert.equal(shown[0].options?.pinned, true);
     assert.equal(shown[0].options?.action?.label, "Reload");
     assert.equal(reloads, 0);
     shown[0].options?.action?.onClick();
@@ -102,5 +106,65 @@ describe("watchForAppUpdates", () => {
     stop();
     assert.equal(fake.listeners.has("visibilitychange"), false);
     assert.equal(fake.cleared(), true);
+  });
+});
+
+const indexHtml = (src: string) =>
+  `<!doctype html><html><head><script type="module" crossorigin src="${src}"></script></head></html>`;
+
+describe("entryScriptUrl", () => {
+  it("resolves a relative entry src against the index URL", () => {
+    assert.equal(
+      entryScriptUrl(indexHtml("./assets/main-abc.js"), "https://example.org/demo/index.html"),
+      "https://example.org/demo/assets/main-abc.js",
+    );
+  });
+
+  it("returns null when the document has no module entry", () => {
+    assert.equal(entryScriptUrl("<html></html>", "https://example.org/index.html"), null);
+  });
+});
+
+describe("isNewBuildDeployed", () => {
+  const current = "https://example.org/demo/assets/main-abc.js";
+
+  it("is false when the deployed index loads the running entry", async () => {
+    const fetched: string[] = [];
+    const isNew = await isNewBuildDeployed({
+      currentEntryUrl: current,
+      fetchText: async (url) => {
+        fetched.push(url);
+        return indexHtml("./assets/main-abc.js");
+      },
+    });
+    assert.equal(isNew, false);
+    // index.html is read from the deployment base, one level above assets/.
+    assert.deepEqual(fetched, ["https://example.org/demo/index.html"]);
+  });
+
+  it("is true when the deployed index loads a different entry", async () => {
+    const isNew = await isNewBuildDeployed({
+      currentEntryUrl: current,
+      fetchText: async () => indexHtml("./assets/main-def.js"),
+    });
+    assert.equal(isNew, true);
+  });
+
+  it("trusts the worker when the build cannot be compared", async () => {
+    assert.equal(
+      await isNewBuildDeployed({ currentEntryUrl: null, fetchText: async () => "" }),
+      true,
+    );
+    assert.equal(
+      await isNewBuildDeployed({
+        currentEntryUrl: current,
+        fetchText: () => Promise.reject(new Error("offline")),
+      }),
+      true,
+    );
+    assert.equal(
+      await isNewBuildDeployed({ currentEntryUrl: current, fetchText: async () => "<html>" }),
+      true,
+    );
   });
 });
