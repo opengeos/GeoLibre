@@ -555,20 +555,22 @@ const RASTER_API_KEY_OWNER = "geolens-raster:";
  * GeoLens server reachable on the same origin never sees it.
  */
 function registerRasterApiKey(app: GeoLibreAppAPI, tiles: string, apiKey: string): void {
+  // Only MapLibre maps are built with the host's request transform (mapbox-gl
+  // takes one at construction and the ArcGIS and Cesium renderers have none),
+  // so a private raster cannot authenticate on Mapbox, ArcGIS or the Cesium
+  // globe. Say so rather than add a layer whose every tile 401s, and check
+  // before registering, so the key isn't left registered for nothing.
+  // engine-audit-allow: getMap-mapbox
+  if (!app.getMap?.()) {
+    const renderer = app.getMapRenderer?.();
+    // eslint-disable-next-line local/no-renderer-kind-checks -- the request transform is MapLibre's
+    if (app.getMapboxMap?.() || renderer === "arcgis" || renderer === "cesium")
+      throw new Error(labels.privateRasterNeedsMapLibre);
+  }
   const prefix = tileUrlPrefix(tiles);
   setTileRequestHeaders(`${RASTER_API_KEY_OWNER}${prefix}`, [prefix], {
     [GEOLENS_API_KEY_HEADER]: apiKey,
   });
-  // Only MapLibre maps are built with the host's request transform (mapbox-gl
-  // takes one at construction and the ArcGIS and Cesium renderers have none),
-  // so a private raster cannot authenticate on Mapbox, ArcGIS or the Cesium
-  // globe. Say so rather than add a layer whose every tile 401s.
-  // engine-audit-allow: getMap-mapbox
-  if (app.getMap?.()) return;
-  const renderer = app.getMapRenderer?.();
-  // eslint-disable-next-line local/no-renderer-kind-checks -- the request transform is MapLibre's
-  if (app.getMapboxMap?.() || renderer === "arcgis" || renderer === "cesium")
-    throw new Error(labels.privateRasterNeedsMapLibre);
 }
 
 /**

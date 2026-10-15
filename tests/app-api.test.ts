@@ -980,6 +980,33 @@ describe("plugin app API layers", () => {
     assert.equal(tileRequestHeadersFor(tile), undefined);
   });
 
+  it("keeps a layer's headers through a token refresh, but not a move to another URL", () => {
+    const api = createAppAPI(undefined, fakeHost().host);
+    const vector = api.addVectorTileLayer(
+      "Records",
+      "https://records.example.org/mvt/node/{z}/{x}/{y}.pbf?token=first",
+      { sourceLayers: ["node"], headers: { Authorization: "Bearer token" } },
+    );
+    const update = (tiles: string) => {
+      const layer = useAppStore.getState().layers.find((item) => item.id === vector);
+      useAppStore.getState().updateLayer(vector, { source: { ...layer!.source, tiles: [tiles] } });
+    };
+
+    // Only the query string after the placeholders changes: same prefix.
+    update("https://records.example.org/mvt/node/{z}/{x}/{y}.pbf?token=second");
+    assert.ok(tileRequestHeadersFor("https://records.example.org/mvt/node/3/2/1.pbf"));
+
+    update("https://elsewhere.example.com/mvt/node/{z}/{x}/{y}.pbf");
+    assert.equal(
+      tileRequestHeadersFor("https://records.example.org/mvt/node/3/2/1.pbf"),
+      undefined,
+    );
+    assert.equal(
+      tileRequestHeadersFor("https://elsewhere.example.com/mvt/node/3/2/1.pbf"),
+      undefined,
+    );
+  });
+
   it("refuses headers that could reach other servers or repeat a name", () => {
     const api = createAppAPI(undefined, fakeHost().host);
     // A placeholder in the host leaves only "https://" to match on.
@@ -1010,6 +1037,22 @@ describe("plugin app API layers", () => {
           authorization: "Bearer b",
         }),
       /given more than once/,
+    );
+    for (const browserOwned of ["Cookie", "host", "Sec-Fetch-Mode", "Proxy-Authorization"]) {
+      assert.throws(
+        () => api.setLayerRequestHeaders(vector, { [browserOwned]: "x" }),
+        /the browser sets header/,
+        browserOwned,
+      );
+    }
+    assert.throws(
+      () => api.setLayerRequestHeaders(vector, { Authorization: "Bearer ✓" }),
+      /above U\+00FF/,
+    );
+    assert.equal(
+      api.setLayerRequestHeaders(vector, { "X-Api-Key": "café" }),
+      true,
+      "Latin-1 is fine",
     );
   });
 

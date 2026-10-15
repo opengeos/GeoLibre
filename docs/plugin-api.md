@@ -1066,12 +1066,12 @@ const layerId = app.addVectorTileLayer?.("Sites", tilesUrl, {
 app.setLayerRequestHeaders?.(layerId, { Authorization: `Bearer ${newAccessToken}` });
 ```
 
-- **Session only, and tied to the layer.** Headers are held in memory, never written to the layer, a saved project or a share. They're dropped when the layer is removed, whichever way (the Layers panel, undo, `removeLayer`), and when another project opens. A layer that comes back (redo, or a reopened project) needs them set again; `setLayerRequestHeaders(layerId, null)` stops sending them, for example when the plugin deactivates.
+- **Session only, and tied to the layer.** Headers are held in memory, never written to the layer, a saved project or a share. They're dropped when the layer is removed, whichever way (the Layers panel, undo, `removeLayer`), when its tile URL changes to another host or path (a token in the query string after the placeholders can change), and when another project opens. A layer that comes back (redo, or a reopened project) needs them set again; `setLayerRequestHeaders(layerId, null)` stops sending them, for example when the plugin deactivates.
 - **Scoped to one host.** The tile template must have a fixed host and the start of a path before its first `{`: `https://tiles.example.org/{z}/{x}/{y}.pbf` works, but `https://{s}.tiles.example.org/...` or `https://{z}.example.org/...` doesn't, since its match would be `https://` and the headers would reach every server. Those throw rather than register.
 - **One transform for everyone.** GeoLibre builds its MapLibre maps with a single `transformRequest` that adds the registered headers, and GeoLens's private rasters use it too, so don't call `getMap().setTransformRequest`: it would replace GeoLibre's and stop every layer's headers.
 - **MapLibre only.** The Mapbox, ArcGIS and Cesium renderers request tiles without them, and so does the desktop app's native WMS route, which fetches WMS tiles outside MapLibre.
 - **CORS.** A header turns a tile request into one the browser preflights, so the service must allow the app's origin and the header (for example `Access-Control-Allow-Headers: Authorization`).
-- `setLayerRequestHeaders` returns false when there is no such layer or it has no tile URL. It throws on a header name that isn't a valid token, a name given twice in different cases, a value with a line break, or an unscoped tile URL.
+- `setLayerRequestHeaders` returns false when there is no such layer or it has no tile URL. It throws on a header name that isn't a valid token or that the browser sets itself (`Cookie`, `Host`, `Origin`, `Sec-*`, `Proxy-*` and the rest of the Fetch standard's forbidden names), a name given twice in different cases, a value with a line break or a character above U+00FF, or an unscoped tile URL.
 
 ## Zarr layers
 

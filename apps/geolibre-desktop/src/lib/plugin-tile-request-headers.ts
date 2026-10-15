@@ -10,16 +10,48 @@ const LAYER_KEY_PREFIX = "plugin-layer:";
 // RFC 9110 token characters.
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const HEADER_VALUE_BREAK = /[\r\n\0]/;
+// fetch only sends header values made of bytes, U+0000 to U+00FF.
+const NON_BYTE_CHARACTER = /[^\u0000-\u00ff]/;
+// Request headers the browser sets itself (the Fetch standard's forbidden
+// names), which fetch silently leaves out.
+const BROWSER_OWNED_HEADER_NAMES = new Set([
+  "accept-charset",
+  "accept-encoding",
+  "access-control-request-headers",
+  "access-control-request-method",
+  "connection",
+  "content-length",
+  "cookie",
+  "cookie2",
+  "date",
+  "dnt",
+  "expect",
+  "host",
+  "keep-alive",
+  "origin",
+  "referer",
+  "set-cookie",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "via",
+]);
+const BROWSER_OWNED_HEADER_PREFIXES = ["proxy-", "sec-"];
 
-/** Layers with headers registered, so they can be dropped with the layer. */
-const layersWithHeaders = new Set<string>();
+/**
+ * The tile URL prefixes each layer's headers were registered for, so they can
+ * be dropped when the layer goes or its tile URL moves.
+ */
+const registeredPrefixesByLayer = new Map<string, string>();
 let unsubscribeLayerWatch: (() => void) | null = null;
 
 /**
  * Check a plugin's headers before they reach a request: a plain object of
- * header names to string values with no line breaks, each name given once
- * (names are case-insensitive, and `fetch` would join two spellings' values
- * into one).
+ * header names to string values that `fetch` will send: no line breaks or
+ * characters above U+00FF, no name the browser sets itself (`Cookie`,
+ * `Host`, ...), and each name once (names are case-insensitive, and `fetch`
+ * would join two spellings' values into one).
  *
  * @param method - The API method, for the error message.
  * @param headers - The plugin's headers.
@@ -40,6 +72,17 @@ export function validateRequestHeaders(method: string, headers: unknown): Record
       throw new Error(`${method}: header "${name}" must be a valid name with a string value.`);
     }
     const caseInsensitiveName = name.toLowerCase();
+    if (
+      BROWSER_OWNED_HEADER_NAMES.has(caseInsensitiveName) ||
+      BROWSER_OWNED_HEADER_PREFIXES.some((prefix) => caseInsensitiveName.startsWith(prefix))
+    ) {
+      throw new Error(`${method}: the browser sets header "${name}" itself and won't send it.`);
+    }
+    if (NON_BYTE_CHARACTER.test(value)) {
+      throw new Error(
+        `${method}: header "${name}" has a character fetch can't send (above U+00FF).`,
+      );
+    }
     if (seenNames.has(caseInsensitiveName)) {
       throw new Error(`${method}: header "${name}" is given more than once.`);
     }
@@ -64,10 +107,23 @@ export function layerTileUrlPrefixes(layer: Pick<GeoLibreLayer, "source">): stri
   return [...new Set(urls.map(tileUrlPrefix))];
 }
 
-// Headers belong to their layer in the open project. They are dropped when the
-// layer leaves the store, however it went (the Layers panel, undo, a plugin),
-// and when another project opens, so credentials don't stay registered for a
-// URL nothing on the map draws. A layer that comes back needs them set again.
+/**
+ * One string for a set of prefixes, to compare two sets.
+ *
+ * @param prefixes - Tile URL prefixes.
+ * @returns The prefixes, sorted and joined.
+ */
+function prefixesKey(prefixes: readonly string[]): string {
+  return [...prefixes].sort().join("\n");
+}
+
+// Headers belong to their layer in the open project, at the tile URL they were
+// set for. They are dropped when the layer leaves the store, however it went
+// (the Layers panel, undo, a plugin), when its tile URL moves to other
+// prefixes, and when another project opens, so credentials don't stay
+// registered for a URL nothing on the map draws, and a new URL doesn't
+// inherit them. A token refresh that only changes the query string keeps the
+// same prefixes, and the headers.
 function dropHeadersWithTheirLayers(): void {
   if (unsubscribeLayerWatch) return;
   let generation = useAppStore.getState().projectGeneration;
@@ -75,9 +131,16 @@ function dropHeadersWithTheirLayers(): void {
     const projectChanged = state.projectGeneration !== generation;
     generation = state.projectGeneration;
     if (!projectChanged && state.layers === previous.layers) return;
-    const presentLayerIds = new Set(state.layers.map((layer) => layer.id));
-    for (const layerId of [...layersWithHeaders]) {
-      if (projectChanged || !presentLayerIds.has(layerId)) clearLayerRequestHeaders(layerId);
+    const layersById = new Map(state.layers.map((layer) => [layer.id, layer]));
+    for (const [layerId, registeredPrefixes] of [...registeredPrefixesByLayer]) {
+      const layer = layersById.get(layerId);
+      if (
+        projectChanged ||
+        !layer ||
+        prefixesKey(layerTileUrlPrefixes(layer)) !== registeredPrefixes
+      ) {
+        clearLayerRequestHeaders(layerId);
+      }
     }
   });
 }
@@ -109,7 +172,7 @@ export function registerLayerRequestHeaders(
   }
   dropHeadersWithTheirLayers();
   setTileRequestHeaders(`${LAYER_KEY_PREFIX}${layer.id}`, prefixes, headers);
-  layersWithHeaders.add(layer.id);
+  registeredPrefixesByLayer.set(layer.id, prefixesKey(prefixes));
   return true;
 }
 
@@ -120,7 +183,7 @@ export function registerLayerRequestHeaders(
  */
 export function clearLayerRequestHeaders(layerId: string): void {
   clearTileRequestHeaders(`${LAYER_KEY_PREFIX}${layerId}`);
-  layersWithHeaders.delete(layerId);
+  registeredPrefixesByLayer.delete(layerId);
 }
 
 /**
