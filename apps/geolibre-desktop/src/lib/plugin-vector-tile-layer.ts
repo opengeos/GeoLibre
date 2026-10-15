@@ -17,6 +17,7 @@ const RENDER_ROUTING_METADATA_KEYS = [
   "customLayerType",
   "nativeLayerIds",
   "sourceIds",
+  "sourceId",
   "externalNativeLayer",
   "externalDeckLayer",
   "controlOwnsPaint",
