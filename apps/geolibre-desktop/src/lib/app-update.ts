@@ -26,24 +26,29 @@ export const APP_UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 /** Toasts sharing this key collapse, so repeat activations show one notice. */
 export const APP_UPDATE_DEDUPE_KEY = "app-update-available";
 
-/** Matches the entry module script tag Vite writes into index.html. */
-const ENTRY_SCRIPT_PATTERN = /<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["']/i;
+/** Matches each opening script tag in index.html. */
+const SCRIPT_TAG_PATTERN = /<script\b[^>]*>/gi;
 
 /**
- * Return the entry module script URL referenced by an index.html document.
+ * Return the entry module script URL referenced by an index.html document: the
+ * first `<script type="module" src>`, with its attributes in any order.
  *
  * @param html - The index.html source.
  * @param baseUrl - URL the document was fetched from, to resolve a relative src.
  * @returns The absolute entry script URL, or null when none is found.
  */
 export function entryScriptUrl(html: string, baseUrl: string): string | null {
-  const match = ENTRY_SCRIPT_PATTERN.exec(html);
-  if (!match) return null;
-  try {
-    return new URL(match[1], baseUrl).href;
-  } catch {
-    return null;
+  for (const [tag] of html.matchAll(SCRIPT_TAG_PATTERN)) {
+    if (!/\btype=["']module["']/i.test(tag)) continue;
+    const src = /\bsrc=["']([^"']+)["']/i.exec(tag)?.[1];
+    if (!src) continue;
+    try {
+      return new URL(src, baseUrl).href;
+    } catch {
+      return null;
+    }
   }
+  return null;
 }
 
 export interface NewBuildCheckDeps {

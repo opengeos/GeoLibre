@@ -120,6 +120,16 @@ describe("entryScriptUrl", () => {
     );
   });
 
+  it("finds the entry whatever the attribute order, skipping non-module scripts", () => {
+    const html =
+      '<script src="./runtime-config.js"></script>' +
+      '<script crossorigin src="./assets/main-abc.js" type="module"></script>';
+    assert.equal(
+      entryScriptUrl(html, "https://example.org/index.html"),
+      "https://example.org/assets/main-abc.js",
+    );
+  });
+
   it("returns null when the document has no module entry", () => {
     assert.equal(entryScriptUrl("<html></html>", "https://example.org/index.html"), null);
   });
