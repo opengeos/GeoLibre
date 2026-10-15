@@ -67,6 +67,7 @@ import { notify } from "./lib/notify";
 import { isDesktopRuntime, isWindows } from "./lib/is-mobile";
 import { isTauri } from "./lib/is-tauri";
 import { installStaleChunkReload } from "./lib/stale-chunk-reload";
+import { offerAppUpdate, watchForAppUpdates } from "./lib/app-update";
 import { resolveAuthGate, type AuthGateConfig } from "./lib/auth-gate";
 import { getInitialThemeMode } from "./hooks/useThemeMode";
 import { KeychainWaitScreen } from "./components/common/KeychainWaitScreen";
@@ -278,18 +279,32 @@ function loadAuthGate(
 //
 // `onNeedReload` takes over that reload flow: the new worker still activates and
 // claims the page (skipWaiting + clientsClaim), so its fresh precache serves
-// every subsequent request, but we do NOT force a reload. Page recovery is
-// delegated to installStaleChunkReload above, which reloads on-demand when a
-// stale lazy chunk 404s (cooldown-guarded; if sessionStorage is blocked it
-// skips the reload and lets the preload error surface instead). That keeps
-// the user's session/map state intact and removes the self-refresh loop.
+// every subsequent request, but we do NOT force a reload. Instead the user is
+// offered one (offerAppUpdate), since the page is still running the previous
+// build. installStaleChunkReload above remains the on-demand recovery path when
+// a stale lazy chunk 404s before they act on it (cooldown-guarded; if
+// sessionStorage is blocked it skips the reload and lets the preload error
+// surface instead). That keeps the user's session/map state intact and removes
+// the self-refresh loop.
 registerSW({
   immediate: true,
   onNeedReload() {
-    // Intentionally a no-op: the updated SW is already in control, so let the
-    // refreshed shell load on the user's next page load rather than yanking the
-    // page out from under them. See installStaleChunkReload for the on-demand
-    // recovery path when a now-deleted lazy chunk is actually requested.
+    void i18nReady.then(() =>
+      offerAppUpdate({
+        showInfo: notify.info,
+        message: i18n.t("notifications.appUpdateAvailable"),
+        reloadLabel: i18n.t("notifications.appUpdateReload"),
+        reload: () => window.location.reload(),
+      }),
+    );
+  },
+  onRegisteredSW(_swUrl, registration) {
+    if (!registration) return;
+    watchForAppUpdates(registration, {
+      document,
+      setInterval: (handler, ms) => window.setInterval(handler, ms),
+      clearInterval: (handle) => window.clearInterval(handle as number),
+    });
   },
   onRegisterError(error) {
     // Registration can fail in production (non-secure origin, scope conflict).

@@ -9523,6 +9523,8 @@
     "dismiss": "Dismiss notification",
     "reportIssue": "Report issue",
     "repeated": "×{{count}}",
+    "appUpdateAvailable": "A new version of GeoLibre is available.",
+    "appUpdateReload": "Reload",
     "layerLoadFailed": "Layer \"{{name}}\" failed to load",
     "layerLoadFailedHint": "Check the URL, your network connection, and any required API key. Details are in the Diagnostics panel.",
     "fileReadFailed": "Could not read \"{{name}}\", so it was skipped.",
