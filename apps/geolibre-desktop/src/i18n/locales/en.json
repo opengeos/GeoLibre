@@ -9549,6 +9549,7 @@
     "windowCloseFailed": "Could not close the window.",
     "nativeProjectPathFailed": "Could not open the project file passed to GeoLibre.",
     "kmlSuperOverlayReadFailed": "Could not read the KML Super-Overlay \"{{name}}\" again, so its tiles are blank.",
+    "dialogLoadFailed": "This dialog could not be loaded. If GeoLibre was just updated, save your project, then reload the page.",
     "projectControlFailed": "Could not apply the project's \"{{control}}\" setting.",
     "pluginSnapshotFailed": "Some plugin settings may not carry over to the new renderer.",
     "lidarRestoreFailed": "Could not restore the project's saved point clouds.",

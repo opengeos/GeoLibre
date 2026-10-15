@@ -1,4 +1,6 @@
+import i18next from "i18next";
 import { lazy, Suspense, useState, type ComponentType, type ReactNode } from "react";
+import { notify } from "../../../lib/notify";
 
 // The toolbar's on-demand dialogs, split out of the app chunk. Each is fetched
 // the first time it opens (see MountWhenOpened). Dialogs that must run while
@@ -16,7 +18,9 @@ import { lazy, Suspense, useState, type ComponentType, type ReactNode } from "re
  * `undefined` once a `vite:preloadError` listener calls `preventDefault()`, as
  * the stale-chunk recovery does while it reloads the page. Without the
  * fallback, `React.lazy` reads `.default` off `undefined` during render and
- * the toolbar's error boundary takes the whole toolbar down.
+ * the toolbar's error boundary takes the whole toolbar down. A warning toast
+ * tells the user the dialog did not open and how to recover, since `React.lazy`
+ * caches the empty fallback until the page reloads.
  *
  * @param name - The dialog's name, for the console error.
  * @param load - Imports the chunk and picks the dialog component from it.
@@ -33,6 +37,9 @@ export async function loadLazyDialog<T extends ComponentType<never>>(
   } catch (error) {
     console.error(`Failed to load ${name}`, error);
   }
+  notify.warning(i18next.t("notifications.dialogLoadFailed"));
+  // The fallback renders nothing, so it ignores the dialog's props; the cast
+  // only satisfies the dialog's prop type.
   return { default: (() => null) as unknown as T };
 }
 
