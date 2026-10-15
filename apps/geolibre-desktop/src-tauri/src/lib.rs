@@ -2232,7 +2232,9 @@ fn load_external_plugin_archive(
 /// full path within the archive, or None when no plugin.json is present.
 #[cfg(not(feature = "mas"))]
 fn find_zip_manifest_path<R: Read + std::io::Seek>(archive: &zip::ZipArchive<R>) -> Option<String> {
-    let names: Vec<&str> = archive.file_names().collect();
+    // Entries whose names can't be decoded can't be the manifest; skip them.
+    let owned: Vec<_> = archive.file_names().filter_map(Result::ok).collect();
+    let names: Vec<&str> = owned.iter().map(|name| name.as_ref()).collect();
     if names.contains(&"plugin.json") {
         return Some("plugin.json".to_string());
     }
@@ -4588,7 +4590,10 @@ fn extract_martin_binary_from_zip(archive: &[u8], binary_path: &Path) -> Result<
         let mut file = archive
             .by_index(index)
             .map_err(|error| format!("Could not read Martin zip entry: {error}"))?;
-        let path = PathBuf::from(file.name());
+        let name = file
+            .name()
+            .map_err(|error| format!("Could not read Martin zip entry name: {error}"))?;
+        let path = PathBuf::from(name.as_ref());
         if path.file_name().and_then(|name| name.to_str()) != Some(executable_name) {
             continue;
         }
