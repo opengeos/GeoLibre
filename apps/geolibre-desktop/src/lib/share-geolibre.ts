@@ -450,6 +450,22 @@ export interface FetchSharesOptions {
   fetchImpl?: typeof fetch;
 }
 
+/**
+ * The share server has no share-link management API. The hosted
+ * share.geolibre.app publishes projects but only the self-hosted GeoLibre
+ * server lists and revokes share links, so a 404 here means "not supported",
+ * not "your links are gone".
+ */
+export class ShareLinksUnsupportedError extends Error {
+  readonly host: string;
+
+  constructor(host: string) {
+    super(`${host} does not manage share links.`);
+    this.name = "ShareLinksUnsupportedError";
+    this.host = host;
+  }
+}
+
 export async function fetchProjectShares(options: FetchSharesOptions): Promise<ActiveShare[]> {
   const token = options.token.trim();
   if (!token) {
@@ -481,6 +497,9 @@ export async function fetchProjectShares(options: FetchSharesOptions): Promise<A
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Invalid or expired API token.");
+  }
+  if (response.status === 404) {
+    throw new ShareLinksUnsupportedError(hostOf(base));
   }
   if (!response.ok) {
     throw new Error(`Failed to fetch shares (HTTP ${response.status}).`);

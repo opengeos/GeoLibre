@@ -1915,6 +1915,7 @@
     "createShare": "New Share",
     "noActiveShares": "No active share links found.",
     "sharesErrorFallback": "Could not load your active share links.",
+    "sharesUnsupported": "{{shareHost}} does not list share links here. Manage your shared projects on its website.",
     "revoke": "Revoke",
     "revoking": "Revoking…",
     "revokeConfirm": "Revoke this share link? Anyone you sent it to will lose access immediately, and this cannot be undone.",

@@ -5,6 +5,7 @@ import {
   DEFAULT_PROJECT_TITLE,
   DEFAULT_SHARE_BASE_URL,
   fetchProjectShares,
+  ShareLinksUnsupportedError,
   fetchSharedProjectVersions,
   isShareableTitle,
   MAX_PROJECT_TITLE_LENGTH,
@@ -515,6 +516,37 @@ describe("fetchProjectShares", () => {
 
   it("rejects when no token is provided", async () => {
     await assert.rejects(() => fetchProjectShares({ token: "   " }), /token/i);
+  });
+
+  it("reports a server without the share-link API as unsupported, not failed", async () => {
+    // share.geolibre.app publishes projects but has no GET /api/shares.
+    const { fn } = fakeFetch(404, { error: "Not Found" });
+
+    await assert.rejects(
+      () =>
+        fetchProjectShares({
+          token: "glb_secrettoken",
+          baseUrl: "https://share.geolibre.app",
+          fetchImpl: fn,
+        }),
+      (err: unknown) =>
+        err instanceof ShareLinksUnsupportedError && err.host === "share.geolibre.app",
+    );
+  });
+
+  it("still reports other server failures as errors", async () => {
+    const { fn } = fakeFetch(500, { error: "boom" });
+
+    await assert.rejects(
+      () =>
+        fetchProjectShares({
+          token: "glb_secrettoken",
+          baseUrl: "https://share.geolibre.app",
+          fetchImpl: fn,
+        }),
+      (err: unknown) =>
+        !(err instanceof ShareLinksUnsupportedError) && /HTTP 500/.test(String(err)),
+    );
   });
 
   it("fails closed to the view role when the server sends an unknown one", async () => {
