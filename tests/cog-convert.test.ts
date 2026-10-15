@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { before, describe, it } from "node:test";
-import { GeoTiffReader } from "geolibre-wasm";
+import { CogBuilder, GeoTiffReader } from "geolibre-wasm";
 import {
   COG_WASM_COMPRESSIONS,
   convertGeoTiffToCog,
@@ -159,6 +159,27 @@ describe("convertGeoTiffToCog", () => {
     const flat = await convertGeoTiffToCog(tiff, { overviews: false });
     assert.equal(await imageCount(flat), 1);
     assert.equal(await isTiledGeoTiff(flat), true);
+  });
+
+  it("keeps a user-defined projection that has no EPSG code (#3130)", async () => {
+    // South Africa's Lo29 (ESRI:102567): GDAL tags it ProjectedCSType 32767 with
+    // the datum's GeographicType 4148, which used to read back as EPSG:4148.
+    const lo29 =
+      "+proj=tmerc +lat_0=0 +lon_0=29 +k_0=1 +x_0=0 +y_0=0 +a=6378137 +rf=298.257223563 +units=m +no_defs";
+    const builder = new CogBuilder(16, 16, 1);
+    builder.set_proj_string(lo29);
+    builder.set_origin(20000, -2800000, 10);
+    builder.set_overview_levels(new Uint32Array());
+    const source = builder.write_f32(new Float32Array(16 * 16).fill(1));
+    builder.free();
+
+    const reader = new GeoTiffReader(await convertGeoTiffToCog(source));
+    try {
+      assert.equal(reader.epsg, undefined);
+      assert.equal(reader.proj_string, lo29);
+    } finally {
+      reader.free();
+    }
   });
 
   it("defaults to deflate, which compresses better than storing raw", async () => {

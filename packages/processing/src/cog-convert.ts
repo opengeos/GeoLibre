@@ -175,6 +175,10 @@ export async function convertGeoTiffToCog(
       const epsg = reader.epsg;
       if (typeof epsg === "number" && Number.isFinite(epsg)) {
         builder.set_epsg(epsg);
+      } else if (reader.proj_string) {
+        // A user-defined projection (e.g. South Africa's Lo29, ESRI:102567) has
+        // no EPSG code; carry its projection GeoKeys over instead.
+        builder.set_proj_string(reader.proj_string);
       }
       const geoTransform = reader.geo_transform();
       if (geoTransform.length >= 6) builder.set_geo_transform(geoTransform);
