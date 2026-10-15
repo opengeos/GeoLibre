@@ -130,6 +130,16 @@ describe("entryScriptUrl", () => {
     );
   });
 
+  it("ignores data-type and data-src look-alike attributes", () => {
+    const html =
+      '<script data-type="module" src="./not-module.js"></script>' +
+      '<script data-src="./wrong.js" src="./assets/main-abc.js" type="module"></script>';
+    assert.equal(
+      entryScriptUrl(html, "https://example.org/index.html"),
+      "https://example.org/assets/main-abc.js",
+    );
+  });
+
   it("returns null when the document has no module entry", () => {
     assert.equal(entryScriptUrl("<html></html>", "https://example.org/index.html"), null);
   });

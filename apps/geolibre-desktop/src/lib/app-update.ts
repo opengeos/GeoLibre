@@ -39,8 +39,9 @@ const SCRIPT_TAG_PATTERN = /<script\b[^>]*>/gi;
  */
 export function entryScriptUrl(html: string, baseUrl: string): string | null {
   for (const [tag] of html.matchAll(SCRIPT_TAG_PATTERN)) {
-    if (!/\btype=["']module["']/i.test(tag)) continue;
-    const src = /\bsrc=["']([^"']+)["']/i.exec(tag)?.[1];
+    // Whitespace before each name, so `data-type` / `data-src` never match.
+    if (!/\stype=["']module["']/i.test(tag)) continue;
+    const src = /\ssrc=["']([^"']+)["']/i.exec(tag)?.[1];
     if (!src) continue;
     try {
       return new URL(src, baseUrl).href;

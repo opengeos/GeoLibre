@@ -296,7 +296,11 @@ const runningEntryUrl =
 async function offerReloadIfNewBuild(): Promise<void> {
   const isNew = await isNewBuildDeployed({
     currentEntryUrl: runningEntryUrl,
-    fetchText: (url) => fetch(url, { cache: "no-cache" }).then((response) => response.text()),
+    fetchText: async (url) => {
+      const response = await fetch(url, { cache: "no-cache" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.text();
+    },
   });
   if (!isNew) return;
   await i18nReady;
