@@ -168,3 +168,35 @@ it("leaves CDN import errors to their feature while retaining local stale-chunk 
   );
   assert.equal(isExternalModuleFailure(undefined, origin), false);
 });
+
+it("lets the import reject when a dirty project defers the reload", async () => {
+  const { useAppStore } = await import("@geolibre/core");
+  const previous = globalThis.window;
+  const target = new EventTarget();
+  let reloads = 0;
+  Object.assign(globalThis, {
+    window: Object.assign(target, {
+      location: { origin: "https://web.geolibre.app", reload: () => reloads++ },
+      sessionStorage: { getItem: () => null, setItem: () => {} },
+    }),
+  });
+  const wasDirty = useAppStore.getState().isDirty;
+  useAppStore.setState({ isDirty: true });
+  const cleanup = installStaleChunkReload({ enabled: true });
+  try {
+    const stale = Object.assign(new Event("vite:preloadError", { cancelable: true }), {
+      payload: new TypeError(
+        "Failed to fetch dynamically imported module: https://web.geolibre.app/assets/old.js",
+      ),
+    });
+    target.dispatchEvent(stale);
+    assert.equal(reloads, 0, "unsaved work is not reloaded away");
+    // preventDefault() would make Vite's preload wrapper resolve the import to
+    // undefined, and a React.lazy dialog would then crash reading `.default`.
+    assert.equal(stale.defaultPrevented, false, "the feature still receives its rejection");
+  } finally {
+    cleanup();
+    useAppStore.setState({ isDirty: wasDirty });
+    Object.assign(globalThis, { window: previous });
+  }
+});

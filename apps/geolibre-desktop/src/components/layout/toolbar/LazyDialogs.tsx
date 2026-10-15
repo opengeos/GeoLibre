@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ComponentType, type ReactNode } from "react";
 
 // The toolbar's on-demand dialogs, split out of the app chunk. Each is fetched
 // the first time it opens (see MountWhenOpened). Dialogs that must run while
@@ -6,57 +6,109 @@ import { lazy, Suspense, useState, type ReactNode } from "react";
 // button, Print Layout syncs the project's print layout on mount, and Field
 // Collection restores its session pill from a device preference on mount.
 
+/**
+ * Resolves a dialog chunk to the module shape `React.lazy` expects, falling
+ * back to a component that renders nothing when the chunk cannot be loaded.
+ *
+ * Two failure shapes reach this: a rejected import (offline, or a stale chunk
+ * deleted by a redeploy), and an import that resolves to `undefined`. The
+ * second comes from Vite's preload wrapper, which turns the rejection into
+ * `undefined` once a `vite:preloadError` listener calls `preventDefault()`, as
+ * the stale-chunk recovery does while it reloads the page. Without the
+ * fallback, `React.lazy` reads `.default` off `undefined` during render and
+ * the toolbar's error boundary takes the whole toolbar down.
+ *
+ * @param name - The dialog's name, for the console error.
+ * @param load - Imports the chunk and picks the dialog component from it.
+ * @returns The `{ default }` module for `React.lazy`.
+ */
+export async function loadLazyDialog<T extends ComponentType<never>>(
+  name: string,
+  load: () => Promise<T | undefined>,
+): Promise<{ default: T }> {
+  try {
+    const component = await load();
+    if (component) return { default: component };
+    console.error(`Failed to load ${name}: its chunk is unavailable.`);
+  } catch (error) {
+    console.error(`Failed to load ${name}`, error);
+  }
+  return { default: (() => null) as unknown as T };
+}
+
 export const AboutDialog = lazy(() =>
-  import("../AboutDialog").then((m) => ({ default: m.AboutDialog })),
+  loadLazyDialog("AboutDialog", () => import("../AboutDialog").then((m) => m.AboutDialog)),
 );
 export const AddDataDialog = lazy(() =>
-  import("../AddDataDialog").then((m) => ({ default: m.AddDataDialog })),
+  loadLazyDialog("AddDataDialog", () => import("../AddDataDialog").then((m) => m.AddDataDialog)),
 );
 export const AddNetcdfDialog = lazy(() =>
-  import("../AddNetcdfDialog").then((m) => ({ default: m.AddNetcdfDialog })),
+  loadLazyDialog("AddNetcdfDialog", () =>
+    import("../AddNetcdfDialog").then((m) => m.AddNetcdfDialog),
+  ),
 );
 export const AddSpaceborneLidarDialog = lazy(() =>
-  import("../AddSpaceborneLidarDialog").then((m) => ({ default: m.AddSpaceborneLidarDialog })),
+  loadLazyDialog("AddSpaceborneLidarDialog", () =>
+    import("../AddSpaceborneLidarDialog").then((m) => m.AddSpaceborneLidarDialog),
+  ),
 );
 export const CommandPalette = lazy(() =>
-  import("../../command/CommandPalette").then((m) => ({ default: m.CommandPalette })),
+  loadLazyDialog("CommandPalette", () =>
+    import("../../command/CommandPalette").then((m) => m.CommandPalette),
+  ),
 );
 export const GeoreferencerDialog = lazy(() =>
-  import("../GeoreferencerDialog").then((m) => ({ default: m.GeoreferencerDialog })),
+  loadLazyDialog("GeoreferencerDialog", () =>
+    import("../GeoreferencerDialog").then((m) => m.GeoreferencerDialog),
+  ),
 );
 export const GpsTrackingDialog = lazy(() =>
-  import("../GpsTrackingDialog").then((m) => ({ default: m.GpsTrackingDialog })),
+  loadLazyDialog("GpsTrackingDialog", () =>
+    import("../GpsTrackingDialog").then((m) => m.GpsTrackingDialog),
+  ),
 );
 export const KeyboardShortcutsDialog = lazy(() =>
-  import("../../command/KeyboardShortcutsDialog").then((m) => ({
-    default: m.KeyboardShortcutsDialog,
-  })),
+  loadLazyDialog("KeyboardShortcutsDialog", () =>
+    import("../../command/KeyboardShortcutsDialog").then((m) => m.KeyboardShortcutsDialog),
+  ),
 );
 export const LoadFeaturesIntoEditorDialog = lazy(() =>
-  import("../LoadFeaturesIntoEditorDialog").then((m) => ({
-    default: m.LoadFeaturesIntoEditorDialog,
-  })),
+  loadLazyDialog("LoadFeaturesIntoEditorDialog", () =>
+    import("../LoadFeaturesIntoEditorDialog").then((m) => m.LoadFeaturesIntoEditorDialog),
+  ),
 );
 export const ManagePluginsDialog = lazy(() =>
-  import("../ManagePluginsDialog").then((m) => ({ default: m.ManagePluginsDialog })),
+  loadLazyDialog("ManagePluginsDialog", () =>
+    import("../ManagePluginsDialog").then((m) => m.ManagePluginsDialog),
+  ),
 );
 export const NewProjectDialog = lazy(() =>
-  import("../NewProjectDialog").then((m) => ({ default: m.NewProjectDialog })),
+  loadLazyDialog("NewProjectDialog", () =>
+    import("../NewProjectDialog").then((m) => m.NewProjectDialog),
+  ),
 );
 export const ProjectGalleryDialog = lazy(() =>
-  import("../ProjectGalleryDialog").then((m) => ({ default: m.ProjectGalleryDialog })),
+  loadLazyDialog("ProjectGalleryDialog", () =>
+    import("../ProjectGalleryDialog").then((m) => m.ProjectGalleryDialog),
+  ),
 );
 export const RecordTourDialog = lazy(() =>
-  import("../RecordTourDialog").then((m) => ({ default: m.RecordTourDialog })),
+  loadLazyDialog("RecordTourDialog", () =>
+    import("../RecordTourDialog").then((m) => m.RecordTourDialog),
+  ),
 );
 export const RecordVideoDialog = lazy(() =>
-  import("../RecordVideoDialog").then((m) => ({ default: m.RecordVideoDialog })),
+  loadLazyDialog("RecordVideoDialog", () =>
+    import("../RecordVideoDialog").then((m) => m.RecordVideoDialog),
+  ),
 );
 export const SetViewDialog = lazy(() =>
-  import("../SetViewDialog").then((m) => ({ default: m.SetViewDialog })),
+  loadLazyDialog("SetViewDialog", () => import("../SetViewDialog").then((m) => m.SetViewDialog)),
 );
 export const ShareProjectDialog = lazy(() =>
-  import("../ShareProjectDialog").then((m) => ({ default: m.ShareProjectDialog })),
+  loadLazyDialog("ShareProjectDialog", () =>
+    import("../ShareProjectDialog").then((m) => m.ShareProjectDialog),
+  ),
 );
 
 /**

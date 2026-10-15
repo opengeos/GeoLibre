@@ -183,11 +183,16 @@ export function installStaleChunkReload(options?: { enabled?: boolean }): () => 
       event.preventDefault();
     } else if (outcome === "deferred-unsaved") {
       // Reloading would discard unsaved work (and raise the "Leave site?"
-      // prompt), so the feature is left unloaded. Record an actionable notice
-      // instead of letting the raw preload error surface, and suppress Vite's
-      // rethrow so it does not read as an unhandled crash. Skip the append when
-      // the same notice is already present so repeated retries (each firing a
-      // fresh preload error) do not stack identical entries in the panel.
+      // prompt), so the feature is left unloaded. Record an actionable notice.
+      // Skip the append when the same notice is already present so repeated
+      // retries (each firing a fresh preload error) do not stack identical
+      // entries in the panel.
+      //
+      // Vite's rethrow is NOT suppressed here: preventDefault() makes the
+      // preload wrapper resolve the import to `undefined` instead of
+      // rejecting, so the caller would read properties off `undefined` (a
+      // React.lazy dialog then crashed the whole toolbar). Left to reject, the
+      // feature's own error handling sees a real load failure.
       const alreadyRecorded = getDiagnosticsSnapshot().records.some(
         (record) =>
           record.source === STALE_CHUNK_DIAGNOSTIC_SOURCE &&
@@ -207,7 +212,6 @@ export function installStaleChunkReload(options?: { enabled?: boolean }): () => 
           source: STALE_CHUNK_DIAGNOSTIC_SOURCE,
         });
       }
-      event.preventDefault();
     }
   };
 
