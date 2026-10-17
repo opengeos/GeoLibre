@@ -1,5 +1,6 @@
 import type { Feature, Point } from "geojson";
 import { getRuntimeEnvironment } from "./runtime-env";
+import type { GeocodingLocator } from "./types";
 
 /**
  * Geocoding client and pure helpers shared by the batch-geocode dialog and the
@@ -13,7 +14,8 @@ import { getRuntimeEnvironment } from "./runtime-env";
  *
  * Providers: geocoding is dispatched through a small {@link GeocodingProvider}
  * registry so alternatives to Nominatim (ArcGIS World Geocoder, CartoCiudad, Mapbox,
- * Pelias, Google) can be selected per project. Each provider builds its own request
+ * Pelias, Google, organization-hosted ArcGIS GeocodeServer locators) can be
+ * selected per project. Each provider builds its own request
  * URLs and normalizes its response into a {@link GeocodeMatch} (forward) or a
  * {@link ReverseGeocodeDisplay} (reverse), so the dialog and plugin stay
  * provider-agnostic. Nominatim is the default.
@@ -69,6 +71,7 @@ export type GeocodingProviderId =
   | "nominatim"
   | "pelias"
   | "arcgis"
+  | "arcgis-locator"
   | "mapbox"
   | "google"
   | "cartociudad";
@@ -87,6 +90,38 @@ export interface GeocoderConfig {
   email?: string;
   /** API key / access token for providers that require one. */
   apiKey?: string;
+  /** The selected locator, for the `arcgis-locator` provider. */
+  locator?: GeocodingLocator;
+}
+
+/**
+ * An error the geocoding service reported about the request itself, as opposed
+ * to a network failure or a search with no matches. ArcGIS answers failures with
+ * HTTP 200 and an `error` envelope, so `response.ok` alone would turn them into
+ * an empty result. `code` is the service's own code (498/499 for a missing or
+ * invalid token, 403 for insufficient permission).
+ */
+export class GeocoderServiceError extends Error {
+  readonly code: number | undefined;
+
+  constructor(message: string, code?: number) {
+    super(message);
+    this.name = "GeocoderServiceError";
+    this.code = code;
+  }
+
+  /** Whether the service asked for a token or rejected the one it got. */
+  get isAuthError(): boolean {
+    return this.code === 401 || this.code === 403 || this.code === 498 || this.code === 499;
+  }
+}
+
+/** The configured geocoder does not support the requested operation. */
+export class GeocoderUnsupportedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GeocoderUnsupportedError";
+  }
 }
 
 /** Per-request options passed to a provider's forward URL builder. */
@@ -502,28 +537,7 @@ const arcgisProvider: GeocodingProvider = {
     if (config.apiKey) url.searchParams.set("token", config.apiKey);
     return url.toString();
   },
-  parseForward: (data) => {
-    const candidates =
-      data &&
-      typeof data === "object" &&
-      Array.isArray((data as { candidates?: unknown }).candidates)
-        ? ((data as { candidates: unknown[] }).candidates as Record<string, unknown>[])
-        : [];
-    return candidates
-      .map((candidate) => {
-        const location = candidate.location as { x?: unknown; y?: unknown } | undefined;
-        const lon = Number(location?.x);
-        const lat = Number(location?.y);
-        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
-        return {
-          lon,
-          lat,
-          displayName: readString(candidate, "address") ?? "",
-          score: coerceScore(candidate.score as number | undefined),
-        } satisfies GeocodeMatch;
-      })
-      .filter((m): m is GeocodeMatch => m !== null);
-  },
+  parseForward: parseArcGISCandidates,
   buildReverseUrl: (config, lon, lat) => {
     const url = new URL(config.reverseEndpoint);
     url.searchParams.set("location", `${lon},${lat}`);
@@ -531,17 +545,287 @@ const arcgisProvider: GeocodingProvider = {
     if (config.apiKey) url.searchParams.set("token", config.apiKey);
     return url.toString();
   },
-  parseReverse: (data) => {
-    const address =
-      data && typeof data === "object" ? (data as { address?: unknown }).address : undefined;
-    if (!address || typeof address !== "object") return null;
-    const displayName = (
-      readString(address, "LongLabel") ?? readString(address, "Match_addr")
-    )?.trim();
-    return displayName
-      ? { displayName, parts: stringifyParts(address as Record<string, unknown>) }
+  parseReverse: parseArcGISReverse,
+};
+
+// --- Organization-hosted ArcGIS GeocodeServer locators ----------------------
+
+/** Spatial references ArcGIS reports for Web Mercator. */
+const WEB_MERCATOR_WKIDS = new Set([102100, 102113, 3857, 900913]);
+/** Earth radius of the Web Mercator sphere, in meters. */
+const WEB_MERCATOR_RADIUS = 6378137;
+/** The operations a pasted GeocodeServer URL may already end in. */
+const LOCATOR_OPERATION = /\/(findAddressCandidates|reverseGeocode|suggest|geocodeAddresses)$/i;
+
+/** The ArcGIS `error` envelope in a response body, as a {@link GeocoderServiceError}. */
+function arcgisServiceError(data: unknown): GeocoderServiceError | null {
+  const error = data && typeof data === "object" ? (data as { error?: unknown }).error : undefined;
+  if (!error || typeof error !== "object") return null;
+  const code = Number((error as { code?: unknown }).code);
+  const message = readString(error, "message") ?? "ArcGIS geocoding service error";
+  return new GeocoderServiceError(message, Number.isFinite(code) ? code : undefined);
+}
+
+/** The well-known ID of an ArcGIS `spatialReference`, preferring `latestWkid`. */
+function spatialReferenceWkid(spatialReference: unknown): number | null {
+  if (!spatialReference || typeof spatialReference !== "object") return null;
+  const sr = spatialReference as { wkid?: unknown; latestWkid?: unknown };
+  const wkid = Number(sr.latestWkid ?? sr.wkid);
+  return Number.isFinite(wkid) ? wkid : null;
+}
+
+/**
+ * A candidate's position as longitude/latitude. Organization-hosted locators
+ * often work in a projected system, and ArcGIS ignores an `outSR` it cannot
+ * honor, so the reported spatial reference decides: geographic WGS 84 (or none,
+ * the World Geocoder's default) is read as is, Web Mercator is unprojected, and
+ * anything else is refused rather than plotted in the wrong place.
+ *
+ * @param x - The candidate's x coordinate.
+ * @param y - The candidate's y coordinate.
+ * @param wkid - The response's spatial reference, or null when it reports none.
+ * @returns The position, or null when the coordinates are not finite or not on Earth.
+ * @throws GeocoderServiceError When the coordinates are in an unsupported spatial reference.
+ */
+function arcgisCandidatePosition(
+  x: number,
+  y: number,
+  wkid: number | null,
+): { lon: number; lat: number } | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  let lon = x;
+  let lat = y;
+  if (wkid !== null && WEB_MERCATOR_WKIDS.has(wkid)) {
+    lon = (x / WEB_MERCATOR_RADIUS) * (180 / Math.PI);
+    lat = (2 * Math.atan(Math.exp(y / WEB_MERCATOR_RADIUS)) - Math.PI / 2) * (180 / Math.PI);
+  } else if (wkid !== null && wkid !== 4326) {
+    throw new GeocoderServiceError(
+      `The geocoder returned coordinates in spatial reference ${wkid}, which GeoLibre cannot place on the map.`,
+    );
+  }
+  if (lon < -180 || lon > 180 || lat < -90 || lat > 90) return null;
+  return { lon, lat };
+}
+
+/**
+ * Normalize an ArcGIS `findAddressCandidates` response. Throws the service's
+ * error envelope instead of reporting it as "no matches".
+ *
+ * @param data - The parsed response body.
+ * @returns The candidates as normalized matches.
+ */
+function parseArcGISCandidates(data: unknown): GeocodeMatch[] {
+  const error = arcgisServiceError(data);
+  if (error) throw error;
+  if (!data || typeof data !== "object") return [];
+  const body = data as { candidates?: unknown; spatialReference?: unknown };
+  if (!Array.isArray(body.candidates)) return [];
+  const wkid = spatialReferenceWkid(body.spatialReference);
+  return (body.candidates as Record<string, unknown>[])
+    .map((candidate) => {
+      const location = candidate.location as { x?: unknown; y?: unknown } | undefined;
+      const position = arcgisCandidatePosition(Number(location?.x), Number(location?.y), wkid);
+      if (!position) return null;
+      return {
+        ...position,
+        displayName: readString(candidate, "address") ?? "",
+        score: coerceScore(candidate.score as number | undefined),
+      } satisfies GeocodeMatch;
+    })
+    .filter((m): m is GeocodeMatch => m !== null);
+}
+
+/**
+ * Normalize an ArcGIS `reverseGeocode` response. "Unable to find address" comes
+ * back as an `error` envelope with code 400, which is a valid empty answer
+ * rather than a failure.
+ *
+ * @param data - The parsed response body.
+ * @returns The address, or null when there is none.
+ */
+function parseArcGISReverse(data: unknown): ReverseGeocodeDisplay | null {
+  const error = arcgisServiceError(data);
+  if (error && error.code !== 400) throw error;
+  const address =
+    data && typeof data === "object" ? (data as { address?: unknown }).address : undefined;
+  if (!address || typeof address !== "object") return null;
+  const displayName = (
+    readString(address, "LongLabel") ??
+    readString(address, "Match_addr") ??
+    readString(address, "Address")
+  )?.trim();
+  return displayName
+    ? { displayName, parts: stringifyParts(address as Record<string, unknown>) }
+    : null;
+}
+
+/**
+ * The GeocodeServer base URL of a pasted locator URL: an operation suffix
+ * (`/findAddressCandidates`, ...), the query string and any credentials are
+ * dropped, so a token in a pasted URL is never stored.
+ *
+ * @param input - The URL as typed.
+ * @returns The base URL ending in `/GeocodeServer`, or null when it is not one.
+ */
+export function normalizeArcGISLocatorUrl(input: string | undefined | null): string | null {
+  let url: URL;
+  try {
+    url = new URL((input ?? "").trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const path = url.pathname.replace(/\/+$/, "").replace(LOCATOR_OPERATION, "");
+  if (!/\/GeocodeServer$/i.test(path)) return null;
+  url.pathname = path;
+  url.search = "";
+  url.hash = "";
+  url.username = "";
+  url.password = "";
+  return url.toString();
+}
+
+/**
+ * Coerce a stored locator to a {@link GeocodingLocator}, or null when it has no
+ * usable id or GeocodeServer URL. Used for project files and runtime env, so
+ * anything unexpected is dropped rather than trusted.
+ *
+ * @param value - The stored value.
+ * @returns The locator, or null.
+ */
+export function normalizeGeocodingLocator(value: unknown): GeocodingLocator | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+  const url = normalizeArcGISLocatorUrl(
+    typeof candidate.url === "string" ? candidate.url : undefined,
+  );
+  if (!id || !url) return null;
+  const text = (key: string) =>
+    typeof candidate[key] === "string" && (candidate[key] as string).trim()
+      ? (candidate[key] as string).trim()
+      : undefined;
+  const flag = (key: string) =>
+    typeof candidate[key] === "boolean" ? (candidate[key] as boolean) : undefined;
+  const addressFields = Array.isArray(candidate.addressFields)
+    ? candidate.addressFields.filter(
+        (field): field is string => typeof field === "string" && field.trim() !== "",
+      )
+    : undefined;
+  const locator: GeocodingLocator = { id, name: text("name") ?? id, url };
+  const portalUrl = text("portalUrl");
+  if (portalUrl) locator.portalUrl = portalUrl;
+  const singleLineField = text("singleLineField");
+  if (singleLineField) locator.singleLineField = singleLineField;
+  if (addressFields?.length) locator.addressFields = addressFields;
+  const reverse = flag("reverse");
+  if (reverse !== undefined) locator.reverse = reverse;
+  const suggest = flag("suggest");
+  if (suggest !== undefined) locator.suggest = suggest;
+  return locator;
+}
+
+/** What a GeocodeServer's `?f=json` metadata says it supports. */
+export type ArcGISLocatorCapabilities = Required<Pick<GeocodingLocator, "reverse" | "suggest">> &
+  Pick<GeocodingLocator, "singleLineField" | "addressFields">;
+
+/**
+ * Read a GeocodeServer's capabilities from its `?f=json` metadata. A service
+ * that lists no `capabilities` (older ArcGIS Server) is taken to support
+ * geocoding and reverse geocoding but not suggestions.
+ *
+ * @param data - The parsed metadata.
+ * @returns The capabilities.
+ * @throws GeocoderServiceError For an error envelope, or metadata that is not a
+ *   GeocodeServer's.
+ * @throws GeocoderUnsupportedError When the service does not geocode.
+ */
+export function parseArcGISLocatorInfo(data: unknown): ArcGISLocatorCapabilities {
+  const error = arcgisServiceError(data);
+  if (error) throw error;
+  if (!data || typeof data !== "object") {
+    throw new GeocoderServiceError("The service did not return GeocodeServer metadata.");
+  }
+  const info = data as Record<string, unknown>;
+  const fieldName = (field: unknown) =>
+    field && typeof field === "object" ? readString(field, "name")?.trim() || undefined : undefined;
+  const addressFields = Array.isArray(info.addressFields)
+    ? info.addressFields.map(fieldName).filter((name): name is string => !!name)
+    : [];
+  const singleLineField = fieldName(info.singleLineAddressField);
+  if (!singleLineField && !addressFields.length) {
+    throw new GeocoderServiceError("The service did not return GeocodeServer metadata.");
+  }
+  const listed =
+    typeof info.capabilities === "string"
+      ? new Set(info.capabilities.split(",").map((entry) => entry.trim().toLowerCase()))
       : null;
+  if (listed && !listed.has("geocode")) {
+    throw new GeocoderUnsupportedError("This locator does not support geocoding.");
+  }
+  return {
+    singleLineField,
+    addressFields: addressFields.length ? addressFields : undefined,
+    reverse: listed ? listed.has("reversegeocode") : true,
+    suggest: listed ? listed.has("suggest") : false,
+  };
+}
+
+/**
+ * The input field a single search string is sent in: the locator's published
+ * single-line field, else its only structured field (an asset ID locator often
+ * publishes just one), else ArcGIS's conventional `SingleLine`.
+ */
+function arcgisLocatorInputField(locator: GeocodingLocator): string {
+  if (locator.singleLineField) return locator.singleLineField;
+  if (locator.addressFields?.length === 1) return locator.addressFields[0];
+  return "SingleLine";
+}
+
+/** The config's locator, or an error naming what is missing. */
+function requireLocator(config: GeocoderConfig): GeocodingLocator {
+  if (!config.locator) {
+    throw new GeocoderUnsupportedError("No ArcGIS GeocodeServer locator is selected.");
+  }
+  return config.locator;
+}
+
+const arcgisLocatorProvider: GeocodingProvider = {
+  id: "arcgis-locator",
+  label: "ArcGIS GeocodeServer (organization)",
+  forward: true,
+  // Per locator: see geocoderSupportsReverse.
+  reverse: true,
+  // A public locator needs no key; a secured one borrows a portal sign-in.
+  requiresApiKey: false,
+  acceptsApiKey: false,
+  // Derived from the selected locator's URL by resolveGeocoderConfig.
+  defaultForwardEndpoint: "",
+  defaultReverseEndpoint: "",
+  buildForwardUrl: (config, query, options) => {
+    const locator = requireLocator(config);
+    const url = new URL(config.forwardEndpoint || `${locator.url}/findAddressCandidates`);
+    url.searchParams.set(arcgisLocatorInputField(locator), query);
+    url.searchParams.set("f", "json");
+    // Locators often work in a projected system; ask for WGS 84 and check the
+    // spatial reference the response reports (see arcgisCandidatePosition).
+    url.searchParams.set("outSR", "4326");
+    if (options.limit) url.searchParams.set("maxLocations", String(options.limit));
+    return url.toString();
   },
+  parseForward: parseArcGISCandidates,
+  buildReverseUrl: (config, lon, lat) => {
+    const locator = requireLocator(config);
+    const url = new URL(config.reverseEndpoint || `${locator.url}/reverseGeocode`);
+    url.searchParams.set(
+      "location",
+      JSON.stringify({ x: lon, y: lat, spatialReference: { wkid: 4326 } }),
+    );
+    url.searchParams.set("outSR", "4326");
+    url.searchParams.set("f", "json");
+    return url.toString();
+  },
+  parseReverse: parseArcGISReverse,
 };
 
 const mapboxProvider: GeocodingProvider = {
@@ -843,6 +1127,7 @@ export const GEOCODING_PROVIDERS: readonly GeocodingProvider[] = [
   nominatimProvider,
   peliasProvider,
   arcgisProvider,
+  arcgisLocatorProvider,
   mapboxProvider,
   googleProvider,
   cartociudadProvider,
@@ -875,13 +1160,51 @@ export function getGeocodingProvider(id: string | undefined | null): GeocodingPr
 export function getGeocoderConfig(): GeocoderConfig {
   const env = getRuntimeEnvironment();
   const provider = getGeocodingProvider(env.VITE_GEOCODER_PROVIDER);
+  // The `arcgis-locator` provider's selected locator travels as JSON in
+  // `VITE_GEOCODER_LOCATOR`, so the reverse-geocode plugin (which reads runtime
+  // env, not the store) can build its requests.
+  let locator: GeocodingLocator | undefined;
+  if (provider.id === "arcgis-locator" && env.VITE_GEOCODER_LOCATOR) {
+    try {
+      locator = normalizeGeocodingLocator(JSON.parse(env.VITE_GEOCODER_LOCATOR)) ?? undefined;
+    } catch {
+      locator = undefined;
+    }
+  }
+  const endpoints = locator ? locatorEndpoints(locator) : provider;
   return {
     providerId: provider.id,
-    forwardEndpoint: env.VITE_GEOCODER_ENDPOINT?.trim() || provider.defaultForwardEndpoint,
-    reverseEndpoint: env.VITE_GEOCODER_REVERSE_ENDPOINT?.trim() || provider.defaultReverseEndpoint,
+    forwardEndpoint: env.VITE_GEOCODER_ENDPOINT?.trim() || endpoints.defaultForwardEndpoint,
+    reverseEndpoint: env.VITE_GEOCODER_REVERSE_ENDPOINT?.trim() || endpoints.defaultReverseEndpoint,
     email: env.VITE_GEOCODER_EMAIL?.trim() || undefined,
     apiKey: env.VITE_GEOCODER_API_KEY?.trim() || undefined,
+    ...(locator ? { locator } : {}),
   };
+}
+
+/** A locator's operation URLs, derived from its base GeocodeServer URL. */
+function locatorEndpoints(locator: GeocodingLocator): {
+  defaultForwardEndpoint: string;
+  defaultReverseEndpoint: string;
+} {
+  return {
+    defaultForwardEndpoint: `${locator.url}/findAddressCandidates`,
+    defaultReverseEndpoint: `${locator.url}/reverseGeocode`,
+  };
+}
+
+/**
+ * The locator the `arcgis-locator` provider uses: the one `locatorId` names,
+ * else the first configured.
+ *
+ * @param input - The geocoding preference.
+ * @returns The locator, or undefined when none is configured.
+ */
+export function selectedGeocodingLocator(
+  input: Pick<GeocodingPreferenceInput, "locators" | "locatorId">,
+): GeocodingLocator | undefined {
+  const locators = input.locators ?? [];
+  return locators.find((locator) => locator.id === input.locatorId) ?? locators[0];
 }
 
 /** Inputs to {@link resolveGeocoderConfig}, mirroring the project preference. */
@@ -894,6 +1217,10 @@ export interface GeocodingPreferenceInput {
   /** Optional custom reverse endpoint (else the provider default). */
   reverseEndpoint?: string;
   email?: string;
+  /** Configured ArcGIS GeocodeServer locators. */
+  locators?: GeocodingLocator[];
+  /** The locator the `arcgis-locator` provider uses. */
+  locatorId?: string;
 }
 
 /**
@@ -903,6 +1230,19 @@ export interface GeocodingPreferenceInput {
  */
 export function resolveGeocoderConfig(input: GeocodingPreferenceInput): GeocoderConfig {
   const provider = getGeocodingProvider(input.providerId);
+  if (provider.id === "arcgis-locator") {
+    // A locator's endpoints come from its own URL; the project-wide overrides
+    // belong to the built-in providers.
+    const locator = selectedGeocodingLocator(input);
+    const endpoints = locator ? locatorEndpoints(locator) : provider;
+    return {
+      providerId: provider.id,
+      forwardEndpoint: endpoints.defaultForwardEndpoint,
+      reverseEndpoint: endpoints.defaultReverseEndpoint,
+      email: input.email?.trim() || undefined,
+      ...(locator ? { locator } : {}),
+    };
+  }
   return {
     providerId: provider.id,
     forwardEndpoint: input.forwardEndpoint?.trim() || provider.defaultForwardEndpoint,
@@ -1056,6 +1396,85 @@ export function setGeocodingFetch(fetchImpl: typeof globalThis.fetch | null): vo
   geocodingFetch = fetchImpl;
 }
 
+/**
+ * Resolves the access token for a secured locator, or undefined to send the
+ * request without one. See {@link setGeocodingTokenProvider}.
+ */
+export type GeocodingTokenProvider = (locator: GeocodingLocator) => Promise<string | undefined>;
+
+let geocodingTokenProvider: GeocodingTokenProvider | null = null;
+
+/**
+ * Register how a secured locator gets its token, or pass null to remove it.
+ *
+ * Core has no sign-in of its own: the app installs a provider that reuses its
+ * ArcGIS portal sessions. It is only consulted for a locator that names a
+ * `portalUrl`, and the provider decides whether that portal's token may be sent
+ * to the locator's host, so a token is never forwarded to an unrelated server.
+ *
+ * @param provider - The token provider, or null.
+ */
+export function setGeocodingTokenProvider(provider: GeocodingTokenProvider | null): void {
+  geocodingTokenProvider = provider;
+}
+
+/** The token to send with a request for `config`, when its locator is secured. */
+async function locatorToken(config: GeocoderConfig): Promise<string | undefined> {
+  const locator = config.providerId === "arcgis-locator" ? config.locator : undefined;
+  if (!locator?.portalUrl || !geocodingTokenProvider) return undefined;
+  return geocodingTokenProvider(locator);
+}
+
+/** `url` with `token` added, when there is one. */
+async function withLocatorToken(url: string, config: GeocoderConfig): Promise<string> {
+  const token = await locatorToken(config);
+  if (!token) return url;
+  const withToken = new URL(url);
+  withToken.searchParams.set("token", token);
+  return withToken.toString();
+}
+
+/**
+ * Whether `config` can reverse-geocode: a locator only when its metadata
+ * advertises `reverseGeocode` (unchecked locators are assumed to).
+ *
+ * @param config - The geocoder configuration.
+ * @returns Whether reverse geocoding is available.
+ */
+export function geocoderSupportsReverse(config: GeocoderConfig): boolean {
+  const provider = getGeocodingProvider(config.providerId);
+  if (!provider.reverse) return false;
+  return provider.id !== "arcgis-locator" || config.locator?.reverse !== false;
+}
+
+/**
+ * Fetch and read a GeocodeServer's capabilities. A secured service is asked
+ * with `token`.
+ *
+ * @param url - The locator's GeocodeServer URL (normalized first).
+ * @param options - An abort signal and an optional token.
+ * @returns The capabilities.
+ * @throws GeocoderServiceError For an HTTP or service error.
+ */
+export async function fetchArcGISLocatorInfo(
+  url: string,
+  options: { signal?: AbortSignal; token?: string } = {},
+): Promise<ArcGISLocatorCapabilities> {
+  const base = normalizeArcGISLocatorUrl(url);
+  if (!base) throw new GeocoderServiceError("Not an ArcGIS GeocodeServer URL.");
+  const request = new URL(base);
+  request.searchParams.set("f", "json");
+  if (options.token) request.searchParams.set("token", options.token);
+  const response = await geocodeFetch()(request.toString(), {
+    signal: options.signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new GeocoderServiceError(`Geocoder returned HTTP ${response.status}`, response.status);
+  }
+  return parseArcGISLocatorInfo(await readGeocodeJson(response));
+}
+
 /** The active geocoding fetch: the injected override, else the global fetch. */
 function geocodeFetch(): typeof globalThis.fetch {
   return geocodingFetch ?? fetch;
@@ -1106,16 +1525,19 @@ export async function geocodeForward(
 ): Promise<GeocodeMatch[]> {
   const config = options.config ?? getGeocoderConfig();
   const provider = getGeocodingProvider(config.providerId);
-  const url = provider.buildForwardUrl(config, query, {
-    email: config.email,
-    limit: options.limit,
-  });
+  const url = await withLocatorToken(
+    provider.buildForwardUrl(config, query, {
+      email: config.email,
+      limit: options.limit,
+    }),
+    config,
+  );
   const response = await geocodeFetch()(url, {
     signal: options.signal,
     headers: { Accept: "application/json" },
   });
   if (!response.ok) {
-    throw new Error(`Geocoder returned HTTP ${response.status}`);
+    throw new GeocoderServiceError(`Geocoder returned HTTP ${response.status}`, response.status);
   }
   const data: unknown = await readGeocodeJson(response);
   return provider.parseForward(data);
@@ -1136,16 +1558,22 @@ export async function geocodeReverse(
   }
   const config = options.config ?? getGeocoderConfig();
   const provider = getGeocodingProvider(config.providerId);
-  const url = provider.buildReverseUrl(config, wrappedLon, lat, {
-    email: config.email,
-    zoom: options.zoom,
-  });
+  if (!geocoderSupportsReverse(config)) {
+    throw new GeocoderUnsupportedError("The selected geocoder does not support reverse geocoding.");
+  }
+  const url = await withLocatorToken(
+    provider.buildReverseUrl(config, wrappedLon, lat, {
+      email: config.email,
+      zoom: options.zoom,
+    }),
+    config,
+  );
   const response = await geocodeFetch()(url, {
     signal: options.signal,
     headers: { Accept: "application/json" },
   });
   if (!response.ok) {
-    throw new Error(`Geocoder returned HTTP ${response.status}`);
+    throw new GeocoderServiceError(`Geocoder returned HTTP ${response.status}`, response.status);
   }
   const data: unknown = await readGeocodeJson(response);
   return provider.parseReverse(data);

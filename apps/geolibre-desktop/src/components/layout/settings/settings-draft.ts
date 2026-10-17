@@ -8,6 +8,7 @@
 import { migrateMapboxTokenSettings } from "../../../lib/mapbox-token-settings";
 import {
   DEFAULT_PROJECT_PREFERENCES,
+  normalizeGeocodingLocator,
   normalizeGeocodingProviderId,
   type MapPreferences,
   type ProjectPreferences,
@@ -149,6 +150,9 @@ export function clonePreferences(preferences: ProjectPreferences): DraftPreferen
     geocoding: {
       ...preferences.geocoding,
       apiKeys: { ...preferences.geocoding.apiKeys },
+      ...(preferences.geocoding.locators
+        ? { locators: preferences.geocoding.locators.map((locator) => ({ ...locator })) }
+        : {}),
     },
   };
 }
@@ -289,8 +293,8 @@ export function normalizePreferences(preferences: ProjectPreferences): ProjectPr
  *   geocoding: The draft geocoding preferences.
  *
  * Returns:
- *   The preferences with a known provider id, only non-empty API keys, and
- *   blank optional fields dropped.
+ *   The preferences with a known provider id, only non-empty API keys, only
+ *   locators with a GeocodeServer URL, and blank optional fields dropped.
  */
 export function normalizeGeocodingPreferences(
   geocoding: ProjectPreferences["geocoding"],
@@ -307,7 +311,31 @@ export function normalizeGeocodingPreferences(
     forwardEndpoint: geocoding.forwardEndpoint?.trim() || undefined,
     reverseEndpoint: geocoding.reverseEndpoint?.trim() || undefined,
     email: geocoding.email?.trim() || undefined,
+    ...normalizeDraftLocators(geocoding),
   };
+}
+
+/**
+ * The draft's locators ready to save: unusable rows (no GeocodeServer URL) are
+ * dropped, and the selection falls back to the first remaining locator.
+ *
+ * Args:
+ *   geocoding: The draft geocoding preferences.
+ *
+ * Returns:
+ *   The locators and selected locator id, or nothing when there are none.
+ */
+function normalizeDraftLocators(
+  geocoding: ProjectPreferences["geocoding"],
+): Pick<ProjectPreferences["geocoding"], "locators" | "locatorId"> {
+  const locators = (geocoding.locators ?? [])
+    .map(normalizeGeocodingLocator)
+    .filter((locator): locator is NonNullable<typeof locator> => locator !== null);
+  if (!locators.length) return {};
+  const locatorId = locators.some((locator) => locator.id === geocoding.locatorId)
+    ? geocoding.locatorId
+    : locators[0].id;
+  return { locators, locatorId };
 }
 
 // Returned as a code (not a message) so the user-facing string is resolved

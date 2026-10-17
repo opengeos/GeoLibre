@@ -259,7 +259,15 @@ describe("provider registry", () => {
 
   it("includes the proposed alternatives", () => {
     const ids = GEOCODING_PROVIDERS.map((p) => p.id).sort();
-    assert.deepEqual(ids, ["arcgis", "cartociudad", "google", "mapbox", "nominatim", "pelias"]);
+    assert.deepEqual(ids, [
+      "arcgis",
+      "arcgis-locator",
+      "cartociudad",
+      "google",
+      "mapbox",
+      "nominatim",
+      "pelias",
+    ]);
   });
 
   it("normalizes unknown provider ids to Nominatim", () => {

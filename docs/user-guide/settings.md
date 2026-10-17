@@ -71,7 +71,7 @@ Panels also auto-hide on small screens for a responsive layout.
 
 ## Geocoding
 
-**Settings → Geocoding** chooses the **Provider** used by Geocode Addresses, address import, and Reverse Geocode. Nominatim is the default and needs no key. For providers that need one, enter an **API key**. You can also override the **Forward endpoint** and **Reverse endpoint**, for example to point at a self-hosted instance, and give Nominatim a **Contact email**. The section notes where keys are stored: in the system keychain when it is available, otherwise in the project file. Keys are sent as query parameters, so they appear in request URLs. See [Data Integrations → Geocoding](data-integrations.md#geocoding) for the provider list.
+**Settings → Geocoding** chooses the **Provider** used by Geocode Addresses, address import, and Reverse Geocode. Nominatim is the default and needs no key. For providers that need one, enter an **API key**. You can also override the **Forward endpoint** and **Reverse endpoint**, for example to point at a self-hosted instance, and give Nominatim a **Contact email**. The section notes where keys are stored: in the system keychain when it is available, otherwise in the project file. Keys are sent as query parameters, so they appear in request URLs. See [Data Integrations → Geocoding](data-integrations.md#geocoding) for the provider list. With **ArcGIS GeocodeServer (organization)** the endpoint fields give way to a list of named **Locators**, each with its service URL, an optional portal for secured services, and a **Check service** button; see [Organization locators](data-integrations.md#organization-locators).
 
 ## AI Providers
 

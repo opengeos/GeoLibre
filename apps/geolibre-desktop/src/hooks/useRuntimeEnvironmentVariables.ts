@@ -2,6 +2,7 @@ import {
   normalizeGeocodingProviderId,
   overlayStoredEnvironmentVariables,
   overlayStoredGeocodingApiKeys,
+  selectedGeocodingLocator,
   useAppStore,
 } from "@geolibre/core";
 import { useEffect, useRef, useState } from "react";
@@ -65,10 +66,17 @@ export function useRuntimeEnvironmentVariables() {
     };
     const apiKey = overlayStoredGeocodingApiKeys(geocoding).apiKeys[providerId]?.trim();
     if (apiKey) geocoderEnv.VITE_GEOCODER_API_KEY = apiKey;
-    if (geocoding.forwardEndpoint?.trim())
-      geocoderEnv.VITE_GEOCODER_ENDPOINT = geocoding.forwardEndpoint.trim();
-    if (geocoding.reverseEndpoint?.trim())
-      geocoderEnv.VITE_GEOCODER_REVERSE_ENDPOINT = geocoding.reverseEndpoint.trim();
+    if (providerId === "arcgis-locator") {
+      // The locator (nonsecret: URL, portal, capabilities) travels as JSON; its
+      // endpoints derive from its URL, so the built-in overrides are not sent.
+      const locator = selectedGeocodingLocator(geocoding);
+      if (locator) geocoderEnv.VITE_GEOCODER_LOCATOR = JSON.stringify(locator);
+    } else {
+      if (geocoding.forwardEndpoint?.trim())
+        geocoderEnv.VITE_GEOCODER_ENDPOINT = geocoding.forwardEndpoint.trim();
+      if (geocoding.reverseEndpoint?.trim())
+        geocoderEnv.VITE_GEOCODER_REVERSE_ENDPOINT = geocoding.reverseEndpoint.trim();
+    }
     if (geocoding.email?.trim()) geocoderEnv.VITE_GEOCODER_EMAIL = geocoding.email.trim();
 
     const projectEnv = Object.fromEntries(

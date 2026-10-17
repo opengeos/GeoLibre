@@ -3142,7 +3142,32 @@
       "secretsWarning": "Keys are stored in plain text in the project file and may be exposed when the project is shared. They are also sent as query parameters, so they appear in geocoding request URLs visible in browser DevTools and any proxy logs.",
       "secretsWarningKeychain": "Keys are kept in your system keychain and shared by every project on this computer, not saved in the project file. They are sent as query parameters, so they appear in geocoding request URLs visible in browser DevTools and any proxy logs.",
       "secretsWarningUnavailable": "Project credential storage in the system keychain is unavailable. Saving a local project asks whether to keep API keys in the file or strip them; sharing and exporting strip them. Keys are sent in geocoding request URLs visible in browser DevTools and proxy logs.",
-      "corsNote": "Google does not officially allow browser requests to its Geocoding API, so requests may be blocked unless served through a same-origin proxy."
+      "corsNote": "Google does not officially allow browser requests to its Geocoding API, so requests may be blocked unless served through a same-origin proxy.",
+      "locatorHint": "Use your organization's own ArcGIS GeocodeServer locators, such as address, parcel or asset locators. Public locators need no key; a secured locator uses your ArcGIS portal sign-in.",
+      "locators": {
+        "title": "Locators",
+        "description": "Add each GeocodeServer by its service URL, then check it to read what it supports.",
+        "empty": "No locators yet. Add one to start geocoding with it.",
+        "defaultName": "Locator {{n}}",
+        "active": "Active locator",
+        "name": "Name",
+        "url": "GeocodeServer URL",
+        "portal": "Portal URL (secured locators only)",
+        "portalHint": "Leave blank for a public locator. For a secured one, enter the ArcGIS Enterprise portal it is federated with and sign in to that portal (Add Data → ArcGIS Layer or Plugins → ArcGIS Portal). The portal sign-in is only sent to a locator on that portal's host or on a server federated with it.",
+        "remove": "Remove {{name}}",
+        "check": "Check service",
+        "unchecked": "Not checked yet.",
+        "capabilities": "Search field: {{field}} · Reverse geocoding: {{reverse}} · Suggestions: {{suggest}}",
+        "yes": "yes",
+        "no": "no",
+        "noReverse": "This locator does not support reverse geocoding, so Reverse Geocode will report that instead of an address.",
+        "errorUrl": "Enter an ArcGIS GeocodeServer URL ending in /GeocodeServer.",
+        "errorAuth": "This locator needs a sign-in. Set its portal URL, sign in to that portal, then check again.",
+        "errorPortal": "This locator is not on the portal's host or on a server federated with it, so the portal sign-in will not be sent to it.",
+        "errorUnsupported": "This service does not support geocoding.",
+        "errorService": "The service reported an error: {{detail}}",
+        "errorNetwork": "Could not reach the service. It may be offline, or it may not allow requests from this app (CORS)."
+      }
     },
     "ai": {
       "title": "AI Assistant providers",
@@ -4412,6 +4437,8 @@
     "reverseNoAddress": "No address found.",
     "reverseCopyAddress": "Copy address",
     "reverseFailed": "Reverse geocoding failed.",
+    "reverseUnsupported": "The selected geocoder does not support reverse geocoding.",
+    "authRequired": "The geocoding service requires a sign-in that GeoLibre does not have.",
     "reverseClosePopup": "Close popup"
   },
   "graticule": {

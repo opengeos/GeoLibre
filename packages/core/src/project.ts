@@ -76,6 +76,7 @@ import {
   type PrintLayoutConfig,
 } from "./print-layout-config";
 import { getEllipsoid } from "./ellipsoids";
+import { normalizeGeocodingLocator } from "./geocoding";
 import {
   scrubWidgetsForRemovedLayers,
   scrubCommentsForRemovedLayers,
@@ -1632,7 +1633,32 @@ function normalizeGeocodingPreferences(geocoding: unknown): ProjectPreferences["
       typeof candidate.email === "string" && candidate.email.trim()
         ? candidate.email.trim()
         : undefined,
+    ...normalizeGeocodingLocators(candidate.locators, candidate.locatorId),
   };
+}
+
+/**
+ * The project's ArcGIS GeocodeServer locators, dropping malformed entries and
+ * duplicate ids, plus the selected locator id when it still names one. Both are
+ * omitted when there are none, so older projects round-trip unchanged.
+ */
+function normalizeGeocodingLocators(
+  locators: unknown,
+  locatorId: unknown,
+): Pick<ProjectPreferences["geocoding"], "locators" | "locatorId"> {
+  if (!Array.isArray(locators)) return {};
+  const seen = new Set<string>();
+  const result = locators
+    .map(normalizeGeocodingLocator)
+    .filter((locator): locator is NonNullable<typeof locator> => {
+      if (!locator || seen.has(locator.id)) return false;
+      seen.add(locator.id);
+      return true;
+    });
+  if (!result.length) return {};
+  return typeof locatorId === "string" && seen.has(locatorId)
+    ? { locators: result, locatorId }
+    : { locators: result };
 }
 
 /** Coerce an unknown value to a supported scale unit, defaulting to metric. */

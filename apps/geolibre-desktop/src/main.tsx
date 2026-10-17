@@ -3,6 +3,7 @@ import "./lib/crypto-random-uuid-polyfill";
 // Must precede any Map construction (see the module docs).
 import "./lib/maplibre-worker";
 import { installEarthdataFetchAuth } from "./lib/earthdata-fetch-auth";
+import { installGeocodingTokenProvider } from "./lib/geocoding-auth";
 import React from "react";
 import ReactDOM from "react-dom/client";
 /* App typeface — see the --font-sans/--font-mono note in index.css.
@@ -90,6 +91,7 @@ import { configureShareOAuthReadiness, markColdShareCallback } from "./lib/share
 // Adds the Earthdata Login token to Earthdata relay requests (NASA COG
 // layers). Before Diagnostics wraps `fetch`, so its restore keeps this wrapper.
 installEarthdataFetchAuth();
+installGeocodingTokenProvider();
 
 installDiagnosticsCapture();
 

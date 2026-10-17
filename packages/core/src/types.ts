@@ -1789,6 +1789,38 @@ export interface GeocodingPreferences {
   reverseEndpoint?: string;
   /** Contact email sent to identify the client (used by Nominatim). */
   email?: string;
+  /** Named organization-hosted ArcGIS GeocodeServer locators. */
+  locators?: GeocodingLocator[];
+  /** The {@link GeocodingLocator.id} used by the `arcgis-locator` provider. */
+  locatorId?: string;
+}
+
+/**
+ * An organization-hosted ArcGIS GeocodeServer locator. Everything here is
+ * nonsecret: the URL is stored without its query string, so a pasted token never
+ * reaches the project file, and a secured locator borrows the token of the
+ * portal named by `portalUrl` at request time.
+ *
+ * The capability fields are read from the service's `?f=json` metadata when the
+ * locator is checked in Settings; they are absent until then.
+ */
+export interface GeocodingLocator {
+  /** Stable id, unique within the project. */
+  id: string;
+  /** Display name, e.g. "County Parcel Locator". */
+  name: string;
+  /** The GeocodeServer base URL, ending in `/GeocodeServer`. */
+  url: string;
+  /** Portal whose sign-in authorizes this locator, when it is secured. */
+  portalUrl?: string;
+  /** The single-line input field the locator publishes (usually `SingleLine`). */
+  singleLineField?: string;
+  /** The structured input fields the locator publishes, in service order. */
+  addressFields?: string[];
+  /** Whether the service advertises `reverseGeocode`. */
+  reverse?: boolean;
+  /** Whether the service advertises `suggest`. */
+  suggest?: boolean;
 }
 
 export interface ProjectPreferences {

@@ -60,6 +60,8 @@ export function usePluginLabelSync(): void {
       noAddress: t("geocode.reverseNoAddress"),
       copyAddress: t("geocode.reverseCopyAddress"),
       failed: t("geocode.reverseFailed"),
+      unsupported: t("geocode.reverseUnsupported"),
+      authRequired: t("geocode.authRequired"),
       closePopup: t("geocode.reverseClosePopup"),
     });
     setBasemapControlLabels({

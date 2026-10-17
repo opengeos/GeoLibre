@@ -1,4 +1,4 @@
-import { geocodeReverse } from "@geolibre/core";
+import { GeocoderServiceError, GeocoderUnsupportedError, geocodeReverse } from "@geolibre/core";
 import type { Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import type { MapPopup } from "./map-popup";
@@ -43,6 +43,10 @@ export interface ReverseGeocodeLabels {
   noAddress: string;
   copyAddress: string;
   failed: string;
+  /** The selected geocoder (a forward-only locator) cannot reverse-geocode. */
+  unsupported: string;
+  /** The geocoding service asked for a sign-in or refused the one it got. */
+  authRequired: string;
   /** Accessible name of the popup's close button. */
   closePopup: string;
 }
@@ -52,6 +56,8 @@ let labels: ReverseGeocodeLabels = {
   noAddress: "No address found.",
   copyAddress: "Copy address",
   failed: "Reverse geocoding failed.",
+  unsupported: "The selected geocoder does not support reverse geocoding.",
+  authRequired: "The geocoding service requires a sign-in that GeoLibre does not have.",
   closePopup: "Close popup",
 };
 
@@ -127,11 +133,17 @@ async function showReverseGeocodePopup(
     if (requestToken !== lookupToken || !popup) return;
     const label = resolved?.displayName ?? labels.noAddress;
     popup.setDOMContent(buildPopupContent(resolved?.displayName ?? "", label, labels.copyAddress));
-  } catch {
+  } catch (error) {
     // A superseded/aborted request fails the token check and is ignored; only a
     // still-current failure surfaces the error text.
     if (requestToken !== lookupToken || !popup) return;
-    popup.setText(labels.failed);
+    popup.setText(
+      error instanceof GeocoderUnsupportedError
+        ? labels.unsupported
+        : error instanceof GeocoderServiceError && error.isAuthError
+          ? labels.authRequired
+          : labels.failed,
+    );
   }
 }
 

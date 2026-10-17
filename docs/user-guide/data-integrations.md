@@ -99,10 +99,25 @@ Choose a backend in **Settings → Geocoding**. The selection, per-provider API 
 | **CartoCiudad (IGN España)** | No | Official Spanish national geocoder (IGN/CNIG). Free public API, no key required. |
 | **Pelias** | Optional | Hosted [geocode.earth](https://geocode.earth/) needs a key; a self-hosted Pelias does not. |
 | **ArcGIS World Geocoder** | Yes | Esri token / API key. |
+| **ArcGIS GeocodeServer (organization)** | No | Your organization's own locators. See [Organization locators](#organization-locators). |
 | **Mapbox** | Yes | Mapbox access token (`pk.…`). |
 | **Google** | Yes | Google Maps Geocoding API key. Google does not officially allow browser cross-origin requests to this API, so a same-origin proxy may be required. |
 
 API keys are stored in plain text in the `.geolibre.json` project file, so avoid sharing a project that carries them (the Project → Share flow can strip environment variables, but provider keys live under Geocoding settings).
+
+### Organization locators
+
+Cities, counties and utilities often publish their own ArcGIS GeocodeServer locators: address locators built from local address points, parcel locators that find a parcel or folio number, asset locators that find a hydrant or valve ID. Choose **ArcGIS GeocodeServer (organization)** in **Settings → Geocoding** to use them with the same search box, Geocode Addresses, address import and Reverse Geocode as any other provider.
+
+- **Add** a locator for each service, give it a name, and paste its GeocodeServer URL (`https://gis.example.org/server/rest/services/Locators/Parcels/GeocodeServer`). An operation URL (`.../GeocodeServer/findAddressCandidates`) works too; GeoLibre keeps the base URL and drops any query string, so a token pasted with the URL is never saved. With more than one locator, **Active locator** picks the one in use.
+- **Check service** reads the locator's metadata and shows its search field and whether it supports reverse geocoding and suggestions. Searches go to the locator's single-line field, or to its only input field when it publishes just one (an asset ID locator, for example). The locator decides how a search is matched and ranked.
+- A locator without reverse geocoding still searches; Reverse Geocode then says the locator does not support it instead of showing an address.
+- Results are requested in WGS 84 (`outSR=4326`). Many organization locators work in a projected system such as State Plane; if a service returns coordinates in a system GeoLibre cannot convert (anything other than WGS 84 or Web Mercator), the search reports an error rather than placing the result in the wrong spot.
+- Errors the service reports, such as an invalid token or missing permission, are shown as errors rather than as "no results".
+
+**Secured locators.** A public locator needs no key. For a secured locator on ArcGIS Enterprise, enter the **Portal URL** it is federated with and sign in to that portal (Add Data → ArcGIS Layer with **Sign in with ArcGIS**, or Plugins → Web Services → ArcGIS Portal). GeoLibre then sends that portal's access token with the locator's requests, renewing it the same way as for ArcGIS layers; signing out stops it. The token is only sent when the locator is on the portal's own host, or on an ArcGIS Server whose `rest/info` names that portal as its owner (a federated server). A standalone ArcGIS Server, or one federated with another portal, never receives it, and **Check service** says so.
+
+Locator names, URLs, portal URLs and capabilities are saved with the project. Tokens never are. In the web build the locator's server must allow browser requests from GeoLibre's origin (CORS); most ArcGIS Server sites do. The desktop app also sends organization locator requests through the webview, so the same applies there.
 
 ### Usage policy and limits
 
@@ -118,8 +133,9 @@ The Geocoding settings panel is the easiest way to configure a provider, but the
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `VITE_GEOCODER_PROVIDER` | `nominatim` | Provider id: `nominatim`, `cartociudad`, `pelias`, `arcgis`, `mapbox`, or `google`. |
+| `VITE_GEOCODER_PROVIDER` | `nominatim` | Provider id: `nominatim`, `cartociudad`, `pelias`, `arcgis`, `arcgis-locator`, `mapbox`, or `google`. |
 | `VITE_GEOCODER_API_KEY` | unset | API key / access token for the selected provider. |
 | `VITE_GEOCODER_ENDPOINT` | provider default | Forward (address to point) search endpoint override. |
 | `VITE_GEOCODER_REVERSE_ENDPOINT` | provider default | Reverse (point to address) endpoint override. |
 | `VITE_GEOCODER_EMAIL` | unset | Contact email sent as the `email` query parameter to identify your client to Nominatim. |
+| `VITE_GEOCODER_LOCATOR` | set from Settings | The selected organization locator as JSON (`id`, `name`, `url`, optional `portalUrl` and capabilities), for `arcgis-locator`. |

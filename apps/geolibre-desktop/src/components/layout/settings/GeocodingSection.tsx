@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { credentialStorageLocation } from "../../../lib/credential-store";
 import { projectCredentialsInKeychain } from "../../../lib/project-credentials";
 import { CredentialStorageNotice } from "../CredentialStorageNotice";
+import { GeocodingLocatorsEditor } from "./GeocodingLocatorsEditor";
 import { useSettingsDraft } from "./SettingsDraftContext";
 
 /**
@@ -77,11 +78,13 @@ export function GeocodingSection() {
                 ))}
               </Select>
               <p className="text-xs text-muted-foreground">
-                {provider.requiresApiKey
-                  ? t("settings.geocoding.requiresKey")
-                  : provider.acceptsApiKey
-                    ? t("settings.geocoding.optionalKey")
-                    : t("settings.geocoding.noKey")}
+                {provider.id === "arcgis-locator"
+                  ? t("settings.geocoding.locatorHint")
+                  : provider.requiresApiKey
+                    ? t("settings.geocoding.requiresKey")
+                    : provider.acceptsApiKey
+                      ? t("settings.geocoding.optionalKey")
+                      : t("settings.geocoding.noKey")}
               </p>
               {provider.browserCorsRestricted ? (
                 <p className="text-xs text-amber-600 dark:text-amber-500">
@@ -129,51 +132,59 @@ export function GeocodingSection() {
               </div>
             ) : null}
 
-            <div className="space-y-1.5">
-              <Label className="text-xs" htmlFor="geocoding-forward">
-                {t("settings.geocoding.forwardEndpoint")}
-              </Label>
-              <Input
-                id="geocoding-forward"
-                value={draftPreferences.geocoding.forwardEndpoint ?? ""}
-                onChange={(event) =>
-                  updateGeocoding({
-                    forwardEndpoint: event.target.value,
-                  })
-                }
-                placeholder={provider.defaultForwardEndpoint}
-              />
-            </div>
+            {provider.id === "arcgis-locator" ? <GeocodingLocatorsEditor /> : null}
 
-            <div className="space-y-1.5">
-              <Label className="text-xs" htmlFor="geocoding-reverse">
-                {t("settings.geocoding.reverseEndpoint")}
-              </Label>
-              <Input
-                id="geocoding-reverse"
-                value={draftPreferences.geocoding.reverseEndpoint ?? ""}
-                onChange={(event) =>
-                  updateGeocoding({
-                    reverseEndpoint: event.target.value,
-                  })
-                }
-                placeholder={provider.defaultReverseEndpoint}
-              />
-            </div>
+            {provider.id === "arcgis-locator" ? null : (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs" htmlFor="geocoding-forward">
+                    {t("settings.geocoding.forwardEndpoint")}
+                  </Label>
+                  <Input
+                    id="geocoding-forward"
+                    value={draftPreferences.geocoding.forwardEndpoint ?? ""}
+                    onChange={(event) =>
+                      updateGeocoding({
+                        forwardEndpoint: event.target.value,
+                      })
+                    }
+                    placeholder={provider.defaultForwardEndpoint}
+                  />
+                </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs" htmlFor="geocoding-email">
-                {t("settings.geocoding.email")}
-              </Label>
-              <Input
-                id="geocoding-email"
-                type="email"
-                value={draftPreferences.geocoding.email ?? ""}
-                onChange={(event) => updateGeocoding({ email: event.target.value })}
-                placeholder={t("settings.geocoding.emailPlaceholder")}
-              />
-              <p className="text-xs text-muted-foreground">{t("settings.geocoding.emailHint")}</p>
-            </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs" htmlFor="geocoding-reverse">
+                    {t("settings.geocoding.reverseEndpoint")}
+                  </Label>
+                  <Input
+                    id="geocoding-reverse"
+                    value={draftPreferences.geocoding.reverseEndpoint ?? ""}
+                    onChange={(event) =>
+                      updateGeocoding({
+                        reverseEndpoint: event.target.value,
+                      })
+                    }
+                    placeholder={provider.defaultReverseEndpoint}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs" htmlFor="geocoding-email">
+                    {t("settings.geocoding.email")}
+                  </Label>
+                  <Input
+                    id="geocoding-email"
+                    type="email"
+                    value={draftPreferences.geocoding.email ?? ""}
+                    onChange={(event) => updateGeocoding({ email: event.target.value })}
+                    placeholder={t("settings.geocoding.emailPlaceholder")}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.geocoding.emailHint")}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         );
       })()}
