@@ -112,19 +112,31 @@ function templateChoices(info: ArcGISEditInfo): TemplateChoice[] {
  * arbitrarily and only the subtype and field defaults apply. Server-managed
  * fields are never filled.
  *
+ * By default an attribute counts as empty when its value is null or missing,
+ * since drawn features can carry placeholder nulls. With `keepGiven`, every
+ * attribute present on `properties` is the user's own value, a null included:
+ * a field the user cleared on purpose must reach validation as null rather than
+ * be refilled from a template (#3122).
+ *
  * @param info - The layer's `?f=json` metadata.
  * @param properties - The new feature's current attributes.
+ * @param options - `keepGiven`: never fill an attribute present on `properties`.
  * @returns The feature's attributes with defaults filled in.
  */
 export function arcGISNewFeatureProperties(
   info: ArcGISEditInfo,
   properties: Record<string, unknown> | null,
+  options: { keepGiven?: boolean } = {},
 ): Record<string, unknown> {
   const managed = arcGISServerManagedFields(info);
   const result: Record<string, unknown> = {};
   // Drawn features start empty, but drop anything the service assigns anyway.
   for (const [key, value] of Object.entries(properties ?? {}))
     if (!managed.has(key.toLowerCase())) result[key] = value;
+  const given = new Set(
+    options.keepGiven ? Object.keys(result).map((key) => key.toLowerCase()) : [],
+  );
+  const supplied = (name: string) => result[name] != null || given.has(name.toLowerCase());
 
   const selector = arcGISSubtypeField(info);
   const fieldDefaults = new Map(
@@ -138,7 +150,7 @@ export function arcGISNewFeatureProperties(
   let chosen: TemplateChoice | undefined;
   let typeValue = selector ? result[selector] : undefined;
 
-  if (selector && typeValue == null) {
+  if (selector && !supplied(selector)) {
     if (choices.length === 1) {
       chosen = choices[0];
       typeValue =
@@ -172,7 +184,7 @@ export function arcGISNewFeatureProperties(
   const subtypeDefaults = byFieldName(info, subtype?.defaultValues);
   for (const field of info.fields ?? []) {
     const name = field.name;
-    if (name === selector || managed.has(name.toLowerCase()) || result[name] != null) continue;
+    if (name === selector || managed.has(name.toLowerCase()) || supplied(name)) continue;
     const value = prototype.get(name) ?? subtypeDefaults.get(name) ?? fieldDefaults.get(name);
     if (value != null) result[name] = value;
   }

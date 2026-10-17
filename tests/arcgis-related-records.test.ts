@@ -465,6 +465,40 @@ describe("related record writes", () => {
     assert.equal(posts.length, 0);
   });
 
+  it("keeps a field the user cleared instead of refilling it from a template (#3122)", async () => {
+    const { layer, posts } = await load();
+    const [inspections] = arcGISRelationships(layer);
+    // A creation template whose prototype holds a one-space ID, as ArcGIS Pro can publish.
+    const templated: ArcGISRelatedTableInfo = {
+      ...inspectionInfo,
+      fields: [
+        ...inspectionInfo.fields!,
+        { name: "TestId", type: "esriFieldTypeString", length: 40, nullable: false },
+      ],
+      templates: [
+        { name: "Routine", prototype: { attributes: { TestId: " ", Notes: "Routine" } } },
+      ],
+    };
+    const support = arcGISRelatedEditSupport(layer, inspections, templated);
+    const add = (values: Record<string, unknown>) =>
+      addArcGISRelatedRecord(layer.id, inspections, templated, support, "H-001", values);
+    // Cleared on a non-nullable field: rejected before anything is sent.
+    await assert.rejects(add({ TestId: null }), /Field TestId cannot be null/);
+    assert.equal(posts.length, 0);
+    // Cleared on a nullable field: sent as null, not as the template's value.
+    await add({ TestId: "T-1", Notes: null });
+    // Untouched fields still take the template; a typed value is kept as entered.
+    await add({});
+    const [cleared, untouched] = posts.map(
+      (post) => JSON.parse(post.body.get("adds")!)[0].attributes,
+    );
+    assert.equal(cleared.TestId, "T-1");
+    assert.ok(Object.hasOwn(cleared, "Notes"));
+    assert.equal(cleared.Notes, null);
+    assert.equal(untouched.TestId, " ");
+    assert.equal(untouched.Notes, "Routine");
+  });
+
   it("updates only changed attributes and keeps an untouched historical value", async () => {
     const { layer, posts, rows } = await load();
     const [inspections] = arcGISRelationships(layer);

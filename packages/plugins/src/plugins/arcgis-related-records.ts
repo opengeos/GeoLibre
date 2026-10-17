@@ -617,7 +617,9 @@ export async function addArcGISRelatedRecord(
       "This relationship does not allow that related record edit.",
     );
   }
-  const properties = arcGISNewFeatureProperties(related, values);
+  // Every value given is the user's edit: a field they cleared stays null so
+  // validation sees it, instead of being refilled from a template (#3122).
+  const properties = arcGISNewFeatureProperties(related, values, { keepGiven: true });
   for (const key of Object.keys(properties))
     if (key.toLowerCase() === foreignKey.toLowerCase()) delete properties[key];
   properties[foreignKey] = parentKey;
