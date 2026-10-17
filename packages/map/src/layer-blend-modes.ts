@@ -377,11 +377,21 @@ function patchUseProgram(proto: ProgramSource): void {
  * maplibre-gl 6.14 moved `useProgram` off the painter onto a module-private
  * `FrameRenderContext` built once per frame, so its prototype is only
  * reachable from a live render call. Found by shape, like the style layer.
+ *
+ * Only a class instance whose `useProgram` comes from its prototype qualifies:
+ * an own `useProgram` would shadow the wrapper, and a plain object's prototype
+ * is `Object.prototype`, which must never be patched.
  */
 function programSourceArgument(args: unknown[]): ProgramSource | undefined {
   for (const candidate of args) {
-    if (typeof (candidate as Partial<ProgramSource> | null)?.useProgram === "function") {
-      return Object.getPrototypeOf(candidate) as ProgramSource;
+    if (typeof (candidate as Partial<ProgramSource> | null)?.useProgram !== "function") continue;
+    const proto = Object.getPrototypeOf(candidate) as ProgramSource | null;
+    if (
+      proto &&
+      proto !== Object.prototype &&
+      !Object.prototype.hasOwnProperty.call(candidate, "useProgram")
+    ) {
+      return proto;
     }
   }
   return undefined;
@@ -537,6 +547,8 @@ export function installLayerBlendModes(map: maplibregl.Map): boolean {
           setSupported(false);
         }
       }
+      // Leave every draw on MapLibre's own compositing once blending is off.
+      if (programSourceMissing) return originalRenderLayer.apply(this, args);
       const layer = styleLayerArgument(args);
       const previous = active;
       const mode = layer?.id ? modeForNativeLayer(layer.id) : null;

@@ -428,12 +428,23 @@ function frameContextPainter() {
     blend = stateValue(false);
     blendFunc = stateValue<[number, number]>([GL.ONE, GL.ONE_MINUS_SRC_ALPHA]);
     blendEquation = stateValue(GL.FUNC_ADD);
+    /** The blend state each draw issued with, in order. */
+    draws: { program: string; func: [number, number]; equation: number }[] = [];
     setColorMode(_colorMode: { mask: boolean[] }) {}
   }
   class FrameRenderContext {
     constructor(readonly context: Context) {}
-    useProgram(_name: string) {
-      return { draw: () => this.context.setColorMode({ mask: [true, true, true, true] }) };
+    useProgram(name: string) {
+      return {
+        draw: () => {
+          this.context.setColorMode({ mask: [true, true, true, true] });
+          this.context.draws.push({
+            program: name,
+            func: this.context.blendFunc.current,
+            equation: this.context.blendEquation.current,
+          });
+        },
+      };
     }
   }
   class Painter {
@@ -467,8 +478,10 @@ describe("installing the render wrappers", () => {
     const multiply = blendSpecFor("multiply", GL)!;
     // The draw into the scratch buffer stays on alpha compositing; only the
     // composite carries the mode.
-    assert.deepEqual(context.blendFunc.history, [multiply.func]);
-    assert.deepEqual(context.blendEquation.history.at(-1), multiply.equation);
+    assert.deepEqual(context.draws, [
+      { program: "fill", func: [GL.ONE, GL.ONE_MINUS_SRC_ALPHA], equation: GL.FUNC_ADD },
+      { program: "layerOpacity", func: multiply.func, equation: multiply.equation },
+    ]);
   });
 });
 
