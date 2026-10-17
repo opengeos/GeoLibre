@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import {
   createEmptyProject,
   fetchArcGISLocatorInfo,
+  getGeocoderConfig,
   geocodeForward,
   geocodeReverse,
   GeocoderServiceError,
@@ -20,9 +21,12 @@ import {
 } from "@geolibre/core";
 import {
   approveLocatorPortalToken,
+  commitLocatorPortalApprovals,
+  discardStagedLocatorApprovals,
   locatorAcceptsPortalToken,
   resetLocatorFederationCache,
   resolveLocatorToken,
+  stageLocatorPortalApproval,
 } from "../apps/geolibre-desktop/src/lib/geocoding-auth";
 
 const BASE = "https://gis.example.org/server/rest/services/Locators/Parcels/GeocodeServer";
@@ -434,5 +438,100 @@ describe("resolveLocatorToken", () => {
     globalThis.fetch = (async () => Response.json({})) as typeof fetch;
     approveLocatorPortalToken(federated.url, federated.portalUrl);
     await assert.rejects(resolveLocatorToken(federated), /not on a server federated/);
+  });
+});
+
+describe("locator token routing", () => {
+  const secured = { ...PARCELS, portalUrl: "https://gis.example.org/portal" };
+  const tokenProvider = async () => "portal-token";
+
+  it("ignores endpoint overrides from the runtime env for a locator", () => {
+    const globals = globalThis as { window?: unknown };
+    const previous = globals.window;
+    globals.window = {
+      __GEOLIBRE_RUNTIME_ENV__: {
+        VITE_GEOCODER_PROVIDER: "arcgis-locator",
+        VITE_GEOCODER_LOCATOR: JSON.stringify(secured),
+        VITE_GEOCODER_ENDPOINT: "https://attacker.example/search",
+        VITE_GEOCODER_REVERSE_ENDPOINT: "https://attacker.example/reverse",
+      },
+    };
+    try {
+      const config = getGeocoderConfig();
+      assert.equal(config.locator?.id, "parcels");
+      assert.equal(config.forwardEndpoint, `${BASE}/findAddressCandidates`);
+      assert.equal(config.reverseEndpoint, `${BASE}/reverseGeocode`);
+    } finally {
+      globals.window = previous;
+    }
+  });
+
+  it("refuses to attach the token to a request outside the locator's URL", async () => {
+    setGeocodingTokenProvider(tokenProvider);
+    const urls = stubFetch({ candidates: [] });
+    const config = {
+      ...locatorConfig(secured),
+      forwardEndpoint: "https://attacker.example/findAddressCandidates",
+    };
+    await assert.rejects(
+      geocodeForward("A", { config }),
+      /does not go to the locator's own server/,
+    );
+    assert.equal(urls.length, 0);
+  });
+
+  it("does not follow redirects on requests that carry a token", async () => {
+    setGeocodingTokenProvider(tokenProvider);
+    const redirects: (RequestRedirect | undefined)[] = [];
+    setGeocodingFetch(async (_input, init) => {
+      redirects.push(init?.redirect);
+      return Response.json({ candidates: [] });
+    });
+    await geocodeForward("A", { config: locatorConfig(secured) });
+    await geocodeForward("A", { config: locatorConfig(PARCELS) });
+    await fetchArcGISLocatorInfo(BASE, { token: "t" }).catch(() => undefined);
+    assert.deepEqual(redirects, ["error", undefined, "error"]);
+  });
+});
+
+describe("locator approvals and federation caching", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    resetLocatorFederationCache();
+  });
+  const locator: GeocodingLocator = {
+    id: "fed",
+    name: "Federated",
+    url: "https://maps.example.org/arcgis/rest/services/Locators/Parcels/GeocodeServer",
+    portalUrl: "https://portal.example.org/portal",
+  };
+  const claimPortal = () => {
+    globalThis.fetch = (async () =>
+      Response.json({ owningSystemUrl: "https://portal.example.org/portal" })) as typeof fetch;
+  };
+
+  it("does not cache a failed rest/info as 'not federated'", async () => {
+    globalThis.fetch = (async () => new Response("busy", { status: 503 })) as typeof fetch;
+    assert.equal(await locatorAcceptsPortalToken(locator.url, locator.portalUrl), false);
+    claimPortal();
+    assert.equal(await locatorAcceptsPortalToken(locator.url, locator.portalUrl), true);
+  });
+
+  it("grants a staged approval only when Settings saves that locator", async () => {
+    claimPortal();
+    stageLocatorPortalApproval(locator.url, locator.portalUrl);
+    discardStagedLocatorApprovals();
+    commitLocatorPortalApprovals([locator]);
+    await assert.rejects(resolveLocatorToken(locator), /Check this locator in Settings/);
+
+    stageLocatorPortalApproval(locator.url, locator.portalUrl);
+    // Saved without that locator: nothing is granted.
+    commitLocatorPortalApprovals([]);
+    await assert.rejects(resolveLocatorToken(locator), /Check this locator in Settings/);
+
+    stageLocatorPortalApproval(locator.url, locator.portalUrl);
+    commitLocatorPortalApprovals([locator]);
+    assert.equal(await resolveLocatorToken(locator), undefined);
   });
 });

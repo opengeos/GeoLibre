@@ -26,6 +26,8 @@ const federation = new Map<string, Promise<boolean>>();
 const APPROVALS_STORAGE_KEY = "geolibre.geocoding.locatorTokenHosts";
 /** Approvals kept for this session when storage is unavailable. */
 const sessionApprovals = new Set<string>();
+/** Checks that passed in the open Settings dialog, granted only when it saves. */
+const stagedApprovals = new Set<string>();
 
 /** The ArcGIS Server REST root of a GeocodeServer URL (`.../rest`), or null. */
 function restRoot(locatorUrl: string): string | null {
@@ -65,8 +67,7 @@ function readApprovals(): Set<string> {
 
 /**
  * Record that the user allows `portalUrl`'s sign-in to be sent to the host of
- * `locatorUrl` on this device. Called when the user checks a locator that names
- * a portal in Settings.
+ * `locatorUrl` on this device.
  *
  * @param locatorUrl - The locator's GeocodeServer URL.
  * @param portalUrl - The locator's portal.
@@ -82,6 +83,40 @@ export function approveLocatorPortalToken(locatorUrl: string, portalUrl: string 
   }
 }
 
+/**
+ * Note that the user checked a locator with its portal while signed in. The
+ * approval is only granted by {@link commitLocatorPortalApprovals} when the
+ * Settings dialog saves with that locator, so a cancelled dialog grants nothing.
+ *
+ * @param locatorUrl - The locator's GeocodeServer URL.
+ * @param portalUrl - The locator's portal.
+ */
+export function stageLocatorPortalApproval(
+  locatorUrl: string,
+  portalUrl: string | undefined,
+): void {
+  const key = approvalKey(locatorUrl, portalUrl);
+  if (key) stagedApprovals.add(key);
+}
+
+/** Forget approvals staged by a Settings dialog that did not save. */
+export function discardStagedLocatorApprovals(): void {
+  stagedApprovals.clear();
+}
+
+/**
+ * Grant the staged approvals of the locators being saved.
+ *
+ * @param locators - The locators the Settings dialog saves.
+ */
+export function commitLocatorPortalApprovals(locators: readonly GeocodingLocator[]): void {
+  for (const locator of locators) {
+    const key = approvalKey(locator.url, locator.portalUrl);
+    if (key && stagedApprovals.has(key)) approveLocatorPortalToken(locator.url, locator.portalUrl);
+  }
+  stagedApprovals.clear();
+}
+
 /** Ask an ArcGIS Server which portal it is federated with. */
 async function owningSystemHost(root: string): Promise<string | null> {
   const response = await fetch(`${root}/info?f=json`, {
@@ -89,7 +124,9 @@ async function owningSystemHost(root: string): Promise<string | null> {
     credentials: "omit",
     redirect: "error",
   });
-  if (!response.ok) return null;
+  // Throw rather than answer "not federated", so a transient failure is not
+  // cached for the session (see locatorAcceptsPortalToken).
+  if (!response.ok) throw new Error(`rest/info returned HTTP ${response.status}`);
   const info = (await response.json()) as { owningSystemUrl?: unknown };
   return typeof info.owningSystemUrl === "string" ? hostOf(info.owningSystemUrl) : null;
 }
@@ -168,6 +205,7 @@ export function installGeocodingTokenProvider(): void {
 export function resetLocatorFederationCache(): void {
   federation.clear();
   sessionApprovals.clear();
+  stagedApprovals.clear();
   try {
     localStorage.removeItem(APPROVALS_STORAGE_KEY);
   } catch {

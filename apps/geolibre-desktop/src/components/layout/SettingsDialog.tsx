@@ -100,6 +100,7 @@ import {
   type SettingsDraftContextValue,
 } from "./settings/SettingsDraftContext";
 import { useLanguagePack } from "./settings/useLanguagePack";
+import { commitLocatorPortalApprovals } from "../../lib/geocoding-auth";
 
 export type SettingsSection =
   | "language"
@@ -519,6 +520,7 @@ export function SettingsDialog({
       );
     }
     setPreferences(normalized);
+    commitLocatorPortalApprovals(normalized.geocoding.locators ?? []);
     // When a level preset is still active, recompute its hidden lists from the
     // current plugin registry at save time. The draft was snapshotted when the
     // dialog opened, so this picks up any external plugins that loaded since

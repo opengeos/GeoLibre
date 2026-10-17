@@ -3153,7 +3153,7 @@
         "name": "Name",
         "url": "GeocodeServer URL",
         "portal": "Portal URL (secured locators only)",
-        "portalHint": "Leave blank for a public locator. For a secured one, enter the ArcGIS Enterprise portal it is federated with and sign in to that portal (Add Data → ArcGIS Layer or Plugins → ArcGIS Portal). The portal sign-in is only sent to a locator on that portal's host, or on a server federated with it that you have checked here on this device: checking allows the sign-in to be sent to that server.",
+        "portalHint": "Leave blank for a public locator. For a secured one, enter the ArcGIS Enterprise portal it is federated with and sign in to that portal (Add Data → ArcGIS Layer or Plugins → ArcGIS Portal). The portal sign-in is only sent to a locator on that portal's host, or on a server federated with it that you checked here while signed in and then saved: that allows the sign-in to be sent to that server from this device.",
         "remove": "Remove {{name}}",
         "check": "Check service",
         "unchecked": "Not checked yet.",

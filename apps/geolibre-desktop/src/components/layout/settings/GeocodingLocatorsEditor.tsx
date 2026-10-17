@@ -7,10 +7,14 @@ import {
 } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { tryGetArcGISAccessToken } from "../../../lib/arcgis-oauth";
-import { approveLocatorPortalToken, locatorAcceptsPortalToken } from "../../../lib/geocoding-auth";
+import {
+  discardStagedLocatorApprovals,
+  locatorAcceptsPortalToken,
+  stageLocatorPortalApproval,
+} from "../../../lib/geocoding-auth";
 import { useSettingsDraft } from "./SettingsDraftContext";
 
 /** The outcome of the last "Check service" per locator id. */
@@ -68,6 +72,8 @@ export function GeocodingLocatorsEditor() {
   // The check in flight per locator id. An edit to the URL or portal forgets it,
   // so a check that finishes afterwards does not overwrite the newer values.
   const pendingChecks = useRef(new Map<string, object>());
+  // A dialog opened afresh starts with nothing staged (see stageLocatorPortalApproval).
+  useEffect(() => discardStagedLocatorApprovals(), []);
   const locators = draftPreferences.geocoding.locators ?? [];
   const activeId = locators.some((locator) => locator.id === draftPreferences.geocoding.locatorId)
     ? draftPreferences.geocoding.locatorId
@@ -165,10 +171,11 @@ export function GeocodingLocatorsEditor() {
           return;
         }
         if (!current()) return;
-        // Checking with a portal is the user's consent to send its sign-in to
-        // this server from this device (see geocoding-auth.ts).
-        approveLocatorPortalToken(url, locator.portalUrl);
         token = await tryGetArcGISAccessToken(locator.portalUrl);
+        // Checking with a portal while signed in is the user's consent to send
+        // its sign-in to this server from this device, granted when Settings
+        // saves (see geocoding-auth.ts).
+        if (token) stageLocatorPortalApproval(url, locator.portalUrl);
       }
       const capabilities = await fetchArcGISLocatorInfo(url, { token });
       if (!current()) return;

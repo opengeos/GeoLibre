@@ -1172,10 +1172,14 @@ export function getGeocoderConfig(): GeocoderConfig {
     }
   }
   const endpoints = locator ? locatorEndpoints(locator) : provider;
+  // A locator's endpoints always come from its own URL: an override would send
+  // its requests, and the portal token they may carry, somewhere else.
+  const overrides = provider.id === "arcgis-locator" ? {} : env;
   return {
     providerId: provider.id,
-    forwardEndpoint: env.VITE_GEOCODER_ENDPOINT?.trim() || endpoints.defaultForwardEndpoint,
-    reverseEndpoint: env.VITE_GEOCODER_REVERSE_ENDPOINT?.trim() || endpoints.defaultReverseEndpoint,
+    forwardEndpoint: overrides.VITE_GEOCODER_ENDPOINT?.trim() || endpoints.defaultForwardEndpoint,
+    reverseEndpoint:
+      overrides.VITE_GEOCODER_REVERSE_ENDPOINT?.trim() || endpoints.defaultReverseEndpoint,
     email: env.VITE_GEOCODER_EMAIL?.trim() || undefined,
     apiKey: env.VITE_GEOCODER_API_KEY?.trim() || undefined,
     ...(locator ? { locator } : {}),
@@ -1425,13 +1429,29 @@ async function locatorToken(config: GeocoderConfig): Promise<string | undefined>
   return geocodingTokenProvider(locator);
 }
 
-/** `url` with `token` added, when there is one. */
-async function withLocatorToken(url: string, config: GeocoderConfig): Promise<string> {
+/**
+ * `url` with the locator's token added, when there is one. The token is only
+ * attached to a request under the locator's own GeocodeServer URL, whatever
+ * endpoint the config carries.
+ *
+ * @returns The URL, and whether a token was attached (such a request must not
+ *   follow redirects, which could replay the token to another host).
+ */
+async function withLocatorToken(
+  url: string,
+  config: GeocoderConfig,
+): Promise<{ url: string; token: boolean }> {
   const token = await locatorToken(config);
-  if (!token) return url;
+  if (!token) return { url, token: false };
   const withToken = new URL(url);
+  const base = `${config.locator?.url}/`;
+  if (!`${withToken.origin}${withToken.pathname}`.startsWith(base)) {
+    throw new GeocoderServiceError(
+      "The geocoding request does not go to the locator's own server, so its sign-in is not sent.",
+    );
+  }
   withToken.searchParams.set("token", token);
-  return withToken.toString();
+  return { url: withToken.toString(), token: true };
 }
 
 /**
@@ -1468,6 +1488,8 @@ export async function fetchArcGISLocatorInfo(
   const response = await geocodeFetch()(request.toString(), {
     signal: options.signal,
     headers: { Accept: "application/json" },
+    // A redirect would replay the token to wherever it points.
+    ...(options.token ? { redirect: "error" as const } : {}),
   });
   if (!response.ok) {
     throw new GeocoderServiceError(`Geocoder returned HTTP ${response.status}`, response.status);
@@ -1525,16 +1547,17 @@ export async function geocodeForward(
 ): Promise<GeocodeMatch[]> {
   const config = options.config ?? getGeocoderConfig();
   const provider = getGeocodingProvider(config.providerId);
-  const url = await withLocatorToken(
+  const request = await withLocatorToken(
     provider.buildForwardUrl(config, query, {
       email: config.email,
       limit: options.limit,
     }),
     config,
   );
-  const response = await geocodeFetch()(url, {
+  const response = await geocodeFetch()(request.url, {
     signal: options.signal,
     headers: { Accept: "application/json" },
+    ...(request.token ? { redirect: "error" as const } : {}),
   });
   if (!response.ok) {
     throw new GeocoderServiceError(`Geocoder returned HTTP ${response.status}`, response.status);
@@ -1561,16 +1584,17 @@ export async function geocodeReverse(
   if (!geocoderSupportsReverse(config)) {
     throw new GeocoderUnsupportedError("The selected geocoder does not support reverse geocoding.");
   }
-  const url = await withLocatorToken(
+  const request = await withLocatorToken(
     provider.buildReverseUrl(config, wrappedLon, lat, {
       email: config.email,
       zoom: options.zoom,
     }),
     config,
   );
-  const response = await geocodeFetch()(url, {
+  const response = await geocodeFetch()(request.url, {
     signal: options.signal,
     headers: { Accept: "application/json" },
+    ...(request.token ? { redirect: "error" as const } : {}),
   });
   if (!response.ok) {
     throw new GeocoderServiceError(`Geocoder returned HTTP ${response.status}`, response.status);
