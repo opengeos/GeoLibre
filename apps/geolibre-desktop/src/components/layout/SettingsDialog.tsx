@@ -100,7 +100,10 @@ import {
   type SettingsDraftContextValue,
 } from "./settings/SettingsDraftContext";
 import { useLanguagePack } from "./settings/useLanguagePack";
-import { commitLocatorPortalApprovals } from "../../lib/geocoding-auth";
+import {
+  commitLocatorPortalApprovals,
+  discardStagedLocatorApprovals,
+} from "../../lib/geocoding-auth";
 
 export type SettingsSection =
   | "language"
@@ -321,6 +324,9 @@ export function SettingsDialog({
   // preferences would reset in-progress edits if the store changed while the
   // dialog is open (e.g. a slow ?url= project finishes loading).
   useEffect(() => {
+    // Locator approvals staged by Check service belong to one opening of the
+    // dialog: only its Save grants them (see geocoding-auth.ts).
+    discardStagedLocatorApprovals();
     if (!open) {
       // Clear so the stale projection can't flash the Globe hint for a frame
       // on the next open before this effect re-reads it.

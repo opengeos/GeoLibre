@@ -7,14 +7,10 @@ import {
 } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { tryGetArcGISAccessToken } from "../../../lib/arcgis-oauth";
-import {
-  discardStagedLocatorApprovals,
-  locatorAcceptsPortalToken,
-  stageLocatorPortalApproval,
-} from "../../../lib/geocoding-auth";
+import { locatorAcceptsPortalToken, stageLocatorPortalApproval } from "../../../lib/geocoding-auth";
 import { useSettingsDraft } from "./SettingsDraftContext";
 
 /** The outcome of the last "Check service" per locator id. */
@@ -72,8 +68,6 @@ export function GeocodingLocatorsEditor() {
   // The check in flight per locator id. An edit to the URL or portal forgets it,
   // so a check that finishes afterwards does not overwrite the newer values.
   const pendingChecks = useRef(new Map<string, object>());
-  // A dialog opened afresh starts with nothing staged (see stageLocatorPortalApproval).
-  useEffect(() => discardStagedLocatorApprovals(), []);
   const locators = draftPreferences.geocoding.locators ?? [];
   const activeId = locators.some((locator) => locator.id === draftPreferences.geocoding.locatorId)
     ? draftPreferences.geocoding.locatorId

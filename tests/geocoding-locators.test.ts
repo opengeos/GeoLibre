@@ -274,6 +274,17 @@ describe("arcgis-locator reverse geocoding", () => {
       error: { code: 400, message: "Unable to find address for the specified location." },
     });
     assert.equal(await geocodeReverse(0, 0, { config: locatorConfig() }), null);
+    // Enterprise puts the reason in `details`.
+    stubFetch({
+      error: {
+        code: 400,
+        message: "Cannot perform query. Invalid query parameters.",
+        details: ["Unable to find address for the specified location."],
+      },
+    });
+    assert.equal(await geocodeReverse(0, 0, { config: locatorConfig() }), null);
+    stubFetch({ error: { code: 400, message: "Invalid parameter outSR.", details: [] } });
+    await assert.rejects(geocodeReverse(0, 0, { config: locatorConfig() }), /outSR/);
     stubFetch({ error: { code: 403, message: "You do not have permissions" } });
     await assert.rejects(geocodeReverse(0, 0, { config: locatorConfig() }), GeocoderServiceError);
   });

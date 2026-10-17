@@ -636,6 +636,18 @@ function parseArcGISCandidates(data: unknown): GeocodeMatch[] {
 }
 
 /**
+ * Whether an ArcGIS error envelope is the "Unable to find address" answer:
+ * code 400 with that text in its message or (Enterprise) its details. Other
+ * 400s, such as malformed parameters, are real failures.
+ */
+function isNoAddressError(data: unknown, error: GeocoderServiceError): boolean {
+  if (error.code !== 400) return false;
+  const envelope = (data as { error?: { details?: unknown } }).error;
+  const details = Array.isArray(envelope?.details) ? envelope.details.join(" ") : "";
+  return /unable to find address/i.test(`${error.message} ${details}`);
+}
+
+/**
  * Normalize an ArcGIS `reverseGeocode` response. "Unable to find address" comes
  * back as an `error` envelope with code 400, which is a valid empty answer
  * rather than a failure.
@@ -645,7 +657,7 @@ function parseArcGISCandidates(data: unknown): GeocodeMatch[] {
  */
 function parseArcGISReverse(data: unknown): ReverseGeocodeDisplay | null {
   const error = arcgisServiceError(data);
-  if (error && error.code !== 400) throw error;
+  if (error && !isNoAddressError(data, error)) throw error;
   const address =
     data && typeof data === "object" ? (data as { address?: unknown }).address : undefined;
   if (!address || typeof address !== "object") return null;
@@ -1154,7 +1166,8 @@ export function getGeocodingProvider(id: string | undefined | null): GeocodingPr
  * Resolve the geocoder configuration from runtime env, falling back to the
  * selected provider's default endpoints. `VITE_GEOCODER_PROVIDER` selects the
  * backend; `VITE_GEOCODER_ENDPOINT`/`VITE_GEOCODER_REVERSE_ENDPOINT` override
- * the endpoints; `VITE_GEOCODER_EMAIL` supplies the contact email; and
+ * the endpoints (except for `arcgis-locator`, whose endpoints always come from
+ * `VITE_GEOCODER_LOCATOR`); `VITE_GEOCODER_EMAIL` supplies the contact email; and
  * `VITE_GEOCODER_API_KEY` supplies the API key for keyed providers.
  */
 export function getGeocoderConfig(): GeocoderConfig {
