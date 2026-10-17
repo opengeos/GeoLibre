@@ -166,13 +166,13 @@ export function GeocodingLocatorsEditor() {
         }
         if (!current()) return;
         token = await tryGetArcGISAccessToken(locator.portalUrl);
-        // Checking with a portal while signed in is the user's consent to send
-        // its sign-in to this server from this device, granted when Settings
-        // saves (see geocoding-auth.ts).
-        if (token) stageLocatorPortalApproval(url, locator.portalUrl);
       }
       const capabilities = await fetchArcGISLocatorInfo(url, { token });
       if (!current()) return;
+      // A successful check with a portal while signed in is the user's consent
+      // to send its sign-in to this server from this device, granted when
+      // Settings saves (see geocoding-auth.ts).
+      if (token) stageLocatorPortalApproval(url, locator.portalUrl);
       patchLocator(locator.id, { url, ...capabilities });
       setStatuses((s) => ({ ...s, [locator.id]: { kind: "ok" } }));
     } catch (error) {
