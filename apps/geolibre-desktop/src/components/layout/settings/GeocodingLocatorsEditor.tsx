@@ -7,10 +7,10 @@ import {
 } from "@geolibre/core";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { tryGetArcGISAccessToken } from "../../../lib/arcgis-oauth";
-import { locatorAcceptsPortalToken } from "../../../lib/geocoding-auth";
+import { approveLocatorPortalToken, locatorAcceptsPortalToken } from "../../../lib/geocoding-auth";
 import { useSettingsDraft } from "./SettingsDraftContext";
 
 /** The outcome of the last "Check service" per locator id. */
@@ -65,6 +65,9 @@ export function GeocodingLocatorsEditor() {
   const { t } = useTranslation();
   const { draftPreferences, setDraftPreferences, setError } = useSettingsDraft();
   const [statuses, setStatuses] = useState<Record<string, CheckStatus>>({});
+  // The check in flight per locator id. An edit to the URL or portal forgets it,
+  // so a check that finishes afterwards does not overwrite the newer values.
+  const pendingChecks = useRef(new Map<string, object>());
   const locators = draftPreferences.geocoding.locators ?? [];
   const activeId = locators.some((locator) => locator.id === draftPreferences.geocoding.locatorId)
     ? draftPreferences.geocoding.locatorId
@@ -98,7 +101,7 @@ export function GeocodingLocatorsEditor() {
     );
 
   const editLocator = (id: string, patch: Partial<GeocodingLocator>) => {
-    if (patch.url === undefined && patch.portalUrl === undefined) {
+    if (!("url" in patch) && !("portalUrl" in patch)) {
       patchLocator(id, patch);
       return;
     }
@@ -111,6 +114,7 @@ export function GeocodingLocatorsEditor() {
         return next;
       }),
     );
+    pendingChecks.current.delete(id);
     clearStatus(id);
   };
 
@@ -130,6 +134,7 @@ export function GeocodingLocatorsEditor() {
   };
 
   const removeLocator = (id: string) => {
+    pendingChecks.current.delete(id);
     setLocators((current) => current.filter((locator) => locator.id !== id));
     clearStatus(id);
   };
@@ -143,24 +148,36 @@ export function GeocodingLocatorsEditor() {
       }));
       return;
     }
+    const ticket = {};
+    pendingChecks.current.set(locator.id, ticket);
+    const current = () => pendingChecks.current.get(locator.id) === ticket;
     setStatuses((s) => ({ ...s, [locator.id]: { kind: "checking" } }));
     try {
       let token: string | undefined;
       if (locator.portalUrl?.trim()) {
         if (!(await locatorAcceptsPortalToken(url, locator.portalUrl))) {
-          setStatuses((s) => ({
-            ...s,
-            [locator.id]: { kind: "error", key: "settings.geocoding.locators.errorPortal" },
-          }));
+          if (current()) {
+            setStatuses((s) => ({
+              ...s,
+              [locator.id]: { kind: "error", key: "settings.geocoding.locators.errorPortal" },
+            }));
+          }
           return;
         }
+        if (!current()) return;
+        // Checking with a portal is the user's consent to send its sign-in to
+        // this server from this device (see geocoding-auth.ts).
+        approveLocatorPortalToken(url, locator.portalUrl);
         token = await tryGetArcGISAccessToken(locator.portalUrl);
       }
       const capabilities = await fetchArcGISLocatorInfo(url, { token });
+      if (!current()) return;
       patchLocator(locator.id, { url, ...capabilities });
       setStatuses((s) => ({ ...s, [locator.id]: { kind: "ok" } }));
     } catch (error) {
-      setStatuses((s) => ({ ...s, [locator.id]: checkError(error) }));
+      if (current()) setStatuses((s) => ({ ...s, [locator.id]: checkError(error) }));
+    } finally {
+      if (current()) pendingChecks.current.delete(locator.id);
     }
   };
 

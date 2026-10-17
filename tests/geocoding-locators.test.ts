@@ -19,8 +19,10 @@ import {
   type GeocodingLocator,
 } from "@geolibre/core";
 import {
+  approveLocatorPortalToken,
   locatorAcceptsPortalToken,
   resetLocatorFederationCache,
+  resolveLocatorToken,
 } from "../apps/geolibre-desktop/src/lib/geocoding-auth";
 
 const BASE = "https://gis.example.org/server/rest/services/Locators/Parcels/GeocodeServer";
@@ -396,5 +398,41 @@ describe("locators in the project file", () => {
     const geocoding = parseProject(serializeProject(createEmptyProject())).preferences.geocoding;
     assert.equal("locators" in geocoding, false);
     assert.equal("locatorId" in geocoding, false);
+  });
+});
+
+describe("resolveLocatorToken", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    resetLocatorFederationCache();
+  });
+
+  const federated: GeocodingLocator = {
+    id: "fed",
+    name: "Federated",
+    url: "https://maps.example.org/arcgis/rest/services/Locators/Parcels/GeocodeServer",
+    portalUrl: "https://portal.example.org/portal",
+  };
+
+  it("needs this device's approval before a federated server gets the token", async () => {
+    // The server claims the portal; that alone must not release the token.
+    globalThis.fetch = (async () =>
+      Response.json({ owningSystemUrl: "https://portal.example.org/portal" })) as typeof fetch;
+    await assert.rejects(resolveLocatorToken(federated), /Check this locator in Settings/);
+    approveLocatorPortalToken(federated.url, federated.portalUrl);
+    // Approved, but not signed in: sent without a token rather than refused.
+    assert.equal(await resolveLocatorToken(federated), undefined);
+  });
+
+  it("needs no approval on the portal's own host", async () => {
+    const sameHost = { ...PARCELS, portalUrl: "https://gis.example.org/portal" };
+    assert.equal(await resolveLocatorToken(sameHost), undefined);
+  });
+
+  it("refuses a server that does not claim the portal, approved or not", async () => {
+    globalThis.fetch = (async () => Response.json({})) as typeof fetch;
+    approveLocatorPortalToken(federated.url, federated.portalUrl);
+    await assert.rejects(resolveLocatorToken(federated), /not on a server federated/);
   });
 });

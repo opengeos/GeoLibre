@@ -9,15 +9,23 @@ import { normalizeArcGISPortalUrl, tryGetArcGISAccessToken } from "./arcgis-oaut
 /**
  * Secured ArcGIS GeocodeServer locators borrow an ArcGIS portal sign-in.
  *
- * A portal token is only sent to a locator that the portal vouches for: one on
- * the portal's own host, or on an ArcGIS Server whose `rest/info` names the
- * portal as its `owningSystemUrl` (a federated server). A standalone server, or
- * one federated with another portal, never receives the token; its requests go
- * out without one and the service's own "token required" answer is shown.
+ * A portal token is sent to a locator on the portal's own host. Any other host
+ * needs two things: its ArcGIS Server's `rest/info` names the portal as its
+ * `owningSystemUrl` (a federated server), and the user approved sending that
+ * portal's sign-in to that host on this device, by checking the locator in
+ * Settings. The `owningSystemUrl` claim alone is not enough, since the server
+ * attests it about itself: a shared project could otherwise pair a hostile
+ * server with a portal the user is signed in to. A standalone server, or one
+ * federated with another portal, never receives the token.
  */
 
 /** Whether each (portal, ArcGIS Server) pair is federated, cached per session. */
 const federation = new Map<string, Promise<boolean>>();
+
+/** Device-local approvals, as `"<portal host> <locator host>"` entries. */
+const APPROVALS_STORAGE_KEY = "geolibre.geocoding.locatorTokenHosts";
+/** Approvals kept for this session when storage is unavailable. */
+const sessionApprovals = new Set<string>();
 
 /** The ArcGIS Server REST root of a GeocodeServer URL (`.../rest`), or null. */
 function restRoot(locatorUrl: string): string | null {
@@ -34,6 +42,46 @@ function hostOf(url: string): string | null {
   }
 }
 
+/** The approval entry for sending `portalUrl`'s token to `locatorUrl`'s host, or null. */
+function approvalKey(locatorUrl: string, portalUrl: string | undefined): string | null {
+  const portal = portalUrl?.trim() ? normalizeArcGISPortalUrl(portalUrl) : null;
+  const portalHost = portal ? hostOf(portal) : null;
+  const locatorHost = hostOf(locatorUrl);
+  return portalHost && locatorHost ? `${portalHost} ${locatorHost}` : null;
+}
+
+function readApprovals(): Set<string> {
+  const approvals = new Set(sessionApprovals);
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(APPROVALS_STORAGE_KEY) ?? "[]");
+    if (Array.isArray(stored)) {
+      for (const entry of stored) if (typeof entry === "string") approvals.add(entry);
+    }
+  } catch {
+    // Storage unavailable or corrupt: only this session's approvals count.
+  }
+  return approvals;
+}
+
+/**
+ * Record that the user allows `portalUrl`'s sign-in to be sent to the host of
+ * `locatorUrl` on this device. Called when the user checks a locator that names
+ * a portal in Settings.
+ *
+ * @param locatorUrl - The locator's GeocodeServer URL.
+ * @param portalUrl - The locator's portal.
+ */
+export function approveLocatorPortalToken(locatorUrl: string, portalUrl: string | undefined): void {
+  const key = approvalKey(locatorUrl, portalUrl);
+  if (!key) return;
+  sessionApprovals.add(key);
+  try {
+    localStorage.setItem(APPROVALS_STORAGE_KEY, JSON.stringify([...readApprovals()]));
+  } catch {
+    // Kept for this session only.
+  }
+}
+
 /** Ask an ArcGIS Server which portal it is federated with. */
 async function owningSystemHost(root: string): Promise<string | null> {
   const response = await fetch(`${root}/info?f=json`, {
@@ -47,7 +95,9 @@ async function owningSystemHost(root: string): Promise<string | null> {
 }
 
 /**
- * Whether `portal`'s sign-in may be sent to the locator at `locatorUrl`.
+ * Whether the locator at `locatorUrl` is on `portal`'s host or on a server that
+ * reports being federated with it. This is the server's own claim; see
+ * {@link resolveLocatorToken} for what else a token needs.
  *
  * @param locatorUrl - The locator's GeocodeServer URL.
  * @param portalUrl - The portal the locator was configured with.
@@ -84,17 +134,26 @@ export async function locatorAcceptsPortalToken(
 
 /**
  * The token for a secured locator: its portal's current access token when the
- * portal vouches for the locator and the user is signed in, else undefined.
+ * locator is on the portal's host, or on a federated server the user approved
+ * on this device, and the user is signed in; else undefined.
  *
  * @param locator - The locator.
  * @returns The token, or undefined to send the request without one.
- * @throws GeocoderServiceError When the locator is not on a server the portal
- *   vouches for, so a configuration mistake is reported rather than hidden.
+ * @throws GeocoderServiceError When the token may not be sent to the locator,
+ *   so a configuration problem is reported rather than hidden.
  */
-async function locatorToken(locator: GeocodingLocator): Promise<string | undefined> {
+export async function resolveLocatorToken(locator: GeocodingLocator): Promise<string | undefined> {
   if (!(await locatorAcceptsPortalToken(locator.url, locator.portalUrl))) {
     throw new GeocoderServiceError(
       "This locator is not on a server federated with its portal, so GeoLibre will not send the portal sign-in to it.",
+    );
+  }
+  const portal = normalizeArcGISPortalUrl(locator.portalUrl);
+  const sameHost = portal !== null && hostOf(portal) === hostOf(locator.url);
+  const key = approvalKey(locator.url, locator.portalUrl);
+  if (!sameHost && (!key || !readApprovals().has(key))) {
+    throw new GeocoderServiceError(
+      "Check this locator in Settings → Geocoding to allow GeoLibre to send your portal sign-in to its server.",
     );
   }
   return tryGetArcGISAccessToken(locator.portalUrl);
@@ -102,10 +161,16 @@ async function locatorToken(locator: GeocodingLocator): Promise<string | undefin
 
 /** Let secured locators reuse ArcGIS portal sign-ins (all builds). */
 export function installGeocodingTokenProvider(): void {
-  setGeocodingTokenProvider(locatorToken);
+  setGeocodingTokenProvider(resolveLocatorToken);
 }
 
-/** Test hook: forget cached federation checks. */
+/** Test hook: forget cached federation checks and approvals. */
 export function resetLocatorFederationCache(): void {
   federation.clear();
+  sessionApprovals.clear();
+  try {
+    localStorage.removeItem(APPROVALS_STORAGE_KEY);
+  } catch {
+    // Storage unavailable.
+  }
 }
