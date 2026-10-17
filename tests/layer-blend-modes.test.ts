@@ -14,7 +14,9 @@ import {
   LAYER_OPACITY_FOR_BLEND,
   blendModeForNativeLayer,
   blendSpecFor,
+  installLayerBlendModes,
   isBlending,
+  layerBlendModesSupported,
   blendModeSignature,
   resetLayerBlendModes,
   syncLayerBlendModes,
@@ -22,6 +24,7 @@ import {
   type BlendSpec,
 } from "../packages/map/src/layer-blend-modes";
 import { fillPaint, linePaint } from "../packages/map/src/style-mapper";
+import type * as maplibregl from "maplibre-gl";
 
 /**
  * Distinguishable stand-ins for the WebGL enums, so a spec assertion names the
@@ -397,6 +400,75 @@ describe("electing MapLibre's layer-opacity composite", () => {
     // layer stuck on the render-to-texture path.
     assert.equal(fillPaint(DEFAULT_LAYER_STYLE, 1)["fill-layer-opacity"], 1);
     assert.equal(linePaint(DEFAULT_LAYER_STYLE, 1)["line-layer-opacity"], 1);
+  });
+});
+
+/** A dirty-tracked GL state wrapper, recording every value it was set to. */
+function stateValue<T>(initial: T) {
+  return {
+    current: initial,
+    history: [] as T[],
+    set(value: T) {
+      this.current = value;
+      this.history.push(value);
+    },
+  };
+}
+
+/**
+ * A painter shaped like maplibre-gl 6.14's: `useProgram` lives on a per-frame
+ * render context passed as `renderLayer`'s last argument, not on the painter.
+ * Each fill draw feeds the scratch framebuffer once, then composites it with
+ * the `layerOpacity` program, the same as `drawLayerOpacity`.
+ */
+function frameContextPainter() {
+  const gl = { ...GL, MIN: 108 } as unknown as WebGL2RenderingContext;
+  class Context {
+    gl = gl;
+    blend = stateValue(false);
+    blendFunc = stateValue<[number, number]>([GL.ONE, GL.ONE_MINUS_SRC_ALPHA]);
+    blendEquation = stateValue(GL.FUNC_ADD);
+    setColorMode(_colorMode: { mask: boolean[] }) {}
+  }
+  class FrameRenderContext {
+    constructor(readonly context: Context) {}
+    useProgram(_name: string) {
+      return { draw: () => this.context.setColorMode({ mask: [true, true, true, true] }) };
+    }
+  }
+  class Painter {
+    context = new Context();
+    renderLayer(
+      _painter: Painter,
+      _tileManager: unknown,
+      _layer: { id: string; type: string },
+      _coords: unknown[],
+      frame: FrameRenderContext,
+    ) {
+      frame.useProgram("fill").draw();
+      frame.useProgram("layerOpacity").draw();
+    }
+  }
+  const painter = new Painter();
+  const render = (layerSpec: { id: string; type: string }) =>
+    painter.renderLayer(painter, {}, layerSpec, [], new FrameRenderContext(painter.context));
+  return { map: { painter } as unknown as maplibregl.Map, context: painter.context, render };
+}
+
+describe("installing the render wrappers", () => {
+  it("blends only the composite draw when useProgram is on the frame context", () => {
+    const { map, context, render } = frameContextPainter();
+    assert.equal(installLayerBlendModes(map), true);
+    syncLayerBlendModes([
+      layer("abc", { style: { ...DEFAULT_LAYER_STYLE, blendMode: "multiply" } }),
+    ]);
+    render({ id: "layer-abc-fill", type: "fill" });
+    assert.equal(layerBlendModesSupported(), true);
+    const multiply = blendSpecFor("multiply", GL)!;
+    // The draw into the scratch buffer stays on alpha compositing; only the
+    // composite carries the mode.
+    assert.deepEqual(context.blendFunc.history, [multiply.func]);
+    assert.deepEqual(context.blendEquation.history.at(-1), multiply.equation);
   });
 });
 

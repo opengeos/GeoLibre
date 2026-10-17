@@ -341,7 +341,50 @@ interface PainterContext {
 interface PainterLike {
   context: PainterContext;
   renderLayer(...args: unknown[]): unknown;
+  /** On the painter through maplibre-gl 6.13; see {@link ProgramSource}. */
+  useProgram?(name: string, ...rest: unknown[]): unknown;
+}
+
+/**
+ * Whatever owns `useProgram`: the painter through maplibre-gl 6.13, and from
+ * 6.14 the per-frame `FrameRenderContext` that `renderLayer` receives.
+ */
+interface ProgramSource {
   useProgram(name: string, ...rest: unknown[]): unknown;
+  [PATCHED]?: boolean;
+}
+
+/** Marks a prototype this module has already wrapped (prototypes are shared). */
+const PATCHED = Symbol.for("geolibre.layerBlendModes.patched");
+
+/**
+ * Wrap `useProgram` on `proto` so {@link lastProgram} names the draw about to
+ * issue. Idempotent per prototype.
+ */
+function patchUseProgram(proto: ProgramSource): void {
+  if (proto[PATCHED]) return;
+  const originalUseProgram = proto.useProgram;
+  proto.useProgram = function useProgram(this: ProgramSource, name: string, ...rest: unknown[]) {
+    lastProgram = name;
+    return originalUseProgram.call(this, name, ...rest);
+  };
+  proto[PATCHED] = true;
+}
+
+/**
+ * The prototype of the `useProgram` owner among `renderLayer`'s arguments.
+ *
+ * maplibre-gl 6.14 moved `useProgram` off the painter onto a module-private
+ * `FrameRenderContext` built once per frame, so its prototype is only
+ * reachable from a live render call. Found by shape, like the style layer.
+ */
+function programSourceArgument(args: unknown[]): ProgramSource | undefined {
+  for (const candidate of args) {
+    if (typeof (candidate as Partial<ProgramSource> | null)?.useProgram === "function") {
+      return Object.getPrototypeOf(candidate) as ProgramSource;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -364,9 +407,6 @@ function styleLayerArgument(args: unknown[]): { id?: string; type?: string } | u
   return undefined;
 }
 
-/** Marks a prototype this module has already wrapped (prototypes are shared). */
-const PATCHED = Symbol.for("geolibre.layerBlendModes.patched");
-
 /**
  * The layer currently rendering, if it blends. Read inside `setColorMode`,
  * which MapLibre only ever calls synchronously within a `renderLayer` call, so
@@ -377,6 +417,8 @@ let active: { spec: BlendSpec; compositeOnly: boolean } | null = null;
 let lastProgram: string | null = null;
 /** `null` until a map has been installed and the seams actually probed. */
 let supported: boolean | null = null;
+/** Set once a render call showed no `useProgram` owner to wrap. */
+let programSourceMissing = false;
 const supportListeners = new Set<() => void>();
 
 /**
@@ -448,9 +490,12 @@ export function installLayerBlendModes(map: maplibregl.Map): boolean {
   };
   const context = painter.context;
 
+  // `useProgram` is not checked here: from maplibre-gl 6.14 it lives on a
+  // per-frame object only a render call can reach, so the `renderLayer`
+  // wrapper checks it on the first frame instead.
   const seamsPresent =
+    !programSourceMissing &&
     typeof painterProto.renderLayer === "function" &&
-    typeof painterProto.useProgram === "function" &&
     typeof contextProto.setColorMode === "function" &&
     typeof context.blend?.set === "function" &&
     typeof context.blendFunc?.set === "function" &&
@@ -471,7 +516,27 @@ export function installLayerBlendModes(map: maplibregl.Map): boolean {
 
   if (!painterProto[PATCHED]) {
     const originalRenderLayer = painterProto.renderLayer;
+    let programSourceChecked = false;
+    if (typeof painterProto.useProgram === "function") {
+      patchUseProgram(painterProto as ProgramSource);
+      programSourceChecked = true;
+    }
     painterProto.renderLayer = function renderLayer(this: PainterLike, ...args: unknown[]) {
+      if (!programSourceChecked) {
+        programSourceChecked = true;
+        const source = programSourceArgument(args);
+        if (source) {
+          patchUseProgram(source);
+        } else {
+          // Without the program name the composite draw of a fill or line
+          // layer cannot be told apart, so blending would silently do nothing.
+          console.warn(
+            "[geolibre] per-layer blend modes disabled: this maplibre-gl build does not expose useProgram to renderLayer",
+          );
+          programSourceMissing = true;
+          setSupported(false);
+        }
+      }
       const layer = styleLayerArgument(args);
       const previous = active;
       const mode = layer?.id ? modeForNativeLayer(layer.id) : null;
@@ -482,16 +547,6 @@ export function installLayerBlendModes(map: maplibregl.Map): boolean {
       } finally {
         active = previous;
       }
-    };
-
-    const originalUseProgram = painterProto.useProgram;
-    painterProto.useProgram = function useProgram(
-      this: PainterLike,
-      name: string,
-      ...rest: unknown[]
-    ) {
-      lastProgram = name;
-      return originalUseProgram.call(this, name, ...rest);
     };
 
     painterProto[PATCHED] = true;
