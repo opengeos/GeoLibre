@@ -211,6 +211,16 @@ If you use GeoLibre in your work, please cite it. GeoLibre is archived on [Zenod
 
 You can also use GitHub's **"Cite this repository"** button (which reads [`CITATION.cff`](CITATION.cff)) to copy a ready-made APA or BibTeX entry. See the [How to Cite](https://geolibre.app/citation/) page for more formats.
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=opengeos%2Fgeolibre&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=opengeos/geolibre&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=opengeos/geolibre&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=opengeos/geolibre&type=date&legend=top-left" />
+ </picture>
+</a>
+
 ## License
 
 [MIT](LICENSE)
