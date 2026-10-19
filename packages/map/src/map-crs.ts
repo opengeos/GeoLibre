@@ -123,13 +123,17 @@ let workerScript: Promise<string> | null = null;
  * workers build the same converter the page does from each CRS's `definition`.
  */
 function projectionHandlerScript(): Promise<string> {
-  workerScript ??= import("proj4/dist/proj4.js?raw").then(
-    ({ default: proj4Source }) =>
-      `${proj4Source}\n;self.setProjectionHandler(function (definition) { return proj4(definition); });\n`,
-  );
-  workerScript.catch(() => {
-    workerScript = null;
-  });
+  if (!workerScript) {
+    const pending = import("proj4/dist/proj4.js?raw").then(
+      ({ default: proj4Source }) =>
+        `${proj4Source}\n;self.setProjectionHandler(function (definition) { return proj4(definition); });\n`,
+    );
+    // A failed lazy chunk may be transient: let the next call retry it.
+    pending.catch(() => {
+      if (workerScript === pending) workerScript = null;
+    });
+    workerScript = pending;
+  }
   return workerScript;
 }
 

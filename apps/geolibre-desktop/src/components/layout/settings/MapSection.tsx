@@ -137,15 +137,22 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
       if (!crs) return;
       // Opening the dialog on a saved code resolves it too: leave that draft
       // (and the body it pairs with) alone, and write only a new code.
-      setDraftPreferences((current) =>
-        normalizeMapCrs(current.map.mapCrs) === crs.id
-          ? current
-          : {
-              ...current,
-              // The EPSG tables describe Earth, so measurements follow it there.
-              map: { ...current.map, mapCrs: crs.id, ellipsoidId: "earth" },
-            },
-      );
+      setDraftPreferences((current) => {
+        const saved = normalizeMapCrs(current.map.mapCrs);
+        if (saved === crs.id) return current;
+        // The EPSG tables describe Earth, so the body follows it on the way
+        // into a custom EPSG CRS. Editing one code into another keeps the body
+        // the user has since chosen.
+        const enteringEpsg = parseMapCrsEpsgCode(saved) === null;
+        return {
+          ...current,
+          map: {
+            ...current.map,
+            mapCrs: crs.id,
+            ...(enteringEpsg ? { ellipsoidId: "earth" } : {}),
+          },
+        };
+      });
       setError(null);
     });
     return () => {
