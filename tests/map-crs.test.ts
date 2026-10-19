@@ -79,7 +79,7 @@ describe("MAP_CRS_PRESETS", () => {
 describe("normalizeMapCrs", () => {
   it("keeps presets and EPSG codes and drops the default map", () => {
     assert.equal(normalizeMapCrs("mars-north-polar"), "mars-north-polar");
-    assert.equal(normalizeMapCrs("EPSG:3031"), "EPSG:3031");
+    assert.equal(normalizeMapCrs("EPSG:3995"), "EPSG:3995");
     assert.equal(normalizeMapCrs(" epsg:5070 "), "EPSG:5070");
     // Codes a preset uses resolve to it: one grid per registered code.
     assert.equal(normalizeMapCrs("EPSG:4326"), "earth-cylindrical");
