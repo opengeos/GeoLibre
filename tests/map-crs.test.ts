@@ -81,8 +81,10 @@ describe("normalizeMapCrs", () => {
     assert.equal(normalizeMapCrs("mars-north-polar"), "mars-north-polar");
     assert.equal(normalizeMapCrs("EPSG:3031"), "EPSG:3031");
     assert.equal(normalizeMapCrs(" epsg:5070 "), "EPSG:5070");
-    // EPSG:4326 has a preset with a basemap.
+    // Codes a preset uses resolve to it: one grid per registered code.
     assert.equal(normalizeMapCrs("EPSG:4326"), "earth-cylindrical");
+    assert.equal(normalizeMapCrs("EPSG:3413"), "earth-arctic");
+    assert.equal(normalizeMapCrs("epsg:3031"), "earth-antarctic");
     for (const value of [
       undefined,
       null,
@@ -230,8 +232,10 @@ describe("map-crs (MapLibre side)", () => {
     const preset = await resolveMapCrs("mars-south-polar");
     assert.equal(preset?.code, "IAU_2015:49920");
     assert.ok(preset?.basemap);
-    const epsg = await resolveMapCrs("EPSG:3031");
-    assert.equal(epsg?.code, "EPSG:3031");
+    // A preset's code resolves to the preset, with its grid and basemap.
+    assert.equal((await resolveMapCrs("EPSG:3031"))?.id, "earth-antarctic");
+    const epsg = await resolveMapCrs("EPSG:5070");
+    assert.equal(epsg?.code, "EPSG:5070");
     assert.equal(epsg?.basemap, undefined);
     assert.ok((epsg?.tileMatrixSet.extentAtZoom0 ?? 0) > 1e6);
     assert.equal(await resolveMapCrs("EPSG:999999"), null);

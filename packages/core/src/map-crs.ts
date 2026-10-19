@@ -385,8 +385,11 @@ export function normalizeMapCrs(value: unknown): string | undefined {
   if (getMapCrsPreset(value)) return value;
   const code = parseMapCrsEpsgCode(value);
   if (code === null || WEB_MERCATOR_CODES.has(code)) return undefined;
-  // The EPSG:4326 preset carries a basemap, so prefer it to a bare code.
-  return code === 4326 ? "earth-cylindrical" : `EPSG:${code}`;
+  // A code a preset uses (EPSG:3413, 3031, 4326) is that preset: it carries a
+  // basemap, and MapLibre registers one grid per code, so a derived grid for
+  // the bare code would clash with the preset's.
+  const epsg = `EPSG:${code}`;
+  return MAP_CRS_PRESETS.find((preset) => preset.code === epsg)?.id ?? epsg;
 }
 
 /**
