@@ -14,37 +14,17 @@
  */
 
 import {
-  adaptBboxTemplateToCrs,
   deriveTileMatrixSet,
   getMapCrsPreset,
   normalizeMapCrs,
   parseMapCrsEpsgCode,
-  type MapCrsBasemap,
-  type MapCrsTileMatrixSet,
 } from "@geolibre/core";
 import * as maplibregl from "maplibre-gl";
 import { BLANK_BACKGROUND_LAYER_ID } from "./basemap-style";
+import type { ResolvedMapCrs } from "./active-map-crs";
 import { resolveEpsgProjection } from "./epsg-proj4";
 
-/** A map CRS ready to register with MapLibre. */
-export interface ResolvedMapCrs {
-  /** The `preferences.map.mapCrs` value it was resolved from. */
-  id: string;
-  /** Name it is registered under, and the `SRS` WMS layers ask for. */
-  code: string;
-  /** PROJ string, rebuilt into a converter by proj4 on the page and in the workers. */
-  definition: string;
-  tileMatrixSet: MapCrsTileMatrixSet;
-  /** The preset's native basemap; an EPSG CRS has none. */
-  basemap?: MapCrsBasemap;
-  /** Box the map frames when it enters the CRS, `[west, south, east, north]`. */
-  bounds?: [number, number, number, number];
-  /**
-   * The lng/lat at the center of the tile grid. An EPSG CRS has no box, so the
-   * map frames its whole grid around this point on the way in.
-   */
-  gridCenter?: [number, number];
-}
+export type { ResolvedMapCrs } from "./active-map-crs";
 
 /** Source and layer id of a CRS's own basemap in the style. */
 export const MAP_CRS_BASEMAP_ID = "map-crs-basemap";
@@ -89,6 +69,7 @@ async function resolveNormalizedMapCrs(id: string): Promise<ResolvedMapCrs | nul
       tileMatrixSet: preset.tileMatrixSet,
       basemap: preset.basemap,
       bounds: preset.bounds,
+      ...(preset.wmsSrs ? { wmsSrs: preset.wmsSrs } : {}),
     };
   }
   const code = parseMapCrsEpsgCode(id);
@@ -213,54 +194,4 @@ export function createMapCrsStyle(crs: ResolvedMapCrs): maplibregl.StyleSpecific
         : []),
     ],
   };
-}
-
-const activeCrsByMap = new WeakMap<maplibregl.Map, ResolvedMapCrs>();
-
-/**
- * Record the CRS a map is drawn in, for layer sync to read.
- *
- * Args:
- *   map: The map.
- *   crs: Its CRS, or `null` for the default Web Mercator map or globe.
- */
-export function setActiveMapCrs(map: maplibregl.Map, crs: ResolvedMapCrs | null): void {
-  if (crs) activeCrsByMap.set(map, crs);
-  else activeCrsByMap.delete(map);
-}
-
-/**
- * The CRS a map is drawn in.
- *
- * Args:
- *   map: The map.
- *
- * Returns:
- *   The CRS, or `undefined` on the default Web Mercator map or globe.
- */
-export function getActiveMapCrs(map: maplibregl.Map): ResolvedMapCrs | undefined {
-  return activeCrsByMap.get(map);
-}
-
-/**
- * The raster tile templates a layer requests on `map`.
- *
- * On the default map they are returned as they are. On a map in another CRS,
- * WMS and ArcGIS export templates ask for each tile's box in that CRS, and
- * templates with no bounding box (XYZ, TMS) are dropped, since their Web
- * Mercator tiles would land in the wrong place.
- *
- * Args:
- *   map: The map the layer is drawn on.
- *   tiles: The layer's tile templates.
- *
- * Returns:
- *   The templates to request; empty when none can be drawn.
- */
-export function tileTemplatesForMapCrs(map: maplibregl.Map, tiles: string[]): string[] {
-  const crs = getActiveMapCrs(map);
-  if (!crs) return tiles;
-  return tiles
-    .map((tile) => adaptBboxTemplateToCrs(tile, crs.code))
-    .filter((tile): tile is string => tile !== null);
 }

@@ -15,7 +15,7 @@ import {
 import { resolveMapCrs, type MapEngine } from "@geolibre/map";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { Crosshair, RotateCcw, TriangleAlert } from "lucide-react";
-import { type RefObject, useEffect, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   COORDINATE_FORMATS,
@@ -103,6 +103,10 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
   const [crsEpsgText, setCrsEpsgText] = useState(() =>
     mapCrsEpsg === null ? "" : String(mapCrsEpsg),
   );
+  // Set when the user picks "Custom EPSG code…": the first code written after
+  // that moves the body to Earth (the EPSG tables describe Earth), and later
+  // edits keep whatever body the user has chosen since.
+  const enteringCustomCrs = useRef(false);
   // Whether the typed code resolves to a drawable CRS; null while checking.
   const [crsEpsgKnown, setCrsEpsgKnown] = useState<boolean | null>(null);
   const crsChoice = customCrs || mapCrsEpsg !== null ? "custom" : (mapCrs ?? "");
@@ -135,24 +139,25 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
       if (cancelled) return;
       setCrsEpsgKnown(crs !== null);
       if (!crs) return;
+      // A code a preset uses (3413, 3031, 4326) resolves to that preset: show
+      // the preset in the picker, as if it had been chosen there.
+      if (!crs.id.startsWith("EPSG:")) setCustomCrs(false);
+      const resetBody = enteringCustomCrs.current;
+      enteringCustomCrs.current = false;
       // Opening the dialog on a saved code resolves it too: leave that draft
       // (and the body it pairs with) alone, and write only a new code.
-      setDraftPreferences((current) => {
-        const saved = normalizeMapCrs(current.map.mapCrs);
-        if (saved === crs.id) return current;
-        // The EPSG tables describe Earth, so the body follows it on the way
-        // into a custom EPSG CRS. Editing one code into another keeps the body
-        // the user has since chosen.
-        const enteringEpsg = parseMapCrsEpsgCode(saved) === null;
-        return {
-          ...current,
-          map: {
-            ...current.map,
-            mapCrs: crs.id,
-            ...(enteringEpsg ? { ellipsoidId: "earth" } : {}),
-          },
-        };
-      });
+      setDraftPreferences((current) =>
+        normalizeMapCrs(current.map.mapCrs) === crs.id
+          ? current
+          : {
+              ...current,
+              map: {
+                ...current.map,
+                mapCrs: crs.id,
+                ...(resetBody ? { ellipsoidId: "earth" } : {}),
+              },
+            },
+      );
       setError(null);
     });
     return () => {
@@ -403,6 +408,7 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
           onChange={(event) => {
             const value = event.target.value;
             if (value === "custom") {
+              enteringCustomCrs.current = !customCrs;
               setCustomCrs(true);
               return;
             }

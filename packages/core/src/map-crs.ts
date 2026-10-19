@@ -60,6 +60,12 @@ export interface MapCrsPreset {
    * written into the `SRS`/`CRS` of WMS layers drawn on the map.
    */
   code: string;
+  /**
+   * The label WMS and ArcGIS export layers on the map ask for, when servers
+   * do not read `code`. MapServer's PROJ rejects the planetary IAU codes, so
+   * those presets use the labels USGS Astrogeology serves their grids under.
+   */
+  wmsSrs?: string;
   /** PROJ string of the CRS, used by proj4 on the page and in the workers. */
   definition: string;
   /** Ellipsoid registry id the preset's coordinates describe. */
@@ -156,6 +162,8 @@ function cylindrical(
     id: `${body}-cylindrical`,
     name,
     code: `IAU_2015:${naifCode}`,
+    // Servers read a lng/lat degree grid as EPSG:4326, whatever the body.
+    wmsSrs: "EPSG:4326",
     definition: longlat(radius),
     ellipsoidId: body,
     tileMatrixSet: GEOGRAPHIC_GRID,
@@ -221,6 +229,7 @@ export const MAP_CRS_PRESETS: readonly MapCrsPreset[] = [
     id: "moon-north-polar",
     name: "Moon North Polar Stereographic",
     code: "IAU_2015:30118",
+    wmsSrs: "EPSG:32661",
     definition: polarStereographic(true, MOON_RADIUS),
     ellipsoidId: "moon",
     // About 60°N at the edge, where the LRO WAC polar mosaic ends.
@@ -232,6 +241,7 @@ export const MAP_CRS_PRESETS: readonly MapCrsPreset[] = [
     id: "moon-south-polar",
     name: "Moon South Polar Stereographic",
     code: "IAU_2015:30120",
+    wmsSrs: "EPSG:32761",
     definition: polarStereographic(false, MOON_RADIUS),
     ellipsoidId: "moon",
     tileMatrixSet: polarGrid(931000),
@@ -250,6 +260,7 @@ export const MAP_CRS_PRESETS: readonly MapCrsPreset[] = [
     id: "mars-north-polar",
     name: "Mars North Polar Stereographic",
     code: "IAU_2015:49918",
+    wmsSrs: "EPSG:32661",
     definition: polarStereographic(true, MARS_RADIUS),
     ellipsoidId: "mars",
     // The extent of the USGS north polar mosaics, about 38°N at the edges.
@@ -261,6 +272,7 @@ export const MAP_CRS_PRESETS: readonly MapCrsPreset[] = [
     id: "mars-south-polar",
     name: "Mars South Polar Stereographic",
     code: "IAU_2015:49920",
+    wmsSrs: "EPSG:32761",
     definition: polarStereographic(false, MARS_RADIUS),
     ellipsoidId: "mars",
     tileMatrixSet: polarGrid(2357030),

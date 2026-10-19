@@ -58,7 +58,10 @@ another CRS:
 
 - **GeoJSON layers** are drawn, projected by proj4 in MapLibre's workers.
 - **WMS layers and ArcGIS `export` layers** ask for each tile's box in the CRS
-  (WMS 1.1.1, `SRS=<code>`). The server must support that CRS.
+  (WMS 1.1.1, `SRS=<code>`). The server must support that CRS. Planetary
+  presets ask under the labels servers read rather than their IAU code:
+  `EPSG:4326` for a simple-cylindrical grid, and the `EPSG:32661`/`EPSG:32761`
+  labels USGS Astrogeology serves its polar grids under.
 - **Image and video overlays** are drawn from their corner coordinates.
 - **XYZ, vector tile, MBTiles and Wayback layers** are not drawn, nor is the
   shared basemap, since their tiles are Web Mercator. Plugins that add their own

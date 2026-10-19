@@ -16,13 +16,11 @@ import {
   serializeProject,
 } from "@geolibre/core";
 import {
-  createMapCrsStyle,
-  MAP_CRS_BASEMAP_ID,
-  resolveMapCrs,
   setActiveMapCrs,
   tileTemplatesForMapCrs,
   type ResolvedMapCrs,
-} from "../packages/map/src/map-crs";
+} from "../packages/map/src/active-map-crs";
+import { createMapCrsStyle, MAP_CRS_BASEMAP_ID, resolveMapCrs } from "../packages/map/src/map-crs";
 import { proxyWmsTileUrl } from "../packages/map/src/wms-proxy";
 import type * as maplibregl from "maplibre-gl";
 
@@ -224,6 +222,18 @@ describe("map-crs (MapLibre side)", () => {
     assert.match(adapted, /SRS=EPSG:3413/);
     setActiveMapCrs(map, null);
     assert.deepEqual(tileTemplatesForMapCrs(map, [xyz]), [xyz]);
+  });
+
+  it("asks WMS layers on a planetary map for the label servers read", async () => {
+    const map = {} as maplibregl.Map;
+    const mars = await resolveMapCrs("mars-cylindrical");
+    assert.equal(mars?.code, "IAU_2015:49900");
+    setActiveMapCrs(map, mars);
+    const [adapted] = tileTemplatesForMapCrs(map, [WMS_3857]);
+    assert.match(adapted, /SRS=EPSG:4326/);
+    setActiveMapCrs(map, await resolveMapCrs("moon-south-polar"));
+    assert.match(tileTemplatesForMapCrs(map, [WMS_3857])[0], /SRS=EPSG:32761/);
+    setActiveMapCrs(map, null);
   });
 
   it("resolves presets, EPSG codes and the default map", async () => {

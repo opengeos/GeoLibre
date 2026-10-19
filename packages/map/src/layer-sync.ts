@@ -107,7 +107,7 @@ import {
   rasterPaint,
 } from "./style-mapper";
 import { isViteDevServer, proxyWmsTileUrl, proxyWmsTiles } from "./wms-proxy";
-import { getActiveMapCrs, tileTemplatesForMapCrs } from "./map-crs";
+import { getActiveMapCrs, tileTemplatesForMapCrs } from "./active-map-crs";
 import { resolveTextFontFromStyleLayers } from "./text-font";
 
 // Existing importers (MapController, tests) read it from here.

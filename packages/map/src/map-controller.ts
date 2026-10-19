@@ -97,13 +97,8 @@ import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control"
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import { installMapTransformCompat } from "./map-transform-compat";
-import {
-  createMapCrsStyle,
-  registerMapCrs,
-  resolveMapCrs,
-  setActiveMapCrs,
-  type ResolvedMapCrs,
-} from "./map-crs";
+import { setActiveMapCrs, type ResolvedMapCrs } from "./active-map-crs";
+import { createMapCrsStyle, registerMapCrs, resolveMapCrs } from "./map-crs";
 import { transformTileRequest } from "./tile-request-headers";
 import {
   MAPLIBRE_CAPABILITIES,
