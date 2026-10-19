@@ -1,4 +1,5 @@
-// Offline EPSG code → proj4 definition lookup, shared by the desktop WMS tile
+// Offline EPSG code → proj4 definition lookup, shared by the map CRS
+// (map-crs.ts), the desktop WMS tile
 // reprojection (wms-projected.ts) and GML reprojection (gml-projection.ts).
 // The EPSG tables come from geotiff-geokeys-to-proj4; both it and proj4 are
 // loaded on first use, so a session that never needs them never pays for them.

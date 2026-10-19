@@ -1724,6 +1724,16 @@ export interface MapPreferences {
    * (a `SceneView`) ignores it. See `arcgis-projection.ts`.
    */
   arcgisWkid?: number;
+  /**
+   * Coordinate reference system of the flat MapLibre map (issue #1128): a
+   * preset id from `MAP_CRS_PRESETS` (polar and simple-cylindrical grids of
+   * Earth, the Moon, Mars and other bodies) or `"EPSG:<code>"`. Absent means
+   * the default Web Mercator map or globe. Tiles are not reprojected, so only
+   * GeoJSON, image/video overlays and WMS or ArcGIS export layers (asked for
+   * each tile's box in this CRS) draw; XYZ, vector tile and plugin layers are
+   * set aside, and the globe and terrain are off. See `map-crs.ts`.
+   */
+  mapCrs?: string;
   /** Cesium imagery override; absent follows the shared project basemap. */
   cesiumBasemap?: import("./cesium-imagery").CesiumBasemapId;
   /**

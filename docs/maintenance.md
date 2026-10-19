@@ -126,6 +126,17 @@ fail again with "Unsupported data format/bitsPerSample";
   `tests/upstream-contracts.test.ts` reads the default offset out of the
   published bundle and fails if it moves; still play a story on a non-MapLibre
   renderer if the pin's anchor changed.
+- **Map CRS** (`packages/map/src/map-crs.ts`, issue #1128) uses
+  `addProjection`, `importScriptInWorkers` and the workers'
+  `setProjectionHandler`, all `@experimental` upstream, so a minor release may
+  change them. The handler script is proj4's UMD build (`proj4/dist/proj4.js`,
+  read with `?raw`) followed by one `setProjectionHandler` call: MapLibre
+  fetches it from a `blob:` URL and evaluates it with `eval`, which both CSPs
+  allow (`connect-src blob:`, `'unsafe-eval'`). If upstream starts loading
+  worker scripts as modules or by `importScripts`, or proj4 drops its UMD build,
+  GeoJSON on a custom CRS map silently draws in the wrong place (MapLibre only
+  warns). After a bump, run `tests/map-crs.test.ts` and pick a preset under
+  **Settings → Map** with a GeoJSON layer on the map.
 
 ### `@deck.gl/mapbox` and `@deck.gl/maplibre`
 

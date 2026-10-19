@@ -15,7 +15,7 @@
     "@modelcontextprotocol/ext-apps": "^2.0.3",
     "i18next": "^26.4.3",
     "lucide": "^1.55.0",
-    "maplibre-gl": "^6.14.0",
+    "maplibre-gl": "^6.15.0",
     "zod": "^4.6.6"
   },
   "devDependencies": {

@@ -1,11 +1,11 @@
 /**
  * Celestial-body ellipsoids and the planetary basemaps that pair with them.
  *
- * GeoLibre is Earth-centric by construction: MapLibre only renders Web Mercator
- * and all vector data is kept as WGS84 lon/lat GeoJSON. This module does *not*
- * change that — MapLibre still treats the planet as a unit sphere and there is
- * no true multi-CRS rendering (see maplibre-gl-js#168). What it adds is a
- * per-project notion of *which body* the coordinates describe, so that:
+ * GeoLibre is Earth-centric by construction: the default map is Web Mercator
+ * and all vector data is kept as lon/lat GeoJSON. This module does *not*
+ * change that (a map drawn in a body's own polar or simple-cylindrical CRS is
+ * `map-crs.ts`). What it adds is a per-project notion of *which body* the
+ * coordinates describe, so that:
  *
  *   - distance / area / scale measurements use that body's radius instead of a
  *     hardcoded Earth radius, and

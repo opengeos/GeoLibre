@@ -2961,6 +2961,39 @@
         "plateCarree": "Plate Carrée (WGS 84)",
         "northPolar": "Arctic Polar Stereographic",
         "southPolar": "Antarctic Polar Stereographic"
+      },
+      "mapCrs": "Map coordinate reference system",
+      "mapCrsHint": "Draws the MapLibre map flat in another CRS, such as a polar or simple-cylindrical grid of Earth, the Moon or Mars, with a basemap served in that grid. Tiles are not reprojected: GeoJSON layers, image overlays and WMS or ArcGIS export layers (requested in the CRS) are drawn, while XYZ, vector tile and most plugin layers are not, and the globe and terrain are off.",
+      "mapCrsDefault": "Web Mercator / globe (default)",
+      "mapCrsCustom": "Custom EPSG code…",
+      "mapCrsEpsg": "EPSG code",
+      "mapCrsEpsgHint": "Any projected or geographic EPSG code the app knows, e.g. 3995 (Arctic Polar Stereographic) or 5070 (Conus Albers). It has no basemap: add a WMS that serves this CRS.",
+      "mapCrsEpsgUnknown": "Unknown or unsupported EPSG code. The map keeps its current CRS until a known code is entered.",
+      "mapCrsGroups": {
+        "earth": "Earth",
+        "moon": "Moon",
+        "mars": "Mars",
+        "other": "Other bodies"
+      },
+      "mapCrsPresets": {
+        "earth-arctic": "Arctic Polar Stereographic",
+        "earth-antarctic": "Antarctic Polar Stereographic",
+        "earth-cylindrical": "Plate Carrée (WGS 84)",
+        "moon-cylindrical": "Moon Simple Cylindrical",
+        "moon-north-polar": "Moon North Polar Stereographic",
+        "moon-south-polar": "Moon South Polar Stereographic",
+        "mars-cylindrical": "Mars Simple Cylindrical",
+        "mars-north-polar": "Mars North Polar Stereographic",
+        "mars-south-polar": "Mars South Polar Stereographic",
+        "mercury-cylindrical": "Mercury Simple Cylindrical",
+        "venus-cylindrical": "Venus Simple Cylindrical",
+        "io-cylindrical": "Io Simple Cylindrical",
+        "europa-cylindrical": "Europa Simple Cylindrical",
+        "ganymede-cylindrical": "Ganymede Simple Cylindrical",
+        "callisto-cylindrical": "Callisto Simple Cylindrical",
+        "titan-cylindrical": "Titan Simple Cylindrical",
+        "pluto-cylindrical": "Pluto Simple Cylindrical",
+        "charon-cylindrical": "Charon Simple Cylindrical"
       }
     },
     "layout": {

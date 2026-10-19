@@ -5,7 +5,7 @@
 // WFS 1.0.0 does) still lands in the right place.
 
 import type { FeatureCollection, Geometry, Position } from "geojson";
-import { resolveEpsgProjection } from "./epsg-proj4";
+import { resolveEpsgProjection } from "@geolibre/map/epsg-proj4";
 import {
   GmlUnsupportedCrsError,
   parseEpsgSrsName,

@@ -107,6 +107,7 @@ import {
   rasterPaint,
 } from "./style-mapper";
 import { isViteDevServer, proxyWmsTileUrl, proxyWmsTiles } from "./wms-proxy";
+import { getActiveMapCrs, tileTemplatesForMapCrs } from "./map-crs";
 import { resolveTextFontFromStyleLayers } from "./text-font";
 
 // Existing importers (MapController, tests) read it from here.
@@ -507,7 +508,10 @@ export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
         removeLayerFromMap(map, layer.id, layer);
         return;
       }
-      if (shouldUseTiledRendering(layer.geojson)) {
+      // The tiled path cuts Web Mercator tiles on the main thread; in another
+      // map CRS only MapLibre's own GeoJSON source, which projects in the
+      // workers, lands features in the right place.
+      if (shouldUseTiledRendering(layer.geojson) && !getActiveMapCrs(map)) {
         syncGeoJsonVtLayer(map, layer, beforeId);
       } else {
         syncGeoJsonLayer(map, layer, beforeId);
@@ -517,12 +521,14 @@ export function syncLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: 
       syncRasterTileLayer(map, layer, beforeId);
       return;
     case "vector-tiles":
-      syncVectorTileLayer(map, layer, beforeId);
+      // Web Mercator tiles: not drawn on a map in another CRS (map-crs.ts).
+      if (!getActiveMapCrs(map)) syncVectorTileLayer(map, layer, beforeId);
       return;
     case "tile-archive":
       // A PMTiles archive is drawn by its plugin control (registered above as
-      // an external native layer) or is a placeholder; MBTiles is read here.
-      if (layer.type === "mbtiles") syncMbtilesLayer(map, layer, beforeId);
+      // an external native layer) or is a placeholder; MBTiles is read here,
+      // except on a map in another CRS, which its Web Mercator tiles miss.
+      if (layer.type === "mbtiles" && !getActiveMapCrs(map)) syncMbtilesLayer(map, layer, beforeId);
       return;
     case "video":
       syncVideoLayer(map, layer, beforeId);
@@ -1136,7 +1142,8 @@ function syncWaybackExternalRasterLayer(
   const nativeLayerId = nativeLayerIds[0] ?? layer.id;
   const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
   const tileUrl = getWaybackTileUrl(layer);
-  if (!tileUrl) return;
+  // Wayback serves Web Mercator XYZ tiles only.
+  if (!tileUrl || getActiveMapCrs(map)) return;
 
   if (!map.getSource(sourceId)) {
     map.addSource(sourceId, {
@@ -1195,7 +1202,7 @@ function syncExternalRasterTileLayer(
 ): void {
   const nativeLayerId = nativeLayerIds[0] ?? layer.id;
   const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
-  const tiles = getSourceTiles(layer);
+  const tiles = tileTemplatesForMapCrs(map, getSourceTiles(layer));
   if (tiles.length === 0) return;
 
   // The source is built once and never rebuilt while it exists, matching the
@@ -1250,7 +1257,7 @@ function syncBasemapControlRasterLayer(
 ): void {
   const nativeLayerId = nativeLayerIds[0] ?? layer.id;
   const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
-  const tiles = getBasemapControlTiles(layer);
+  const tiles = tileTemplatesForMapCrs(map, getBasemapControlTiles(layer));
   if (tiles.length === 0) return;
 
   if (!map.getSource(sourceId)) {
@@ -1320,7 +1327,7 @@ function syncWebServiceTileRasterLayer(
 ): void {
   const nativeLayerId = nativeLayerIds[0] ?? layer.id;
   const sourceId = getExternalSourceIds(layer)[0] ?? `${nativeLayerId}-source`;
-  const tiles = getWebServiceTiles(layer);
+  const tiles = getWebServiceTiles(map, layer);
   if (tiles.length === 0) return;
 
   if (!map.getSource(sourceId)) {
@@ -1361,13 +1368,13 @@ function syncWebServiceTileRasterLayer(
 // federal endpoints without permissive CORS headers, so the dev server
 // routes them through the WMS proxy. The external-native path bypasses
 // getRenderableRasterTiles, hence the dedicated proxying here.
-function getWebServiceTiles(layer: GeoLibreLayer): string[] {
-  const tiles = getBasemapControlTiles(layer);
+function getWebServiceTiles(map: maplibregl.Map, layer: GeoLibreLayer): string[] {
+  const tiles = tileTemplatesForMapCrs(map, getBasemapControlTiles(layer));
   if (layer.type !== "wms" || !isViteDevServer()) return tiles;
   return tiles.map((tile) =>
     // Skip already proxied templates so repeated sync passes cannot nest
     // proxy URLs.
-    tile.includes("{bbox-epsg-3857}") && /^https?:\/\//i.test(tile) ? proxyWmsTileUrl(tile) : tile,
+    /\{bbox(-epsg-3857)?\}/.test(tile) && /^https?:\/\//i.test(tile) ? proxyWmsTileUrl(tile) : tile,
   );
 }
 
@@ -2839,7 +2846,7 @@ function resolveTextFontFromStyle(map: maplibregl.Map): string[] {
 function syncRasterTileLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: string): void {
   const src = sourceId(layer.id);
   const lid = `layer-${layer.id}-raster`;
-  const tiles = getRenderableRasterTiles(layer);
+  const tiles = getRenderableRasterTiles(map, layer);
   const tileSize = numberSource(layer.source.tileSize) ?? 256;
   if (tiles.length === 0) return;
   if (!map.getSource(src)) {
@@ -2988,8 +2995,13 @@ function syncImageLayer(map: maplibregl.Map, layer: GeoLibreLayer, beforeId?: st
   );
 }
 
-function getRenderableRasterTiles(layer: GeoLibreLayer): string[] {
-  return proxyWmsTiles(layer.type, (layer.source.tiles as string[]) ?? []);
+// Adapted to the map's CRS before the dev proxy wraps them: the adaptation
+// reads the template's query string, which the proxy URL-encodes.
+function getRenderableRasterTiles(map: maplibregl.Map, layer: GeoLibreLayer): string[] {
+  return proxyWmsTiles(
+    layer.type,
+    tileTemplatesForMapCrs(map, (layer.source.tiles as string[]) ?? []),
+  );
 }
 
 /** The parts of MapLibre's `VectorTileSource` this module reads and updates. */

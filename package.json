@@ -87,7 +87,7 @@
     },
     "fast-uri": "^3.1.7",
     "filelist": "^2.0.2",
-    "maplibre-gl": "^6.3.0",
+    "maplibre-gl": "^6.15.0",
     "miniflare": {
       "undici": "^7.29.0"
     },

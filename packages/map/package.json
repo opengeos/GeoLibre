@@ -40,7 +40,8 @@
     "./arcgis-sdk": "./src/arcgis-sdk.ts",
     "./zarr-source": "./src/zarr-source.ts",
     "./kerchunk-reference-store": "./src/kerchunk-reference-store.ts",
-    "./arcgis-control-adapters": "./src/arcgis-control-adapters.ts"
+    "./arcgis-control-adapters": "./src/arcgis-control-adapters.ts",
+    "./epsg-proj4": "./src/epsg-proj4.ts"
   },
   "publishConfig": {
     "main": "./dist/headless.mjs",
@@ -101,12 +102,16 @@
       "./arcgis-control-adapters": {
         "types": "./dist/arcgis-control-adapters.d.mts",
         "import": "./dist/arcgis-control-adapters.mjs"
+      },
+      "./epsg-proj4": {
+        "types": "./dist/epsg-proj4.d.mts",
+        "import": "./dist/epsg-proj4.mjs"
       }
     },
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/mapbox-style-export.ts src/style-layer-ids.ts src/tile-request-headers.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts --format esm --dts"
+    "build": "tsdown src/headless.ts src/derived-geometry.ts src/pmtiles-layer.ts src/style-import.ts src/mapbox-style-export.ts src/style-layer-ids.ts src/tile-request-headers.ts src/layer-labels.ts src/map-capture.ts src/arcgis-sdk.ts src/arcgis-control-adapters.ts src/zarr-source.ts src/kerchunk-reference-store.ts src/epsg-proj4.ts --format esm --dts"
   },
   "dependencies": {
     "@cesium/core": "^0.1.0",
@@ -132,7 +137,7 @@
     "geotiff-geokeys-to-proj4": "^2026.10.9",
     "laz-perf": "^0.0.7",
     "mapbox-gl": "^3.32.0",
-    "maplibre-gl": "^6.14.0",
+    "maplibre-gl": "^6.15.0",
     "maplibre-gl-layer-control": "^0.18.2",
     "pmtiles": "^4.5.0",
     "proj4": "^2.22.0",

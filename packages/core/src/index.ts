@@ -7,6 +7,7 @@ export * from "./ellipsoids";
 export * from "./regional-basemaps";
 export * from "./cesium-imagery";
 export * from "./arcgis-projection";
+export * from "./map-crs";
 export * from "./geojson-z";
 export * from "./color-ramp";
 export * from "./paths";

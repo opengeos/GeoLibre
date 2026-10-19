@@ -7,7 +7,7 @@
 // path in wms-geographic.ts; any other geographic EPSG code (e.g. EPSG:4269) is
 // warped here, in degrees.
 
-import { resolveEpsgProjection } from "./epsg-proj4";
+import { resolveEpsgProjection } from "@geolibre/map/epsg-proj4";
 import {
   describeWmsFailure,
   GEOGRAPHIC_WMS_CRS,

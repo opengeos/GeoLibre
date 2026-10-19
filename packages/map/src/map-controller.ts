@@ -4,6 +4,7 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
   horizontalBbox,
+  normalizeMapCrs,
   scaleAltitudeToActiveBody,
   styleValue,
   useAppStore,
@@ -96,6 +97,13 @@ import { TerrainControl, DEFAULT_TERRAIN_EXAGGERATION } from "./terrain-control"
 import { getDynamicPaintProperty, setDynamicPaintProperty } from "./dynamic-style-property";
 import { registerCogDemSource, type CogDemSourceRegistration } from "./cog-dem-source";
 import { installMapTransformCompat } from "./map-transform-compat";
+import {
+  createMapCrsStyle,
+  registerMapCrs,
+  resolveMapCrs,
+  setActiveMapCrs,
+  type ResolvedMapCrs,
+} from "./map-crs";
 import { transformTileRequest } from "./tile-request-headers";
 import {
   MAPLIBRE_CAPABILITIES,
@@ -297,6 +305,18 @@ export class MapController implements MapEngine {
   private basemapOpacity = 1;
   private blankBackgroundColor: string | null = null;
   private mapPreferences: MapPreferences = DEFAULT_PROJECT_PREFERENCES.map;
+  /** The custom CRS the map is drawn in (map-crs.ts); null on the default map. */
+  private activeCrs: ResolvedMapCrs | null = null;
+  /** The normalized `mapCrs` the map is moving to, set before it resolves. */
+  private desiredCrsId: string | undefined;
+  /** Bumped per CRS change so a slow resolution cannot overwrite a newer one. */
+  private crsGeneration = 0;
+  /**
+   * Whether the store set a view since the last CRS change began. Opening a
+   * project applies its preferences and then its saved view in one commit, so
+   * the CRS switch that follows must keep that view rather than frame its area.
+   */
+  private storeViewSinceCrsChange = false;
   private basemapOriginalPaintValues = new Map<string, Map<string, unknown>>();
   private syncedLayers: GeoLibreLayer[] = [];
   private layerIds: string[] = [];
@@ -345,9 +365,15 @@ export class MapController implements MapEngine {
     // Start blank and apply it below, as soon as the listeners are wired — the
     // path a project saved with a Mapbox basemap and a split-view pane both take.
     const deferMapboxStyle = isMapboxStyleUrl(this.basemapStyleUrl);
+    // A map in a custom CRS also starts blank: its style is built once the CRS
+    // resolves (syncMapCrs below), so the Web Mercator basemap never loads.
+    const deferCrsStyle = normalizeMapCrs(mapPreferences.mapCrs) !== undefined;
     this.map = new maplibregl.Map({
       container,
-      style: deferMapboxStyle ? createBlankMapStyle() : resolveMapStyle(this.basemapStyleUrl),
+      style:
+        deferMapboxStyle || deferCrsStyle
+          ? createBlankMapStyle()
+          : resolveMapStyle(this.basemapStyleUrl),
       center: view?.center ?? [-100, 40],
       zoom: view?.zoom ?? 2,
       bearing: view?.bearing ?? 0,
@@ -436,6 +462,8 @@ export class MapController implements MapEngine {
     // `styledata` are wired, so the real style is treated exactly like a later
     // basemap switch rather than racing the listeners above.
     if (deferMapboxStyle) this.applyStyleToMap(this.basemapStyleUrl);
+    // Keep the project's saved view: frame the CRS only on a later switch.
+    this.syncMapCrs(false);
     return this.map;
   }
 
@@ -846,6 +874,11 @@ export class MapController implements MapEngine {
     this.map?.remove();
     this.map = null;
     this.styleReady = false;
+    // A later init() starts from the default map and resolves its CRS afresh;
+    // the bump drops a resolution still in flight for this map.
+    this.activeCrs = null;
+    this.desiredCrsId = undefined;
+    this.crsGeneration += 1;
     this.clearLayerDisplayNames();
   }
 
@@ -897,6 +930,14 @@ export class MapController implements MapEngine {
     // request is pure waste. Also covers a request that never settles, which
     // would otherwise keep its closure (and this controller) alive.
     this.abortPendingMapboxStyle();
+
+    // A map in a custom CRS draws its own basemap (or none): Web Mercator
+    // basemaps would land in the wrong place. The URL is kept for the way back.
+    if (this.activeCrs) {
+      this.beginStyleSwap();
+      map.setStyle(createMapCrsStyle(this.activeCrs), { diff: false });
+      return;
+    }
 
     if (!isMapboxStyleUrl(url)) {
       this.beginStyleSwap();
@@ -1002,6 +1043,7 @@ export class MapController implements MapEngine {
    */
   applyStoreView(view: MapViewState): void {
     if (this.storeEchoes.delete(view)) return;
+    this.storeViewSinceCrsChange = true;
     this.applyView(view);
   }
 
@@ -1035,10 +1077,18 @@ export class MapController implements MapEngine {
     // Reflect a changed projection preference (e.g. loading a project saved in
     // mercator) onto the live map.
     this.enforceProjection();
-    this.map.setMaxBounds(mapBoundsForPreferences(preferences));
-    this.map.setTransformConstrain(
-      createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
-    );
+    if (normalizeMapCrs(preferences.mapCrs) !== undefined) {
+      // The bounds and the latitude clamp below are Web Mercator math. A map in
+      // another CRS keeps MapLibre's own constraint, which knows the CRS's edge.
+      this.map.setMaxBounds(null);
+      this.map.setTransformConstrain(null);
+    } else {
+      this.map.setMaxBounds(mapBoundsForPreferences(preferences));
+      this.map.setTransformConstrain(
+        createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
+      );
+    }
+    this.syncMapCrs(true);
     this.clampViewToPreferences();
     // The ellipsoid or the scale unit can change here (Settings' dropdowns)
     // without the basemap changing, so push the unit and redraw the body-aware
@@ -1919,16 +1969,123 @@ export class MapController implements MapEngine {
 
   /** Current map projection, normalized to the two values we persist. */
   readProjection(): MapProjection {
+    // A custom CRS is flat, like Mercator; it is persisted as `mapCrs`.
+    if (this.activeCrs) return "mercator";
     return this.map?.getProjection()?.type === "mercator" ? "mercator" : "globe";
   }
 
   /**
-   * Apply the projection from the active map preferences. Defaults to globe so
-   * projects saved before projection was persisted keep their previous look.
-   * Retries on the next idle if the style is not ready to accept it yet.
+   * Move the map into the CRS `preferences.map.mapCrs` names, or back to the
+   * default map, when that preference changed.
+   *
+   * Resolving an EPSG code loads the EPSG tables and proj4, so it is
+   * asynchronous; a generation counter drops a result the user has already
+   * superseded. Entering or leaving a CRS re-applies the style (see
+   * applyStyleToMap), which rebuilds every layer in the new grid.
+   *
+   * Args:
+   *   frame: Fit the view to the CRS's area when the current center lies
+   *     outside it. Off for the CRS a map is created in, which keeps the
+   *     project's saved view.
    */
+  private syncMapCrs(frame: boolean): void {
+    const map = this.map;
+    if (!map) return;
+    const desired = normalizeMapCrs(this.mapPreferences.mapCrs);
+    if (desired === this.desiredCrsId) return;
+    this.desiredCrsId = desired;
+    this.storeViewSinceCrsChange = false;
+    const generation = ++this.crsGeneration;
+    if (desired === undefined) {
+      if (this.activeCrs) this.applyMapCrs(null, frame);
+      return;
+    }
+    const current = () => this.map === map && this.crsGeneration === generation;
+    void resolveMapCrs(desired)
+      .then(async (crs) => {
+        if (!current()) return;
+        if (!crs) {
+          console.warn(`Map CRS "${desired}" could not be resolved; drawing the default map.`);
+          if (this.activeCrs) this.applyMapCrs(null, false);
+          else if (!this.styleReady) this.applyStyleToMap(this.basemapStyleUrl);
+          return;
+        }
+        await registerMapCrs(crs);
+        if (current()) this.applyMapCrs(crs, frame);
+      })
+      .catch((error: unknown) => {
+        if (!current()) return;
+        console.warn(`Failed to switch the map to CRS "${desired}".`, error);
+        if (!this.activeCrs && !this.styleReady) this.applyStyleToMap(this.basemapStyleUrl);
+      });
+  }
+
+  /**
+   * Draw the map in `crs` (or the default map for `null`) from a fresh style.
+   *
+   * Zoom levels of different grids are different scales, so a switch frames
+   * the area the new map shows: a preset's own box, or an EPSG CRS's whole tile
+   * grid, on the way in, and on the way out the box of the CRS being left (Web
+   * Mercator stops at ±85°). Skipped when the store set a view meanwhile (a
+   * project opening with its saved view).
+   */
+  private applyMapCrs(crs: ResolvedMapCrs | null, frame: boolean): void {
+    const map = this.map;
+    if (!map) return;
+    const previous = this.activeCrs;
+    this.activeCrs = crs;
+    setActiveMapCrs(map, crs);
+    // The globe toggle has nothing to switch to in a custom CRS.
+    if (crs) this.removeGlobeControl();
+    else this.addGlobeControl();
+    this.applyStyleToMap(this.basemapStyleUrl);
+    this.scaleControl?.refresh();
+    if (!frame) return;
+    let frameView: (() => void) | undefined;
+    const box = crs ? crs.bounds : previous?.bounds;
+    if (box) {
+      const maxLat = crs ? 90 : 85;
+      frameView = () =>
+        map.fitBounds(
+          [
+            [box[0], Math.max(box[1], -maxLat)],
+            [box[2], Math.min(box[3], maxLat)],
+          ],
+          { padding: FIT_BOUNDS_PADDING, animate: false },
+        );
+    } else if (crs?.gridCenter) {
+      const center = crs.gridCenter;
+      // Zoom 0 draws the grid's square 512 px wide; fit it to the canvas.
+      frameView = () => {
+        const canvas = map.getCanvas();
+        const side = Math.max(1, Math.min(canvas.clientWidth, canvas.clientHeight));
+        map.jumpTo({ center, zoom: Math.max(0, Math.log2(side / 512)), bearing: 0, pitch: 0 });
+      };
+    }
+    if (!frameView) return;
+    const run = frameView;
+    // After the style has set the projection: before it, the view would be
+    // fitted in the outgoing one.
+    map.once("style.load", () => {
+      if (this.map !== map || this.activeCrs !== crs || this.storeViewSinceCrsChange) return;
+      run();
+    });
+  }
+
   private enforceProjection(): void {
     if (!this.map) return;
+    if (this.desiredCrsId !== undefined) {
+      // The CRS style carries its projection; this only reverts a stray
+      // setProjection (a plugin, a script). Nothing to do while it resolves.
+      const code = this.activeCrs?.code;
+      if (!code || this.map.getProjection()?.type === code) return;
+      try {
+        this.map.setProjection({ type: code });
+      } catch {
+        this.map.once("idle", () => this.enforceProjection());
+      }
+      return;
+    }
     const desired = this.mapPreferences.projection ?? DEFAULT_PROJECTION.type;
     try {
       if (this.map.getProjection()?.type === desired) return;
@@ -2018,7 +2175,8 @@ export class MapController implements MapEngine {
   }
 
   private addTerrainSource(): boolean {
-    if (!this.map || !this.isStyleReady()) {
+    // Terrain tiles are Web Mercator, and a custom CRS map is flat.
+    if (!this.map || !this.isStyleReady() || this.activeCrs) {
       return false;
     }
     if (this.map.getSource(TERRAIN_SOURCE_ID)) return true;
@@ -2396,7 +2554,7 @@ export class MapController implements MapEngine {
   }
 
   private addGlobeControl(): boolean {
-    if (!this.map || this.globeControl || !this.controlVisibility.globe) {
+    if (!this.map || this.globeControl || !this.controlVisibility.globe || this.activeCrs) {
       return false;
     }
     this.globeControl = new maplibregl.GlobeControl();
@@ -2748,10 +2906,12 @@ function constrainMapView(
     : requestedMinZoom;
   const maxZoom = Math.max(minZoom, clampNumber(preferences.maxZoom, 0, 24));
 
+  // Web Mercator stops short of the poles; a custom CRS (a polar one) does not.
+  const maxLat = normalizeMapCrs(preferences.mapCrs) === undefined ? 85 : 90;
   return {
     center: [
       preferences.renderWorldCopies ? view.center[0] : clampNumber(view.center[0], -180, 180),
-      clampNumber(view.center[1], -85, 85),
+      clampNumber(view.center[1], -maxLat, maxLat),
     ],
     zoom: clampNumber(view.zoom, minZoom, maxZoom),
     bearing: view.bearing,

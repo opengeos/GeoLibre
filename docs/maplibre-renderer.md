@@ -39,6 +39,36 @@ COG DEM. This globe projection remains a MapLibre style map; choose the
 [Cesium renderer](cesium-renderer.md) for a native 3D globe and Cesium-native
 scene formats.
 
+## Other coordinate reference systems
+
+MapLibre GL JS 6.15 can draw a flat map in any planar CRS (issue #1128).
+**Settings → Map → Map coordinate reference system** picks one, saved as
+`preferences.map.mapCrs`; absent means the default Web Mercator map or globe.
+The presets are polar stereographic and simple-cylindrical grids of Earth, the
+Moon and Mars, and simple-cylindrical grids of Mercury, Venus, Io, Europa,
+Ganymede, Callisto, Titan, Pluto and Charon. Each comes with a basemap the
+server renders in that grid: NASA GIBS for Earth and USGS Astrogeology for the
+other bodies, read directly rather than reprojected to Web Mercator. Picking a
+preset also sets the celestial body, so measurements use its radius.
+**Custom EPSG code…** takes any code the bundled EPSG tables resolve; it has no
+basemap, and its tile grid is fitted to the part of the world it maps.
+
+MapLibre places tiles on the CRS's grid without reprojecting them, so in
+another CRS:
+
+- **GeoJSON layers** are drawn, projected by proj4 in MapLibre's workers.
+- **WMS layers and ArcGIS `export` layers** ask for each tile's box in the CRS
+  (WMS 1.1.1, `SRS=<code>`). The server must support that CRS.
+- **Image and video overlays** are drawn from their corner coordinates.
+- **XYZ, vector tile, MBTiles and Wayback layers** are not drawn, nor is the
+  shared basemap, since their tiles are Web Mercator. Plugins that add their own
+  tiles or deck.gl overlays are not adapted either.
+- The globe button is hidden, terrain is off, and the restricted-bounds setting
+  is set aside (MapLibre keeps the view inside the CRS).
+
+Switching CRS rebuilds the style and frames the new map's area; opening a
+project keeps its saved view.
+
 ## Basemaps and plugins
 
 The shared Basemaps panel provides keyless styles as well as optional provider

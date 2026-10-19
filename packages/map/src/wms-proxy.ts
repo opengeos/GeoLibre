@@ -22,10 +22,11 @@ export function isViteDevServer(): boolean {
 
 /** Rewrite one absolute WMS tile template to go through the dev proxy. */
 export function proxyWmsTileUrl(tileUrl: string): string {
-  const encodedUrl = encodeURIComponent(tileUrl).replaceAll(
-    "%7Bbbox-epsg-3857%7D",
-    "{bbox-epsg-3857}",
-  );
+  // Keep MapLibre's bounding-box tokens literal so it can still fill them in:
+  // `{bbox}` is the one a map in a custom CRS asks for (map-crs.ts).
+  const encodedUrl = encodeURIComponent(tileUrl)
+    .replaceAll("%7Bbbox-epsg-3857%7D", "{bbox-epsg-3857}")
+    .replaceAll("%7Bbbox%7D", "{bbox}");
   return `${WMS_PROXY_PATH}?url=${encodedUrl}`;
 }
 

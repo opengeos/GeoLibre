@@ -25,7 +25,7 @@
 import { formatEasting, formatNorthing, lngLatToUtm } from "@geolibre/plugins/maplibre-graticule";
 import { lngLatToMgrs, mgrsToUsng } from "@geolibre/plugins/mgrs-reference";
 import { decimalToDdmAxis, decimalToDmsAxis } from "./dms";
-import { resolveEpsgProjection } from "./epsg-proj4";
+import { resolveEpsgProjection } from "@geolibre/map/epsg-proj4";
 
 /** Coordinate notations the status bar can display. */
 export const COORDINATE_FORMATS = ["dd", "dms", "ddm", "utm", "mgrs", "usng", "epsg"] as const;
