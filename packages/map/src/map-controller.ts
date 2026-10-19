@@ -312,6 +312,12 @@ export class MapController implements MapEngine {
   /** Bumped per CRS change so a slow resolution cannot overwrite a newer one. */
   private crsGeneration = 0;
   /**
+   * Whether the map still shows the blank style it was created with while its
+   * CRS resolved (init), so a CRS that is cleared or fails before then must
+   * apply the basemap itself.
+   */
+  private crsStyleDeferred = false;
+  /**
    * Whether the store set a view since the last CRS change began. Opening a
    * project applies its preferences and then its saved view in one commit, so
    * the CRS switch that follows must keep that view rather than frame its area.
@@ -368,6 +374,7 @@ export class MapController implements MapEngine {
     // A map in a custom CRS also starts blank: its style is built once the CRS
     // resolves (syncMapCrs below), so the Web Mercator basemap never loads.
     const deferCrsStyle = normalizeMapCrs(mapPreferences.mapCrs) !== undefined;
+    this.crsStyleDeferred = deferCrsStyle;
     this.map = new maplibregl.Map({
       container,
       style:
@@ -878,6 +885,7 @@ export class MapController implements MapEngine {
     // the bump drops a resolution still in flight for this map.
     this.activeCrs = null;
     this.desiredCrsId = undefined;
+    this.crsStyleDeferred = false;
     this.crsGeneration += 1;
     this.clearLayerDisplayNames();
   }
@@ -1077,17 +1085,7 @@ export class MapController implements MapEngine {
     // Reflect a changed projection preference (e.g. loading a project saved in
     // mercator) onto the live map.
     this.enforceProjection();
-    if (normalizeMapCrs(preferences.mapCrs) !== undefined) {
-      // The bounds and the latitude clamp below are Web Mercator math. A map in
-      // another CRS keeps MapLibre's own constraint, which knows the CRS's edge.
-      this.map.setMaxBounds(null);
-      this.map.setTransformConstrain(null);
-    } else {
-      this.map.setMaxBounds(mapBoundsForPreferences(preferences));
-      this.map.setTransformConstrain(
-        createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
-      );
-    }
+    this.applyViewConstraints(minZoom, maxZoom);
     this.syncMapCrs(true);
     this.clampViewToPreferences();
     // The ellipsoid or the scale unit can change here (Settings' dropdowns)
@@ -1098,6 +1096,30 @@ export class MapController implements MapEngine {
     // or both).
     this.scaleControl?.setUnit(preferences.scaleUnit);
     this.scaleControl?.refresh();
+  }
+
+  /**
+   * Install the bounds and transform constraint for the map as it is drawn now.
+   * They are Web Mercator math, so a map in another CRS keeps MapLibre's own
+   * constraint, which knows the CRS's edge. Keyed on the CRS actually applied,
+   * not the preference, so a CRS still resolving (or one that failed) leaves
+   * the default map constrained as usual.
+   *
+   * Args:
+   *   minZoom: The effective minimum zoom.
+   *   maxZoom: The effective maximum zoom.
+   */
+  private applyViewConstraints(minZoom: number, maxZoom: number): void {
+    if (!this.map) return;
+    if (this.activeCrs) {
+      this.map.setMaxBounds(null);
+      this.map.setTransformConstrain(null);
+      return;
+    }
+    this.map.setMaxBounds(mapBoundsForPreferences(this.mapPreferences));
+    this.map.setTransformConstrain(
+      createMapTransformConstraint(this.mapPreferences, this.map, minZoom, maxZoom),
+    );
   }
 
   /**
@@ -1997,17 +2019,23 @@ export class MapController implements MapEngine {
     this.storeViewSinceCrsChange = false;
     const generation = ++this.crsGeneration;
     if (desired === undefined) {
-      if (this.activeCrs) this.applyMapCrs(null, frame);
+      this.showDefaultMap(frame);
       return;
     }
     const current = () => this.map === map && this.crsGeneration === generation;
+    // A CRS that cannot be drawn leaves the default map, with its projection,
+    // rather than the blank style or the previous CRS.
+    const fallBack = () => {
+      this.desiredCrsId = undefined;
+      this.showDefaultMap(false);
+      this.enforceProjection();
+    };
     void resolveMapCrs(desired)
       .then(async (crs) => {
         if (!current()) return;
         if (!crs) {
           console.warn(`Map CRS "${desired}" could not be resolved; drawing the default map.`);
-          if (this.activeCrs) this.applyMapCrs(null, false);
-          else if (!this.styleReady) this.applyStyleToMap(this.basemapStyleUrl);
+          fallBack();
           return;
         }
         await registerMapCrs(crs);
@@ -2016,8 +2044,18 @@ export class MapController implements MapEngine {
       .catch((error: unknown) => {
         if (!current()) return;
         console.warn(`Failed to switch the map to CRS "${desired}".`, error);
-        if (!this.activeCrs && !this.styleReady) this.applyStyleToMap(this.basemapStyleUrl);
+        fallBack();
       });
+  }
+
+  /** Leave a custom CRS, or replace the blank style a CRS map was created with. */
+  private showDefaultMap(frame: boolean): void {
+    if (this.activeCrs) {
+      this.applyMapCrs(null, frame);
+    } else if (this.crsStyleDeferred) {
+      this.crsStyleDeferred = false;
+      this.applyStyleToMap(this.basemapStyleUrl);
+    }
   }
 
   /**
@@ -2034,7 +2072,14 @@ export class MapController implements MapEngine {
     if (!map) return;
     const previous = this.activeCrs;
     this.activeCrs = crs;
+    this.crsStyleDeferred = false;
     setActiveMapCrs(map, crs);
+    const requestedMinZoom = clampNumber(this.mapPreferences.minZoom, 0, 24);
+    const minZoom = effectiveMinZoomForPreferences(this.mapPreferences, map, requestedMinZoom);
+    this.applyViewConstraints(
+      minZoom,
+      Math.max(minZoom, clampNumber(this.mapPreferences.maxZoom, 0, 24)),
+    );
     // The globe toggle has nothing to switch to in a custom CRS.
     if (crs) this.removeGlobeControl();
     else this.addGlobeControl();

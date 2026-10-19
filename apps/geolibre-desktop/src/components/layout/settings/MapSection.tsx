@@ -137,7 +137,8 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
       if (!crs) return;
       setDraftPreferences((current) => ({
         ...current,
-        map: { ...current.map, mapCrs: crs.id },
+        // The EPSG tables describe Earth, so measurements follow it there.
+        map: { ...current.map, mapCrs: crs.id, ellipsoidId: "earth" },
       }));
       setError(null);
     });
