@@ -71,6 +71,9 @@ export function resolveMapCrs(value: unknown): Promise<ResolvedMapCrs | null> {
   let pending = resolvedCrs.get(id);
   if (!pending) {
     pending = resolveNormalizedMapCrs(id);
+    // A rejection (a lazy chunk that failed to load) may be transient; only a
+    // resolved miss is cached for good.
+    pending.catch(() => resolvedCrs.delete(id));
     resolvedCrs.set(id, pending);
   }
   return pending;
@@ -124,6 +127,9 @@ function projectionHandlerScript(): Promise<string> {
     ({ default: proj4Source }) =>
       `${proj4Source}\n;self.setProjectionHandler(function (definition) { return proj4(definition); });\n`,
   );
+  workerScript.catch(() => {
+    workerScript = null;
+  });
   return workerScript;
 }
 

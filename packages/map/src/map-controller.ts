@@ -317,6 +317,8 @@ export class MapController implements MapEngine {
    * apply the basemap itself.
    */
   private crsStyleDeferred = false;
+  /** A `mapCrs` that could not be drawn, not retried until the preference changes. */
+  private failedCrsId: string | undefined;
   /**
    * Whether the store set a view since the last CRS change began. Opening a
    * project applies its preferences and then its saved view in one commit, so
@@ -885,6 +887,7 @@ export class MapController implements MapEngine {
     // the bump drops a resolution still in flight for this map.
     this.activeCrs = null;
     this.desiredCrsId = undefined;
+    this.failedCrsId = undefined;
     this.crsStyleDeferred = false;
     this.crsGeneration += 1;
     this.clearLayerDisplayNames();
@@ -1025,7 +1028,7 @@ export class MapController implements MapEngine {
     if (!this.map) return;
     // jumpTo stop()s drag handlers, so skip while the user is still panning.
     if (this.map.dragPan.isActive() || this.map.dragRotate.isActive()) return;
-    this.map.jumpTo(constrainMapView(view, this.mapPreferences, this.map));
+    this.map.jumpTo(constrainMapView(view, this.mapPreferences, this.map, this.activeCrs !== null));
   }
 
   /**
@@ -1061,7 +1064,7 @@ export class MapController implements MapEngine {
    */
   easeToView(view: MapViewState): void {
     if (!this.map) return;
-    this.map.easeTo(constrainMapView(view, this.mapPreferences, this.map));
+    this.map.easeTo(constrainMapView(view, this.mapPreferences, this.map, this.activeCrs !== null));
   }
 
   applyMapPreferences(preferences: MapPreferences): void {
@@ -2014,7 +2017,10 @@ export class MapController implements MapEngine {
     const map = this.map;
     if (!map) return;
     const desired = normalizeMapCrs(this.mapPreferences.mapCrs);
-    if (desired === this.desiredCrsId) return;
+    if (desired === this.desiredCrsId || (desired !== undefined && desired === this.failedCrsId)) {
+      return;
+    }
+    this.failedCrsId = undefined;
     this.desiredCrsId = desired;
     this.storeViewSinceCrsChange = false;
     const generation = ++this.crsGeneration;
@@ -2026,6 +2032,7 @@ export class MapController implements MapEngine {
     // A CRS that cannot be drawn leaves the default map, with its projection,
     // rather than the blank style or the previous CRS.
     const fallBack = () => {
+      this.failedCrsId = desired;
       this.desiredCrsId = undefined;
       this.showDefaultMap(false);
       this.enforceProjection();
@@ -2941,6 +2948,7 @@ function constrainMapView(
   view: MapViewState,
   preferences: MapPreferences,
   map: maplibregl.Map | null,
+  customCrs = false,
 ): maplibregl.JumpToOptions {
   const requestedMinZoom = clampNumber(preferences.minZoom, 0, 24);
   // Use the same effective floor the transform constraint enforces so the
@@ -2952,7 +2960,8 @@ function constrainMapView(
   const maxZoom = Math.max(minZoom, clampNumber(preferences.maxZoom, 0, 24));
 
   // Web Mercator stops short of the poles; a custom CRS (a polar one) does not.
-  const maxLat = normalizeMapCrs(preferences.mapCrs) === undefined ? 85 : 90;
+  // Keyed on the CRS applied, like applyViewConstraints.
+  const maxLat = customCrs ? 90 : 85;
   return {
     center: [
       preferences.renderWorldCopies ? view.center[0] : clampNumber(view.center[0], -180, 180),

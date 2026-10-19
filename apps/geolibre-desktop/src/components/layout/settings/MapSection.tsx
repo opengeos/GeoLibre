@@ -135,11 +135,17 @@ export function MapSection({ mapControllerRef, liveProjection }: MapSectionProps
       if (cancelled) return;
       setCrsEpsgKnown(crs !== null);
       if (!crs) return;
-      setDraftPreferences((current) => ({
-        ...current,
-        // The EPSG tables describe Earth, so measurements follow it there.
-        map: { ...current.map, mapCrs: crs.id, ellipsoidId: "earth" },
-      }));
+      // Opening the dialog on a saved code resolves it too: leave that draft
+      // (and the body it pairs with) alone, and write only a new code.
+      setDraftPreferences((current) =>
+        normalizeMapCrs(current.map.mapCrs) === crs.id
+          ? current
+          : {
+              ...current,
+              // The EPSG tables describe Earth, so measurements follow it there.
+              map: { ...current.map, mapCrs: crs.id, ellipsoidId: "earth" },
+            },
+      );
       setError(null);
     });
     return () => {
