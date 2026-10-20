@@ -180,6 +180,9 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
     // the final color immediately.
     const [draft, setDraft] = React.useState<string | null>(null);
     const pendingRef = React.useRef<string | null>(null);
+    // The last drag color handed to `onChange`, to tell the caller echoing it
+    // back from an independent change of `value`.
+    const lastSentRef = React.useRef<string | null>(null);
     const frameRef = React.useRef<number | null>(null);
     // Read through a ref so a frame scheduled before a re-render reports to
     // the current handler.
@@ -200,7 +203,9 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       cancelFrame();
       const next = pendingRef.current;
       pendingRef.current = null;
-      if (next !== null) onChangeRef.current(next);
+      if (next === null) return;
+      lastSentRef.current = next;
+      onChangeRef.current(next);
     }, [cancelFrame]);
 
     /** Ends a drag: delivers its last color and returns the swatch to `value`. */
@@ -216,13 +221,19 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       setDraft(null);
     }, [cancelFrame]);
 
-    // Once `value` changes with nothing left to send (the caller applied the
-    // last drag color, or an undo replaced it) the swatch follows `value`
-    // again. React's change tracking usually swallows the native `change` that
-    // ends a drag, so this, not `endDrag`, is what normally clears the draft.
+    // A `value` the drag did not send (an undo, a pasted style) supersedes the
+    // drag: drop its unsent color so the next frame cannot overwrite it. An
+    // echo of a sent color keeps the drag going, and once nothing is left to
+    // send the swatch follows `value` again. React's change tracking usually
+    // swallows the native `change` that ends a drag, so this, not `endDrag`,
+    // is what normally clears the draft.
     React.useEffect(() => {
+      if (value !== lastSentRef.current) {
+        cancelFrame();
+        pendingRef.current = null;
+      }
       if (pendingRef.current === null) setDraft(null);
-    }, [value]);
+    }, [cancelFrame, value]);
 
     // Deliver a drag color still waiting for its frame when the field unmounts
     // (the panel closed mid-drag), so the user's last pick is not lost.

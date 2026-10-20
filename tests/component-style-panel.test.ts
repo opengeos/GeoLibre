@@ -118,6 +118,21 @@ describe("StylePanel", () => {
     unsubscribe();
   });
 
+  it("drops an unsent drag color when the fill color changes elsewhere", async () => {
+    selectPolygonLayer();
+    renderStylePanel();
+
+    fireEvent.input(input("Fill color"), { target: { value: "#110000" } });
+    // A pasted style or an undo lands before the drag's frame.
+    act(() => {
+      useAppStore.getState().setLayerStyle("blocks", { fillColor: "#00ff00" });
+    });
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+
+    assert.equal(style("blocks").fillColor, "#00ff00");
+    assert.equal(input("Fill color").value, "#00ff00");
+  });
+
   it("writes a typed fill opacity to the store", () => {
     selectPolygonLayer();
     renderStylePanel();
