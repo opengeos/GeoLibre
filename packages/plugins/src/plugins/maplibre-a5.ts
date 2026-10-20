@@ -186,7 +186,7 @@ export function a5GridForBounds(
   };
   const enumerable = getNumCells(resolution) <= limit * 4;
   if (enumerable && (span >= 359.999 || areaM2 > EARTH_AREA_M2 * POLYGON_FILL_MAX_EARTH_FRACTION)) {
-    for (const cell of uncompact(getRes0Cells(), resolution)) {
+    for (const cell of getRes0Cells().flatMap((root) => cellToChildren(root, resolution))) {
       const [lng, lat] = cellToLonLat(cell);
       if (lat < south || lat > north) continue;
       // Modulo keeps antimeridian-crossing and unwrapped west values working.
@@ -196,8 +196,9 @@ export function a5GridForBounds(
   } else {
     // A5 works on the sphere, so the ring may cross the antimeridian or carry
     // unwrapped longitudes as-is — no splitting needed. polygonToCells compacts
-    // its result; uncompact back to one resolution, as mixed-resolution
-    // pentagons do not nest and would render gaps/overlaps.
+    // its result (ending in a marker recording the resolution); uncompact
+    // back to that one resolution, as mixed-resolution pentagons do not nest
+    // and would render gaps/overlaps.
     // Known tradeoff (accepted): on the sphere the top/bottom edges of this
     // plain rectangle are great-circle arcs, not parallels, so high-latitude
     // views (e.g. Svalbard, Antarctica) omit some cells near the poleward
@@ -210,7 +211,7 @@ export function a5GridForBounds(
       [west, north],
       [west, south],
     ] as A5LonLat[];
-    for (const cell of uncompact(polygonToCells(ring, resolution), resolution)) {
+    for (const cell of uncompact(polygonToCells(ring, resolution))) {
       push(cell);
     }
   }
@@ -223,7 +224,7 @@ export function a5GridForBounds(
 function neighborCells(cell: string): string[] {
   const id = hexToU64(cell);
   // gridDisk compacts its result, so expand back to the cell's resolution.
-  return [...uncompact(gridDisk(id, 1), getResolution(id))]
+  return [...uncompact(gridDisk(id, 1))]
     .map(u64ToHex)
     .filter((neighbor) => neighbor !== cell);
 }
