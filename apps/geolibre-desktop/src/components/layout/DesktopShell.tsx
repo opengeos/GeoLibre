@@ -99,8 +99,6 @@ import { createLayerFailureNotifier } from "../../lib/layer-failure-notifier";
 import { mapDiagnosticLevel } from "../../lib/map-error-notification";
 import { useCredentialStorageStatus } from "../../lib/credential-store";
 import { SectionErrorBoundary, SilentErrorBoundary } from "../common/error-boundaries";
-import { AttributeTable } from "../panels/AttributeTable";
-import { RasterAttributeTable } from "../panels/RasterAttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { useLayerRefresh } from "../panels/layer-panel/useLayerRefresh";
 import { ViewerLayerPanel } from "../panels/ViewerLayerPanel";
@@ -121,16 +119,15 @@ import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
 import { RegistryPluginTrustDialog } from "./RegistryPluginTrustDialog";
 import { ProjectHistoryDialog } from "./ProjectHistoryDialog";
 import { ProjectRecoveryDialog } from "./ProjectRecoveryDialog";
+import { BottomPanels } from "./BottomPanels";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import type { ProjectUrlLoadState } from "../../hooks/useProjectUrlLoader";
 import {
-  AssistantPanel,
   BatchToolsDialog,
   ConversionDialog,
-  DashboardPanel,
   GeocodeDialog,
   ModelBuilderPanel,
   NetworkToolsDialog,
@@ -138,13 +135,11 @@ import {
   ObjectDetectionDialog,
   ProcessingDialog,
   ProcessingHistoryDialog,
-  PythonConsolePanel,
   RasterToolsDialog,
   SegmentationDialog,
   SegmentEverythingPanel,
   SelectByExpressionDialog,
   SelectByLocationDialog,
-  SqlWorkspacePanel,
   StatisticsToolsDialog,
   StyleManagerPanel,
   VectorToolsDialog,
@@ -262,10 +257,6 @@ export function DesktopShell({
   const [basemapExtractOpen, setBasemapExtractOpen] = useState(false);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const layers = useAppStore((s) => s.layers);
-  const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
-  const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
-  const sqlWorkspaceOpen = useAppStore((s) => s.ui.sqlWorkspaceOpen);
-  const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   // Register the Browser as a movable/dockable right panel; its body is portaled
   // into a dedicated content host (below) that the dock slots adopt.
   useRegisterBrowserPanel();
@@ -313,8 +304,6 @@ export function DesktopShell({
     replaceStylePanelIds,
     setPluginPanelWidth,
   } = useRightPanelHost(layoutOptions);
-  const assistantOpen = useAppStore((s) => s.ui.assistantOpen);
-  const dashboardOpen = useAppStore((s) => s.ui.dashboardOpen);
   const geometryEditLayerId = useSyncExternalStore(
     subscribeGeometryEdit,
     getGeometryEditTargetLayerId,
@@ -554,64 +543,12 @@ export function DesktopShell({
       t,
     });
 
-  // The bottom panels span the window by default; the `bottomPanelsUnderMap`
-  // layout setting renders them inside the map column instead, so the side
-  // docks keep their full height while one is open (#3157).
   const bottomPanels = (
-    <>
-      {layoutOptions.attributePanelVisible ? (
-        <SectionErrorBoundary
-          label="Attribute table"
-          displayName={t("shell.section.attributeTable")}
-        >
-          <AttributeTable mapControllerRef={mapControllerRef} refresh={layerRefresh} />
-        </SectionErrorBoundary>
-      ) : null}
-      {layoutOptions.attributePanelVisible ? (
-        <SectionErrorBoundary
-          label="Raster attribute table"
-          displayName={t("shell.section.rasterAttributeTable")}
-        >
-          <RasterAttributeTable />
-        </SectionErrorBoundary>
-      ) : null}
-      {dashboardOpen ? (
-        <SectionErrorBoundary label="Dashboard" displayName={t("shell.section.dashboard")}>
-          <Suspense fallback={null}>
-            <DashboardPanel />
-          </Suspense>
-        </SectionErrorBoundary>
-      ) : null}
-      {pythonConsoleOpen ? (
-        <SectionErrorBoundary
-          label="Python console"
-          displayName={t("shell.section.pythonConsole")}
-          onClose={() => setPythonConsoleOpen(false)}
-        >
-          <Suspense fallback={null}>
-            <PythonConsolePanel mapControllerRef={mapControllerRef} />
-          </Suspense>
-        </SectionErrorBoundary>
-      ) : null}
-      {sqlWorkspaceOpen ? (
-        <SectionErrorBoundary
-          label="SQL workspace"
-          displayName={t("shell.section.sqlWorkspace")}
-          onClose={() => setSqlWorkspaceOpen(false)}
-        >
-          <Suspense fallback={null}>
-            <SqlWorkspacePanel />
-          </Suspense>
-        </SectionErrorBoundary>
-      ) : null}
-      {assistantOpen ? (
-        <SectionErrorBoundary label="Assistant" displayName={t("shell.section.assistant")}>
-          <Suspense fallback={null}>
-            <AssistantPanel mapControllerRef={mapControllerRef} />
-          </Suspense>
-        </SectionErrorBoundary>
-      ) : null}
-    </>
+    <BottomPanels
+      attributePanelVisible={layoutOptions.attributePanelVisible}
+      mapControllerRef={mapControllerRef}
+      layerRefresh={layerRefresh}
+    />
   );
 
   return (
