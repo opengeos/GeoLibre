@@ -43,6 +43,8 @@ export interface PluginActivationResult {
 
 /** How long to wait for a plugin that registers its tools after a deferred mount. */
 const TOOL_REGISTRATION_TIMEOUT_MS = 3000;
+/** How long registrations must stay quiet before a plugin counts as done registering. */
+const TOOL_REGISTRATION_SETTLE_MS = 250;
 const TOOL_REGISTRATION_POLL_MS = 50;
 
 /**
@@ -57,23 +59,35 @@ export function activatablePluginsKey(plugins: readonly ActivatablePlugin[]): st
 }
 
 /**
- * Wait until a just-activated plugin has registered at least one tool. A plugin
- * may register from a deferred mount, after `activate` has already resolved.
+ * Wait until a just-activated plugin has finished registering its tools. A
+ * plugin may register from a deferred mount, after `activate` has already
+ * resolved, and in more than one step, so the wait ends once its tool list has
+ * stopped changing for a short settle period (or at the timeout).
  *
  * @param pluginId The plugin that was turned on.
  * @param listEntries Reads the registered plugin tools.
  * @param timeoutMs The longest time to wait.
+ * @param settleMs How long the plugin's tool list must stay unchanged.
  * @returns The plugin's registered tools, possibly empty after the timeout.
  */
 export async function waitForPluginTools(
   pluginId: string,
   listEntries: () => AssistantToolEntry[],
   timeoutMs: number = TOOL_REGISTRATION_TIMEOUT_MS,
+  settleMs: number = TOOL_REGISTRATION_SETTLE_MS,
 ): Promise<AssistantToolEntry[]> {
   const deadline = Date.now() + timeoutMs;
+  let previous = "";
+  let stableSince = 0;
   for (;;) {
     const owned = listEntries().filter((entry) => entry.ownerPluginId === pluginId);
-    if (owned.length > 0 || Date.now() >= deadline) return owned;
+    const now = Date.now();
+    const names = owned.map((entry) => entry.tool.name).join("\n");
+    if (names !== previous) {
+      previous = names;
+      stableSince = now;
+    }
+    if (now >= deadline || (owned.length > 0 && now - stableSince >= settleMs)) return owned;
     await new Promise((resolve) => setTimeout(resolve, TOOL_REGISTRATION_POLL_MS));
   }
 }
@@ -123,8 +137,14 @@ export function createActivatePluginTool(
   plugins: readonly ActivatablePlugin[],
   activate: (pluginId: string) => Promise<PluginActivationResult>,
 ): Tool {
+  // Plugin text is collapsed to one line, so a description cannot forge more
+  // list entries or start lines of its own in the tool description.
+  const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
   const listing = plugins
-    .map((plugin) => `- ${plugin.id} (${plugin.name}): ${plugin.description.trim()}`)
+    .map(
+      (plugin) =>
+        `- ${oneLine(plugin.id)} (${oneLine(plugin.name)}): ${oneLine(plugin.description)}`,
+    )
     .join("\n");
   return tool({
     name: ACTIVATE_PLUGIN_NAME,

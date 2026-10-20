@@ -1813,9 +1813,11 @@ by the UI profile), the assistant gets a host tool, `activate_plugin`, whose
 description lists each such plugin by id, name and description. Calling it turns
 the plugin on exactly as the Plugins menu does: the same activation, recorded in
 the project's plugin state, and your `activate` may open your panel as usual.
-The tools the plugin registers during activation, including from a deferred
-mount within a few seconds, are added to the running agent, so the model calls
-them in the same turn. The tool result lists them and repeats your
+The tools the plugin registers during activation are added to the running
+agent, so the model calls them in the same turn. That includes tools registered
+from a deferred mount, in one step or several: the host waits up to 3 seconds
+for the first one, then until no new tool has appeared for 250 ms. A plugin that
+registers nothing holds the turn for the full 3 seconds, so register promptly. The tool result lists them and repeats your
 `registerAssistantGuidance` text, which reaches the system prompt from the next
 message on.
 
