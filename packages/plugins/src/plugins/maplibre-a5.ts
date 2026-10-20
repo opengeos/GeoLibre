@@ -224,9 +224,7 @@ export function a5GridForBounds(
 function neighborCells(cell: string): string[] {
   const id = hexToU64(cell);
   // gridDisk compacts its result, so expand back to the cell's resolution.
-  return [...uncompact(gridDisk(id, 1))]
-    .map(u64ToHex)
-    .filter((neighbor) => neighbor !== cell);
+  return [...uncompact(gridDisk(id, 1))].map(u64ToHex).filter((neighbor) => neighbor !== cell);
 }
 
 /**
