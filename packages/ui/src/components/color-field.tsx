@@ -180,8 +180,10 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
     // the final color immediately.
     const [draft, setDraft] = React.useState<string | null>(null);
     const pendingRef = React.useRef<string | null>(null);
-    // The last drag color handed to `onChange`, to tell the caller echoing it
-    // back from an independent change of `value`.
+    // The last color the active drag handed to `onChange`, to tell the caller
+    // echoing it back from an independent change of `value`. Cleared when the
+    // drag ends or is superseded, so a later edit to the same color is not
+    // mistaken for an echo.
     const lastSentRef = React.useRef<string | null>(null);
     const frameRef = React.useRef<number | null>(null);
     // Read through a ref so a frame scheduled before a re-render reports to
@@ -218,21 +220,28 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
     const discardDrag = React.useCallback(() => {
       cancelFrame();
       pendingRef.current = null;
+      lastSentRef.current = null;
       setDraft(null);
     }, [cancelFrame]);
 
     // A `value` the drag did not send (an undo, a pasted style) supersedes the
     // drag: drop its unsent color so the next frame cannot overwrite it. An
-    // echo of a sent color keeps the drag going, and once nothing is left to
-    // send the swatch follows `value` again. React's change tracking usually
-    // swallows the native `change` that ends a drag, so this, not `endDrag`,
-    // is what normally clears the draft.
-    React.useEffect(() => {
-      if (value !== lastSentRef.current) {
+    // echo of the color it last sent keeps the drag going, and once nothing is
+    // left to send the drag is over and the swatch follows `value` again.
+    // React's change tracking usually swallows the native `change` that ends a
+    // drag, so this, not `endDrag`, is what normally clears the draft. A layout
+    // effect, so the invalidation lands before a pending frame can fire.
+    React.useLayoutEffect(() => {
+      const sent = lastSentRef.current;
+      // Case-insensitive, so a caller storing uppercase hex still reads as an echo.
+      if (sent === null || value.toLowerCase() !== sent.toLowerCase()) {
         cancelFrame();
         pendingRef.current = null;
       }
-      if (pendingRef.current === null) setDraft(null);
+      if (pendingRef.current === null) {
+        lastSentRef.current = null;
+        setDraft(null);
+      }
     }, [cancelFrame, value]);
 
     // Deliver a drag color still waiting for its frame when the field unmounts
