@@ -5091,12 +5091,15 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
  * The shell is `flex flex-col`: its direct children are the toolbar, the
  * workspace row (Layers + map + Style), the attribute table, and the status bar.
  * Hide all of them except the row, then within the row hide everything except
- * the `<main>` map landmark, which flexes to fill. */
+ * the map column, and within the column everything except the `<main>` map
+ * landmark, which flexes to fill. The column also holds the bottom panels when
+ * they sit under the map (#3157). */
 [data-map-fullscreen] > *:not([data-workspace-row]) {
   display: none !important;
 }
 
-[data-map-fullscreen] [data-workspace-row] > *:not(main) {
+[data-map-fullscreen] [data-workspace-row] > *:not([data-map-column]),
+[data-map-fullscreen] [data-map-column] > *:not(main) {
   display: none !important;
 }
 

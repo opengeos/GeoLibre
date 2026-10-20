@@ -5,6 +5,11 @@ import { useDesktopSettingsStore, type DesktopLayoutSettings } from "./useDeskto
 
 export interface LayoutOptions {
   attributePanelVisible: boolean;
+  /**
+   * Whether the bottom panels sit under the map column (the side docks keep the
+   * full height) instead of spanning the window. A persisted layout setting.
+   */
+  bottomPanelsUnderMap: boolean;
   compact: boolean;
   layerPanelVisible: boolean;
   /**
@@ -91,6 +96,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
 
   return {
     attributePanelVisible,
+    bottomPanelsUnderMap: layoutSettings.bottomPanelsUnderMap,
     compact,
     layerPanelVisible,
     panelsHidden,

@@ -61,3 +61,22 @@ describe("compact layer list setting", () => {
     assert.equal(layout.compactLayerList, false);
   });
 });
+
+// Placing the bottom panels under the map (#3157) is opt-in: existing users keep
+// the full-width bottom panels until they turn it on.
+describe("bottom panels under the map setting", () => {
+  it("defaults to full-width bottom panels", () => {
+    assert.equal(DEFAULT_DESKTOP_LAYOUT_SETTINGS.bottomPanelsUnderMap, false);
+    assert.equal(normalizeDesktopSettings({ layout: {} }).layout.bottomPanelsUnderMap, false);
+  });
+
+  it("keeps the under-map placement across a load", () => {
+    const layout = normalizeDesktopSettings({ layout: { bottomPanelsUnderMap: true } }).layout;
+    assert.equal(layout.bottomPanelsUnderMap, true);
+  });
+
+  it("rejects a non-boolean value from tampered storage", () => {
+    const layout = normalizeDesktopSettings({ layout: { bottomPanelsUnderMap: "map" } }).layout;
+    assert.equal(layout.bottomPanelsUnderMap, false);
+  });
+});

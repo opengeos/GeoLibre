@@ -554,6 +554,66 @@ export function DesktopShell({
       t,
     });
 
+  // The bottom panels span the window by default; the `bottomPanelsUnderMap`
+  // layout setting renders them inside the map column instead, so the side
+  // docks keep their full height while one is open (#3157).
+  const bottomPanels = (
+    <>
+      {layoutOptions.attributePanelVisible ? (
+        <SectionErrorBoundary
+          label="Attribute table"
+          displayName={t("shell.section.attributeTable")}
+        >
+          <AttributeTable mapControllerRef={mapControllerRef} refresh={layerRefresh} />
+        </SectionErrorBoundary>
+      ) : null}
+      {layoutOptions.attributePanelVisible ? (
+        <SectionErrorBoundary
+          label="Raster attribute table"
+          displayName={t("shell.section.rasterAttributeTable")}
+        >
+          <RasterAttributeTable />
+        </SectionErrorBoundary>
+      ) : null}
+      {dashboardOpen ? (
+        <SectionErrorBoundary label="Dashboard" displayName={t("shell.section.dashboard")}>
+          <Suspense fallback={null}>
+            <DashboardPanel />
+          </Suspense>
+        </SectionErrorBoundary>
+      ) : null}
+      {pythonConsoleOpen ? (
+        <SectionErrorBoundary
+          label="Python console"
+          displayName={t("shell.section.pythonConsole")}
+          onClose={() => setPythonConsoleOpen(false)}
+        >
+          <Suspense fallback={null}>
+            <PythonConsolePanel mapControllerRef={mapControllerRef} />
+          </Suspense>
+        </SectionErrorBoundary>
+      ) : null}
+      {sqlWorkspaceOpen ? (
+        <SectionErrorBoundary
+          label="SQL workspace"
+          displayName={t("shell.section.sqlWorkspace")}
+          onClose={() => setSqlWorkspaceOpen(false)}
+        >
+          <Suspense fallback={null}>
+            <SqlWorkspacePanel />
+          </Suspense>
+        </SectionErrorBoundary>
+      ) : null}
+      {assistantOpen ? (
+        <SectionErrorBoundary label="Assistant" displayName={t("shell.section.assistant")}>
+          <Suspense fallback={null}>
+            <AssistantPanel mapControllerRef={mapControllerRef} />
+          </Suspense>
+        </SectionErrorBoundary>
+      ) : null}
+    </>
+  );
+
   return (
     <div
       ref={shellRef}
@@ -735,258 +795,271 @@ export function DesktopShell({
             ) : null}
           </>
         )}
-        <main
-          ref={mapAreaRef}
-          // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
-          className={`relative isolate min-w-0 flex-1 overflow-hidden ${
-            layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"
+        {/* The map column always wraps <main>, so toggling where the bottom
+            panels sit never remounts the map. */}
+        <div
+          data-map-column=""
+          className={`flex min-w-0 flex-1 flex-col ${
+            layoutOptions.compact ? "min-h-0" : "md:min-h-0"
           }`}
         >
-          {/* Visually-hidden page title: gives the document the single
+          <main
+            ref={mapAreaRef}
+            // `isolate` creates a stacking context so map-panel z-indexes (up to 10000) stay below body-portaled dialogs. See #451.
+            className={`relative isolate min-w-0 flex-1 overflow-hidden ${
+              layoutOptions.compact ? "min-h-0" : "min-h-72 md:min-h-0"
+            }`}
+          >
+            {/* Visually-hidden page title: gives the document the single
               top-level heading that assistive tech (and the axe
               `page-has-heading-one` check) expect, without altering the
               chrome-free visual layout. Placed inside the main landmark so it
               is not flagged as content outside a landmark. */}
-          <h1 className="sr-only">{t("shell.workspaceTitle")}</h1>
-          <SectionErrorBoundary
-            label="Map"
-            displayName={t("shell.section.map")}
-            fallbackClassName="h-full w-full"
-          >
-            {/* Color vision preview filters the map canvases in every pane. */}
-            <CvdPreview>
-              <MapGrid>
-                {/* The primary map area is one renderer or the other (#2217).
+            <h1 className="sr-only">{t("shell.workspaceTitle")}</h1>
+            <SectionErrorBoundary
+              label="Map"
+              displayName={t("shell.section.map")}
+              fallbackClassName="h-full w-full"
+            >
+              {/* Color vision preview filters the map canvases in every pane. */}
+              <CvdPreview>
+                <MapGrid>
+                  {/* The primary map area is one renderer or the other (#2217).
                   Everything below that takes `mapControllerRef` is MapLibre-only
                   — it drives a `MapController` that the globe does not have — so
                   it mounts with the 2D map and stays unmounted on the globe,
                   where `PrimaryCesiumCanvas` explains the absence. Renderer-
                   neutral, store-driven overlays sit outside the branch and are
                   available under either engine. */}
-                {mapboxPrimary ? (
-                  <PrimaryMapboxCanvas
-                    canUseRemoteElevation={hasElevationConsent}
-                    engineRef={mapControllerRef}
-                    identifyAllLabels={identifyAllLabels}
-                    identifyRasterLayerAt={identifyRasterLayerAt}
-                    identifyEditActions={identifyEditActions}
-                    onEngineReady={handleMapControllerReady}
-                    onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                  />
-                ) : arcgisPrimary ? (
-                  <PrimaryArcgisCanvas
-                    canUseRemoteElevation={hasElevationConsent}
-                    engineRef={mapControllerRef}
-                    identifyAllLabels={identifyAllLabels}
-                    identifyRasterLayerAt={identifyRasterLayerAt}
-                    onEngineReady={handleMapControllerReady}
-                    onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                  />
-                ) : cesiumPrimary ? (
-                  <PrimaryCesiumCanvas
-                    engineRef={mapControllerRef}
-                    onEngineReady={handleMapControllerReady}
-                    onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                  />
-                ) : (
-                  <>
-                    <MapCanvas
+                  {mapboxPrimary ? (
+                    <PrimaryMapboxCanvas
                       canUseRemoteElevation={hasElevationConsent}
-                      controllerRef={mapControllerRef}
+                      engineRef={mapControllerRef}
                       identifyAllLabels={identifyAllLabels}
                       identifyRasterLayerAt={identifyRasterLayerAt}
                       identifyEditActions={identifyEditActions}
+                      onEngineReady={handleMapControllerReady}
                       onMapDiagnosticEvent={handleMapDiagnosticEvent}
-                      onControllerReady={handleMapControllerReady}
                     />
-                    <MountWhenOpened isOpen={(ui) => ui.objectDetectionOpen}>
-                      <Suspense fallback={null}>
-                        <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
-                      </Suspense>
-                    </MountWhenOpened>
-                    <MountWhenOpened isOpen={(ui) => ui.segmentEverythingOpen}>
-                      <Suspense fallback={null}>
-                        <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
-                      </Suspense>
-                    </MountWhenOpened>
-                  </>
-                )}
-                {/* Renderer-neutral: these use the store or `MapEngine`, so they
+                  ) : arcgisPrimary ? (
+                    <PrimaryArcgisCanvas
+                      canUseRemoteElevation={hasElevationConsent}
+                      engineRef={mapControllerRef}
+                      identifyAllLabels={identifyAllLabels}
+                      identifyRasterLayerAt={identifyRasterLayerAt}
+                      onEngineReady={handleMapControllerReady}
+                      onMapDiagnosticEvent={handleMapDiagnosticEvent}
+                    />
+                  ) : cesiumPrimary ? (
+                    <PrimaryCesiumCanvas
+                      engineRef={mapControllerRef}
+                      onEngineReady={handleMapControllerReady}
+                      onMapDiagnosticEvent={handleMapDiagnosticEvent}
+                    />
+                  ) : (
+                    <>
+                      <MapCanvas
+                        canUseRemoteElevation={hasElevationConsent}
+                        controllerRef={mapControllerRef}
+                        identifyAllLabels={identifyAllLabels}
+                        identifyRasterLayerAt={identifyRasterLayerAt}
+                        identifyEditActions={identifyEditActions}
+                        onMapDiagnosticEvent={handleMapDiagnosticEvent}
+                        onControllerReady={handleMapControllerReady}
+                      />
+                      <MountWhenOpened isOpen={(ui) => ui.objectDetectionOpen}>
+                        <Suspense fallback={null}>
+                          <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
+                        </Suspense>
+                      </MountWhenOpened>
+                      <MountWhenOpened isOpen={(ui) => ui.segmentEverythingOpen}>
+                        <Suspense fallback={null}>
+                          <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
+                        </Suspense>
+                      </MountWhenOpened>
+                    </>
+                  )}
+                  {/* Renderer-neutral: these use the store or `MapEngine`, so they
                   stay available on every renderer. */}
-                <MapModeBanner mapControllerRef={mapControllerRef} />
-                <PixelTimeSeriesControl
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                <NetcdfSampleMarkers
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                {/* Its own boundary: the cube window builds a `WebGLRenderer`,
+                  <MapModeBanner mapControllerRef={mapControllerRef} />
+                  <PixelTimeSeriesControl
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  <NetcdfSampleMarkers
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  {/* Its own boundary: the cube window builds a `WebGLRenderer`,
                   whose constructor throws outright when the browser or driver
                   gives it no context. Sharing the map's boundary would turn a
                   failure to draw one panel into the loss of the whole map. */}
-                <SilentErrorBoundary label="NetCDF 3D cube">
-                  <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
-                </SilentErrorBoundary>
-                <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
-                <RemoteCursorsOverlay
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                <CommentMapOverlay
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                  onSelectComment={(commentId) => {
-                    setSelectedCommentId(commentId);
-                    openRightPanel(COMMENTS_PANEL_ID);
-                  }}
-                  showResolved={showResolvedComments}
-                />
-                {/* Isolate the collaboration badge in its own boundary: it renders
-                  over the map, so a fault here must never take down the map. */}
-                <SilentErrorBoundary label="Collaboration status">
-                  <CollaborationStatusBadge
-                    api={collaboration}
+                  <SilentErrorBoundary label="NetCDF 3D cube">
+                    <NetcdfCubeWindow mapControllerRef={mapControllerRef} />
+                  </SilentErrorBoundary>
+                  <NetcdfCubeSetupDialog mapControllerRef={mapControllerRef} />
+                  <RemoteCursorsOverlay
                     mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
                   />
-                </SilentErrorBoundary>
-                <MapLegendPanel
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                <MapContextMenu
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                  onExplorePlace={handleExplorePlace}
-                />
-                <LineOfSightPanel
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                <NavigationPanel
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                <KnowledgeCardPanel
-                  place={knowledgePlace}
-                  lang={wikipediaLang(i18n.language)}
-                  onClose={() => setKnowledgePlace(null)}
-                  onFlyTo={handleKnowledgeFlyTo}
-                />
-                <StoryMapComposeBar
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
-                <RasterSubsetPanel
-                  layer={rasterSubsetLayer}
-                  onClose={() => setRasterSubsetLayer(null)}
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                <BasemapExtractPanel
-                  open={basemapExtractOpen}
-                  onClose={() => setBasemapExtractOpen(false)}
-                  mapControllerRef={mapControllerRef}
-                  mapReadyGeneration={mapReadyGeneration}
-                />
-                <BoundsRestrictionIndicator />
-                <QuickAnalysisBanner />
-                <NetcdfProfileWindow />
-                <AlongTrackProfileWindow mapControllerRef={mapControllerRef} />
-                <MountWhenOpened isOpen={(ui) => ui.styleManagerOpen}>
-                  <Suspense fallback={null}>
-                    <StyleManagerPanel />
-                  </Suspense>
-                </MountWhenOpened>
-              </MapGrid>
-            </CvdPreview>
-          </SectionErrorBoundary>
-          <SectionErrorBoundary
-            label="Plugin floating panels"
-            displayName={t("shell.section.pluginFloatingPanels")}
-          >
-            <FloatingPanels />
-          </SectionErrorBoundary>
-          {/* Mounted inside the map area (like FloatingPanels) so the canvas
+                  <CommentMapOverlay
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                    onSelectComment={(commentId) => {
+                      setSelectedCommentId(commentId);
+                      openRightPanel(COMMENTS_PANEL_ID);
+                    }}
+                    showResolved={showResolvedComments}
+                  />
+                  {/* Isolate the collaboration badge in its own boundary: it renders
+                  over the map, so a fault here must never take down the map. */}
+                  <SilentErrorBoundary label="Collaboration status">
+                    <CollaborationStatusBadge
+                      api={collaboration}
+                      mapControllerRef={mapControllerRef}
+                    />
+                  </SilentErrorBoundary>
+                  <MapLegendPanel
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  <MapContextMenu
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                    onExplorePlace={handleExplorePlace}
+                  />
+                  <LineOfSightPanel
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  <NavigationPanel
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  <KnowledgeCardPanel
+                    place={knowledgePlace}
+                    lang={wikipediaLang(i18n.language)}
+                    onClose={() => setKnowledgePlace(null)}
+                    onFlyTo={handleKnowledgeFlyTo}
+                  />
+                  <StoryMapComposeBar
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
+                  <RasterSubsetPanel
+                    layer={rasterSubsetLayer}
+                    onClose={() => setRasterSubsetLayer(null)}
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  <BasemapExtractPanel
+                    open={basemapExtractOpen}
+                    onClose={() => setBasemapExtractOpen(false)}
+                    mapControllerRef={mapControllerRef}
+                    mapReadyGeneration={mapReadyGeneration}
+                  />
+                  <BoundsRestrictionIndicator />
+                  <QuickAnalysisBanner />
+                  <NetcdfProfileWindow />
+                  <AlongTrackProfileWindow mapControllerRef={mapControllerRef} />
+                  <MountWhenOpened isOpen={(ui) => ui.styleManagerOpen}>
+                    <Suspense fallback={null}>
+                      <StyleManagerPanel />
+                    </Suspense>
+                  </MountWhenOpened>
+                </MapGrid>
+              </CvdPreview>
+            </SectionErrorBoundary>
+            <SectionErrorBoundary
+              label="Plugin floating panels"
+              displayName={t("shell.section.pluginFloatingPanels")}
+            >
+              <FloatingPanels />
+            </SectionErrorBoundary>
+            {/* Mounted inside the map area (like FloatingPanels) so the canvas
               floats over the map and drag-clamps to it, not to the whole
               window — the user keeps their layers in view while building. */}
-          <SectionErrorBoundary label="Model Builder" displayName={t("shell.section.modelBuilder")}>
-            <MountWhenOpened isOpen={(ui) => ui.modelBuilderOpen}>
-              <Suspense fallback={null}>
-                <ModelBuilderPanel
-                  mapControllerRef={mapControllerRef}
-                  onAddRaster={async (bytes, name, fileName) => {
-                    // Same Uint8Array -> BlobPart cast as ProcessingDialog below.
-                    const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
-                      type: "image/tiff",
-                    });
-                    await addRasterToMap(createAppAPI(mapControllerRef), file, {
-                      name,
-                    });
-                  }}
-                />
-              </Suspense>
-            </MountWhenOpened>
-          </SectionErrorBoundary>
-          {/* Mounted here (inside the map area, like FloatingPanels) so the
+            <SectionErrorBoundary
+              label="Model Builder"
+              displayName={t("shell.section.modelBuilder")}
+            >
+              <MountWhenOpened isOpen={(ui) => ui.modelBuilderOpen}>
+                <Suspense fallback={null}>
+                  <ModelBuilderPanel
+                    mapControllerRef={mapControllerRef}
+                    onAddRaster={async (bytes, name, fileName) => {
+                      // Same Uint8Array -> BlobPart cast as ProcessingDialog below.
+                      const file = new File([bytes as BlobPart], fileName ?? `${name}.tif`, {
+                        type: "image/tiff",
+                      });
+                      await addRasterToMap(createAppAPI(mapControllerRef), file, {
+                        name,
+                      });
+                    }}
+                  />
+                </Suspense>
+              </MountWhenOpened>
+            </SectionErrorBoundary>
+            {/* Mounted here (inside the map area, like FloatingPanels) so the
               selection panels anchor to the map canvas's top-left corner and
               drag-clamp to the map, not the whole window (#1314). */}
-          <SectionErrorBoundary
-            label="Selection panels"
-            displayName={t("shell.section.selectionPanels")}
-          >
-            <MountWhenOpened isOpen={(ui) => ui.selectByExpressionOpen}>
-              <Suspense fallback={null}>
-                <SelectByExpressionDialog canEditLayer={collaboration.canEditLayer} />
-              </Suspense>
-            </MountWhenOpened>
-            <MountWhenOpened isOpen={(ui) => ui.selectByLocationOpen}>
-              <Suspense fallback={null}>
-                <SelectByLocationDialog />
-              </Suspense>
-            </MountWhenOpened>
-          </SectionErrorBoundary>
-          <SectionErrorBoundary
-            label="Sun simulation panel"
-            displayName={t("shell.section.sunSimulationPanel")}
-          >
-            <SunPanel />
-          </SectionErrorBoundary>
-          <SectionErrorBoundary
-            label="Route animation panel"
-            displayName={t("shell.section.routeAnimationPanel")}
-          >
-            <RouteAnimationPanel mapControllerRef={mapControllerRef} />
-          </SectionErrorBoundary>
-          <SectionErrorBoundary
-            label="Flight simulator panel"
-            displayName={t("shell.section.flightSimulatorPanel")}
-          >
-            <FlightSimulatorPanel />
-          </SectionErrorBoundary>
-          <KnowledgeCardConsentDialog
-            open={knowledgeNoticeOpen}
-            onOpenChange={(open) => {
-              setKnowledgeNoticeOpen(open);
-              // Clear the paired pending place when the notice is dismissed
-              // (Cancel/Escape/overlay), mirroring dismissRoutingNotice so no
-              // stale target lingers. Confirm sets the place before this runs.
-              if (!open) setPendingKnowledgePlace(null);
-            }}
-            onConfirm={confirmKnowledgeConsent}
-          />
-          {/* Rendered here (not in TopToolbar) so the dialog the status badge
-              reopens stays mounted even in toolbar-hidden layouts (#754). */}
-          {collaboration.enabled && (
-            <CollaborateDialog
-              open={collaborateDialogOpen}
-              onOpenChange={setCollaborateDialogOpen}
-              api={collaboration}
+            <SectionErrorBoundary
+              label="Selection panels"
+              displayName={t("shell.section.selectionPanels")}
+            >
+              <MountWhenOpened isOpen={(ui) => ui.selectByExpressionOpen}>
+                <Suspense fallback={null}>
+                  <SelectByExpressionDialog canEditLayer={collaboration.canEditLayer} />
+                </Suspense>
+              </MountWhenOpened>
+              <MountWhenOpened isOpen={(ui) => ui.selectByLocationOpen}>
+                <Suspense fallback={null}>
+                  <SelectByLocationDialog />
+                </Suspense>
+              </MountWhenOpened>
+            </SectionErrorBoundary>
+            <SectionErrorBoundary
+              label="Sun simulation panel"
+              displayName={t("shell.section.sunSimulationPanel")}
+            >
+              <SunPanel />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary
+              label="Route animation panel"
+              displayName={t("shell.section.routeAnimationPanel")}
+            >
+              <RouteAnimationPanel mapControllerRef={mapControllerRef} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary
+              label="Flight simulator panel"
+              displayName={t("shell.section.flightSimulatorPanel")}
+            >
+              <FlightSimulatorPanel />
+            </SectionErrorBoundary>
+            <KnowledgeCardConsentDialog
+              open={knowledgeNoticeOpen}
+              onOpenChange={(open) => {
+                setKnowledgeNoticeOpen(open);
+                // Clear the paired pending place when the notice is dismissed
+                // (Cancel/Escape/overlay), mirroring dismissRoutingNotice so no
+                // stale target lingers. Confirm sets the place before this runs.
+                if (!open) setPendingKnowledgePlace(null);
+              }}
+              onConfirm={confirmKnowledgeConsent}
             />
-          )}
-        </main>
+            {/* Rendered here (not in TopToolbar) so the dialog the status badge
+              reopens stays mounted even in toolbar-hidden layouts (#754). */}
+            {collaboration.enabled && (
+              <CollaborateDialog
+                open={collaborateDialogOpen}
+                onOpenChange={setCollaborateDialogOpen}
+                api={collaboration}
+              />
+            )}
+          </main>
+          {layoutOptions.bottomPanelsUnderMap ? bottomPanels : null}
+        </div>
         {/* Same as the left dock: a map-only / hidden-panels embed skips the
             entire right side-dock (Style, plugin panels, and their shared rail). */}
         {layoutOptions.panelsHidden || layoutOptions.viewer ? null : (
@@ -1094,58 +1167,7 @@ export function DesktopShell({
           </SectionErrorBoundary>
         ) : null}
       </div>
-      {layoutOptions.attributePanelVisible ? (
-        <SectionErrorBoundary
-          label="Attribute table"
-          displayName={t("shell.section.attributeTable")}
-        >
-          <AttributeTable mapControllerRef={mapControllerRef} refresh={layerRefresh} />
-        </SectionErrorBoundary>
-      ) : null}
-      {layoutOptions.attributePanelVisible ? (
-        <SectionErrorBoundary
-          label="Raster attribute table"
-          displayName={t("shell.section.rasterAttributeTable")}
-        >
-          <RasterAttributeTable />
-        </SectionErrorBoundary>
-      ) : null}
-      {dashboardOpen ? (
-        <SectionErrorBoundary label="Dashboard" displayName={t("shell.section.dashboard")}>
-          <Suspense fallback={null}>
-            <DashboardPanel />
-          </Suspense>
-        </SectionErrorBoundary>
-      ) : null}
-      {pythonConsoleOpen ? (
-        <SectionErrorBoundary
-          label="Python console"
-          displayName={t("shell.section.pythonConsole")}
-          onClose={() => setPythonConsoleOpen(false)}
-        >
-          <Suspense fallback={null}>
-            <PythonConsolePanel mapControllerRef={mapControllerRef} />
-          </Suspense>
-        </SectionErrorBoundary>
-      ) : null}
-      {sqlWorkspaceOpen ? (
-        <SectionErrorBoundary
-          label="SQL workspace"
-          displayName={t("shell.section.sqlWorkspace")}
-          onClose={() => setSqlWorkspaceOpen(false)}
-        >
-          <Suspense fallback={null}>
-            <SqlWorkspacePanel />
-          </Suspense>
-        </SectionErrorBoundary>
-      ) : null}
-      {assistantOpen ? (
-        <SectionErrorBoundary label="Assistant" displayName={t("shell.section.assistant")}>
-          <Suspense fallback={null}>
-            <AssistantPanel mapControllerRef={mapControllerRef} />
-          </Suspense>
-        </SectionErrorBoundary>
-      ) : null}
+      {layoutOptions.bottomPanelsUnderMap ? null : bottomPanels}
       {layoutOptions.statusBarVisible ? (
         <SectionErrorBoundary label="Status bar" displayName={t("shell.section.statusBar")}>
           <StatusBar

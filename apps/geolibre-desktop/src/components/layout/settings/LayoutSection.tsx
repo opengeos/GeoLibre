@@ -4,6 +4,7 @@ import {
   FolderTree,
   ListCollapse,
   MessageSquare,
+  PanelBottom,
   PanelLeft,
   PanelRight,
   RotateCcw,
@@ -159,6 +160,20 @@ export function LayoutSection() {
           />
           <ListCollapse className="h-4 w-4 text-muted-foreground" />
           <span>{t("settings.layout.compactLayerList")}</span>
+        </label>
+        <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+          <input
+            className="h-4 w-4"
+            type="checkbox"
+            checked={draftDesktopSettings.layout.bottomPanelsUnderMap}
+            onChange={(event) =>
+              updateDraftLayoutSettings({
+                bottomPanelsUnderMap: event.target.checked,
+              })
+            }
+          />
+          <PanelBottom className="h-4 w-4 text-muted-foreground" />
+          <span>{t("settings.layout.bottomPanelsUnderMap")}</span>
         </label>
       </div>
       {showsAdvancedNotices(desktopSettings.uiProfile) ? (

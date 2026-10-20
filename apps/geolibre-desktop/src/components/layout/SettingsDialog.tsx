@@ -726,6 +726,17 @@ export function SettingsDialog({
               >
                 {t("settings.layout.showCommentsPanel")}
               </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={desktopSettings.layout.bottomPanelsUnderMap}
+                onCheckedChange={(checked: boolean) =>
+                  updateSavedLayoutSettings({
+                    bottomPanelsUnderMap: checked === true,
+                  })
+                }
+                onSelect={(event: Event) => event.preventDefault()}
+              >
+                {t("settings.layout.bottomPanelsUnderMap")}
+              </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
