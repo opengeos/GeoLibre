@@ -1642,7 +1642,8 @@ If instead you want a plugin compiled into the main JS bundle (no `plugin.json`,
   "entry": "dist/index.js",
   "description": "Optional short description",
   "style": "dist/style.css",
-  "engines": ["maplibre", "cesium"]
+  "engines": ["maplibre", "cesium"],
+  "assistant": { "description": "Search the example catalogue and add its layers." }
 }
 ```
 
@@ -1792,6 +1793,35 @@ plugins, whose registrations no cleanup path would reach.
 The assistant refreshes its tools before the next prompt while retaining its
 conversation history. Plugin callbacks execute plugin-authored code, like a
 panel button; they should use the app API to update layers and other app state.
+
+### Letting the assistant turn your plugin on
+
+Tools exist only while the plugin is on, so on their own the assistant cannot
+tell that an installed plugin which is off could serve a request. Declare
+`assistant` to fix that: set it in `plugin.json` (it is copied onto the exported
+plugin when the plugin does not set its own) or on the plugin object.
+
+```json
+"assistant": { "description": "Search the example catalogue and add its layers." }
+```
+
+`description` is required, at most 300 characters, and should say in one
+sentence what the plugin's tools do and which data they cover: it is all the
+model sees while the plugin is off. While at least one installed plugin with
+this declaration is off (and supported by the current renderer, and not hidden
+by the UI profile), the assistant gets a host tool, `activate_plugin`, whose
+description lists each such plugin by id, name and description. Calling it turns
+the plugin on exactly as the Plugins menu does: the same activation, recorded in
+the project's plugin state, and your `activate` may open your panel as usual.
+The tools the plugin registers during activation, including from a deferred
+mount within a few seconds, are added to the running agent, so the model calls
+them in the same turn. The tool result lists them and repeats your
+`registerAssistantGuidance` text, which reaches the system prompt from the next
+message on.
+
+The declaration does not register anything by itself: keep registering your
+tools from `activate`. A plugin that declares `assistant` but registers no tools
+is turned on and reports an empty tool list.
 
 ### Progressive tool disclosure
 

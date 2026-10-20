@@ -442,6 +442,7 @@ operations, so its actions stay within GeoLibre's validated surface.
 | **Earth observation** | Searches the Microsoft [Planetary Computer](https://planetarycomputer.microsoft.com) STAC catalog (Sentinel-2, Landsat, NAIP, DEMs, …) and adds an item over the current view as a raster layer — tiles are signed server-side, so no credentials are needed. |
 | **Map control** | Moves the camera (fit a layer or a bounding box), switches the basemap, toggles layer visibility/opacity, and removes layers. |
 | **Web search** | Looks up current information online (best with `TAVILY_API_KEY`). |
+| **Plugin tools** | Calls the tools an installed plugin registers while it is on. It can also turn on an installed plugin that is off when the plugin declares assistant tools: ask for the plugin by name ("open the RNDT plugin and search for…"), or describe the task and the assistant picks the plugin. The plugin turns on as it would from the Plugins menu, and its tools are usable in the same reply. |
 | **Code fallback** | For tasks with no dedicated tool, runs a small **JavaScript** snippet against the live map (e.g. globe projection) or a **Python** snippet in the [Pyodide runtime](python-console.md). |
 
 ## Sample prompts

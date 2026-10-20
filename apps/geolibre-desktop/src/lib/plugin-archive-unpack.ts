@@ -4,7 +4,10 @@
 // file" flow (in-browser unzip). The heavier external-plugin loader re-exports
 // what it needs from here.
 
-import type { GeoLibreExternalPluginManifest } from "@geolibre/plugins";
+import type {
+  GeoLibreExternalPluginManifest,
+  GeoLibrePluginAssistantInfo,
+} from "@geolibre/plugins";
 import { unzip } from "fflate";
 
 export interface ExternalPluginBundle {
@@ -47,6 +50,25 @@ export function isPluginEngineList(
   );
 }
 
+/** Longest assistant description an external plugin may declare. */
+export const MAX_PLUGIN_ASSISTANT_DESCRIPTION_LENGTH = 300;
+
+/**
+ * Whether a value is a valid plugin `assistant` declaration.
+ *
+ * @param value The declared value, from `plugin.json` or the exported plugin.
+ * @returns True when it has a non-empty description within the length limit.
+ */
+export function isPluginAssistantInfo(value: unknown): value is GeoLibrePluginAssistantInfo {
+  if (!value || typeof value !== "object") return false;
+  const { description } = value as Partial<GeoLibrePluginAssistantInfo>;
+  return (
+    typeof description === "string" &&
+    description.trim().length > 0 &&
+    description.length <= MAX_PLUGIN_ASSISTANT_DESCRIPTION_LENGTH
+  );
+}
+
 /**
  * Type guard validating that a candidate object conforms to the GeoLibre external plugin manifest schema.
  *
@@ -66,7 +88,8 @@ export function isExternalPluginManifest(value: unknown): value is GeoLibreExter
     (manifest.style === undefined ||
       (typeof manifest.style === "string" && manifest.style.endsWith(".css"))) &&
     (manifest.activeByDefault === undefined || typeof manifest.activeByDefault === "boolean") &&
-    (manifest.engines === undefined || isPluginEngineList(manifest.engines))
+    (manifest.engines === undefined || isPluginEngineList(manifest.engines)) &&
+    (manifest.assistant === undefined || isPluginAssistantInfo(manifest.assistant))
   );
 }
 

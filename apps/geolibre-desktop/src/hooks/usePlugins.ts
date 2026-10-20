@@ -177,6 +177,8 @@ import { mergeStringLists } from "../lib/string-lists";
 import { saveBinaryFileWithFallback } from "../lib/tauri-io";
 import { createAppAPI as buildAppAPI, isTauriRuntime, type AppApiHost } from "../lib/app-api";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
+import { isPluginVisible } from "../lib/ui-profile";
+import type { ActivatablePlugin } from "../lib/assistant/plugin-activation";
 
 /** Records a plugin failure in the diagnostics panel without crashing the app. */
 function reportPluginError(pluginId: string, action: string, error: unknown): void {
@@ -1292,6 +1294,53 @@ export async function activateDeepLinkedPlugin(
   if (JSON.stringify(nextState) !== JSON.stringify(useAppStore.getState().projectPlugins)) {
     useAppStore.getState().setProjectPlugins(nextState, false);
   }
+  return true;
+}
+
+/**
+ * The installed plugins the AI Assistant may turn on: off, declaring assistant
+ * tools, supported by the current renderer, and not hidden by the UI profile
+ * (the same plugins the Plugins menu offers).
+ *
+ * @returns Each such plugin with its assistant description.
+ */
+export function listAssistantActivatablePlugins(): ActivatablePlugin[] {
+  const renderer = useAppStore.getState().primaryRenderer;
+  const { uiProfile } = useDesktopSettingsStore.getState().desktopSettings;
+  return manager
+    .list()
+    .flatMap((plugin) =>
+      plugin.assistant &&
+      !manager.isActive(plugin.id) &&
+      isPluginEngineSupported(plugin, renderer) &&
+      isPluginVisible(uiProfile, plugin.id)
+        ? [{ id: plugin.id, name: plugin.name, description: plugin.assistant.description.trim() }]
+        : [],
+    );
+}
+
+/**
+ * Turns a plugin on for the AI Assistant, as the Plugins menu does: a throw is
+ * contained in diagnostics, and the project records the plugin as on.
+ *
+ * @param pluginId - The id of a plugin from {@link listAssistantActivatablePlugins}.
+ * @param mapControllerRef - The primary map engine.
+ * @returns Whether the plugin is on afterwards.
+ */
+export async function activatePluginForAssistant(
+  pluginId: string,
+  mapControllerRef: RefObject<MapEngine | null>,
+): Promise<boolean> {
+  if (manager.isActive(pluginId)) return true;
+  const before = JSON.stringify(projectPluginStateSnapshot());
+  try {
+    const activated = await manager.activate(pluginId, createAppAPI(mapControllerRef));
+    if (!activated || !manager.isActive(pluginId)) return false;
+  } catch (error) {
+    reportPluginError(pluginId, "activate", error);
+    return false;
+  }
+  persistProjectPluginState(before);
   return true;
 }
 

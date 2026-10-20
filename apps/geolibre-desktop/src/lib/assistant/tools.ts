@@ -24,6 +24,7 @@ import {
   type CatalogTool,
 } from "./catalog-select";
 import { describeLayers, SQL_GEOMETRY_SOURCE_METADATA_KEY, summarizeLayers } from "./layer-summary";
+import type { AssistantPluginHost } from "./plugin-activation";
 import { buildSymbologyStyle } from "./symbology";
 import { readRuntimeEnv } from "./provider";
 import { guardMapForScript } from "./map-script-guard";
@@ -49,6 +50,11 @@ export interface AssistantToolDeps {
     tool: "run_python" | "run_maplibre_js";
     code: string;
   }) => Promise<boolean>;
+  /**
+   * Lets the assistant turn on installed plugins that declare assistant tools
+   * (`activate_plugin`). When omitted (e.g. in tests) the tool is not offered.
+   */
+  plugins?: AssistantPluginHost;
 }
 
 /**

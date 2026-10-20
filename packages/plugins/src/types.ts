@@ -1628,6 +1628,19 @@ export interface GeoLibreRightPanelRegistration {
   onExplicitClose?: () => void;
 }
 
+/**
+ * What the AI Assistant is told about an inactive plugin it could turn on.
+ * See {@link GeoLibrePlugin.assistant}.
+ */
+export interface GeoLibrePluginAssistantInfo {
+  /**
+   * One sentence on what the plugin's assistant tools do and which data they
+   * cover, shown to the model while the plugin is off (at most 300
+   * characters for an external plugin).
+   */
+  description: string;
+}
+
 export interface GeoLibrePlugin {
   id: string;
   name: string;
@@ -1642,6 +1655,13 @@ export interface GeoLibrePlugin {
   engines?: MapRendererKind[];
   /** Plugins in the same group cannot be active at the same time. */
   exclusiveGroup?: string;
+  /**
+   * Declares that this plugin registers AI Assistant tools once it is on, so
+   * the assistant can offer to turn it on (`activate_plugin`) while it is off.
+   * Tools only exist for an active plugin, so without this the assistant
+   * cannot know an installed but inactive plugin could help.
+   */
+  assistant?: GeoLibrePluginAssistantInfo;
   /** At least one name is required for handleUrlParameters to be called. */
   urlParameterNames?: string[];
   /**
@@ -1731,6 +1751,12 @@ export interface GeoLibreExternalPluginManifest {
    * third-party plugins cannot force themselves active.
    */
   activeByDefault?: boolean;
+  /**
+   * Declares that the plugin registers AI Assistant tools, so the assistant
+   * can turn it on while it is off. Copied onto the exported plugin when it
+   * does not declare its own. See {@link GeoLibrePlugin.assistant}.
+   */
+  assistant?: GeoLibrePluginAssistantInfo;
 }
 
 /**

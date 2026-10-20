@@ -16,8 +16,10 @@ import {
   bundleFromZipBytes,
   type ExternalPluginBundle,
   isExternalPluginManifest,
+  isPluginAssistantInfo,
   isPluginEngineList,
   MAX_PLUGIN_ASSET_BYTES,
+  MAX_PLUGIN_ASSISTANT_DESCRIPTION_LENGTH,
 } from "./plugin-archive-unpack";
 import {
   isManagedUrlSource,
@@ -599,7 +601,7 @@ async function fetchPluginText(url: string, label: string, signal?: AbortSignal)
 
 /**
  * Imports an external plugin bundle by creating an ephemeral object URL, verifying its export contract,
- * and propagating manifest engines metadata when omitted by the candidate plugin.
+ * and propagating manifest engines and assistant metadata when omitted by the candidate plugin.
  *
  * @param bundle - The unpacked external plugin bundle.
  * @returns A promise resolving to the validated {@link GeoLibrePlugin}.
@@ -632,6 +634,14 @@ async function importExternalPlugin(bundle: ExternalPluginBundle): Promise<GeoLi
     }
     if (bundle.manifest.engines && !candidate.engines) {
       candidate.engines = bundle.manifest.engines;
+    }
+    if (candidate.assistant !== undefined && !isPluginAssistantInfo(candidate.assistant)) {
+      throw new Error(
+        `Plugin assistant must be an object with a description of at most ${MAX_PLUGIN_ASSISTANT_DESCRIPTION_LENGTH} characters.`,
+      );
+    }
+    if (bundle.manifest.assistant && !candidate.assistant) {
+      candidate.assistant = bundle.manifest.assistant;
     }
     return candidate;
   } finally {

@@ -22,6 +22,11 @@ import {
 } from "./profiles";
 import type { AssistantProfile } from "./provider";
 import { describeLayers } from "./layer-summary";
+import {
+  activatablePluginsKey,
+  activateAssistantPlugin,
+  createActivatePluginTool,
+} from "./plugin-activation";
 import { buildSystemPrompt } from "./system-prompt";
 import {
   ConversationPluginTools,
@@ -83,7 +88,11 @@ function fastPathState(): FastPathState {
  */
 export class AssistantSession {
   private agent: Agent | null = null;
-  private toolsVersion = -1;
+  /**
+   * The tool registry version and activatable-plugin list the agent's tools
+   * were composed from; a change to either refreshes them before the next prompt.
+   */
+  private inputsKey = "";
   private streaming = false;
   /** Explicit provider/model chosen in the UI; null means auto-resolve. */
   private selection: AssistantProviderSelection | null = null;
@@ -237,6 +246,17 @@ export class AssistantSession {
     if (scope.catalog.length > 0) {
       tools.push(createLoadPluginToolsTool((names) => this.loadPluginTools(names)));
     }
+    const host = this.deps.plugins;
+    const activatable = host?.listActivatable() ?? [];
+    if (host && activatable.length > 0) {
+      // A turned-on plugin's tools are loaded like load_plugin_tools loads
+      // deferred ones, so they are callable in the same turn.
+      tools.push(
+        createActivatePluginTool(activatable, (id) =>
+          activateAssistantPlugin(host, id, (owner) => this.loadPluginTools([owner])),
+        ),
+      );
+    }
     return {
       tools,
       systemPrompt: buildSystemPrompt(undefined, formatPluginToolCatalog(scope.catalog)),
@@ -254,9 +274,16 @@ export class AssistantSession {
     return result;
   }
 
+  /** Identifies what {@link composeAgentInputs} would build from right now. */
+  private currentInputsKey(): string {
+    const activatable = this.deps.plugins?.listActivatable() ?? [];
+    return `${getAssistantToolsVersion()}|${activatablePluginsKey(activatable)}`;
+  }
+
   private async ensureAgent(): Promise<Agent> {
     if (this.agent) {
-      if (this.toolsVersion !== getAssistantToolsVersion()) {
+      const inputsKey = this.currentInputsKey();
+      if (this.inputsKey !== inputsKey) {
         // Refresh between prompts, retaining the agent and its conversation.
         // Plugin guidance shares the version counter, so the prompt is
         // recomposed alongside the tools.
@@ -264,7 +291,7 @@ export class AssistantSession {
         this.agent.toolRegistry.clear();
         this.agent.toolRegistry.add(tools);
         this.agent.systemPrompt = systemPrompt;
-        this.toolsVersion = getAssistantToolsVersion();
+        this.inputsKey = inputsKey;
       }
       return this.agent;
     }
@@ -287,9 +314,10 @@ export class AssistantSession {
       );
     }
     const model = await createModel(config);
+    const inputsKey = this.currentInputsKey();
     const { tools, systemPrompt } = this.composeAgentInputs();
     this.agent = new Agent({ model, tools, systemPrompt });
-    this.toolsVersion = getAssistantToolsVersion();
+    this.inputsKey = inputsKey;
     return this.agent;
   }
 

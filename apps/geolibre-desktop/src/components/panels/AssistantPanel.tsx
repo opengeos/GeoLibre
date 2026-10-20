@@ -48,6 +48,10 @@ import {
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import {
+  activatePluginForAssistant,
+  listAssistantActivatablePlugins,
+} from "../../hooks/usePlugins";
 import { shouldIgnoreVoiceButtonClick, useVoiceCommands } from "../../hooks/useVoiceCommands";
 import type { VoiceMode, VoiceStatus } from "../../lib/assistant/voice-session";
 // Paired with MapCanvas so it suspends pointer interaction while dragging.
@@ -296,6 +300,10 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     () =>
       new AssistantSession({
         getMapController: () => mapControllerRef.current,
+        plugins: {
+          listActivatable: listAssistantActivatablePlugins,
+          activate: (pluginId) => activatePluginForAssistant(pluginId, mapControllerRef),
+        },
         // Gate assistant-authored code behind an explicit confirmation (unless
         // the user has opted into always-allow for this session). Prompt-injected
         // content could otherwise make the model run code that exfiltrates data.
