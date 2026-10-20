@@ -300,7 +300,7 @@ export function setSettingsKeychainWritable(writable: boolean): void {
 
 export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
   browserPanelVisible: true,
-  bottomPanelsUnderMap: false,
+  bottomPanelsUnderMap: true,
   commentsPanelVisible: true,
   compactLayerList: false,
   layerPanelVisible: true,

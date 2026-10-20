@@ -30,16 +30,16 @@ describe("layoutOptionsFromLocation", () => {
     assert.equal(options.attributePanelVisible, true);
     assert.equal(options.panelsHidden, false);
     assert.equal(options.panelsCollapsed, false);
-    assert.equal(options.bottomPanelsUnderMap, false);
+    assert.equal(options.bottomPanelsUnderMap, true);
   });
 
   it("passes the bottom-panel placement setting through", () => {
     withSearch("");
     const options = layoutOptionsFromLocation({
       ...DEFAULT_DESKTOP_LAYOUT_SETTINGS,
-      bottomPanelsUnderMap: true,
+      bottomPanelsUnderMap: false,
     });
-    assert.equal(options.bottomPanelsUnderMap, true);
+    assert.equal(options.bottomPanelsUnderMap, false);
   });
 
   it("hides every chrome element when maponly is set as a bare flag", () => {
