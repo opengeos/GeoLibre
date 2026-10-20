@@ -8234,7 +8234,7 @@
       "footerDeck": "ცვლილებები რეალურ დროში ედება რასტრული შრის გამჭვირვალობას.",
       "footerMaplibre": "ცვლილებები რეალურ დროში ედება MapLibre-ის რასტრის paint-თვისებებს.",
       "valueAria": "{{label}} მნიშვნელობა",
-      "editValueAria": "{{label}} მნიშვნელობის რედაქტირება"
+      "editValueAria": "{{value}} — {{label}} მნიშვნელობის რედაქტირება"
     },
     "visibility": {
       "minZoom": "მინ. zoom",
@@ -8987,7 +8987,7 @@
     "opacityExactHint": "ორმაგი დაწკაპუნება ზუსტი მნიშვნელობის შესაყვანად",
     "opacityFor": "{{name}}-ის გამჭვირვალობა",
     "opacityValueInputAria": "{{label}} მნიშვნელობა",
-    "opacityValueEditAria": "{{label}} მნიშვნელობის რედაქტირება",
+    "opacityValueEditAria": "{{value}} — {{label}} მნიშვნელობის რედაქტირება",
     "backgroundOpacity": "ფონის გაუმჭვირვალობა",
     "newGroup": "ახალი ჯგუფი",
     "basemaps": "ბაზური რუკები",

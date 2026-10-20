@@ -8234,7 +8234,7 @@
       "footerDeck": "As alterações são aplicadas ao vivo à opacidade da camada raster.",
       "footerMaplibre": "As alterações são aplicadas ao vivo às propriedades paint raster do MapLibre.",
       "valueAria": "Valor de {{label}}",
-      "editValueAria": "Editar o valor de {{label}}"
+      "editValueAria": "{{value}} — Editar o valor de {{label}}"
     },
     "visibility": {
       "minZoom": "Zoom mín.",
@@ -8987,7 +8987,7 @@
     "opacityExactHint": "Clique duas vezes para digitar um valor exato",
     "opacityFor": "Opacidade de {{name}}",
     "opacityValueInputAria": "Valor de {{label}}",
-    "opacityValueEditAria": "Editar valor de {{label}}",
+    "opacityValueEditAria": "{{value}} — Editar valor de {{label}}",
     "backgroundOpacity": "Opacidade do fundo",
     "newGroup": "Novo grupo",
     "basemaps": "Mapas base",

@@ -1916,7 +1916,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
             size="sm"
             className="h-7 px-2"
             title={t("attributeTable.fieldCalculatorTitle")}
-            aria-label={t("attributeTable.fieldCalculator")}
+            aria-label={t("attributeTable.fieldCalculatorTitle")}
             onClick={openCalculator}
           >
             <Calculator className="h-3.5 w-3.5" />
@@ -1976,7 +1976,7 @@ export function AttributeTable({ mapControllerRef, refresh }: AttributeTableProp
                 ? t("attributeTable.columnExplorerTitle")
                 : t("attributeTable.columnExplorerTitleDisabled")
             }
-            aria-label={t("attributeTable.columnExplorer")}
+            aria-label={t("attributeTable.columnExplorerTitle")}
             disabled={!hasAttributeSource}
             onClick={() => setExplorerOpen(true)}
           >

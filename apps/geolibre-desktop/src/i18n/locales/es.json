@@ -8234,7 +8234,7 @@
       "footerDeck": "Los cambios se aplican en vivo a la opacidad de la capa ráster.",
       "footerMaplibre": "Los cambios se aplican en vivo a las propiedades de pintura ráster de MapLibre.",
       "valueAria": "Valor de {{label}}",
-      "editValueAria": "Editar valor de {{label}}"
+      "editValueAria": "{{value}} — Editar valor de {{label}}"
     },
     "visibility": {
       "minZoom": "Zoom mínimo",
@@ -8987,7 +8987,7 @@
     "opacityExactHint": "Doble clic para introducir un valor exacto",
     "opacityFor": "Opacidad de {{name}}",
     "opacityValueInputAria": "Valor de {{label}}",
-    "opacityValueEditAria": "Editar valor de {{label}}",
+    "opacityValueEditAria": "{{value}} — Editar valor de {{label}}",
     "backgroundOpacity": "Opacidad del fondo",
     "newGroup": "Nuevo grupo",
     "basemaps": "Mapas base",

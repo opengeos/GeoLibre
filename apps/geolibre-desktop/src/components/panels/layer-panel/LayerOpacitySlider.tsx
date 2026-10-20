@@ -101,7 +101,12 @@ export function LayerOpacitySlider({ label, ariaLabel, value, onChange }: LayerO
           type="button"
           className="w-9 shrink-0 cursor-text text-end font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
           title={t("layers.opacityExactHint")}
-          aria-label={t("layers.opacityValueEditAria", { label: ariaLabel })}
+          // The name leads with the visible value (WCAG 2.5.3, axe
+          // label-content-name-mismatch).
+          aria-label={t("layers.opacityValueEditAria", {
+            label: ariaLabel,
+            value: value.toFixed(2),
+          })}
           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
           onDoubleClick={(e: ReactMouseEvent) => {
             e.stopPropagation();

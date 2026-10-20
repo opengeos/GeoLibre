@@ -8108,7 +8108,7 @@
       "footerDeck": "変更はラスターレイヤーの不透明度にリアルタイムで反映されます。",
       "footerMaplibre": "変更はMapLibreのラスターペイントプロパティにリアルタイムで反映されます。",
       "valueAria": "{{label}}の値",
-      "editValueAria": "{{label}}の値を編集"
+      "editValueAria": "{{value}} — {{label}}の値を編集"
     },
     "visibility": {
       "minZoom": "最小ズーム",
@@ -8857,7 +8857,7 @@
     "opacityExactHint": "ダブルクリックして正確な値を入力",
     "opacityFor": "{{name}}の不透明度",
     "opacityValueInputAria": "{{label}}の値",
-    "opacityValueEditAria": "{{label}}の値を編集",
+    "opacityValueEditAria": "{{value}} — {{label}}の値を編集",
     "backgroundOpacity": "背景の不透明度",
     "newGroup": "新しいグループ",
     "basemaps": "ベースマップ",

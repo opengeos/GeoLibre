@@ -8108,7 +8108,7 @@
       "footerDeck": "更改会实时应用于栅格图层的不透明度。",
       "footerMaplibre": "更改会实时应用于 MapLibre 栅格绘制属性。",
       "valueAria": "{{label}} 值",
-      "editValueAria": "编辑 {{label}} 值"
+      "editValueAria": "{{value}} — 编辑 {{label}} 值"
     },
     "visibility": {
       "minZoom": "最小缩放级别",
@@ -8857,7 +8857,7 @@
     "opacityExactHint": "双击以输入精确值",
     "opacityFor": "{{name}} 的不透明度",
     "opacityValueInputAria": "{{label}} 值",
-    "opacityValueEditAria": "编辑 {{label}} 值",
+    "opacityValueEditAria": "{{value}} — 编辑 {{label}} 值",
     "backgroundOpacity": "背景不透明度",
     "newGroup": "新建分组",
     "basemaps": "底图",

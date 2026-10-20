@@ -8108,7 +8108,7 @@
       "footerDeck": "Các thay đổi áp dụng trực tiếp cho độ mờ của lớp raster.",
       "footerMaplibre": "Các thay đổi áp dụng trực tiếp cho thuộc tính sơn raster MapLibre.",
       "valueAria": "Giá trị {{label}}",
-      "editValueAria": "Chỉnh sửa giá trị {{label}}"
+      "editValueAria": "{{value}} — Chỉnh sửa giá trị {{label}}"
     },
     "visibility": {
       "minZoom": "Xoay (°)",
@@ -8857,7 +8857,7 @@
     "opacityExactHint": "Nhấp đúp để nhập giá trị chính xác",
     "opacityFor": "Độ trong suốt của {{name}}",
     "opacityValueInputAria": "Độ trong suốt {{label}}",
-    "opacityValueEditAria": "Chỉnh sửa giá trị {{label}}",
+    "opacityValueEditAria": "{{value}} — Chỉnh sửa giá trị {{label}}",
     "backgroundOpacity": "Độ mờ nền",
     "newGroup": "Nhóm mới",
     "basemaps": "Bản đồ nền",

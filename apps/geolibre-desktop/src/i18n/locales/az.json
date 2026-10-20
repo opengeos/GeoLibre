@@ -8298,7 +8298,7 @@
       "footerDeck": "Dəyişikliklər rastr layın qeyri-şəffaflığına dərhal tətbiq olunur.",
       "footerMaplibre": "Dəyişikliklər MapLibre rastr rəngləmə xassələrinə dərhal tətbiq olunur.",
       "valueAria": "{{label}} dəyəri",
-      "editValueAria": "{{label}} dəyərini redaktə et"
+      "editValueAria": "{{value}} — {{label}} dəyərini redaktə et"
     },
     "visibility": {
       "minZoom": "Minimum yaxınlaşdırma",
@@ -9051,7 +9051,7 @@
     "opacityExactHint": "Dəqiq dəyər daxil etmək üçün iki dəfə klikləyin",
     "opacityFor": "{{name}} üçün qeyri-şəffaflıq",
     "opacityValueInputAria": "{{label}} dəyəri",
-    "opacityValueEditAria": "{{label}} dəyərini redaktə et",
+    "opacityValueEditAria": "{{value}} — {{label}} dəyərini redaktə et",
     "backgroundOpacity": "Fonun qeyri-şəffaflığı",
     "newGroup": "Yeni qrup",
     "basemaps": "Baza xəritələri",

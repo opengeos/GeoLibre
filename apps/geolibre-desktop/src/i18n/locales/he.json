@@ -8424,7 +8424,7 @@
       "footerDeck": "השינויים חלים בזמן אמת על אטימות שכבת הרסטר.",
       "footerMaplibre": "השינויים חלים בזמן אמת על מאפייני הצביעה של רסטר ב-MapLibre.",
       "valueAria": "ערך {{label}}",
-      "editValueAria": "עריכת ערך {{label}}"
+      "editValueAria": "{{value}} — עריכת ערך {{label}}"
     },
     "visibility": {
       "minZoom": "זום מינימלי",
@@ -9181,7 +9181,7 @@
     "opacityExactHint": "לחיצה כפולה להזנת ערך מדויק",
     "opacityFor": "אטימות עבור {{name}}",
     "opacityValueInputAria": "ערך {{label}}",
-    "opacityValueEditAria": "ערוך את הערך של {{label}}",
+    "opacityValueEditAria": "{{value}} — ערוך את הערך של {{label}}",
     "backgroundOpacity": "אטימות הרקע",
     "newGroup": "קבוצה חדשה",
     "basemaps": "מפות בסיס",

@@ -8108,7 +8108,7 @@
       "footerDeck": "การเปลี่ยนแปลงจะมีผลทันทีกับความทึบของเลเยอร์แรสเตอร์",
       "footerMaplibre": "การเปลี่ยนแปลงจะมีผลทันทีกับคุณสมบัติการวาดแรสเตอร์ของ MapLibre",
       "valueAria": "ค่าของ{{label}}",
-      "editValueAria": "แก้ไขค่าของ{{label}}"
+      "editValueAria": "{{value}} — แก้ไขค่าของ{{label}}"
     },
     "visibility": {
       "minZoom": "ระดับซูมต่ำสุด",
@@ -8857,7 +8857,7 @@
     "opacityExactHint": "ดับเบิลคลิกเพื่อป้อนค่าที่แน่นอน",
     "opacityFor": "ความทึบของ {{name}}",
     "opacityValueInputAria": "ค่าของ{{label}}",
-    "opacityValueEditAria": "แก้ไขค่าของ{{label}}",
+    "opacityValueEditAria": "{{value}} — แก้ไขค่าของ{{label}}",
     "backgroundOpacity": "ความทึบของพื้นหลัง",
     "newGroup": "กลุ่มใหม่",
     "basemaps": "แผนที่ฐาน",

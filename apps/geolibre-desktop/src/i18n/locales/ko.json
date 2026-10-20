@@ -8108,7 +8108,7 @@
       "footerDeck": "변경 사항은 래스터 레이어 불투명도에 즉시 적용됩니다.",
       "footerMaplibre": "변경 사항은 MapLibre 래스터 페인트 속성에 즉시 적용됩니다.",
       "valueAria": "{{label}} 값",
-      "editValueAria": "{{label}} 값 편집"
+      "editValueAria": "{{value}} — {{label}} 값 편집"
     },
     "visibility": {
       "minZoom": "최소 줌",
@@ -8857,7 +8857,7 @@
     "opacityExactHint": "두 번 클릭하여 정확한 값을 입력하세요",
     "opacityFor": "{{name}}의 불투명도",
     "opacityValueInputAria": "{{label}} 값",
-    "opacityValueEditAria": "{{label}} 값 편집",
+    "opacityValueEditAria": "{{value}} — {{label}} 값 편집",
     "backgroundOpacity": "배경 불투명도",
     "newGroup": "새 그룹",
     "basemaps": "배경지도",

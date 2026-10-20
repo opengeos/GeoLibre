@@ -8737,7 +8737,7 @@
       "footerDeck": "تُطبَّق التغييرات مباشرة على عتامة طبقة البيانات النقطية.",
       "footerMaplibre": "تُطبَّق التغييرات مباشرة على خصائص رسم البيانات النقطية في MapLibre.",
       "valueAria": "قيمة {{label}}",
-      "editValueAria": "تحرير قيمة {{label}}"
+      "editValueAria": "{{value}} — تحرير قيمة {{label}}"
     },
     "visibility": {
       "minZoom": "الحد الأدنى للتكبير",
@@ -9506,7 +9506,7 @@
     "opacityExactHint": "انقر نقرًا مزدوجًا لإدخال قيمة دقيقة",
     "opacityFor": "عتامة {{name}}",
     "opacityValueInputAria": "قيمة {{label}}",
-    "opacityValueEditAria": "تحرير قيمة {{label}}",
+    "opacityValueEditAria": "{{value}} — تحرير قيمة {{label}}",
     "backgroundOpacity": "عتامة الخلفية",
     "newGroup": "مجموعة جديدة",
     "basemaps": "خرائط الأساس",

@@ -8486,7 +8486,7 @@
       "footerDeck": "Изменения применяются в реальном времени к непрозрачности растрового слоя.",
       "footerMaplibre": "Изменения применяются в реальном времени к свойствам paint растра MapLibre.",
       "valueAria": "Значение {{label}}",
-      "editValueAria": "Изменить значение {{label}}"
+      "editValueAria": "{{value}} — Изменить значение {{label}}"
     },
     "visibility": {
       "minZoom": "Минимальный масштаб",
@@ -9247,7 +9247,7 @@
     "opacityExactHint": "Двойной щелчок для ввода точного значения",
     "opacityFor": "Непрозрачность для {{name}}",
     "opacityValueInputAria": "Значение {{label}}",
-    "opacityValueEditAria": "Изменить значение {{label}}",
+    "opacityValueEditAria": "{{value}} — Изменить значение {{label}}",
     "backgroundOpacity": "Непрозрачность фона",
     "newGroup": "Новая группа",
     "basemaps": "Базовые карты",

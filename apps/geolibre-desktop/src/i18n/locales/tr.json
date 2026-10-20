@@ -8234,7 +8234,7 @@
       "footerDeck": "Değişiklikler, raster katman opaklığına anlık olarak uygulanır.",
       "footerMaplibre": "Değişiklikler, MapLibre raster paint özelliklerine anlık olarak uygulanır.",
       "valueAria": "{{label}} değeri",
-      "editValueAria": "{{label}} değerini düzenle"
+      "editValueAria": "{{value}} — {{label}} değerini düzenle"
     },
     "visibility": {
       "minZoom": "Minimum yakınlaştırma",
@@ -8987,7 +8987,7 @@
     "opacityExactHint": "Tam bir değer girmek için çift tıklayın",
     "opacityFor": "{{name}} için opaklık",
     "opacityValueInputAria": "{{label}} değeri",
-    "opacityValueEditAria": "{{label}} değerini düzenle",
+    "opacityValueEditAria": "{{value}} — {{label}} değerini düzenle",
     "backgroundOpacity": "Arka plan opaklığı",
     "newGroup": "Yeni grup",
     "basemaps": "Temel haritalar",

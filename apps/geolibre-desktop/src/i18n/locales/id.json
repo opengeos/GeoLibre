@@ -8108,7 +8108,7 @@
       "footerDeck": "Perubahan berlaku langsung pada opasitas layer raster.",
       "footerMaplibre": "Perubahan berlaku langsung pada properti paint raster MapLibre.",
       "valueAria": "Nilai {{label}}",
-      "editValueAria": "Edit nilai {{label}}"
+      "editValueAria": "{{value}} — Edit nilai {{label}}"
     },
     "visibility": {
       "minZoom": "Zoom minimum",
@@ -8857,7 +8857,7 @@
     "opacityExactHint": "Klik dua kali untuk memasukkan nilai yang tepat",
     "opacityFor": "Opasitas untuk {{name}}",
     "opacityValueInputAria": "Nilai {{label}}",
-    "opacityValueEditAria": "Edit nilai {{label}}",
+    "opacityValueEditAria": "{{value}} — Edit nilai {{label}}",
     "backgroundOpacity": "Opasitas latar belakang",
     "newGroup": "Grup baru",
     "basemaps": "Peta dasar",

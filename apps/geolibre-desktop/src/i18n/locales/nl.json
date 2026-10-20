@@ -8234,7 +8234,7 @@
       "footerDeck": "Wijzigingen worden direct toegepast op de dekking van de rasterlaag.",
       "footerMaplibre": "Wijzigingen worden direct toegepast op de raster-paint-eigenschappen van MapLibre.",
       "valueAria": "Waarde {{label}}",
-      "editValueAria": "Waarde {{label}} bewerken"
+      "editValueAria": "{{value}} — Waarde {{label}} bewerken"
     },
     "visibility": {
       "minZoom": "Min. zoom",
@@ -8987,7 +8987,7 @@
     "opacityExactHint": "Dubbelklik om een exacte waarde in te voeren",
     "opacityFor": "Dekking voor {{name}}",
     "opacityValueInputAria": "Waarde {{label}}",
-    "opacityValueEditAria": "Waarde {{label}} bewerken",
+    "opacityValueEditAria": "{{value}} — Waarde {{label}} bewerken",
     "backgroundOpacity": "Achtergronddekking",
     "newGroup": "Nieuwe groep",
     "basemaps": "Achtergrondkaarten",

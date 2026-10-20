@@ -8234,7 +8234,7 @@
       "footerDeck": "Änderungen werden sofort auf die Deckkraft der Rasterebene angewendet.",
       "footerMaplibre": "Änderungen werden sofort auf die MapLibre-Raster-Paint-Eigenschaften angewendet.",
       "valueAria": "{{label}}-Wert",
-      "editValueAria": "{{label}}-Wert bearbeiten"
+      "editValueAria": "{{value}} — {{label}}-Wert bearbeiten"
     },
     "visibility": {
       "minZoom": "Min. Zoom",
@@ -8987,7 +8987,7 @@
     "opacityExactHint": "Doppelklicken, um einen genauen Wert einzugeben",
     "opacityFor": "Deckkraft für {{name}}",
     "opacityValueInputAria": "{{label}}-Wert",
-    "opacityValueEditAria": "{{label}}-Wert bearbeiten",
+    "opacityValueEditAria": "{{value}} — {{label}}-Wert bearbeiten",
     "backgroundOpacity": "Hintergrunddeckkraft",
     "newGroup": "Neue Gruppe",
     "basemaps": "Basiskarten",

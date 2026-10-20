@@ -296,7 +296,7 @@ export function RasterStyleSlider({
             type="button"
             className="shrink-0 cursor-text font-mono text-xs text-muted-foreground hover:text-foreground"
             title={t("style.raster.exactValueHint")}
-            aria-label={t("style.raster.editValueAria", { label })}
+            aria-label={t("style.raster.editValueAria", { label, value: format(value) })}
             onDoubleClick={startEditing}
           >
             {format(value)}
