@@ -93,6 +93,31 @@ describe("StylePanel", () => {
     assert.deepEqual(style("other"), otherBefore);
   });
 
+  it("coalesces a fill color drag into one store write per frame", async () => {
+    selectPolygonLayer();
+    const before = style("blocks").fillColor;
+    renderStylePanel();
+    let writes = 0;
+    const unsubscribe = useAppStore.subscribe((state, previous) => {
+      if (state.layers !== previous.layers) writes++;
+    });
+
+    // A native picker streams an `input` event per pointer move (issue #3162).
+    for (const color of ["#110000", "#220000", "#330000"]) {
+      fireEvent.input(input("Fill color"), { target: { value: color } });
+    }
+    // The swatch follows the drag at once; the store waits for the frame.
+    assert.equal(input("Fill color").value, "#330000");
+    assert.equal(style("blocks").fillColor, before);
+
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+
+    assert.equal(style("blocks").fillColor, "#330000");
+    assert.equal(writes, 1);
+    assert.equal(input("Fill color").value, "#330000");
+    unsubscribe();
+  });
+
   it("writes a typed fill opacity to the store", () => {
     selectPolygonLayer();
     renderStylePanel();
