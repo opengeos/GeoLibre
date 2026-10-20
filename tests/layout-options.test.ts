@@ -39,10 +39,10 @@ describe("layoutOptionsFromLocation", () => {
 
   it("passes the bottom-panel placement setting through", () => {
     withSearch("");
-    const options = layoutOptionsFromLocation({
-      ...DEFAULT_DESKTOP_LAYOUT_SETTINGS,
-      bottomPanelsUnderMap: false,
-    });
+    const options = layoutOptionsFromLocation(
+      { ...DEFAULT_DESKTOP_LAYOUT_SETTINGS, bottomPanelsUnderMap: false },
+      ALL_DEPLOYMENT_CAPABILITIES,
+    );
     assert.equal(options.bottomPanelsUnderMap, false);
   });
 
