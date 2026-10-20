@@ -123,6 +123,21 @@ test("spec callbacks receive the cancel signal so Stop can interrupt a running t
   assert.equal(result.status, "error");
 });
 
+test("spec callbacks get a live signal even when the tool context has none", async () => {
+  let seen: AbortSignal | undefined;
+  registerAssistantToolSpec(
+    spec((_input, context) => {
+      seen = context?.signal;
+      return { aborted: context?.signal.aborted };
+    }),
+    "test",
+  );
+  const [registered] = listAssistantTools();
+  assert.equal((await run(registered, {})).status, "success");
+  assert.ok(seen instanceof AbortSignal);
+  assert.equal(seen.aborted, false);
+});
+
 const app = {
   registerAssistantTool,
   registerAssistantToolSpec,
