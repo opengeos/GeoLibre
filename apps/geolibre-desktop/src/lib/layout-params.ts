@@ -2,7 +2,7 @@
 // (useLayoutOptions) and Export as HTML (html-export) read them the same way.
 
 export const HIDDEN_PANEL_VALUES = new Set(["hidden", "hide", "none", "off"]);
-const MAP_ONLY_VALUES = new Set(["", "true", "1", "yes", "on"]);
+const TRUTHY_FLAG_VALUES = new Set(["", "true", "1", "yes", "on"]);
 
 /** A query param value trimmed and lowercased; `""` when absent. */
 export function normalizedParam(value: string | null): string {
@@ -14,7 +14,7 @@ export function normalizedParam(value: string | null): string {
  * flag (`?maponly`) or an explicit truthy value (`?maponly=true`).
  */
 export function isMapOnly(params: URLSearchParams): boolean {
-  return params.has("maponly") && MAP_ONLY_VALUES.has(normalizedParam(params.get("maponly")));
+  return params.has("maponly") && TRUTHY_FLAG_VALUES.has(normalizedParam(params.get("maponly")));
 }
 
 /**
@@ -27,4 +27,13 @@ export function arePanelsHidden(params: URLSearchParams): boolean {
     HIDDEN_PANEL_VALUES.has(normalizedParam(params.get("panels"))) ||
     normalizedParam(params.get("hidePanels")) === "true"
   );
+}
+
+/**
+ * Whether the query opts a `layout=viewer` embed into drawing (`?draw`,
+ * `?draw=true`). Only a flag: the caller decides whether the layout and the
+ * deployment's capabilities let it take effect.
+ */
+export function isDrawRequested(params: URLSearchParams): boolean {
+  return params.has("draw") && TRUTHY_FLAG_VALUES.has(normalizedParam(params.get("draw")));
 }

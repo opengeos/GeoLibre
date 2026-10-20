@@ -103,6 +103,7 @@ client-side.
 | `data` | `?data=https://.../places.geojson` | Load public GeoJSON/GeoParquet/PMTiles/COG directly |
 | `style` | `?style=https://.../sample.style.json` | Apply a style to the `data` layer |
 | `layout` | `?layout=viewer` | `viewer` (read-only chrome) or `compact` (icon-only) |
+| `draw` | `?layout=viewer&draw` | With `layout=viewer`, let the geometry editor run (open it with `&plugin=geo-editor`) |
 | `maponly` | `?maponly` | Map only — no toolbar, panels, or status bar |
 | `toolbar` / `panels` | `?toolbar=none&panels=collapsed` | Trim individual chrome |
 | `theme` | `?theme=dark` | Force a color theme |

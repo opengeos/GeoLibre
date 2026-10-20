@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import type { Feature, FeatureCollection } from "geojson";
 import {
   GEO_EDITOR_PLUGIN_ID,
+  getGeoEditorOptions,
   hasMassingFeatures,
   isGeomanCommittedDisplayLayer,
   maplibreGeoEditorPlugin as plugin,
+  setGeoEditorFileTools,
   sketchesStyleForMassing,
   withCreatedSketch,
   withoutSupersededSketchCopies,
@@ -253,5 +255,18 @@ describe("maplibreGeoEditorPlugin", () => {
       withoutSupersededSketchCopies(collection(older, callbackCopy), collection(older)).features,
       [older, callbackCopy],
     );
+  });
+});
+
+describe("geo-editor file tools", () => {
+  it("shows the Open/Save buttons by default and drops them when switched off", () => {
+    assert.deepEqual(getGeoEditorOptions(null).fileModes, ["open", "save"]);
+    setGeoEditorFileTools(false);
+    try {
+      assert.deepEqual(getGeoEditorOptions(null).fileModes, []);
+    } finally {
+      setGeoEditorFileTools(true);
+    }
+    assert.deepEqual(getGeoEditorOptions(null).fileModes, ["open", "save"]);
   });
 });

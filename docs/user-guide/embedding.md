@@ -29,6 +29,7 @@ A chrome-free `maponly` embed shows only the map, as in this shared 3D Tiles pro
 | `dataType`   | `dataType=lidar`                                           | Marks a `data` URL whose path has no file extension as a LiDAR point cloud; pairs with `data` by position. See [Open remote data](#open-remote-data). |
 | `stac`       | `stac=https://earth-search.aws.element84.com/v1/collections/naip` | Opens the STAC Catalogs browser connected to a STAC catalog, API, or API collection. A collection URL is searched on load, so its item footprints appear as a layer. See [Open a STAC catalog](#open-a-stac-catalog). |
 | `layout`     | `layout=viewer`                                            | `viewer` provides read-only chrome: Layers, View, Controls, basemaps, search/identify, Help, and any quick filters the project's layers carry, with authoring UI hidden. `compact` is the icon-only full-app layout; `embed` and `iframe` are aliases. |
+| `draw`       | `layout=viewer&draw`                                       | Lets the geometry editor run in `layout=viewer`, so a host page can offer drawing without the rest of the authoring chrome. The bare flag or `true`, `1`, `yes`, `on` enable it. It has no effect in other layouts and needs the `project:edit` [deployment capability](../deployment-capabilities.md). See [Drawing in a viewer embed](#drawing-in-a-viewer-embed). |
 | `toolbar`    | `toolbar=none`                                             | Hides the top toolbar while keeping panels and the status bar. Use `icons` for icon-only buttons; `icon` and `icon-only` are aliases. `hidden`, `hide`, and `off` are aliases for `none`. |
 | `panels`     | `panels=collapsed`                                         | Starts Layers and Style collapsed to their icon rails. Use `none` to hide all panels; `hidden`, `hide`, and `off` are aliases.         |
 | `hidePanels` | `hidePanels=true`                                          | Alternative way to hide those panels.                                                                                                 |
@@ -126,7 +127,8 @@ distinct from project manifest URL trust, whose prompt is suppressed when
 Unknown names are ignored. A plugin that does not support the current renderer
 does not activate. Directions and reverse geocoding send what you click to a
 public server, so they only open from the menu, after their one-time notice. The
-drawing and editing plugins stay off in `layout=viewer`.
+drawing and editing plugins stay off in `layout=viewer`, except the
+geometry editor when the link adds [`draw`](#drawing-in-a-viewer-embed).
 
 ## Waiting for a screenshot
 
@@ -216,6 +218,44 @@ So an embed cannot be steered into authoring by a key press, a drag, or a
 project file. Display plugins (layer control, basemaps, time slider, legend and
 colorbar components) keep working, so the project still looks as it was saved. Use `layout=compact` for the complete authoring
 toolbar in a smaller space, or `maponly` for a pure map.
+
+### Drawing in a viewer embed
+
+By default the geometry editor cannot run in `layout=viewer`. Add `draw` and the
+viewer lets it through, while everything else stays read-only: no menus, no
+Style panel, no drag-and-drop import, and Annotations and GeoAgent remain
+blocked. Combine it with `plugin=geo-editor` to open the drawing toolbar on
+load:
+
+```text
+https://geolibre.example.org/?url=https://share.geolibre.app/you/project.geolibre.json&layout=viewer&draw&plugin=geo-editor
+```
+
+What the user draws lands in a Sketches layer. A host page reads it back with
+`getDrawnFeatures()` and is told about changes by the `featuresChanged` event
+(see [Reading features back](#reading-features-back)), so the host decides what
+to do with the geometry.
+
+Drawing itself needs only the `project:edit` capability, but reading the
+drawings back goes through the embed API, so it needs two more things. Your
+page's origin must be on the deployment's embed allowlist (see
+[Talking to the map at runtime](#talking-to-the-map-at-runtime)), and the
+deployment must grant the `export:data`
+[capability](../deployment-capabilities.md), which `getDrawnFeatures()` and
+`featuresChanged` require. The public `web.geolibre.app` has no allowlist, so
+the example above uses a placeholder for a deployment you host yourself; on
+the public site the toolbar draws, but a host page cannot read the result.
+
+A project saved with the geometry editor active opens its toolbar on load, with
+or without `plugin=geo-editor`, as it does in the full app. The toolbar's
+Open and Save file buttons are hidden in the viewer, and Identify offers no Edit
+geometry or Edit attributes action, so the toolbar only draws and edits what
+was drawn in the session.
+
+`draw` grants nothing that the same deployment would not give without
+`layout=viewer`: a deployment that withholds the `project:edit`
+[capability](../deployment-capabilities.md) ignores it, and the viewer then
+stays fully read-only.
 
 ## Open remote data
 

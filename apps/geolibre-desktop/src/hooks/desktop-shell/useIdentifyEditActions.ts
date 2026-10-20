@@ -7,6 +7,7 @@ import {
   maplibreGeoEditorPlugin,
 } from "@geolibre/plugins";
 import { useMemo } from "react";
+import { identifyEditActionsForLayout } from "../../lib/identify-edit-actions-layout";
 import {
   canEditAttributeValues,
   canOpenLayerAttributeTable,
@@ -17,6 +18,8 @@ interface IdentifyEditActionsOptions {
   canEditLayer: (layerId: string) => boolean;
   /** Starts a geometry-edit session on the layer with the feature selected. */
   editFeatureGeometry: (layerId: string, featureId: string) => Promise<void>;
+  /** Whether the app runs in the read-only `layout=viewer` preset. */
+  viewer: boolean;
 }
 
 /**
@@ -37,14 +40,17 @@ function canEditLayerAttributes(layer: GeoLibreLayer): boolean {
  * The Edit geometry / Edit attributes actions offered on Identify results
  * (#2932): each one selects the feature and opens the matching editor.
  *
- * @param options - The collaboration edit gate and the geometry-edit starter.
- * @returns The actions object for the map canvases.
+ * @param options - The collaboration edit gate, the geometry-edit starter, and
+ *   whether the app runs in the read-only viewer.
+ * @returns The actions object for the map canvases, or undefined in the viewer,
+ *   since both actions start an editor session on the clicked layer.
  */
 export function useIdentifyEditActions({
   canEditLayer,
   editFeatureGeometry,
-}: IdentifyEditActionsOptions): MapCanvasIdentifyEditActions {
-  return useMemo(() => {
+  viewer,
+}: IdentifyEditActionsOptions): MapCanvasIdentifyEditActions | undefined {
+  const actions = useMemo(() => {
     const canEditGeometry = (layer: GeoLibreLayer) => {
       const target = getGeometryEditTargetLayerId();
       return (
@@ -87,4 +93,5 @@ export function useIdentifyEditActions({
       },
     } satisfies MapCanvasIdentifyEditActions;
   }, [canEditLayer, editFeatureGeometry]);
+  return identifyEditActionsForLayout(actions, viewer);
 }

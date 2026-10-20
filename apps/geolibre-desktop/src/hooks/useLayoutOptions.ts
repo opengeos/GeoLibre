@@ -1,6 +1,7 @@
+import { useAppStore, type DeploymentCapability } from "@geolibre/core";
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { arePanelsHidden, isMapOnly, normalizedParam } from "../lib/layout-params";
+import { arePanelsHidden, isDrawRequested, isMapOnly, normalizedParam } from "../lib/layout-params";
 import { useDesktopSettingsStore, type DesktopLayoutSettings } from "./useDesktopSettings";
 
 export interface LayoutOptions {
@@ -29,6 +30,13 @@ export interface LayoutOptions {
   toolbarVisible: boolean;
   /** Read-only embed chrome with Layers and map navigation, but no authoring UI. */
   viewer: boolean;
+  /**
+   * Whether the read-only viewer lets the geometry editor run (`?layout=viewer`
+   * with `?draw`), so a host page can offer drawing without the authoring
+   * chrome. Needs the deployment's `project:edit` capability; always false
+   * outside the viewer, where the editor is not blocked in the first place.
+   */
+  viewerDrawing: boolean;
 }
 
 const COMPACT_LAYOUT_VALUES = new Set(["compact", "embed", "iframe"]);
@@ -39,7 +47,11 @@ export function useLayoutOptions(): LayoutOptions {
   // Shallow equality keeps unrelated desktop-settings updates (which always
   // rebuild the layout object) from re-rendering every layout consumer.
   const layoutSettings = useDesktopSettingsStore(useShallow((s) => s.desktopSettings.layout));
-  return useMemo(() => layoutOptionsFromLocation(layoutSettings), [layoutSettings]);
+  const capabilities = useAppStore((s) => s.deploymentCapabilities);
+  return useMemo(
+    () => layoutOptionsFromLocation(layoutSettings, capabilities),
+    [layoutSettings, capabilities],
+  );
 }
 
 /**
@@ -55,7 +67,10 @@ export function isViewerLayout(search: string): boolean {
   return normalizedParam(new URLSearchParams(search).get("layout")) === "viewer";
 }
 
-export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings): LayoutOptions {
+export function layoutOptionsFromLocation(
+  layoutSettings: DesktopLayoutSettings,
+  capabilities: ReadonlySet<DeploymentCapability>,
+): LayoutOptions {
   if (typeof window === "undefined") {
     return {
       attributePanelVisible: true,
@@ -65,6 +80,7 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
       statusBarVisible: true,
       toolbarVisible: true,
       viewer: false,
+      viewerDrawing: false,
       ...layoutSettings,
     };
   }
@@ -107,5 +123,6 @@ export function layoutOptionsFromLocation(layoutSettings: DesktopLayoutSettings)
     toolbarLabels,
     toolbarVisible: !mapOnly && !HIDDEN_TOOLBAR_VALUES.has(toolbar),
     viewer,
+    viewerDrawing: viewer && isDrawRequested(params) && capabilities.has("project:edit"),
   };
 }

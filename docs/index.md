@@ -175,7 +175,7 @@ For a fully chrome-free, map-only embed, add `&maponly` to hide the toolbar menu
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
 ```
 
-For a read-only embed that viewers can still explore, use `&layout=viewer`. It keeps the Layers list, View and Controls menus, basemaps, and search/identify, and hides everything that would change the project:
+For a read-only embed that viewers can still explore, use `&layout=viewer`. It keeps the Layers list, View and Controls menus, basemaps, and search/identify, and hides everything that would change the project (add `&draw` to let readers sketch with the geometry editor; see [Drawing in a viewer embed](user-guide/embedding.md#drawing-in-a-viewer-embed)):
 
 ```text
 https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=viewer

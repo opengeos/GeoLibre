@@ -526,7 +526,7 @@ export {
   DECK_VIZ_SOURCE_KIND,
   isDeckVizLayer,
 } from "./plugins/deckgl-viz/store-layer";
-export { VIEWER_BLOCKED_PLUGIN_IDS } from "./viewer-plugins";
+export { VIEWER_BLOCKED_PLUGIN_IDS, isViewerBlockedPlugin } from "./viewer-plugins";
 export {
   maplibreAnnotationsPlugin,
   ANNOTATIONS_PLUGIN_ID,
@@ -560,6 +560,7 @@ export {
   GEO_EDITOR_PLUGIN_ID,
   DEFAULT_GEO_EDITOR_LABELS,
   setGeoEditorLabels,
+  setGeoEditorFileTools,
   type GeoEditorLabels,
   canEditLayerGeometry,
   SKETCHES_SOURCE_KIND,

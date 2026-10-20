@@ -7,7 +7,10 @@ import {
   GEOAGENT_PLUGIN_ID,
   GEO_EDITOR_PLUGIN_ID,
 } from "../packages/plugins/src/plugin-ids";
-import { VIEWER_BLOCKED_PLUGIN_IDS } from "../packages/plugins/src/viewer-plugins";
+import {
+  VIEWER_BLOCKED_PLUGIN_IDS,
+  isViewerBlockedPlugin,
+} from "../packages/plugins/src/viewer-plugins";
 
 describe("VIEWER_BLOCKED_PLUGIN_IDS", () => {
   it("names every plugin whose on-map control writes to the project", () => {
@@ -34,5 +37,40 @@ describe("VIEWER_BLOCKED_PLUGIN_IDS", () => {
     // the guard and its tests do not drag plugin implementations (and their
     // window-touching dependencies) in. This test passing IS that check.
     assert.ok(VIEWER_BLOCKED_PLUGIN_IDS.every((id) => typeof id === "string" && id.length > 0));
+  });
+});
+
+describe("isViewerBlockedPlugin", () => {
+  const ids = [GEO_EDITOR_PLUGIN_ID, ANNOTATIONS_PLUGIN_ID, GEOAGENT_PLUGIN_ID];
+
+  it("blocks every authoring plugin in the plain viewer", () => {
+    for (const id of ids) {
+      assert.equal(isViewerBlockedPlugin(id, { viewer: true, drawing: false }), true, id);
+    }
+  });
+
+  it("lets only the geometry editor through when drawing was requested", () => {
+    assert.equal(
+      isViewerBlockedPlugin(GEO_EDITOR_PLUGIN_ID, { viewer: true, drawing: true }),
+      false,
+    );
+    assert.equal(
+      isViewerBlockedPlugin(ANNOTATIONS_PLUGIN_ID, { viewer: true, drawing: true }),
+      true,
+    );
+    assert.equal(isViewerBlockedPlugin(GEOAGENT_PLUGIN_ID, { viewer: true, drawing: true }), true);
+  });
+
+  it("blocks nothing outside the viewer", () => {
+    for (const id of ids) {
+      assert.equal(isViewerBlockedPlugin(id, { viewer: false, drawing: false }), false, id);
+    }
+  });
+
+  it("does not block display plugins", () => {
+    assert.equal(
+      isViewerBlockedPlugin("maplibre-gl-layer-control", { viewer: true, drawing: false }),
+      false,
+    );
   });
 });

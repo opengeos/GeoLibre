@@ -81,6 +81,12 @@ cannot hang for the life of the page.
 Events: `ready`, `ack`, `projectLoaded`, `selectionChanged`, `viewChanged`,
 `toolCompleted`, `serverFileWritten`, `featuresChanged`.
 
+A host that wants users to draw loads the app with `layout=viewer&draw`, which
+lets the geometry editor run in the otherwise read-only viewer (add
+`plugin=geo-editor` to open its toolbar on load); the deployment needs the
+`project:edit` capability to draw, and reading the drawings back below also needs
+your origin on the embed allowlist and the `export:data` capability.
+
 `getLayerFeatures(layerId)` and `getDrawnFeatures()` read features back out
 (ids exactly as stored). They mirror the plugin API's `getLayerFeatures` and
 `getDrawnFeatures` and the Python widget's `get_features` and

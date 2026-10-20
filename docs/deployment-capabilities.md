@@ -44,7 +44,7 @@ withheld is never on offer, whatever the profile says.
 
 | Capability | Grants |
 | --- | --- |
-| `project:edit` | Authoring the project: New, Open, Open Recent, Import, Project History, Save, Save As, Duplicate, Save as Template, Collaborate, StoryMap; Undo/Redo (the menu items **and** the Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, and Ctrl+Y shortcuts); Export Selection; adding a review comment; the embed API's `loadProject`. |
+| `project:edit` | Authoring the project: New, Open, Open Recent, Import, Project History, Save, Save As, Duplicate, Save as Template, Collaborate, StoryMap; Undo/Redo (the menu items **and** the Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, and Ctrl+Y shortcuts); Export Selection; adding a review comment; the embed API's `loadProject`; and the `draw` option of a `layout=viewer` embed, which is ignored without it. |
 | `data:add` | Bringing data in: the whole Add Data menu, dragging a file onto the map (browser and desktop), and the embed API's `addLayer` and `addData`. |
 | `processing:run` | The whole Processing menu — Whitebox, SQL, Python, the AI assistant, geocoding, Model Builder, conversion/vector/raster tools — and the embed API's `openTool`. |
 | `export:data` | Getting data or a rendering back out: Share, Export HTML, Print, Print Layout, Offline Basemap, and the embed API's `exportImage`, `getLayerFeatures`, and `getDrawnFeatures`. |

@@ -103,6 +103,11 @@ describe("whiteboxToolFromSearch", () => {
     assert.deepEqual(target?.parameters, { z_factor: "2" });
   });
 
+  it("reserves the viewer draw flag instead of passing it to the tool", () => {
+    const target = whiteboxToolFromSearch("?tool=slope&layout=viewer&draw&z_factor=2");
+    assert.deepEqual(target?.parameters, { z_factor: "2" });
+  });
+
   it("uses the first value when a tool parameter is repeated", () => {
     assert.equal(
       whiteboxToolFromSearch("?tool=extract_cog_subset&url=a&url=b")?.parameters.url,

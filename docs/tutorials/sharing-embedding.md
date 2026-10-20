@@ -50,6 +50,9 @@ Adjust the look with parameters (they combine):
 - `maponly` hides all chrome, leaving only the map.
 - `layout=viewer` gives a read-only map: Layers, View, Controls, basemaps, and
   search/identify stay, while everything that edits the project is hidden.
+- `draw`, together with `layout=viewer`, lets readers sketch geometry on the map
+  with the geometry editor while the rest of the viewer stays read-only. See
+  [Drawing in a viewer embed](../user-guide/embedding.md#drawing-in-a-viewer-embed).
 - `layout=compact` keeps a slim, icon-only toolbar.
 - `toolbar=none` hides the top toolbar while keeping panels and the status bar.
 - `panels=none` hides the side and bottom panels but keeps the toolbar.
