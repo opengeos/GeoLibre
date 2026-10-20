@@ -91,8 +91,10 @@ export function registerAssistantToolSpec(
       name: spec.name,
       description: spec.description,
       inputSchema: spec.inputSchema,
-      callback: async (input): Promise<JSONValue> => {
-        const result = await spec.callback(input);
+      callback: async (input, toolContext): Promise<JSONValue> => {
+        // Without the signal, a running tool outlives Stop (Agent.cancel only
+        // stops at the next safe point), blocking the next message.
+        const result = await spec.callback(input, { signal: toolContext.cancelSignal });
         // The SDK wraps and copies callback results. Avoid serializing twice;
         // plugins are responsible for the documented JSON return contract.
         return (result === undefined ? null : result) as JSONValue;

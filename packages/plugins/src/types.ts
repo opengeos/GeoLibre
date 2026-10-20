@@ -544,7 +544,15 @@ export interface AssistantToolSpec {
   name: string;
   description: string;
   inputSchema?: JSONSchema;
-  callback: (input: unknown) => unknown | Promise<unknown>;
+  callback: (input: unknown, context?: AssistantToolCallContext) => unknown | Promise<unknown>;
+}
+
+/** Per-call context handed to an {@link AssistantToolSpec} callback. */
+export interface AssistantToolCallContext {
+  /** Aborts when the user stops the assistant. Pass it to `fetch` or check
+   * `signal.aborted` between steps so a long-running tool returns promptly.
+   */
+  signal: AbortSignal;
 }
 
 /** Options for {@link GeoLibreAppAPI.downloadRemoteFile}. */

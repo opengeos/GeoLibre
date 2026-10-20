@@ -23,9 +23,10 @@ const spec = (callback = (input: unknown): unknown => input) => ({
   callback,
   inputSchema: { type: "object" as const, properties: { value: { type: "string" as const } } },
 });
-async function run(registered: Tool, input: unknown) {
+async function run(registered: Tool, input: unknown, cancelSignal?: AbortSignal) {
   const stream = registered.stream({
     toolUse: { name: registered.name, toolUseId: "test-use", input },
+    cancelSignal,
   } as ToolContext);
   let result = await stream.next();
   while (!result.done) result = await stream.next();
@@ -94,6 +95,28 @@ test("scoped names cannot collide across ambiguous owner/name joins", () => {
   assert.throws(() => registerAssistantToolSpec({ ...spec(), name: "x".repeat(64) }, "test"));
   registerAssistantToolSpec(spec(), "test");
   assert.throws(() => registerAssistantToolSpec({ ...spec(), name: "ECHO" }, "test"), /conflicts/);
+});
+
+test("spec callbacks receive the cancel signal so Stop can interrupt a running tool", async () => {
+  const controller = new AbortController();
+  let seen: AbortSignal | undefined;
+  registerAssistantToolSpec(
+    spec(
+      (_input, context) =>
+        new Promise((resolve, reject) => {
+          seen = context?.signal;
+          context?.signal.addEventListener("abort", () => reject(new Error("stopped")));
+        }),
+    ),
+    "test",
+  );
+  const [registered] = listAssistantTools();
+  const pending = run(registered, {}, controller.signal);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(seen, controller.signal);
+  controller.abort();
+  const result = await pending;
+  assert.equal(result.status, "error");
 });
 
 const app = {

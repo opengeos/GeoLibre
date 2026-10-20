@@ -1727,7 +1727,7 @@ export default {
   version: "1.0.0",
   activate(app) {
     // Share this function with the panel's Add button.
-    async function addCities(input) {
+    async function addCities(input, context) {
       if (
         !input ||
         typeof input !== "object" ||
@@ -1736,7 +1736,8 @@ export default {
         throw new Error("name must be a string");
       }
       const response = await fetch(
-        "https://raw.githubusercontent.com/opengeos/leafmap/master/examples/data/us_cities.geojson"
+        "https://raw.githubusercontent.com/opengeos/leafmap/master/examples/data/us_cities.geojson",
+        { signal: context?.signal }
       );
       if (!response.ok) throw new Error(`Download failed: ${response.status}`);
       const data = await response.json();
@@ -1767,6 +1768,14 @@ model-supplied input before performing an action. Return JSON-serializable data
 or a promise of it; a callback returning `undefined` produces `null`. Thrown
 errors become assistant tool error results. Omitting `inputSchema` describes an
 empty object with no additional properties.
+
+**Honour Stop with `context.signal`.** The callback's second argument is
+`{ signal }`, an `AbortSignal` that aborts when the user stops the assistant.
+The assistant cannot interrupt a tool that is already running, so a tool that
+waits on the network should pass `signal` to `fetch` (or check `signal.aborted`
+between steps); otherwise the assistant stays busy until the tool finishes.
+Older hosts call the callback without a second argument, so read it as
+`context?.signal`.
 
 Built-in plugins that already import the SDK can instead call
 `app.registerAssistantTool(tool({ name, description, inputSchema, callback }))`,
