@@ -13,11 +13,15 @@ import {
   MAX_ASSISTANT_GUIDANCE_LENGTH,
 } from "../packages/plugins/src/assistant-tool-registry";
 import { PluginManager } from "../packages/plugins/src/plugin-manager";
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "../packages/plugins/src/types";
+import type {
+  AssistantToolSpec,
+  GeoLibreAppAPI,
+  GeoLibrePlugin,
+} from "../packages/plugins/src/types";
 
 const owners = ["test", "other", "a_b", "a"];
 afterEach(() => owners.forEach(unregisterAssistantToolsByOwner));
-const spec = (callback = (input: unknown): unknown => input) => ({
+const spec = (callback: AssistantToolSpec["callback"] = (input) => input) => ({
   name: "echo",
   description: "Echo input",
   callback,
