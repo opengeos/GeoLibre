@@ -6,6 +6,15 @@ whose work makes GeoLibre possible. If we have inadvertently left someone out,
 please [open an issue](https://github.com/opengeos/GeoLibre/issues) so we can
 correct it.
 
+!!! note "Disclaimer"
+
+    GeoLibre is primarily built with
+    [Claude Opus 5.5](https://www.anthropic.com/claude), an AI model by
+    Anthropic, working under human direction and review. Its results are tested,
+    but check them for your own use, and please
+    [report](https://github.com/opengeos/GeoLibre/issues) anything that looks
+    wrong.
+
 ## Open-source projects
 
 GeoLibre is built almost entirely on free and open-source software. We are
