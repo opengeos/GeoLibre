@@ -19,7 +19,14 @@ import {
   migrateA5V0Hex,
   suggestA5Resolution,
 } from "../packages/processing/src/a5-tools";
-import { cellToChildren, getResolution, hexToU64, lonLatToCell, u64ToHex } from "a5-js";
+import {
+  cellToChildren,
+  getRes0Cells,
+  getResolution,
+  hexToU64,
+  lonLatToCell,
+  u64ToHex,
+} from "a5-js";
 import { bboxAreaKm2 } from "../packages/processing/src/h3-tools";
 
 describe("a5 resolution math", () => {
@@ -198,6 +205,11 @@ describe("a5 v1 cell IDs", () => {
     assert.equal(out.length, 20);
     assert.ok(out.every((cell) => getResolution(cell) === 7));
     assert.equal(estimateA5ExpandCount([coarse], 4), 0);
+    // A resolution-0 cell splits into 5, then 4 per level.
+    const root = getRes0Cells()[0]!;
+    assert.equal(estimateA5ExpandCount([root], 0), 1);
+    assert.equal(estimateA5ExpandCount([root], 3), 80);
+    assert.equal(expandA5Cells([root], 3).length, 80);
     assert.throws(() => expandA5Cells([coarse], 4), /finer than target resolution 4/);
   });
 
@@ -219,7 +231,7 @@ describe("a5 v1 cell IDs", () => {
             },
           ],
         }),
-      /not an A5 cell ID/,
+      /Feature 1: "not-a-cell" is not an A5 v1 cell ID.*v0 index/,
     );
   });
 

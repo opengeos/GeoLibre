@@ -230,27 +230,35 @@ export function migrateA5V0Hex(hex: string): string {
   return u64ToHex(migrate(hexToU64(hex)));
 }
 
-/** Parse an A5 hex cell ID, rejecting anything that is not a valid v1 cell. */
-function parseA5Cell(hex: string): bigint {
-  let id: bigint;
+/**
+ * Parse an A5 hex cell ID, rejecting anything that is not a valid v1 cell.
+ * `index` is the feature's position, so the error points at the bad row.
+ */
+function parseA5Cell(hex: string, index: number): bigint {
+  let id: bigint | null = null;
   try {
     id = hexToU64(hex);
   } catch {
-    throw new RangeError(`"${hex}" is not an A5 cell ID`);
+    // Reported below.
   }
-  if (!isValidCell(id)) throw new RangeError(`"${hex}" is not an A5 cell ID`);
+  if (id === null || !isValidCell(id)) {
+    throw new RangeError(
+      `Feature ${index + 1}: "${hex}" is not an A5 v1 cell ID. ` +
+        "Layers made by GeoLibre before A5 v1 use the old v0 index; regenerate them.",
+    );
+  }
   return id;
 }
 
 /** Collect distinct A5 cell IDs from a feature property (default `a5`). */
 export function a5CellsFromLayer(fc: FeatureCollection, cellField = "a5"): bigint[] {
   const cells = new Set<bigint>();
-  for (const feature of fc.features) {
+  fc.features.forEach((feature, index) => {
     const raw = feature.properties?.[cellField];
-    if (raw === undefined || raw === null) continue;
+    if (raw === undefined || raw === null) return;
     const hex = String(raw).trim();
-    if (hex) cells.add(parseA5Cell(hex));
-  }
+    if (hex) cells.add(parseA5Cell(hex, index));
+  });
   return [...cells];
 }
 
@@ -264,13 +272,16 @@ export function compactA5Cells(cells: bigint[]): bigint[] {
   return [...compact(cells)].filter((cell) => !isCompactionMarker(cell));
 }
 
-/** Exact cell count after expanding `cells` to `res` (4× per level); 0 if any is finer. */
+/**
+ * Exact cell count after expanding `cells` to `res`; 0 if any is finer. A
+ * resolution-0 cell has 5 children, every later level 4.
+ */
 export function estimateA5ExpandCount(cells: bigint[], res: number): number {
   let n = 0;
   for (const cell of cells) {
     const r = getResolution(cell);
     if (r > res) return 0;
-    n += 4 ** (res - r);
+    n += r === 0 && res > 0 ? 5 * 4 ** (res - 1) : 4 ** (res - r);
   }
   return n;
 }
