@@ -78,6 +78,9 @@
     "typescript-eslint": "^8.71.2"
   },
   "overrides": {
+    "@deck.gl/geo-layers": {
+      "a5-js": "^1.0.0"
+    },
     "@loaders.gl/compression": {
       "fflate": "^0.8.3"
     },

@@ -932,6 +932,25 @@ follow the lockfile clean-up in
 Spark's `dist` embeds three inside its sort worker's source string. That copy runs in
 a Web Worker and never registers as a second main-thread instance.
 
+### One `a5-js`, on the A5 v1 index
+
+A5 v1 (`a5-js` 1.0) renumbered every cell: the cells are the same, but their
+IDs are not compatible with v0 (`a5-js` <= 0.10). GeoLibre speaks v1 everywhere
+(the A5 grid plugin and the DGGS tools in `@geolibre/processing`). Two
+dependencies still lag:
+
+- `@deck.gl/geo-layers` 9.4 declares `a5-js: ^0.10.0` for `A5Layer`, which
+  plugins reach through the plugin API. The root `package.json` `overrides`
+  forces it onto the app's `a5-js` (A5Layer only calls `cellToBoundary` and
+  `hexToU64`, unchanged in v1). Drop the override once a deck.gl release depends
+  on `a5-js` 1.x, and check `npm ls a5-js` lists one version.
+- The DuckDB `a5` community extension built for the bundled DuckDB-WASM (DuckDB
+  v1.5.1) is still on the v0 index; only DuckDB >= 1.5.6 gets the v1 build.
+  `packages/processing/src/a5-tools.ts` passes every ID the extension returns
+  through `migrate()`, and DGGS Compact runs A5 client-side on `a5-js`. When a
+  `@duckdb/duckdb-wasm` bump moves to DuckDB >= 1.5.6, remove the migration
+  (DGGS Generator/Binning would otherwise migrate v1 IDs a second time).
+
 ## Adding a blend mode
 
 **Do not add a blend mode without checking it in the browser.** MapLibre's blend

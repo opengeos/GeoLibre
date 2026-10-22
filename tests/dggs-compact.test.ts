@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { s2 } from "s2js";
-import {
-  buildA5CompactSql,
-  buildA5ExpandCountSql,
-  buildA5ExpandSql,
-} from "../packages/processing/src/a5-tools";
+import { cellToChildren, getResolution, lonLatToCell, u64ToHex } from "a5-js";
+import { a5CellsToFeatureCollection } from "../packages/processing/src/a5-tools";
 import {
   buildH3CompactSql,
   buildH3ExpandCountSql,
@@ -26,17 +23,6 @@ describe("dggs compact/expand SQL", () => {
     const expand = buildH3ExpandSql("ST_Read('x.geojson')", 7);
     assert.match(expand, /h3_uncompact_cells\(cells, 7\)/);
     assert.match(buildH3ExpandCountSql("ST_Read('x.geojson')", 7), /len\(h3_uncompact_cells/);
-  });
-
-  it("builds A5 compact and expand SQL from a cell ID field", () => {
-    const compact = buildA5CompactSql("ST_Read('x.geojson')");
-    assert.match(compact, /a5_hex_to_u64\(CAST\("a5" AS VARCHAR\)\)/);
-    assert.match(compact, /a5_compact\(cells\)/);
-    assert.match(compact, /a5_u64_to_hex\(cell\) AS a5/);
-
-    const expand = buildA5ExpandSql("ST_Read('x.geojson')", 8, "a5");
-    assert.match(expand, /a5_uncompact\(cells, 8\)/);
-    assert.match(buildA5ExpandCountSql("ST_Read('x.geojson')", 8), /len\(a5_uncompact/);
   });
 });
 
@@ -269,6 +255,31 @@ describe("dggs compact tool", () => {
     assert.equal(added.length, 1);
     assert.match(added[0]!, /S2 expand \(res 6\)/);
     assert.equal(featureCount, 4);
+  });
+
+  it("compacts and expands a v1 A5 cell layer without DuckDB", async () => {
+    // A5 v1 IDs (a5-js 1.0) the bundled DuckDB a5 extension (v0 index) cannot read.
+    const parent = lonLatToCell([-73.98, 40.75] as never, 5);
+    const children = a5CellsToFeatureCollection(cellToChildren(parent, 6));
+    const layer: GeoLibreLayer = { ...h3CellLayer(), id: "a5cells", geojson: children };
+    const results: { name: string; ids: string[] }[] = [];
+    const run = (parameters: Record<string, unknown>) =>
+      dggsCompactTool.run({
+        layers: [layer],
+        parameters: { dggsType: "a5", layer: "a5cells", ...parameters },
+        log: () => {},
+        addResultLayer: (name, fc) =>
+          results.push({ name, ids: fc.features.map((f) => String(f.properties?.a5)) }),
+      });
+
+    await run({ mode: "compact" });
+    assert.match(results[0]!.name, /A5 compact/);
+    assert.deepEqual(results[0]!.ids, [u64ToHex(parent)]);
+
+    await run({ mode: "expand", resolution: 7 });
+    assert.match(results[1]!.name, /A5 expand \(res 7\)/);
+    assert.equal(results[1]!.ids.length, 16);
+    assert.ok(results[1]!.ids.every((id) => getResolution(BigInt(`0x${id}`)) === 7));
   });
 
   it("compacts a DGGAL ISEA4R cell layer without DuckDB", async () => {

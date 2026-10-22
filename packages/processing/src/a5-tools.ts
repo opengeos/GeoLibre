@@ -1,5 +1,24 @@
-import type { FeatureCollection, Geometry } from "geojson";
+import type { FeatureCollection, Geometry, Polygon } from "geojson";
+import {
+  cellToBoundary,
+  cellToChildren,
+  compact,
+  getResolution,
+  hexToU64,
+  isCompactionMarker,
+  isValidCell,
+  migrate,
+  u64ToHex,
+} from "a5-js";
+import { unwrapAntimeridianRing } from "./antimeridian";
 import { bboxToWktPolygon, normalizeLonLatBbox, sqlIdent, sqlStr } from "./h3-tools";
+
+// Cell IDs: GeoLibre speaks the A5 v1 index (a5-js >= 1.0, the A5 grid
+// plugin). The DuckDB `a5` community extension built for the bundled DuckDB
+// (v1.5.1) is still on the v0 index; only DuckDB >= 1.5.6 gets the v1 build.
+// Both index the same cells, so the SQL below stays as is and every ID it
+// returns goes through {@link migrateA5V0Hex}. Compact/expand read IDs from a
+// layer, so they run client-side on a5-js instead of feeding v1 IDs to v0 SQL.
 
 /**
  * Approximate average A5 cell area (km²) at resolutions 0..30.
@@ -206,42 +225,88 @@ export function buildA5BinSql(sourceSql: string, res: number, op: A5AggOp, field
   );
 }
 
+/** Re-encode a v0 A5 cell ID (DuckDB `a5` extension output) in the v1 index. */
+export function migrateA5V0Hex(hex: string): string {
+  return u64ToHex(migrate(hexToU64(hex)));
+}
+
+/** Parse an A5 hex cell ID, rejecting anything that is not a valid v1 cell. */
+function parseA5Cell(hex: string): bigint {
+  let id: bigint;
+  try {
+    id = hexToU64(hex);
+  } catch {
+    throw new RangeError(`"${hex}" is not an A5 cell ID`);
+  }
+  if (!isValidCell(id)) throw new RangeError(`"${hex}" is not an A5 cell ID`);
+  return id;
+}
+
+/** Collect distinct A5 cell IDs from a feature property (default `a5`). */
+export function a5CellsFromLayer(fc: FeatureCollection, cellField = "a5"): bigint[] {
+  const cells = new Set<bigint>();
+  for (const feature of fc.features) {
+    const raw = feature.properties?.[cellField];
+    if (raw === undefined || raw === null) continue;
+    const hex = String(raw).trim();
+    if (hex) cells.add(parseA5Cell(hex));
+  }
+  return [...cells];
+}
+
 /**
- * Collect A5 cell IDs (hex strings) from `cellField` on `sourceSql` into an array.
+ * Compact A5 cells: every complete group of siblings becomes its parent,
+ * recursively (mixed resolutions). The compaction marker a5-js appends is
+ * dropped; it is not a cell.
  */
-function a5CellArrayCte(sourceSql: string, cellField: string): string {
-  const f = sqlIdent(cellField);
-  return (
-    `input AS (SELECT DISTINCT a5_hex_to_u64(CAST(${f} AS VARCHAR)) AS cell FROM ${sourceSql} ` +
-    `WHERE ${f} IS NOT NULL AND CAST(${f} AS VARCHAR) <> ''), ` +
-    `arr AS (SELECT list(cell) AS cells FROM input)`
-  );
+export function compactA5Cells(cells: bigint[]): bigint[] {
+  if (cells.length === 0) return [];
+  return [...compact(cells)].filter((cell) => !isCompactionMarker(cell));
 }
 
-/** Compact A5 cells from a polygon cell layer (IDs in `cellField`, default `a5`). */
-export function buildA5CompactSql(sourceSql: string, cellField = "a5"): string {
-  return (
-    `WITH ${a5CellArrayCte(sourceSql, cellField)}, ` +
-    `cells AS (SELECT unnest(a5_compact(cells)) AS cell FROM arr) ` +
-    GRID_SELECT
-  );
+/** Exact cell count after expanding `cells` to `res` (4× per level); 0 if any is finer. */
+export function estimateA5ExpandCount(cells: bigint[], res: number): number {
+  let n = 0;
+  for (const cell of cells) {
+    const r = getResolution(cell);
+    if (r > res) return 0;
+    n += 4 ** (res - r);
+  }
+  return n;
 }
 
-/** Expand (uncompact) A5 cells to a uniform `res`. */
-export function buildA5ExpandSql(sourceSql: string, res: number, cellField = "a5"): string {
-  return (
-    `WITH ${a5CellArrayCte(sourceSql, cellField)}, ` +
-    `cells AS (SELECT unnest(a5_uncompact(cells, ${res})) AS cell FROM arr) ` +
-    GRID_SELECT
-  );
+/**
+ * Expand A5 cells to a uniform `res` via their children. Cells already finer
+ * than `res` throw; use {@link estimateA5ExpandCount} for the hard-cap guard.
+ */
+export function expandA5Cells(cells: bigint[], res: number): bigint[] {
+  const out = new Set<bigint>();
+  for (const cell of cells) {
+    const r = getResolution(cell);
+    if (r > res) {
+      throw new RangeError(
+        `A5 cell ${u64ToHex(cell)} is finer than target resolution ${res}; choose a finer target or compact first`,
+      );
+    }
+    for (const child of r === res ? [cell] : cellToChildren(cell, res)) out.add(child);
+  }
+  return [...out];
 }
 
-/** Count of cells that {@link buildA5ExpandSql} would emit (for the hard-cap guard). */
-export function buildA5ExpandCountSql(sourceSql: string, res: number, cellField = "a5"): string {
-  return (
-    `WITH ${a5CellArrayCte(sourceSql, cellField)} ` +
-    `SELECT coalesce(len(a5_uncompact(cells, ${res})), 0) AS n FROM arr`
-  );
+/** A5 cells as GeoJSON polygons carrying their hex ID in `a5`. */
+export function a5CellsToFeatureCollection(cells: bigint[]): FeatureCollection<Polygon> {
+  return {
+    type: "FeatureCollection",
+    features: cells.map((cell) => ({
+      type: "Feature" as const,
+      // a5-js returns raw ±180 jumps; keep the ring on one world copy.
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [unwrapAntimeridianRing(cellToBoundary(cell) as number[][])],
+      },
+      properties: { a5: u64ToHex(cell) },
+    })),
+  };
 }
 
 /** Parse a DuckDB `ST_AsGeoJSON` cell (VARCHAR or already-decoded JSON object). */
@@ -259,13 +324,17 @@ function geometryFromGeoJsonCell(raw: unknown): Geometry | null {
   return null;
 }
 
-/** Build a FeatureCollection from rows carrying `a5`, optional `count`/`value`, and `geojson`. */
+/**
+ * Build a FeatureCollection from DuckDB rows carrying `a5`, optional
+ * `count`/`value`, and `geojson`. The extension's v0 `a5` IDs are migrated to
+ * the v1 index.
+ */
 export function a5RowsToFeatureCollection(rows: Record<string, unknown>[]): FeatureCollection {
   const features = [];
   for (const row of rows) {
     const geometry = geometryFromGeoJsonCell(row.geojson);
     if (!geometry) continue;
-    const properties: Record<string, unknown> = { a5: String(row.a5) };
+    const properties: Record<string, unknown> = { a5: migrateA5V0Hex(String(row.a5)) };
     if (row.count !== undefined && row.count !== null) {
       properties.count = Number(row.count);
     }

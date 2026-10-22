@@ -9,16 +9,18 @@ import type {
   ProcessingContext,
 } from "./types";
 import {
+  a5CellsFromLayer,
+  a5CellsToFeatureCollection,
   a5RowsToFeatureCollection,
   buildA5BinSql,
-  buildA5CompactSql,
-  buildA5ExpandCountSql,
-  buildA5ExpandSql,
   buildA5GridFromBboxesSql,
   buildA5GridFromSourceSql,
   A5_HARD_CAP,
   A5_MAX_TOOL_RES,
+  compactA5Cells,
   estimateA5CellCount,
+  estimateA5ExpandCount,
+  expandA5Cells,
   suggestA5Resolution,
   type A5AggOp,
 } from "./a5-tools";
@@ -834,7 +836,7 @@ type DggsCompactType = "h3" | "a5" | "s2" | "dggal";
 /**
  * Compact a polygon DGGS cell layer, or expand (uncompact) it to a target
  * resolution. Reads cell IDs from a property (`h3` / `a5` / `s2` / `dggal` by
- * default). H3 and A5 use DuckDB; S2 and DGGAL run client-side.
+ * default). H3 uses DuckDB; S2, A5, and DGGAL run client-side.
  */
 export const dggsCompactTool: ProcessingAlgorithm = {
   id: "dggs-compact",
@@ -1026,6 +1028,37 @@ export const dggsCompactTool: ProcessingAlgorithm = {
       return;
     }
 
+    // A5 is client-side (a5-js): the layer's IDs are v1, which the bundled
+    // DuckDB a5 extension (v0 index) cannot read.
+    if (type === "a5") {
+      try {
+        const cells = a5CellsFromLayer(layer.geojson, cellField);
+        if (mode === "expand") {
+          const n = estimateA5ExpandCount(cells, res);
+          const hardCap = hardCapFor("a5");
+          if (!Number.isFinite(n) || n <= 0) {
+            ctx.log(
+              `No A5 cells to expand. Check the cell ID field and that cells are coarser than resolution ${res}.`,
+            );
+            return;
+          }
+          if (n > hardCap) {
+            ctx.log(
+              `Error: expanding to resolution ${res} would generate ${Math.round(n).toLocaleString()} cells (cap ${hardCap.toLocaleString()}). Choose a coarser target.`,
+            );
+            return;
+          }
+          emitResult(a5CellsToFeatureCollection(expandA5Cells(cells, res)));
+        } else {
+          emitResult(a5CellsToFeatureCollection(compactA5Cells(cells)));
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.log(`Error: ${message}`);
+      }
+      return;
+    }
+
     // DGGAL is client-side WASM; no DuckDB.
     if (type === "dggal") {
       try {
@@ -1064,11 +1097,7 @@ export const dggsCompactTool: ProcessingAlgorithm = {
       await duckdb.ensureExtensions(["spatial", extensionForDggs(type)!]);
       registered = await duckdb.registerGeoJson(layer.geojson);
       if (mode === "expand") {
-        const countSql =
-          type === "a5"
-            ? buildA5ExpandCountSql(registered.sql, res, cellField)
-            : buildH3ExpandCountSql(registered.sql, res, cellField);
-        const countRows = await duckdb.query(countSql);
+        const countRows = await duckdb.query(buildH3ExpandCountSql(registered.sql, res, cellField));
         const n = Number(countRows[0]?.n ?? 0);
         const hardCap = hardCapFor(type);
         if (!Number.isFinite(n) || n <= 0) {
@@ -1087,19 +1116,11 @@ export const dggsCompactTool: ProcessingAlgorithm = {
 
       const sql =
         mode === "compact"
-          ? type === "a5"
-            ? buildA5CompactSql(registered.sql, cellField)
-            : buildH3CompactSql(registered.sql, cellField)
-          : type === "a5"
-            ? buildA5ExpandSql(registered.sql, res, cellField)
-            : buildH3ExpandSql(registered.sql, res, cellField);
+          ? buildH3CompactSql(registered.sql, cellField)
+          : buildH3ExpandSql(registered.sql, res, cellField);
 
       const rows = await duckdb.query(sql);
-      const fc =
-        type === "a5"
-          ? a5RowsToFeatureCollection(rows)
-          : rowsToFeatureCollection(rows, resolveFixAntimeridian(ctx, type));
-      emitResult(fc);
+      emitResult(rowsToFeatureCollection(rows, resolveFixAntimeridian(ctx, type)));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       ctx.log(`Error: ${message}`);

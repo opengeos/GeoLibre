@@ -4,15 +4,22 @@ import {
   A5_AVG_AREA_KM2,
   A5_HARD_CAP,
   A5_MAX_TOOL_RES,
+  a5CellsFromLayer,
+  a5CellsToFeatureCollection,
   a5RowsToFeatureCollection,
   buildA5BinSql,
   buildA5GridFromBboxSql,
   buildA5GridFromBboxesSql,
   buildA5GridFromSourceSql,
   buildA5GridFromWktSql,
+  compactA5Cells,
   estimateA5CellCount,
+  estimateA5ExpandCount,
+  expandA5Cells,
+  migrateA5V0Hex,
   suggestA5Resolution,
 } from "../packages/processing/src/a5-tools";
+import { cellToChildren, getResolution, hexToU64, lonLatToCell, u64ToHex } from "a5-js";
 import { bboxAreaKm2 } from "../packages/processing/src/h3-tools";
 
 describe("a5 resolution math", () => {
@@ -113,13 +120,13 @@ describe("a5 SQL builders", () => {
   it("converts result rows to a FeatureCollection with a5 props", () => {
     const fc = a5RowsToFeatureCollection([
       {
-        a5: "abc",
+        a5: "2606000000000000",
         count: 2,
         value: 4.5,
         geojson: '{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}',
       },
       {
-        a5: "obj",
+        a5: "872f880000000000",
         geojson: {
           type: "Polygon",
           coordinates: [
@@ -135,10 +142,11 @@ describe("a5 SQL builders", () => {
       { a5: "skip", geojson: 12 },
     ]);
     assert.equal(fc.features.length, 2);
-    assert.equal(fc.features[0].properties?.a5, "abc");
+    // DuckDB's a5 extension emits v0 IDs; they come out in the v1 index.
+    assert.equal(fc.features[0].properties?.a5, "2652000000000000");
     assert.equal(fc.features[0].properties?.count, 2);
     assert.equal(fc.features[0].properties?.value, 4.5);
-    assert.equal(fc.features[1].properties?.a5, "obj");
+    assert.equal(fc.features[1].properties?.a5, "872fb80000000000");
   });
 
   it("leaves A5 cell geometry unchanged (native dateline handling)", () => {
@@ -151,7 +159,7 @@ describe("a5 SQL builders", () => {
     ];
     const fc = a5RowsToFeatureCollection([
       {
-        a5: "x",
+        a5: "9760000000000000",
         geojson: JSON.stringify({ type: "Polygon", coordinates: [raw] }),
       },
     ]);
@@ -159,5 +167,66 @@ describe("a5 SQL builders", () => {
       (fc.features[0].geometry as { coordinates: number[][][] }).coordinates[0],
       raw,
     );
+  });
+});
+
+describe("a5 v1 cell IDs", () => {
+  // v0 → v1 pairs computed with a5-js 0.10.1 and 1.0.0 for the same point.
+  it("migrates the DuckDB extension's v0 IDs to the v1 index", () => {
+    assert.equal(migrateA5V0Hex("2606000000000000"), "2652000000000000"); // NYC, res 5
+    assert.equal(migrateA5V0Hex("872f880000000000"), "872fb80000000000"); // Tokyo, res 8
+    assert.equal(migrateA5V0Hex("9760000000000000"), "9360000000000000"); // Fiji, res 3
+    assert.equal(
+      migrateA5V0Hex("2606000000000000"),
+      u64ToHex(lonLatToCell([-73.98, 40.75] as never, 5)),
+    );
+  });
+
+  it("compacts a complete sibling set to its parent", () => {
+    const parent = lonLatToCell([-73.98, 40.75] as never, 5);
+    const children = cellToChildren(parent, 7);
+    const out = compactA5Cells(children);
+    assert.deepEqual(out, [parent]);
+    assert.deepEqual(compactA5Cells([]), []);
+  });
+
+  it("expands to a uniform resolution and counts exactly", () => {
+    const coarse = lonLatToCell([-73.98, 40.75] as never, 5);
+    const fine = lonLatToCell([139.7, 35.7] as never, 6);
+    assert.equal(estimateA5ExpandCount([coarse, fine], 7), 16 + 4);
+    const out = expandA5Cells([coarse, fine], 7);
+    assert.equal(out.length, 20);
+    assert.ok(out.every((cell) => getResolution(cell) === 7));
+    assert.equal(estimateA5ExpandCount([coarse], 4), 0);
+    assert.throws(() => expandA5Cells([coarse], 4), /finer than target resolution 4/);
+  });
+
+  it("reads v1 IDs from a layer and rejects non-A5 values", () => {
+    const fc = a5CellsToFeatureCollection([hexToU64("2652000000000000")]);
+    assert.equal(fc.features[0].properties?.a5, "2652000000000000");
+    const ring = fc.features[0].geometry.coordinates[0];
+    assert.deepEqual(ring[0], ring[ring.length - 1]);
+    assert.deepEqual(a5CellsFromLayer(fc), [hexToU64("2652000000000000")]);
+    assert.throws(
+      () =>
+        a5CellsFromLayer({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [0, 0] },
+              properties: { a5: "not-a-cell" },
+            },
+          ],
+        }),
+      /not an A5 cell ID/,
+    );
+  });
+
+  it("keeps an antimeridian cell's ring on one world copy", () => {
+    const cell = lonLatToCell([179.9, -16.5] as never, 3);
+    const ring = a5CellsToFeatureCollection([cell]).features[0].geometry.coordinates[0];
+    const lons = ring.map((p) => p[0]);
+    assert.ok(Math.max(...lons) - Math.min(...lons) < 180);
   });
 });
